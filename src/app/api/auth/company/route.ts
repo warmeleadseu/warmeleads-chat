@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { put, list, del } from '@vercel/blob';
 import { safeLog } from '@/lib/logger';
+import { withAuth } from '@/middleware/auth';
+import type { AuthenticatedUser } from '@/middleware/auth';
 
 // Force dynamic rendering for this route
 export const dynamic = 'force-dynamic';
@@ -28,7 +30,13 @@ interface CompanyData {
   createdAt: string;
 }
 
-export async function GET(request: NextRequest) {
+// Helper to check if user is admin
+function isAdmin(email: string): boolean {
+  const adminEmails = process.env.ADMIN_EMAILS?.split(',').map(e => e.trim()) || [];
+  return adminEmails.includes(email);
+}
+
+export const GET = withAuth(async (request: NextRequest, user: AuthenticatedUser) => {
   try {
     const { searchParams } = new URL(request.url);
     const ownerEmail = searchParams.get('ownerEmail');

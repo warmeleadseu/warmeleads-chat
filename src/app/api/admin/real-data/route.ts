@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withAuth } from '@/middleware/auth';
+import type { AuthenticatedUser } from '@/middleware/auth';
 
-// API om echte data op te halen voor admin
-export async function GET(req: NextRequest) {
+// API om echte data op te halen voor admin (ADMIN ONLY)
+export const GET = withAuth(async (req: NextRequest, user: AuthenticatedUser) => {
   try {
     // Haal echte data op uit localStorage/database
     const customers: any[] = [];
@@ -31,10 +33,10 @@ export async function GET(req: NextRequest) {
       { status: 500 }
     );
   }
-}
+}, { adminOnly: true });
 
-// API om nieuwe bestelling toe te voegen aan admin
-export async function POST(req: NextRequest) {
+// API om nieuwe bestelling toe te voegen aan admin (ADMIN ONLY)
+export const POST = withAuth(async (req: NextRequest, user: AuthenticatedUser) => {
   try {
     const orderData = await req.json();
     

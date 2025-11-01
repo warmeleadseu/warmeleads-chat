@@ -1,14 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { put, del, list } from '@vercel/blob';
 import { isAdminEmail } from '@/config/admin';
+import { withAuth } from '@/middleware/auth';
+import type { AuthenticatedUser } from '@/middleware/auth';
 
-// Manage account: activate, deactivate, or delete
-export async function POST(request: NextRequest) {
+// Manage account: activate, deactivate, or delete (ADMIN ONLY)
+export const POST = withAuth(async (request: NextRequest, user: AuthenticatedUser) => {
   try {
     const { action, email, adminEmail } = await request.json();
 
-    // Simple admin check
-    if (!adminEmail || !isAdminEmail(adminEmail)) {
+    // Verify admin via withAuth (user is already authenticated)
+    if (!isAdminEmail(user.email)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
 
@@ -96,5 +98,5 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+}, { adminOnly: true });
 
