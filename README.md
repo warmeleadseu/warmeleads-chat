@@ -71,4 +71,4 @@ tail -f server.log
 
 ### Port 3000 is bezet:
 1. Stop alle servers: `pkill -f "next dev"`
-2. Start opnieuw: `npm run dev:stable`
+2. Start opnieuw: `npm run dev:stable`# Force rebuild to load new env vars
