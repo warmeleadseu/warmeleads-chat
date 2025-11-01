@@ -784,6 +784,9 @@ export default function CustomersPage() {
                     Status
                   </th>
                   <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Google Sheet
+                  </th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Activiteit
                   </th>
                 </tr>
@@ -870,6 +873,89 @@ export default function CustomersPage() {
                        </div>
                     </td>
                     <td className="px-6 py-4">
+                      <div className="flex items-center space-x-2">
+                        {customer.googleSheetId || customer.googleSheetUrl ? (
+                          <>
+                            <a
+                              href={customer.googleSheetUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-lg bg-green-100 text-green-800 hover:bg-green-200 transition-colors"
+                              title="Open Google Sheet"
+                            >
+                              📊 Gekoppeld
+                            </a>
+                            <button
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                const currentUrl = customer.googleSheetUrl || '';
+                                const sheetUrl = prompt(
+                                  `Google Sheets URL wijzigen:\n\nHuidige URL:\n${currentUrl}\n\nVoer nieuwe URL in:`,
+                                  currentUrl
+                                );
+                                
+                                if (sheetUrl && sheetUrl.includes('docs.google.com/spreadsheets')) {
+                                  try {
+                                    console.log('📊 Wijzigen Google Sheet via Supabase...');
+                                    const success = await crmSystem.linkGoogleSheet(customer.id, sheetUrl);
+                                    
+                                    if (success) {
+                                      alert(`✅ Google Sheet bijgewerkt!`);
+                                      window.location.reload();
+                                    } else {
+                                      alert('❌ Fout bij bijwerken Google Sheet');
+                                    }
+                                  } catch (error) {
+                                    console.error('❌ Error:', error);
+                                    alert('❌ Fout bij bijwerken Google Sheet');
+                                  }
+                                } else if (sheetUrl !== null && sheetUrl !== '') {
+                                  alert('❌ Ongeldige Google Sheets URL');
+                                }
+                              }}
+                              className="text-blue-600 hover:text-blue-800 transition-colors text-sm"
+                              title="Sheet URL wijzigen"
+                            >
+                              ✏️
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              const sheetUrl = prompt(
+                                `Google Sheets URL koppelen aan ${customer.name || customer.email}:\n\nVoer URL in:\n(Bijv: https://docs.google.com/spreadsheets/d/1ABC.../edit)`
+                              );
+                              
+                              if (sheetUrl && sheetUrl.includes('docs.google.com/spreadsheets')) {
+                                try {
+                                  console.log('📊 Koppelen Google Sheet via Supabase...');
+                                  const success = await crmSystem.linkGoogleSheet(customer.id, sheetUrl);
+                                  
+                                  if (success) {
+                                    alert(`✅ Google Sheet gekoppeld!`);
+                                    window.location.reload();
+                                  } else {
+                                    alert('❌ Fout bij koppelen Google Sheet');
+                                  }
+                                } catch (error) {
+                                  console.error('❌ Error:', error);
+                                  alert('❌ Fout bij koppelen Google Sheet');
+                                }
+                              } else if (sheetUrl !== null && sheetUrl !== '') {
+                                alert('❌ Ongeldige Google Sheets URL');
+                              }
+                            }}
+                            className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
+                            title="Google Sheet koppelen"
+                          >
+                            📊 Koppelen
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
                       <div className="text-sm text-gray-900">
                         {new Date(customer.lastActivity).toLocaleDateString('nl-NL')}
                       </div>
@@ -909,66 +995,6 @@ export default function CustomersPage() {
                           >
                             👤
                           </button>
-                        )}
-                        
-                        {customer.hasAccount && (
-                          <>
-                            <button
-                              onClick={async (e) => {
-                                e.stopPropagation();
-                                const currentUrl = customer.googleSheetUrl || '';
-                                const sheetUrl = prompt(
-                                  `Google Sheets URL voor deze klant:\n${currentUrl ? `Huidige URL: ${currentUrl}\n\n` : ''}Voer nieuwe URL in:\n(Bijv: https://docs.google.com/spreadsheets/d/1ABC.../edit)`,
-                                  currentUrl
-                                );
-                                
-                                if (sheetUrl && sheetUrl.includes('docs.google.com/spreadsheets')) {
-                                  try {
-                                    console.log('📊 Koppelen Google Sheet via Supabase...');
-                                    console.log('Customer ID:', customer.id);
-                                    console.log('Google Sheets URL:', sheetUrl);
-                                    
-                                    // Use crmSystem to link sheet (saves to Supabase)
-                                    const success = await crmSystem.linkGoogleSheet(customer.id, sheetUrl);
-                                    
-                                    if (success) {
-                                      console.log('✅ Google Sheet gekoppeld in Supabase');
-                                      alert(`✅ Google Sheet ${customer.googleSheetId ? 'bijgewerkt' : 'gekoppeld'} voor ${customer.name || customer.email}!`);
-                                      
-                                      // Reload to fetch updated data
-                                      window.location.reload();
-                                    } else {
-                                      console.error('❌ Failed to link Google Sheet');
-                                      alert('❌ Fout bij koppelen Google Sheet');
-                                    }
-                                  } catch (error) {
-                                    console.error('❌ Error saving Google Sheet URL:', error);
-                                    alert('❌ Fout bij koppelen Google Sheet');
-                                  }
-                                } else if (sheetUrl !== null && sheetUrl !== '') {
-                                  console.error('❌ Invalid Google Sheets URL');
-                                  alert('❌ Ongeldige Google Sheets URL. Zorg dat de URL docs.google.com/spreadsheets bevat.');
-                                }
-                              }}
-                              className="text-green-600 hover:text-green-800 transition-colors"
-                              title={customer.googleSheetId ? "Google Sheet URL wijzigen" : "Google Sheet koppelen"}
-                            >
-                              {customer.googleSheetId ? '✏️📊' : '📊'}
-                            </button>
-                            
-                            {customer.googleSheetId && (
-                              <a
-                                href={customer.googleSheetUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                onClick={(e) => e.stopPropagation()}
-                                className="text-blue-600 hover:text-blue-800 transition-colors ml-2"
-                                title="Open Google Sheet"
-                              >
-                                🔗
-                              </a>
-                            )}
-                          </>
                         )}
                         
                         <a
