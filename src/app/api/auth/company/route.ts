@@ -126,9 +126,9 @@ export const GET = withAuth(async (request: NextRequest, user: AuthenticatedUser
       { status: 500 }
     );
   }
-}
+});
 
-export async function POST(request: NextRequest) {
+export const POST = withAuth(async (request: NextRequest, user: AuthenticatedUser) => {
   try {
     const { ownerEmail, companyName, employeeEmail, employeeName, permissions } = await request.json();
 
@@ -136,6 +136,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'Owner email is required' },
         { status: 400 }
+      );
+    }
+
+    // Security: User can only manage their own company (unless admin)
+    if (ownerEmail !== user.email && !isAdmin(user.email)) {
+      return NextResponse.json(
+        { error: 'Forbidden - You can only manage your own company' },
+        { status: 403 }
       );
     }
 

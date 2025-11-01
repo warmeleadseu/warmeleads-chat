@@ -4,13 +4,23 @@
  * Sends WhatsApp messages to leads
  * - Uses Warmeleads WhatsApp Business (default)
  * - Uses customer's own WhatsApp Business (premium)
+ * 
+ * AUTHENTICATED - User can only send messages from their own account
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { whatsappService, WhatsAppService } from '@/lib/whatsappAPI';
 import { WhatsAppConfig } from '@/lib/whatsappAPI';
+import { withAuth } from '@/middleware/auth';
+import type { AuthenticatedUser } from '@/middleware/auth';
 
-export async function POST(request: NextRequest) {
+// Helper to check if user is admin
+function isAdmin(email: string): boolean {
+  const adminEmails = process.env.ADMIN_EMAILS?.split(',').map(e => e.trim()) || [];
+  return adminEmails.includes(email);
+}
+
+export const POST = withAuth(async (request: NextRequest, user: AuthenticatedUser) => {
   try {
     const { 
       customerId, 
@@ -39,6 +49,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ 
         error: 'Customer ID, phone number, and message are required' 
       }, { status: 400 });
+    }
+
+    // Security: User can only send messages from their own account (unless admin)
+    if (customerId !== user.email && !isAdmin(user.email)) {
+      return NextResponse.json({ 
+        error: 'Forbidden - You can only send messages from your own account' 
+      }, { status: 403 });
     }
 
     // Validate customerId format (email)
@@ -310,4 +327,4 @@ export async function POST(request: NextRequest) {
       details: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 });
   }
-}
+});

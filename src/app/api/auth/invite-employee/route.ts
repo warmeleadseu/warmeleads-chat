@@ -2,8 +2,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { put, list } from '@vercel/blob';
 import bcrypt from 'bcryptjs';
 import { sendEmployeeInvitationEmail } from '@/lib/emailService';
+import { withAuth } from '@/middleware/auth';
+import type { AuthenticatedUser } from '@/middleware/auth';
 
-export async function POST(request: NextRequest) {
+// Helper to check if user is admin
+function isAdmin(email: string): boolean {
+  const adminEmails = process.env.ADMIN_EMAILS?.split(',').map(e => e.trim()) || [];
+  return adminEmails.includes(email);
+}
+
+export const POST = withAuth(async (request: NextRequest, user: AuthenticatedUser) => {
   try {
     const { ownerEmail, employeeEmail, employeeName, permissions } = await request.json();
 
@@ -11,6 +19,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'Owner email, employee email en employee name zijn verplicht' },
         { status: 400 }
+      );
+    }
+
+    // Security: User can only invite employees to their own company (unless admin)
+    if (ownerEmail !== user.email && !isAdmin(user.email)) {
+      return NextResponse.json(
+        { error: 'Forbidden - You can only invite employees to your own company' },
+        { status: 403 }
       );
     }
 
@@ -154,5 +170,4 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-}
-
+});

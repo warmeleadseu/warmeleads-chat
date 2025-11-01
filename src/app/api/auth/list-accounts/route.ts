@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { list } from '@vercel/blob';
 import { ADMIN_CONFIG } from '@/config/admin';
+import { withAuth } from '@/middleware/auth';
+import type { AuthenticatedUser } from '@/middleware/auth';
 
 const BLOB_STORE_PREFIX = 'auth-accounts';
 
@@ -8,22 +10,20 @@ const BLOB_STORE_PREFIX = 'auth-accounts';
 export const dynamic = 'force-dynamic';
 
 // Admin only - list all registered accounts
-export async function GET(request: NextRequest) {
+export const GET = withAuth(async (request: NextRequest, user: AuthenticatedUser) => {
   try {
-    // Simple auth check - only allow specific admin emails
-    const { searchParams } = new URL(request.url);
-    const adminEmail = searchParams.get('adminEmail');
+    // Auth check via withAuth middleware (user is already authenticated)
     const allowedAdmins = ADMIN_CONFIG.adminEmails;
     
-    if (!adminEmail || !allowedAdmins.includes(adminEmail)) {
-      console.warn('⚠️ Unauthorized access attempt to list-accounts:', adminEmail);
+    if (!allowedAdmins.includes(user.email)) {
+      console.warn('⚠️ Unauthorized access attempt to list-accounts:', user.email);
       return NextResponse.json(
         { error: 'Unauthorized' },
-        { status: 401 }
+        { status: 403 }
       );
     }
     
-    console.log('✅ Authorized admin access:', adminEmail);
+    console.log('✅ Authorized admin access:', user.email);
     
     console.log('📊 GET /api/auth/list-accounts - Fetching all accounts');
     console.log('🔍 Looking for blobs with prefix:', BLOB_STORE_PREFIX);
@@ -78,6 +78,4 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
-}
-
-
+}, { adminOnly: true });
