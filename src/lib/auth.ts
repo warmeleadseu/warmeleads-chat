@@ -259,7 +259,7 @@ export const useAuthStore = create<AuthState>()(
         }
         
         // Store the session token
-        const token = data.token;
+        const token = data.token ? String(data.token) : null;
         if (token) {
           console.log('🔑 Session token received:', token.substring(0, 8) + '...');
         } else {
