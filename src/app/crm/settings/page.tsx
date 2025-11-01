@@ -98,20 +98,12 @@ export default function CRMSettingsPage() {
     if (!customerData || !googleSheetUrl.trim()) return;
 
     try {
-      const response = await fetch('/api/customer-sheets', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          customerId: customerData.id,
-          googleSheetUrl
-        }),
-      });
+      // Use crmSystem to link Google Sheet (saves to Supabase)
+      const success = await crmSystem.linkGoogleSheet(customerData.id, googleSheetUrl);
 
-      if (response.ok) {
+      if (success) {
         // Update local state
-        setCustomerData(prev => prev ? { ...prev, googleSheetUrl } : null);
+        setCustomerData(prev => prev ? { ...prev, googleSheetUrl, googleSheetId: googleSheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/)?.[1] } : null);
         console.log('✅ Google Sheet URL saved successfully');
         
         // Show success feedback (optional)

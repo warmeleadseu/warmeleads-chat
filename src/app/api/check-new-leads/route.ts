@@ -61,18 +61,12 @@ export async function GET(request: NextRequest) {
       try {
         console.log(`📊 Checking leads for customer: ${customer.name || customer.email}`);
         
-        // Haal Google Sheets URL op uit blob storage
-        let googleSheetUrl = customer.googleSheetUrl;
+        // Google Sheet URL should already be in customer object from Supabase
+        const googleSheetUrl = customer.googleSheetUrl;
         
-        try {
-          const response = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL || 'https://www.warmeleads.eu'}/api/customer-sheets?customerId=${customer.id}`);
-          if (response.ok) {
-            const data = await response.json();
-            googleSheetUrl = data.googleSheetUrl;
-            console.log(`✅ Loaded Google Sheets URL from blob for ${customer.email}`);
-          }
-        } catch (error) {
-          console.log(`ℹ️ Using localStorage URL for ${customer.email}`);
+        if (!googleSheetUrl) {
+          console.log(`ℹ️ No Google Sheet URL configured for ${customer.email}`);
+          continue;
         }
 
         // Lees leads uit Google Sheets
