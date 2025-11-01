@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   HomeIcon,
   ChatBubbleLeftRightIcon,
@@ -13,6 +13,8 @@ import {
   CurrencyEuroIcon,
   DocumentTextIcon,
   BellIcon,
+  Bars3Icon,
+  XMarkIcon,
 } from '@heroicons/react/24/outline';
 
 const navigation = [
@@ -30,14 +32,61 @@ const navigation = [
 export function AdminSidebar() {
   const pathname = usePathname();
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
+
+  // Close mobile menu on route change
+  useEffect(() => {
+    setIsMobileOpen(false);
+  }, [pathname]);
+
+  // Prevent body scroll when mobile menu is open
+  useEffect(() => {
+    if (isMobileOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isMobileOpen]);
 
   return (
-    <motion.div
-      className={`bg-brand-navy text-white transition-all duration-300 ${
-        isCollapsed ? 'w-16' : 'w-64'
-      }`}
-      animate={{ width: isCollapsed ? 64 : 256 }}
-    >
+    <>
+      {/* Mobile Hamburger Button (fixed top-left) */}
+      <button
+        onClick={() => setIsMobileOpen(true)}
+        className="lg:hidden fixed top-4 left-4 z-50 p-2 rounded-lg bg-brand-navy text-white shadow-lg hover:bg-brand-navy/90 transition-colors"
+        aria-label="Open menu"
+      >
+        <Bars3Icon className="w-6 h-6" />
+      </button>
+
+      {/* Mobile Overlay */}
+      <AnimatePresence>
+        {isMobileOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setIsMobileOpen(false)}
+            className="lg:hidden fixed inset-0 bg-black/50 z-40"
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Desktop Sidebar & Mobile Drawer */}
+      <motion.div
+        className={`
+          bg-brand-navy text-white
+          fixed lg:static inset-y-0 left-0 z-50
+          transition-all duration-300
+          ${isCollapsed ? 'lg:w-16' : 'lg:w-64'}
+          ${isMobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+          w-64
+        `}
+        animate={{ width: isCollapsed ? 64 : 256 }}
+      >
       {/* Logo */}
       <div className="p-6 border-b border-white/10">
         <div className="flex items-center justify-between">
@@ -51,9 +100,21 @@ export function AdminSidebar() {
               <p className="text-white/60 text-sm">Admin Dashboard</p>
             </motion.div>
           )}
+          
+          {/* Mobile Close Button */}
+          <button
+            onClick={() => setIsMobileOpen(false)}
+            className="lg:hidden p-2 rounded-lg hover:bg-white/10 transition-colors"
+            aria-label="Close menu"
+          >
+            <XMarkIcon className="w-5 h-5" />
+          </button>
+
+          {/* Desktop Collapse Button */}
           <button
             onClick={() => setIsCollapsed(!isCollapsed)}
-            className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+            className="hidden lg:block p-2 rounded-lg hover:bg-white/10 transition-colors"
+            aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           >
             <svg
               className={`w-5 h-5 transition-transform ${
@@ -131,5 +192,6 @@ export function AdminSidebar() {
         </motion.div>
       )}
     </motion.div>
+    </>
   );
 }

@@ -1,9 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { list, put, del } from '@vercel/blob';
 import { safeLog } from '@/lib/logger';
+import { withAuth } from '@/middleware/auth';
+import type { AuthenticatedUser } from '@/middleware/auth';
 
 // Force dynamic rendering for this route
 export const dynamic = 'force-dynamic';
+
+// Helper to check if user is admin
+function isAdmin(email: string): boolean {
+  const adminEmails = process.env.ADMIN_EMAILS?.split(',').map(e => e.trim()) || [];
+  return adminEmails.includes(email);
+}
 
 interface EmployeeAccount {
   email: string;
@@ -28,7 +36,7 @@ interface CompanyData {
   createdAt: string;
 }
 
-export async function DELETE(request: NextRequest) {
+export const DELETE = withAuth(async (request: NextRequest, user: AuthenticatedUser) => {
   try {
     const { searchParams } = new URL(request.url);
     const ownerEmail = searchParams.get('ownerEmail');
@@ -39,6 +47,11 @@ export async function DELETE(request: NextRequest) {
         { error: 'Owner email and employee email are required' },
         { status: 400 }
       );
+    }
+
+    // Security check: User can only delete employees from their own company (unless admin)
+    if (!isAdmin(user.email) && ownerEmail !== user.email) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     safeLog.log('🔧 Force deleting employee:', { ownerEmail, employeeEmail });
@@ -188,4 +201,4 @@ export async function DELETE(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});

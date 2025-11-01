@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createHash, createSign } from 'crypto';
+import { withAuth } from '@/middleware/auth';
+import type { AuthenticatedUser } from '@/middleware/auth';
 
-export async function POST(req: NextRequest) {
+export const POST = withAuth(async (req: NextRequest, user: AuthenticatedUser) => {
   try {
     const { unsignedToken, privateKey } = await req.json();
     
@@ -30,7 +32,7 @@ export async function POST(req: NextRequest) {
       details: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 });
   }
-}
+});
 
 
 

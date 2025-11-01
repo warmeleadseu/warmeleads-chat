@@ -9,8 +9,16 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { WhatsAppConfig } from '@/lib/whatsappAPI';
+import { withAuth } from '@/middleware/auth';
+import type { AuthenticatedUser } from '@/middleware/auth';
 
-export async function POST(request: NextRequest) {
+// Helper to check if user is admin
+function isAdmin(email: string): boolean {
+  const adminEmails = process.env.ADMIN_EMAILS?.split(',').map(e => e.trim()) || [];
+  return adminEmails.includes(email);
+}
+
+export const POST = withAuth(async (request: NextRequest, user: AuthenticatedUser) => {
   try {
     const { 
       customerId, 
@@ -25,6 +33,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ 
         error: 'Customer ID, Lead ID, and phone number are required' 
       }, { status: 400 });
+    }
+
+    // Security check: User can only trigger for themselves (unless admin)
+    if (!isAdmin(user.email) && customerId !== user.email) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     console.log(`🔄 WhatsApp trigger for new lead: ${leadName} (${phoneNumber})`);
@@ -133,7 +146,7 @@ export async function POST(request: NextRequest) {
       details: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 });
   }
-}
+});
 
 // Get product name from branch
 function getProductNameFromBranch(branch: string): string {

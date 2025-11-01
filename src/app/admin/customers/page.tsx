@@ -11,7 +11,8 @@ import {
   EnvelopeIcon,
   PhoneIcon,
   XMarkIcon,
-  ClockIcon
+  ClockIcon,
+  CurrencyEuroIcon,
 } from '@heroicons/react/24/outline';
 import { crmSystem, type Customer } from '@/lib/crmSystem';
 import { ADMIN_CONFIG, getFirstAdminEmail } from '@/config/admin';
@@ -27,7 +28,7 @@ function CustomerDetailModal({ customer, onClose, onRefresh }: { customer: Custo
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-0 md:p-4"
       onClick={onClose}
     >
       <motion.div
@@ -35,7 +36,7 @@ function CustomerDetailModal({ customer, onClose, onRefresh }: { customer: Custo
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.95, opacity: 0 }}
         onClick={(e) => e.stopPropagation()}
-        className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden"
+        className="bg-white md:rounded-2xl shadow-2xl max-w-4xl w-full h-full md:h-auto md:max-h-[90vh] overflow-hidden flex flex-col"
       >
         {/* Header */}
         <div className="bg-gradient-to-r from-brand-purple to-brand-pink text-white p-6">
@@ -91,8 +92,8 @@ function CustomerDetailModal({ customer, onClose, onRefresh }: { customer: Custo
         </div>
 
         {/* Tabs */}
-        <div className="border-b border-gray-200">
-          <nav className="flex space-x-8 px-6 overflow-x-auto">
+        <div className="border-b border-gray-200 flex-shrink-0">
+          <nav className="flex space-x-4 md:space-x-8 px-4 md:px-6 overflow-x-auto scrollbar-hide">
             {[
               { id: 'info', label: 'Info', icon: UserGroupIcon },
               { id: 'chat', label: `Chat (${customer.chatHistory.length})`, icon: ChatBubbleLeftRightIcon },
@@ -118,7 +119,7 @@ function CustomerDetailModal({ customer, onClose, onRefresh }: { customer: Custo
         </div>
 
         {/* Tab Content */}
-        <div className="p-6 max-h-96 overflow-y-auto">
+        <div className="p-4 md:p-6 overflow-y-auto flex-1">
           {activeTab === 'info' && (
             <div className="space-y-6">
               <div className="grid grid-cols-2 gap-6">
@@ -866,13 +867,14 @@ export default function CustomersPage() {
           </p>
         </motion.div>
       ) : (
-        <motion.div
+        <motion.div 
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.2 }}
           className="bg-white rounded-xl shadow-sm overflow-hidden"
         >
-          <div className="overflow-x-auto">
+          {/* Desktop Table */}
+          <div className="hidden lg:block overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
@@ -1141,6 +1143,125 @@ export default function CustomersPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+
+          {/* Mobile Cards */}
+          <div className="lg:hidden divide-y divide-gray-200">
+            {filteredCustomers.map((customer) => (
+              <div
+                key={customer.id}
+                onClick={() => setSelectedCustomer(customer)}
+                className="p-4 hover:bg-gray-50 cursor-pointer transition-colors"
+              >
+                {/* Customer Header */}
+                <div className="flex items-start space-x-3 mb-3">
+                  <div className="w-12 h-12 bg-gradient-to-r from-brand-purple to-brand-pink rounded-full flex items-center justify-center flex-shrink-0">
+                    <span className="text-white font-semibold">
+                      {customer.name?.charAt(0) || customer.email.charAt(0).toUpperCase()}
+                    </span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-sm font-medium text-gray-900 truncate">
+                      {customer.name || 'Naamloos'}
+                    </h3>
+                    <p className="text-xs text-gray-500 truncate">{customer.email}</p>
+                    {customer.company && (
+                      <p className="text-xs text-gray-400 truncate">{customer.company}</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Status Badges */}
+                <div className="flex flex-wrap gap-1.5 mb-3">
+                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                    customer.status === 'customer' ? 'bg-green-100 text-green-800' :
+                    customer.status === 'contacted' ? 'bg-blue-100 text-blue-800' :
+                    customer.status === 'lead' ? 'bg-yellow-100 text-yellow-800' :
+                    'bg-gray-100 text-gray-800'
+                  }`}>
+                    {customer.status === 'customer' ? '🎯 Klant' :
+                     customer.status === 'contacted' ? '📞 Gecontacteerd' :
+                     customer.status === 'lead' ? '🔥 Lead' : '💤 Inactief'}
+                  </span>
+                  
+                  {customer.hasAccount && (
+                    <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-purple-100 text-purple-800">
+                      👤 Account
+                    </span>
+                  )}
+                  
+                  {customer.googleSheetId && (
+                    <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+                      📊 Sheet
+                    </span>
+                  )}
+                  
+                  {customer.openInvoices.length > 0 && (
+                    <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-orange-100 text-orange-800">
+                      📋 {customer.openInvoices.length}
+                    </span>
+                  )}
+                </div>
+
+                {/* Stats */}
+                <div className="grid grid-cols-2 gap-2 text-xs text-gray-600 mb-3">
+                  {customer.phone && (
+                    <div className="flex items-center">
+                      <PhoneIcon className="w-3.5 h-3.5 mr-1.5" />
+                      <span className="truncate">{customer.phone}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center">
+                    <ChatBubbleLeftRightIcon className="w-3.5 h-3.5 mr-1.5" />
+                    {customer.chatHistory.length} berichten
+                  </div>
+                  <div className="flex items-center">
+                    <DocumentTextIcon className="w-3.5 h-3.5 mr-1.5" />
+                    {customer.orders.length} orders
+                  </div>
+                  <div className="flex items-center">
+                    <CurrencyEuroIcon className="w-3.5 h-3.5 mr-1.5" />
+                    €{customer.orders.reduce((sum, o) => sum + o.amount, 0).toFixed(2)}
+                  </div>
+                </div>
+
+                {/* Quick Actions */}
+                <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+                  <div className="text-xs text-gray-500">
+                    {new Date(customer.lastActivity).toLocaleDateString('nl-NL')}
+                  </div>
+                  <div className="flex space-x-2" onClick={(e) => e.stopPropagation()}>
+                    <a
+                      href={`mailto:${customer.email}`}
+                      className="text-blue-600 hover:text-blue-800 p-1.5"
+                      title="Email"
+                    >
+                      <EnvelopeIcon className="w-4 h-4" />
+                    </a>
+                    {customer.phone && (
+                      <a
+                        href={`tel:${customer.phone}`}
+                        className="text-green-600 hover:text-green-800 p-1.5"
+                        title="Bel"
+                      >
+                        <PhoneIcon className="w-4 h-4" />
+                      </a>
+                    )}
+                    {customer.googleSheetUrl && (
+                      <a
+                        href={customer.googleSheetUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-purple-600 hover:text-purple-800 p-1.5"
+                        title="Sheet"
+                      >
+                        📊
+                      </a>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         </motion.div>
       )}

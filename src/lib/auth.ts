@@ -219,13 +219,6 @@ export const useAuthStore = create<AuthState>()(
           error: null 
         });
         
-        // Store in localStorage manually for persistence
-        localStorage.setItem('warmeleads-auth', JSON.stringify({
-          user,
-          isAuthenticated: true,
-          timestamp: Date.now()
-        }));
-        
         notifyListeners();
         
       } catch (error) {
@@ -353,10 +346,6 @@ export const useAuthStore = create<AuthState>()(
           error: null 
         });
         
-        // Clear all auth data
-        localStorage.removeItem('warmeleads-auth');
-        localStorage.removeItem('warmeleads_visited');
-        
         console.log('🚨 State after logout:', authState);
         notifyListeners();
       },
@@ -394,42 +383,11 @@ export const useAuthStore = create<AuthState>()(
         set({ error: null });
       },
 
-      // Initialize auth state from localStorage
+      // Initialize auth state (no localStorage persistence)
       init: () => {
-        try {
-          const authData = localStorage.getItem('warmeleads-auth');
-          if (authData) {
-            const parsed = JSON.parse(authData);
-            // Check if auth data is not too old (24 hours)
-            if (parsed.timestamp && (Date.now() - parsed.timestamp) < 24 * 60 * 60 * 1000) {
-              console.log('🔄 RESTORING AUTH FROM LOCALSTORAGE:', { 
-                email: parsed.user?.email, 
-                isAuthenticated: parsed.isAuthenticated 
-              });
-              
-              // Update local state
-              authState.user = parsed.user;
-              authState.isAuthenticated = parsed.isAuthenticated;
-              authState.isLoading = false;
-              authState.error = null;
-              
-              set({
-                user: parsed.user,
-                isAuthenticated: parsed.isAuthenticated,
-                isLoading: false,
-                error: null
-              });
-              
-              notifyListeners();
-            } else {
-              console.log('🕐 AUTH DATA TOO OLD, CLEARING');
-              localStorage.removeItem('warmeleads-auth');
-            }
-          }
-        } catch (error) {
-          console.error('Error restoring auth:', error);
-          localStorage.removeItem('warmeleads-auth');
-        }
+        // Auth state is managed server-side via Supabase JWT tokens
+        // No client-side persistence needed
+        console.log('🔄 Auth initialized - using Supabase sessions');
       }
     })
 );
