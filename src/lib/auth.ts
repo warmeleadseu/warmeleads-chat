@@ -483,12 +483,13 @@ export const useAuthStore = create<AuthState>()(
           const authData = localStorage.getItem('warmeleads-auth');
           if (authData) {
             const parsed = JSON.parse(authData);
-            // Check if auth data is not too old (24 hours)
-            if (parsed.timestamp && (Date.now() - parsed.timestamp) < 24 * 60 * 60 * 1000) {
+            // Check if auth data is not too old (24 hours) AND has a token
+            if (parsed.timestamp && (Date.now() - parsed.timestamp) < 24 * 60 * 60 * 1000 && parsed.token) {
               console.log('🔄 RESTORING AUTH FROM LOCALSTORAGE:', { 
                 email: parsed.user?.email, 
                 name: parsed.user?.name,
-                isAuthenticated: parsed.isAuthenticated 
+                isAuthenticated: parsed.isAuthenticated,
+                hasToken: !!parsed.token
               });
               
               // Update local state
@@ -496,6 +497,9 @@ export const useAuthStore = create<AuthState>()(
               authState.isAuthenticated = parsed.isAuthenticated;
               authState.isLoading = false;
               authState.error = null;
+              
+              // Cache the token
+              cachedToken = parsed.token;
               
               set({
                 user: parsed.user,
@@ -506,7 +510,11 @@ export const useAuthStore = create<AuthState>()(
               
               notifyListeners();
             } else {
-              console.log('🕐 AUTH DATA TOO OLD, CLEARING');
+              if (!parsed.token) {
+                console.log('⚠️ AUTH DATA HAS NO TOKEN, CLEARING');
+              } else {
+                console.log('🕐 AUTH DATA TOO OLD, CLEARING');
+              }
               localStorage.removeItem('warmeleads-auth');
             }
           } else {
