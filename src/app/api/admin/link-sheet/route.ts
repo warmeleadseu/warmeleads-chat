@@ -51,7 +51,7 @@ export async function POST(request: Request) {
     console.log('   🔍 Checking if customer exists...');
     const { data: existingCustomer, error: fetchError } = await supabase
       .from('customers')
-      .select('id, email, name')
+      .select('id, email, name, google_sheet_id, google_sheet_url')
       .eq('email', customerEmail)
       .maybeSingle();
 
