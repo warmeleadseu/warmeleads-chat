@@ -101,10 +101,10 @@ export const GET = withAuth(async (request: NextRequest, user: AuthenticatedUser
     console.error('Error in GET /api/whatsapp/config:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
-}
+});
 
-// POST: Sla WhatsApp configuratie op
-export async function POST(request: NextRequest) {
+// POST: Sla WhatsApp configuratie op (AUTHENTICATED)
+export const POST = withAuth(async (request: NextRequest, user: AuthenticatedUser) => {
   try {
     const body = await request.json();
     console.log('📥 POST /api/whatsapp/config - RAW body:', JSON.stringify(body, null, 2));
@@ -114,6 +114,13 @@ export async function POST(request: NextRequest) {
     if (!customerId || !config) {
       console.error('❌ Missing customerId or config in request');
       return NextResponse.json({ error: 'Customer ID and config are required' }, { status: 400 });
+    }
+
+    // Security: User can only update their own config (unless admin)
+    if (customerId !== user.email && !isAdmin(user.email)) {
+      return NextResponse.json({ 
+        error: 'Forbidden - You can only update your own WhatsApp config' 
+      }, { status: 403 });
     }
 
     console.log(`📥 Received config for customer ${customerId}:`);

@@ -1,12 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Resend } from 'resend';
+import { withAuth } from '@/middleware/auth';
+import type { AuthenticatedUser } from '@/middleware/auth';
 
 // API route voor het versturen van email notificaties over nieuwe leads
+// AUTHENTICATED - Internal use only (called from other API routes)
 
-//
 const resend = new Resend(process.env.RESEND_API_KEY || 're_dummy_key_for_build');
 
-export async function POST(request: NextRequest) {
+// Helper to check if user is admin
+function isAdmin(email: string): boolean {
+  const adminEmails = process.env.ADMIN_EMAILS?.split(',').map(e => e.trim()) || [];
+  return adminEmails.includes(email);
+}
+
+export const POST = withAuth(async (request: NextRequest, user: AuthenticatedUser) => {
   try {
     const body = await request.json();
     const { customerEmail, customerName, lead } = body;
@@ -19,6 +27,13 @@ export async function POST(request: NextRequest) {
         { error: 'Customer email and lead data are required' },
         { status: 400 }
       );
+    }
+
+    // Security: User can only send notifications to themselves (unless admin)
+    if (customerEmail !== user.email && !isAdmin(user.email)) {
+      return NextResponse.json({ 
+        error: 'Forbidden - You can only send notifications to yourself' 
+      }, { status: 403 });
     }
 
     // Maak email content voor individuele lead
@@ -255,5 +270,4 @@ www.warmeleads.eu
       { status: 500 }
     );
   }
-}
-
+});

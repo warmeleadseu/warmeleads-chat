@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { put, list, head } from '@vercel/blob';
 import bcrypt from 'bcryptjs';
 
+// Public endpoint - employee activation with email/password only
+// Security: No auth required, but validates employee account exists
 export async function POST(request: NextRequest) {
   try {
     const { email, password } = await request.json();
