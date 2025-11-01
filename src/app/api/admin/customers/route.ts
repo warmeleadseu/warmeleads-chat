@@ -11,11 +11,14 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(request: NextRequest) {
   try {
+    console.log('🔍 Environment check:');
+    console.log('   NEXT_PUBLIC_SUPABASE_URL:', process.env.NEXT_PUBLIC_SUPABASE_URL);
+    console.log('   SUPABASE_SERVICE_ROLE_KEY exists:', !!process.env.SUPABASE_SERVICE_ROLE_KEY);
+    console.log('   SUPABASE_SERVICE_ROLE_KEY length:', process.env.SUPABASE_SERVICE_ROLE_KEY?.length);
+    
     const supabase = createServerClient();
 
     console.log('🔍 Fetching customers from Supabase...');
-    console.log('   URL:', process.env.NEXT_PUBLIC_SUPABASE_URL?.substring(0, 40));
-    console.log('   Has Service Key:', !!process.env.SUPABASE_SERVICE_ROLE_KEY);
 
     // Fetch all customers with their related data
     const { data: customers, error } = await supabase
