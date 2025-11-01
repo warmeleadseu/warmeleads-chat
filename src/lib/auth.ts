@@ -1,6 +1,71 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
+// Session token management
+let cachedToken: string | null = null;
+
+/**
+ * Get the current auth token from localStorage
+ */
+export function getAuthToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  
+  if (cachedToken) return cachedToken;
+  
+  try {
+    const authData = localStorage.getItem('warmeleads-auth');
+    if (authData) {
+      const parsed = JSON.parse(authData);
+      if (parsed.token) {
+        cachedToken = parsed.token;
+        return parsed.token;
+      }
+    }
+  } catch (error) {
+    console.error('Error reading auth token:', error);
+  }
+  
+  return null;
+}
+
+/**
+ * Clear cached token
+ */
+export function clearAuthToken() {
+  cachedToken = null;
+}
+
+/**
+ * Make an authenticated API request
+ * Automatically includes the auth token
+ */
+export async function authenticatedFetch(url: string, options: RequestInit = {}): Promise<Response> {
+  const token = getAuthToken();
+  
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  
+  // Merge existing headers
+  if (options.headers) {
+    Object.entries(options.headers).forEach(([key, value]) => {
+      headers[key] = value as string;
+    });
+  }
+  
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+    console.log('🔑 Making authenticated request to:', url, '| Token:', token.substring(0, 8) + '...');
+  } else {
+    console.warn('⚠️ No auth token found for request to:', url);
+  }
+  
+  return fetch(url, {
+    ...options,
+    headers,
+  });
+}
+
 export interface UserPermissions {
   canViewLeads: boolean;
   canViewOrders: boolean;
