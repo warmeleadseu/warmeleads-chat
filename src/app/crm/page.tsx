@@ -46,47 +46,24 @@ export default function CRMDashboard() {
     
     let customer: Customer | null = null;
     try {
-      const response = await fetch('/api/customer-data');
-      if (response.ok) {
-        const data = await response.json();
-        console.log('📡 CRM Dashboard: API response:', data);
-        
-        // Handle different response structures
-        if (data.customers && Array.isArray(data.customers)) {
-          customer = data.customers.find((c: any) => c.email === user?.email);
-        } else if (data.customer) {
-          customer = data.customer;
-        } else if (data.success && data.customer) {
-          customer = data.customer;
-        } else {
-          console.log('ℹ️ CRM Dashboard: Unexpected API response structure, falling back to localStorage.');
-          const allCustomers = crmSystem.getAllCustomers();
-          customer = allCustomers.find(c => c.email === user?.email) || null;
-        }
+      // Try to get customer directly from CRM system
+      if (user?.email) {
+        customer = await crmSystem.getCustomerByEmail(user.email);
         
         if (customer) {
-          console.log('✅ CRM Dashboard: Customer data fetched from API.');
-        } else {
-          console.log('ℹ️ CRM Dashboard: Customer not found in API response, falling back to localStorage.');
-          const allCustomers = crmSystem.getAllCustomers();
-          customer = allCustomers.find(c => c.email === user?.email) || null;
+          console.log('✅ CRM Dashboard: Customer data fetched from Supabase');
         }
-      } else {
-        console.log('ℹ️ CRM Dashboard: API fetch failed, falling back to localStorage.');
-        // Fallback to localStorage if API fails or no data
-        const allCustomers = crmSystem.getAllCustomers();
-        customer = allCustomers.find(c => c.email === user?.email) || null;
       }
 
       if (!customer) {
-        console.log('ℹ️ CRM Dashboard: Customer not found in any source, creating fallback customer.');
+        console.log('ℹ️ CRM Dashboard: Customer not found, creating fallback customer');
         // Create a minimal fallback customer to prevent crashes
         customer = {
           id: user?.email || 'unknown',
           name: user?.name || 'Unknown User',
           email: user?.email || 'unknown@example.com',
-          company: 'Unknown Company',
-          phone: '',
+          company: user?.company || 'Unknown Company',
+          phone: user?.phone || '',
           status: 'customer',
           googleSheetUrl: '',
           leadData: [],

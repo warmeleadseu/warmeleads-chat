@@ -27,10 +27,10 @@ export default function AdminDashboard() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const loadStats = () => {
+    const loadStats = async () => {
       try {
-        const analytics = getCRMAnalytics();
-        const overdueInvoices = getOverdueInvoices();
+        const analytics = await getCRMAnalytics();
+        const overdueInvoices = await getOverdueInvoices();
         
         setStats({
           totalCustomers: analytics.totalCustomers,

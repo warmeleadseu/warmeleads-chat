@@ -1,6 +1,17 @@
-// Smart CRM System for WarmeLeads
-import { v4 as uuidv4 } from 'uuid';
+/**
+ * NEW Supabase-based CRM System
+ * Replaces localStorage with Supabase database
+ * 
+ * MIGRATION STRATEGY:
+ * - All customer data now in Supabase customers table
+ * - Chat messages in chat_messages table
+ * - Orders in orders table
+ * - NO MORE localStorage usage
+ */
 
+import { createClient } from '@supabase/supabase-js';
+
+// Types (keep existing interfaces)
 export interface ChatMessage {
   id: string;
   type: 'lisa' | 'user';
@@ -84,320 +95,521 @@ export interface Lead {
   timeline?: string;
   notes?: string;
   status: 'new' | 'contacted' | 'qualified' | 'proposal' | 'negotiation' | 'converted' | 'deal_closed' | 'lost';
-  dealValue?: number; // Omzet van de deal in euro's
-  profit?: number; // Winst van de deal in euro's
+  dealValue?: number;
+  profit?: number;
   assignedTo?: string;
   createdAt: Date;
   updatedAt: Date;
   source: 'campaign' | 'manual' | 'import';
-  sheetRowNumber?: number; // For Google Sheets sync
+  sheetRowNumber?: number;
+  branchData?: any;
+}
+
+// Helper to get Supabase client
+function getSupabaseClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   
-  // Branch-specific fields
-  branchData?: {
-    // Thuisbatterijen specifiek
-    datumInteresse?: string;
-    postcode?: string;
-    huisnummer?: string;
-    zonnepanelen?: string;
-    dynamischContract?: string;
-    stroomverbruik?: string;
-    nieuwsbrief?: string;
-    redenThuisbatterij?: string;
-    koopintentie?: string;
-    
-    // Zonnepanelen specifiek (voor later)
-    dakoppervlak?: string;
-    dakrichting?: string;
-    schaduw?: string;
-    
-    // Warmtepompen specifiek (voor later)
-    huisgrootte?: string;
-    isolatie?: string;
-    huidigeVerwarming?: string;
-    
-    // Financial lease specifiek (voor later)
-    bedrijfsomvang?: string;
-    branche?: string;
-    kredietScore?: string;
+  if (!supabaseUrl || !supabaseServiceKey) {
+    throw new Error('Supabase credentials not configured');
+  }
+  
+  return createClient(supabaseUrl, supabaseServiceKey);
+}
+
+/**
+ * Transform Supabase customer data to Customer interface
+ */
+function transformSupabaseCustomer(data: any): Customer {
+  return {
+    id: data.id,
+    email: data.email,
+    name: data.name,
+    phone: data.phone,
+    company: data.company,
+    status: data.status,
+    source: data.source,
+    hasAccount: data.has_account,
+    accountCreatedAt: data.account_created_at ? new Date(data.account_created_at) : undefined,
+    googleSheetId: data.google_sheet_id,
+    googleSheetUrl: data.google_sheet_url,
+    emailNotifications: {
+      enabled: data.email_notifications_enabled,
+      newLeads: data.email_notifications_new_leads,
+      lastNotificationSent: data.last_notification_sent ? new Date(data.last_notification_sent) : undefined
+    },
+    createdAt: new Date(data.created_at),
+    lastActivity: new Date(data.last_activity),
+    chatHistory: (data.chat_messages || []).map((msg: any) => ({
+      id: msg.id,
+      type: msg.type,
+      content: msg.content,
+      step: msg.step,
+      timestamp: new Date(msg.timestamp)
+    })),
+    orders: (data.orders || []).map((order: any) => ({
+      id: order.id,
+      customerId: order.customer_id,
+      industry: order.industry,
+      leadType: order.lead_type,
+      quantity: order.quantity,
+      amount: order.total_amount,
+      status: order.status,
+      createdAt: new Date(order.created_at),
+      paidAt: order.paid_at ? new Date(order.paid_at) : undefined,
+      deliveredAt: order.delivered_at ? new Date(order.delivered_at) : undefined,
+      stripeSessionId: order.stripe_session_id,
+      stripePaymentIntentId: order.stripe_payment_intent_id
+    })),
+    openInvoices: (data.open_invoices || []).map((inv: any) => ({
+      id: inv.id,
+      customerId: inv.customer_id,
+      industry: inv.industry,
+      leadType: inv.lead_type,
+      quantity: inv.quantity.toString(),
+      amount: inv.amount.toString(),
+      createdAt: new Date(inv.created_at),
+      lastReminderSent: inv.last_reminder_sent ? new Date(inv.last_reminder_sent) : undefined,
+      reminderCount: inv.reminder_count,
+      status: inv.status
+    })),
+    dataHistory: (data.data_changes || []).map((change: any) => ({
+      field: change.field,
+      oldValue: change.old_value,
+      newValue: change.new_value,
+      timestamp: new Date(change.timestamp),
+      source: change.source
+    })),
+    leadData: (data.leads || []).map((lead: any) => ({
+      id: lead.id,
+      name: lead.name,
+      email: lead.email,
+      phone: lead.phone,
+      company: lead.company,
+      address: lead.address,
+      city: lead.city,
+      interest: lead.interest,
+      budget: lead.budget,
+      timeline: lead.timeline,
+      notes: lead.notes,
+      status: lead.status,
+      dealValue: lead.deal_value,
+      profit: lead.profit,
+      assignedTo: lead.assigned_to,
+      createdAt: new Date(lead.created_at),
+      updatedAt: new Date(lead.updated_at),
+      source: lead.source,
+      sheetRowNumber: lead.sheet_row_number,
+      branchData: lead.lead_branch_data?.[0] || {}
+    }))
   };
 }
 
 class CRMSystem {
-  private customers: Map<string, Customer> = new Map();
-  private customersByEmail: Map<string, string> = new Map(); // email -> customerId
-
-  // Initialize with data from localStorage (in production: database)
-  constructor() {
-    this.loadFromStorage();
-  }
-
-  private loadFromStorage() {
-    try {
-      // Check if we're in a browser environment
-      if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
-        return;
-      }
-      const stored = localStorage.getItem('warmeleads_crm_data');
-      if (stored) {
-        const { customers, customersByEmail } = JSON.parse(stored);
-        
-        // Properly restore customers with dates and branchData
-        this.customers = new Map(customers.map(([id, customer]: [string, any]) => [id, {
-          ...customer,
-          createdAt: new Date(customer.createdAt),
-          lastActivity: new Date(customer.lastActivity),
-          accountCreatedAt: customer.accountCreatedAt ? new Date(customer.accountCreatedAt) : undefined,
-          chatHistory: customer.chatHistory.map((msg: any) => ({ 
-            ...msg, 
-            timestamp: new Date(msg.timestamp) 
-          })),
-          dataHistory: customer.dataHistory.map((change: any) => ({ 
-            ...change, 
-            timestamp: new Date(change.timestamp) 
-          })),
-          leadData: customer.leadData?.map((lead: any) => ({ 
-            ...lead, 
-            createdAt: new Date(lead.createdAt), 
-            updatedAt: new Date(lead.updatedAt),
-            // Ensure branchData is preserved correctly
-            branchData: lead.branchData || {}
-          })) || []
-        }]));
-        
-        this.customersByEmail = new Map(customersByEmail);
-        
-        console.log('📊 CRM data loaded from storage with branch data preservation');
-      }
-    } catch (error) {
-      console.error('Error loading CRM data:', error);
-    }
-  }
-
-  private saveToStorage() {
-    try {
-      // Check if we're in a browser environment
-      if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
-        return;
-      }
-      const data = {
-        customers: Array.from(this.customers.entries()),
-        customersByEmail: Array.from(this.customersByEmail.entries())
-      };
-      localStorage.setItem('warmeleads_crm_data', JSON.stringify(data));
-    } catch (error) {
-      console.error('Error saving CRM data:', error);
-    }
-  }
-
-  // Smart customer creation/update system
-  createOrUpdateCustomer(data: {
+  /**
+   * Create or update customer
+   * NO MORE localStorage - direct Supabase insert/update
+   */
+  async createOrUpdateCustomer(data: {
     email?: string;
     name?: string;
     phone?: string;
     company?: string;
     source?: 'chat' | 'direct' | 'landing_page';
-  }): Customer {
-    let customer: Customer;
-    let customerId: string;
+  }): Promise<Customer> {
+    const supabase = getSupabaseClient();
+    
+    if (!data.email) {
+      throw new Error('Email is required to create/update customer');
+    }
 
-    // Find existing customer by email
-    if (data.email && this.customersByEmail.has(data.email)) {
-      customerId = this.customersByEmail.get(data.email)!;
-      customer = this.customers.get(customerId)!;
-    } else {
-      // Create new customer
-      customerId = uuidv4();
-      customer = {
-        id: customerId,
-        email: data.email || '',
-        createdAt: new Date(),
-        lastActivity: new Date(),
-        status: 'lead',
-        source: data.source || 'chat',
-        chatHistory: [],
-        orders: [],
-        openInvoices: [],
-        dataHistory: [],
-        hasAccount: false,
-        leadData: []
+    // Check if customer exists
+    const { data: existing } = await supabase
+      .from('customers')
+      .select('*')
+      .eq('email', data.email)
+      .single();
+
+    if (existing) {
+      // Update existing customer
+      const updates: any = {
+        last_activity: new Date().toISOString()
       };
       
-      this.customers.set(customerId, customer);
-      if (data.email) {
-        this.customersByEmail.set(data.email, customerId);
+      if (data.name && data.name !== existing.name) {
+        updates.name = data.name;
+        
+        // Log data change
+        await supabase.from('data_changes').insert({
+          customer_id: existing.id,
+          field: 'name',
+          old_value: existing.name,
+          new_value: data.name,
+          source: 'form'
+        });
       }
-    }
-
-    // Smart data updates with history tracking
-    const updates: Partial<Customer> = {};
-    const dataChanges: DataChange[] = [];
-
-    // Track all field changes
-    if (data.name && data.name !== customer.name) {
-      dataChanges.push({
-        field: 'name',
-        oldValue: customer.name,
-        newValue: data.name,
-        timestamp: new Date(),
-        source: 'form'
-      });
-      updates.name = data.name;
-    }
-
-    if (data.phone && data.phone !== customer.phone) {
-      dataChanges.push({
-        field: 'phone',
-        oldValue: customer.phone,
-        newValue: data.phone,
-        timestamp: new Date(),
-        source: 'form'
-      });
-      updates.phone = data.phone;
-    }
-
-    if (data.company && data.company !== customer.company) {
-      dataChanges.push({
-        field: 'company',
-        oldValue: customer.company,
-        newValue: data.company,
-        timestamp: new Date(),
-        source: 'form'
-      });
-      updates.company = data.company;
-    }
-
-    if (data.email && data.email !== customer.email) {
-      // Update email mapping
-      if (customer.email) {
-        this.customersByEmail.delete(customer.email);
-      }
-      this.customersByEmail.set(data.email, customerId);
       
-      dataChanges.push({
-        field: 'email',
-        oldValue: customer.email,
-        newValue: data.email,
-        timestamp: new Date(),
-        source: 'form'
-      });
-      updates.email = data.email;
-    }
-
-    // Apply updates
-    Object.assign(customer, updates);
-    customer.lastActivity = new Date();
-    customer.dataHistory.push(...dataChanges);
-
-    this.saveToStorage();
-    return customer;
-  }
-
-  // Log chat messages
-  logChatMessage(customerEmail: string, message: ChatMessage) {
-    const customerId = this.customersByEmail.get(customerEmail);
-    if (customerId) {
-      const customer = this.customers.get(customerId);
-      if (customer) {
-        customer.chatHistory.push(message);
-        customer.lastActivity = new Date();
-        this.saveToStorage();
+      if (data.phone && data.phone !== existing.phone) {
+        updates.phone = data.phone;
+        
+        await supabase.from('data_changes').insert({
+          customer_id: existing.id,
+          field: 'phone',
+          old_value: existing.phone,
+          new_value: data.phone,
+          source: 'form'
+        });
       }
+      
+      if (data.company && data.company !== existing.company) {
+        updates.company = data.company;
+        
+        await supabase.from('data_changes').insert({
+          customer_id: existing.id,
+          field: 'company',
+          old_value: existing.company,
+          new_value: data.company,
+          source: 'form'
+        });
+      }
+
+      await supabase
+        .from('customers')
+        .update(updates)
+        .eq('id', existing.id);
+
+      // Fetch updated customer with relations
+      const { data: updated } = await supabase
+        .from('customers')
+        .select(`
+          *,
+          chat_messages(*),
+          orders(*),
+          open_invoices(*),
+          data_changes(*),
+          leads(*, lead_branch_data(*))
+        `)
+        .eq('id', existing.id)
+        .single();
+
+      return transformSupabaseCustomer(updated);
+    } else {
+      // Create new customer
+      const { data: newCustomer, error } = await supabase
+        .from('customers')
+        .insert({
+          email: data.email,
+          name: data.name,
+          phone: data.phone,
+          company: data.company,
+          status: 'lead',
+          source: data.source || 'chat',
+          has_account: false
+        })
+        .select(`
+          *,
+          chat_messages(*),
+          orders(*),
+          open_invoices(*),
+          data_changes(*),
+          leads(*, lead_branch_data(*))
+        `)
+        .single();
+
+      if (error) {
+        console.error('❌ Error creating customer:', error);
+        throw error;
+      }
+
+      return transformSupabaseCustomer(newCustomer);
     }
   }
 
-  // Create open invoice (before payment)
-  createOpenInvoice(customerEmail: string, invoiceData: {
+  /**
+   * Log chat message to database
+   */
+  async logChatMessage(customerEmail: string, message: ChatMessage): Promise<void> {
+    const supabase = getSupabaseClient();
+    
+    // Get customer ID
+    const { data: customer } = await supabase
+      .from('customers')
+      .select('id')
+      .eq('email', customerEmail)
+      .single();
+
+    if (!customer) {
+      console.warn(`⚠️  Customer not found: ${customerEmail}`);
+      return;
+    }
+
+    // Insert chat message
+    await supabase.from('chat_messages').insert({
+      customer_id: customer.id,
+      type: message.type,
+      content: message.content,
+      step: message.step,
+      timestamp: message.timestamp.toISOString()
+    });
+
+    // Update last activity
+    await supabase
+      .from('customers')
+      .update({ last_activity: new Date().toISOString() })
+      .eq('id', customer.id);
+  }
+
+  /**
+   * Create open invoice
+   */
+  async createOpenInvoice(customerEmail: string, invoiceData: {
     industry: string;
     leadType: string;
     quantity: string;
     amount: string;
-  }): OpenInvoice {
-    const customer = this.getOrCreateCustomerByEmail(customerEmail);
+  }): Promise<OpenInvoice> {
+    const supabase = getSupabaseClient();
     
-    const invoice: OpenInvoice = {
-      id: uuidv4(),
-      customerId: customer.id,
-      industry: invoiceData.industry,
-      leadType: invoiceData.leadType,
-      quantity: invoiceData.quantity,
-      amount: invoiceData.amount,
-      createdAt: new Date(),
-      reminderCount: 0,
-      status: 'draft'
+    // Get or create customer
+    const customer = await this.createOrUpdateCustomer({ email: customerEmail });
+
+    // Insert invoice
+    const { data: invoice, error } = await supabase
+      .from('open_invoices')
+      .insert({
+        customer_id: customer.id,
+        customer_email: customerEmail,
+        industry: invoiceData.industry,
+        lead_type: invoiceData.leadType,
+        quantity: parseInt(invoiceData.quantity.match(/\d+/)?.[0] || '0'),
+        amount: parseFloat(invoiceData.amount.replace(/[€.,]/g, '')) || 0,
+        status: 'draft',
+        reminder_count: 0
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('❌ Error creating invoice:', error);
+      throw error;
+    }
+
+    return {
+      id: invoice.id,
+      customerId: invoice.customer_id,
+      industry: invoice.industry,
+      leadType: invoice.lead_type,
+      quantity: invoice.quantity.toString(),
+      amount: invoice.amount.toString(),
+      createdAt: new Date(invoice.created_at),
+      reminderCount: invoice.reminder_count,
+      status: invoice.status
     };
-
-    customer.openInvoices.push(invoice);
-    customer.lastActivity = new Date();
-    this.saveToStorage();
-
-    return invoice;
   }
 
-  // Convert open invoice to paid order
-  convertInvoiceToOrder(invoiceId: string, stripeData: {
+  /**
+   * Convert open invoice to paid order
+   */
+  async convertInvoiceToOrder(invoiceId: string, stripeData: {
     sessionId?: string;
     paymentIntentId?: string;
-  }): Order | null {
-    for (const customer of this.customers.values()) {
-      const invoiceIndex = customer.openInvoices.findIndex(inv => inv.id === invoiceId);
-      if (invoiceIndex !== -1) {
-        const invoice = customer.openInvoices[invoiceIndex];
-        
-        // Create order from invoice
-        const order: Order = {
-          id: uuidv4(),
-          customerId: customer.id,
-          industry: invoice.industry,
-          leadType: invoice.leadType.toLowerCase().includes('exclusief') ? 'exclusive' : 'shared',
-          quantity: parseInt(invoice.quantity.match(/\d+/)?.[0] || '0'),
-          amount: parseFloat(invoice.amount.replace(/[€.,]/g, '')) || 0,
-          status: 'paid',
-          createdAt: invoice.createdAt,
-          paidAt: new Date(),
-          stripeSessionId: stripeData.sessionId,
-          stripePaymentIntentId: stripeData.paymentIntentId
-        };
+  }): Promise<Order | null> {
+    const supabase = getSupabaseClient();
 
-        // Add order and remove open invoice
-        customer.orders.push(order);
-        customer.openInvoices.splice(invoiceIndex, 1);
-        customer.status = 'customer';
-        customer.lastActivity = new Date();
+    // Get invoice
+    const { data: invoice } = await supabase
+      .from('open_invoices')
+      .select('*')
+      .eq('id', invoiceId)
+      .single();
 
-        this.saveToStorage();
-        return order;
-      }
+    if (!invoice) {
+      return null;
     }
-    return null;
-  }
 
-  // Get customer by email (create if not exists)
-  private getOrCreateCustomerByEmail(email: string): Customer {
-    let customerId = this.customersByEmail.get(email);
-    if (!customerId) {
-      return this.createOrUpdateCustomer({ email, source: 'chat' });
+    // Create order
+    const { data: order, error: orderError } = await supabase
+      .from('orders')
+      .insert({
+        order_number: `WL-${Date.now()}`,
+        customer_id: invoice.customer_id,
+        customer_email: invoice.customer_email,
+        customer_name: 'Customer', // TODO: Get from customer
+        package_id: 'custom',
+        package_name: invoice.industry,
+        industry: invoice.industry,
+        lead_type: invoice.lead_type.toLowerCase().includes('exclusief') ? 'exclusive' : 'shared',
+        quantity: invoice.quantity,
+        price_per_lead: Math.round(invoice.amount / invoice.quantity),
+        total_amount: invoice.amount,
+        vat_amount: Math.round(invoice.amount * 0.21),
+        total_amount_incl_vat: Math.round(invoice.amount * 1.21),
+        status: 'completed',
+        payment_status: 'paid',
+        payment_method: 'stripe',
+        stripe_session_id: stripeData.sessionId,
+        stripe_payment_intent_id: stripeData.paymentIntentId,
+        paid_at: new Date().toISOString()
+      })
+      .select()
+      .single();
+
+    if (orderError) {
+      console.error('❌ Error creating order:', orderError);
+      throw orderError;
     }
-    return this.customers.get(customerId)!;
+
+    // Delete open invoice
+    await supabase
+      .from('open_invoices')
+      .delete()
+      .eq('id', invoiceId);
+
+    // Update customer status
+    await supabase
+      .from('customers')
+      .update({ 
+        status: 'customer',
+        last_activity: new Date().toISOString()
+      })
+      .eq('id', invoice.customer_id);
+
+    return {
+      id: order.id,
+      customerId: order.customer_id,
+      industry: order.industry,
+      leadType: order.lead_type,
+      quantity: order.quantity,
+      amount: order.total_amount,
+      status: order.status,
+      createdAt: new Date(order.created_at),
+      paidAt: new Date(order.paid_at),
+      stripeSessionId: order.stripe_session_id,
+      stripePaymentIntentId: order.stripe_payment_intent_id
+    };
   }
 
-  // Get all customers for admin
-  getAllCustomers(): Customer[] {
-    return Array.from(this.customers.values()).sort((a, b) => 
-      new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime()
-    );
+  /**
+   * Get all customers
+   */
+  async getAllCustomers(): Promise<Customer[]> {
+    const supabase = getSupabaseClient();
+    
+    const { data, error } = await supabase
+      .from('customers')
+      .select(`
+        *,
+        chat_messages(*),
+        orders(*),
+        open_invoices(*),
+        data_changes(*),
+        leads(*, lead_branch_data(*))
+      `)
+      .order('last_activity', { ascending: false });
+
+    if (error) {
+      console.error('❌ Error fetching customers:', error);
+      return [];
+    }
+
+    return (data || []).map(transformSupabaseCustomer);
   }
 
-  // Get customers with open invoices
-  getCustomersWithOpenInvoices(): Customer[] {
-    return this.getAllCustomers().filter(customer => customer.openInvoices.length > 0);
+  /**
+   * Get customer by ID
+   */
+  async getCustomerById(customerId: string): Promise<Customer | null> {
+    const supabase = getSupabaseClient();
+    
+    const { data, error } = await supabase
+      .from('customers')
+      .select(`
+        *,
+        chat_messages(*),
+        orders(*),
+        open_invoices(*),
+        data_changes(*),
+        leads(*, lead_branch_data(*))
+      `)
+      .eq('id', customerId)
+      .single();
+
+    if (error) {
+      console.error('❌ Error fetching customer:', error);
+      return null;
+    }
+
+    return transformSupabaseCustomer(data);
   }
 
-  // Get overdue invoices (older than 24 hours)
-  getOverdueInvoices(): { customer: Customer; invoice: OpenInvoice }[] {
+  /**
+   * Get customer by email
+   */
+  async getCustomerByEmail(email: string): Promise<Customer | null> {
+    const supabase = getSupabaseClient();
+    
+    const { data, error } = await supabase
+      .from('customers')
+      .select(`
+        *,
+        chat_messages(*),
+        orders(*),
+        open_invoices(*),
+        data_changes(*),
+        leads(*, lead_branch_data(*))
+      `)
+      .eq('email', email)
+      .single();
+
+    if (error || !data) {
+      return null;
+    }
+
+    return transformSupabaseCustomer(data);
+  }
+
+  /**
+   * Update customer
+   */
+  async updateCustomer(customerId: string, updates: Partial<Customer>): Promise<boolean> {
+    const supabase = getSupabaseClient();
+    
+    const dbUpdates: any = {
+      last_activity: new Date().toISOString()
+    };
+    
+    if (updates.name !== undefined) dbUpdates.name = updates.name;
+    if (updates.phone !== undefined) dbUpdates.phone = updates.phone;
+    if (updates.company !== undefined) dbUpdates.company = updates.company;
+    if (updates.status !== undefined) dbUpdates.status = updates.status;
+    if (updates.hasAccount !== undefined) dbUpdates.has_account = updates.hasAccount;
+    if (updates.googleSheetUrl !== undefined) dbUpdates.google_sheet_url = updates.googleSheetUrl;
+    
+    const { error } = await supabase
+      .from('customers')
+      .update(dbUpdates)
+      .eq('id', customerId);
+
+    return !error;
+  }
+
+  /**
+   * Get customers with open invoices
+   */
+  async getCustomersWithOpenInvoices(): Promise<Customer[]> {
+    const customers = await this.getAllCustomers();
+    return customers.filter(c => c.openInvoices.length > 0);
+  }
+
+  /**
+   * Get overdue invoices
+   */
+  async getOverdueInvoices(): Promise<{ customer: Customer; invoice: OpenInvoice }[]> {
+    const customers = await this.getAllCustomers();
     const overdueList: { customer: Customer; invoice: OpenInvoice }[] = [];
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-    for (const customer of this.customers.values()) {
+    for (const customer of customers) {
       for (const invoice of customer.openInvoices) {
         if (new Date(invoice.createdAt) < oneDayAgo && invoice.status !== 'abandoned') {
           overdueList.push({ customer, invoice });
@@ -410,180 +622,237 @@ class CRMSystem {
     );
   }
 
-  // Mark invoice as reminder sent
-  markReminderSent(invoiceId: string) {
-    for (const customer of this.customers.values()) {
-      const invoice = customer.openInvoices.find(inv => inv.id === invoiceId);
-      if (invoice) {
-        invoice.lastReminderSent = new Date();
-        invoice.reminderCount += 1;
-        invoice.status = 'sent';
-        this.saveToStorage();
-        break;
-      }
-    }
+  /**
+   * Mark reminder sent
+   */
+  async markReminderSent(invoiceId: string): Promise<void> {
+    const supabase = getSupabaseClient();
+    
+    await supabase
+      .from('open_invoices')
+      .update({
+        last_reminder_sent: new Date().toISOString(),
+        reminder_count: supabase.rpc('increment', { row_id: invoiceId }),
+        status: 'sent'
+      })
+      .eq('id', invoiceId);
   }
 
-  // Get customer by ID
-  getCustomerById(customerId: string): Customer | null {
-    return this.customers.get(customerId) || null;
+  /**
+   * Update customer status
+   */
+  async updateCustomerStatus(customerId: string, status: Customer['status']): Promise<void> {
+    await this.updateCustomer(customerId, { status });
   }
 
-  // Update customer status
-  updateCustomerStatus(customerId: string, status: Customer['status']) {
-    const customer = this.customers.get(customerId);
-    if (customer) {
-      customer.status = status;
-      customer.lastActivity = new Date();
-      this.saveToStorage();
-    }
-  }
+  /**
+   * Create account
+   */
+  async createAccount(customerId: string): Promise<boolean> {
+    const supabase = getSupabaseClient();
+    
+    const { error } = await supabase
+      .from('customers')
+      .update({
+        has_account: true,
+        account_created_at: new Date().toISOString(),
+        status: 'customer',
+        last_activity: new Date().toISOString()
+      })
+      .eq('id', customerId);
 
-  // Update customer data (generic)
-  updateCustomer(customerId: string, updates: Partial<Customer>): boolean {
-    const customer = this.customers.get(customerId);
-    if (customer) {
-      Object.assign(customer, updates);
-      customer.lastActivity = new Date();
-      this.saveToStorage();
-      console.log(`✅ Customer ${customerId} updated with:`, updates);
-      return true;
-    }
-    return false;
-  }
-
-  // Account management
-  createAccount(customerId: string): boolean {
-    const customer = this.customers.get(customerId);
-    if (customer && !customer.hasAccount) {
-      customer.hasAccount = true;
-      customer.accountCreatedAt = new Date();
-      customer.status = 'customer';
-      customer.lastActivity = new Date();
-      
-      // Add data change log
-      customer.dataHistory.push({
+    if (!error) {
+      // Log data change
+      await supabase.from('data_changes').insert({
+        customer_id: customerId,
         field: 'hasAccount',
-        oldValue: 'false',
-        newValue: 'true',
-        timestamp: new Date(),
+        old_value: 'false',
+        new_value: 'true',
         source: 'admin'
       });
-
-      this.saveToStorage();
-      return true;
     }
-    return false;
+
+    return !error;
   }
 
-  // Google Sheets integration
-  linkGoogleSheet(customerId: string, sheetUrl: string): boolean {
-    const customer = this.customers.get(customerId);
-    if (customer && customer.hasAccount) {
-      // Extract sheet ID from URL
-      const match = sheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
-      if (match) {
-        const sheetId = match[1];
-        customer.googleSheetId = sheetId;
-        customer.googleSheetUrl = sheetUrl;
-        customer.lastActivity = new Date();
-        
-        // Add data change log
-        customer.dataHistory.push({
-          field: 'googleSheetId',
-          oldValue: customer.googleSheetId || undefined,
-          newValue: sheetId,
-          timestamp: new Date(),
-          source: 'admin'
-        });
-
-        this.saveToStorage();
-        return true;
-      }
+  /**
+   * Link Google Sheet
+   */
+  async linkGoogleSheet(customerId: string, sheetUrl: string): Promise<boolean> {
+    const supabase = getSupabaseClient();
+    
+    // Extract sheet ID
+    const match = sheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+    if (!match) {
+      return false;
     }
-    return false;
-  }
 
-  // Lead management
-  addLeadToCustomer(customerId: string, leadData: Omit<Lead, 'id' | 'createdAt' | 'updatedAt'>): Lead | null {
-    const customer = this.customers.get(customerId);
-    if (customer) {
-      console.log(`🔧 CRM: Adding lead ${leadData.name} with branchData:`, leadData.branchData);
-      
-      const lead: Lead = {
-        id: uuidv4(),
-        ...leadData,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      };
+    const sheetId = match[1];
+    
+    const { error } = await supabase
+      .from('customers')
+      .update({
+        google_sheet_id: sheetId,
+        google_sheet_url: sheetUrl,
+        last_activity: new Date().toISOString()
+      })
+      .eq('id', customerId);
 
-      console.log(`🔧 CRM: Created lead object:`, lead);
-      console.log(`🔧 CRM: Lead has branchData:`, !!lead.branchData);
-
-      if (!customer.leadData) {
-        customer.leadData = [];
-      }
-      customer.leadData.push(lead);
-      customer.lastActivity = new Date();
-      
-      console.log(`🔧 CRM: Customer now has ${customer.leadData.length} leads`);
-      console.log(`🔧 CRM: Last added lead branchData:`, customer.leadData[customer.leadData.length - 1].branchData);
-      
-      this.saveToStorage();
-      return lead;
+    if (!error) {
+      // Log data change
+      await supabase.from('data_changes').insert({
+        customer_id: customerId,
+        field: 'googleSheetId',
+        old_value: null,
+        new_value: sheetId,
+        source: 'admin'
+      });
     }
-    return null;
+
+    return !error;
   }
 
-  // Update lead in customer account
-  updateCustomerLead(customerId: string, leadId: string, updates: Partial<Lead>): boolean {
-    const customer = this.customers.get(customerId);
-    if (customer && customer.leadData) {
-      const leadIndex = customer.leadData.findIndex(l => l.id === leadId);
-      if (leadIndex !== -1) {
-        customer.leadData[leadIndex] = {
-          ...customer.leadData[leadIndex],
-          ...updates,
-          updatedAt: new Date()
-        };
-        customer.lastActivity = new Date();
-        this.saveToStorage();
-        return true;
-      }
+  /**
+   * Add lead to customer
+   */
+  async addLeadToCustomer(customerId: string, leadData: Omit<Lead, 'id' | 'createdAt' | 'updatedAt'>): Promise<Lead | null> {
+    const supabase = getSupabaseClient();
+    
+    const { data: lead, error: leadError } = await supabase
+      .from('leads')
+      .insert({
+        customer_id: customerId,
+        name: leadData.name,
+        email: leadData.email,
+        phone: leadData.phone,
+        company: leadData.company,
+        address: leadData.address,
+        city: leadData.city,
+        interest: leadData.interest,
+        budget: leadData.budget,
+        timeline: leadData.timeline,
+        notes: leadData.notes,
+        status: leadData.status,
+        deal_value: leadData.dealValue,
+        profit: leadData.profit,
+        assigned_to: leadData.assignedTo,
+        source: leadData.source,
+        sheet_row_number: leadData.sheetRowNumber
+      })
+      .select()
+      .single();
+
+    if (leadError) {
+      console.error('❌ Error adding lead:', leadError);
+      return null;
     }
-    return false;
-  }
 
-  // Remove lead from customer account
-  removeLeadFromCustomer(customerId: string, leadId: string): boolean {
-    const customer = this.customers.get(customerId);
-    if (customer && customer.leadData) {
-      const leadIndex = customer.leadData.findIndex(l => l.id === leadId);
-      if (leadIndex !== -1) {
-        const removedLead = customer.leadData[leadIndex];
-        customer.leadData.splice(leadIndex, 1);
-        customer.lastActivity = new Date();
-        this.saveToStorage();
-        console.log(`🗑️ CRM: Removed lead ${removedLead.name} (${leadId}) from customer ${customerId}`);
-        return true;
-      }
+    // Add branch data if exists
+    if (leadData.branchData && Object.keys(leadData.branchData).length > 0) {
+      await supabase.from('lead_branch_data').insert({
+        lead_id: lead.id,
+        data: leadData.branchData
+      });
     }
-    return false;
+
+    // Update customer last activity
+    await supabase
+      .from('customers')
+      .update({ last_activity: new Date().toISOString() })
+      .eq('id', customerId);
+
+    return {
+      id: lead.id,
+      name: lead.name,
+      email: lead.email,
+      phone: lead.phone,
+      company: lead.company,
+      address: lead.address,
+      city: lead.city,
+      interest: lead.interest,
+      budget: lead.budget,
+      timeline: lead.timeline,
+      notes: lead.notes,
+      status: lead.status,
+      dealValue: lead.deal_value,
+      profit: lead.profit,
+      assignedTo: lead.assigned_to,
+      createdAt: new Date(lead.created_at),
+      updatedAt: new Date(lead.updated_at),
+      source: lead.source,
+      sheetRowNumber: lead.sheet_row_number,
+      branchData: leadData.branchData
+    };
   }
 
-  // Get customers with accounts
-  getCustomersWithAccounts(): Customer[] {
-    return this.getAllCustomers().filter(c => c.hasAccount);
+  /**
+   * Update lead
+   */
+  async updateCustomerLead(customerId: string, leadId: string, updates: Partial<Lead>): Promise<boolean> {
+    const supabase = getSupabaseClient();
+    
+    const dbUpdates: any = {
+      updated_at: new Date().toISOString()
+    };
+    
+    if (updates.status) dbUpdates.status = updates.status;
+    if (updates.notes) dbUpdates.notes = updates.notes;
+    if (updates.dealValue !== undefined) dbUpdates.deal_value = updates.dealValue;
+    if (updates.profit !== undefined) dbUpdates.profit = updates.profit;
+    
+    const { error } = await supabase
+      .from('leads')
+      .update(dbUpdates)
+      .eq('id', leadId)
+      .eq('customer_id', customerId);
+
+    if (!error && updates.branchData) {
+      // Update branch data
+      await supabase
+        .from('lead_branch_data')
+        .update({ data: updates.branchData })
+        .eq('lead_id', leadId);
+    }
+
+    return !error;
   }
 
-  // Get customers without accounts
-  getCustomersWithoutAccounts(): Customer[] {
-    return this.getAllCustomers().filter(c => !c.hasAccount);
+  /**
+   * Remove lead
+   */
+  async removeLeadFromCustomer(customerId: string, leadId: string): Promise<boolean> {
+    const supabase = getSupabaseClient();
+    
+    const { error } = await supabase
+      .from('leads')
+      .delete()
+      .eq('id', leadId)
+      .eq('customer_id', customerId);
+
+    return !error;
   }
 
-  // Get analytics data
-  getAnalytics() {
-    const customers = this.getAllCustomers();
+  /**
+   * Get customers with accounts
+   */
+  async getCustomersWithAccounts(): Promise<Customer[]> {
+    const customers = await this.getAllCustomers();
+    return customers.filter(c => c.hasAccount);
+  }
+
+  /**
+   * Get customers without accounts
+   */
+  async getCustomersWithoutAccounts(): Promise<Customer[]> {
+    const customers = await this.getAllCustomers();
+    return customers.filter(c => !c.hasAccount);
+  }
+
+  /**
+   * Get analytics
+   */
+  async getAnalytics() {
+    const customers = await this.getAllCustomers();
     const totalCustomers = customers.length;
     const activeCustomers = customers.filter(c => c.status !== 'inactive').length;
     const customersWithAccounts = customers.filter(c => c.hasAccount).length;
@@ -592,7 +861,7 @@ class CRMSystem {
       sum + c.orders.reduce((orderSum, o) => orderSum + o.amount, 0), 0
     );
     const openInvoices = customers.reduce((sum, c) => sum + c.openInvoices.length, 0);
-    const overdueInvoices = this.getOverdueInvoices().length;
+    const overdueInvoices = (await this.getOverdueInvoices()).length;
     const totalLeads = customers.reduce((sum, c) => sum + (c.leadData?.length || 0), 0);
 
     return {
@@ -613,9 +882,9 @@ class CRMSystem {
 // Singleton instance
 export const crmSystem = new CRMSystem();
 
-// Helper functions for easy access
+// Helper functions for easy access (now async)
 export const logChatMessage = (customerEmail: string, message: ChatMessage) => {
-  crmSystem.logChatMessage(customerEmail, message);
+  return crmSystem.logChatMessage(customerEmail, message);
 };
 
 export const createOrUpdateCustomer = (data: Parameters<typeof crmSystem.createOrUpdateCustomer>[0]) => {
