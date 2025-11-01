@@ -788,11 +788,24 @@ export default function CustomerLeadsPage() {
       console.error('❌ Status update: Blob Storage sync failed:', error);
     }
     
-    // Sync to Google Sheets if available (using Service Account)
+    // Sync to Google Sheets if available (server-side with Service Account)
     if (customerData.googleSheetUrl && updatedLead.sheetRowNumber) {
       try {
         console.log('📊 Status update: Syncing to Google Sheets via Service Account...');
-        await updateLeadInSheet(customerData.googleSheetUrl, updatedLead);
+        const sheetResponse = await authenticatedFetch('/api/update-lead-in-sheet', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            googleSheetUrl: customerData.googleSheetUrl,
+            lead: updatedLead
+          })
+        });
+        
+        if (!sheetResponse.ok) {
+          const errorData = await sheetResponse.json();
+          throw new Error(errorData.error || 'Failed to update Google Sheets');
+        }
+        
         console.log('✅ Status update: Synced to Google Sheets via Service Account');
       } catch (error) {
         console.error('❌ Status update: Google Sheets sync failed:', error);
@@ -881,8 +894,21 @@ export default function CustomerLeadsPage() {
       });
       
       try {
-        // Call updateLeadInSheet - this uses the Service Account by default
-        await updateLeadInSheet(customerData.googleSheetUrl, updatedLead);
+        // Use server-side API route for proper Service Account authentication
+        const sheetResponse = await authenticatedFetch('/api/update-lead-in-sheet', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            googleSheetUrl: customerData.googleSheetUrl,
+            lead: updatedLead
+          })
+        });
+        
+        if (!sheetResponse.ok) {
+          const errorData = await sheetResponse.json();
+          throw new Error(errorData.error || 'Failed to update Google Sheets');
+        }
+        
         console.log('✅ Deal closed: Successfully synced to Google Sheets via Service Account');
       } catch (error) {
         console.error('❌ Deal closed: Google Sheets sync failed:', error);
@@ -921,7 +947,7 @@ export default function CustomerLeadsPage() {
       
           try {
             console.log('💾 Pipeline: Syncing lead update to Blob Storage...');
-            const response = await fetch('/api/customer-data', {
+            const response = await authenticatedFetch('/api/customer-data', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -939,7 +965,7 @@ export default function CustomerLeadsPage() {
             console.error('❌ Pipeline: Error syncing to Blob Storage:', error);
           }
           
-      // CRITICAL: Also sync to Google Sheet if available
+      // CRITICAL: Also sync to Google Sheet if available (server-side with Service Account)
       const googleSheetUrl = customerData.googleSheetUrl;
       console.log('🔍 Google Sheet URL check:', { 
         hasUrl: !!googleSheetUrl
@@ -956,10 +982,21 @@ export default function CustomerLeadsPage() {
             console.log('📊 Syncing lead update to Google Sheet...');
             console.log('📊 Complete lead data:', completeUpdatedLead);
             
-                await updateLeadInSheet(
-              googleSheetUrl,
-              completeUpdatedLead
-            );
+            // Use server-side API route for proper Service Account authentication
+            const sheetResponse = await authenticatedFetch('/api/update-lead-in-sheet', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                googleSheetUrl: googleSheetUrl,
+                lead: completeUpdatedLead
+              })
+            });
+            
+            if (!sheetResponse.ok) {
+              const errorData = await sheetResponse.json();
+              throw new Error(errorData.error || 'Failed to update Google Sheets');
+            }
+            
             console.log(`✅ Lead ${leadId} synced to Google Sheet (row ${existingLead.sheetRowNumber})`);
           } else {
             console.warn(`⚠️ Cannot sync to Google Sheets: missing sheetRowNumber for lead ${leadId}`, {
