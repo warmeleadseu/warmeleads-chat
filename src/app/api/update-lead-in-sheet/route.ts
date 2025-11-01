@@ -52,6 +52,12 @@ export const POST = withAuth(async (request: NextRequest, user: AuthenticatedUse
 
   } catch (error) {
     console.error('❌ API: Error updating lead in Google Sheets:', error);
+    console.error('❌ API: Error details:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+      type: typeof error,
+      error: error
+    });
     
     return NextResponse.json(
       { 
