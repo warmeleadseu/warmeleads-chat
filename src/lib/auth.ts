@@ -204,7 +204,7 @@ export const useAuthStore = create<AuthState>()(
         // Load company data and ensure permissions are set
         user = await loadUserWithCompanyData(user);
         
-        console.log('🔐 LOGIN SUCCESS:', { email, isAuthenticated: true, role: user.role });
+        console.log('🔐 LOGIN SUCCESS:', { email, isAuthenticated: true, role: user.role, name: user.name });
         
         // Update local state
         authState.user = user;
@@ -218,6 +218,18 @@ export const useAuthStore = create<AuthState>()(
           isLoading: false,
           error: null 
         });
+        
+        // Store session in localStorage for persistence
+        try {
+          localStorage.setItem('warmeleads-auth', JSON.stringify({
+            user,
+            isAuthenticated: true,
+            timestamp: Date.now()
+          }));
+          console.log('✅ Auth stored in localStorage:', { email: user.email, name: user.name });
+        } catch (error) {
+          console.error('Failed to store auth in localStorage:', error);
+        }
         
         notifyListeners();
         
@@ -346,6 +358,15 @@ export const useAuthStore = create<AuthState>()(
           error: null 
         });
         
+        // Clear localStorage
+        try {
+          localStorage.removeItem('warmeleads-auth');
+          localStorage.removeItem('warmeleads_visited');
+          console.log('✅ Auth cleared from localStorage');
+        } catch (error) {
+          console.error('Failed to clear localStorage:', error);
+        }
+        
         console.log('🚨 State after logout:', authState);
         notifyListeners();
       },
@@ -383,11 +404,45 @@ export const useAuthStore = create<AuthState>()(
         set({ error: null });
       },
 
-      // Initialize auth state (no localStorage persistence)
+      // Initialize auth state from localStorage
       init: () => {
-        // Auth state is managed server-side via Supabase JWT tokens
-        // No client-side persistence needed
-        console.log('🔄 Auth initialized - using Supabase sessions');
+        try {
+          const authData = localStorage.getItem('warmeleads-auth');
+          if (authData) {
+            const parsed = JSON.parse(authData);
+            // Check if auth data is not too old (24 hours)
+            if (parsed.timestamp && (Date.now() - parsed.timestamp) < 24 * 60 * 60 * 1000) {
+              console.log('🔄 RESTORING AUTH FROM LOCALSTORAGE:', { 
+                email: parsed.user?.email, 
+                name: parsed.user?.name,
+                isAuthenticated: parsed.isAuthenticated 
+              });
+              
+              // Update local state
+              authState.user = parsed.user;
+              authState.isAuthenticated = parsed.isAuthenticated;
+              authState.isLoading = false;
+              authState.error = null;
+              
+              set({
+                user: parsed.user,
+                isAuthenticated: parsed.isAuthenticated,
+                isLoading: false,
+                error: null
+              });
+              
+              notifyListeners();
+            } else {
+              console.log('🕐 AUTH DATA TOO OLD, CLEARING');
+              localStorage.removeItem('warmeleads-auth');
+            }
+          } else {
+            console.log('ℹ️ No auth data in localStorage');
+          }
+        } catch (error) {
+          console.error('Error restoring auth:', error);
+          localStorage.removeItem('warmeleads-auth');
+        }
       }
     })
 );
