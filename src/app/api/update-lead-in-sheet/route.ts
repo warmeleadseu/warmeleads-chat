@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { withAuth } from '@/middleware/auth';
 import type { AuthenticatedUser } from '@/middleware/auth';
-import { updateLeadInSheet } from '@/lib/googleSheetsAPI';
+import { updateLeadInSheetServerSide } from '@/lib/googleSheetsServerSide';
 
 /**
  * API route to update a lead in Google Sheets (server-side with Service Account)
@@ -41,7 +41,7 @@ export const POST = withAuth(async (request: NextRequest, user: AuthenticatedUse
     }
 
     // Update lead in Google Sheets using server-side Service Account authentication
-    await updateLeadInSheet(googleSheetUrl, lead);
+    await updateLeadInSheetServerSide(googleSheetUrl, lead);
 
     console.log('✅ API: Successfully updated lead in Google Sheets');
 
