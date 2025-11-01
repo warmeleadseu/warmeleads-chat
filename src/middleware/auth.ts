@@ -36,9 +36,16 @@ export async function verifyAuthToken(request: NextRequest): Promise<AuthResult>
     const authHeader = request.headers.get('authorization');
     let token = authHeader?.replace('Bearer ', '');
     
+    console.log('🔐 AUTH MIDDLEWARE:', { 
+      hasAuthHeader: !!authHeader, 
+      token: token ? token.substring(0, 8) + '...' : 'none',
+      url: request.url 
+    });
+    
     // Fallback to cookie
     if (!token) {
       token = request.cookies.get('auth-token')?.value;
+      console.log('🍪 Trying cookie, found:', !!token);
     }
     
     // Try email from query params (legacy, for backwards compatibility)
@@ -47,6 +54,7 @@ export async function verifyAuthToken(request: NextRequest): Promise<AuthResult>
       const email = searchParams.get('email');
       
       if (email) {
+        console.log('📧 Trying email from query params:', email);
         // Verify this is a valid user
         const supabase = createServerClient();
         const { data: user, error } = await supabase
@@ -56,6 +64,7 @@ export async function verifyAuthToken(request: NextRequest): Promise<AuthResult>
           .single();
         
         if (!error && user) {
+          console.log('✅ Found user via email query param');
           return {
             user: transformUser(user),
             error: null
@@ -65,10 +74,12 @@ export async function verifyAuthToken(request: NextRequest): Promise<AuthResult>
     }
     
     if (!token) {
+      console.log('❌ No token found anywhere');
       return { user: null, error: 'No authentication token provided' };
     }
     
     // Verify token with Supabase
+    console.log('🔍 Looking up user with token (ID):', token);
     const supabase = createServerClient();
     const { data: user, error } = await supabase
       .from('users')
@@ -77,11 +88,15 @@ export async function verifyAuthToken(request: NextRequest): Promise<AuthResult>
       .single();
     
     if (error || !user) {
+      console.log('❌ Token verification failed:', error?.message || 'User not found');
       return { user: null, error: 'Invalid or expired token' };
     }
     
+    console.log('✅ Token verified, user found:', user.email);
+    
     // Check if account is active
     if (!user.is_active && user.role === 'employee') {
+      console.log('❌ Employee account not active');
       return { user: null, error: 'Account not yet activated' };
     }
     
