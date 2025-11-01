@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
+import { withAuth, withOwnership } from '@/middleware/auth';
+import type { AuthenticatedUser } from '@/middleware/auth';
 
 // Helper function to serialize dates for JSON
 function serializeDates(obj: any): any {
@@ -18,8 +20,8 @@ function serializeDates(obj: any): any {
   return obj;
 }
 
-// GET: Fetch customer data from Supabase
-export async function GET(request: NextRequest) {
+// GET: Fetch customer data from Supabase (AUTHENTICATED)
+export const GET = withAuth(async (request: NextRequest, user: AuthenticatedUser) => {
   try {
     const { searchParams } = new URL(request.url);
     const customerId = searchParams.get('customerId');
@@ -29,8 +31,17 @@ export async function GET(request: NextRequest) {
     
     const supabase = createServerClient();
 
+    // Check ownership - user can only access their own data (unless admin)
+    const adminEmails = process.env.ADMIN_EMAILS?.split(',').map(e => e.trim()) || [];
+    const isAdmin = adminEmails.includes(user.email);
+    
     // Fetch specific customer or all customers
     if (customerId) {
+      // Security check: Can user access this customer?
+      if (!isAdmin && customerId !== user.email) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
+      
       // Get customer with all related data
       const { data: customer, error: customerError } = await supabase
         .from('customers')
@@ -116,10 +127,10 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});
 
-// POST: Save customer data to Supabase
-export async function POST(request: NextRequest) {
+// POST: Save customer data to Supabase (AUTHENTICATED)
+export const POST = withAuth(async (request: NextRequest, user: AuthenticatedUser) => {
   try {
     const body = await request.json();
     const { customerId, customerData } = body;
@@ -129,6 +140,14 @@ export async function POST(request: NextRequest) {
         { error: 'Customer ID and data are required' },
         { status: 400 }
       );
+    }
+    
+    // Security check: Can user modify this customer?
+    const adminEmails = process.env.ADMIN_EMAILS?.split(',').map(e => e.trim()) || [];
+    const isAdmin = adminEmails.includes(user.email);
+    
+    if (!isAdmin && customerId !== user.email) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     console.log('💾 POST /api/customer-data');
@@ -265,10 +284,10 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});
 
-// DELETE: Remove customer data from Supabase
-export async function DELETE(request: NextRequest) {
+// DELETE: Remove customer data from Supabase (AUTHENTICATED + ADMIN ONLY)
+export const DELETE = withAuth(async (request: NextRequest, user: AuthenticatedUser) => {
   try {
     const { searchParams } = new URL(request.url);
     const customerId = searchParams.get('customerId');
@@ -278,6 +297,12 @@ export async function DELETE(request: NextRequest) {
         { error: 'Customer ID is required' },
         { status: 400 }
       );
+    }
+    
+    // Only admins can delete customers
+    const adminEmails = process.env.ADMIN_EMAILS?.split(',').map(e => e.trim()) || [];
+    if (!adminEmails.includes(user.email)) {
+      return NextResponse.json({ error: 'Forbidden - Admin only' }, { status: 403 });
     }
 
     console.log('🗑️ DELETE /api/customer-data');
@@ -315,4 +340,4 @@ export async function DELETE(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+}, { adminOnly: true });
