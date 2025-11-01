@@ -488,20 +488,31 @@ export default function CustomersPage() {
         const allCustomers = await getAllCustomers();
         console.log(`✅ Loaded ${allCustomers.length} customers from Supabase`);
         
-        // Also fetch registered user accounts to merge data
+        // Also fetch registered user accounts directly from Supabase
         const registeredEmails = new Set<string>();
         
         try {
-          const response = await fetch(`/api/auth/list-accounts?adminEmail=${encodeURIComponent(getFirstAdminEmail())}`);
-          if (response.ok) {
-            const { accounts } = await response.json();
-            console.log(`✅ Fetched ${accounts.length} registered user accounts`);
-            
-            accounts.forEach((account: any) => {
-              if (account.email && !account.isGuest) {
-                registeredEmails.add(account.email);
+          // Fetch users directly from Supabase
+          const { createClient } = await import('@supabase/supabase-js');
+          const supabase = createClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+          );
+          
+          const { data: users, error } = await supabase
+            .from('users')
+            .select('email, name, company, phone, role, created_at')
+            .order('created_at', { ascending: false });
+          
+          if (users && !error) {
+            console.log(`✅ Fetched ${users.length} registered user accounts from Supabase`);
+            users.forEach((user: any) => {
+              if (user.email) {
+                registeredEmails.add(user.email);
               }
             });
+          } else if (error) {
+            console.error('Error fetching users:', error);
           }
         } catch (error) {
           console.log('ℹ️ Could not fetch user accounts:', error);
@@ -553,7 +564,7 @@ export default function CustomersPage() {
         
         setCustomers(syncedCustomers);
         
-        console.log('📊 Loaded customers with Blob Storage sync:', {
+        console.log('📊 Loaded customers with Supabase sync:', {
           totalCustomers: syncedCustomers.length,
           withAccounts: syncedCustomers.filter(c => c.hasAccount).length,
           registeredEmailsCount: registeredEmails.size,
