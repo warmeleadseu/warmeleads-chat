@@ -332,24 +332,14 @@ export default function CustomerLeadsPage() {
           
           addDebugLog('info', '➕ Created minimal customer object', { email: customerId });
         }
-          
-          // If still no customer, try localStorage
-          if (!customer) {
-            addDebugLog('warning', '⚠️ Falling back to localStorage', {});
-          const allCustomers = await crmSystem.getAllCustomers();
-          customer = allCustomers.find(c => c.email === user?.email) || null;
-            addDebugLog('info', '💾 LOCAL STORAGE: Search result', { 
-              found: !!customer, 
-              totalCustomers: allCustomers.length,
-              customerData: customer ? {
-                id: customer.id,
-                email: customer.email,
-                hasGoogleSheet: !!customer.googleSheetUrl,
-                leadsCount: customer.leadData?.length || 0
-              } : null
-            });
-          }
-        }
+
+        addDebugLog('info', '✅ Customer ready', {
+          hasCustomer: !!customer,
+          customerId: customer?.id,
+          email: customer?.email,
+          hasGoogleSheetUrl: !!customer?.googleSheetUrl,
+          leadsCount: customer?.leadData?.length || 0
+        });
       } else {
         const errorData = await response.json().catch(() => ({}));
         addDebugLog('error', `❌ BLOB STORAGE: API failed (${response.status})`, { status: response.status, errorData });

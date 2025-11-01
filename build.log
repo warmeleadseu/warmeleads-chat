@@ -1,0 +1,55 @@
+
+> warmeleads-chat@0.1.0 build
+> next build
+
+  ▲ Next.js 14.2.32
+  - Environments: .env.local
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully
+   Linting and checking validity of types ...
+   Collecting page data ...
+Stripe configuration: {
+  hasSecretKey: false,
+  keyPrefix: 'undefined...',
+  nodeEnv: 'production',
+  usingLiveKeys: true
+}
+Stripe configuration: {
+  hasSecretKey: false,
+  keyPrefix: 'undefined...',
+  nodeEnv: 'production',
+  usingLiveKeys: true
+}
+   Generating static pages (0/290) ...
+Stripe configuration: {
+  hasSecretKey: false,
+  keyPrefix: 'undefined...',
+  nodeEnv: 'production',
+  usingLiveKeys: true
+}
+🔑 GET /api/sheets-auth - Requesting Service Account token
+🔑 JWT generated, exchanging for access token...
+✅ Access token obtained and cached
+Stripe configuration: {
+  hasSecretKey: false,
+  keyPrefix: 'undefined...',
+  nodeEnv: 'production',
+  usingLiveKeys: true
+}
+   Generating static pages (72/290) 
+   Generating static pages (144/290) 
+   Generating static pages (217/290) 
+Stripe configuration: {
+  hasSecretKey: false,
+  keyPrefix: 'undefined...',
+  nodeEnv: 'production',
+  usingLiveKeys: true
+}
+Stripe configuration: {
+  hasSecretKey: false,
+  keyPrefix: 'undefined...',
+  nodeEnv: 'production',
+  usingLiveKeys: true
+}
+ ✓ Generating static pages (290/290)
