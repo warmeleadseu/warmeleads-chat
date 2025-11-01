@@ -25,7 +25,7 @@ import {
   Cog6ToothIcon,
   BellIcon
 } from '@heroicons/react/24/outline';
-import { useAuthStore } from '@/lib/auth';
+import { useAuthStore, authenticatedFetch } from '@/lib/auth';
 import { crmSystem, type Customer, type Lead } from '@/lib/crmSystem';
 import { readCustomerLeads, GoogleSheetsService, updateLeadInSheet, addLeadToSheet } from '@/lib/googleSheetsAPI';
 import { branchIntelligence, type Branch, type BranchIntelligence, type BranchAnalytics } from '@/lib/branchIntelligence';
@@ -210,14 +210,14 @@ export default function CustomerLeadsPage() {
         return;
       }
       
-      addDebugLog('info', '📦 STEP 1: Fetching from Blob Storage API', { 
+      addDebugLog('info', '📦 STEP 1: Fetching from API with authentication', { 
         customerId, 
         userRole: user?.role,
         userEmail: user?.email,
         ownerEmail: user?.ownerEmail,
         endpoint: `/api/customer-data?customerId=${encodeURIComponent(customerId)}` 
       });
-      const response = await fetch(`/api/customer-data?customerId=${encodeURIComponent(customerId)}`);
+      const response = await authenticatedFetch(`/api/customer-data?customerId=${encodeURIComponent(customerId)}`);
       
       addDebugLog('info', `📦 Blob Storage API Response Status: ${response.status}`, { ok: response.ok, statusText: response.statusText });
       
