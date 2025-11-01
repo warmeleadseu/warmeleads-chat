@@ -23,14 +23,7 @@ export async function GET(request: NextRequest) {
     // Fetch all customers with their related data
     const { data: customers, error } = await supabase
       .from('customers')
-      .select(`
-        *,
-        chat_messages(*),
-        orders(*),
-        open_invoices(*),
-        data_changes(*),
-        leads(*, lead_branch_data(*))
-      `)
+      .select('*')
       .order('last_activity', { ascending: false });
 
     if (error) {
@@ -70,17 +63,17 @@ export async function GET(request: NextRequest) {
       googleSheetId: customer.google_sheet_id,  // ✅ Transform to camelCase
       googleSheetUrl: customer.google_sheet_url, // ✅ Transform to camelCase
       emailNotifications: {
-        enabled: customer.email_notifications_enabled,
-        newLeads: customer.email_notifications_new_leads,
+        enabled: customer.email_notifications_enabled || false,
+        newLeads: customer.email_notifications_new_leads || false,
         lastNotificationSent: customer.last_notification_sent
       },
       createdAt: customer.created_at,
       lastActivity: customer.last_activity,
-      chatHistory: customer.chat_messages || [],
-      orders: customer.orders || [],
-      openInvoices: customer.open_invoices || [],
-      dataHistory: customer.data_changes || [],
-      leadData: customer.leads || [],
+      chatHistory: [], // Empty for now - will load separately if needed
+      orders: [], // Empty for now - will load separately if needed
+      openInvoices: [], // Empty for now - will load separately if needed
+      dataHistory: [], // Empty for now - will load separately if needed
+      leadData: [], // Empty for now - will load separately if needed
       notes: [],
       tags: [],
       whatsappConfig: {
