@@ -13,7 +13,7 @@ import {
   XMarkIcon,
   ClockIcon
 } from '@heroicons/react/24/outline';
-import { getAllCustomers, type Customer } from '@/lib/crmSystem';
+import { getAllCustomers, crmSystem, type Customer } from '@/lib/crmSystem';
 import { ADMIN_CONFIG, getFirstAdminEmail } from '@/config/admin';
 
 // Customer Detail Modal Component
@@ -482,76 +482,49 @@ export default function CustomersPage() {
   useEffect(() => {
     const loadCustomers = async () => {
       try {
-        console.log('🔄 Loading customers from Blob Storage and localStorage...');
+        console.log('🔄 Loading customers from Supabase...');
         
-        // 1. Get CRM customers from localStorage (contains lead data, google sheets, etc.)
-        const crmCustomers = await getAllCustomers();
-        console.log(`📦 Loaded ${crmCustomers.length} customers from CRM (localStorage)`);
+        // Get ALL customers from Supabase via crmSystem
+        const allCustomers = await getAllCustomers();
+        console.log(`✅ Loaded ${allCustomers.length} customers from Supabase`);
         
-        // 2. Fetch registered accounts from Blob Storage (cross-device)
+        // Also fetch registered user accounts to merge data
         const registeredEmails = new Set<string>();
         
         try {
           const response = await fetch(`/api/auth/list-accounts?adminEmail=${encodeURIComponent(getFirstAdminEmail())}`);
           if (response.ok) {
             const { accounts } = await response.json();
-            console.log(`✅ Fetched ${accounts.length} registered accounts from Blob Storage`);
+            console.log(`✅ Fetched ${accounts.length} registered user accounts`);
             
             accounts.forEach((account: any) => {
               if (account.email && !account.isGuest) {
                 registeredEmails.add(account.email);
               }
             });
-          } else {
-            console.warn('⚠️ Failed to fetch accounts from Blob Storage, falling back to localStorage');
           }
         } catch (error) {
-          console.error('❌ Error fetching accounts from Blob Storage:', error);
+          console.log('ℹ️ Could not fetch user accounts:', error);
         }
         
-        // 3. Fallback: Also check localStorage for accounts (backward compatibility)
-        const authUsers = JSON.parse(localStorage.getItem('warmeleads-auth-store') || '{}');
-        if (authUsers.state?.user?.email) {
-          registeredEmails.add(authUsers.state.user.email);
-        }
-        
-        // Also add all configured admin emails
-        ADMIN_CONFIG.adminEmails.forEach(email => {
-          registeredEmails.add(email);
-        });
-        
-        // Check localStorage for other registered users (legacy)
-        const authData = localStorage.getItem('auth-users') || '[]';
-        try {
-          const users = JSON.parse(authData);
-          users.forEach((user: any) => {
-            if (user.email && !user.isGuest) {
-              registeredEmails.add(user.email);
-            }
-          });
-        } catch (e) {
-          console.log('No additional auth users found in localStorage');
-        }
-        
-        // 4. Merge: Update CRM customers with account status from Blob Storage
-        const syncedCustomers = crmCustomers.map(customer => {
+        // Merge: Sync account status for customers
+        const syncedCustomers = allCustomers.map(customer => {
           const hasAccount = registeredEmails.has(customer.email);
           if (hasAccount && !customer.hasAccount) {
-            // Update customer to have account
-            customer.hasAccount = true;
-            customer.accountCreatedAt = new Date();
-            customer.status = 'customer';
-            
-            console.log(`✅ Synced account status for ${customer.email}`);
+            // Customer has registered but CRM not updated yet
+            console.log(`🔄 Syncing account status for ${customer.email}`);
           }
-          return customer;
+          return {
+            ...customer,
+            hasAccount: hasAccount || customer.hasAccount
+          };
         });
         
-        // 5. Add accounts that are not yet in CRM
+        // Add user accounts that don't have CRM customer records yet
         registeredEmails.forEach(email => {
           const existsInCrm = syncedCustomers.some(c => c.email === email);
           if (!existsInCrm) {
-            console.log(`➕ Adding new account to CRM list: ${email}`);
+            console.log(`➕ Adding registered user to customer list: ${email}`);
             syncedCustomers.push({
               id: `account-${email}`,
               email: email,
@@ -945,91 +918,30 @@ export default function CustomersPage() {
                                 
                                 if (sheetUrl && sheetUrl.includes('docs.google.com/spreadsheets')) {
                                   try {
-                                    // Extract sheet ID from URL
-                                    const match = sheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
-                                    if (match) {
-                                      const sheetId = match[1];
+                                    console.log('📊 Koppelen Google Sheet via Supabase...');
+                                    console.log('Customer ID:', customer.id);
+                                    console.log('Google Sheets URL:', sheetUrl);
+                                    
+                                    // Use crmSystem to link sheet (saves to Supabase)
+                                    const success = await crmSystem.linkGoogleSheet(customer.id, sheetUrl);
+                                    
+                                    if (success) {
+                                      console.log('✅ Google Sheet gekoppeld in Supabase');
+                                      alert(`✅ Google Sheet ${customer.googleSheetId ? 'bijgewerkt' : 'gekoppeld'} voor ${customer.name || customer.email}!`);
                                       
-                                      console.log('📊 Saving Google Sheets URL to blob storage...');
-                                      console.log('Customer ID:', customer.id);
-                                      console.log('Customer Email:', customer.email);
-                                      console.log('Google Sheets URL:', sheetUrl);
-                                      console.log('Sheet ID:', sheetId);
-                                      
-                                      // Save to Vercel Blob Storage in customer-data (niet customer-sheets!)
-                                      // Gebruik email als customerId voor consistentie
-                                      const response = await fetch('/api/customer-data', {
-                                        method: 'POST',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({
-                                          customerId: customer.email, // Gebruik email, niet ID!
-                                          customerData: {
-                                            id: customer.email,
-                                            email: customer.email,
-                                            name: customer.name,
-                                            googleSheetUrl: sheetUrl,
-                                            googleSheetId: sheetId
-                                          }
-                                        })
-                                      });
-
-                                      if (response.ok) {
-                                        const result = await response.json();
-                                        console.log('✅ Successfully saved:', result);
-                                        
-                                        if (result.blobUrl) {
-                                          console.log('✅ Saved to blob storage!');
-                                          console.log('Blob URL:', result.blobUrl);
-                                        } else if (result.warning) {
-                                          console.warn('⚠️', result.warning);
-                                        }
-                                        
-                                        // Update customer with Google Sheet info (localStorage blijft als backup)
-                                        const updatedCustomers = customers.map(c => 
-                                          c.id === customer.id 
-                                            ? { ...c, googleSheetId: sheetId, googleSheetUrl: sheetUrl }
-                                            : c
-                                        );
-                                        
-                                        // Save to localStorage
-                                        localStorage.setItem('warmeleads_crm_data', JSON.stringify({
-                                          customers: updatedCustomers.map(c => [c.id, c]),
-                                          customersByEmail: updatedCustomers.map(c => [c.email, c.id])
-                                        }));
-                                        
-                                        const storageType = result.blobUrl ? 'blob storage en localStorage' : 'localStorage (blob storage niet geconfigureerd)';
-                                        alert(`✅ Google Sheet ${customer.googleSheetId ? 'bijgewerkt' : 'gekoppeld'} en opgeslagen in ${storageType} voor ${customer.name || customer.email}!`);
-                                        window.location.reload();
-                                      } else {
-                                        const error = await response.json();
-                                        console.error('❌ Failed to save to blob storage:', error);
-                                        
-                                        // Still update localStorage as fallback
-                                        const updatedCustomers = customers.map(c => 
-                                          c.id === customer.id 
-                                            ? { ...c, googleSheetId: sheetId, googleSheetUrl: sheetUrl }
-                                            : c
-                                        );
-                                        
-                                        localStorage.setItem('warmeleads_crm_data', JSON.stringify({
-                                          customers: updatedCustomers.map(c => [c.id, c]),
-                                          customersByEmail: updatedCustomers.map(c => [c.email, c.id])
-                                        }));
-                                        
-                                        alert(`⚠️ Google Sheet opgeslagen in localStorage (blob storage fout: ${error.details || error.error})\n\nDe URL werkt nog steeds via localStorage.`);
-                                        window.location.reload();
-                                      }
+                                      // Reload to fetch updated data
+                                      window.location.reload();
                                     } else {
-                                      console.error('❌ Invalid Google Sheets URL format');
-                                      alert('❌ Ongeldige Google Sheets URL');
+                                      console.error('❌ Failed to link Google Sheet');
+                                      alert('❌ Fout bij koppelen Google Sheet');
                                     }
                                   } catch (error) {
                                     console.error('❌ Error saving Google Sheet URL:', error);
                                     alert('❌ Fout bij koppelen Google Sheet');
                                   }
                                 } else if (sheetUrl !== null && sheetUrl !== '') {
-                                  console.error('❌ URL does not contain docs.google.com/spreadsheets');
-                                  alert('❌ Ongeldige Google Sheets URL');
+                                  console.error('❌ Invalid Google Sheets URL');
+                                  alert('❌ Ongeldige Google Sheets URL. Zorg dat de URL docs.google.com/spreadsheets bevat.');
                                 }
                               }}
                               className="text-green-600 hover:text-green-800 transition-colors"
