@@ -1,8 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { DEFAULT_PRICING, type BranchPricingConfig } from '@/lib/pricing';
+import { withAuth, withOptionalAuth } from '@/middleware/auth';
+import type { AuthenticatedUser } from '@/middleware/auth';
 
-// GET - Fetch pricing configuration
+// Helper to check if user is admin
+function isAdmin(email: string): boolean {
+  const adminEmails = process.env.ADMIN_EMAILS?.split(',').map(e => e.trim()) || [];
+  return adminEmails.includes(email);
+}
+
+// GET - Fetch pricing configuration (PUBLIC - No auth required for reading prices)
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
@@ -89,8 +97,8 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST - Save pricing configuration
-export async function POST(req: NextRequest) {
+// POST - Save pricing configuration (ADMIN ONLY)
+export const POST = withAuth(async (req: NextRequest, user: AuthenticatedUser) => {
   try {
     const body = await req.json();
     const { branchId, pricing } = body as { branchId: string; pricing: BranchPricingConfig };
@@ -143,10 +151,10 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
-}
+}, { adminOnly: true });
 
-// PUT - Update pricing configuration for a branch
-export async function PUT(req: NextRequest) {
+// PUT - Update pricing configuration for a branch (ADMIN ONLY)
+export const PUT = withAuth(async (req: NextRequest, user: AuthenticatedUser) => {
   try {
     const body = await req.json();
     const { branchId, updates } = body;
@@ -203,4 +211,4 @@ export async function PUT(req: NextRequest) {
       { status: 500 }
     );
   }
-}
+}, { adminOnly: true });

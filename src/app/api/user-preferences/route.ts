@@ -1,8 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
+import { withAuth } from '@/middleware/auth';
+import type { AuthenticatedUser } from '@/middleware/auth';
 
-// GET: Fetch user preferences
-export async function GET(request: NextRequest) {
+// Helper to check if user is admin
+function isAdmin(email: string): boolean {
+  const adminEmails = process.env.ADMIN_EMAILS?.split(',').map(e => e.trim()) || [];
+  return adminEmails.includes(email);
+}
+
+// GET: Fetch user preferences (AUTHENTICATED)
+export const GET = withAuth(async (request: NextRequest, user: AuthenticatedUser) => {
   try {
     const { searchParams } = new URL(request.url);
     const customerId = searchParams.get('customerId');
@@ -11,6 +19,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         { error: 'Customer ID is required' },
         { status: 400 }
+      );
+    }
+
+    // Security: User can only fetch their own preferences (unless admin)
+    if (customerId !== user.email && !isAdmin(user.email)) {
+      return NextResponse.json(
+        { error: 'Forbidden - You can only access your own preferences' },
+        { status: 403 }
       );
     }
 
@@ -60,10 +76,10 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});
 
-// POST: Save user preferences
-export async function POST(request: NextRequest) {
+// POST: Save user preferences (AUTHENTICATED)
+export const POST = withAuth(async (request: NextRequest, user: AuthenticatedUser) => {
   try {
     const { customerId, preferences } = await request.json();
 
@@ -71,6 +87,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'Customer ID and preferences are required' },
         { status: 400 }
+      );
+    }
+
+    // Security: User can only update their own preferences (unless admin)
+    if (customerId !== user.email && !isAdmin(user.email)) {
+      return NextResponse.json(
+        { error: 'Forbidden - You can only update your own preferences' },
+        { status: 403 }
       );
     }
 
@@ -123,10 +147,10 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});
 
-// DELETE: Delete user preferences
-export async function DELETE(request: NextRequest) {
+// DELETE: Delete user preferences (AUTHENTICATED)
+export const DELETE = withAuth(async (request: NextRequest, user: AuthenticatedUser) => {
   try {
     const { searchParams } = new URL(request.url);
     const customerId = searchParams.get('customerId');
@@ -135,6 +159,14 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json(
         { error: 'Customer ID is required' },
         { status: 400 }
+      );
+    }
+
+    // Security: User can only delete their own preferences (unless admin)
+    if (customerId !== user.email && !isAdmin(user.email)) {
+      return NextResponse.json(
+        { error: 'Forbidden - You can only delete your own preferences' },
+        { status: 403 }
       );
     }
 
@@ -183,4 +215,4 @@ export async function DELETE(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});

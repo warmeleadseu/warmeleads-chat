@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
+import { withAuth, withOptionalAuth } from '@/middleware/auth';
+import type { AuthenticatedUser } from '@/middleware/auth';
 
 export interface Order {
   id: string;
@@ -30,8 +32,14 @@ export interface Order {
   conversions?: number;
 }
 
-// GET - Fetch orders for a customer
-export async function GET(req: NextRequest) {
+// Helper to check if user is admin
+function isAdmin(email: string): boolean {
+  const adminEmails = process.env.ADMIN_EMAILS?.split(',').map(e => e.trim()) || [];
+  return adminEmails.includes(email);
+}
+
+// GET - Fetch orders for a customer (AUTHENTICATED)
+export const GET = withAuth(async (req: NextRequest, user: AuthenticatedUser) => {
   try {
     const { searchParams } = new URL(req.url);
     const customerEmail = searchParams.get('customerEmail');
@@ -40,6 +48,14 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(
         { error: 'Customer email is required' },
         { status: 400 }
+      );
+    }
+
+    // Security: User can only fetch their own orders (unless admin)
+    if (customerEmail !== user.email && !isAdmin(user.email)) {
+      return NextResponse.json(
+        { error: 'Forbidden - You can only access your own orders' },
+        { status: 403 }
       );
     }
 
@@ -102,10 +118,10 @@ export async function GET(req: NextRequest) {
       { status: 500 }
     );
   }
-}
+});
 
-// POST - Create a new order
-export async function POST(req: NextRequest) {
+// POST - Create a new order (AUTHENTICATED)
+export const POST = withAuth(async (req: NextRequest, user: AuthenticatedUser) => {
   try {
     const body = await req.json();
     const { order } = body as { order: Order };
@@ -114,6 +130,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { error: 'Order data with customerEmail is required' },
         { status: 400 }
+      );
+    }
+
+    // Security: User can only create orders for themselves (unless admin)
+    if (order.customerEmail !== user.email && !isAdmin(user.email)) {
+      return NextResponse.json(
+        { error: 'Forbidden - You can only create orders for yourself' },
+        { status: 403 }
       );
     }
 
@@ -179,10 +203,10 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
-}
+});
 
-// PUT - Update an existing order
-export async function PUT(req: NextRequest) {
+// PUT - Update an existing order (AUTHENTICATED + ADMIN ONLY)
+export const PUT = withAuth(async (req: NextRequest, user: AuthenticatedUser) => {
   try {
     const body = await req.json();
     const { orderNumber, updates } = body;
@@ -191,6 +215,14 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json(
         { error: 'Order number and updates are required' },
         { status: 400 }
+      );
+    }
+
+    // Only admins can update orders
+    if (!isAdmin(user.email)) {
+      return NextResponse.json(
+        { error: 'Forbidden - Admin only' },
+        { status: 403 }
       );
     }
 
@@ -236,10 +268,10 @@ export async function PUT(req: NextRequest) {
       { status: 500 }
     );
   }
-}
+}, { adminOnly: true });
 
-// DELETE - Delete an order
-export async function DELETE(req: NextRequest) {
+// DELETE - Delete an order (ADMIN ONLY)
+export const DELETE = withAuth(async (req: NextRequest, user: AuthenticatedUser) => {
   try {
     const { searchParams } = new URL(req.url);
     const orderNumber = searchParams.get('orderNumber');
@@ -282,4 +314,4 @@ export async function DELETE(req: NextRequest) {
       { status: 500 }
     );
   }
-}
+}, { adminOnly: true });

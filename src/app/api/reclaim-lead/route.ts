@@ -1,8 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
+import { withAuth } from '@/middleware/auth';
+import type { AuthenticatedUser } from '@/middleware/auth';
 
-// GET - Check if lead has been reclaimed
-export async function GET(req: NextRequest) {
+// Helper to check if user is admin
+function isAdmin(email: string): boolean {
+  const adminEmails = process.env.ADMIN_EMAILS?.split(',').map(e => e.trim()) || [];
+  return adminEmails.includes(email);
+}
+
+// GET - Check if lead has been reclaimed (AUTHENTICATED)
+export const GET = withAuth(async (req: NextRequest, user: AuthenticatedUser) => {
   try {
     const { searchParams } = new URL(req.url);
     const customerId = searchParams.get('customerId');
@@ -12,6 +20,14 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(
         { error: 'Customer ID and sheet row number are required' },
         { status: 400 }
+      );
+    }
+
+    // Security: User can only check their own reclamations (unless admin)
+    if (customerId !== user.email && !isAdmin(user.email)) {
+      return NextResponse.json(
+        { error: 'Forbidden - You can only check your own reclamations' },
+        { status: 403 }
       );
     }
 
@@ -59,10 +75,10 @@ export async function GET(req: NextRequest) {
       { status: 500 }
     );
   }
-}
+});
 
-// POST - Create a lead reclamation
-export async function POST(req: NextRequest) {
+// POST - Create a lead reclamation (AUTHENTICATED)
+export const POST = withAuth(async (req: NextRequest, user: AuthenticatedUser) => {
   try {
     const body = await req.json();
     const { customerId, lead, reason, description } = body;
@@ -78,6 +94,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { error: 'Lead must have a sheet row number' },
         { status: 400 }
+      );
+    }
+
+    // Security: User can only create reclamations for themselves (unless admin)
+    if (customerId !== user.email && !isAdmin(user.email)) {
+      return NextResponse.json(
+        { error: 'Forbidden - You can only create reclamations for yourself' },
+        { status: 403 }
       );
     }
 
@@ -158,4 +182,4 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
-}
+});
