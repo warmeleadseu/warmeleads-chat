@@ -6,21 +6,38 @@
  * - Response rates
  * - Delivery status
  * - Usage statistics
+ * 
+ * AUTHENTICATED - User can only view their own analytics
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { WhatsAppConfig } from '@/lib/whatsappAPI';
+import { withAuth } from '@/middleware/auth';
+import type { AuthenticatedUser } from '@/middleware/auth';
 
 // Force dynamic rendering for this route
 export const dynamic = 'force-dynamic';
 
-export async function GET(request: NextRequest) {
+// Helper to check if user is admin
+function isAdmin(email: string): boolean {
+  const adminEmails = process.env.ADMIN_EMAILS?.split(',').map(e => e.trim()) || [];
+  return adminEmails.includes(email);
+}
+
+export const GET = withAuth(async (request: NextRequest, user: AuthenticatedUser) => {
   try {
     const { searchParams } = new URL(request.url);
     const customerId = searchParams.get('customerId');
 
     if (!customerId) {
       return NextResponse.json({ error: 'Customer ID is required' }, { status: 400 });
+    }
+
+    // Security: User can only view their own analytics (unless admin)
+    if (customerId !== user.email && !isAdmin(user.email)) {
+      return NextResponse.json({ 
+        error: 'Forbidden - You can only view your own analytics' 
+      }, { status: 403 });
     }
 
     console.log(`📊 Fetching WhatsApp analytics for customer: ${customerId}`);

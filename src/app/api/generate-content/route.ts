@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { contentTopics, getWeeklyContent, generateArticleContent, optimizeForSEO } from '@/lib/contentGenerator';
 import { generateWeeklyContent, generateActualContent } from '@/lib/hybridContentSystem';
 import { generateWeeklyAIContent, testAIGeneration } from '@/lib/aiContentGenerator';
+import { withAuth } from '@/middleware/auth';
+import type { AuthenticatedUser } from '@/middleware/auth';
 
-export async function POST(req: NextRequest) {
+export const POST = withAuth(async (req: NextRequest, user: AuthenticatedUser) => {
   try {
     const { mode = 'hybrid', forceGenerate = false } = await req.json();
     
@@ -60,10 +62,10 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
-}
+}, { adminOnly: true });
 
-// Webhook voor automatische wekelijkse generatie
-export async function GET(req: NextRequest) {
+// Webhook voor automatische wekelijkse generatie (ADMIN ONLY)
+export const GET = withAuth(async (req: NextRequest, user: AuthenticatedUser) => {
   try {
     // Check if it's time for new content (every Monday)
     const now = new Date();

@@ -4,16 +4,26 @@
  * Handles WhatsApp Business API configuration for customers
  * - Warmeleads WhatsApp (default, gratis)
  * - Customer own WhatsApp Business (premium, €750 setup)
+ * 
+ * AUTHENTICATED - User can only access their own config
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { WhatsAppConfig, DEFAULT_TEMPLATES } from '@/lib/whatsappAPI';
+import { withAuth } from '@/middleware/auth';
+import type { AuthenticatedUser } from '@/middleware/auth';
 
 // Use Vercel KV for persistent storage across serverless functions
 import { kv } from '@vercel/kv';
 
-// GET: Haal WhatsApp configuratie op
-export async function GET(request: NextRequest) {
+// Helper to check if user is admin
+function isAdmin(email: string): boolean {
+  const adminEmails = process.env.ADMIN_EMAILS?.split(',').map(e => e.trim()) || [];
+  return adminEmails.includes(email);
+}
+
+// GET: Haal WhatsApp configuratie op (AUTHENTICATED)
+export const GET = withAuth(async (request: NextRequest, user: AuthenticatedUser) => {
   try {
     const { searchParams } = new URL(request.url);
     const customerId = searchParams.get('customerId');
