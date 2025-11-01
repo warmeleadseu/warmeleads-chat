@@ -1,5 +1,6 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
@@ -16,7 +17,12 @@ import {
 import { useAuthStore } from '@/lib/auth';
 import { crmSystem, type Customer, type Lead } from '@/lib/crmSystem';
 import { branchIntelligence, type BranchAnalytics } from '@/lib/branchIntelligence';
-import { WhatsAppAnalytics } from '@/components/WhatsAppAnalytics';
+
+// Lazy load WhatsApp analytics (heavy component)
+const WhatsAppAnalytics = dynamic(() => import('@/components/WhatsAppAnalytics').then(mod => mod.WhatsAppAnalytics), {
+  loading: () => <div className="bg-white p-6 rounded-xl shadow-sm animate-pulse"><div className="h-40 bg-gray-200 rounded"></div></div>,
+  ssr: false
+});
 
 export default function CRMDashboard() {
   const router = useRouter();
