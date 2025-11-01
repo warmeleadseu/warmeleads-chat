@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withAuth } from '@/middleware/auth';
+import type { AuthenticatedUser } from '@/middleware/auth';
 
 /**
  * Server-side Google Sheets Service Account Authentication
  * This endpoint handles OAuth2 token generation for the Service Account
+ * 
+ * AUTHENTICATED - Service account, but still requires auth for tracking/logging
  */
 
 const SERVICE_ACCOUNT = {
@@ -21,9 +25,9 @@ let cachedToken: string | null = null;
 let tokenExpiry: number = 0;
 
 /**
- * Get or refresh OAuth2 access token for Google Sheets API
+ * Get or refresh OAuth2 access token for Google Sheets API (AUTHENTICATED)
  */
-export async function GET(request: NextRequest) {
+export const GET = withAuth(async (request: NextRequest, user: AuthenticatedUser) => {
   try {
     console.log('🔑 GET /api/sheets-auth - Requesting Service Account token');
     
