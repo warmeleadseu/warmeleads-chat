@@ -27,7 +27,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { useAuthStore, authenticatedFetch } from '@/lib/auth';
 import { crmSystem, type Customer, type Lead } from '@/lib/crmSystem';
-import { readCustomerLeads, GoogleSheetsService, updateLeadInSheet, addLeadToSheet } from '@/lib/googleSheetsAPI';
+import { readCustomerLeads, GoogleSheetsService, addLeadToSheet } from '@/lib/googleSheetsAPI';
 import { branchIntelligence, type Branch, type BranchIntelligence, type BranchAnalytics } from '@/lib/branchIntelligence';
 import { PipelineBoard } from '@/components/PipelineBoard';
 import { type CustomStage, PipelineStagesManager } from '@/lib/pipelineStages';
@@ -2504,7 +2504,7 @@ export default function CustomerLeadsPage() {
                       }
                     }
                     
-                    // Sync to Google Sheets if URL is configured
+                    // Sync to Google Sheets if URL is configured (server-side with Service Account)
                     if (customerData.googleSheetUrl && updatedLead.sheetRowNumber) {
                       try {
                         console.log('📊 Edit Modal: Syncing to Google Sheets...');
@@ -2517,7 +2517,21 @@ export default function CustomerLeadsPage() {
                           branchData: updatedLead.branchData
                         });
                         
-                        await updateLeadInSheet(customerData.googleSheetUrl, updatedLead);
+                        // Use server-side API route for proper Service Account authentication
+                        const sheetResponse = await authenticatedFetch('/api/update-lead-in-sheet', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            googleSheetUrl: customerData.googleSheetUrl,
+                            lead: updatedLead
+                          })
+                        });
+                        
+                        if (!sheetResponse.ok) {
+                          const errorData = await sheetResponse.json();
+                          throw new Error(errorData.error || 'Failed to update Google Sheets');
+                        }
+                        
                         console.log('✅ Edit Modal: Synced to Google Sheets');
                       } catch (sheetError) {
                         console.error('❌ Edit Modal: Google Sheets sync failed:', sheetError);
