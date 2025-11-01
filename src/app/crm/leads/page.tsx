@@ -307,67 +307,31 @@ export default function CustomerLeadsPage() {
           addDebugLog('warning', '⚠️ BLOB STORAGE: Unexpected response', { responseData: data });
         }
         
-        // If still no valid customer, try to get Google Sheets URL from dedicated API
+        // If still no valid customer, customer data might not be synced yet
         if (!customer) {
-          addDebugLog('warning', '⚠️ BLOB STORAGE: No valid customer, trying /api/customer-sheets', {});
+          addDebugLog('info', 'ℹ️ Customer not found in API, may be first-time user', {});
           
-          // Also check if WhatsApp config has the customerId that was used in admin
-          const blobCustomerId = (data.customerData as any)?.customerId;
-          addDebugLog('info', '🔍 Checking customer IDs', {
-            userEmail: customerId,
-            blobCustomerId: blobCustomerId,
-            areTheSame: customerId === blobCustomerId
-          });
+          // Create minimal customer object for first-time users
+          customer = {
+            id: customerId,
+            email: customerId,
+            name: customerId.split('@')[0],
+            createdAt: new Date(),
+            lastActivity: new Date(),
+            status: 'customer' as const,
+            source: 'direct' as const,
+            chatHistory: [],
+            orders: [],
+            openInvoices: [],
+            dataHistory: [],
+            hasAccount: true,
+            googleSheetUrl: undefined,
+            googleSheetId: undefined,
+            leadData: []
+          };
           
-          try {
-            // Try with user email first
-            const sheetsResponse = await fetch(`/api/customer-sheets?customerId=${encodeURIComponent(customerId)}`);
-            addDebugLog('info', `📊 STEP 1.5: Fetching Google Sheets URL (with user email)`, { 
-              customerId: customerId,
-              status: sheetsResponse.status,
-              ok: sheetsResponse.ok 
-            });
-            
-            if (sheetsResponse.ok) {
-              const sheetsData = await sheetsResponse.json();
-              addDebugLog('success', '✅ GOOGLE SHEETS URL: Found in customer-sheets API', { 
-                hasUrl: !!sheetsData.googleSheetUrl,
-                url: sheetsData.googleSheetUrl?.substring(0, 50) + '...'
-              });
-              
-              // Create customer with Google Sheets URL
-              if (sheetsData.googleSheetUrl) {
-                customer = {
-                  id: customerId,
-                  email: customerId,
-                  name: customerId.split('@')[0],
-                  createdAt: new Date(),
-                  lastActivity: new Date(),
-                  status: 'customer' as const,
-                  source: 'direct' as const,
-                  chatHistory: [],
-                  orders: [],
-                  openInvoices: [],
-                  dataHistory: [],
-                  hasAccount: true,
-                  googleSheetUrl: sheetsData.googleSheetUrl,
-                  leadData: []
-                };
-                addDebugLog('info', '🔨 CREATED: Customer object with Google Sheets URL', {
-                  hasCustomer: !!customer,
-                  hasGoogleSheetUrl: !!customer.googleSheetUrl
-                });
-              }
-            } else {
-              addDebugLog('warning', '⚠️ GOOGLE SHEETS URL: Not found in customer-sheets API', { 
-                status: sheetsResponse.status 
-              });
-            }
-          } catch (error) {
-            addDebugLog('error', '❌ GOOGLE SHEETS URL: Error fetching', { 
-              error: error instanceof Error ? error.message : 'Unknown error' 
-            });
-          }
+          addDebugLog('info', '➕ Created minimal customer object', { email: customerId });
+        }
           
           // If still no customer, try localStorage
           if (!customer) {
