@@ -79,9 +79,14 @@ export async function POST(request: NextRequest) {
       needs_password_reset: accountData.needs_password_reset 
     });
     
-    // Return user data (without password) including employee/role info
+    // Generate a simple session token (just the user ID for now)
+    // In production, you'd use a proper JWT with expiration
+    const sessionToken = accountData.id;
+    
+    // Return user data (without password) including employee/role info + session token
     return NextResponse.json({
       success: true,
+      token: sessionToken, // ADD TOKEN
       user: {
         email: accountData.email,
         name: accountData.name,

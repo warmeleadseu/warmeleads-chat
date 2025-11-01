@@ -17,7 +17,7 @@ import {
   UserPlusIcon
 } from '@heroicons/react/24/outline';
 import { Logo } from './Logo';
-import { useAuthStore } from '../lib/auth';
+import { useAuthStore, authenticatedFetch } from '../lib/auth';
 import { CustomerLeadsSection } from './CustomerLeadsSection';
 import { crmSystem, type Customer, type Lead } from '@/lib/crmSystem';
 import { calculateRevenueFromLeads, formatRevenue } from '@/lib/revenueCalculator';
@@ -237,7 +237,7 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
         console.log('📦 CustomerPortal: Loading data for', user.email);
         
         // Load from Supabase via API
-        const response = await fetch(`/api/customer-data?customerId=${encodeURIComponent(user.email)}`);
+        const response = await authenticatedFetch(`/api/customer-data?customerId=${encodeURIComponent(user.email)}`);
         if (response.ok) {
           const data = await response.json();
           const customer = data.customerData || data.customer || null;
@@ -324,7 +324,7 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
         }
         
         // Reload customer data to reflect changes
-        const response = await fetch(`/api/customer-data?customerId=${encodeURIComponent(email)}`);
+        const response = await authenticatedFetch(`/api/customer-data?customerId=${encodeURIComponent(email)}`);
         if (response.ok) {
           const data = await response.json();
           const updatedCustomer = data.customerData || data.customer || null;

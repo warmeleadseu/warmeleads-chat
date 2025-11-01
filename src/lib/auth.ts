@@ -184,6 +184,12 @@ export const useAuthStore = create<AuthState>()(
           throw new Error(data.error || 'Ongeldig emailadres of wachtwoord');
         }
         
+        // Store the session token
+        const token = data.token;
+        if (token) {
+          console.log('🔑 Session token received:', token.substring(0, 8) + '...');
+        }
+        
         // Create user from API response
         let user: User = {
           id: data.user.email,
@@ -223,10 +229,11 @@ export const useAuthStore = create<AuthState>()(
         try {
           localStorage.setItem('warmeleads-auth', JSON.stringify({
             user,
+            token, // STORE TOKEN
             isAuthenticated: true,
             timestamp: Date.now()
           }));
-          console.log('✅ Auth stored in localStorage:', { email: user.email, name: user.name });
+          console.log('✅ Auth stored in localStorage:', { email: user.email, name: user.name, hasToken: !!token });
         } catch (error) {
           console.error('Failed to store auth in localStorage:', error);
         }
@@ -358,10 +365,11 @@ export const useAuthStore = create<AuthState>()(
           error: null 
         });
         
-        // Clear localStorage
+        // Clear localStorage and cached token
         try {
           localStorage.removeItem('warmeleads-auth');
           localStorage.removeItem('warmeleads_visited');
+          clearAuthToken(); // Clear cached token
           console.log('✅ Auth cleared from localStorage');
         } catch (error) {
           console.error('Failed to clear localStorage:', error);
