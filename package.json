@@ -26,7 +26,8 @@
     "@react-spring/web": "^10.0.1",
     "@stripe/stripe-js": "^7.9.0",
     "@supabase/supabase-js": "^2.78.0",
-    "@tanstack/react-query": "^5.85.6",
+    "@tanstack/react-query": "^5.90.6",
+    "@tanstack/react-virtual": "^3.13.12",
     "@types/bcryptjs": "^2.4.6",
     "@types/uuid": "^10.0.0",
     "@vercel/blob": "^2.0.0",
@@ -49,7 +50,7 @@
     "stripe": "^18.5.0",
     "uuid": "^13.0.0",
     "whatsapp-web.js": "^1.34.1",
-    "zod": "^4.1.5",
+    "zod": "^4.1.12",
     "zustand": "^5.0.8"
   },
   "devDependencies": {
