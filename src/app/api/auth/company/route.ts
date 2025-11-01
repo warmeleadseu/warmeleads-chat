@@ -243,7 +243,7 @@ export const POST = withAuth(async (request: NextRequest, user: AuthenticatedUse
       { status: 500 }
     );
   }
-}
+});
 
 export async function DELETE(request: NextRequest) {
   try {

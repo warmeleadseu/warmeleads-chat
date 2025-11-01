@@ -145,4 +145,4 @@ export const GET = withAuth(async (request: NextRequest, user: AuthenticatedUser
       { status: 500 }
     );
   }
-}
+});

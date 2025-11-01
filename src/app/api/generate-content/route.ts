@@ -100,4 +100,4 @@ export const GET = withAuth(async (req: NextRequest, user: AuthenticatedUser) =>
       { status: 500 }
     );
   }
-}
+}, { adminOnly: true });

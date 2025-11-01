@@ -58,4 +58,4 @@ export const POST = withAuth(async (req: NextRequest, user: AuthenticatedUser) =
       { status: 500 }
     );
   }
-}
+}, { adminOnly: true });

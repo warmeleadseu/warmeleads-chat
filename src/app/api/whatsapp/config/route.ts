@@ -221,7 +221,7 @@ export const POST = withAuth(async (request: NextRequest, user: AuthenticatedUse
       timestamp: new Date().toISOString()
     }, { status: 500 });
   }
-}
+});
 
 // DELETE: Verwijder WhatsApp configuratie
 export async function DELETE(request: NextRequest) {

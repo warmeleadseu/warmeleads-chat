@@ -244,8 +244,8 @@ export const inviteEmployeeSchema = z.object({
 // ============================================
 
 export const paginationSchema = z.object({
-  page: z.string().regex(/^\d+$/).transform(Number).default('1'),
-  limit: z.string().regex(/^\d+$/).transform(Number).default('50'),
+  page: z.string().regex(/^\d+$/).transform(Number).pipe(z.number().min(1)).default(() => 1),
+  limit: z.string().regex(/^\d+$/).transform(Number).pipe(z.number().min(1).max(100)).default(() => 50),
 });
 
 export const dateRangeSchema = z.object({
@@ -272,7 +272,7 @@ export async function validateRequestBody<T>(
     if (error instanceof z.ZodError) {
       throw new ValidationError(
         'Validation failed',
-        error.errors.map(e => ({
+        error.issues.map(e => ({
           field: e.path.join('.'),
           message: e.message
         }))
@@ -297,7 +297,7 @@ export function validateQueryParams<T>(
     if (error instanceof z.ZodError) {
       throw new ValidationError(
         'Invalid query parameters',
-        error.errors.map(e => ({
+        error.issues.map(e => ({
           field: e.path.join('.'),
           message: e.message
         }))
@@ -326,7 +326,7 @@ export class ValidationError extends Error {
 export function formatZodErrors(error: z.ZodError) {
   return {
     error: 'Validation failed',
-    details: error.errors.map(e => ({
+    details: error.issues.map(e => ({
       field: e.path.join('.'),
       message: e.message,
       code: e.code
