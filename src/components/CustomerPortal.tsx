@@ -289,53 +289,31 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
     loadCustomerData();
   }, [user]);
 
-  // Background Google Sheets sync (non-blocking)
+  // Read leads DIRECTLY from Google Sheets (real-time, no Supabase storage)
   const syncWithGoogleSheetsInBackground = async (customer: any, email: string) => {
     try {
       const { readCustomerLeads } = await import('@/lib/googleSheetsAPI');
       const freshLeads = await readCustomerLeads(customer.googleSheetUrl);
       
-      console.log(`🔄 Synced ${freshLeads.length} leads from Google Sheets`);
+      console.log(`📊 Loaded ${freshLeads.length} leads DIRECTLY from Google Sheets (real-time)`);
       
-      // Only update if data has changed
-      if (JSON.stringify(freshLeads) !== JSON.stringify(customer.leadData)) {
-        console.log(`✅ CustomerPortal: Background sync found ${freshLeads.length} leads from Google Sheets`);
-        
-        // Add or update leads in Supabase via crmSystem
-        for (const lead of freshLeads) {
-          try {
-            // Check if lead already exists (by email or sheet row number)
-            const existingLeads = customer.leadData || [];
-            const existingLead = existingLeads.find((l: any) => 
-              l.email === lead.email || 
-              (lead.sheetRowNumber && l.sheetRowNumber === lead.sheetRowNumber)
-            );
-            
-            if (existingLead) {
-              // Update existing lead
-              await crmSystem.updateCustomerLead(email, existingLead.id, lead);
-            } else {
-              // Add new lead
-              await crmSystem.addLeadToCustomer(email, lead);
-            }
-          } catch (leadError) {
-            console.error('❌ Error syncing lead:', lead.name, leadError);
-          }
-        }
-        
-        // Reload customer data to reflect changes
-        const response = await authenticatedFetch(`/api/customer-data?customerId=${encodeURIComponent(email)}`);
-        if (response.ok) {
-          const data = await response.json();
-          const updatedCustomer = data.customerData || data.customer || null;
-          setCustomerData(updatedCustomer);
-          console.log(`✅ Customer data reloaded with ${updatedCustomer?.leadData?.length || 0} leads`);
-        }
-      } else {
-        console.log('ℹ️ CustomerPortal: No changes in Google Sheets data');
-      }
+      // Update customer data with fresh leads from sheet
+      // NO writing to Supabase - sheet is the single source of truth!
+      const updatedCustomer = {
+        ...customer,
+        leadData: freshLeads
+      };
+      
+      setCustomerData(updatedCustomer);
+      console.log(`✅ CustomerPortal: ${freshLeads.length} leads from Google Sheets ready`);
+      
     } catch (syncError) {
-      console.error('❌ CustomerPortal: Background Google Sheets sync failed:', syncError);
+      console.error('❌ CustomerPortal: Failed to read Google Sheets:', syncError);
+      // Set customer data without leads if sheet read fails
+      setCustomerData({
+        ...customer,
+        leadData: []
+      });
     }
   };
   

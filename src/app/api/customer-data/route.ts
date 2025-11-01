@@ -42,15 +42,14 @@ export const GET = withAuth(async (request: NextRequest, user: AuthenticatedUser
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
       }
       
-      // Get customer with all related data
+      // Get customer with related data (NO leads - they come from Google Sheets!)
       const { data: customer, error: customerError } = await supabase
         .from('customers')
         .select(`
           *,
           chat_messages(*),
           orders(*),
-          open_invoices(*),
-          leads(*, lead_branch_data(*))
+          open_invoices(*)
         `)
         .eq('email', customerId)
         .single();
@@ -61,8 +60,10 @@ export const GET = withAuth(async (request: NextRequest, user: AuthenticatedUser
       }
 
       console.log(`✅ Loaded customer data for ${customerId}`);
+      console.log(`   Google Sheet: ${customer.google_sheet_url ? 'LINKED' : 'NOT LINKED'}`);
       
       // Transform to match expected format
+      // NOTE: leadData is EMPTY - leads are read directly from Google Sheets by the frontend!
       const customerData = {
         id: customer.id,
         email: customer.email,
@@ -85,10 +86,7 @@ export const GET = withAuth(async (request: NextRequest, user: AuthenticatedUser
         chatHistory: customer.chat_messages || [],
         orders: customer.orders || [],
         openInvoices: customer.open_invoices || [],
-        leadData: (customer.leads || []).map((lead: any) => ({
-          ...lead,
-          branchData: lead.lead_branch_data?.[0] || {}
-        })),
+        leadData: [], // ALWAYS EMPTY - leads come from Google Sheets!
       };
 
       return NextResponse.json({
