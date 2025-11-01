@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { ADMIN_CONFIG } from '@/config/admin';
 
 export interface UserPermissions {
   canViewLeads: boolean;
@@ -88,80 +87,7 @@ export interface Company {
   createdAt: string;
 }
 
-// Mock database for demo purposes - dynamically generated from config
-const getMockUsers = (): User[] => {
-  const users: User[] = [];
-  
-  // Add demo account if configured
-  if (ADMIN_CONFIG.demoAccount) {
-    users.push({
-      id: 'user_demo',
-      email: ADMIN_CONFIG.demoAccount.email,
-      name: ADMIN_CONFIG.demoAccount.name,
-      company: ADMIN_CONFIG.demoAccount.company,
-      phone: '+31 85 047 7067',
-      createdAt: new Date(),
-      lastLogin: new Date(),
-      isGuest: false,
-      role: 'owner',
-      permissions: {
-        canViewLeads: true,
-        canViewOrders: true,
-        canManageEmployees: true,
-        canCheckout: true,
-      },
-      orders: [
-        {
-          id: 'order_1',
-          type: 'Exclusieve Thuisbatterij Leads',
-          quantity: 50,
-          status: 'delivered',
-          date: '2024-01-15',
-          amount: 2000,
-          leads: 47,
-          conversions: 12
-        },
-        {
-          id: 'order_2',
-          type: 'Gedeelde Zonnepaneel Leads',
-          quantity: 500,
-          status: 'active',
-          date: '2024-01-20',
-          amount: 7500,
-          leads: 423,
-          conversions: 89
-        }
-      ]
-    });
-  }
-  
-  // Add admin accounts
-  ADMIN_CONFIG.adminEmails.forEach((adminEmail, index) => {
-    users.push({
-      id: `user_admin_${index}`,
-      email: adminEmail,
-      name: adminEmail.split('@')[0].replace('.', ' ').replace(/\b\w/g, l => l.toUpperCase()),
-      company: 'WarmeLeads BV',
-      phone: '+31 61 392 7338',
-      createdAt: new Date('2025-09-20'),
-      lastLogin: new Date(),
-      isGuest: false,
-      role: 'owner',
-      permissions: {
-        canViewLeads: true,
-        canViewOrders: true,
-        canManageEmployees: true,
-        canCheckout: true,
-      },
-      orders: []
-    });
-  });
-  
-  return users;
-};
-
-const mockUsers: User[] = getMockUsers();
-let nextUserId = 4;
+// All accounts are now stored in Supabase - no more hardcoded mock users
 
 // Helper function to get default permissions for owners
 const getDefaultOwnerPermissions = (): UserPermissions => ({
@@ -245,114 +171,35 @@ export const useAuthStore = create<AuthState>()(
       set({ isLoading: true, error: null });
       
       try {
-        // First check for hardcoded demo accounts (backwards compatibility)
-        let user: User | null = null;
-        const existingUser = mockUsers.find(u => u.email === email);
+        // Call Supabase login API
+        const response = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password })
+        });
         
-        if (existingUser) {
-          // Check password for existing mock users
-          let validPassword = false;
-          
-          // Check demo account
-          if (ADMIN_CONFIG.demoAccount && 
-              email === ADMIN_CONFIG.demoAccount.email && 
-              password === ADMIN_CONFIG.demoAccount.password) {
-            validPassword = true;
-          }
-          
-          // Check if it's an admin account (they all use the same password for now)
-          if (ADMIN_CONFIG.adminEmails.includes(email) && password === 'Ab49n805!') {
-            validPassword = true;
-          }
-          
-          if (validPassword) {
-            user = { ...existingUser, lastLogin: new Date() };
-            
-            // Try to get updated profile data from Blob Storage for demo/admin accounts too
-            try {
-              const profileResponse = await fetch(`/api/auth/get-profile?email=${encodeURIComponent(email)}`);
-              if (profileResponse.ok) {
-                const profileData = await profileResponse.json();
-                if (profileData.success && profileData.user) {
-                  // Merge updated profile data including role/permissions
-                  user = {
-                    ...user,
-                    name: profileData.user.name || user.name,
-                    company: profileData.user.company || user.company,
-                    phone: profileData.user.phone || user.phone,
-                    role: profileData.user.role || user.role || 'owner',
-                    companyId: profileData.user.companyId || user.companyId,
-                    ownerEmail: profileData.user.ownerEmail || user.ownerEmail,
-                    permissions: profileData.user.permissions || user.permissions,
-                  };
-                  console.log('✅ Updated profile data loaded from Blob Storage for demo/admin account');
-                }
-              }
-            } catch (profileError) {
-              console.log('ℹ️ Could not load updated profile data for demo/admin account, using mock data:', profileError);
-            }
-          }
+        const data = await response.json();
+        
+        if (!response.ok) {
+          throw new Error(data.error || 'Ongeldig emailadres of wachtwoord');
         }
         
-        // If not a mock user, try real API login
-        if (!user) {
-          const response = await fetch('/api/auth/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, password })
-          });
-          
-          const data = await response.json();
-          
-          if (!response.ok) {
-            throw new Error(data.error || 'Ongeldig emailadres of wachtwoord');
-          }
-          
-          // Create base user from API response
-          user = {
-            id: data.user.email,
-            email: data.user.email,
-            name: data.user.name,
-            company: data.user.company,
-            phone: data.user.phone,
-            createdAt: new Date(data.user.createdAt),
-            lastLogin: new Date(),
-            isGuest: false,
-            orders: [],
-            role: data.user.role || 'owner',
-            companyId: data.user.companyId,
-            ownerEmail: data.user.ownerEmail,
-            permissions: data.user.permissions
-          };
-
-          // Try to get updated profile data from Blob Storage
-          try {
-            const profileResponse = await fetch(`/api/auth/get-profile?email=${encodeURIComponent(email)}`);
-            if (profileResponse.ok) {
-              const profileData = await profileResponse.json();
-              if (profileData.success && profileData.user) {
-                // Merge updated profile data including role/permissions
-                user = {
-                  ...user,
-                  name: profileData.user.name || user.name,
-                  company: profileData.user.company || user.company,
-                  phone: profileData.user.phone || user.phone,
-                  role: profileData.user.role || user.role || 'owner',
-                  companyId: profileData.user.companyId || user.companyId,
-                  ownerEmail: profileData.user.ownerEmail || user.ownerEmail,
-                  permissions: profileData.user.permissions || user.permissions,
-                };
-                console.log('✅ Updated profile data loaded from Blob Storage');
-              }
-            }
-          } catch (profileError) {
-            console.log('ℹ️ Could not load updated profile data, using API response:', profileError);
-          }
-        }
-        
-        if (!user) {
-          throw new Error('Ongeldig emailadres of wachtwoord');
-        }
+        // Create user from API response
+        let user: User = {
+          id: data.user.email,
+          email: data.user.email,
+          name: data.user.name,
+          company: data.user.company,
+          phone: data.user.phone,
+          createdAt: new Date(data.user.createdAt),
+          lastLogin: new Date(),
+          isGuest: false,
+          orders: [],
+          role: data.user.role || 'owner',
+          companyId: data.user.companyId,
+          ownerEmail: data.user.ownerEmail,
+          permissions: data.user.permissions || getDefaultOwnerPermissions()
+        };
         
         // Load company data and ensure permissions are set
         user = await loadUserWithCompanyData(user);
@@ -526,71 +373,20 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true, error: null });
         
         try {
-          // Simulate API call
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          
-          const existingUser = mockUsers.find(u => u.email === userData.email);
-          
-          if (existingUser) {
-            throw new Error('Email is al in gebruik');
-          }
-          
           const currentUser = get().user;
           if (!currentUser?.isGuest) {
             throw new Error('Alleen gasten kunnen een account aanmaken');
           }
           
-          const newUser: User = {
-            id: `user_${nextUserId++}`,
-            email: userData.email,
-            name: userData.name,
-            company: userData.company,
-            phone: userData.phone,
-            createdAt: new Date(),
-            lastLogin: new Date(),
-            isGuest: false,
-            orders: currentUser.orders // Transfer guest orders
-          };
-          
-          mockUsers.push(newUser);
-          
-          // ALSO add to CRM system so the customer appears in admin
-          try {
-            const { crmSystem } = await import('./crmSystem');
-            
-            // Use createOrUpdateCustomer to add/update in CRM
-            const customer = crmSystem.createOrUpdateCustomer({
-              email: userData.email,
-              name: userData.name,
-              company: userData.company,
-              phone: userData.phone,
-              source: 'direct'
-            });
-            
-            // Mark as having account
-            crmSystem.updateCustomer(customer.id, {
-              hasAccount: true,
-              accountCreatedAt: new Date()
-            });
-            
-            console.log('✅ Customer synced to CRM system (from guest):', userData.email);
-          } catch (crmError) {
-            console.error('⚠️ Error syncing customer to CRM:', crmError);
-            // Don't fail the registration if CRM sync fails
-          }
-          
-          set({ 
-            user: newUser, 
-            isAuthenticated: true, 
-            isLoading: false,
-            error: null 
-          });
+          // Use register API to create account in Supabase
+          await get().register(userData);
           
         } catch (error) {
           set({ 
             error: error instanceof Error ? error.message : 'Account aanmaken mislukt', 
             isLoading: false 
           });
+          throw error;
         }
       },
 
