@@ -482,43 +482,117 @@ export default function CustomersPage() {
   useEffect(() => {
     const loadCustomers = async () => {
       try {
-        console.log('🔄 Loading customers and users via API...');
+        console.log('═══════════════════════════════════════════════════════════════');
+        console.log('🔄 LOADING CUSTOMERS - START');
+        console.log('═══════════════════════════════════════════════════════════════');
+        console.log('Timestamp:', new Date().toISOString());
+        console.log('URL:', window.location.href);
+        console.log('');
         
         // Fetch customers via secure API route (uses SERVICE_ROLE)
+        console.log('📡 Step 1: Fetching customers from /api/admin/customers...');
+        console.log('   Request URL:', '/api/admin/customers');
+        
         const customersResponse = await fetch('/api/admin/customers');
+        
+        console.log('   Response Status:', customersResponse.status);
+        console.log('   Response OK:', customersResponse.ok);
+        console.log('   Response Headers:', {
+          'content-type': customersResponse.headers.get('content-type'),
+          'content-length': customersResponse.headers.get('content-length')
+        });
+        
         const customersData = await customersResponse.json();
         
+        console.log('📦 Step 2: Customers API Response:');
+        console.log('   Success:', customersData.success);
+        console.log('   Count:', customersData.count);
+        console.log('   Customers array length:', customersData.customers?.length || 0);
+        
+        if (customersData.error) {
+          console.error('   ❌ API Error:', customersData.error);
+          console.error('   Error Code:', customersData.code);
+          console.error('   Error Hint:', customersData.hint);
+        }
+        
         if (!customersData.success) {
-          console.error('❌ Failed to load customers:', customersData.error);
+          console.error('');
+          console.error('❌❌❌ CUSTOMERS API FAILED ❌❌❌');
+          console.error('Error:', customersData.error);
+          console.error('Full response:', customersData);
           throw new Error(customersData.error);
         }
         
         const allCustomers: Customer[] = customersData.customers || [];
-        console.log(`✅ Loaded ${allCustomers.length} customers via API`);
+        
+        console.log('');
+        console.log('✅ Customers fetched successfully!');
+        console.log('   Total customers:', allCustomers.length);
+        
+        if (allCustomers.length > 0) {
+          console.log('');
+          console.log('📋 Customer Details:');
+          allCustomers.forEach((customer, index) => {
+            console.log(`   ${index + 1}. ${customer.email}`);
+            console.log(`      - Name: ${customer.name || 'N/A'}`);
+            console.log(`      - Has Account: ${customer.hasAccount}`);
+            console.log(`      - Google Sheet ID: ${customer.googleSheetId || 'NOT SET'}`);
+            console.log(`      - Google Sheet URL: ${customer.googleSheetUrl ? customer.googleSheetUrl.substring(0, 60) + '...' : 'NOT SET'}`);
+          });
+        } else {
+          console.log('');
+          console.log('⚠️⚠️⚠️ WARNING: 0 CUSTOMERS RETURNED! ⚠️⚠️⚠️');
+          console.log('This means the API returned successfully but with an empty array.');
+          console.log('Possible causes:');
+          console.log('  1. Supabase customers table is empty');
+          console.log('  2. RLS policies are blocking the query');
+          console.log('  3. Wrong Supabase instance/credentials');
+        }
         
         // Fetch registered users via secure API route (uses SERVICE_ROLE)
+        console.log('');
+        console.log('📡 Step 3: Fetching users from /api/admin/users...');
+        
         const usersResponse = await fetch('/api/admin/users');
+        console.log('   Response Status:', usersResponse.status);
+        console.log('   Response OK:', usersResponse.ok);
+        
         const usersData = await usersResponse.json();
+        console.log('📦 Step 4: Users API Response:');
+        console.log('   Success:', usersData.success);
+        console.log('   Users count:', usersData.count);
+        console.log('   Users array length:', usersData.users?.length || 0);
         
         const registeredEmails = new Set<string>();
         
         if (usersData.success && usersData.users) {
-          console.log(`✅ Fetched ${usersData.users.length} registered user accounts via API`);
-          usersData.users.forEach((user: any) => {
+          console.log('');
+          console.log('✅ Users fetched successfully!');
+          console.log('   Total users:', usersData.users.length);
+          console.log('');
+          console.log('📋 Registered User Emails:');
+          usersData.users.forEach((user: any, index: number) => {
+            console.log(`   ${index + 1}. ${user.email}`);
             if (user.email) {
               registeredEmails.add(user.email);
             }
           });
         } else {
+          console.error('');
           console.error('❌ Failed to load users:', usersData.error);
         }
+        
+        console.log('');
+        console.log('🔄 Step 5: Merging customer and user data...');
+        console.log('   Customers from API:', allCustomers.length);
+        console.log('   Registered users:', registeredEmails.size);
         
         // Merge: Sync account status for customers
         const syncedCustomers = allCustomers.map(customer => {
           const hasAccount = registeredEmails.has(customer.email);
           if (hasAccount && !customer.hasAccount) {
             // Customer has registered but CRM not updated yet
-            console.log(`🔄 Syncing account status for ${customer.email}`);
+            console.log(`   🔄 Syncing account status for ${customer.email}`);
           }
           return {
             ...customer,
@@ -526,11 +600,16 @@ export default function CustomersPage() {
           };
         });
         
+        console.log('');
+        console.log('➕ Step 6: Adding users without CRM records...');
+        
         // Add user accounts that don't have CRM customer records yet
+        let addedCount = 0;
         registeredEmails.forEach(email => {
           const existsInCrm = syncedCustomers.some(c => c.email === email);
           if (!existsInCrm) {
-            console.log(`➕ Adding registered user to customer list: ${email}`);
+            console.log(`   ➕ Adding registered user: ${email}`);
+            addedCount++;
             syncedCustomers.push({
               id: `account-${email}`,
               email: email,
@@ -557,16 +636,39 @@ export default function CustomersPage() {
           }
         });
         
+        console.log(`   Added ${addedCount} users as customers`);
+        
         setCustomers(syncedCustomers);
         
-        console.log('📊 Loaded customers with API:', {
-          totalCustomers: syncedCustomers.length,
-          withAccounts: syncedCustomers.filter(c => c.hasAccount).length,
-          registeredEmailsCount: registeredEmails.size,
-          registeredEmails: Array.from(registeredEmails)
-        });
+        console.log('');
+        console.log('═══════════════════════════════════════════════════════════════');
+        console.log('✅ LOADING CUSTOMERS - COMPLETE');
+        console.log('═══════════════════════════════════════════════════════════════');
+        console.log('📊 Final Results:');
+        console.log('   Total customers shown:', syncedCustomers.length);
+        console.log('   Customers with accounts:', syncedCustomers.filter(c => c.hasAccount).length);
+        console.log('   Customers with Google Sheets:', syncedCustomers.filter(c => c.googleSheetId || c.googleSheetUrl).length);
+        console.log('   Registered emails:', registeredEmails.size);
+        console.log('');
+        console.log('📋 Customers with Google Sheets:');
+        syncedCustomers
+          .filter(c => c.googleSheetId || c.googleSheetUrl)
+          .forEach(c => {
+            console.log(`   ✓ ${c.email} → Sheet ID: ${c.googleSheetId?.substring(0, 20)}...`);
+          });
+        console.log('═══════════════════════════════════════════════════════════════');
+        console.log('');
+        
       } catch (error) {
-        console.error('❌ Error loading customers:', error);
+        console.log('');
+        console.log('═══════════════════════════════════════════════════════════════');
+        console.error('💥💥💥 FATAL ERROR LOADING CUSTOMERS 💥💥💥');
+        console.log('═══════════════════════════════════════════════════════════════');
+        console.error('Error:', error);
+        console.error('Error message:', (error as Error).message);
+        console.error('Error stack:', (error as Error).stack);
+        console.log('═══════════════════════════════════════════════════════════════');
+        console.log('');
       } finally {
         setIsLoading(false);
       }
