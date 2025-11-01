@@ -1,7 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { stripe } from '@/lib/stripe';
+import { withAuth } from '@/middleware/auth';
+import type { AuthenticatedUser } from '@/middleware/auth';
 
-export async function POST(req: NextRequest) {
+// Helper to check if user is admin
+function isAdmin(email: string): boolean {
+  const adminEmails = process.env.ADMIN_EMAILS?.split(',').map(e => e.trim()) || [];
+  return adminEmails.includes(email);
+}
+
+export const POST = withAuth(async (req: NextRequest, user: AuthenticatedUser) => {
   try {
     const body = await req.json();
     
@@ -16,6 +24,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { error: 'Missing required fields or invalid amount' },
         { status: 400 }
+      );
+    }
+
+    // Security: User can only create payment intent for themselves (unless admin)
+    if (customerInfo.email !== user.email && !isAdmin(user.email)) {
+      return NextResponse.json(
+        { error: 'Forbidden - You can only create payments for yourself' },
+        { status: 403 }
       );
     }
 
@@ -72,7 +88,7 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
-}
+});
 
 export async function OPTIONS() {
   return new NextResponse(null, {
@@ -80,7 +96,7 @@ export async function OPTIONS() {
     headers: {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     },
   });
 }

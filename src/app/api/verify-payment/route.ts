@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withAuth } from '@/middleware/auth';
+import type { AuthenticatedUser } from '@/middleware/auth';
 
-export async function POST(req: NextRequest) {
+// Helper to check if user is admin
+function isAdmin(email: string): boolean {
+  const adminEmails = process.env.ADMIN_EMAILS?.split(',').map(e => e.trim()) || [];
+  return adminEmails.includes(email);
+}
+
+export const POST = withAuth(async (req: NextRequest, user: AuthenticatedUser) => {
   try {
     const { sessionId } = await req.json();
     
@@ -38,6 +46,15 @@ export async function POST(req: NextRequest) {
 
     const session = await response.json();
     
+    // Security: User can only verify their own payments (unless admin)
+    const customerEmail = session.customer_details?.email || session.customer_email;
+    if (customerEmail && customerEmail !== user.email && !isAdmin(user.email)) {
+      return NextResponse.json(
+        { error: 'Forbidden - You can only verify your own payments' },
+        { status: 403 }
+      );
+    }
+    
     // Check if payment was successful
     if (session.payment_status === 'paid') {
       console.log('✅ Payment verified:', {
@@ -73,10 +90,4 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
-}
-
-
-
-
-
-
+});

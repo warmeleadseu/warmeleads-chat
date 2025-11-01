@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withAuth } from '@/middleware/auth';
+import type { AuthenticatedUser } from '@/middleware/auth';
 
-export async function POST(req: NextRequest) {
+// Helper to check if user is admin
+function isAdmin(email: string): boolean {
+  const adminEmails = process.env.ADMIN_EMAILS?.split(',').map(e => e.trim()) || [];
+  return adminEmails.includes(email);
+}
+
+export const POST = withAuth(async (req: NextRequest, user: AuthenticatedUser) => {
   try {
     console.log('🔵 Stripe payment endpoint called');
     
@@ -30,6 +38,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { error: 'Missing customer email' },
         { status: 400 }
+      );
+    }
+
+    // Security: User can only create payment for themselves (unless admin)
+    if (customerInfo.email !== user.email && !isAdmin(user.email)) {
+      return NextResponse.json(
+        { error: 'Forbidden - You can only create payments for yourself' },
+        { status: 403 }
       );
     }
 
@@ -98,4 +114,4 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
-}
+});
