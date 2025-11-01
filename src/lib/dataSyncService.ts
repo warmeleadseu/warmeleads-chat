@@ -145,7 +145,7 @@ class DataSyncService {
     
     // Add to CRM system
     const { crmSystem } = await import('./crmSystem');
-    crmSystem.addLeadToCustomer(this.unifiedState.customer.id, leadData);
+    await crmSystem.addLeadToCustomer(this.unifiedState.customer.id, leadData);
 
     // Trigger refresh to get updated data
     await this.refreshAllData(this.unifiedState.customer.email);
@@ -210,10 +210,10 @@ class DataSyncService {
   }
 
   // Fetch from localStorage
-  private fetchFromLocalStorage(userEmail: string): Customer | null {
+  private async fetchFromLocalStorage(userEmail: string): Promise<Customer | null> {
     try {
       const { crmSystem } = require('./crmSystem');
-      const customers = crmSystem.getAllCustomers();
+      const customers = await crmSystem.getAllCustomers();
       return customers.find((c: Customer) => c.email === userEmail) || null;
     } catch (error) {
       console.error('LocalStorage fetch failed:', error);

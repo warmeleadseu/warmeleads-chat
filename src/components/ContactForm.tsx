@@ -84,12 +84,12 @@ export function ContactForm({ onSubmit, orderData }: ContactFormProps) {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (validateForm()) {
       // Create/update customer in CRM system
-      const customer = createOrUpdateCustomer({
+      const customer = await createOrUpdateCustomer({
         email: formData.email.trim(),
         name: formData.name.trim(),
         phone: formData.phone.trim(),
@@ -123,7 +123,7 @@ export function ContactForm({ onSubmit, orderData }: ContactFormProps) {
       const calculatedAmount = calculateInvoiceAmount();
 
       // Create open invoice for follow-up
-      const invoice = createOpenInvoice(formData.email.trim(), {
+      const invoice = await createOpenInvoice(formData.email.trim(), {
         industry: correctedOrderData.industry,
         leadType: correctedOrderData.leadType,
         quantity: correctedOrderData.quantity,

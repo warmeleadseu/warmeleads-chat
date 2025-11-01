@@ -32,8 +32,8 @@ export default function LiveChatsPage() {
 
   useEffect(() => {
     // Load initial data
-    const loadData = () => {
-      const allCustomers = getAllCustomers();
+    const loadData = async () => {
+      const allCustomers = await getAllCustomers();
       setCustomers(allCustomers);
 
       // Load persisted events first

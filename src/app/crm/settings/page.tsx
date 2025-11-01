@@ -62,7 +62,7 @@ export default function CRMSettingsPage() {
       }
 
       if (!customer && user?.email) {
-        const allCustomers = crmSystem.getAllCustomers();
+        const allCustomers = await crmSystem.getAllCustomers();
         customer = allCustomers.find(cust => cust.email === user.email) || null;
       }
 

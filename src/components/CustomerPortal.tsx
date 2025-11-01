@@ -253,14 +253,14 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
         } else {
           // Fallback to localStorage
           console.log('ℹ️ CustomerPortal: Falling back to localStorage');
-          const customers = crmSystem.getAllCustomers();
+          const customers = await crmSystem.getAllCustomers();
           const customer = customers.find(c => c.email === user.email);
           setCustomerData(customer || null);
         }
       } catch (error) {
         console.error('❌ CustomerPortal: Error loading data:', error);
         // Fallback to localStorage
-        const customers = crmSystem.getAllCustomers();
+        const customers = await crmSystem.getAllCustomers();
         const customer = customers.find(c => c.email === user.email);
         setCustomerData(customer || null);
       } finally {
@@ -348,22 +348,22 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
   };
 
   // Lead management handlers
-  const handleUpdateLead = (leadId: string, updates: Partial<Lead>) => {
+  const handleUpdateLead = async (leadId: string, updates: Partial<Lead>) => {
     if (customerData) {
-      crmSystem.updateCustomerLead(customerData.id, leadId, updates);
+      await crmSystem.updateCustomerLead(customerData.id, leadId, updates);
       // Refresh customer data
-      const updatedCustomer = crmSystem.getCustomerById(customerData.id);
+      const updatedCustomer = await crmSystem.getCustomerById(customerData.id);
       if (updatedCustomer) {
         setCustomerData(updatedCustomer);
       }
     }
   };
 
-  const handleAddLead = (leadData: Omit<Lead, 'id' | 'createdAt' | 'updatedAt'>) => {
+  const handleAddLead = async (leadData: Omit<Lead, 'id' | 'createdAt' | 'updatedAt'>) => {
     if (customerData) {
-      crmSystem.addLeadToCustomer(customerData.id, leadData);
+      await crmSystem.addLeadToCustomer(customerData.id, leadData);
       // Refresh customer data
-      const updatedCustomer = crmSystem.getCustomerById(customerData.id);
+      const updatedCustomer = await crmSystem.getCustomerById(customerData.id);
       if (updatedCustomer) {
         setCustomerData(updatedCustomer);
       }

@@ -3,7 +3,7 @@ import { getOverdueInvoices, crmSystem } from '@/lib/crmSystem';
 
 export async function POST(req: NextRequest) {
   try {
-    const overdueInvoices = getOverdueInvoices();
+    const overdueInvoices = await getOverdueInvoices();
     const emailsSent = [];
 
     console.log(`📧 Processing ${overdueInvoices.length} overdue invoices`);
@@ -136,9 +136,10 @@ function generateFollowUpEmail(customer: any, invoice: any, quantity: number) {
 
 // Manual trigger endpoint
 export async function GET() {
+  const overdueInvoices = await getOverdueInvoices();
   return NextResponse.json({
     message: 'Use POST to trigger follow-up emails',
-    overdueCount: getOverdueInvoices().length
+    overdueCount: overdueInvoices.length
   });
 }
 

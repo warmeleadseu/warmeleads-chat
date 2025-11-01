@@ -485,7 +485,7 @@ export default function CustomersPage() {
         console.log('🔄 Loading customers from Blob Storage and localStorage...');
         
         // 1. Get CRM customers from localStorage (contains lead data, google sheets, etc.)
-        const crmCustomers = getAllCustomers();
+        const crmCustomers = await getAllCustomers();
         console.log(`📦 Loaded ${crmCustomers.length} customers from CRM (localStorage)`);
         
         // 2. Fetch registered accounts from Blob Storage (cross-device)
@@ -1091,7 +1091,7 @@ export default function CustomersPage() {
               // Reload customers after account management action
               const loadCustomers = async () => {
                 try {
-                  const crmCustomers = getAllCustomers();
+                  const crmCustomers = await getAllCustomers();
                   const registeredEmails = new Set<string>();
                   
                   try {

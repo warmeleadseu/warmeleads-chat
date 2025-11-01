@@ -372,7 +372,7 @@ export default function CustomerLeadsPage() {
           // If still no customer, try localStorage
           if (!customer) {
             addDebugLog('warning', '⚠️ Falling back to localStorage', {});
-          const allCustomers = crmSystem.getAllCustomers();
+          const allCustomers = await crmSystem.getAllCustomers();
           customer = allCustomers.find(c => c.email === user?.email) || null;
             addDebugLog('info', '💾 LOCAL STORAGE: Search result', { 
               found: !!customer, 
@@ -392,7 +392,7 @@ export default function CustomerLeadsPage() {
         
         // Fallback to localStorage if API fails or no data
         addDebugLog('info', '💾 Falling back to localStorage due to API failure', {});
-        const allCustomers = crmSystem.getAllCustomers();
+        const allCustomers = await crmSystem.getAllCustomers();
         customer = allCustomers.find(c => c.email === user?.email) || null;
         addDebugLog('info', '💾 LOCAL STORAGE: Search result', { found: !!customer, totalCustomers: allCustomers.length });
       }
@@ -615,7 +615,7 @@ export default function CustomerLeadsPage() {
                 branchData: leadData.branchData
               };
               
-              const addedLead = crmSystem.addLeadToCustomer(customerData.id, leadToAdd);
+              const addedLead = await crmSystem.addLeadToCustomer(customerData.id, leadToAdd);
               if (addedLead) {
                 addedLeads.push(addedLead);
                 console.log(`✅ Added new lead: ${leadData.name}`);
@@ -637,7 +637,7 @@ export default function CustomerLeadsPage() {
           // Remove deleted leads
           if (deletedLeads.length > 0) {
             for (const deletedLead of deletedLeads) {
-              const success = crmSystem.removeLeadFromCustomer(customerData.id, deletedLead.id);
+              const success = await crmSystem.removeLeadFromCustomer(customerData.id, deletedLead.id);
               if (success) {
                 console.log(`🗑️ Removed deleted lead: ${deletedLead.name}`);
                 hasChanges = true;
@@ -650,7 +650,7 @@ export default function CustomerLeadsPage() {
           
           // Update customer data if there were changes (but don't update leads state again)
           if (hasChanges) {
-            const updatedCustomer = crmSystem.getCustomerById(customerData.id);
+            const updatedCustomer = await crmSystem.getCustomerById(customerData.id);
             if (updatedCustomer) {
               setCustomerData(updatedCustomer);
             }
@@ -1032,13 +1032,13 @@ export default function CustomerLeadsPage() {
 
     try {
       if (customerData) {
-        const success = crmSystem.removeLeadFromCustomer(customerData.id, lead.id);
+        const success = await crmSystem.removeLeadFromCustomer(customerData.id, lead.id);
         if (success) {
           // Direct update UI
           setLeads(prevLeads => prevLeads.filter(l => l.id !== lead.id));
           
           // Update customer data
-          const updatedCustomer = crmSystem.getCustomerById(customerData.id);
+          const updatedCustomer = await crmSystem.getCustomerById(customerData.id);
           if (updatedCustomer) {
             setCustomerData(updatedCustomer);
           }
@@ -1159,11 +1159,11 @@ export default function CustomerLeadsPage() {
         
         console.log(`🔧 leadToAdd with branchData:`, leadToAdd.branchData);
         
-        crmSystem.addLeadToCustomer(customerData.id, leadToAdd);
+        await crmSystem.addLeadToCustomer(customerData.id, leadToAdd);
       }
 
             // Refresh data
-            const updatedCustomer = crmSystem.getCustomerById(customerData.id);
+            const updatedCustomer = await crmSystem.getCustomerById(customerData.id);
             if (updatedCustomer) {
               setCustomerData(updatedCustomer);
               setLeads(updatedCustomer.leadData || []);
@@ -2820,10 +2820,10 @@ export default function CustomerLeadsPage() {
                   };
 
                   if (customerData) {
-                    const success = crmSystem.addLeadToCustomer(customerData.id, newLead);
+                    const success = await crmSystem.addLeadToCustomer(customerData.id, newLead);
                     if (success) {
                       // Refresh data
-                      const updatedCustomer = crmSystem.getCustomerById(customerData.id);
+                      const updatedCustomer = await crmSystem.getCustomerById(customerData.id);
                       if (updatedCustomer) {
                         setCustomerData(updatedCustomer);
                         setLeads(updatedCustomer.leadData || []);
