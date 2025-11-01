@@ -13,6 +13,10 @@ export async function GET(request: NextRequest) {
   try {
     const supabase = createServerClient();
 
+    console.log('🔍 Fetching customers from Supabase...');
+    console.log('   URL:', process.env.NEXT_PUBLIC_SUPABASE_URL?.substring(0, 40));
+    console.log('   Has Service Key:', !!process.env.SUPABASE_SERVICE_ROLE_KEY);
+
     // Fetch all customers with their related data
     const { data: customers, error } = await supabase
       .from('customers')
@@ -28,17 +32,26 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       console.error('❌ Error fetching customers:', error);
+      console.error('   Code:', error.code);
+      console.error('   Details:', error.details);
+      console.error('   Hint:', error.hint);
       return NextResponse.json(
         { 
           success: false, 
           error: error.message,
-          hint: 'Check Supabase credentials and RLS policies'
+          code: error.code,
+          hint: error.hint || 'Check Supabase credentials and RLS policies'
         },
         { status: 500 }
       );
     }
 
     console.log(`✅ Fetched ${customers?.length || 0} customers via SERVICE_ROLE`);
+    
+    if (customers && customers.length > 0) {
+      console.log(`   First customer: ${customers[0].email}`);
+      console.log(`   Has google_sheet_id: ${!!customers[0].google_sheet_id}`);
+    }
     
     // Transform snake_case to camelCase for frontend
     const transformedCustomers = (customers || []).map((customer: any) => ({
