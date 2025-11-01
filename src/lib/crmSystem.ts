@@ -105,16 +105,28 @@ export interface Lead {
   branchData?: any;
 }
 
-// Helper to get Supabase client
+// Helper to get Supabase client (CLIENT-SIDE - uses anon key)
 function getSupabaseClient() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  // For client-side, use the public anon key
+  const supabaseUrl = typeof window !== 'undefined' 
+    ? (window as any).ENV?.NEXT_PUBLIC_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
+    : process.env.NEXT_PUBLIC_SUPABASE_URL;
+    
+  const supabaseAnonKey = typeof window !== 'undefined'
+    ? (window as any).ENV?.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    : process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   
-  if (!supabaseUrl || !supabaseServiceKey) {
+  if (!supabaseUrl || !supabaseAnonKey) {
+    console.error('Supabase config:', { 
+      hasUrl: !!supabaseUrl, 
+      hasKey: !!supabaseAnonKey,
+      url: supabaseUrl?.substring(0, 30),
+      isWindow: typeof window !== 'undefined'
+    });
     throw new Error('Supabase credentials not configured');
   }
   
-  return createClient(supabaseUrl, supabaseServiceKey);
+  return createClient(supabaseUrl, supabaseAnonKey);
 }
 
 /**
