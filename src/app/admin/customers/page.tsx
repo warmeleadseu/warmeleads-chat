@@ -13,7 +13,7 @@ import {
   XMarkIcon,
   ClockIcon
 } from '@heroicons/react/24/outline';
-import { getAllCustomers, crmSystem, type Customer } from '@/lib/crmSystem';
+import { crmSystem, type Customer } from '@/lib/crmSystem';
 import { ADMIN_CONFIG, getFirstAdminEmail } from '@/config/admin';
 
 // Customer Detail Modal Component
@@ -482,40 +482,35 @@ export default function CustomersPage() {
   useEffect(() => {
     const loadCustomers = async () => {
       try {
-        console.log('🔄 Loading customers from Supabase...');
+        console.log('🔄 Loading customers and users via API...');
         
-        // Get ALL customers from Supabase via crmSystem
-        const allCustomers = await getAllCustomers();
-        console.log(`✅ Loaded ${allCustomers.length} customers from Supabase`);
+        // Fetch customers via secure API route (uses SERVICE_ROLE)
+        const customersResponse = await fetch('/api/admin/customers');
+        const customersData = await customersResponse.json();
         
-        // Also fetch registered user accounts directly from Supabase
+        if (!customersData.success) {
+          console.error('❌ Failed to load customers:', customersData.error);
+          throw new Error(customersData.error);
+        }
+        
+        const allCustomers: Customer[] = customersData.customers || [];
+        console.log(`✅ Loaded ${allCustomers.length} customers via API`);
+        
+        // Fetch registered users via secure API route (uses SERVICE_ROLE)
+        const usersResponse = await fetch('/api/admin/users');
+        const usersData = await usersResponse.json();
+        
         const registeredEmails = new Set<string>();
         
-        try {
-          // Fetch users directly from Supabase
-          const { createClient } = await import('@supabase/supabase-js');
-          const supabase = createClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL!,
-            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-          );
-          
-          const { data: users, error } = await supabase
-            .from('users')
-            .select('email, name, company, phone, role, created_at')
-            .order('created_at', { ascending: false });
-          
-          if (users && !error) {
-            console.log(`✅ Fetched ${users.length} registered user accounts from Supabase`);
-            users.forEach((user: any) => {
-              if (user.email) {
-                registeredEmails.add(user.email);
-              }
-            });
-          } else if (error) {
-            console.error('Error fetching users:', error);
-          }
-        } catch (error) {
-          console.log('ℹ️ Could not fetch user accounts:', error);
+        if (usersData.success && usersData.users) {
+          console.log(`✅ Fetched ${usersData.users.length} registered user accounts via API`);
+          usersData.users.forEach((user: any) => {
+            if (user.email) {
+              registeredEmails.add(user.email);
+            }
+          });
+        } else {
+          console.error('❌ Failed to load users:', usersData.error);
         }
         
         // Merge: Sync account status for customers
@@ -564,7 +559,7 @@ export default function CustomersPage() {
         
         setCustomers(syncedCustomers);
         
-        console.log('📊 Loaded customers with Supabase sync:', {
+        console.log('📊 Loaded customers with API:', {
           totalCustomers: syncedCustomers.length,
           withAccounts: syncedCustomers.filter(c => c.hasAccount).length,
           registeredEmailsCount: registeredEmails.size,
@@ -1012,42 +1007,77 @@ export default function CustomersPage() {
             onClose={() => setSelectedCustomer(null)}
             onRefresh={async () => {
               // Reload customers after account management action
-              const loadCustomers = async () => {
-                try {
-                  const crmCustomers = await getAllCustomers();
-                  const registeredEmails = new Set<string>();
-                  
-                  try {
-                    const response = await fetch(`/api/auth/list-accounts?adminEmail=${encodeURIComponent(getFirstAdminEmail())}`);
-                    if (response.ok) {
-                      const { accounts } = await response.json();
-                      accounts.forEach((account: any) => {
-                        if (account.email && !account.isGuest) {
-                          registeredEmails.add(account.email);
-                        }
-                      });
-                    }
-                  } catch (error) {
-                    console.error('Error fetching accounts:', error);
-                  }
-                  
-                  const syncedCustomers = crmCustomers.map(customer => {
-                    const hasAccount = registeredEmails.has(customer.email);
-                    if (hasAccount && !customer.hasAccount) {
-                      customer.hasAccount = true;
-                      customer.accountCreatedAt = new Date();
-                      customer.status = 'customer';
-                    }
-                    return customer;
-                  });
-                  
-                  setCustomers(syncedCustomers);
-                } catch (error) {
-                  console.error('Error reloading customers:', error);
+              try {
+                console.log('🔄 Refreshing customers after action...');
+                
+                // Fetch customers via API
+                const customersResponse = await fetch('/api/admin/customers');
+                const customersData = await customersResponse.json();
+                
+                if (!customersData.success) {
+                  throw new Error(customersData.error);
                 }
-              };
-              
-              await loadCustomers();
+                
+                const allCustomers: Customer[] = customersData.customers || [];
+                
+                // Fetch users via API
+                const usersResponse = await fetch('/api/admin/users');
+                const usersData = await usersResponse.json();
+                
+                const registeredEmails = new Set<string>();
+                
+                if (usersData.success && usersData.users) {
+                  usersData.users.forEach((user: any) => {
+                    if (user.email) {
+                      registeredEmails.add(user.email);
+                    }
+                  });
+                }
+                
+                // Sync account status
+                const syncedCustomers = allCustomers.map(customer => {
+                  const hasAccount = registeredEmails.has(customer.email);
+                  return {
+                    ...customer,
+                    hasAccount: hasAccount || customer.hasAccount
+                  };
+                });
+                
+                // Add registered users without CRM records
+                registeredEmails.forEach(email => {
+                  const existsInCrm = syncedCustomers.some(c => c.email === email);
+                  if (!existsInCrm) {
+                    syncedCustomers.push({
+                      id: `account-${email}`,
+                      email: email,
+                      name: email.split('@')[0],
+                      hasAccount: true,
+                      accountCreatedAt: new Date(),
+                      status: 'customer',
+                      createdAt: new Date(),
+                      lastActivity: new Date(),
+                      source: 'direct',
+                      leadData: [],
+                      orders: [],
+                      chatHistory: [],
+                      openInvoices: [],
+                      dataHistory: [],
+                      notes: [],
+                      tags: ['registered-account'],
+                      whatsappConfig: {
+                        enabled: false,
+                        phoneNumber: '',
+                        notificationTypes: []
+                      }
+                    } as Customer);
+                  }
+                });
+                
+                setCustomers(syncedCustomers);
+                console.log('✅ Customers refreshed successfully');
+              } catch (error) {
+                console.error('❌ Error refreshing customers:', error);
+              }
             }}
           />
         )}
