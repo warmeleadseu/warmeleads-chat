@@ -39,11 +39,45 @@ export async function GET(request: NextRequest) {
     }
 
     console.log(`✅ Fetched ${customers?.length || 0} customers via SERVICE_ROLE`);
+    
+    // Transform snake_case to camelCase for frontend
+    const transformedCustomers = (customers || []).map((customer: any) => ({
+      id: customer.id,
+      email: customer.email,
+      name: customer.name,
+      phone: customer.phone,
+      company: customer.company,
+      status: customer.status,
+      source: customer.source,
+      hasAccount: customer.has_account,
+      accountCreatedAt: customer.account_created_at,
+      googleSheetId: customer.google_sheet_id,  // ✅ Transform to camelCase
+      googleSheetUrl: customer.google_sheet_url, // ✅ Transform to camelCase
+      emailNotifications: {
+        enabled: customer.email_notifications_enabled,
+        newLeads: customer.email_notifications_new_leads,
+        lastNotificationSent: customer.last_notification_sent
+      },
+      createdAt: customer.created_at,
+      lastActivity: customer.last_activity,
+      chatHistory: customer.chat_messages || [],
+      orders: customer.orders || [],
+      openInvoices: customer.open_invoices || [],
+      dataHistory: customer.data_changes || [],
+      leadData: customer.leads || [],
+      notes: [],
+      tags: [],
+      whatsappConfig: {
+        enabled: false,
+        phoneNumber: '',
+        notificationTypes: []
+      }
+    }));
 
     return NextResponse.json({
       success: true,
-      customers: customers || [],
-      count: customers?.length || 0
+      customers: transformedCustomers,
+      count: transformedCustomers.length
     });
 
   } catch (error: any) {
