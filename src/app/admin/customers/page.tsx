@@ -999,14 +999,23 @@ export default function CustomersPage() {
                                 
                                 if (sheetUrl && sheetUrl.includes('docs.google.com/spreadsheets')) {
                                   try {
-                                    console.log('📊 Wijzigen Google Sheet via Supabase...');
-                                    const success = await crmSystem.linkGoogleSheet(customer.id, sheetUrl);
+                                    console.log('📊 Wijzigen Google Sheet via API...');
+                                    const response = await fetch('/api/admin/link-sheet', {
+                                      method: 'POST',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify({
+                                        customerEmail: customer.email,
+                                        sheetUrl: sheetUrl
+                                      })
+                                    });
+
+                                    const result = await response.json();
                                     
-                                    if (success) {
-                                      alert(`✅ Google Sheet bijgewerkt!`);
+                                    if (result.success) {
+                                      alert(`✅ ${result.message}`);
                                       window.location.reload();
                                     } else {
-                                      alert('❌ Fout bij bijwerken Google Sheet');
+                                      alert(`❌ ${result.error}`);
                                     }
                                   } catch (error) {
                                     console.error('❌ Error:', error);
@@ -1032,14 +1041,23 @@ export default function CustomersPage() {
                               
                               if (sheetUrl && sheetUrl.includes('docs.google.com/spreadsheets')) {
                                 try {
-                                  console.log('📊 Koppelen Google Sheet via Supabase...');
-                                  const success = await crmSystem.linkGoogleSheet(customer.id, sheetUrl);
+                                  console.log('📊 Koppelen Google Sheet via API...');
+                                  const response = await fetch('/api/admin/link-sheet', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                      customerEmail: customer.email,
+                                      sheetUrl: sheetUrl
+                                    })
+                                  });
+
+                                  const result = await response.json();
                                   
-                                  if (success) {
-                                    alert(`✅ Google Sheet gekoppeld!`);
+                                  if (result.success) {
+                                    alert(`✅ ${result.message}`);
                                     window.location.reload();
                                   } else {
-                                    alert('❌ Fout bij koppelen Google Sheet');
+                                    alert(`❌ ${result.error}`);
                                   }
                                 } catch (error) {
                                   console.error('❌ Error:', error);
