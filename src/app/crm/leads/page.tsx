@@ -2490,7 +2490,7 @@ export default function CustomerLeadsPage() {
                       // Sync to Blob Storage
                       try {
                         console.log('💾 Edit Modal: Syncing to Blob Storage...');
-                        await fetch('/api/customer-data', {
+                        await authenticatedFetch('/api/customer-data', {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({
