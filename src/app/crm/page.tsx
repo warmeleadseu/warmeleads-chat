@@ -10,7 +10,8 @@ import {
   ArrowRightIcon,
   ArrowUpIcon,
   ArrowDownIcon,
-  ClockIcon
+  ClockIcon,
+  ArrowLeftIcon
 } from '@heroicons/react/24/outline';
 import { useAuthStore } from '@/lib/auth';
 import { crmSystem, type Customer, type Lead } from '@/lib/crmSystem';
@@ -164,6 +165,17 @@ export default function CRMDashboard() {
       {/* Header - Mobile Optimized */}
       <div className="bg-white/10 backdrop-blur-sm border-b border-white/20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-8">
+          {/* Back to Portal Button */}
+          <div className="mb-4">
+            <button
+              onClick={() => router.push('/portal')}
+              className="inline-flex items-center space-x-2 text-white/80 hover:text-white transition-colors group"
+            >
+              <ArrowLeftIcon className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+              <span className="text-sm font-medium">Terug naar Portal</span>
+            </button>
+          </div>
+          
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0">
             <div className="text-center sm:text-left">
               <h1 className="text-2xl sm:text-3xl font-bold text-white">CRM Dashboard</h1>
