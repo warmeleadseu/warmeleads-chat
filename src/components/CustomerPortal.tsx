@@ -313,7 +313,7 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
             
             if (existingLead) {
               // Update existing lead
-              await crmSystem.updateLead(existingLead.id, lead);
+              await crmSystem.updateCustomerLead(email, existingLead.id, lead);
             } else {
               // Add new lead
               await crmSystem.addLeadToCustomer(email, lead);
