@@ -85,7 +85,7 @@ class DataSyncService {
       } else {
         // 2. Fallback to localStorage
         console.log('⚠️ DataSync: No API data, using localStorage');
-        const localCustomer = this.fetchFromLocalStorage(userEmail);
+        const localCustomer = await this.fetchFromLocalStorage(userEmail);
         
         if (localCustomer) {
           console.log('✅ DataSync: LocalStorage data loaded -', localCustomer.leadData?.length, 'leads');

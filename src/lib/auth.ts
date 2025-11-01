@@ -279,7 +279,7 @@ export const useAuthStore = create<AuthState>()(
             const { crmSystem } = await import('./crmSystem');
             
             // Use createOrUpdateCustomer to add/update in CRM
-            const customer = crmSystem.createOrUpdateCustomer({
+            const customer = await crmSystem.createOrUpdateCustomer({
               email: userData.email,
               name: userData.name,
               company: userData.company,
@@ -288,7 +288,7 @@ export const useAuthStore = create<AuthState>()(
             });
             
             // Mark as having account
-            crmSystem.updateCustomer(customer.id, {
+            await crmSystem.updateCustomer(customer.id, {
               hasAccount: true,
               accountCreatedAt: new Date()
             });
