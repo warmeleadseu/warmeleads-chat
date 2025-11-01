@@ -196,13 +196,13 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
     }
   }, [searchParams, user]);
 
-  // Load orders from Blob Storage
+  // Load orders from Supabase
   const loadOrders = async (email: string) => {
     try {
       setLoadingOrders(true);
       console.log('📦 Loading orders for:', email);
       
-      const response = await fetch(`/api/orders?customerEmail=${encodeURIComponent(email)}`);
+      const response = await authenticatedFetch(`/api/orders?customerEmail=${encodeURIComponent(email)}`);
       if (response.ok) {
         const data = await response.json();
         setOrders(data.orders || []);
