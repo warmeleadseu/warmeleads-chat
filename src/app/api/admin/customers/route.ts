@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 
 export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+export const fetchCache = 'force-no-store';
 
 /**
  * GET /api/admin/customers
@@ -83,11 +85,18 @@ export async function GET(request: NextRequest) {
       }
     }));
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       customers: transformedCustomers,
       count: transformedCustomers.length
     });
+
+    // Prevent any caching
+    response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    response.headers.set('Pragma', 'no-cache');
+    response.headers.set('Expires', '0');
+
+    return response;
 
   } catch (error: any) {
     console.error('💥 Server error fetching customers:', error);
