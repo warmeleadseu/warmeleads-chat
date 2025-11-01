@@ -243,7 +243,16 @@ export const useAuthStore = create<AuthState>()(
           body: JSON.stringify({ email, password })
         });
         
+        console.log('📡 LOGIN RESPONSE:', { status: response.status, ok: response.ok });
+        
         const data = await response.json();
+        
+        console.log('📦 LOGIN DATA:', { 
+          success: data.success, 
+          hasUser: !!data.user, 
+          hasToken: !!data.token,
+          error: data.error 
+        });
         
         if (!response.ok) {
           throw new Error(data.error || 'Ongeldig emailadres of wachtwoord');
@@ -253,6 +262,8 @@ export const useAuthStore = create<AuthState>()(
         const token = data.token;
         if (token) {
           console.log('🔑 Session token received:', token.substring(0, 8) + '...');
+        } else {
+          console.warn('⚠️ No token received from login API!');
         }
         
         // Create user from API response
@@ -307,6 +318,8 @@ export const useAuthStore = create<AuthState>()(
         
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Login mislukt';
+        
+        console.error('❌ LOGIN ERROR:', errorMessage, error);
         
         // Update local state
         authState.error = errorMessage;
