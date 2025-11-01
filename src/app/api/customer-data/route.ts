@@ -1,31 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { put, head, del, list } from '@vercel/blob';
+import { createServerClient } from '@/lib/supabase';
 
-// Blob store naam voor customer data
-const BLOB_STORE_PREFIX = 'customer-data';
-
-// Check if blob storage is configured
-function isBlobStorageConfigured(): boolean {
-  return !!process.env.BLOB_READ_WRITE_TOKEN;
-}
-
-// Recursively convert all Date objects to ISO strings for JSON serialization
+// Helper function to serialize dates for JSON
 function serializeDates(obj: any): any {
-  if (obj === null || obj === undefined) {
-    return obj;
-  }
-  
-  // Handle Date objects
-  if (obj instanceof Date) {
-    return obj.toISOString();
-  }
-  
-  // Handle arrays
-  if (Array.isArray(obj)) {
-    return obj.map(item => serializeDates(item));
-  }
-  
-  // Handle objects
+  if (obj === null || obj === undefined) return obj;
+  if (obj instanceof Date) return obj.toISOString();
+  if (Array.isArray(obj)) return obj.map(item => serializeDates(item));
   if (typeof obj === 'object') {
     const serialized: any = {};
     for (const key in obj) {
@@ -35,12 +15,10 @@ function serializeDates(obj: any): any {
     }
     return serialized;
   }
-  
-  // Primitive types (string, number, boolean)
   return obj;
 }
 
-// GET: Haal customer data op uit Blob Storage (alle customers of specifieke customer)
+// GET: Fetch customer data from Supabase
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -48,279 +26,234 @@ export async function GET(request: NextRequest) {
     
     console.log('📊 GET /api/customer-data');
     console.log('  Customer ID:', customerId || 'ALL');
-    console.log('  Blob storage configured:', isBlobStorageConfigured());
     
-    if (!isBlobStorageConfigured()) {
-      console.error('❌ Blob storage not configured - missing BLOB_READ_WRITE_TOKEN');
-      return NextResponse.json(
-        { error: 'Blob storage not configured. Please set BLOB_READ_WRITE_TOKEN environment variable.' },
-        { status: 500 }
-      );
-    }
+    const supabase = createServerClient();
 
-    // Als specifieke customer wordt gevraagd
+    // Fetch specific customer or all customers
     if (customerId) {
-      const blobName = `${BLOB_STORE_PREFIX}/${customerId}.json`;
-      
-      console.log('🔍 Searching for blob with prefix:', blobName);
-      
-      try {
-        // Use Vercel Blob Storage API to get the blob
-        const { blobs } = await list({
-          prefix: BLOB_STORE_PREFIX,
-          token: process.env.BLOB_READ_WRITE_TOKEN
-        });
-        
-        console.log(`📋 Found ${blobs.length} blobs in storage:`, blobs.map(b => b.pathname));
-        
-        // Find the blob that matches our customer ID
-        const matchingBlob = blobs.find(b => b.pathname === blobName || b.pathname.includes(customerId));
-        
-        if (!matchingBlob) {
-          console.log(`ℹ️ No blob found for customer ${customerId}`);
-          return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
-        }
-        
-        console.log(`📁 Found blob for customer ${customerId}:`, matchingBlob.url);
-        
-        // Fetch the blob content
-        const response = await fetch(matchingBlob.url);
-        if (!response.ok) {
-          console.log(`ℹ️ Failed to fetch blob content for customer ${customerId}`);
-          return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
-        }
-        
-        const data = await response.json();
-        console.log(`✅ Loaded customer data for ${customerId}`);
-        
-        return NextResponse.json({
-          success: true,
-          customerData: data
-        });
-      } catch (error) {
-        console.error(`❌ Error loading customer ${customerId}:`, error);
+      // Get customer with all related data
+      const { data: customer, error: customerError } = await supabase
+        .from('customers')
+        .select(`
+          *,
+          chat_messages(*),
+          orders(*),
+          open_invoices(*),
+          leads(*, lead_branch_data(*))
+        `)
+        .eq('email', customerId)
+        .single();
+
+      if (customerError || !customer) {
+        console.log(`ℹ️ No customer found: ${customerId}`);
         return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
       }
-    }
-    
-    // Haal alle customers op
-    try {
-      const { blobs } = await list({
-        prefix: `${BLOB_STORE_PREFIX}/`,
-        token: process.env.BLOB_READ_WRITE_TOKEN
+
+      console.log(`✅ Loaded customer data for ${customerId}`);
+      
+      // Transform to match expected format
+      const customerData = {
+        id: customer.id,
+        email: customer.email,
+        name: customer.name,
+        phone: customer.phone,
+        company: customer.company,
+        status: customer.status,
+        source: customer.source,
+        hasAccount: customer.has_account,
+        accountCreatedAt: customer.account_created_at,
+        googleSheetId: customer.google_sheet_id,
+        googleSheetUrl: customer.google_sheet_url,
+        emailNotifications: {
+          enabled: customer.email_notifications_enabled,
+          newLeads: customer.email_notifications_new_leads,
+          lastNotificationSent: customer.last_notification_sent,
+        },
+        createdAt: customer.created_at,
+        lastActivity: customer.last_activity,
+        chatHistory: customer.chat_messages || [],
+        orders: customer.orders || [],
+        openInvoices: customer.open_invoices || [],
+        leadData: (customer.leads || []).map((lead: any) => ({
+          ...lead,
+          branchData: lead.lead_branch_data?.[0] || {}
+        })),
+      };
+
+      return NextResponse.json({
+        success: true,
+        customerData
       });
-      
-      console.log(`📋 Found ${blobs.length} customer blobs`);
-      
-      // Haal alle customer data op
-      const customers = await Promise.all(
-        blobs.map(async (blob) => {
-          try {
-            const response = await fetch(blob.url);
-            const data = await response.json();
-            return data;
-          } catch (error) {
-            console.error(`❌ Error loading blob ${blob.pathname}:`, error);
-            return null;
-          }
-        })
-      );
-      
-      // Filter out nulls
-      const validCustomers = customers.filter(c => c !== null);
-      console.log(`✅ Loaded ${validCustomers.length} customers`);
+    } else {
+      // Get all customers
+      const { data: customers, error } = await supabase
+        .from('customers')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('❌ Error fetching customers:', error);
+        return NextResponse.json(
+          { error: 'Failed to fetch customers', details: error.message },
+          { status: 500 }
+        );
+      }
+
+      console.log(`✅ Loaded ${customers?.length || 0} customers`);
       
       return NextResponse.json({
         success: true,
-        customers: validCustomers
+        customers: customers || []
       });
-    } catch (error) {
-      console.error('❌ Error listing customer blobs:', error);
-      return NextResponse.json(
-        { error: 'Failed to load customers', details: error instanceof Error ? error.message : 'Unknown error' },
-        { status: 500 }
-      );
     }
   } catch (error) {
     console.error('❌ Error in GET /api/customer-data:', error);
     return NextResponse.json(
-      { error: 'Internal server error', details: error instanceof Error ? error.message : 'Unknown error' },
+      { 
+        error: 'Internal server error',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      },
       { status: 500 }
     );
   }
 }
 
-// POST: Sla customer data op in Blob Storage
+// POST: Save customer data to Supabase
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { customerId, customerData, whatsappConfig } = body;
-    
+    const { customerId, customerData } = body;
+
+    if (!customerId || !customerData) {
+      return NextResponse.json(
+        { error: 'Customer ID and data are required' },
+        { status: 400 }
+      );
+    }
+
     console.log('💾 POST /api/customer-data');
     console.log('  Customer ID:', customerId);
-    console.log('  Email:', customerData?.email);
-    console.log('  Has Google Sheet URL:', !!customerData?.googleSheetUrl);
-    console.log('  Email notifications enabled:', customerData?.emailNotifications?.enabled);
-    console.log('  Has WhatsApp config:', !!whatsappConfig);
-    console.log('  Blob storage configured:', isBlobStorageConfigured());
-    
-    // Input validation
-    if (!customerId || (!customerData && !whatsappConfig)) {
-      console.error('❌ Missing required fields');
-      return NextResponse.json(
-        { error: 'Customer ID and customer data or WhatsApp config are required' },
-        { status: 400 }
-      );
-    }
 
-    // Validate customerId format (email)
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(customerId)) {
-      return NextResponse.json(
-        { error: 'Invalid customer ID format' },
-        { status: 400 }
-      );
-    }
+    const supabase = createServerClient();
 
-    // Validate customerData if provided
-    if (customerData) {
-      if (customerData.email && !emailRegex.test(customerData.email)) {
-        return NextResponse.json(
-          { error: 'Invalid email format in customer data' },
-          { status: 400 }
-        );
-      }
-      if (customerData.googleSheetUrl && !customerData.googleSheetUrl.startsWith('https://')) {
-        return NextResponse.json(
-          { error: 'Google Sheet URL must use HTTPS' },
-          { status: 400 }
-        );
-      }
-    }
+    // Upsert customer data
+    const { data: customer, error: customerError } = await supabase
+      .from('customers')
+      .upsert({
+        email: customerId,
+        name: customerData.name,
+        phone: customerData.phone,
+        company: customerData.company,
+        status: customerData.status || 'lead',
+        source: customerData.source || 'direct',
+        has_account: customerData.hasAccount || false,
+        account_created_at: customerData.accountCreatedAt,
+        google_sheet_id: customerData.googleSheetId,
+        google_sheet_url: customerData.googleSheetUrl,
+        email_notifications_enabled: customerData.emailNotifications?.enabled ?? true,
+        email_notifications_new_leads: customerData.emailNotifications?.newLeads ?? true,
+        last_notification_sent: customerData.emailNotifications?.lastNotificationSent,
+        last_activity: new Date().toISOString(),
+      }, {
+        onConflict: 'email'
+      })
+      .select()
+      .single();
 
-    if (!isBlobStorageConfigured()) {
-      console.error('❌ Blob storage not configured - missing BLOB_READ_WRITE_TOKEN');
+    if (customerError) {
+      console.error('❌ Error upserting customer:', customerError);
       return NextResponse.json(
-        { error: 'Blob storage not configured. Please set BLOB_READ_WRITE_TOKEN environment variable.' },
+        { error: 'Failed to save customer', details: customerError.message },
         { status: 500 }
       );
     }
 
-    const blobName = `${BLOB_STORE_PREFIX}/${customerId}.json`;
-    
-    // ALWAYS merge with existing data to prevent data loss
-    let dataToStore;
-    try {
-      // Try to get existing data first
-      const { blobs } = await list({
-        prefix: BLOB_STORE_PREFIX,
-        token: process.env.BLOB_READ_WRITE_TOKEN
-      });
-      
-      const matchingBlob = blobs.find(b => b.pathname === blobName || b.pathname.includes(customerId));
-      let existingData = null;
-      
-      if (matchingBlob) {
-        const response = await fetch(matchingBlob.url);
-        if (response.ok) {
-          existingData = await response.json();
-          console.log('📝 Found existing customer data, merging...');
-        }
-      }
-      
-      // Merge with existing data
-      if (existingData) {
-        dataToStore = {
-          ...existingData, // Start with existing data
-          customerId,
-          lastUpdated: new Date().toISOString()
-        };
-        
-        // Merge WhatsApp config if provided
-        if (whatsappConfig) {
-          dataToStore.whatsappConfig = whatsappConfig;
-          console.log('📝 Merged WhatsApp config');
-        }
-        
-        // Merge customer data if provided
-        if (customerData) {
-          dataToStore = {
-            ...dataToStore,
-            ...customerData,
-            customerId, // Keep customerId consistent
-            lastUpdated: new Date().toISOString()
-          };
-          console.log('📝 Merged customer data');
-        }
-      } else {
-        // No existing data, create new
-        if (whatsappConfig && !customerData) {
-          dataToStore = {
-            customerId,
-            whatsappConfig,
-            lastUpdated: new Date().toISOString()
-          };
-          console.log('📝 Creating new customer data with WhatsApp config');
-        } else {
-          dataToStore = {
-            ...customerData,
-            customerId,
-            lastUpdated: new Date().toISOString()
-          };
-          console.log('📝 Creating new customer data');
-        }
-      }
-    } catch (error) {
-      console.log('ℹ️ Error fetching existing data, creating new:', error);
-      // Fallback: create new data
-      if (whatsappConfig && !customerData) {
-        dataToStore = {
-          customerId,
-          whatsappConfig,
-          lastUpdated: new Date().toISOString()
-        };
-      } else {
-        dataToStore = {
-          ...customerData,
-          customerId,
-          lastUpdated: new Date().toISOString()
-        };
+    // Save chat messages if present
+    if (customerData.chatHistory && customerData.chatHistory.length > 0) {
+      // Delete existing messages first
+      await supabase
+        .from('chat_messages')
+        .delete()
+        .eq('customer_id', customer.id);
+
+      // Insert new messages
+      const messages = customerData.chatHistory.map((msg: any) => ({
+        customer_id: customer.id,
+        type: msg.type,
+        content: msg.content,
+        step: msg.step,
+        timestamp: msg.timestamp,
+      }));
+
+      const { error: messagesError } = await supabase
+        .from('chat_messages')
+        .insert(messages);
+
+      if (messagesError) {
+        console.warn('⚠️ Error saving chat messages:', messagesError);
       }
     }
 
-    console.log('💾 Writing customer data to blob storage:');
-    console.log('  Blob name:', blobName);
+    // Save leads if present
+    if (customerData.leadData && customerData.leadData.length > 0) {
+      for (const lead of customerData.leadData) {
+        // Upsert lead
+        const { data: savedLead, error: leadError } = await supabase
+          .from('leads')
+          .upsert({
+            customer_id: customer.id,
+            name: lead.name,
+            email: lead.email,
+            phone: lead.phone,
+            company: lead.company,
+            address: lead.address,
+            city: lead.city,
+            interest: lead.interest,
+            budget: lead.budget,
+            timeline: lead.timeline,
+            notes: lead.notes,
+            status: lead.status || 'new',
+            deal_value: lead.dealValue,
+            profit: lead.profit,
+            assigned_to: lead.assignedTo,
+            source: lead.source || 'campaign',
+            sheet_row_number: lead.sheetRowNumber,
+            created_at: lead.createdAt,
+            updated_at: lead.updatedAt || new Date().toISOString(),
+          }, {
+            onConflict: 'id'
+          })
+          .select()
+          .single();
 
-    // Check if blob already exists and delete it first
-    try {
-      const existingBlob = await head(blobName);
-      if (existingBlob) {
-        console.log('📝 Blob already exists, deleting old version...');
-        await del(existingBlob.url);
-        console.log('✅ Old blob deleted');
+        if (leadError) {
+          console.warn('⚠️ Error saving lead:', leadError);
+          continue;
+        }
+
+        // Save branch data if present
+        if (lead.branchData && savedLead) {
+          const { error: branchError } = await supabase
+            .from('lead_branch_data')
+            .upsert({
+              lead_id: savedLead.id,
+              ...lead.branchData,
+            }, {
+              onConflict: 'lead_id'
+            });
+
+          if (branchError) {
+            console.warn('⚠️ Error saving branch data:', branchError);
+          }
+        }
       }
-    } catch (error) {
-      console.log('ℹ️ No existing blob found, creating new one');
     }
 
-    // Serialize Date objects before JSON.stringify to prevent serialization errors
-    const serializedData = serializeDates(dataToStore);
-
-    // Write new blob
-    const blob = await put(blobName, JSON.stringify(serializedData), {
-      access: 'public',
-      addRandomSuffix: false,
-      contentType: 'application/json'
-    });
-
-    console.log('✅ Successfully saved customer data to blob storage!');
-    console.log('  Blob URL:', blob.url);
-    console.log(`✅ Saved customer data for ${customerId}`);
+    console.log('✅ Successfully saved customer data to Supabase');
 
     return NextResponse.json({
       success: true,
       customerId,
-      blobUrl: blob.url
     });
   } catch (error) {
     console.error('❌ Error in POST /api/customer-data:', error);
@@ -334,15 +267,12 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// DELETE: Verwijder customer data uit Blob Storage
+// DELETE: Remove customer data from Supabase
 export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const customerId = searchParams.get('customerId');
-    
-    console.log('🗑️ DELETE /api/customer-data');
-    console.log('  Customer ID:', customerId);
-    
+
     if (!customerId) {
       return NextResponse.json(
         { error: 'Customer ID is required' },
@@ -350,41 +280,39 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    if (!isBlobStorageConfigured()) {
+    console.log('🗑️ DELETE /api/customer-data');
+    console.log('  Customer ID:', customerId);
+
+    const supabase = createServerClient();
+
+    // Delete customer (CASCADE will delete related data)
+    const { error } = await supabase
+      .from('customers')
+      .delete()
+      .eq('email', customerId);
+
+    if (error) {
+      console.error('❌ Error deleting customer:', error);
       return NextResponse.json(
-        { error: 'Blob storage not configured. Please set BLOB_READ_WRITE_TOKEN environment variable.' },
+        { error: 'Failed to delete customer', details: error.message },
         { status: 500 }
       );
     }
 
-    const blobName = `${BLOB_STORE_PREFIX}/${customerId}.json`;
-    
-    try {
-      const existingBlob = await head(blobName);
-      if (existingBlob) {
-        await del(existingBlob.url);
-        console.log(`✅ Deleted customer data for ${customerId}`);
-        
-        return NextResponse.json({
-          success: true,
-          message: 'Customer data deleted'
-        });
-      } else {
-        return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
-      }
-    } catch (error) {
-      console.error(`❌ Error deleting customer ${customerId}:`, error);
-      return NextResponse.json(
-        { error: 'Failed to delete customer data' },
-        { status: 500 }
-      );
-    }
+    console.log('✅ Successfully deleted customer');
+
+    return NextResponse.json({
+      success: true,
+      message: 'Customer deleted successfully'
+    });
   } catch (error) {
     console.error('❌ Error in DELETE /api/customer-data:', error);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { 
+        error: 'Failed to delete customer',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      },
       { status: 500 }
     );
   }
 }
-

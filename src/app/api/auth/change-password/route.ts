@@ -1,18 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { put } from '@vercel/blob';
 import bcrypt from 'bcryptjs';
-
-interface AccountData {
-  email: string;
-  name?: string;
-  company?: string;
-  phone?: string;
-  password: string;
-  createdAt?: string;
-  lastLogin?: string;
-  isGuest?: boolean;
-  updatedAt?: string;
-}
+import { createServerClient } from '@/lib/supabase';
 
 export async function POST(request: NextRequest) {
   try {
@@ -25,82 +13,70 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (newPassword.length < 6) {
+    if (newPassword.length < 8) {
       return NextResponse.json(
-        { error: 'Nieuw wachtwoord moet minimaal 6 karakters bevatten' },
+        { error: 'Nieuw wachtwoord moet minimaal 8 karakters bevatten' },
         { status: 400 }
       );
     }
 
     console.log('🔐 Changing password for:', email);
 
-    // Get current account data from Blob Storage
-    const blobKey = `auth-accounts/${email.replace('@', '_at_').replace('.', '_dot_')}.json`;
-    
-    try {
-      // Get existing account data
-      const existingResponse = await fetch(`https://blob.vercel-storage.com/${blobKey}`, {
-        headers: {
-          'Authorization': `Bearer ${process.env.BLOB_READ_WRITE_TOKEN}`,
-        },
-      });
+    const supabase = createServerClient();
 
-      if (!existingResponse.ok) {
-        return NextResponse.json(
-          { error: 'Account niet gevonden' },
-          { status: 404 }
-        );
-      }
+    // Get current account data from Supabase
+    const { data: accountData, error: fetchError } = await supabase
+      .from('users')
+      .select('password_hash')
+      .eq('email', email.toLowerCase())
+      .single();
 
-      const accountData: AccountData = await existingResponse.json();
-      console.log('✅ Found existing account data');
-
-      // Verify current password
-      const isCurrentPasswordValid = await bcrypt.compare(currentPassword, accountData.password);
-      if (!isCurrentPasswordValid) {
-        return NextResponse.json(
-          { error: 'Huidig wachtwoord is onjuist' },
-          { status: 400 }
-        );
-      }
-
-      // Hash new password
-      const saltRounds = 12;
-      const hashedNewPassword = await bcrypt.hash(newPassword, saltRounds);
-
-      // Update account data with new password
-      const updatedAccountData = {
-        ...accountData,
-        password: hashedNewPassword,
-        passwordChangedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-
-      // Save updated account to Blob Storage
-      const blobResponse = await put(blobKey, JSON.stringify(updatedAccountData, null, 2), {
-        access: 'public',
-        token: process.env.BLOB_READ_WRITE_TOKEN,
-        allowOverwrite: true, // Allow overwriting existing blobs
-      });
-
-      console.log('✅ Password changed successfully:', {
-        email,
-        blobUrl: blobResponse.url,
-        passwordChangedAt: updatedAccountData.passwordChangedAt
-      });
-
-      return NextResponse.json({
-        success: true,
-        message: 'Wachtwoord succesvol gewijzigd'
-      });
-
-    } catch (blobError) {
-      console.error('❌ Blob Storage error:', blobError);
+    if (fetchError || !accountData) {
       return NextResponse.json(
-        { error: 'Fout bij het wijzigen van wachtwoord' },
+        { error: 'Account niet gevonden' },
+        { status: 404 }
+      );
+    }
+
+    console.log('✅ Found existing account data');
+
+    // Verify current password
+    const isCurrentPasswordValid = await bcrypt.compare(currentPassword, accountData.password_hash);
+    if (!isCurrentPasswordValid) {
+      return NextResponse.json(
+        { error: 'Huidig wachtwoord is onjuist' },
+        { status: 400 }
+      );
+    }
+
+    // Hash new password
+    const hashedNewPassword = await bcrypt.hash(newPassword, 10);
+
+    // Update password in Supabase
+    const { error: updateError } = await supabase
+      .from('users')
+      .update({ 
+        password_hash: hashedNewPassword,
+        needs_password_reset: false, // Reset this flag when password is changed
+      })
+      .eq('email', email.toLowerCase());
+
+    if (updateError) {
+      console.error('❌ Supabase update error:', updateError);
+      return NextResponse.json(
+        { error: 'Fout bij het wijzigen van wachtwoord', details: updateError.message },
         { status: 500 }
       );
     }
+
+    console.log('✅ Password changed successfully:', {
+      email
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: 'Wachtwoord succesvol gewijzigd'
+    });
 
   } catch (error) {
     console.error('❌ Password change error:', error);

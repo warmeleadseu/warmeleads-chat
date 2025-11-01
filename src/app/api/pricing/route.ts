@@ -1,167 +1,205 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { put, list } from '@vercel/blob';
+import { createServerClient } from '@/lib/supabase';
 import { DEFAULT_PRICING, type BranchPricingConfig } from '@/lib/pricing';
-import { ADMIN_CONFIG } from '@/config/admin';
 
-const PRICING_BLOB_NAME = 'pricing-config.json';
-
-/**
- * GET /api/pricing
- * Fetch current pricing configuration
- */
-export async function GET(request: NextRequest) {
+// GET - Fetch pricing configuration
+export async function GET(req: NextRequest) {
   try {
-    console.log('📊 GET /api/pricing - Fetching pricing configuration');
+    const { searchParams } = new URL(req.url);
+    const branchId = searchParams.get('branchId');
 
-    // Try to fetch from Blob Storage
-    try {
-      const { blobs } = await list({ prefix: PRICING_BLOB_NAME });
-      
-      if (blobs.length > 0) {
-        const blob = blobs[0];
-        const response = await fetch(blob.url);
-        const pricingData: BranchPricingConfig[] = await response.json();
-        
-        console.log('✅ Pricing loaded from Blob Storage');
-        return NextResponse.json(pricingData);
+    console.log('💰 Fetching pricing config:', branchId || 'ALL');
+
+    const supabase = createServerClient();
+
+    if (branchId) {
+      // Get specific branch pricing
+      const { data, error } = await supabase
+        .from('pricing_config')
+        .select('*')
+        .eq('branch_id', branchId)
+        .single();
+
+      if (error && error.code !== 'PGRST116') { // Not found is OK
+        console.error('❌ Error fetching pricing:', error);
+        return NextResponse.json(
+          { error: 'Failed to fetch pricing', details: error.message },
+          { status: 500 }
+        );
       }
-    } catch (blobError) {
-      console.warn('⚠️ Blob Storage not available, using defaults:', blobError);
+
+      // Return default if not found
+      if (!data) {
+        const defaultBranch = DEFAULT_PRICING.find(p => p.branchId === branchId);
+        return NextResponse.json(defaultBranch || null);
+      }
+
+      // Transform to expected format
+      const pricing: BranchPricingConfig = {
+        branchId: data.branch_id,
+        branchName: data.branch_name,
+        exclusive: {
+          basePrice: parseFloat(data.exclusive_base_price),
+          tiers: data.exclusive_tiers
+        },
+        shared: {
+          basePrice: parseFloat(data.shared_base_price),
+          minQuantity: data.shared_min_quantity
+        }
+      };
+
+      return NextResponse.json(pricing);
+    } else {
+      // Get all pricing
+      const { data, error } = await supabase
+        .from('pricing_config')
+        .select('*');
+
+      if (error) {
+        console.error('❌ Error fetching all pricing:', error);
+        // Return defaults on error
+        return NextResponse.json(DEFAULT_PRICING);
+      }
+
+      if (!data || data.length === 0) {
+        // Return defaults if empty
+        return NextResponse.json(DEFAULT_PRICING);
+      }
+
+      // Transform to expected format
+      const pricing: BranchPricingConfig[] = data.map(p => ({
+        branchId: p.branch_id,
+        branchName: p.branch_name,
+        exclusive: {
+          basePrice: parseFloat(p.exclusive_base_price),
+          tiers: p.exclusive_tiers
+        },
+        shared: {
+          basePrice: parseFloat(p.shared_base_price),
+          minQuantity: p.shared_min_quantity
+        }
+      }));
+
+      return NextResponse.json(pricing);
     }
-
-    // Return default pricing if no custom pricing found
-    console.log('📋 Using default pricing configuration');
-    return NextResponse.json(DEFAULT_PRICING);
-
   } catch (error) {
     console.error('❌ Error in GET /api/pricing:', error);
+    // Return defaults on error
     return NextResponse.json(DEFAULT_PRICING);
   }
 }
 
-/**
- * POST /api/pricing
- * Update pricing configuration (Admin only)
- */
-export async function POST(request: NextRequest) {
+// POST - Save pricing configuration
+export async function POST(req: NextRequest) {
   try {
-    const body = await request.json();
-    const { adminEmail, pricing } = body;
+    const body = await req.json();
+    const { branchId, pricing } = body as { branchId: string; pricing: BranchPricingConfig };
 
-    // Validate admin access
-    if (!adminEmail || !ADMIN_CONFIG.adminEmails.includes(adminEmail)) {
-      console.error('❌ Unauthorized pricing update attempt:', adminEmail);
+    if (!branchId || !pricing) {
       return NextResponse.json(
-        { error: 'Unauthorized - Admin access required' },
-        { status: 403 }
-      );
-    }
-
-    if (!pricing || !Array.isArray(pricing)) {
-      return NextResponse.json(
-        { error: 'Invalid pricing data' },
+        { error: 'Branch ID and pricing are required' },
         { status: 400 }
       );
     }
 
-    console.log('📊 Updating pricing configuration:', {
-      admin: adminEmail,
-      branches: pricing.length
-    });
+    console.log('💾 Saving pricing config for:', branchId);
 
-    // Save to Blob Storage
-    const blob = await put(PRICING_BLOB_NAME, JSON.stringify(pricing, null, 2), {
-      access: 'public',
-      addRandomSuffix: false,
-      contentType: 'application/json',
-    });
+    const supabase = createServerClient();
 
-    console.log('✅ Pricing configuration updated successfully');
+    // Upsert pricing
+    const { data, error } = await supabase
+      .from('pricing_config')
+      .upsert({
+        branch_id: branchId,
+        branch_name: pricing.branchName,
+        exclusive_base_price: pricing.exclusive.basePrice,
+        exclusive_tiers: pricing.exclusive.tiers,
+        shared_base_price: pricing.shared.basePrice,
+        shared_min_quantity: pricing.shared.minQuantity
+      }, {
+        onConflict: 'branch_id'
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('❌ Error saving pricing:', error);
+      return NextResponse.json(
+        { error: 'Failed to save pricing', details: error.message },
+        { status: 500 }
+      );
+    }
+
+    console.log('✅ Pricing saved successfully');
 
     return NextResponse.json({
       success: true,
-      message: 'Pricing updated successfully',
-      blobUrl: blob.url,
-      branches: pricing.length
+      pricing: data
     });
-
   } catch (error) {
-    console.error('❌ Error updating pricing:', error);
+    console.error('❌ Error in POST /api/pricing:', error);
     return NextResponse.json(
-      { error: 'Failed to update pricing', details: error instanceof Error ? error.message : 'Unknown error' },
+      { error: 'Failed to save pricing' },
       { status: 500 }
     );
   }
 }
 
-/**
- * PUT /api/pricing
- * Update single branch pricing (Admin only)
- */
-export async function PUT(request: NextRequest) {
+// PUT - Update pricing configuration for a branch
+export async function PUT(req: NextRequest) {
   try {
-    const body = await request.json();
-    const { adminEmail, branchId, branchPricing } = body;
+    const body = await req.json();
+    const { branchId, updates } = body;
 
-    // Validate admin access
-    if (!adminEmail || !ADMIN_CONFIG.adminEmails.includes(adminEmail)) {
+    if (!branchId || !updates) {
       return NextResponse.json(
-        { error: 'Unauthorized - Admin access required' },
-        { status: 403 }
-      );
-    }
-
-    if (!branchId || !branchPricing) {
-      return NextResponse.json(
-        { error: 'Missing branchId or branchPricing' },
+        { error: 'Branch ID and updates are required' },
         { status: 400 }
       );
     }
 
-    console.log('📊 Updating pricing for branch:', branchId);
+    console.log('📝 Updating pricing for:', branchId);
 
-    // Fetch current pricing
-    let currentPricing: BranchPricingConfig[] = DEFAULT_PRICING;
-    
-    try {
-      const { blobs } = await list({ prefix: PRICING_BLOB_NAME });
-      if (blobs.length > 0) {
-        const response = await fetch(blobs[0].url);
-        currentPricing = await response.json();
-      }
-    } catch (error) {
-      console.warn('Using default pricing as base');
+    const supabase = createServerClient();
+
+    // Build update object
+    const updateData: any = {};
+    if (updates.branchName) updateData.branch_name = updates.branchName;
+    if (updates.exclusive) {
+      if (updates.exclusive.basePrice) updateData.exclusive_base_price = updates.exclusive.basePrice;
+      if (updates.exclusive.tiers) updateData.exclusive_tiers = updates.exclusive.tiers;
+    }
+    if (updates.shared) {
+      if (updates.shared.basePrice) updateData.shared_base_price = updates.shared.basePrice;
+      if (updates.shared.minQuantity) updateData.shared_min_quantity = updates.shared.minQuantity;
     }
 
-    // Update specific branch
-    const updatedPricing = currentPricing.map(p => 
-      p.branchId === branchId ? { ...p, ...branchPricing } : p
-    );
+    // Update pricing
+    const { data, error } = await supabase
+      .from('pricing_config')
+      .update(updateData)
+      .eq('branch_id', branchId)
+      .select()
+      .single();
 
-    // If branch doesn't exist, add it
-    if (!updatedPricing.find(p => p.branchId === branchId)) {
-      updatedPricing.push(branchPricing);
+    if (error) {
+      console.error('❌ Error updating pricing:', error);
+      return NextResponse.json(
+        { error: 'Failed to update pricing', details: error.message },
+        { status: 500 }
+      );
     }
 
-    // Save to Blob Storage
-    const blob = await put(PRICING_BLOB_NAME, JSON.stringify(updatedPricing, null, 2), {
-      access: 'public',
-      addRandomSuffix: false,
-      contentType: 'application/json',
-    });
-
-    console.log('✅ Branch pricing updated successfully:', branchId);
+    console.log('✅ Pricing updated successfully');
 
     return NextResponse.json({
       success: true,
-      message: `Pricing updated for ${branchId}`,
-      blobUrl: blob.url
+      pricing: data
     });
-
   } catch (error) {
-    console.error('❌ Error updating branch pricing:', error);
+    console.error('❌ Error in PUT /api/pricing:', error);
     return NextResponse.json(
-      { error: 'Failed to update branch pricing', details: error instanceof Error ? error.message : 'Unknown error' },
+      { error: 'Failed to update pricing' },
       { status: 500 }
     );
   }

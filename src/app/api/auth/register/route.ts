@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { put, list } from '@vercel/blob';
 import bcrypt from 'bcryptjs';
-
-const BLOB_STORE_PREFIX = 'auth-accounts';
+import { createServerClient } from '@/lib/supabase';
 
 export async function POST(request: NextRequest) {
   try {
@@ -26,68 +24,104 @@ export async function POST(request: NextRequest) {
       );
     }
     
+    // Check password strength (minimaal 8 karakters)
+    if (password.length < 8) {
+      return NextResponse.json(
+        { error: 'Wachtwoord moet minimaal 8 karakters lang zijn' },
+        { status: 400 }
+      );
+    }
+    
+    const supabase = createServerClient();
+    
     // Check if account already exists
-    try {
-      const { blobs } = await list({
-        prefix: BLOB_STORE_PREFIX,
-        token: process.env.BLOB_READ_WRITE_TOKEN
-      });
-      
-      const accountBlob = blobs.find(b => b.pathname.includes(email.replace('@', '_at_').replace('.', '_')));
-      
-      if (accountBlob) {
-        return NextResponse.json(
-          { error: 'Dit emailadres is al geregistreerd' },
-          { status: 409 }
-        );
-      }
-    } catch (error) {
-      console.error('Error checking existing accounts:', error);
+    const { data: existingUser, error: checkError } = await supabase
+      .from('users')
+      .select('email')
+      .eq('email', email.toLowerCase())
+      .single();
+    
+    if (existingUser) {
+      return NextResponse.json(
+        { error: 'Dit emailadres is al geregistreerd' },
+        { status: 409 }
+      );
     }
     
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
     
-    // Create account data
-    const accountData = {
-      email,
-      password: hashedPassword,
-      name,
-      company: company || undefined,
-      phone: phone || undefined,
-      createdAt: new Date().toISOString(),
-      isGuest: false,
-      role: 'owner', // New accounts are owners by default
-      permissions: {
-        canViewLeads: true,
-        canViewOrders: true,
-        canManageEmployees: true,
-        canCheckout: true,
+    // Create account in Supabase
+    const { data: newUser, error: insertError } = await supabase
+      .from('users')
+      .insert({
+        email: email.toLowerCase(),
+        password_hash: hashedPassword,
+        name,
+        company: company || null,
+        phone: phone || null,
+        role: 'owner', // New accounts are owners by default
+        can_view_leads: true,
+        can_view_orders: true,
+        can_manage_employees: true,
+        can_checkout: true,
+        is_active: true,
+        needs_password_reset: false,
+      })
+      .select()
+      .single();
+    
+    if (insertError) {
+      console.error('❌ Error creating user in Supabase:', insertError);
+      
+      // Check if it's a unique constraint violation
+      if (insertError.code === '23505') { // Unique violation
+        return NextResponse.json(
+          { error: 'Dit emailadres is al geregistreerd' },
+          { status: 409 }
+        );
       }
-    };
+      
+      return NextResponse.json(
+        { error: 'Registratie mislukt', details: insertError.message },
+        { status: 500 }
+      );
+    }
     
-    // Save to Blob Storage
-    const blobName = `${BLOB_STORE_PREFIX}/${email.replace('@', '_at_').replace(/\./g, '_')}.json`;
+    console.log('✅ Account created in Supabase:', email);
     
-    const blob = await put(blobName, JSON.stringify(accountData), {
-      access: 'public',
-      addRandomSuffix: false,
-      contentType: 'application/json',
-      token: process.env.BLOB_READ_WRITE_TOKEN
-    });
-    
-    console.log('✅ Account created in Blob Storage:', email);
+    // Also create company record if company name provided
+    if (company) {
+      const { error: companyError } = await supabase
+        .from('companies')
+        .insert({
+          owner_email: email.toLowerCase(),
+          company_name: company,
+        });
+      
+      if (companyError) {
+        console.warn('⚠️ Could not create company record:', companyError);
+        // Don't fail registration if company creation fails
+      }
+    }
     
     // Return user data (without password)
     return NextResponse.json({
       success: true,
       user: {
-        email,
-        name,
-        company,
-        phone,
-        createdAt: accountData.createdAt,
-        isGuest: false
+        email: newUser.email,
+        name: newUser.name,
+        company: newUser.company,
+        phone: newUser.phone,
+        createdAt: newUser.created_at,
+        isGuest: false,
+        role: newUser.role,
+        permissions: {
+          canViewLeads: newUser.can_view_leads,
+          canViewOrders: newUser.can_view_orders,
+          canManageEmployees: newUser.can_manage_employees,
+          canCheckout: newUser.can_checkout,
+        }
       }
     });
     

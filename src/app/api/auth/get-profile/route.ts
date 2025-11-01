@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { head } from '@vercel/blob';
+import { createServerClient } from '@/lib/supabase';
 
 // Force dynamic rendering for this route
 export const dynamic = 'force-dynamic';
@@ -18,75 +18,49 @@ export async function GET(request: NextRequest) {
 
     console.log('📋 Getting profile data for:', email);
 
-    // Check if BLOB_READ_WRITE_TOKEN is available
-    if (!process.env.BLOB_READ_WRITE_TOKEN) {
-      console.error('❌ BLOB_READ_WRITE_TOKEN environment variable is not set');
-      return NextResponse.json(
-        { error: 'Server configuratie fout' },
-        { status: 500 }
-      );
-    }
-
-    // Get profile data from Blob Storage
-    const blobKey = `auth-accounts/${email.replace('@', '_at_').replace(/\./g, '_dot_')}.json`;
+    const supabase = createServerClient();
     
-    try {
-      // Check if blob exists
-      const blobExists = await head(blobKey, {
-        token: process.env.BLOB_READ_WRITE_TOKEN,
-      });
-      
-      if (blobExists) {
-        console.log('✅ Blob exists, fetching profile data...');
-        const response = await fetch(blobExists.url);
-        if (response.ok) {
-          const accountData = await response.json();
-          console.log('✅ Profile data retrieved successfully');
-          
-          return NextResponse.json({
-            success: true,
-            user: {
-              email: accountData.email,
-              name: accountData.name,
-              company: accountData.company,
-              phone: accountData.phone,
-              updatedAt: accountData.updatedAt,
-              role: accountData.role || 'owner',
-              companyId: accountData.companyId,
-              ownerEmail: accountData.ownerEmail,
-              permissions: accountData.permissions || {
-                canViewLeads: true,
-                canViewOrders: true,
-                canManageEmployees: accountData.role !== 'employee',
-                canCheckout: accountData.role !== 'employee',
-              }
-            }
-          });
-        } else {
-          throw new Error('Failed to fetch profile data');
-        }
-      } else {
-        console.log('ℹ️ No profile data found in Blob Storage');
-        return NextResponse.json(
-          { error: 'Profiel niet gevonden' },
-          { status: 404 }
-        );
-      }
-    } catch (blobError) {
-      console.error('❌ Blob Storage error:', blobError);
+    // Get profile data from Supabase
+    const { data: accountData, error: fetchError } = await supabase
+      .from('users')
+      .select('*')
+      .eq('email', email.toLowerCase())
+      .single();
+    
+    if (fetchError || !accountData) {
+      console.log('ℹ️ No profile data found in Supabase');
       return NextResponse.json(
-        { 
-          error: 'Fout bij het ophalen van profiel data',
-          details: blobError instanceof Error ? blobError.message : 'Unknown error'
-        },
-        { status: 500 }
+        { error: 'Profiel niet gevonden' },
+        { status: 404 }
       );
     }
+    
+    console.log('✅ Profile data retrieved successfully');
+    
+    return NextResponse.json({
+      success: true,
+      user: {
+        email: accountData.email,
+        name: accountData.name,
+        company: accountData.company,
+        phone: accountData.phone,
+        updatedAt: accountData.updated_at,
+        role: accountData.role || 'owner',
+        companyId: accountData.company_id,
+        ownerEmail: accountData.owner_email,
+        permissions: {
+          canViewLeads: accountData.can_view_leads,
+          canViewOrders: accountData.can_view_orders,
+          canManageEmployees: accountData.can_manage_employees,
+          canCheckout: accountData.can_checkout,
+        }
+      }
+    });
 
   } catch (error) {
     console.error('❌ Get profile error:', error);
     return NextResponse.json(
-      { error: 'Er is een onverwachte fout opgetreden' },
+      { error: 'Er is een onverwachte fout opgetreden', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     );
   }
