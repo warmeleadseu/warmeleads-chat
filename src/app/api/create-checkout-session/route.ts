@@ -1,7 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { leadPackages, calculatePackagePrice } from '@/lib/stripe';
+import { withAuth } from '@/middleware/auth';
+import type { AuthenticatedUser } from '@/middleware/auth';
 
-export async function POST(req: NextRequest) {
+// Helper to check if user is admin
+function isAdmin(email: string): boolean {
+  const adminEmails = process.env.ADMIN_EMAILS?.split(',').map(e => e.trim()) || [];
+  return adminEmails.includes(email);
+}
+
+export const POST = withAuth(async (req: NextRequest, user: AuthenticatedUser) => {
   try {
     console.log('🔵 Creating Stripe Checkout Session...');
     
@@ -31,6 +39,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { error: 'Customer email is required' },
         { status: 400 }
+      );
+    }
+
+    // Security: User can only create checkout for themselves (unless admin)
+    if (customerEmail !== user.email && !isAdmin(user.email)) {
+      return NextResponse.json(
+        { error: 'Forbidden - You can only create checkout sessions for yourself' },
+        { status: 403 }
       );
     }
     
@@ -147,8 +163,4 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
-}
-
-
-
-
+});

@@ -3,12 +3,16 @@
  * 
  * Gebruikt SERVICE_ROLE_KEY om RLS te omzeilen
  * Maakt eerst een CRM customer record aan als die niet bestaat
+ * 
+ * ADMIN ONLY
  */
 
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
+import { withAuth } from '@/middleware/auth';
+import type { AuthenticatedUser } from '@/middleware/auth';
 
-export async function POST(request: Request) {
+export const POST = withAuth(async (request: NextRequest, user: AuthenticatedUser) => {
   try {
     const body = await request.json();
     const { customerEmail, sheetUrl } = body;
@@ -164,5 +168,5 @@ export async function POST(request: Request) {
       { status: 500 }
     );
   }
-}
+}, { adminOnly: true });
 
