@@ -427,7 +427,7 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: () => {
-        console.log('🚨 EXPLICIT LOGOUT CALLED - Stack trace:', new Error().stack);
+        console.log('🚨 LOGOUT CALLED');
         console.log('🚨 Current state before logout:', authState);
         
         // Update local state
@@ -453,8 +453,14 @@ export const useAuthStore = create<AuthState>()(
           console.error('Failed to clear localStorage:', error);
         }
         
-        console.log('🚨 State after logout:', authState);
+        console.log('✅ State after logout:', authState);
         notifyListeners();
+        
+        // Redirect to home with login screen
+        if (typeof window !== 'undefined') {
+          console.log('🔄 Redirecting to login screen...');
+          window.location.href = '/?login=true';
+        }
       },
 
       updateProfile: (updates: Partial<User>) => {

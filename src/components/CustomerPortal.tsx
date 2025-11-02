@@ -333,11 +333,8 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
     : getRecentOrders(user); // Fallback to demo data for demo account
 
   const handleLogout = () => {
+    // Logout handles redirect to login screen automatically
     logout();
-    // Navigate to home after logout using router.push
-    setTimeout(() => {
-      router.push('/');
-    }, 100);
   };
 
   const handleQuickAction = (action: string) => {

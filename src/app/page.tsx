@@ -32,14 +32,21 @@ export default function HomePage() {
       isLoading: false 
     });
     
-    // Check for URL parameters to set chat context
+    // Check for URL parameters to set chat context or show login
     const urlParams = new URLSearchParams(window.location.search);
     const chatParam = urlParams.get('chat');
+    const loginParam = urlParams.get('login');
     
     if (chatParam === 'roi') {
       // Set ROI context and go to chat
       ChatContextManager.setContext('roi');
       setCurrentPage('chat');
+    } else if (loginParam === 'true') {
+      // Show login screen (e.g. after logout)
+      console.log('🔐 Showing login screen from URL parameter');
+      setCurrentPage('login');
+      // Clean URL
+      window.history.replaceState({}, '', '/');
     }
   }, [init]);
 

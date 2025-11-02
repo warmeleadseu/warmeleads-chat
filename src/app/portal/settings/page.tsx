@@ -135,8 +135,8 @@ export default function AccountSettingsPage() {
   };
 
   const handleLogout = () => {
+    // Logout handles redirect to login screen automatically
     logout();
-    router.push('/');
   };
 
   if (!user) {
