@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
     // Fetch all orders
     const { data: orders, error: ordersError } = await supabase
       .from('orders')
-      .select('id, total_amount_incl_vat, status, created_at');
+      .select('id, customer_id, total_amount_incl_vat, status, created_at');
 
     if (ordersError) {
       console.error('❌ Error fetching orders:', ordersError);
