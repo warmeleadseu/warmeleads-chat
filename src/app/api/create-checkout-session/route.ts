@@ -52,8 +52,8 @@ export async function POST(req: NextRequest) {
 
     // Security check: For authenticated orders, verify the user
     if (!isGuest) {
-      const user = await verifyAuthToken(req);
-      if (!user) {
+      const authResult = await verifyAuthToken(req);
+      if (!authResult.user) {
         return NextResponse.json(
           { error: 'Unauthorized - Login required' },
           { status: 401 }
@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
       }
 
       // User can only create checkout for themselves (unless admin)
-      if (customerEmail !== user.email && !isAdmin(user.email)) {
+      if (customerEmail !== authResult.user.email && !isAdmin(authResult.user.email)) {
         return NextResponse.json(
           { error: 'Forbidden - You can only create checkout sessions for yourself' },
           { status: 403 }

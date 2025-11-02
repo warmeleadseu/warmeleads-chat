@@ -46,7 +46,8 @@ export async function POST(req: NextRequest) {
     const session = await response.json();
     
     // Security check: For authenticated users, verify they own this payment
-    const user = await verifyAuthToken(req);
+    const authResult = await verifyAuthToken(req);
+    const user = authResult.user;
     const customerEmail = session.customer_details?.email || session.customer_email;
     const isGuestCheckout = session.metadata?.isGuest === 'true';
     
