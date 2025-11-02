@@ -10,6 +10,7 @@ export default function PaymentSuccessContent() {
   const router = useRouter();
   const [isVerifying, setIsVerifying] = useState(true);
   const [paymentVerified, setPaymentVerified] = useState(false);
+  const [orderMetadata, setOrderMetadata] = useState<any>(null);
   const sessionId = searchParams.get('session_id');
 
   useEffect(() => {
@@ -30,7 +31,9 @@ export default function PaymentSuccessContent() {
         });
 
         if (response.ok) {
+          const data = await response.json();
           setPaymentVerified(true);
+          setOrderMetadata(data.metadata);
           // Trigger lead delivery
           await fetch('/api/deliver-leads', {
             method: 'POST',
@@ -49,6 +52,9 @@ export default function PaymentSuccessContent() {
 
     verifyPayment();
   }, [sessionId]);
+
+  const isExclusive = orderMetadata?.leadType === 'exclusive';
+  const isGuest = orderMetadata?.isGuest === 'true';
 
   if (isVerifying) {
     return (
@@ -91,7 +97,10 @@ export default function PaymentSuccessContent() {
             </h1>
 
             <p className="text-gray-600 mb-6">
-              Uw betaling is succesvol verwerkt. Uw leads worden binnen 15 minuten geleverd in uw dashboard.
+              {isExclusive 
+                ? "Uw bestelling is bevestigd! We starten binnen 24 uur exclusieve campagnes voor u."
+                : "Uw bestelling is bevestigd! U ontvangt binnen 24 uur het Excel bestand per email."
+              }
             </p>
 
             <div className="bg-green-50 rounded-2xl p-4 mb-6 text-left">
@@ -99,8 +108,20 @@ export default function PaymentSuccessContent() {
               <ul className="text-sm text-green-700 space-y-1">
                 <li>✅ Betaling bevestigd</li>
                 <li>📧 Bevestigingsmail verzonden</li>
-                <li>🚀 Leads worden binnen 15 minuten geleverd</li>
-                <li>📊 Toegang tot uw dashboard</li>
+                {isExclusive ? (
+                  <>
+                    <li>🚀 We starten binnen 24u campagnes speciaal voor u</li>
+                    <li>⚡ Leads verschijnen real-time in uw persoonlijke portal</li>
+                    <li>📊 We maken een Google Spreadsheet speciaal voor u aan</li>
+                    {isGuest && <li>🔐 U ontvangt een link om een account aan te maken (optioneel)</li>}
+                  </>
+                ) : (
+                  <>
+                    <li>📦 Excel bestand binnen 24 uur op uw email</li>
+                    <li>✅ Direct bruikbaar, geen portal nodig</li>
+                    {isGuest && <li>🔐 U kunt later een account aanmaken als u dat wilt</li>}
+                  </>
+                )}
               </ul>
             </div>
 

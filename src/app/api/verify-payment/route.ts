@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { withAuth } from '@/middleware/auth';
-import type { AuthenticatedUser } from '@/middleware/auth';
+import { verifyAuthToken } from '@/middleware/auth';
 
 // Helper to check if user is admin
 function isAdmin(email: string): boolean {
@@ -8,7 +7,7 @@ function isAdmin(email: string): boolean {
   return adminEmails.includes(email);
 }
 
-export const POST = withAuth(async (req: NextRequest, user: AuthenticatedUser) => {
+export async function POST(req: NextRequest) {
   try {
     const { sessionId } = await req.json();
     
@@ -46,9 +45,12 @@ export const POST = withAuth(async (req: NextRequest, user: AuthenticatedUser) =
 
     const session = await response.json();
     
-    // Security: User can only verify their own payments (unless admin)
+    // Security check: For authenticated users, verify they own this payment
+    const user = await verifyAuthToken(req);
     const customerEmail = session.customer_details?.email || session.customer_email;
-    if (customerEmail && customerEmail !== user.email && !isAdmin(user.email)) {
+    const isGuestCheckout = session.metadata?.isGuest === 'true';
+    
+    if (user && customerEmail && customerEmail !== user.email && !isAdmin(user.email)) {
       return NextResponse.json(
         { error: 'Forbidden - You can only verify your own payments' },
         { status: 403 }
@@ -61,7 +63,8 @@ export const POST = withAuth(async (req: NextRequest, user: AuthenticatedUser) =
         sessionId,
         paymentStatus: session.payment_status,
         customerEmail: session.customer_details?.email,
-        amountTotal: session.amount_total
+        amountTotal: session.amount_total,
+        isGuest: isGuestCheckout
       });
 
       return NextResponse.json({
@@ -90,4 +93,4 @@ export const POST = withAuth(async (req: NextRequest, user: AuthenticatedUser) =
       { status: 500 }
     );
   }
-});
+}

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { leadPackages, calculatePackagePrice } from '@/lib/stripe';
-import { withAuth } from '@/middleware/auth';
-import type { AuthenticatedUser } from '@/middleware/auth';
+import { verifyAuthToken } from '@/middleware/auth';
 
 // Helper to check if user is admin
 function isAdmin(email: string): boolean {
@@ -9,7 +8,7 @@ function isAdmin(email: string): boolean {
   return adminEmails.includes(email);
 }
 
-export const POST = withAuth(async (req: NextRequest, user: AuthenticatedUser) => {
+export async function POST(req: NextRequest) {
   try {
     console.log('🔵 Creating Stripe Checkout Session...');
     
@@ -20,7 +19,8 @@ export const POST = withAuth(async (req: NextRequest, user: AuthenticatedUser) =
       customerEmail,
       customerName,
       customerCompany,
-      paymentMethod = 'card'
+      paymentMethod = 'card',
+      isGuest = false
     } = body;
 
     // Find the package
@@ -42,12 +42,31 @@ export const POST = withAuth(async (req: NextRequest, user: AuthenticatedUser) =
       );
     }
 
-    // Security: User can only create checkout for themselves (unless admin)
-    if (customerEmail !== user.email && !isAdmin(user.email)) {
+    // Guest checkout: naam is verplicht
+    if (isGuest && !customerName) {
       return NextResponse.json(
-        { error: 'Forbidden - You can only create checkout sessions for yourself' },
-        { status: 403 }
+        { error: 'Customer name is required for guest checkout' },
+        { status: 400 }
       );
+    }
+
+    // Security check: For authenticated orders, verify the user
+    if (!isGuest) {
+      const user = await verifyAuthToken(req);
+      if (!user) {
+        return NextResponse.json(
+          { error: 'Unauthorized - Login required' },
+          { status: 401 }
+        );
+      }
+
+      // User can only create checkout for themselves (unless admin)
+      if (customerEmail !== user.email && !isAdmin(user.email)) {
+        return NextResponse.json(
+          { error: 'Forbidden - You can only create checkout sessions for yourself' },
+          { status: 403 }
+        );
+      }
     }
     
     // Validate quantity for exclusive leads
@@ -127,6 +146,7 @@ export const POST = withAuth(async (req: NextRequest, user: AuthenticatedUser) =
       'metadata[customerEmail]': customerEmail,
       'metadata[customerCompany]': customerCompany || '',
       'metadata[orderQuantity]': quantity.toString(),
+      'metadata[isGuest]': isGuest ? 'true' : 'false',
     };
 
     const response = await fetch('https://api.stripe.com/v1/checkout/sessions', {
@@ -163,4 +183,4 @@ export const POST = withAuth(async (req: NextRequest, user: AuthenticatedUser) =
       { status: 500 }
     );
   }
-});
+}

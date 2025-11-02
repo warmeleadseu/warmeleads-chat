@@ -41,10 +41,11 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
   const [isProcessing, setIsProcessing] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState(false);
   const [showAuthFlow, setShowAuthFlow] = useState(false);
-  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+  const [authMode, setAuthMode] = useState<'guest' | 'login' | 'register'>('guest');
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
   const [authName, setAuthName] = useState('');
+  const [authCompany, setAuthCompany] = useState('');
   const [authError, setAuthError] = useState('');
   const [currentStep, setCurrentStep] = useState<number>(1);
   const [isSummaryOpen, setIsSummaryOpen] = useState(false); // For mobile collapsible summary
@@ -101,8 +102,22 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
     setIsProcessing(true);
 
     try {
-      if (authMode === 'login') {
+      if (authMode === 'guest') {
+        // Guest checkout - just proceed with email and name
+        if (!authEmail || !authName) {
+          setAuthError('Email en naam zijn verplicht');
+          setIsProcessing(false);
+          return;
+        }
+        // Proceed directly to checkout with guest info
+        setShowAuthFlow(false);
+        setIsProcessing(false);
+        setTimeout(() => handleCheckoutAsGuest(), 100);
+      } else if (authMode === 'login') {
         await login(authEmail, authPassword);
+        setShowAuthFlow(false);
+        setIsProcessing(false);
+        setTimeout(() => handleCheckout(), 100);
       } else {
         if (!authName) {
           setAuthError('Naam is verplicht');
@@ -114,15 +129,67 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
           password: authPassword,
           name: authName
         });
+        setShowAuthFlow(false);
+        setIsProcessing(false);
+        setTimeout(() => handleCheckout(), 100);
       }
-      
-      // After successful auth, close auth flow and proceed to checkout
-      setShowAuthFlow(false);
-      setIsProcessing(false);
-      // Automatically proceed to checkout
-      setTimeout(() => handleCheckout(), 100);
     } catch (error) {
       setAuthError(error instanceof Error ? error.message : 'Er ging iets mis');
+      setIsProcessing(false);
+    }
+  };
+
+  const handleCheckoutAsGuest = async () => {
+    if (!selectedPackage) return;
+    
+    // Validate quantity
+    if (selectedPackage.type === 'exclusive') {
+      const minQty = selectedPackage.minQuantity || 30;
+      if (quantity < minQty) {
+        alert(`Minimum ${minQty} leads vereist voor exclusieve leads`);
+        return;
+      }
+    }
+
+    setIsProcessing(true);
+
+    try {
+      // Calculate final price
+      const pricing = calculatePackagePrice(selectedPackage, quantity);
+      
+      // Create checkout session for guest
+      const response = await fetch('/api/create-checkout-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          packageId: selectedPackage.id,
+          quantity: quantity,
+          customerEmail: authEmail,
+          customerName: authName,
+          customerCompany: authCompany || undefined,
+          isGuest: true,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to create checkout session');
+      }
+
+      const { sessionId } = await response.json();
+
+      // Redirect to Stripe Checkout
+      const stripe = await stripePromise;
+      if (stripe) {
+        const { error } = await stripe.redirectToCheckout({ sessionId });
+        if (error) {
+          console.error('Stripe error:', error);
+          alert('Er ging iets mis met de betaling. Probeer het opnieuw.');
+        }
+      }
+    } catch (error) {
+      console.error('Checkout error:', error);
+      alert('Er ging iets mis. Probeer het opnieuw.');
+    } finally {
       setIsProcessing(false);
     }
   };
@@ -291,7 +358,7 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
                     <div className="flex-1 overflow-y-auto pr-0 lg:pr-4 space-y-4 lg:space-y-6 pb-32 lg:pb-0">
                       
                       {showAuthFlow ? (
-                        /* Auth Flow */
+                        /* Auth Flow with Guest Option */
                         <motion.div
                           initial={{ opacity: 0, y: 20 }}
                           animate={{ opacity: 1, y: 0 }}
@@ -299,24 +366,27 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
                         >
                           <div className="bg-white rounded-2xl shadow-lg p-8">
                             <div className="text-center mb-6">
-                              <div className="inline-flex p-4 bg-gradient-to-br from-purple-100 to-pink-100 rounded-full mb-4">
-                                <UserIcon className="w-12 h-12 text-purple-600" />
+                              <div className="inline-flex p-4 bg-gradient-to-br from-orange-100 to-red-100 rounded-full mb-4">
+                                <ShoppingCartIcon className="w-12 h-12 text-orange-600" />
                               </div>
                               <h3 className="text-2xl font-bold text-gray-900 mb-2">
-                                {authMode === 'login' ? 'Log in om door te gaan' : 'Maak een account aan'}
+                                {authMode === 'guest' ? 'Bestel snel als gast' : authMode === 'login' ? 'Log in op je account' : 'Maak een account aan'}
                               </h3>
                               <p className="text-gray-600">
-                                {authMode === 'login' 
+                                {authMode === 'guest' 
+                                  ? 'Vul je gegevens in en ga direct naar de betaling'
+                                  : authMode === 'login'
                                   ? 'Log in op je account om je bestelling af te ronden'
-                                  : 'Maak snel een gratis account aan om te bestellen'}
+                                  : 'Maak snel een account aan om te bestellen'}
                               </p>
                             </div>
 
                             <form onSubmit={handleAuth} className="space-y-4">
-                              {authMode === 'register' && (
+                              {/* Name field - for guest and register */}
+                              {(authMode === 'guest' || authMode === 'register') && (
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Naam
+                                    Naam *
                                   </label>
                                   <div className="relative">
                                     <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -324,17 +394,18 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
                                       type="text"
                                       value={authName}
                                       onChange={(e) => setAuthName(e.target.value)}
-                                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                                       placeholder="Je volledige naam"
-                                      required={authMode === 'register'}
+                                      required
                                     />
                                   </div>
                                 </div>
                               )}
 
+                              {/* Email field - always visible */}
                               <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                                  Email
+                                  Email *
                                 </label>
                                 <div className="relative">
                                   <EnvelopeIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -342,30 +413,49 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
                                     type="email"
                                     value={authEmail}
                                     onChange={(e) => setAuthEmail(e.target.value)}
-                                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                                     placeholder="je@email.nl"
                                     required
                                   />
                                 </div>
                               </div>
 
-                              <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                  Wachtwoord
-                                </label>
-                                <div className="relative">
-                                  <LockClosedIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                              {/* Company field - only for guest */}
+                              {authMode === 'guest' && (
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Bedrijf (optioneel)
+                                  </label>
                                   <input
-                                    type="password"
-                                    value={authPassword}
-                                    onChange={(e) => setAuthPassword(e.target.value)}
-                                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                                    placeholder="••••••••"
-                                    required
-                                    minLength={6}
+                                    type="text"
+                                    value={authCompany}
+                                    onChange={(e) => setAuthCompany(e.target.value)}
+                                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                                    placeholder="Je bedrijfsnaam"
                                   />
                                 </div>
-                              </div>
+                              )}
+
+                              {/* Password field - only for login and register */}
+                              {(authMode === 'login' || authMode === 'register') && (
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Wachtwoord
+                                  </label>
+                                  <div className="relative">
+                                    <LockClosedIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                                    <input
+                                      type="password"
+                                      value={authPassword}
+                                      onChange={(e) => setAuthPassword(e.target.value)}
+                                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                                      placeholder="••••••••"
+                                      required
+                                      minLength={6}
+                                    />
+                                  </div>
+                                </div>
+                              )}
 
                               {authError && (
                                 <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm">
@@ -376,22 +466,77 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
                               <button
                                 type="submit"
                                 disabled={isProcessing}
-                                className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold py-4 px-6 rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="w-full bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 text-white font-semibold py-4 px-6 rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
                               >
-                                {isProcessing ? 'Bezig...' : (authMode === 'login' ? 'Inloggen en bestellen' : 'Account aanmaken en bestellen')}
+                                {isProcessing ? 'Bezig...' : (
+                                  authMode === 'guest' ? 'Doorgaan naar betalen' : 
+                                  authMode === 'login' ? 'Inloggen en bestellen' : 
+                                  'Account aanmaken en bestellen'
+                                )}
                               </button>
 
-                              <div className="text-center">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setAuthMode(authMode === 'login' ? 'register' : 'login');
-                                    setAuthError('');
-                                  }}
-                                  className="text-purple-600 hover:text-purple-700 text-sm font-medium"
-                                >
-                                  {authMode === 'login' ? 'Nog geen account? Registreer hier' : 'Al een account? Log hier in'}
-                                </button>
+                              {/* Toggle between modes */}
+                              <div className="space-y-2 text-center">
+                                {authMode === 'guest' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setAuthMode('login');
+                                      setAuthError('');
+                                    }}
+                                    className="text-orange-600 hover:text-orange-700 text-sm font-medium"
+                                  >
+                                    Al een account? Log hier in
+                                  </button>
+                                )}
+                                {authMode === 'login' && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setAuthMode('guest');
+                                        setAuthError('');
+                                      }}
+                                      className="block w-full text-orange-600 hover:text-orange-700 text-sm font-medium"
+                                    >
+                                      ← Bestel als gast (geen account nodig)
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setAuthMode('register');
+                                        setAuthError('');
+                                      }}
+                                      className="text-gray-600 hover:text-gray-700 text-sm"
+                                    >
+                                      Nog geen account? Registreer hier
+                                    </button>
+                                  </>
+                                )}
+                                {authMode === 'register' && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setAuthMode('guest');
+                                        setAuthError('');
+                                      }}
+                                      className="block w-full text-orange-600 hover:text-orange-700 text-sm font-medium"
+                                    >
+                                      ← Bestel als gast (geen account nodig)
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setAuthMode('login');
+                                        setAuthError('');
+                                      }}
+                                      className="text-gray-600 hover:text-gray-700 text-sm"
+                                    >
+                                      Al een account? Log hier in
+                                    </button>
+                                  </>
+                                )}
                               </div>
 
                               <div className="text-center">
@@ -528,6 +673,26 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
                                           {pkg.description}
                                         </p>
 
+                                        {/* Delivery info per package type */}
+                                        <div className={`mb-4 p-3 rounded-lg border ${
+                                          selectedPackage?.id === pkg.id 
+                                            ? 'bg-white/10 border-white/20' 
+                                            : 'bg-blue-50 border-blue-200'
+                                        }`}>
+                                          <div className={`text-xs font-semibold mb-1 ${
+                                            selectedPackage?.id === pkg.id ? 'text-white' : 'text-blue-900'
+                                          }`}>
+                                            📦 Levering:
+                                          </div>
+                                          <div className={`text-xs ${
+                                            selectedPackage?.id === pkg.id ? 'text-white/90' : 'text-blue-800'
+                                          }`}>
+                                            {pkg.type === 'exclusive' 
+                                              ? 'We starten binnen 24u campagnes • Leads real-time in je portal • Toegang tot persoonlijke spreadsheet'
+                                              : 'Binnen 24 uur per email • Excel bestand • Direct te gebruiken'}
+                                          </div>
+                                        </div>
+
                                         {/* Price */}
                                         <div className="mb-4">
                                           {pkg.type === 'exclusive' && pkg.pricingTiers ? (
@@ -647,11 +812,29 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
                                         }
                                       </div>
                                       
-                                      <p className={`text-sm ${
+                                      <p className={`text-sm mb-3 ${
                                         selectedPackage?.id === pkg.id ? 'text-white/90' : 'text-gray-600'
                                       }`}>
                                         {pkg.description}
                                       </p>
+
+                                      {/* Delivery info mobile */}
+                                      <div className={`text-xs p-2 rounded-lg ${
+                                        selectedPackage?.id === pkg.id 
+                                          ? 'bg-white/10' 
+                                          : 'bg-blue-50'
+                                      }`}>
+                                        <span className={`font-semibold ${
+                                          selectedPackage?.id === pkg.id ? 'text-white' : 'text-blue-900'
+                                        }`}>
+                                          📦{' '}
+                                        </span>
+                                        <span className={selectedPackage?.id === pkg.id ? 'text-white/90' : 'text-blue-800'}>
+                                          {pkg.type === 'exclusive' 
+                                            ? 'Campagnes starten binnen 24u'
+                                            : 'Excel binnen 24u per email'}
+                                        </span>
+                                      </div>
                                     </motion.button>
                                   ))}
                                 </div>
@@ -736,13 +919,17 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
                                     <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-2">
                                       <BoltIcon className="w-5 h-5 text-green-600" />
                                     </div>
-                                    <div className="text-xs font-medium text-gray-900">Actieve Koopintentie</div>
+                                    <div className="text-xs font-medium text-gray-900">
+                                      {selectedPackage?.type === 'exclusive' ? 'Start binnen 24u' : 'Levering binnen 24u'}
+                                    </div>
                                   </div>
                                   <div className="text-center">
                                     <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-2">
                                       <SparklesIcon className="w-5 h-5 text-purple-600" />
                                     </div>
-                                    <div className="text-xs font-medium text-gray-900">100% Exclusief</div>
+                                    <div className="text-xs font-medium text-gray-900">
+                                      {selectedPackage?.type === 'exclusive' ? '100% Exclusief' : 'Direct Bruikbaar'}
+                                    </div>
                                   </div>
                                 </div>
                               </div>
@@ -823,11 +1010,15 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
                                   </div>
                                   <div className="text-center bg-white rounded-lg p-3 shadow-sm">
                                     <BoltIcon className="w-6 h-6 text-green-600 mx-auto mb-1" />
-                                    <div className="text-xs font-medium text-gray-900">Koopintentie</div>
+                                    <div className="text-xs font-medium text-gray-900">
+                                      {selectedPackage?.type === 'exclusive' ? '< 24u Start' : '< 24u Excel'}
+                                    </div>
                                   </div>
                                   <div className="text-center bg-white rounded-lg p-3 shadow-sm">
                                     <SparklesIcon className="w-6 h-6 text-purple-600 mx-auto mb-1" />
-                                    <div className="text-xs font-medium text-gray-900">Exclusief</div>
+                                    <div className="text-xs font-medium text-gray-900">
+                                      {selectedPackage?.type === 'exclusive' ? 'Exclusief' : 'Klaar'}
+                                    </div>
                                   </div>
                                 </div>
                               </div>

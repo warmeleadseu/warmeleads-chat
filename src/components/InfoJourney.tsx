@@ -28,10 +28,13 @@ const infoSections = [
     title: 'Wat zijn warme leads?',
     content: `Warme leads zijn potentiële klanten die al interesse hebben getoond in uw product of dienst. Bij WarmeLeads genereren we verse leads die:
 
-    ✅ Binnen 24 uur zijn gegenereerd
+    ✅ Vers gegenereerd uit onze actieve campagnes
     ✅ Geïnteresseerd zijn in uw specifieke branche  
     ✅ Nederlandse prospects met contactgegevens
     ✅ Kwaliteitscontrole hebben ondergaan
+    
+    Exclusieve leads: We starten binnen 24u campagnes speciaal voor jou
+    Bulk leads: Direct beschikbaar, binnen 24u geleverd
     
     Dit betekent veel hogere conversiekansen dan koude acquisitie!`,
     cta: 'Vraag Lisa naar voorbeelden',
@@ -61,11 +64,16 @@ const infoSections = [
     Zonnepanelen: €40,00 - €45,00 per lead
     Warmtepompen: €45,00 - €50,00 per lead
     
+    📦 We starten binnen 24u campagnes voor jou
+    ⚡ Leads komen real-time in je persoonlijke portal
+    
     Gedeelde leads (met 2 anderen, 1/3 van de prijs):
     
     Thuisbatterijen: €12,50 per lead (min. 500)
     Zonnepanelen: €15,00 per lead (min. 500)
     Warmtepompen: €16,50 per lead (min. 500)
+    
+    📦 Excel bestand binnen 24 uur per email
     
     ✅ Geen setup kosten
     ✅ Geen abonnementen
