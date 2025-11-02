@@ -49,35 +49,17 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
   const [authError, setAuthError] = useState('');
   const [currentStep, setCurrentStep] = useState<number>(1);
   const [isSummaryOpen, setIsSummaryOpen] = useState(false); // For mobile collapsible summary
-  const [showConfetti, setShowConfetti] = useState(false);
-  const [viewersCount] = useState(Math.floor(Math.random() * 8) + 3); // 3-10 random viewers
   
   const { login, register, isAuthenticated } = useAuthStore();
 
   const industries = Object.keys(leadPackages);
 
-  // Auto-advance steps with smooth scroll
+  // Auto-advance steps
   useEffect(() => {
     if (selectedIndustry && !selectedPackage) {
       setCurrentStep(2);
-      // Smooth scroll to package section
-      setTimeout(() => {
-        document.getElementById('package-section')?.scrollIntoView({ 
-          behavior: 'smooth', 
-          block: 'start' 
-        });
-      }, 100);
     } else if (selectedPackage && currentStep < 3) {
       setCurrentStep(3);
-      setShowConfetti(true);
-      setTimeout(() => setShowConfetti(false), 3000);
-      // Smooth scroll to quantity section
-      setTimeout(() => {
-        document.getElementById('quantity-section')?.scrollIntoView({ 
-          behavior: 'smooth', 
-          block: 'start' 
-        });
-      }, 100);
     }
   }, [selectedIndustry, selectedPackage, currentStep]);
 
@@ -92,6 +74,17 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
     } else {
       setQuantity(pkg.quantity); // Fixed 500 for shared
     }
+    
+    // Auto-scroll to quantity section after package selection
+    setTimeout(() => {
+      const quantitySection = document.getElementById('quantity-section');
+      if (quantitySection) {
+        quantitySection.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'center'
+        });
+      }
+    }, 100);
   };
 
   const handleAuth = async (e: React.FormEvent) => {
@@ -212,29 +205,16 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
               
               {/* Header - Fixed Top */}
               <div className="sticky top-0 z-10 bg-white/95 backdrop-blur-md border-b border-gray-200 shadow-sm">
-                {/* Urgency Bar */}
-                <div className="bg-gradient-to-r from-orange-600 to-red-600 text-white px-4 py-2 text-center">
-                  <div className="flex items-center justify-center gap-2 text-xs sm:text-sm font-medium">
-                    <span className="animate-pulse">🔥</span>
-                    <span className="hidden sm:inline">{viewersCount} andere klanten bekijken nu dit pakket</span>
-                    <span className="sm:hidden">{viewersCount} anderen bekijken dit nu</span>
-                    <span className="hidden md:inline">• Beperkte voorraad deze week</span>
-                  </div>
-                </div>
-
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
                   <div className="flex items-center justify-between">
                     {/* Logo/Title */}
                     <div className="flex items-center gap-3">
-                      <div className="p-2 bg-gradient-to-br from-orange-500 to-red-500 rounded-xl shadow-lg">
+                      <div className="p-2 bg-gradient-to-br from-orange-500 to-red-500 rounded-xl">
                         <ShoppingCartIcon className="w-6 h-6 text-white" />
                       </div>
                       <div>
                         <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Bestel Leads</h1>
-                        <p className="text-xs sm:text-sm text-gray-600 hidden sm:block flex items-center gap-1">
-                          <CheckCircleIcon className="w-4 h-4 text-green-500" />
-                          Verse leads binnen 15 minuten geleverd
-                        </p>
+                        <p className="text-xs sm:text-sm text-gray-600 hidden sm:block">Verse leads binnen 15 minuten</p>
                       </div>
                     </div>
 
@@ -300,7 +280,7 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
                   <div className="h-full flex flex-col lg:flex-row gap-6">
                     
                     {/* LEFT: Main Content - Scrollable */}
-                    <div className="flex-1 overflow-y-auto pr-0 lg:pr-4 space-y-6">
+                    <div className="flex-1 overflow-y-auto pr-0 lg:pr-4 space-y-4 lg:space-y-6 pb-32 lg:pb-0">
                       
                       {showAuthFlow ? (
                         /* Auth Flow */
@@ -420,322 +400,424 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
                         </motion.div>
                       ) : (
                         <>
-                          {/* Confetti Effect */}
-                          <AnimatePresence>
-                            {showConfetti && (
-                              <motion.div
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                exit={{ opacity: 0 }}
-                                className="fixed inset-0 pointer-events-none z-50"
-                              >
-                                {[...Array(50)].map((_, i) => (
-                                  <motion.div
-                                    key={i}
-                                    className="absolute w-2 h-2 bg-gradient-to-r from-orange-500 to-red-500 rounded-full"
-                                    initial={{ 
-                                      x: typeof window !== 'undefined' ? window.innerWidth / 2 : 0, 
-                                      y: typeof window !== 'undefined' ? window.innerHeight / 2 : 0,
-                                      opacity: 1 
-                                    }}
-                                    animate={{ 
-                                      x: typeof window !== 'undefined' ? Math.random() * window.innerWidth : 0,
-                                      y: typeof window !== 'undefined' ? Math.random() * window.innerHeight : 0,
-                                      opacity: 0 
-                                    }}
-                                    transition={{ duration: 2, delay: i * 0.02 }}
-                                  />
-                                ))}
-                              </motion.div>
-                            )}
-                          </AnimatePresence>
-
                           {/* Step 1: Industry Selection */}
-                          <motion.div
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            id="industry-section"
-                            className="bg-white rounded-2xl shadow-lg p-6 border-2 border-gray-100"
-                          >
-                            <div className="flex items-center justify-between mb-4">
-                              <div className="flex items-center gap-2">
-                                <div className="w-8 h-8 bg-gradient-to-br from-orange-500 to-red-500 rounded-lg flex items-center justify-center text-white font-bold text-sm shadow-md">
+                          <div>
+                            {/* Desktop: Card wrapper */}
+                            <div className="hidden lg:block bg-white rounded-2xl shadow-lg p-6">
+                              <div className="flex items-center gap-2 mb-4">
+                                <div className="w-8 h-8 bg-gradient-to-br from-orange-500 to-red-500 rounded-lg flex items-center justify-center text-white font-bold text-sm">
                                   1
                                 </div>
                                 <h3 className="text-xl font-bold text-gray-900">Kies je branche</h3>
                               </div>
-                              {selectedIndustry && (
-                                <motion.div
-                                  initial={{ scale: 0 }}
-                                  animate={{ scale: 1 }}
-                                  className="flex items-center gap-1 text-green-600 text-sm font-medium"
-                                >
-                                  <CheckCircleIcon className="w-5 h-5" />
-                                  <span className="hidden sm:inline">Gekozen</span>
-                                </motion.div>
-                              )}
+                              <div className="grid grid-cols-5 gap-3">
+                                {industries.map((industry) => (
+                                  <motion.button
+                                    key={industry}
+                                    whileHover={{ scale: 1.02 }}
+                                    whileTap={{ scale: 0.98 }}
+                                    onClick={() => {
+                                      setSelectedIndustry(industry);
+                                      setSelectedPackage(null);
+                                    }}
+                                    className={`p-4 rounded-xl font-medium transition-all text-sm ${
+                                      selectedIndustry === industry
+                                        ? 'bg-gradient-to-br from-orange-500 to-red-500 text-white shadow-lg ring-2 ring-orange-300'
+                                        : 'bg-gray-50 text-gray-700 hover:bg-orange-50 border-2 border-gray-200 hover:border-orange-300'
+                                    }`}
+                                  >
+                                    {industry}
+                                  </motion.button>
+                                ))}
+                              </div>
                             </div>
-                            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-                              {industries.map((industry) => (
-                                <motion.button
-                                  key={industry}
-                                  whileHover={{ scale: 1.02 }}
-                                  whileTap={{ scale: 0.98 }}
-                                  onClick={() => {
-                                    setSelectedIndustry(industry);
-                                    setSelectedPackage(null);
-                                  }}
-                                  className={`p-4 rounded-xl font-medium transition-all text-sm ${
-                                    selectedIndustry === industry
-                                      ? 'bg-gradient-to-br from-orange-500 to-red-500 text-white shadow-lg ring-2 ring-orange-300'
-                                      : 'bg-gray-50 text-gray-700 hover:bg-orange-50 border-2 border-gray-200 hover:border-orange-300'
-                                  }`}
-                                >
-                                  {industry}
-                                </motion.button>
-                              ))}
+
+                            {/* Mobile: No card, direct buttons with larger spacing */}
+                            <div className="lg:hidden">
+                              <div className="flex items-center gap-2 mb-4">
+                                <div className="w-8 h-8 bg-gradient-to-br from-orange-500 to-red-500 rounded-lg flex items-center justify-center text-white font-bold text-sm">
+                                  1
+                                </div>
+                                <h3 className="text-lg font-bold text-gray-900">Kies je branche</h3>
+                              </div>
+                              <div className="grid grid-cols-2 gap-3">
+                                {industries.map((industry) => (
+                                  <motion.button
+                                    key={industry}
+                                    whileTap={{ scale: 0.95 }}
+                                    onClick={() => {
+                                      setSelectedIndustry(industry);
+                                      setSelectedPackage(null);
+                                    }}
+                                    className={`p-5 rounded-xl font-medium transition-all text-sm shadow-md ${
+                                      selectedIndustry === industry
+                                        ? 'bg-gradient-to-br from-orange-500 to-red-500 text-white shadow-lg ring-2 ring-orange-300'
+                                        : 'bg-white text-gray-700 active:bg-orange-50 border-2 border-gray-200'
+                                    }`}
+                                  >
+                                    {industry}
+                                  </motion.button>
+                                ))}
+                              </div>
                             </div>
-                          </motion.div>
+                          </div>
 
                           {/* Step 2: Package Selection */}
                           {selectedIndustry && (
-                            <motion.div
-                              initial={{ opacity: 0, y: 20 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              id="package-section"
-                              className="bg-white rounded-2xl shadow-lg p-6 border-2 border-gray-100"
-                            >
-                              <div className="flex items-center justify-between mb-4">
-                                <div className="flex items-center gap-2">
-                                  <div className="w-8 h-8 bg-gradient-to-br from-orange-500 to-red-500 rounded-lg flex items-center justify-center text-white font-bold text-sm shadow-md">
+                            <div>
+                              {/* Desktop: Card wrapper */}
+                              <div className="hidden lg:block bg-white rounded-2xl shadow-lg p-6">
+                                <div className="flex items-center gap-2 mb-4">
+                                  <div className="w-8 h-8 bg-gradient-to-br from-orange-500 to-red-500 rounded-lg flex items-center justify-center text-white font-bold text-sm">
                                     2
                                   </div>
                                   <h3 className="text-xl font-bold text-gray-900">Kies je pakket</h3>
                                 </div>
-                                {selectedPackage && (
-                                  <motion.div
-                                    initial={{ scale: 0 }}
-                                    animate={{ scale: 1 }}
-                                    className="flex items-center gap-1 text-green-600 text-sm font-medium"
-                                  >
-                                    <CheckCircleIcon className="w-5 h-5" />
-                                    <span className="hidden sm:inline">Gekozen</span>
-                                  </motion.div>
-                                )}
-                              </div>
-                              
-                              {/* Social Proof */}
-                              <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                                <div className="flex items-center gap-2 text-sm text-blue-700">
-                                  <SparklesIcon className="w-4 h-4" />
-                                  <span className="font-medium">327 installateurs bestelden deze maand al leads via WarmeLeads</span>
+                                <div className="grid sm:grid-cols-2 gap-4">
+                                  {leadPackages[selectedIndustry]?.map((pkg) => (
+                                    <motion.div
+                                      key={pkg.id}
+                                      whileHover={{ scale: 1.02 }}
+                                      whileTap={{ scale: 0.98 }}
+                                      onClick={() => handleSelectPackage(pkg)}
+                                      className={`relative p-6 rounded-xl cursor-pointer transition-all border-2 ${
+                                        selectedPackage?.id === pkg.id
+                                          ? 'bg-gradient-to-br from-green-500 to-emerald-600 text-white shadow-xl border-green-400'
+                                          : 'bg-gray-50 border-gray-200 hover:border-orange-400 hover:shadow-md'
+                                      }`}
+                                    >
+                                      {/* Badge */}
+                                      <div className="absolute top-3 right-3">
+                                        {pkg.type === 'exclusive' ? (
+                                          <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                                            selectedPackage?.id === pkg.id
+                                              ? 'bg-white/20 text-white'
+                                              : 'bg-gradient-to-r from-orange-500 to-red-500 text-white'
+                                          }`}>
+                                            🔥 EXCLUSIEF
+                                          </span>
+                                        ) : (
+                                          <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                                            selectedPackage?.id === pkg.id
+                                              ? 'bg-white/20 text-white'
+                                              : 'bg-blue-500 text-white'
+                                          }`}>
+                                            💰 GEDEELD
+                                          </span>
+                                        )}
+                                      </div>
+
+                                      {/* Content */}
+                                      <div className="mt-4">
+                                        <h4 className={`text-xl font-bold mb-2 ${
+                                          selectedPackage?.id === pkg.id ? 'text-white' : 'text-gray-900'
+                                        }`}>
+                                          {pkg.name}
+                                        </h4>
+                                        <p className={`text-sm mb-4 ${
+                                          selectedPackage?.id === pkg.id ? 'text-white/90' : 'text-gray-600'
+                                        }`}>
+                                          {pkg.description}
+                                        </p>
+
+                                        {/* Price */}
+                                        <div className="mb-4">
+                                          {pkg.type === 'exclusive' && pkg.pricingTiers ? (
+                                            <div className="space-y-1">
+                                              <div className={`text-lg font-bold ${
+                                                selectedPackage?.id === pkg.id ? 'text-white' : 'text-orange-600'
+                                              }`}>
+                                                Vanaf {formatPrice(pkg.pricingTiers[0].pricePerLead)}/lead
+                                              </div>
+                                              <div className={`text-xs ${
+                                                selectedPackage?.id === pkg.id ? 'text-white/80' : 'text-gray-500'
+                                              }`}>
+                                                Staffelprijzen beschikbaar
+                                              </div>
+                                            </div>
+                                          ) : (
+                                            <>
+                                              <div className={`text-2xl font-bold ${
+                                                selectedPackage?.id === pkg.id ? 'text-white' : 'text-orange-600'
+                                              }`}>
+                                                {formatPrice(pkg.price * pkg.quantity)}
+                                              </div>
+                                              <div className={`text-xs ${
+                                                selectedPackage?.id === pkg.id ? 'text-white/80' : 'text-gray-500'
+                                              }`}>
+                                                {formatPrice(pkg.price)} per lead × {pkg.quantity} leads
+                                              </div>
+                                            </>
+                                          )}
+                                        </div>
+
+                                        {/* Features */}
+                                        <ul className="space-y-2">
+                                          {pkg.features.slice(0, 3).map((feature, idx) => (
+                                            <li key={idx} className="flex items-start gap-2">
+                                              <CheckCircleIcon className={`w-5 h-5 flex-shrink-0 mt-0.5 ${
+                                                selectedPackage?.id === pkg.id ? 'text-white' : 'text-green-500'
+                                              }`} />
+                                              <span className={`text-xs ${
+                                                selectedPackage?.id === pkg.id ? 'text-white' : 'text-gray-700'
+                                              }`}>
+                                                {feature}
+                                              </span>
+                                            </li>
+                                          ))}
+                                        </ul>
+
+                                        {/* Selection Indicator */}
+                                        {selectedPackage?.id === pkg.id && (
+                                          <div className="mt-4 flex items-center gap-2 text-white font-medium text-sm">
+                                            <CheckCircleIcon className="w-5 h-5" />
+                                            Geselecteerd
+                                          </div>
+                                        )}
+                                      </div>
+                                    </motion.div>
+                                  ))}
                                 </div>
                               </div>
-                              <div className="grid sm:grid-cols-2 gap-4">
-                                {leadPackages[selectedIndustry]?.map((pkg) => (
-                                  <motion.div
-                                    key={pkg.id}
-                                    whileHover={{ scale: 1.02 }}
-                                    whileTap={{ scale: 0.98 }}
-                                    onClick={() => handleSelectPackage(pkg)}
-                                    className={`relative p-6 rounded-xl cursor-pointer transition-all border-2 ${
-                                      selectedPackage?.id === pkg.id
-                                        ? 'bg-gradient-to-br from-green-500 to-emerald-600 text-white shadow-xl border-green-400'
-                                        : 'bg-gray-50 border-gray-200 hover:border-orange-400 hover:shadow-md'
-                                    }`}
-                                  >
-                                    {/* Badge */}
-                                    <div className="absolute top-3 right-3">
-                                      {pkg.type === 'exclusive' ? (
-                                        <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
-                                          selectedPackage?.id === pkg.id
-                                            ? 'bg-white/20 text-white'
-                                            : 'bg-gradient-to-r from-orange-500 to-red-500 text-white'
-                                        }`}>
-                                          🔥 EXCLUSIEF
-                                        </span>
-                                      ) : (
-                                        <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
-                                          selectedPackage?.id === pkg.id
-                                            ? 'bg-white/20 text-white'
-                                            : 'bg-blue-500 text-white'
-                                        }`}>
-                                          💰 GEDEELD
-                                        </span>
-                                      )}
-                                    </div>
 
-                                    {/* Content */}
-                                    <div className="mt-4">
-                                      <h4 className={`text-xl font-bold mb-2 ${
-                                        selectedPackage?.id === pkg.id ? 'text-white' : 'text-gray-900'
+                              {/* Mobile: Simplified cards, no nested bg */}
+                              <div className="lg:hidden">
+                                <div className="flex items-center gap-2 mb-4">
+                                  <div className="w-8 h-8 bg-gradient-to-br from-orange-500 to-red-500 rounded-lg flex items-center justify-center text-white font-bold text-sm">
+                                    2
+                                  </div>
+                                  <h3 className="text-lg font-bold text-gray-900">Kies je pakket</h3>
+                                </div>
+                                <div className="space-y-3">
+                                  {leadPackages[selectedIndustry]?.map((pkg) => (
+                                    <motion.button
+                                      key={pkg.id}
+                                      whileTap={{ scale: 0.98 }}
+                                      onClick={() => handleSelectPackage(pkg)}
+                                      className={`w-full text-left p-5 rounded-xl transition-all border-2 shadow-md ${
+                                        selectedPackage?.id === pkg.id
+                                          ? 'bg-gradient-to-br from-green-500 to-emerald-600 text-white border-green-400 shadow-lg'
+                                          : 'bg-white border-gray-200 active:border-orange-400'
+                                      }`}
+                                    >
+                                      <div className="flex items-start justify-between mb-3">
+                                        <div>
+                                          <div className={`text-lg font-bold mb-1 ${
+                                            selectedPackage?.id === pkg.id ? 'text-white' : 'text-gray-900'
+                                          }`}>
+                                            {pkg.name}
+                                          </div>
+                                          {pkg.type === 'exclusive' ? (
+                                            <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-bold ${
+                                              selectedPackage?.id === pkg.id
+                                                ? 'bg-white/20 text-white'
+                                                : 'bg-gradient-to-r from-orange-500 to-red-500 text-white'
+                                            }`}>
+                                              🔥 EXCLUSIEF
+                                            </span>
+                                          ) : (
+                                            <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-bold ${
+                                              selectedPackage?.id === pkg.id
+                                                ? 'bg-white/20 text-white'
+                                                : 'bg-blue-500 text-white'
+                                            }`}>
+                                              💰 GEDEELD
+                                            </span>
+                                          )}
+                                        </div>
+                                        {selectedPackage?.id === pkg.id && (
+                                          <CheckCircleIcon className="w-6 h-6 text-white flex-shrink-0" />
+                                        )}
+                                      </div>
+                                      
+                                      <div className={`text-2xl font-bold mb-2 ${
+                                        selectedPackage?.id === pkg.id ? 'text-white' : 'text-orange-600'
                                       }`}>
-                                        {pkg.name}
-                                      </h4>
-                                      <p className={`text-sm mb-4 ${
+                                        {pkg.type === 'exclusive' && pkg.pricingTiers 
+                                          ? `Vanaf ${formatPrice(pkg.pricingTiers[0].pricePerLead)}/lead`
+                                          : formatPrice(pkg.price * pkg.quantity)
+                                        }
+                                      </div>
+                                      
+                                      <p className={`text-sm ${
                                         selectedPackage?.id === pkg.id ? 'text-white/90' : 'text-gray-600'
                                       }`}>
                                         {pkg.description}
                                       </p>
-
-                                      {/* Price */}
-                                      <div className="mb-4">
-                                        {pkg.type === 'exclusive' && pkg.pricingTiers ? (
-                                          <div className="space-y-1">
-                                            <div className={`text-lg font-bold ${
-                                              selectedPackage?.id === pkg.id ? 'text-white' : 'text-orange-600'
-                                            }`}>
-                                              Vanaf {formatPrice(pkg.pricingTiers[0].pricePerLead)}/lead
-                                            </div>
-                                            <div className={`text-xs ${
-                                              selectedPackage?.id === pkg.id ? 'text-white/80' : 'text-gray-500'
-                                            }`}>
-                                              Staffelprijzen beschikbaar
-                                            </div>
-                                          </div>
-                                        ) : (
-                                          <>
-                                            <div className={`text-2xl font-bold ${
-                                              selectedPackage?.id === pkg.id ? 'text-white' : 'text-orange-600'
-                                            }`}>
-                                              {formatPrice(pkg.price * pkg.quantity)}
-                                            </div>
-                                            <div className={`text-xs ${
-                                              selectedPackage?.id === pkg.id ? 'text-white/80' : 'text-gray-500'
-                                            }`}>
-                                              {formatPrice(pkg.price)} per lead × {pkg.quantity} leads
-                                            </div>
-                                          </>
-                                        )}
-                                      </div>
-
-                                      {/* Features */}
-                                      <ul className="space-y-2">
-                                        {pkg.features.slice(0, 3).map((feature, idx) => (
-                                          <li key={idx} className="flex items-start gap-2">
-                                            <CheckCircleIcon className={`w-5 h-5 flex-shrink-0 mt-0.5 ${
-                                              selectedPackage?.id === pkg.id ? 'text-white' : 'text-green-500'
-                                            }`} />
-                                            <span className={`text-xs ${
-                                              selectedPackage?.id === pkg.id ? 'text-white' : 'text-gray-700'
-                                            }`}>
-                                              {feature}
-                                            </span>
-                                          </li>
-                                        ))}
-                                      </ul>
-
-                                      {/* Selection Indicator */}
-                                      {selectedPackage?.id === pkg.id && (
-                                        <div className="mt-4 flex items-center gap-2 text-white font-medium text-sm">
-                                          <CheckCircleIcon className="w-5 h-5" />
-                                          Geselecteerd
-                                        </div>
-                                      )}
-                                    </div>
-                                  </motion.div>
-                                ))}
+                                    </motion.button>
+                                  ))}
+                                </div>
                               </div>
-                            </motion.div>
+                            </div>
                           )}
 
                           {/* Step 3: Quantity & Confirmation */}
                           {selectedPackage && (
-                            <motion.div
-                              initial={{ opacity: 0, y: 20 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              id="quantity-section"
-                              className="bg-white rounded-2xl shadow-lg p-6 border-2 border-gray-100"
-                            >
-                              <div className="flex items-center gap-2 mb-4">
-                                <div className="w-8 h-8 bg-gradient-to-br from-orange-500 to-red-500 rounded-lg flex items-center justify-center text-white font-bold text-sm shadow-md">
-                                  3
-                                </div>
-                                <h3 className="text-xl font-bold text-gray-900">
-                                  {selectedPackage.type === 'exclusive' ? 'Kies aantal leads' : 'Bevestig je bestelling'}
-                                </h3>
-                              </div>
-
-                              {selectedPackage.type === 'exclusive' ? (
-                                <div className="space-y-4">
-                                  <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                                      Aantal exclusieve leads (minimum {selectedPackage.minQuantity || 30})
-                                    </label>
-                                    <div className="flex items-center gap-3">
-                                      <motion.button
-                                        whileTap={{ scale: 0.95 }}
-                                        onClick={() => setQuantity(Math.max((selectedPackage.minQuantity || 30), quantity - 10))}
-                                        className="p-3 sm:p-4 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors shadow-sm hover:shadow-md"
-                                      >
-                                        <span className="text-xl sm:text-2xl font-bold">−</span>
-                                      </motion.button>
-                                      <input
-                                        type="number"
-                                        min={selectedPackage.minQuantity || 30}
-                                        value={quantity}
-                                        onChange={(e) => setQuantity(Math.max(selectedPackage.minQuantity || 30, parseInt(e.target.value) || 0))}
-                                        className="flex-1 px-4 py-3 sm:py-4 text-2xl sm:text-3xl font-bold text-center text-gray-900 border-2 border-orange-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 shadow-sm"
-                                      />
-                                      <motion.button
-                                        whileTap={{ scale: 0.95 }}
-                                        onClick={() => setQuantity(quantity + 10)}
-                                        className="p-3 sm:p-4 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white rounded-xl transition-colors shadow-md hover:shadow-lg"
-                                      >
-                                        <span className="text-xl sm:text-2xl font-bold">+</span>
-                                      </motion.button>
-                                    </div>
+                            <div id="quantity-section">
+                              {/* Desktop: Card wrapper */}
+                              <div className="hidden lg:block bg-white rounded-2xl shadow-lg p-6">
+                                <div className="flex items-center gap-2 mb-4">
+                                  <div className="w-8 h-8 bg-gradient-to-br from-orange-500 to-red-500 rounded-lg flex items-center justify-center text-white font-bold text-sm">
+                                    3
                                   </div>
-
-                                  {/* Tier Info */}
-                                  {pricing && (
-                                    <motion.div
-                                      initial={{ scale: 0.95 }}
-                                      animate={{ scale: 1 }}
-                                      className="p-4 bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-xl"
-                                    >
-                                      <div className="flex items-center gap-2 text-blue-700 text-sm font-medium">
-                                        <SparklesIcon className="w-5 h-5" />
-                                        {pricing.tierInfo}
-                                      </div>
-                                    </motion.div>
-                                  )}
+                                  <h3 className="text-xl font-bold text-gray-900">
+                                    {selectedPackage.type === 'exclusive' ? 'Kies aantal leads' : 'Bevestig je bestelling'}
+                                  </h3>
                                 </div>
-                              ) : (
-                                <div className="p-6 bg-gradient-to-br from-blue-50 to-purple-50 border-2 border-blue-200 rounded-xl">
-                                  <div className="flex items-center justify-between">
+
+                                {selectedPackage.type === 'exclusive' ? (
+                                  <div className="space-y-4">
                                     <div>
-                                      <div className="text-sm font-medium text-gray-700">Vaste batch grootte</div>
-                                      <div className="text-3xl font-bold text-gray-900 mt-1">{selectedPackage.quantity} leads</div>
-                                      <div className="text-xs text-gray-600 mt-1">Perfect om mee te starten</div>
+                                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Aantal exclusieve leads (minimum {selectedPackage.minQuantity || 30})
+                                      </label>
+                                      <div className="flex items-center gap-3">
+                                        <button
+                                          onClick={() => setQuantity(Math.max((selectedPackage.minQuantity || 30), quantity - 10))}
+                                          className="p-3 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                                        >
+                                          <span className="text-xl font-bold">−</span>
+                                        </button>
+                                        <input
+                                          type="number"
+                                          min={selectedPackage.minQuantity || 30}
+                                          value={quantity}
+                                          onChange={(e) => setQuantity(Math.max(selectedPackage.minQuantity || 30, parseInt(e.target.value) || 0))}
+                                          className="flex-1 px-4 py-3 text-2xl font-bold text-center text-gray-900 border-2 border-orange-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                                        />
+                                        <button
+                                          onClick={() => setQuantity(quantity + 10)}
+                                          className="p-3 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                                        >
+                                          <span className="text-xl font-bold">+</span>
+                                        </button>
+                                      </div>
                                     </div>
-                                    <CheckCircleIcon className="w-16 h-16 text-blue-500" />
-                                  </div>
-                                </div>
-                              )}
 
-                              {/* Trust Badges */}
-                              <div className="grid grid-cols-3 gap-4 mt-6 pt-6 border-t border-gray-200">
-                                <div className="text-center">
-                                  <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-2">
-                                    <TruckIcon className="w-5 h-5 text-green-600" />
+                                    {/* Tier Info */}
+                                    {pricing && (
+                                      <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl">
+                                        <div className="flex items-center gap-2 text-blue-700 text-sm font-medium">
+                                          <SparklesIcon className="w-5 h-5" />
+                                          {pricing.tierInfo}
+                                        </div>
+                                      </div>
+                                    )}
                                   </div>
-                                  <div className="text-xs font-medium text-gray-900">15 Min Levering</div>
-                                </div>
-                                <div className="text-center">
-                                  <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-2">
-                                    <ShieldCheckIcon className="w-5 h-5 text-blue-600" />
+                                ) : (
+                                  <div className="p-4 bg-gradient-to-br from-blue-50 to-purple-50 border-2 border-blue-200 rounded-xl">
+                                    <div className="flex items-center justify-between">
+                                      <div>
+                                        <div className="text-sm font-medium text-gray-700">Vaste batch grootte</div>
+                                        <div className="text-2xl font-bold text-gray-900">{selectedPackage.quantity} leads</div>
+                                      </div>
+                                      <CheckCircleIcon className="w-12 h-12 text-blue-500" />
+                                    </div>
                                   </div>
-                                  <div className="text-xs font-medium text-gray-900">100% Veilig</div>
-                                </div>
-                                <div className="text-center">
-                                  <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-2">
-                                    <SparklesIcon className="w-5 h-5 text-purple-600" />
+                                )}
+
+                                {/* Trust Badges */}
+                                <div className="grid grid-cols-3 gap-4 mt-6 pt-6 border-t border-gray-200">
+                                  <div className="text-center">
+                                    <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-2">
+                                      <TruckIcon className="w-5 h-5 text-green-600" />
+                                    </div>
+                                    <div className="text-xs font-medium text-gray-900">15 Min Levering</div>
                                   </div>
-                                  <div className="text-xs font-medium text-gray-900">Verse Leads</div>
+                                  <div className="text-center">
+                                    <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-2">
+                                      <ShieldCheckIcon className="w-5 h-5 text-blue-600" />
+                                    </div>
+                                    <div className="text-xs font-medium text-gray-900">100% Veilig</div>
+                                  </div>
+                                  <div className="text-center">
+                                    <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-2">
+                                      <SparklesIcon className="w-5 h-5 text-purple-600" />
+                                    </div>
+                                    <div className="text-xs font-medium text-gray-900">Verse Leads</div>
+                                  </div>
                                 </div>
                               </div>
-                            </motion.div>
+
+                              {/* Mobile: Simplified, no card wrapper */}
+                              <div className="lg:hidden">
+                                <div className="flex items-center gap-2 mb-4">
+                                  <div className="w-8 h-8 bg-gradient-to-br from-orange-500 to-red-500 rounded-lg flex items-center justify-center text-white font-bold text-sm">
+                                    3
+                                  </div>
+                                  <h3 className="text-lg font-bold text-gray-900">
+                                    {selectedPackage.type === 'exclusive' ? 'Kies aantal' : 'Bevestigen'}
+                                  </h3>
+                                </div>
+
+                                {selectedPackage.type === 'exclusive' ? (
+                                  <div className="bg-white rounded-xl shadow-md p-5 space-y-4">
+                                    <div>
+                                      <label className="block text-sm font-medium text-gray-700 mb-3">
+                                        Minimum {selectedPackage.minQuantity || 30} leads
+                                      </label>
+                                      <div className="flex items-center gap-3">
+                                        <button
+                                          onClick={() => setQuantity(Math.max((selectedPackage.minQuantity || 30), quantity - 10))}
+                                          className="w-12 h-12 bg-gray-100 active:bg-gray-200 rounded-xl transition-colors flex items-center justify-center"
+                                        >
+                                          <span className="text-2xl font-bold text-gray-700">−</span>
+                                        </button>
+                                        <input
+                                          type="number"
+                                          min={selectedPackage.minQuantity || 30}
+                                          value={quantity}
+                                          onChange={(e) => setQuantity(Math.max(selectedPackage.minQuantity || 30, parseInt(e.target.value) || 0))}
+                                          className="flex-1 px-4 py-3 text-3xl font-bold text-center text-gray-900 border-2 border-orange-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500"
+                                        />
+                                        <button
+                                          onClick={() => setQuantity(quantity + 10)}
+                                          className="w-12 h-12 bg-gray-100 active:bg-gray-200 rounded-xl transition-colors flex items-center justify-center"
+                                        >
+                                          <span className="text-2xl font-bold text-gray-700">+</span>
+                                        </button>
+                                      </div>
+                                    </div>
+
+                                    {/* Tier Info */}
+                                    {pricing && (
+                                      <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                                        <div className="flex items-center gap-2 text-blue-700 text-xs font-medium">
+                                          <SparklesIcon className="w-4 h-4" />
+                                          {pricing.tierInfo}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <div className="bg-gradient-to-br from-blue-50 to-purple-50 border-2 border-blue-200 rounded-xl p-5">
+                                    <div className="flex items-center justify-between">
+                                      <div>
+                                        <div className="text-sm font-medium text-gray-700">Vaste batch</div>
+                                        <div className="text-3xl font-bold text-gray-900">{selectedPackage.quantity} leads</div>
+                                      </div>
+                                      <CheckCircleIcon className="w-12 h-12 text-blue-500" />
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Trust Badges - Mobile */}
+                                <div className="grid grid-cols-3 gap-3 mt-4">
+                                  <div className="text-center bg-white rounded-lg p-3 shadow-sm">
+                                    <TruckIcon className="w-6 h-6 text-green-600 mx-auto mb-1" />
+                                    <div className="text-xs font-medium text-gray-900">15 Min</div>
+                                  </div>
+                                  <div className="text-center bg-white rounded-lg p-3 shadow-sm">
+                                    <ShieldCheckIcon className="w-6 h-6 text-blue-600 mx-auto mb-1" />
+                                    <div className="text-xs font-medium text-gray-900">Veilig</div>
+                                  </div>
+                                  <div className="text-center bg-white rounded-lg p-3 shadow-sm">
+                                    <SparklesIcon className="w-6 h-6 text-purple-600 mx-auto mb-1" />
+                                    <div className="text-xs font-medium text-gray-900">Vers</div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
                           )}
                         </>
                       )}
@@ -823,70 +905,34 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
 
                               {/* Checkout Button */}
                               {userPermissions?.canCheckout !== false ? (
-                                <motion.button
+                                <button
                                   onClick={handleCheckout}
                                   disabled={!selectedPackage || isProcessing}
-                                  whileHover={{ scale: 1.02 }}
-                                  whileTap={{ scale: 0.98 }}
-                                  className="w-full py-4 sm:py-5 bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 text-white rounded-xl font-bold transition-all shadow-xl hover:shadow-2xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-base sm:text-lg relative overflow-hidden group"
+                                  className="w-full py-4 bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 text-white rounded-xl font-bold transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                 >
-                                  <div className="absolute inset-0 bg-gradient-to-r from-orange-400 to-red-400 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                                  <div className="relative flex items-center gap-2">
-                                    {isProcessing ? (
-                                      <>
-                                        <motion.div
-                                          animate={{ rotate: 360 }}
-                                          transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                                        >
-                                          ⏳
-                                        </motion.div>
-                                        <span>Even geduld...</span>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <CreditCardIcon className="w-6 h-6" />
-                                        <span>Afronden en betalen</span>
-                                        <motion.span
-                                          animate={{ x: [0, 5, 0] }}
-                                          transition={{ duration: 1, repeat: Infinity }}
-                                        >
-                                          →
-                                        </motion.span>
-                                      </>
-                                    )}
-                                  </div>
-                                </motion.button>
+                                  {isProcessing ? (
+                                    <>⏳ Even geduld...</>
+                                  ) : (
+                                    <>
+                                      <CreditCardIcon className="w-5 h-5" />
+                                      Doorgaan naar betalen
+                                    </>
+                                  )}
+                                </button>
                               ) : (
                                 <button
                                   disabled
-                                  className="w-full py-4 sm:py-5 bg-gray-400 text-gray-600 rounded-xl font-bold cursor-not-allowed"
+                                  className="w-full py-4 bg-gray-400 text-gray-600 rounded-xl font-bold cursor-not-allowed"
                                 >
                                   🔒 Alleen eigenaren kunnen bestellen
                                 </button>
                               )}
 
-                              {/* Security Info */}
-                              <div className="flex items-center justify-center gap-2 text-xs text-gray-500">
-                                <ShieldCheckIcon className="w-4 h-4 text-green-500" />
-                                <span>Beveiligde betaling via Stripe • SSL encrypted</span>
+                              {/* Payment Info */}
+                              <div className="text-xs text-center text-gray-500">
+                                <ShieldCheckIcon className="w-4 h-4 inline mr-1" />
+                                Beveiligde betaling via Stripe
                               </div>
-
-                              {/* Urgency Message */}
-                              <motion.div
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                className="p-3 bg-orange-50 border border-orange-200 rounded-lg"
-                              >
-                                <div className="flex items-center gap-2 text-xs sm:text-sm text-orange-700">
-                                  <motion.span
-                                    animate={{ scale: [1, 1.2, 1] }}
-                                    transition={{ duration: 2, repeat: Infinity }}
-                                  >
-                                    ⚡
-                                  </motion.span>
-                                  <span className="font-medium">Nog maar {Math.floor(Math.random() * 15) + 5} leads beschikbaar deze week</span>
-                                </div>
-                              </motion.div>
                             </div>
                           </motion.div>
                         </div>
@@ -961,40 +1007,22 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
                   </AnimatePresence>
 
                   {/* CTA Button */}
-                  <div className="p-4 pb-safe">
+                  <div className="p-4">
                     {userPermissions?.canCheckout !== false ? (
-                      <motion.button
+                      <button
                         onClick={handleCheckout}
                         disabled={!selectedPackage || isProcessing}
-                        whileTap={{ scale: 0.95 }}
-                        className="w-full py-4 bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 text-white rounded-xl font-bold transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-lg relative overflow-hidden group"
+                        className="w-full py-4 bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 text-white rounded-xl font-bold transition-all shadow-lg active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                       >
-                        <div className="absolute inset-0 bg-gradient-to-r from-orange-400 to-red-400 opacity-0 group-active:opacity-100 transition-opacity"></div>
-                        <div className="relative flex items-center gap-2">
-                          {isProcessing ? (
-                            <>
-                              <motion.div
-                                animate={{ rotate: 360 }}
-                                transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                              >
-                                ⏳
-                              </motion.div>
-                              <span>Even geduld...</span>
-                            </>
-                          ) : (
-                            <>
-                              <CreditCardIcon className="w-6 h-6" />
-                              <span>Afronden en betalen</span>
-                              <motion.span
-                                animate={{ x: [0, 5, 0] }}
-                                transition={{ duration: 1, repeat: Infinity }}
-                              >
-                                →
-                              </motion.span>
-                            </>
-                          )}
-                        </div>
-                      </motion.button>
+                        {isProcessing ? (
+                          <>⏳ Even geduld...</>
+                        ) : (
+                          <>
+                            <CreditCardIcon className="w-5 h-5" />
+                            Doorgaan naar betalen
+                          </>
+                        )}
+                      </button>
                     ) : (
                       <button
                         disabled
