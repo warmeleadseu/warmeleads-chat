@@ -46,24 +46,24 @@ export default function AnalyticsPage() {
   const [timeRange, setTimeRange] = useState('7d');
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        className="flex justify-between items-center"
+        className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 sm:gap-4"
       >
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Analytics Dashboard</h1>
-          <p className="text-gray-600 mt-1">
-            Inzichten in website performance en lead generatie
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Analytics Dashboard</h1>
+          <p className="text-xs sm:text-sm text-gray-600 mt-1">
+            Inzichten in website performance
           </p>
         </div>
         <select
           value={timeRange}
           onChange={(e) => setTimeRange(e.target.value)}
-          className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-pink focus:border-brand-pink"
+          className="px-3 sm:px-4 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-pink focus:border-brand-pink"
         >
           <option value="1d">Vandaag</option>
           <option value="7d">Laatste 7 dagen</option>
@@ -73,26 +73,26 @@ export default function AnalyticsPage() {
       </motion.div>
 
       {/* Overview Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
         <motion.div
-          className="admin-card"
+          className="admin-card p-4 sm:p-6"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.1 }}
         >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Totaal Bezoekers</p>
-              <p className="text-2xl font-bold text-gray-900">{analyticsData.overview.totalVisitors.toLocaleString()}</p>
+              <p className="text-xs sm:text-sm font-medium text-gray-600">Totaal Bezoekers</p>
+              <p className="text-xl sm:text-2xl font-bold text-gray-900">{analyticsData.overview.totalVisitors.toLocaleString()}</p>
             </div>
-            <div className="p-3 rounded-lg bg-blue-500">
-              <UsersIcon className="w-6 h-6 text-white" />
+            <div className="p-2 sm:p-3 rounded-lg bg-blue-500 flex-shrink-0">
+              <UsersIcon className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
             </div>
           </div>
-          <div className="mt-4 flex items-center">
-            <ArrowTrendingUpIcon className="w-4 h-4 text-green-500 mr-1" />
-            <span className="text-green-600 text-sm font-medium">{analyticsData.overview.trends.visitors}</span>
-            <span className="text-gray-500 text-sm ml-1">vs vorige periode</span>
+          <div className="mt-3 sm:mt-4 flex items-center">
+            <ArrowTrendingUpIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-green-500 mr-1" />
+            <span className="text-green-600 text-xs sm:text-sm font-medium">{analyticsData.overview.trends.visitors}</span>
+            <span className="text-gray-500 text-xs sm:text-sm ml-1">vs vorige periode</span>
           </div>
         </motion.div>
 

@@ -122,19 +122,19 @@ function CustomerDetailModal({ customer, onClose, onRefresh }: { customer: Custo
         <div className="p-4 md:p-6 overflow-y-auto flex-1">
           {activeTab === 'info' && (
             <div className="space-y-6">
-              <div className="grid grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                 <div>
-                  <h3 className="font-semibold text-gray-900 mb-3">Contact Info</h3>
-                  <div className="space-y-2 text-sm">
+                  <h3 className="font-semibold text-gray-900 mb-3 text-sm sm:text-base">Contact Info</h3>
+                  <div className="space-y-2 text-xs sm:text-sm">
                     <div><strong>Naam:</strong> {customer.name || 'Niet opgegeven'}</div>
-                    <div><strong>Email:</strong> {customer.email}</div>
+                    <div className="truncate"><strong>Email:</strong> {customer.email}</div>
                     <div><strong>Telefoon:</strong> {customer.phone || 'Niet opgegeven'}</div>
                     <div><strong>Bedrijf:</strong> {customer.company || 'Niet opgegeven'}</div>
                   </div>
                 </div>
                 <div>
-                  <h3 className="font-semibold text-gray-900 mb-3">Statistieken</h3>
-                  <div className="space-y-2 text-sm">
+                  <h3 className="font-semibold text-gray-900 mb-3 text-sm sm:text-base">Statistieken</h3>
+                  <div className="space-y-2 text-xs sm:text-sm">
                     <div><strong>Status:</strong> {customer.status}</div>
                     <div><strong>Bron:</strong> {customer.source}</div>
                     <div><strong>Chat berichten:</strong> {customer.chatHistory.length}</div>
@@ -687,28 +687,28 @@ export default function CustomersPage() {
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex justify-between items-center"
+        className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 sm:gap-4"
       >
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Klanten</h1>
-          <p className="text-gray-600 mt-1">
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Klanten</h1>
+          <p className="text-xs sm:text-sm text-gray-600 mt-1">
             {customers.length} totaal • {customers.filter(c => c.hasAccount).length} met account • {customers.filter(c => c.openInvoices.length > 0).length} met open facturen
           </p>
         </div>
         
-        <div className="flex gap-3">
+        <div className="flex gap-2 sm:gap-3">
           <button
             onClick={() => {
               // Force reload to sync auth data
               window.location.reload();
             }}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+            className="bg-blue-600 hover:bg-blue-700 text-white px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors"
           >
-            🔄 Sync accounts
+            🔄 Sync
           </button>
           
           <button
@@ -833,13 +833,13 @@ export default function CustomersPage() {
         transition={{ delay: 0.1 }}
         className="relative"
       >
-        <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+        <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5 text-gray-400" />
         <input
           type="text"
-          placeholder="Zoek klanten op naam, email of bedrijf..."
+          placeholder="Zoek klanten..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-purple focus:border-brand-purple"
+          className="w-full pl-9 sm:pl-10 pr-3 sm:pr-4 py-2 sm:py-3 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-purple focus:border-brand-purple"
         />
       </motion.div>
 

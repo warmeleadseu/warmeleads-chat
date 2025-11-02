@@ -56,16 +56,16 @@ export default function AdminLayout({
   // Show admin interface if authenticated
   if (isAuthenticated) {
     return (
-      <div className="min-h-screen bg-gray-100">
-        <div className="flex">
+      <div className="min-h-screen bg-gray-50 lg:bg-gray-100">
+        <div className="flex h-screen overflow-hidden">
           {/* Sidebar */}
           <AdminSidebar />
           
           {/* Main Content */}
-          <div className="flex-1 flex flex-col">
-            {/* Add left padding on mobile to account for hamburger */}
+          <div className="flex-1 flex flex-col overflow-hidden">
             <AdminHeader />
-            <main className="flex-1 p-4 lg:p-6 pt-16 lg:pt-6">
+            {/* Mobile: Add padding-top for fixed hamburger menu */}
+            <main className="flex-1 overflow-y-auto p-3 sm:p-4 lg:p-6 pt-16 lg:pt-4">
               {children}
             </main>
           </div>
