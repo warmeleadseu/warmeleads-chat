@@ -14,7 +14,6 @@ import {
   LockClosedIcon,
   ChevronRightIcon,
   ChevronDownIcon,
-  TruckIcon,
   CreditCardIcon
 } from '@heroicons/react/24/outline';
 import { leadPackages, formatPrice, calculatePackagePrice, type LeadPackage } from '@/lib/stripe';
@@ -719,22 +718,22 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
                                 {/* Trust Badges */}
                                 <div className="grid grid-cols-3 gap-4 mt-6 pt-6 border-t border-gray-200">
                                   <div className="text-center">
-                                    <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-2">
-                                      <TruckIcon className="w-5 h-5 text-green-600" />
-                                    </div>
-                                    <div className="text-xs font-medium text-gray-900">15 Min Levering</div>
-                                  </div>
-                                  <div className="text-center">
                                     <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-2">
                                       <ShieldCheckIcon className="w-5 h-5 text-blue-600" />
                                     </div>
-                                    <div className="text-xs font-medium text-gray-900">100% Veilig</div>
+                                    <div className="text-xs font-medium text-gray-900">Kwaliteit Gegarandeerd</div>
+                                  </div>
+                                  <div className="text-center">
+                                    <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-2">
+                                      <BoltIcon className="w-5 h-5 text-green-600" />
+                                    </div>
+                                    <div className="text-xs font-medium text-gray-900">Actieve Koopintentie</div>
                                   </div>
                                   <div className="text-center">
                                     <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-2">
                                       <SparklesIcon className="w-5 h-5 text-purple-600" />
                                     </div>
-                                    <div className="text-xs font-medium text-gray-900">Verse Leads</div>
+                                    <div className="text-xs font-medium text-gray-900">100% Exclusief</div>
                                   </div>
                                 </div>
                               </div>
@@ -810,16 +809,16 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
                                 {/* Trust Badges - Mobile */}
                                 <div className="grid grid-cols-3 gap-3 mt-4">
                                   <div className="text-center bg-white rounded-lg p-3 shadow-sm">
-                                    <TruckIcon className="w-6 h-6 text-green-600 mx-auto mb-1" />
-                                    <div className="text-xs font-medium text-gray-900">15 Min</div>
+                                    <ShieldCheckIcon className="w-6 h-6 text-blue-600 mx-auto mb-1" />
+                                    <div className="text-xs font-medium text-gray-900">Gegarandeerd</div>
                                   </div>
                                   <div className="text-center bg-white rounded-lg p-3 shadow-sm">
-                                    <ShieldCheckIcon className="w-6 h-6 text-blue-600 mx-auto mb-1" />
-                                    <div className="text-xs font-medium text-gray-900">Veilig</div>
+                                    <BoltIcon className="w-6 h-6 text-green-600 mx-auto mb-1" />
+                                    <div className="text-xs font-medium text-gray-900">Koopintentie</div>
                                   </div>
                                   <div className="text-center bg-white rounded-lg p-3 shadow-sm">
                                     <SparklesIcon className="w-6 h-6 text-purple-600 mx-auto mb-1" />
-                                    <div className="text-xs font-medium text-gray-900">Vers</div>
+                                    <div className="text-xs font-medium text-gray-900">Exclusief</div>
                                   </div>
                                 </div>
                               </div>
