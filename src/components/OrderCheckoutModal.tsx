@@ -15,7 +15,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { leadPackages, formatPrice, calculatePackagePrice, type LeadPackage } from '@/lib/stripe';
 import { loadStripe } from '@stripe/stripe-js';
-import { useAuthStore } from '@/lib/auth';
+import { useAuthStore, authenticatedFetch } from '@/lib/auth';
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || '');
 
@@ -114,8 +114,8 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
       // Calculate final price
       const pricing = calculatePackagePrice(selectedPackage, quantity);
       
-      // Create checkout session
-      const response = await fetch('/api/create-checkout-session', {
+      // Create checkout session with authentication
+      const response = await authenticatedFetch('/api/create-checkout-session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

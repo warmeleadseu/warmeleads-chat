@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import { loadStripe } from '@stripe/stripe-js';
 import { PricingCalculator } from '@/lib/pricing';
+import { authenticatedFetch } from '@/lib/auth';
 
 interface StripeCheckoutProps {
   isOpen: boolean;
@@ -103,8 +104,8 @@ export function StripeCheckout({
 
       setLoadingMessage('Stripe checkout aanmaken...');
 
-      // Create Stripe Checkout Session
-      const response = await fetch('/api/create-checkout-session', {
+      // Create Stripe Checkout Session with authentication
+      const response = await authenticatedFetch('/api/create-checkout-session', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
