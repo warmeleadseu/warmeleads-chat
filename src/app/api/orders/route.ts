@@ -145,10 +145,49 @@ export const POST = withAuth(async (req: NextRequest, user: AuthenticatedUser) =
 
     const supabase = createServerClient();
 
-    // Insert order into Supabase
+    // Look up customer_id from customers table based on email
+    let customerId: string | null = null;
+    try {
+      const { data: customer, error: customerError } = await supabase
+        .from('customers')
+        .select('id')
+        .eq('email', order.customerEmail)
+        .single();
+      
+      if (customer && !customerError) {
+        customerId = customer.id;
+        console.log('✅ Found customer_id for order:', customerId);
+      } else {
+        console.warn('⚠️ Customer not found in customers table for email:', order.customerEmail);
+        // Try to create customer if not exists
+        const { data: newCustomer, error: createError } = await supabase
+          .from('customers')
+          .insert({
+            email: order.customerEmail,
+            name: order.customerName,
+            company: order.customerCompany || null,
+            source: 'checkout',
+            status: 'active',
+          })
+          .select('id')
+          .single();
+        
+        if (newCustomer && !createError) {
+          customerId = newCustomer.id;
+          console.log('✅ Created new customer for order:', customerId);
+        } else {
+          console.error('❌ Failed to create customer:', createError);
+        }
+      }
+    } catch (lookupError) {
+      console.warn('⚠️ Error looking up customer:', lookupError);
+    }
+
+    // Insert order into Supabase with customer_id
     const { data: newOrder, error } = await supabase
       .from('orders')
       .insert({
+        customer_id: customerId, // Link to customer!
         order_number: order.orderNumber,
         customer_email: order.customerEmail,
         customer_name: order.customerName,
