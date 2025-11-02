@@ -18,7 +18,207 @@ export interface BlogArticle {
 }
 
 export const blogArticles: BlogArticle[] = [
-  // Oktober 2025 - Week 2 (NIEUWE ARTIKELEN VOOR KLANTACQUISITIE)
+  // November 2025 - Week 1 (NIEUWE ARTIKELEN Q4 2025)
+  {
+    slug: "warmtepomp-installateurs-winter-2025",
+    title: "Warmtepomp Installateurs: Waarom Winter 2025 Jouw Beste Kwartaal Wordt",
+    excerpt: "De vraag naar warmtepompen explodeert deze winter. Ontdek waarom november-januari 2025 het perfecte moment is om te groeien en hoe je klaar bent voor de stormloop.",
+    date: "2 november 2025",
+    category: "Markttrends",
+    readTime: "10 min",
+    image: "🌡️",
+    keywords: ["warmtepomp installateur", "warmtepomp winter 2025", "warmtepomp vraag", "hybride warmtepomp", "installateur groei"],
+    author: "WarmeLeads Expert Team"
+  },
+  {
+    slug: "thuisbatterij-subsidie-november-2025",
+    title: "Thuisbatterij Subsidie 2025: Laatste Kans Voor €3.000+ Korting",
+    excerpt: "ISDE subsidie voor thuisbatterijen sluit binnenkort! Alles wat installateurs en klanten nu moeten weten over aanvragen, voorwaarden en deadlines.",
+    date: "1 november 2025",
+    category: "Subsidies",
+    readTime: "8 min",
+    image: "💰",
+    keywords: ["thuisbatterij subsidie", "ISDE subsidie 2025", "batterij opslag subsidie", "thuisbatterij korting", "subsidie aanvragen"],
+    author: "WarmeLeads Expert Team"
+  },
+  {
+    slug: "zonnepanelen-terugverdientijd-2025",
+    title: "Zonnepanelen Terugverdientijd 2025: Realistisch Rekenvoorbeeld",
+    excerpt: "Hoelang duurt het voordat zonnepanelen zich terugverdienen in 2025? Complete berekening met huidige energieprijzen, salderingsregeling en BTW-voordeel.",
+    date: "31 oktober 2025",
+    category: "ROI & Rendement",
+    readTime: "12 min",
+    image: "📊",
+    keywords: ["zonnepanelen terugverdientijd", "zonnepanelen rendement 2025", "salderingsregeling", "energieprijzen 2025", "zonnepanelen berekenen"],
+    author: "WarmeLeads Expert Team"
+  },
+  {
+    slug: "energiecontract-dynamisch-thuisbatterij",
+    title: "Dynamisch Energiecontract + Thuisbatterij: €2.400 Besparen Per Jaar",
+    excerpt: "Met een dynamisch energiecontract en thuisbatterij bespaar je enorm. Zo werkt het, wat het oplevert en of het voor jou geschikt is.",
+    date: "30 oktober 2025",
+    category: "Besparen",
+    readTime: "11 min",
+    image: "⚡",
+    keywords: ["dynamisch energiecontract", "thuisbatterij besparing", "dynamische stroomprijs", "batterij opslag voordelen", "energiekosten verlagen"],
+    author: "WarmeLeads Expert Team"
+  },
+  {
+    slug: "lead-conversie-verhogen-installateur",
+    title: "Lead Conversie Verhogen: Van 15% naar 45% in 3 Maanden",
+    excerpt: "Krijg je genoeg leads maar weinig opdrachten? Ontdek hoe succesvolle installateurs hun conversie drastisch verhogen met deze 8 tactieken.",
+    date: "29 oktober 2025",
+    category: "Sales & Conversie",
+    readTime: "13 min",
+    image: "📈",
+    keywords: ["lead conversie verhogen", "conversie optimalisatie", "leads omzetten klanten", "sales technieken installateur", "offertes winnen"],
+    author: "WarmeLeads Expert Team"
+  },
+  {
+    slug: "btw-teruggave-zonnepanelen-2025",
+    title: "BTW Teruggave Zonnepanelen 2025: €2.000+ Terug in 3 Stappen",
+    excerpt: "Krijg als particulier de volledige BTW terug op je zonnepanelen. Complete handleiding met voorbeelden, formulieren en veelgemaakte fouten.",
+    date: "28 oktober 2025",
+    category: "Belasting & Regelgeving",
+    readTime: "9 min",
+    image: "💶",
+    keywords: ["btw teruggave zonnepanelen", "btw terugvragen zonnepanelen", "belastingdienst zonnepanelen", "btw aanvragen 2025"],
+    author: "WarmeLeads Expert Team"
+  },
+  {
+    slug: "beste-thuisbatterij-merken-2025",
+    title: "Beste Thuisbatterij Merken 2025: Top 7 Vergeleken",
+    excerpt: "Welke thuisbatterij is het beste? Vergelijking van Tesla Powerwall, Enphase, BYD, LG en meer op prijs, capaciteit, garantie en klantreviews.",
+    date: "27 oktober 2025",
+    category: "Product Reviews",
+    readTime: "14 min",
+    image: "🔋",
+    keywords: ["beste thuisbatterij", "thuisbatterij vergelijken", "Tesla Powerwall alternatief", "thuisbatterij merken", "batterij opslag test"],
+    author: "WarmeLeads Expert Team"
+  },
+  {
+    slug: "google-mijn-bedrijf-installateur",
+    title: "Google Mijn Bedrijf Voor Installateurs: 50+ Lokale Leads Per Maand",
+    excerpt: "Google Mijn Bedrijf is de #1 bron voor lokale leads. Optimaliseer je profiel en trek automatisch klanten aan in je regio.",
+    date: "26 oktober 2025",
+    category: "Lokale Marketing",
+    readTime: "10 min",
+    image: "📍",
+    keywords: ["google mijn bedrijf", "lokale seo installateur", "google maps ranking", "lokale leads", "installateur vindbaar"],
+    author: "WarmeLeads Expert Team"
+  },
+  {
+    slug: "klantreviews-google-verbeteren",
+    title: "Meer en Betere Google Reviews: 5x Zoveel Klanten",
+    excerpt: "Reviews zijn cruciaal voor nieuwe klanten. Leer hoe je systematisch 5-sterren reviews verzamelt en negatieve feedback ombuigt.",
+    date: "25 oktober 2025",
+    category: "Reputatiemanagement",
+    readTime: "8 min",
+    image: "⭐",
+    keywords: ["google reviews", "klantbeoordelingen", "online reputatie", "reviews vragen klanten", "negatieve reviews"],
+    author: "WarmeLeads Expert Team"
+  },
+  {
+    slug: "salderingsregeling-afbouw-2025",
+    title: "Afbouw Salderingsregeling 2025-2031: Dit Betekent Het Voor Jou",
+    excerpt: "De salderingsregeling wordt stapsgewijs afgebouwd. Wat betekent dit voor je terugverdientijd en moet je nog wel zonnepanelen nemen?",
+    date: "24 oktober 2025",
+    category: "Beleid & Regelgeving",
+    readTime: "11 min",
+    image: "📉",
+    keywords: ["salderingsregeling afbouw", "zonnepanelen 2025", "terugleverkosten", "salderingsregeling toekomst", "netto teruglevering"],
+    author: "WarmeLeads Expert Team"
+  },
+  {
+    slug: "whatsapp-business-installateur-leads",
+    title: "WhatsApp Business Voor Installateurs: 24/7 Leads Binnenhalen",
+    excerpt: "WhatsApp Business is jouw nieuwe sales kanaal. Automatische antwoorden, lead kwalificatie en direct contact zonder gedoe.",
+    date: "23 oktober 2025",
+    category: "Digitale Tools",
+    readTime: "9 min",
+    image: "💬",
+    keywords: ["whatsapp business", "whatsapp installateur", "whatsapp leads", "automatische berichten", "klantcontact whatsapp"],
+    author: "WarmeLeads Expert Team"
+  },
+  {
+    slug: "offerte-software-installateurs-2025",
+    title: "Beste Offerte Software Voor Installateurs 2025",
+    excerpt: "Professionele offertes maken in 5 minuten. Vergelijking van de beste offerte tools met prijzen, features en gebruikerservaringen.",
+    date: "22 oktober 2025",
+    category: "Software & Tools",
+    readTime: "10 min",
+    image: "📝",
+    keywords: ["offerte software", "installateur software", "offerte maken", "crm installateurs", "calculatie software"],
+    author: "WarmeLeads Expert Team"
+  },
+  {
+    slug: "installatiekosten-warmtepomp-2025",
+    title: "Installatiekosten Warmtepomp 2025: Complete Prijsopbouw",
+    excerpt: "Wat kost een warmtepomp nu echt? Transparante prijsopbouw inclusief installatie, subsidie en besparing op jaarbasis.",
+    date: "21 oktober 2025",
+    category: "Prijzen & Kosten",
+    readTime: "12 min",
+    image: "💵",
+    keywords: ["warmtepomp kosten", "warmtepomp installatie prijs", "warmtepomp prijzen 2025", "wat kost warmtepomp", "warmtepomp offerte"],
+    author: "WarmeLeads Expert Team"
+  },
+  {
+    slug: "zonnepanelen-plat-dak-2025",
+    title: "Zonnepanelen Op Plat Dak: Rendement, Opstellingen & Tips",
+    excerpt: "Plat dak? Geen probleem! Alles over optimale hoek, ballast systemen, windbelasting en maximaal rendement op platte daken.",
+    date: "20 oktober 2025",
+    category: "Installatie Tips",
+    readTime: "11 min",
+    image: "🏢",
+    keywords: ["zonnepanelen plat dak", "plat dak zonnepanelen", "ballast systeem", "zonnepanelen hoek", "plat dak opbrengst"],
+    author: "WarmeLeads Expert Team"
+  },
+  {
+    slug: "customer-journey-installateur-optimaliseren",
+    title: "Customer Journey Optimaliseren: Van Zoeker Tot Tevreden Klant",
+    excerpt: "De reis van eerste Google zoekterm tot 5-sterren review. Optimaliseer elk contactmoment en verhoog je conversie met 300%.",
+    date: "19 oktober 2025",
+    category: "Marketing Strategie",
+    readTime: "13 min",
+    image: "🗺️",
+    keywords: ["customer journey", "klantbeleving", "touchpoints optimaliseren", "marketing funnel", "conversie verhogen"],
+    author: "WarmeLeads Expert Team"
+  },
+  {
+    slug: "hybride-warmtepomp-vs-volledig-elektrisch",
+    title: "Hybride Warmtepomp vs Volledig Elektrisch: Wat is Slimmer?",
+    excerpt: "Twijfel tussen hybride of all-electric? Eerlijke vergelijking op kosten, comfort, installatie en toekomstbestendigheid.",
+    date: "18 oktober 2025",
+    category: "Productvergelijking",
+    readTime: "10 min",
+    image: "🔀",
+    keywords: ["hybride warmtepomp", "all electric warmtepomp", "warmtepomp vergelijking", "hybride of elektrisch", "warmtepomp kiezen"],
+    author: "WarmeLeads Expert Team"
+  },
+  {
+    slug: "leadscore-systeem-installateurs",
+    title: "Leadscore Systeem: Focus Op De Beste 20% Leads",
+    excerpt: "Niet alle leads zijn gelijk. Ontwikkel een leadscore systeem en besteed je tijd aan leads die echt gaan kopen.",
+    date: "17 oktober 2025",
+    category: "Lead Management",
+    readTime: "9 min",
+    image: "🎯",
+    keywords: ["lead scoring", "lead kwalificatie", "lead prioritering", "sales efficiency", "lead management"],
+    author: "WarmeLeads Expert Team"
+  },
+  {
+    slug: "video-marketing-installateur-youtube",
+    title: "Video Marketing Voor Installateurs: Van YouTube Naar Opdrachten",
+    excerpt: "Video's converteren 5x beter dan tekst. Start vandaag met YouTube marketing en trek continu nieuwe klanten aan.",
+    date: "16 oktober 2025",
+    category: "Video Marketing",
+    readTime: "11 min",
+    image: "🎥",
+    keywords: ["video marketing", "youtube installateur", "video content", "installatie video's", "youtube leads"],
+    author: "WarmeLeads Expert Team"
+  },
+
+  // Oktober 2025 - Week 2 (BESTAANDE ARTIKELEN)
   {
     slug: "meer-klanten-nodig-installateur-2025",
     title: "Meer Klanten Nodig als Installateur? 7 Proven Strategieën",
