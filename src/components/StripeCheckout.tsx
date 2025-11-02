@@ -236,7 +236,7 @@ export function StripeCheckout({
               </div>
               <h3 className="text-xl font-semibold text-gray-900 mb-2">Bestelling succesvol!</h3>
               <p className="text-gray-600 mb-4">
-                {orderData.packageType === 'exclusive'
+                {orderData.leadType === 'exclusive'
                   ? "Uw bestelling is bevestigd! We starten binnen 24 uur campagnes voor u. Leads verschijnen real-time in uw portal."
                   : "Uw bestelling is bevestigd! U ontvangt binnen 24 uur het Excel bestand per email."
                 }
