@@ -49,17 +49,35 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
   const [authError, setAuthError] = useState('');
   const [currentStep, setCurrentStep] = useState<number>(1);
   const [isSummaryOpen, setIsSummaryOpen] = useState(false); // For mobile collapsible summary
+  const [showConfetti, setShowConfetti] = useState(false);
+  const [viewersCount] = useState(Math.floor(Math.random() * 8) + 3); // 3-10 random viewers
   
   const { login, register, isAuthenticated } = useAuthStore();
 
   const industries = Object.keys(leadPackages);
 
-  // Auto-advance steps
+  // Auto-advance steps with smooth scroll
   useEffect(() => {
     if (selectedIndustry && !selectedPackage) {
       setCurrentStep(2);
+      // Smooth scroll to package section
+      setTimeout(() => {
+        document.getElementById('package-section')?.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'start' 
+        });
+      }, 100);
     } else if (selectedPackage && currentStep < 3) {
       setCurrentStep(3);
+      setShowConfetti(true);
+      setTimeout(() => setShowConfetti(false), 3000);
+      // Smooth scroll to quantity section
+      setTimeout(() => {
+        document.getElementById('quantity-section')?.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'start' 
+        });
+      }, 100);
     }
   }, [selectedIndustry, selectedPackage, currentStep]);
 
@@ -194,16 +212,29 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
               
               {/* Header - Fixed Top */}
               <div className="sticky top-0 z-10 bg-white/95 backdrop-blur-md border-b border-gray-200 shadow-sm">
+                {/* Urgency Bar */}
+                <div className="bg-gradient-to-r from-orange-600 to-red-600 text-white px-4 py-2 text-center">
+                  <div className="flex items-center justify-center gap-2 text-xs sm:text-sm font-medium">
+                    <span className="animate-pulse">🔥</span>
+                    <span className="hidden sm:inline">{viewersCount} andere klanten bekijken nu dit pakket</span>
+                    <span className="sm:hidden">{viewersCount} anderen bekijken dit nu</span>
+                    <span className="hidden md:inline">• Beperkte voorraad deze week</span>
+                  </div>
+                </div>
+
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
                   <div className="flex items-center justify-between">
                     {/* Logo/Title */}
                     <div className="flex items-center gap-3">
-                      <div className="p-2 bg-gradient-to-br from-orange-500 to-red-500 rounded-xl">
+                      <div className="p-2 bg-gradient-to-br from-orange-500 to-red-500 rounded-xl shadow-lg">
                         <ShoppingCartIcon className="w-6 h-6 text-white" />
                       </div>
                       <div>
                         <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Bestel Leads</h1>
-                        <p className="text-xs sm:text-sm text-gray-600 hidden sm:block">Verse leads binnen 15 minuten</p>
+                        <p className="text-xs sm:text-sm text-gray-600 hidden sm:block flex items-center gap-1">
+                          <CheckCircleIcon className="w-4 h-4 text-green-500" />
+                          Verse leads binnen 15 minuten geleverd
+                        </p>
                       </div>
                     </div>
 
@@ -389,17 +420,60 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
                         </motion.div>
                       ) : (
                         <>
+                          {/* Confetti Effect */}
+                          <AnimatePresence>
+                            {showConfetti && (
+                              <motion.div
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                className="fixed inset-0 pointer-events-none z-50"
+                              >
+                                {[...Array(50)].map((_, i) => (
+                                  <motion.div
+                                    key={i}
+                                    className="absolute w-2 h-2 bg-gradient-to-r from-orange-500 to-red-500 rounded-full"
+                                    initial={{ 
+                                      x: typeof window !== 'undefined' ? window.innerWidth / 2 : 0, 
+                                      y: typeof window !== 'undefined' ? window.innerHeight / 2 : 0,
+                                      opacity: 1 
+                                    }}
+                                    animate={{ 
+                                      x: typeof window !== 'undefined' ? Math.random() * window.innerWidth : 0,
+                                      y: typeof window !== 'undefined' ? Math.random() * window.innerHeight : 0,
+                                      opacity: 0 
+                                    }}
+                                    transition={{ duration: 2, delay: i * 0.02 }}
+                                  />
+                                ))}
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+
                           {/* Step 1: Industry Selection */}
                           <motion.div
                             initial={{ opacity: 0, y: 20 }}
                             animate={{ opacity: 1, y: 0 }}
-                            className="bg-white rounded-2xl shadow-lg p-6"
+                            id="industry-section"
+                            className="bg-white rounded-2xl shadow-lg p-6 border-2 border-gray-100"
                           >
-                            <div className="flex items-center gap-2 mb-4">
-                              <div className="w-8 h-8 bg-gradient-to-br from-orange-500 to-red-500 rounded-lg flex items-center justify-center text-white font-bold text-sm">
-                                1
+                            <div className="flex items-center justify-between mb-4">
+                              <div className="flex items-center gap-2">
+                                <div className="w-8 h-8 bg-gradient-to-br from-orange-500 to-red-500 rounded-lg flex items-center justify-center text-white font-bold text-sm shadow-md">
+                                  1
+                                </div>
+                                <h3 className="text-xl font-bold text-gray-900">Kies je branche</h3>
                               </div>
-                              <h3 className="text-xl font-bold text-gray-900">Kies je branche</h3>
+                              {selectedIndustry && (
+                                <motion.div
+                                  initial={{ scale: 0 }}
+                                  animate={{ scale: 1 }}
+                                  className="flex items-center gap-1 text-green-600 text-sm font-medium"
+                                >
+                                  <CheckCircleIcon className="w-5 h-5" />
+                                  <span className="hidden sm:inline">Gekozen</span>
+                                </motion.div>
+                              )}
                             </div>
                             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
                               {industries.map((industry) => (
@@ -428,13 +502,34 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
                             <motion.div
                               initial={{ opacity: 0, y: 20 }}
                               animate={{ opacity: 1, y: 0 }}
-                              className="bg-white rounded-2xl shadow-lg p-6"
+                              id="package-section"
+                              className="bg-white rounded-2xl shadow-lg p-6 border-2 border-gray-100"
                             >
-                              <div className="flex items-center gap-2 mb-4">
-                                <div className="w-8 h-8 bg-gradient-to-br from-orange-500 to-red-500 rounded-lg flex items-center justify-center text-white font-bold text-sm">
-                                  2
+                              <div className="flex items-center justify-between mb-4">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-8 h-8 bg-gradient-to-br from-orange-500 to-red-500 rounded-lg flex items-center justify-center text-white font-bold text-sm shadow-md">
+                                    2
+                                  </div>
+                                  <h3 className="text-xl font-bold text-gray-900">Kies je pakket</h3>
                                 </div>
-                                <h3 className="text-xl font-bold text-gray-900">Kies je pakket</h3>
+                                {selectedPackage && (
+                                  <motion.div
+                                    initial={{ scale: 0 }}
+                                    animate={{ scale: 1 }}
+                                    className="flex items-center gap-1 text-green-600 text-sm font-medium"
+                                  >
+                                    <CheckCircleIcon className="w-5 h-5" />
+                                    <span className="hidden sm:inline">Gekozen</span>
+                                  </motion.div>
+                                )}
+                              </div>
+                              
+                              {/* Social Proof */}
+                              <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                                <div className="flex items-center gap-2 text-sm text-blue-700">
+                                  <SparklesIcon className="w-4 h-4" />
+                                  <span className="font-medium">327 installateurs bestelden deze maand al leads via WarmeLeads</span>
+                                </div>
                               </div>
                               <div className="grid sm:grid-cols-2 gap-4">
                                 {leadPackages[selectedIndustry]?.map((pkg) => (
@@ -549,10 +644,11 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
                             <motion.div
                               initial={{ opacity: 0, y: 20 }}
                               animate={{ opacity: 1, y: 0 }}
-                              className="bg-white rounded-2xl shadow-lg p-6"
+                              id="quantity-section"
+                              className="bg-white rounded-2xl shadow-lg p-6 border-2 border-gray-100"
                             >
                               <div className="flex items-center gap-2 mb-4">
-                                <div className="w-8 h-8 bg-gradient-to-br from-orange-500 to-red-500 rounded-lg flex items-center justify-center text-white font-bold text-sm">
+                                <div className="w-8 h-8 bg-gradient-to-br from-orange-500 to-red-500 rounded-lg flex items-center justify-center text-white font-bold text-sm shadow-md">
                                   3
                                 </div>
                                 <h3 className="text-xl font-bold text-gray-900">
@@ -567,46 +663,53 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
                                       Aantal exclusieve leads (minimum {selectedPackage.minQuantity || 30})
                                     </label>
                                     <div className="flex items-center gap-3">
-                                      <button
+                                      <motion.button
+                                        whileTap={{ scale: 0.95 }}
                                         onClick={() => setQuantity(Math.max((selectedPackage.minQuantity || 30), quantity - 10))}
-                                        className="p-3 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                                        className="p-3 sm:p-4 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors shadow-sm hover:shadow-md"
                                       >
-                                        <span className="text-xl font-bold">−</span>
-                                      </button>
+                                        <span className="text-xl sm:text-2xl font-bold">−</span>
+                                      </motion.button>
                                       <input
                                         type="number"
                                         min={selectedPackage.minQuantity || 30}
                                         value={quantity}
                                         onChange={(e) => setQuantity(Math.max(selectedPackage.minQuantity || 30, parseInt(e.target.value) || 0))}
-                                        className="flex-1 px-4 py-3 text-2xl font-bold text-center text-gray-900 border-2 border-orange-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                                        className="flex-1 px-4 py-3 sm:py-4 text-2xl sm:text-3xl font-bold text-center text-gray-900 border-2 border-orange-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 shadow-sm"
                                       />
-                                      <button
+                                      <motion.button
+                                        whileTap={{ scale: 0.95 }}
                                         onClick={() => setQuantity(quantity + 10)}
-                                        className="p-3 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                                        className="p-3 sm:p-4 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white rounded-xl transition-colors shadow-md hover:shadow-lg"
                                       >
-                                        <span className="text-xl font-bold">+</span>
-                                      </button>
+                                        <span className="text-xl sm:text-2xl font-bold">+</span>
+                                      </motion.button>
                                     </div>
                                   </div>
 
                                   {/* Tier Info */}
                                   {pricing && (
-                                    <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl">
+                                    <motion.div
+                                      initial={{ scale: 0.95 }}
+                                      animate={{ scale: 1 }}
+                                      className="p-4 bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-xl"
+                                    >
                                       <div className="flex items-center gap-2 text-blue-700 text-sm font-medium">
                                         <SparklesIcon className="w-5 h-5" />
                                         {pricing.tierInfo}
                                       </div>
-                                    </div>
+                                    </motion.div>
                                   )}
                                 </div>
                               ) : (
-                                <div className="p-4 bg-gradient-to-br from-blue-50 to-purple-50 border-2 border-blue-200 rounded-xl">
+                                <div className="p-6 bg-gradient-to-br from-blue-50 to-purple-50 border-2 border-blue-200 rounded-xl">
                                   <div className="flex items-center justify-between">
                                     <div>
                                       <div className="text-sm font-medium text-gray-700">Vaste batch grootte</div>
-                                      <div className="text-2xl font-bold text-gray-900">{selectedPackage.quantity} leads</div>
+                                      <div className="text-3xl font-bold text-gray-900 mt-1">{selectedPackage.quantity} leads</div>
+                                      <div className="text-xs text-gray-600 mt-1">Perfect om mee te starten</div>
                                     </div>
-                                    <CheckCircleIcon className="w-12 h-12 text-blue-500" />
+                                    <CheckCircleIcon className="w-16 h-16 text-blue-500" />
                                   </div>
                                 </div>
                               )}
@@ -720,34 +823,70 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
 
                               {/* Checkout Button */}
                               {userPermissions?.canCheckout !== false ? (
-                                <button
+                                <motion.button
                                   onClick={handleCheckout}
                                   disabled={!selectedPackage || isProcessing}
-                                  className="w-full py-4 bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 text-white rounded-xl font-bold transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                  whileHover={{ scale: 1.02 }}
+                                  whileTap={{ scale: 0.98 }}
+                                  className="w-full py-4 sm:py-5 bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 text-white rounded-xl font-bold transition-all shadow-xl hover:shadow-2xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-base sm:text-lg relative overflow-hidden group"
                                 >
-                                  {isProcessing ? (
-                                    <>⏳ Even geduld...</>
-                                  ) : (
-                                    <>
-                                      <CreditCardIcon className="w-5 h-5" />
-                                      Doorgaan naar betalen
-                                    </>
-                                  )}
-                                </button>
+                                  <div className="absolute inset-0 bg-gradient-to-r from-orange-400 to-red-400 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                                  <div className="relative flex items-center gap-2">
+                                    {isProcessing ? (
+                                      <>
+                                        <motion.div
+                                          animate={{ rotate: 360 }}
+                                          transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                                        >
+                                          ⏳
+                                        </motion.div>
+                                        <span>Even geduld...</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <CreditCardIcon className="w-6 h-6" />
+                                        <span>Afronden en betalen</span>
+                                        <motion.span
+                                          animate={{ x: [0, 5, 0] }}
+                                          transition={{ duration: 1, repeat: Infinity }}
+                                        >
+                                          →
+                                        </motion.span>
+                                      </>
+                                    )}
+                                  </div>
+                                </motion.button>
                               ) : (
                                 <button
                                   disabled
-                                  className="w-full py-4 bg-gray-400 text-gray-600 rounded-xl font-bold cursor-not-allowed"
+                                  className="w-full py-4 sm:py-5 bg-gray-400 text-gray-600 rounded-xl font-bold cursor-not-allowed"
                                 >
                                   🔒 Alleen eigenaren kunnen bestellen
                                 </button>
                               )}
 
-                              {/* Payment Info */}
-                              <div className="text-xs text-center text-gray-500">
-                                <ShieldCheckIcon className="w-4 h-4 inline mr-1" />
-                                Beveiligde betaling via Stripe
+                              {/* Security Info */}
+                              <div className="flex items-center justify-center gap-2 text-xs text-gray-500">
+                                <ShieldCheckIcon className="w-4 h-4 text-green-500" />
+                                <span>Beveiligde betaling via Stripe • SSL encrypted</span>
                               </div>
+
+                              {/* Urgency Message */}
+                              <motion.div
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                className="p-3 bg-orange-50 border border-orange-200 rounded-lg"
+                              >
+                                <div className="flex items-center gap-2 text-xs sm:text-sm text-orange-700">
+                                  <motion.span
+                                    animate={{ scale: [1, 1.2, 1] }}
+                                    transition={{ duration: 2, repeat: Infinity }}
+                                  >
+                                    ⚡
+                                  </motion.span>
+                                  <span className="font-medium">Nog maar {Math.floor(Math.random() * 15) + 5} leads beschikbaar deze week</span>
+                                </div>
+                              </motion.div>
                             </div>
                           </motion.div>
                         </div>
@@ -822,22 +961,40 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
                   </AnimatePresence>
 
                   {/* CTA Button */}
-                  <div className="p-4">
+                  <div className="p-4 pb-safe">
                     {userPermissions?.canCheckout !== false ? (
-                      <button
+                      <motion.button
                         onClick={handleCheckout}
                         disabled={!selectedPackage || isProcessing}
-                        className="w-full py-4 bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 text-white rounded-xl font-bold transition-all shadow-lg active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        whileTap={{ scale: 0.95 }}
+                        className="w-full py-4 bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 text-white rounded-xl font-bold transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-lg relative overflow-hidden group"
                       >
-                        {isProcessing ? (
-                          <>⏳ Even geduld...</>
-                        ) : (
-                          <>
-                            <CreditCardIcon className="w-5 h-5" />
-                            Doorgaan naar betalen
-                          </>
-                        )}
-                      </button>
+                        <div className="absolute inset-0 bg-gradient-to-r from-orange-400 to-red-400 opacity-0 group-active:opacity-100 transition-opacity"></div>
+                        <div className="relative flex items-center gap-2">
+                          {isProcessing ? (
+                            <>
+                              <motion.div
+                                animate={{ rotate: 360 }}
+                                transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                              >
+                                ⏳
+                              </motion.div>
+                              <span>Even geduld...</span>
+                            </>
+                          ) : (
+                            <>
+                              <CreditCardIcon className="w-6 h-6" />
+                              <span>Afronden en betalen</span>
+                              <motion.span
+                                animate={{ x: [0, 5, 0] }}
+                                transition={{ duration: 1, repeat: Infinity }}
+                              >
+                                →
+                              </motion.span>
+                            </>
+                          )}
+                        </div>
+                      </motion.button>
                     ) : (
                       <button
                         disabled
