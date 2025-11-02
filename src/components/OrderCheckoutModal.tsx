@@ -751,28 +751,34 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
                                 </div>
 
                                 {selectedPackage.type === 'exclusive' ? (
-                                  <div className="bg-white rounded-xl shadow-md p-5 space-y-4">
+                                  <div className="bg-white rounded-xl shadow-md p-4 space-y-4">
                                     <div>
-                                      <label className="block text-sm font-medium text-gray-700 mb-3">
+                                      <label className="block text-xs font-medium text-gray-600 mb-3 text-center">
                                         Minimum {selectedPackage.minQuantity || 30} leads
                                       </label>
-                                      <div className="flex items-center gap-3">
+                                      <div className="flex items-center justify-center gap-2">
                                         <button
                                           onClick={() => setQuantity(Math.max((selectedPackage.minQuantity || 30), quantity - 10))}
-                                          className="w-12 h-12 bg-gray-100 active:bg-gray-200 rounded-xl transition-colors flex items-center justify-center"
+                                          className="w-14 h-14 bg-gradient-to-br from-gray-100 to-gray-200 active:from-gray-200 active:to-gray-300 rounded-xl transition-all flex items-center justify-center shadow-sm flex-shrink-0"
                                         >
                                           <span className="text-2xl font-bold text-gray-700">−</span>
                                         </button>
-                                        <input
-                                          type="number"
-                                          min={selectedPackage.minQuantity || 30}
-                                          value={quantity}
-                                          onChange={(e) => setQuantity(Math.max(selectedPackage.minQuantity || 30, parseInt(e.target.value) || 0))}
-                                          className="flex-1 px-4 py-3 text-3xl font-bold text-center text-gray-900 border-2 border-orange-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500"
-                                        />
+                                        <div className="flex-1 min-w-0 max-w-[140px]">
+                                          <input
+                                            type="number"
+                                            min={selectedPackage.minQuantity || 30}
+                                            value={quantity}
+                                            onChange={(e) => setQuantity(Math.max(selectedPackage.minQuantity || 30, parseInt(e.target.value) || 0))}
+                                            className="w-full px-2 py-3 text-3xl font-bold text-center text-gray-900 bg-gradient-to-br from-orange-50 to-red-50 border-2 border-orange-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                                            style={{ 
+                                              WebkitAppearance: 'none',
+                                              MozAppearance: 'textfield'
+                                            }}
+                                          />
+                                        </div>
                                         <button
                                           onClick={() => setQuantity(quantity + 10)}
-                                          className="w-12 h-12 bg-gray-100 active:bg-gray-200 rounded-xl transition-colors flex items-center justify-center"
+                                          className="w-14 h-14 bg-gradient-to-br from-gray-100 to-gray-200 active:from-gray-200 active:to-gray-300 rounded-xl transition-all flex items-center justify-center shadow-sm flex-shrink-0"
                                         >
                                           <span className="text-2xl font-bold text-gray-700">+</span>
                                         </button>
@@ -783,8 +789,8 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
                                     {pricing && (
                                       <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
                                         <div className="flex items-center gap-2 text-blue-700 text-xs font-medium">
-                                          <SparklesIcon className="w-4 h-4" />
-                                          {pricing.tierInfo}
+                                          <SparklesIcon className="w-4 h-4 flex-shrink-0" />
+                                          <span className="truncate">{pricing.tierInfo}</span>
                                         </div>
                                       </div>
                                     )}
