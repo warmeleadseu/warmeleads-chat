@@ -1,33 +1,56 @@
 'use client';
 
-import { motion } from 'framer-motion';
-import { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useState, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 
 export function FloatingWhatsAppButton() {
   const [isHovered, setIsHovered] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const pathname = usePathname();
   
   // Hide WhatsApp button on admin pages
   if (pathname?.startsWith('/admin')) {
     return null;
   }
+
+  // Listen for modal open/close events
+  useEffect(() => {
+    const handleModalOpen = () => setIsModalOpen(true);
+    const handleModalClose = () => setIsModalOpen(false);
+
+    window.addEventListener('orderModalOpen', handleModalOpen);
+    window.addEventListener('orderModalClose', handleModalClose);
+
+    return () => {
+      window.removeEventListener('orderModalOpen', handleModalOpen);
+      window.removeEventListener('orderModalClose', handleModalClose);
+    };
+  }, []);
+
+  // Don't render if modal is open
+  if (isModalOpen) {
+    return null;
+  }
+  
   const whatsappNumber = '31613927338'; // +31 61 392 7338
   const defaultMessage = 'Hoi! Ik heb interesse in WarmeLeads en zou graag meer informatie ontvangen.';
   const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(defaultMessage)}`;
 
   return (
-    <motion.div
-      className="fixed bottom-6 right-6 z-50"
-      initial={{ scale: 0, opacity: 0 }}
-      animate={{ scale: 1, opacity: 1 }}
-      transition={{ 
-        type: "spring",
-        stiffness: 260,
-        damping: 20,
-        delay: 1
-      }}
-    >
+    <AnimatePresence>
+      <motion.div
+        className="fixed bottom-6 right-6 z-50"
+        initial={{ scale: 0, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0, opacity: 0 }}
+        transition={{ 
+          type: "spring",
+          stiffness: 260,
+          damping: 20,
+          delay: isModalOpen ? 0 : 1
+        }}
+      >
       <motion.a
         href={whatsappUrl}
         target="_blank"
@@ -96,5 +119,6 @@ export function FloatingWhatsAppButton() {
         1
       </motion.div> */}
     </motion.div>
+    </AnimatePresence>
   );
 }

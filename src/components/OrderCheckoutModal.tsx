@@ -65,6 +65,15 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
   // Calculate pricing
   const pricing = selectedPackage ? calculatePackagePrice(selectedPackage, quantity) : null;
 
+  // Dispatch modal open/close events for WhatsApp button
+  useEffect(() => {
+    if (isOpen) {
+      window.dispatchEvent(new Event('orderModalOpen'));
+    } else {
+      window.dispatchEvent(new Event('orderModalClose'));
+    }
+  }, [isOpen]);
+
   const handleSelectPackage = (pkg: LeadPackage) => {
     setSelectedPackage(pkg);
     // Reset quantity to minimum for exclusive or fixed for shared
