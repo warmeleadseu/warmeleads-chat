@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   CogIcon,
@@ -70,14 +70,56 @@ export default function SettingsPage() {
   const [settings, setSettings] = useState<Settings>(defaultSettings);
   const [activeTab, setActiveTab] = useState('website');
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    loadSettings();
+  }, []);
+
+  const loadSettings = async () => {
+    try {
+      setIsLoading(true);
+      const response = await fetch('/api/admin/settings');
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          // Merge with default settings
+          setSettings({
+            ...defaultSettings,
+            ...data.settings
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error loading settings:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleSave = async () => {
     setIsSaving(true);
-    // Simuleer save actie
-    setTimeout(() => {
+    try {
+      const response = await fetch('/api/admin/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ settings })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        alert('✅ ' + data.message);
+      } else {
+        const error = await response.json();
+        alert('❌ Fout: ' + error.error);
+      }
+    } catch (error) {
+      console.error('Error saving settings:', error);
+      alert('❌ Fout bij opslaan van instellingen');
+    } finally {
       setIsSaving(false);
-      alert('Instellingen opgeslagen!');
-    }, 1000);
+    }
   };
 
   const tabs = [
@@ -86,6 +128,17 @@ export default function SettingsPage() {
     { id: 'integrations', name: 'Integraties', icon: KeyIcon },
     { id: 'notifications', name: 'Notificaties', icon: BellIcon }
   ];
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-96">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-brand-purple/30 border-t-brand-purple rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">Instellingen laden...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
