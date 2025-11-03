@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 
 export default function AITestThuisbatterijTrendsPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-brand-purple via-brand-pink to-brand-orange">
+    <div className="min-h-screen bg-gradient-to-br from-brand-navy via-brand-purple to-brand-pink">
       <div className="relative py-20 overflow-hidden">
         <div className="fixed inset-0 overflow-hidden pointer-events-none">
           <div className="absolute -top-40 -right-40 w-80 h-80 bg-white/10 rounded-full blur-3xl animate-pulse" />

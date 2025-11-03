@@ -141,7 +141,7 @@ export default function AccountSettingsPage() {
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-600 via-pink-600 to-orange-500 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-brand-navy via-brand-purple to-brand-pink flex items-center justify-center">
         <div className="text-white text-center">
           <h1 className="text-2xl font-bold mb-4">Niet ingelogd</h1>
           <p className="mb-6">U moet ingelogd zijn om deze pagina te bekijken.</p>
@@ -157,7 +157,7 @@ export default function AccountSettingsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-600 via-pink-600 to-orange-500">
+    <div className="min-h-screen bg-gradient-to-br from-brand-navy via-brand-purple to-brand-pink">
       {/* Header */}
       <motion.div
         className="flex items-center justify-between p-4 glass-effect"

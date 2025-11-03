@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 
 export default function ThuisbatterijMarktBlogPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-brand-purple via-brand-pink to-brand-orange">
+    <div className="min-h-screen bg-gradient-to-br from-brand-navy via-brand-purple to-brand-pink">
       {/* Hero Section */}
       <div className="relative py-20 overflow-hidden">
         <div className="fixed inset-0 overflow-hidden pointer-events-none">
