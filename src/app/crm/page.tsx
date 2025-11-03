@@ -1,9 +1,8 @@
 'use client';
 
-import dynamic from 'next/dynamic';
-import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { motion } from 'framer-motion';
 import {
   ChartBarIcon,
   UserGroupIcon,
@@ -17,6 +16,8 @@ import {
 import { useAuthStore } from '@/lib/auth';
 import { crmSystem, type Customer, type Lead } from '@/lib/crmSystem';
 import { branchIntelligence, type BranchAnalytics } from '@/lib/branchIntelligence';
+import { Loading } from '@/components/ui';
+import dynamic from 'next/dynamic';
 
 // Lazy load WhatsApp analytics (heavy component)
 const WhatsAppAnalytics = dynamic(() => import('@/components/WhatsAppAnalytics').then(mod => mod.WhatsAppAnalytics), {
@@ -144,14 +145,7 @@ export default function CRMDashboard() {
   };
 
   if (authLoading || isLoading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-brand-navy via-brand-purple to-brand-pink flex items-center justify-center">
-        <div className="text-center text-white">
-          <div className="w-16 h-16 border-4 border-white/30 border-t-white rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-xl">CRM Dashboard laden...</p>
-        </div>
-      </div>
-    );
+    return <Loading fullScreen text="CRM Dashboard laden..." />;
   }
 
   return (

@@ -1198,14 +1198,7 @@ export default function CustomerLeadsPage() {
 
   // Show loading while auth is loading
   if (authLoading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-brand-purple to-brand-pink flex items-center justify-center">
-        <div className="text-center text-white">
-          <div className="w-16 h-16 border-4 border-white/30 border-t-white rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-xl">Authenticatie controleren...</p>
-        </div>
-      </div>
-    );
+    return <Loading fullScreen text="Authenticatie controleren..." />;
   }
 
   // Don't render anything if not authenticated (redirect will happen)
@@ -1214,14 +1207,7 @@ export default function CustomerLeadsPage() {
   }
 
   if (isLoading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-brand-purple to-brand-pink flex items-center justify-center">
-        <div className="text-center text-white">
-          <div className="w-16 h-16 border-4 border-white/30 border-t-white rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-xl">Leads laden...</p>
-        </div>
-      </div>
-    );
+    return <Loading fullScreen text="Leads laden..." />;
   }
 
   return (

@@ -186,7 +186,7 @@ export function LandingPage({ onPathSelect }: LandingPageProps) {
   const pathOptions = getPathOptions();
 
   return (
-    <div className="min-h-screen flex flex-col justify-center items-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-brand-navy via-brand-purple to-brand-pink flex flex-col justify-center items-center p-4">
       {/* Background Effects */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <motion.div
