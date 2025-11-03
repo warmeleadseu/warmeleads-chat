@@ -1,14 +1,41 @@
 /**
- * WARMELEADS UI COMPONENTS
+ * WarmeLeads UI Library
  * 
- * Central export voor alle UI components
+ * Export all design system components
  */
 
-export * from './Button';
-export * from './Card';
-export * from './Input';
-export * from './Select';
-export * from './Checkbox';
-export * from './Badge';
-export * from './Modal';
+// Core Design System
+export {
+  Button,
+  Card,
+  Input,
+  Loading,
+  EmptyState,
+  Badge,
+  type ButtonProps,
+  type CardProps,
+  type InputProps,
+  type LoadingProps,
+  type EmptyStateProps,
+  type BadgeProps,
+} from './DesignSystem';
 
+// Typography
+export {
+  Heading,
+  Text,
+  Label,
+} from './Typography';
+
+// Modal
+export {
+  Modal,
+  type ModalProps,
+} from './Modal';
+
+// Responsive Table
+export {
+  ResponsiveTable,
+  type ResponsiveTableProps,
+  type Column,
+} from './ResponsiveTable';

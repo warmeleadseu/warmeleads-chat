@@ -8,10 +8,14 @@ import {
   EyeSlashIcon,
   UserIcon,
   LockClosedIcon,
-  EnvelopeIcon
+  EnvelopeIcon,
+  CheckCircleIcon,
 } from '@heroicons/react/24/outline';
 import { useAuthStore } from '../lib/auth';
 import { ADMIN_CONFIG } from '@/config/admin';
+import { Button, Input } from '@/components/ui';
+import { useFormValidation, validationRules } from '@/lib/formValidation';
+import { useEscapeKey } from '@/lib/accessibility';
 
 interface LoginFormProps {
   onBack: () => void;
