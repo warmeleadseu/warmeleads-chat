@@ -26,6 +26,7 @@ import {
   BellIcon
 } from '@heroicons/react/24/outline';
 import { useAuthStore, authenticatedFetch } from '@/lib/auth';
+import { Loading } from '@/components/ui';
 import { crmSystem, type Customer, type Lead } from '@/lib/crmSystem';
 import { readCustomerLeads, GoogleSheetsService, addLeadToSheet } from '@/lib/googleSheetsAPI';
 import { branchIntelligence, type Branch, type BranchIntelligence, type BranchAnalytics } from '@/lib/branchIntelligence';

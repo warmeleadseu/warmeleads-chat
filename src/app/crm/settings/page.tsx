@@ -18,6 +18,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { useAuthStore } from '@/lib/auth';
 import { crmSystem, type Customer } from '@/lib/crmSystem';
+import { Loading } from '@/components/ui';
 import { WhatsAppSettings } from '@/components/WhatsAppSettings';
 
 export default function CRMSettingsPage() {
@@ -163,14 +164,7 @@ export default function CRMSettingsPage() {
   };
 
   if (authLoading || isLoading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-brand-navy via-brand-purple to-brand-pink flex items-center justify-center">
-        <div className="text-center text-white">
-          <div className="w-16 h-16 border-4 border-white/30 border-t-white rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-xl">Instellingen laden...</p>
-        </div>
-      </div>
-    );
+    return <Loading fullScreen text="Instellingen laden..." />;
   }
 
   return (

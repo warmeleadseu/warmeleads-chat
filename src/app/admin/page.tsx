@@ -11,6 +11,7 @@ import {
   ArrowTrendingUpIcon,
   ArrowTrendingDownIcon,
 } from '@heroicons/react/24/outline';
+import { Loading } from '@/components/ui';
 
 interface DashboardStats {
   totalCustomers: number;

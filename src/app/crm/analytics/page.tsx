@@ -16,6 +16,7 @@ import {
 import { useAuthStore } from '@/lib/auth';
 import { crmSystem, type Customer, type Lead } from '@/lib/crmSystem';
 import { branchIntelligence, type BranchAnalytics } from '@/lib/branchIntelligence';
+import { Loading } from '@/components/ui';
 
 export default function CRMAnalyticsPage() {
   const router = useRouter();
@@ -98,14 +99,7 @@ export default function CRMAnalyticsPage() {
   const overallStats = getOverallStats();
 
   if (authLoading || isLoading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-brand-navy via-brand-purple to-brand-pink flex items-center justify-center">
-        <div className="text-center text-white">
-          <div className="w-16 h-16 border-4 border-white/30 border-t-white rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-xl">Analytics laden...</p>
-        </div>
-      </div>
-    );
+    return <Loading fullScreen text="Analytics laden..." />;
   }
 
   return (
