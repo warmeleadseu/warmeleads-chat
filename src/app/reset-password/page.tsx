@@ -20,44 +20,50 @@ export default function ResetPasswordPage() {
 
   // Verify the session on mount
   useEffect(() => {
-    const checkSession = async () => {
+    let mounted = true;
+
+    const handleAuthStateChange = async () => {
       try {
-        // First, check if there's a hash with auth tokens (from email link)
-        if (window.location.hash) {
-          console.log('🔍 Hash detected, exchanging for session...');
-          // Supabase will automatically handle the hash and create a session
-          await supabase.auth.getSession();
-        }
+        // Listen for auth state changes (this will handle the hash tokens automatically)
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+          console.log('🔐 Auth state changed:', event, session ? 'Session exists' : 'No session');
+          
+          if (!mounted) return;
 
-        // Small delay to let Supabase process the hash
-        await new Promise(resolve => setTimeout(resolve, 500));
+          if (event === 'PASSWORD_RECOVERY') {
+            console.log('✅ Password recovery session detected');
+            setIsVerifying(false);
+          } else if (session) {
+            console.log('✅ Valid session found');
+            setIsVerifying(false);
+          } else if (event === 'SIGNED_OUT' || !session) {
+            console.log('❌ No valid session');
+            setError('Deze reset link is verlopen of ongeldig. Vraag een nieuwe aan.');
+            setIsVerifying(false);
+          }
+        });
 
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-        
-        if (sessionError) {
-          console.error('Session error:', sessionError);
-          setError('Er ging iets mis met de verificatie. Probeer het opnieuw.');
+        // Also check current session immediately
+        const { data: { session } } = await supabase.auth.getSession();
+        if (mounted && session) {
+          console.log('✅ Existing session found');
           setIsVerifying(false);
-          return;
         }
 
-        if (!session) {
-          console.error('No session found');
-          setError('Deze reset link is verlopen of ongeldig. Vraag een nieuwe aan.');
-          setIsVerifying(false);
-          return;
-        }
-
-        console.log('✅ Valid session found for password reset');
-        setIsVerifying(false);
+        return () => {
+          mounted = false;
+          subscription.unsubscribe();
+        };
       } catch (error) {
         console.error('Session check error:', error);
-        setError('Er ging iets mis. Probeer het opnieuw.');
-        setIsVerifying(false);
+        if (mounted) {
+          setError('Er ging iets mis. Probeer het opnieuw.');
+          setIsVerifying(false);
+        }
       }
     };
 
-    checkSession();
+    handleAuthStateChange();
   }, [supabase]);
 
   // Show loading state while verifying session
