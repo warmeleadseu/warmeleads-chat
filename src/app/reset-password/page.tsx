@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { LockClosedIcon, EyeIcon, EyeSlashIcon, CheckCircleIcon } from '@heroicons/react/24/outline';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { createBrowserClient } from '@/lib/supabase';
 
 export default function ResetPasswordPage() {
   const [password, setPassword] = useState('');
@@ -15,7 +15,7 @@ export default function ResetPasswordPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const router = useRouter();
-  const supabase = createClientComponentClient();
+  const supabase = createBrowserClient();
 
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
