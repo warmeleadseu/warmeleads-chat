@@ -38,7 +38,54 @@ https://www.warmeleads.eu
 
 ---
 
-## Stap 2: Email Template Configureren
+## Stap 2: Email Afzender Configureren 📧
+
+### 1. Ga naar Project Settings
+1. Klik op **Settings** (tandwiel icoon linksonder)
+2. Klik op **Authentication**
+
+### 2. Configureer Email Sender
+Scroll naar **SMTP Settings** of **Email** sectie:
+
+**Sender Name:**
+```
+WarmeLeads
+```
+
+**Sender Email:**
+```
+noreply@warmeleads.eu
+```
+
+**OF (als je een eigen email wilt):**
+```
+support@warmeleads.eu
+```
+
+### 3. Custom SMTP (Optioneel - Aanbevolen voor productie)
+
+Voor nog betere deliverability, configureer je eigen SMTP:
+
+**Provider opties:**
+- **SendGrid** (gratis tier: 100 emails/dag)
+- **Mailgun** (gratis tier: 100 emails/dag)
+- **Amazon SES** (zeer goedkoop, hoge deliverability)
+
+**SMTP Configuratie in Supabase:**
+1. Enable **Custom SMTP**
+2. Vul in:
+   - **Host:** `smtp.sendgrid.net` (of je provider)
+   - **Port:** `587`
+   - **Username:** Je API username
+   - **Password:** Je API key
+   - **Sender Email:** `noreply@warmeleads.eu`
+   - **Sender Name:** `WarmeLeads`
+
+### 4. Klik op **Save**
+
+---
+
+## Stap 3: Email Template Configureren
 
 ### 1. Ga naar Email Templates
 1. Klik op **Authentication** → **Email Templates**
@@ -79,8 +126,9 @@ Kopieer de volledige HTML uit `email-templates/password-reset.html`
 
 - [ ] Redirect URLs toegevoegd aan Supabase (stap 1)
 - [ ] Site URL ingesteld op `warmeleads.eu` (stap 1)
-- [ ] Email template geüpdatet met branded HTML (stap 2)
-- [ ] Getest: Password reset flow werkt van A tot Z (stap 3)
+- [ ] **Email afzender naam aangepast naar "WarmeLeads"** (stap 2) ⭐ **NIEUW**
+- [ ] Email template geüpdatet met branded HTML (stap 3)
+- [ ] Getest: Password reset flow werkt van A tot Z (stap 4)
 - [ ] Code gedeployed naar production (Vercel)
 
 ---
