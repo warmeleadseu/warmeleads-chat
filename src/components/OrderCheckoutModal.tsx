@@ -648,15 +648,23 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
                                               ? 'bg-white/20 text-white'
                                               : 'bg-gradient-to-r from-orange-500 to-red-500 text-white'
                                           }`}>
-                                            🔥 EXCLUSIEF
+                                            💎 EXCLUSIEF
                                           </span>
-                                        ) : (
+                                        ) : pkg.type === 'shared_fresh' ? (
                                           <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
                                             selectedPackage?.id === pkg.id
                                               ? 'bg-white/20 text-white'
                                               : 'bg-blue-500 text-white'
                                           }`}>
-                                            💰 GEDEELD
+                                            🤝 GEDEELD VERS
+                                          </span>
+                                        ) : (
+                                          <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                                            selectedPackage?.id === pkg.id
+                                              ? 'bg-white/20 text-white'
+                                              : 'bg-purple-500 text-white'
+                                          }`}>
+                                            📦 BULK
                                           </span>
                                         )}
                                       </div>
@@ -689,8 +697,10 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
                                             selectedPackage?.id === pkg.id ? 'text-white/90' : 'text-blue-800'
                                           }`}>
                                             {pkg.type === 'exclusive' 
-                                              ? 'We starten binnen 24u campagnes • Leads real-time in je portal • Toegang tot persoonlijke spreadsheet'
-                                              : 'Binnen 24 uur per email • Excel bestand • Direct te gebruiken'}
+                                              ? 'Campagnes binnen 24u • Real-time in portal • Persoonlijke spreadsheet'
+                                              : pkg.type === 'shared_fresh'
+                                              ? 'Verse campagnes binnen 24u • Excel per email • Gedeeld met 2 anderen'
+                                              : 'Excel binnen 24u per email • Database (tot 6 mnd oud) • Direct te gebruiken'}
                                           </div>
                                         </div>
 
@@ -707,6 +717,19 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
                                                 selectedPackage?.id === pkg.id ? 'text-white/80' : 'text-gray-500'
                                               }`}>
                                                 Staffelprijzen beschikbaar
+                                              </div>
+                                            </div>
+                                          ) : pkg.type === 'bulk' && pkg.pricingTiers ? (
+                                            <div className="space-y-1">
+                                              <div className={`text-lg font-bold ${
+                                                selectedPackage?.id === pkg.id ? 'text-white' : 'text-purple-600'
+                                              }`}>
+                                                €3,50 - €4,25/lead
+                                              </div>
+                                              <div className={`text-xs ${
+                                                selectedPackage?.id === pkg.id ? 'text-white/80' : 'text-gray-500'
+                                              }`}>
+                                                Vanaf 100 leads • Volumekorting
                                               </div>
                                             </div>
                                           ) : (
@@ -787,15 +810,23 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
                                                 ? 'bg-white/20 text-white'
                                                 : 'bg-gradient-to-r from-orange-500 to-red-500 text-white'
                                             }`}>
-                                              🔥 EXCLUSIEF
+                                              💎 EXCLUSIEF
                                             </span>
-                                          ) : (
+                                          ) : pkg.type === 'shared_fresh' ? (
                                             <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-bold ${
                                               selectedPackage?.id === pkg.id
                                                 ? 'bg-white/20 text-white'
                                                 : 'bg-blue-500 text-white'
                                             }`}>
-                                              💰 GEDEELD
+                                              🤝 GEDEELD VERS
+                                            </span>
+                                          ) : (
+                                            <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-bold ${
+                                              selectedPackage?.id === pkg.id
+                                                ? 'bg-white/20 text-white'
+                                                : 'bg-purple-500 text-white'
+                                            }`}>
+                                              📦 BULK
                                             </span>
                                           )}
                                         </div>
@@ -809,6 +840,8 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
                                       }`}>
                                         {pkg.type === 'exclusive' && pkg.pricingTiers 
                                           ? `Vanaf ${formatPrice(pkg.pricingTiers[0].pricePerLead)}/lead`
+                                          : pkg.type === 'bulk' && pkg.pricingTiers
+                                          ? '€3,50 - €4,25/lead'
                                           : formatPrice(pkg.price * pkg.quantity)
                                         }
                                       </div>
@@ -832,8 +865,10 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
                                         </span>
                                         <span className={selectedPackage?.id === pkg.id ? 'text-white/90' : 'text-blue-800'}>
                                           {pkg.type === 'exclusive' 
-                                            ? 'Campagnes starten binnen 24u'
-                                            : 'Excel binnen 24u per email'}
+                                            ? 'Campagnes binnen 24u • Portal'
+                                            : pkg.type === 'shared_fresh'
+                                            ? 'Verse campagnes • Excel 24u'
+                                            : 'Database • Excel 24u'}
                                         </span>
                                       </div>
                                     </motion.button>
@@ -893,72 +928,102 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
                                         Voordat je afrekent: zo werkt het bij WarmeLeads 👇
                                       </p>
 
-                                      {/* Process Steps */}
+                                      {/* Process Steps - Dynamic based on package type */}
                                       <div className="space-y-4">
-                                        {/* Step 1 */}
-                                        <div className="flex gap-4">
-                                          <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center text-white font-bold text-sm">
-                                            1
-                                          </div>
-                                          <div className="flex-1">
-                                            <h5 className="font-bold text-gray-900 mb-1">Je rekent je leadbatch af</h5>
-                                            <p className="text-sm text-gray-600">
-                                              Zodra je betaling binnen is, gaan wij direct aan de slag.
-                                            </p>
-                                          </div>
-                                        </div>
-
-                                        {/* Step 2 */}
-                                        <div className="flex gap-4">
-                                          <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center text-white font-bold text-sm">
-                                            2
-                                          </div>
-                                          <div className="flex-1">
-                                            <h5 className="font-bold text-gray-900 mb-1">Wij nemen persoonlijk contact op</h5>
-                                            <p className="text-sm text-gray-600">
-                                              Binnen korte tijd bellen of mailen we om jouw campagnevoorkeuren en benodigde informatie te bespreken.
-                                            </p>
-                                          </div>
-                                        </div>
-
-                                        {/* Step 3 */}
-                                        <div className="flex gap-4">
-                                          <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-600 rounded-full flex items-center justify-center text-white font-bold text-sm">
-                                            3
-                                          </div>
-                                          <div className="flex-1">
-                                            <h5 className="font-bold text-gray-900 mb-1">We starten jouw persoonlijke campagnes</h5>
-                                            <p className="text-sm text-gray-600">
-                                              Op basis van jouw wensen zetten we alles strategisch en doelgericht op.
-                                            </p>
-                                          </div>
-                                        </div>
-
-                                        {/* Step 4 */}
-                                        <div className="flex gap-4">
-                                          <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-orange-500 to-red-600 rounded-full flex items-center justify-center text-white font-bold text-sm">
-                                            4
-                                          </div>
-                                          <div className="flex-1">
-                                            <h5 className="font-bold text-gray-900 mb-1">Je krijgt toegang tot ons CRM-systeem</h5>
-                                            <p className="text-sm text-gray-600">
-                                              We delen een overzichtelijke spreadsheet én geven een korte onboarding van het WarmeLeads CRM — zodat je eenvoudig al je leads kunt beheren.
-                                            </p>
-                                          </div>
-                                        </div>
-
-                                        {/* Step 5 */}
-                                        <div className="flex gap-4">
-                                          <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-yellow-500 to-amber-600 rounded-full flex items-center justify-center text-white font-bold text-sm">
-                                            5
-                                          </div>
-                                          <div className="flex-1">
-                                            <h5 className="font-bold text-gray-900 mb-1">Leads geleverd, wij blijven betrokken</h5>
-                                            <p className="text-sm text-gray-600">
-                                              Je ontvangt je leadbatch en wij blijven monitoren, optimaliseren en beschikbaar voor vragen of hulp.
-                                            </p>
-                                          </div>
-                                        </div>
+                                        {selectedPackage.type === 'exclusive' ? (
+                                          <>
+                                            <div className="flex gap-4">
+                                              <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center text-white font-bold text-sm">1</div>
+                                              <div className="flex-1">
+                                                <h5 className="font-bold text-gray-900 mb-1">💎 Je bestelt exclusieve leads</h5>
+                                                <p className="text-sm text-gray-600">Na betaling starten we binnen 24u campagnes speciaal voor jou.</p>
+                                              </div>
+                                            </div>
+                                            <div className="flex gap-4">
+                                              <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center text-white font-bold text-sm">2</div>
+                                              <div className="flex-1">
+                                                <h5 className="font-bold text-gray-900 mb-1">📊 Toegang tot persoonlijk portal</h5>
+                                                <p className="text-sm text-gray-600">Je krijgt direct toegang tot je CRM portal met Google Sheets integratie.</p>
+                                              </div>
+                                            </div>
+                                            <div className="flex gap-4">
+                                              <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-600 rounded-full flex items-center justify-center text-white font-bold text-sm">3</div>
+                                              <div className="flex-1">
+                                                <h5 className="font-bold text-gray-900 mb-1">⚡ Leads real-time binnen</h5>
+                                                <p className="text-sm text-gray-600">Zodra leads gegenereerd worden, verschijnen ze direct in je portal.</p>
+                                              </div>
+                                            </div>
+                                            <div className="flex gap-4">
+                                              <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-orange-500 to-red-600 rounded-full flex items-center justify-center text-white font-bold text-sm">4</div>
+                                              <div className="flex-1">
+                                                <h5 className="font-bold text-gray-900 mb-1">🎯 100% exclusief voor jou</h5>
+                                                <p className="text-sm text-gray-600">Geen concurrentie - jij bent de enige die deze leads ontvangt.</p>
+                                              </div>
+                                            </div>
+                                          </>
+                                        ) : selectedPackage.type === 'shared_fresh' ? (
+                                          <>
+                                            <div className="flex gap-4">
+                                              <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center text-white font-bold text-sm">1</div>
+                                              <div className="flex-1">
+                                                <h5 className="font-bold text-gray-900 mb-1">🤝 Je bestelt gedeelde verse leads</h5>
+                                                <p className="text-sm text-gray-600">Na betaling starten we binnen 24u campagnes (gedeeld met 2 anderen).</p>
+                                              </div>
+                                            </div>
+                                            <div className="flex gap-4">
+                                              <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center text-white font-bold text-sm">2</div>
+                                              <div className="flex-1">
+                                                <h5 className="font-bold text-gray-900 mb-1">📧 Excel binnen 24 uur</h5>
+                                                <p className="text-sm text-gray-600">Je ontvangt een Excel bestand per email met alle lead data.</p>
+                                              </div>
+                                            </div>
+                                            <div className="flex gap-4">
+                                              <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-600 rounded-full flex items-center justify-center text-white font-bold text-sm">3</div>
+                                              <div className="flex-1">
+                                                <h5 className="font-bold text-gray-900 mb-1">⚡ Verse leads uit campagnes</h5>
+                                                <p className="text-sm text-gray-600">Alle leads zijn vers gegenereerd met bewezen koopintentie.</p>
+                                              </div>
+                                            </div>
+                                            <div className="flex gap-4">
+                                              <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-orange-500 to-red-600 rounded-full flex items-center justify-center text-white font-bold text-sm">4</div>
+                                              <div className="flex-1">
+                                                <h5 className="font-bold text-gray-900 mb-1">💰 1/3 van de prijs</h5>
+                                                <p className="text-sm text-gray-600">Verse leads voor een fractie van de exclusieve prijs!</p>
+                                              </div>
+                                            </div>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <div className="flex gap-4">
+                                              <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center text-white font-bold text-sm">1</div>
+                                              <div className="flex-1">
+                                                <h5 className="font-bold text-gray-900 mb-1">📦 Je bestelt bulk leads</h5>
+                                                <p className="text-sm text-gray-600">Na betaling bereiden we direct je pakket voor uit onze database.</p>
+                                              </div>
+                                            </div>
+                                            <div className="flex gap-4">
+                                              <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center text-white font-bold text-sm">2</div>
+                                              <div className="flex-1">
+                                                <h5 className="font-bold text-gray-900 mb-1">📧 Excel binnen 24 uur</h5>
+                                                <p className="text-sm text-gray-600">Je ontvangt een Excel bestand per email met alle leads.</p>
+                                              </div>
+                                            </div>
+                                            <div className="flex gap-4">
+                                              <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-600 rounded-full flex items-center justify-center text-white font-bold text-sm">3</div>
+                                              <div className="flex-1">
+                                                <h5 className="font-bold text-gray-900 mb-1">💰 Laagste prijs per lead</h5>
+                                                <p className="text-sm text-gray-600">Vanaf €3,50/lead - perfect voor grote volumes en testen.</p>
+                                              </div>
+                                            </div>
+                                            <div className="flex gap-4">
+                                              <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-orange-500 to-red-600 rounded-full flex items-center justify-center text-white font-bold text-sm">4</div>
+                                              <div className="flex-1">
+                                                <h5 className="font-bold text-gray-900 mb-1">📊 Database leads</h5>
+                                                <p className="text-sm text-gray-600">Leads tot 6 maanden oud - ideaal voor cold outreach campaigns.</p>
+                                              </div>
+                                            </div>
+                                          </>
+                                        )}
                                       </div>
 
                                       <div className="mt-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200">
@@ -983,7 +1048,11 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
                                     3
                                   </div>
                                   <h3 className="text-xl font-bold text-gray-900">
-                                    {selectedPackage.type === 'exclusive' ? 'Kies aantal leads' : 'Bevestig je bestelling'}
+                                    {selectedPackage.type === 'exclusive' 
+                                      ? 'Kies aantal leads' 
+                                      : selectedPackage.type === 'shared_fresh'
+                                      ? 'Bevestig je bestelling'
+                                      : 'Kies aantal leads'}
                                   </h3>
                                 </div>
 
