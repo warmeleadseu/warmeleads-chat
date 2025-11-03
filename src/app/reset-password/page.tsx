@@ -21,37 +21,40 @@ export default function ResetPasswordPage() {
   // Verify the session on mount
   useEffect(() => {
     let mounted = true;
+    let hasReceivedRecoveryEvent = false;
 
     const handleAuthStateChange = async () => {
       try {
+        // Set a timeout: if no PASSWORD_RECOVERY event within 5 seconds, show error
+        const verificationTimeout = setTimeout(() => {
+          if (mounted && !hasReceivedRecoveryEvent) {
+            console.log('⏱️ No PASSWORD_RECOVERY event received - link expired or invalid');
+            setError('Deze reset link is verlopen of ongeldig. Vraag een nieuwe aan.');
+            setIsVerifying(false);
+          }
+        }, 5000);
+
         // Listen for auth state changes (this will handle the hash tokens automatically)
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
           console.log('🔐 Auth state changed:', event, session ? 'Session exists' : 'No session');
           
           if (!mounted) return;
 
+          // PASSWORD_RECOVERY is the ONLY event that confirms a valid reset link
           if (event === 'PASSWORD_RECOVERY') {
-            console.log('✅ Password recovery session detected');
-            setIsVerifying(false);
-          } else if (session) {
-            console.log('✅ Valid session found');
-            setIsVerifying(false);
-          } else if (event === 'SIGNED_OUT' || !session) {
-            console.log('❌ No valid session');
-            setError('Deze reset link is verlopen of ongeldig. Vraag een nieuwe aan.');
+            console.log('✅ Password recovery session detected - link is valid!');
+            hasReceivedRecoveryEvent = true;
+            clearTimeout(verificationTimeout);
+            setError(null);
             setIsVerifying(false);
           }
+          // Ignore all other events (SIGNED_OUT, INITIAL_SESSION, etc) during verification
+          // They are normal during the password reset flow
         });
-
-        // Also check current session immediately
-        const { data: { session } } = await supabase.auth.getSession();
-        if (mounted && session) {
-          console.log('✅ Existing session found');
-          setIsVerifying(false);
-        }
 
         return () => {
           mounted = false;
+          clearTimeout(verificationTimeout);
           subscription.unsubscribe();
         };
       } catch (error) {
