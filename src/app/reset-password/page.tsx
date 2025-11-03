@@ -14,8 +14,50 @@ export default function ResetPasswordPage() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(true);
   const router = useRouter();
   const supabase = createBrowserClient();
+
+  // Verify the session on mount
+  useEffect(() => {
+    const checkSession = async () => {
+      try {
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        
+        if (sessionError || !session) {
+          console.error('No valid session found:', sessionError);
+          setError('Deze reset link is verlopen of ongeldig. Vraag een nieuwe aan.');
+          setIsVerifying(false);
+          return;
+        }
+
+        console.log('✅ Valid session found for password reset');
+        setIsVerifying(false);
+      } catch (error) {
+        console.error('Session check error:', error);
+        setError('Er ging iets mis. Probeer het opnieuw.');
+        setIsVerifying(false);
+      }
+    };
+
+    checkSession();
+  }, [supabase]);
+
+  // Show loading state while verifying session
+  if (isVerifying) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-brand-purple to-brand-pink flex items-center justify-center p-4">
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="text-center"
+        >
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-white mb-4"></div>
+          <p className="text-white text-lg">Link verifiëren...</p>
+        </motion.div>
+      </div>
+    );
+  }
 
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
