@@ -406,35 +406,6 @@ export function InfoJourney({ onBackToHome, onStartChat, onDirectOrder }: InfoJo
         </div>
       </div>
 
-      {/* Floating Action Buttons */}
-      <div className="fixed bottom-6 right-6 flex flex-col gap-3 z-40">
-        <motion.button
-          onClick={handleDirectOrder}
-          className="w-14 h-14 bg-gradient-to-r from-green-500 to-emerald-600 rounded-full shadow-2xl flex items-center justify-center"
-          initial={{ scale: 0 }}
-          animate={{ scale: 1 }}
-          transition={{ delay: 0.8, type: 'spring', stiffness: 200 }}
-          whileHover={{ scale: 1.1 }}
-          whileTap={{ scale: 0.9 }}
-          title="Direct bestellen"
-        >
-          <RocketLaunchIcon className="w-7 h-7 text-white" />
-        </motion.button>
-        
-        <motion.button
-          onClick={() => onStartChat('info')}
-          className="w-14 h-14 bg-button-gradient rounded-full shadow-2xl flex items-center justify-center"
-          initial={{ scale: 0 }}
-          animate={{ scale: 1 }}
-          transition={{ delay: 1, type: 'spring', stiffness: 200 }}
-          whileHover={{ scale: 1.1 }}
-          whileTap={{ scale: 0.9 }}
-          title="Chat met Lisa"
-        >
-          <ChatBubbleLeftRightIcon className="w-7 h-7 text-white" />
-        </motion.button>
-      </div>
-
       {/* Completion Modal */}
       <AnimatePresence>
         {hasReadAll && (
