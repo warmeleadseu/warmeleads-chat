@@ -14,7 +14,7 @@ export const metadata: Metadata = {
 
 export default function ZonnepanelenLeadsPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-brand-purple via-brand-pink to-brand-orange">
+    <div className="min-h-screen bg-gradient-to-br from-brand-navy via-brand-purple to-brand-pink">
       {/* SEO Hidden Content */}
       <div className="sr-only">
         <h1>Zonnepanelen Leads Kopen Nederland - Solar Installateur Prospects</h1>

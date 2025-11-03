@@ -109,7 +109,7 @@ export default function ResetPasswordPage() {
   // Show loading state while verifying session
   if (isVerifying) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-brand-purple to-brand-pink flex items-center justify-center p-4">
+      <div className="min-h-screen bg-gradient-to-br from-brand-navy via-brand-purple to-brand-pink flex items-center justify-center p-4">
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -181,7 +181,7 @@ export default function ResetPasswordPage() {
 
   if (success) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-brand-purple to-brand-pink flex items-center justify-center p-4">
+      <div className="min-h-screen bg-gradient-to-br from-brand-navy via-brand-purple to-brand-pink flex items-center justify-center p-4">
         <motion.div
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
@@ -205,7 +205,7 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-brand-purple to-brand-pink flex flex-col">
+    <div className="min-h-screen bg-gradient-to-br from-brand-navy via-brand-purple to-brand-pink flex flex-col">
       {/* Header */}
       <motion.div
         className="w-full bg-white/10 backdrop-blur-sm border-b border-white/20 py-6"

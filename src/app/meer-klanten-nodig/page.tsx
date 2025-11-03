@@ -16,7 +16,7 @@ export const metadata: Metadata = {
 
 export default function MeerKlantenNodigPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-blue-50">
+    <div className="min-h-screen bg-gradient-to-br from-brand-navy via-brand-purple to-brand-pink">
       {/* Hero Section */}
       <div className="relative overflow-hidden bg-gradient-to-r from-orange-600 to-red-600 text-white">
         <div className="absolute inset-0 bg-black/10"></div>
