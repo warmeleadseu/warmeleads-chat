@@ -22,10 +22,27 @@ export default function ResetPasswordPage() {
   useEffect(() => {
     const checkSession = async () => {
       try {
+        // First, check if there's a hash with auth tokens (from email link)
+        if (window.location.hash) {
+          console.log('🔍 Hash detected, exchanging for session...');
+          // Supabase will automatically handle the hash and create a session
+          await supabase.auth.getSession();
+        }
+
+        // Small delay to let Supabase process the hash
+        await new Promise(resolve => setTimeout(resolve, 500));
+
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         
-        if (sessionError || !session) {
-          console.error('No valid session found:', sessionError);
+        if (sessionError) {
+          console.error('Session error:', sessionError);
+          setError('Er ging iets mis met de verificatie. Probeer het opnieuw.');
+          setIsVerifying(false);
+          return;
+        }
+
+        if (!session) {
+          console.error('No session found');
           setError('Deze reset link is verlopen of ongeldig. Vraag een nieuwe aan.');
           setIsVerifying(false);
           return;
