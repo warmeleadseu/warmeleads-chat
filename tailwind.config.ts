@@ -71,5 +71,26 @@ module.exports = {
       }
     },
   },
-  plugins: [],
+  plugins: [
+    // Add custom utility classes
+    function({ addUtilities }: any) {
+      const newUtilities = {
+        '.sr-only': {
+          position: 'absolute',
+          width: '1px',
+          height: '1px',
+          padding: '0',
+          margin: '-1px',
+          overflow: 'hidden',
+          clip: 'rect(0, 0, 0, 0)',
+          whiteSpace: 'nowrap',
+          borderWidth: '0',
+        },
+        '.focus-visible-ring': {
+          '@apply focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-offset-2': {},
+        },
+      };
+      addUtilities(newUtilities);
+    },
+  ],
 };
