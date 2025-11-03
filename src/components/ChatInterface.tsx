@@ -279,7 +279,7 @@ export function ChatInterface({ entryPoint = 'direct', onBackToHome, onShowAccou
   };
 
   return (
-    <div className="flex flex-col h-screen max-w-2xl mx-auto bg-gradient-to-br from-brand-navy via-brand-purple to-brand-pink">
+    <div className="flex flex-col h-screen max-w-2xl mx-auto">
       {/* Header met Logo */}
       <motion.div 
         className="flex items-center justify-between p-4 glass-effect"

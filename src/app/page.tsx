@@ -54,7 +54,7 @@ export default function HomePage() {
 
   if (!isLoaded) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-brand-navy via-brand-purple to-brand-pink flex items-center justify-center">
         <motion.div
           className="flex flex-col items-center space-y-4"
           initial={{ opacity: 0 }}
@@ -212,7 +212,7 @@ export default function HomePage() {
   };
 
   return (
-    <main className="min-h-screen">
+    <main className="min-h-screen bg-gradient-to-br from-brand-navy via-brand-purple to-brand-pink">
       {/* Main Content */}
       <div className="relative z-10">
         {renderCurrentPage()}
