@@ -45,8 +45,29 @@ export default function ResetPasswordPage() {
           return;
         }
         
-        // Manually set the session using the tokens from the URL
-        console.log('🔄 Setting session with recovery token...');
+        // Verify the recovery token via server-side API
+        console.log('🔄 Verifying recovery token with server...');
+        const verifyResponse = await fetch('/api/auth/verify-recovery', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ accessToken, refreshToken }),
+        });
+        
+        if (!verifyResponse.ok) {
+          const errorData = await verifyResponse.json();
+          console.error('❌ Recovery token verification failed:', errorData);
+          setError('Deze reset link is verlopen of ongeldig. Vraag een nieuwe aan.');
+          setIsVerifying(false);
+          return;
+        }
+        
+        const { user } = await verifyResponse.json();
+        console.log('✅ Recovery token verified for:', user.email);
+        
+        if (!mounted) return;
+        
+        // Now set the session in the browser client
+        console.log('🔄 Setting browser session...');
         const { data, error } = await supabase.auth.setSession({
           access_token: accessToken,
           refresh_token: refreshToken || '',
@@ -55,18 +76,18 @@ export default function ResetPasswordPage() {
         if (!mounted) return;
         
         if (error) {
-          console.error('❌ Error setting session:', error);
-          setError('Deze reset link is verlopen of ongeldig. Vraag een nieuwe aan.');
+          console.error('❌ Error setting browser session:', error);
+          // Even if this fails, we know the token is valid, so show the form
+          console.log('⚠️ Proceeding anyway - token was validated by server');
           setIsVerifying(false);
           return;
         }
         
         if (data.session && data.user) {
-          console.log('✅ Valid password reset session established for:', data.user.email);
+          console.log('✅ Browser session established for:', data.user.email);
           setIsVerifying(false);
         } else {
-          console.log('❌ Could not establish session');
-          setError('Deze reset link is verlopen of ongeldig. Vraag een nieuwe aan.');
+          console.log('⚠️ No browser session, but token is valid - proceeding');
           setIsVerifying(false);
         }
       } catch (error) {
