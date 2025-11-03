@@ -54,13 +54,15 @@ export interface ButtonProps
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant, size, fullWidth, isLoading, leftIcon, rightIcon, children, disabled, ...props }, ref) => {
+    const Component = motion.button;
+    
     return (
-      <motion.button
+      <Component
         ref={ref}
         className={cn(buttonVariants({ variant, size, fullWidth, className }))}
         disabled={disabled || isLoading}
-        whileHover={{ scale: disabled || isLoading ? 1 : 1.02 }}
-        whileTap={{ scale: disabled || isLoading ? 1 : 0.98 }}
+        whileHover={disabled || isLoading ? undefined : { scale: 1.02 }}
+        whileTap={disabled || isLoading ? undefined : { scale: 0.98 }}
         {...props}
       >
         {isLoading && (
@@ -72,7 +74,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         {!isLoading && leftIcon && <span className="mr-2">{leftIcon}</span>}
         {children}
         {!isLoading && rightIcon && <span className="ml-2">{rightIcon}</span>}
-      </motion.button>
+      </Component>
     );
   }
 );
