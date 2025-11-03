@@ -178,7 +178,7 @@ export default function HomePage() {
         const chatContext = ChatContextManager.getContext();
         return <ChatInterface entryPoint={chatContext} onBackToHome={handleBackToHome} onShowAccountCreation={() => setCurrentPage('account-creation')} />;
       case 'info':
-        return <InfoJourney onBackToHome={handleBackToHome} onStartChat={(context: ChatContext) => handleStartChat(context)} />;
+        return <InfoJourney onBackToHome={handleBackToHome} onStartChat={(context: ChatContext) => handleStartChat(context)} onDirectOrder={() => handlePathSelect('direct')} />;
       case 'faq':
         return <SmartFAQ onBackToHome={handleBackToHome} onStartChat={(context) => handleStartChat(context)} />;
       case 'customer':

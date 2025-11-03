@@ -10,7 +10,9 @@ import {
   ClockIcon,
   ShieldCheckIcon,
   ChatBubbleLeftRightIcon,
-  StarIcon
+  ChartBarIcon,
+  ComputerDesktopIcon,
+  RocketLaunchIcon
 } from '@heroicons/react/24/outline';
 import { Logo } from './Logo';
 import { StyledContent } from './StyledContent';
@@ -19,6 +21,7 @@ import { type ChatContext } from '@/lib/chatContext';
 interface InfoJourneyProps {
   onBackToHome: () => void;
   onStartChat: (context: ChatContext) => void;
+  onDirectOrder?: () => void;
 }
 
 const infoSections = [
@@ -30,11 +33,18 @@ const infoSections = [
 
     ✅ Vers gegenereerd uit onze actieve campagnes
     ✅ Geïnteresseerd zijn in uw specifieke branche  
-    ✅ Nederlandse prospects met contactgegevens
+    ✅ Nederlandse en Belgische prospects met contactgegevens
     ✅ Kwaliteitscontrole hebben ondergaan
     
-    Exclusieve leads: We starten binnen 24u campagnes speciaal voor jou
-    Bulk leads: Direct beschikbaar, binnen 24u geleverd
+    **Exclusieve leads (alleen voor u):**
+    • We starten binnen 24u campagnes speciaal voor u
+    • Leads komen real-time binnen in uw persoonlijke portal
+    • 100% exclusief, geen concurrentie
+    
+    **Bulk leads (gedeeld, voordelig):**
+    • Direct beschikbaar uit onze database
+    • Binnen 24u per email geleverd (Excel bestand)
+    • Bewezen koopintentie, 1/3 van de prijs
     
     Dit betekent veel hogere conversiekansen dan koude acquisitie!`,
     cta: 'Vraag Lisa naar voorbeelden',
@@ -45,11 +55,13 @@ const infoSections = [
     title: 'Onze specialisaties',
     content: `Wij leveren hoogwaardige leads voor:
 
-    • Zonnepanelen - Huiseigenaren met interesse in solar
-    • Thuisbatterijen - Energie-onafhankelijkheid zoekers  
-    • Warmtepompen - Verduurzaming en besparing
-    • Airco's - Comfort en klimaatbeheersing
-    • Financial Lease - Bedrijven zoekend naar financiering
+    • **Zonnepanelen** - Huiseigenaren met interesse in solar  
+    • **Thuisbatterijen** - Energie-onafhankelijkheid zoekers  
+    • **Warmtepompen** - Verduurzaming en besparing  
+    • **Airco installatie** - Comfort en klimaatbeheersing  
+    • **Financial Lease** - Bedrijven zoekend naar financiering
+    
+    🇳🇱 Nederlandse markt + 🇧🇪 Belgische markt
     
     Plus maatwerk voor andere branches op aanvraag!`,
     cta: 'Chat over mijn branche',
@@ -58,78 +70,126 @@ const infoSections = [
     id: 'pricing',
     icon: CurrencyEuroIcon,
     title: 'Transparante prijzen',
-    content: `Exclusieve leads (alleen voor u):
+    content: `**Exclusieve leads (alleen voor u):**
     
-    Thuisbatterijen: €37,50 - €42,50 per lead
-    Zonnepanelen: €40,00 - €45,00 per lead
-    Warmtepompen: €45,00 - €50,00 per lead
+    • Thuisbatterijen: €37,50 - €42,50 per lead
+    • Zonnepanelen: €40,00 - €45,00 per lead
+    • Warmtepompen: €45,00 - €50,00 per lead
+    • Airco: €35,00 - €40,00 per lead
+    • Financial Lease: €45,00 - €55,00 per lead
     
-    📦 We starten binnen 24u campagnes voor jou
-    ⚡ Leads komen real-time in je persoonlijke portal
+    📦 Campagnes starten binnen 24 uur
+    ⚡ Leads real-time in uw persoonlijke portal
+    🎯 100% exclusief, geen concurrentie
     
-    Gedeelde leads (met 2 anderen, 1/3 van de prijs):
+    **Bulk leads (gedeeld, voordelig):**
     
-    Thuisbatterijen: €12,50 per lead (min. 500)
-    Zonnepanelen: €15,00 per lead (min. 500)
-    Warmtepompen: €16,50 per lead (min. 500)
+    • Thuisbatterijen: €12,50 per lead (min. 500)
+    • Zonnepanelen: €15,00 per lead (min. 500)
+    • Warmtepompen: €16,50 per lead (min. 500)
     
-    📦 Excel bestand binnen 24 uur per email
+    📦 Excel bestand binnen 24u per email
+    💰 1/3 van de prijs van exclusieve leads
     
-    ✅ Geen setup kosten
-    ✅ Geen abonnementen
-    ✅ Alleen resultaat!`,
+    ✅ Geen setup kosten • Geen abonnementen • Alleen resultaat!`,
     cta: 'Bereken mijn investering',
   },
   {
-    id: 'why-15-minutes',
+    id: 'how-it-works',
     icon: ClockIcon,
-    title: 'Waarom binnen 15 minuten?',
-    content: `Snelheid = Kwaliteit
+    title: 'Zo werkt het',
+    content: `**Voor Exclusieve Leads:**
     
-    • Verse leads hebben de hoogste conversiekans
-    • Snelle levering voorkomt dat concurrenten er eerder bij zijn
-    • Real-time systeem zorgt voor directe beschikbaarheid
-    • Automatische delivery naar uw CRM of email
+    1️⃣ U kiest uw pakket en betaalt
+    2️⃣ Wij starten binnen 24u campagnes voor u
+    3️⃣ Leads komen real-time binnen in uw portal
+    4️⃣ U ontvangt automatisch notificaties
+    5️⃣ Direct contact opnemen = maximale conversie!
     
-    Het verschil tussen succes en mislopen is vaak een kwestie van minuten!
+    **Voor Bulk Leads:**
     
-    Onze klanten zien gemiddeld 40% hogere conversie door onze snelheid.`,
-    cta: 'Test de snelheid zelf',
+    1️⃣ U bestelt een bulk pakket (min. 500)
+    2️⃣ Wij bereiden het Excel bestand voor
+    3️⃣ Binnen 24u ontvangt u de leads per email
+    4️⃣ Importeren in uw CRM en aan de slag!
+    
+    💡 **Tip:** Start met bulk om te testen, schakel over naar exclusief voor maximale ROI!`,
+    cta: 'Start nu',
+  },
+  {
+    id: 'your-portal',
+    icon: ComputerDesktopIcon,
+    title: 'Uw persoonlijke portal',
+    content: `Bij WarmeLeads krijgt u toegang tot uw eigen dashboard:
+    
+    📊 **Real-time Lead Overview**
+    • Alle leads op één plek
+    • Status tracking per lead
+    • Notificaties bij nieuwe leads
+    
+    📈 **Analytics & Insights**
+    • Conversie statistieken
+    • ROI berekeningen
+    • Performance tracking
+    
+    🔗 **CRM Integratie**
+    • Direct gekoppeld aan uw Google Sheet
+    • Automatische synchronisatie
+    • Bidirectionele updates
+    
+    ✅ Toegang op elk apparaat - mobiel, tablet, desktop`,
+    cta: 'Bekijk demo portal',
   },
   {
     id: 'success-stories',
-    icon: StarIcon,
-    title: 'Klant succesverhalen',
-    content: `Solar Solutions Utrecht
-    "Van 12 naar 47 klanten per maand dankzij WarmeLeads"
+    icon: ChartBarIcon,
+    title: 'Bewezen resultaten',
+    content: `**Echte statistieken van onze klanten:**
     
-    BatterijXpert Rotterdam  
-    "ROI van 340% in eerste 3 maanden met exclusieve leads"
+    📈 **Gemiddelde conversieratio:**
+    • Exclusieve leads: 25-40% conversie
+    • Bulk leads: 8-15% conversie
+    • Koude acquisitie: 2-5% conversie
     
-    WarmtePomp Pro Eindhoven
-    "Gedeelde leads waren perfect om te starten, nu exclusief"
+    💰 **ROI binnen 3 maanden:**
+    • Exclusieve klanten: 280-450% ROI
+    • Bulk klanten: 180-250% ROI
     
-    AircoMeester Amsterdam
-    "15 minuten delivery is echt waar - ongelooflijk!"`,
+    ⚡ **Snelheid maakt verschil:**
+    • Contact binnen 5 min: 80% hogere conversie
+    • Contact binnen 1 uur: 40% hogere conversie
+    • Contact na 24 uur: Gemiddelde conversie
+    
+    🎯 **85% van onze klanten bestelt opnieuw binnen 3 maanden**`,
     cta: 'Word de volgende successtory',
   },
   {
     id: 'guarantee',
     icon: ShieldCheckIcon,
     title: 'Onze garanties',
-    content: `100% Tevredenheidsgarantie
+    content: `**100% Tevredenheidsgarantie**
     
-    • Kwaliteitsgarantie - Slechte leads worden vervangen
-    • Leveringsgarantie - Binnen 15 minuten of gratis
-    • Geld-terug-garantie - Niet tevreden? Geld terug
-    • Privacy garantie - Uw gegevens blijven veilig
+    ✅ **Kwaliteitsgarantie**
+    Slechte leads? We vervangen ze gratis!
     
-    Wij staan 100% achter onze service!`,
+    ✅ **Levertijdgarantie**  
+    Exclusief: Real-time zodra gegenereerd
+    Bulk: Binnen 24u of gratis extra leads
+    
+    ✅ **Geld-terug-garantie**
+    Niet tevreden? Geld terug binnen 7 dagen
+    
+    ✅ **Privacy & Veiligheid**
+    • AVG-compliant
+    • Versleutelde data
+    • Nederlandse servers
+    
+    🛡️ Wij staan 100% achter onze service!`,
     cta: 'Start risicovrij',
   },
 ];
 
-export function InfoJourney({ onBackToHome, onStartChat }: InfoJourneyProps) {
+export function InfoJourney({ onBackToHome, onStartChat, onDirectOrder }: InfoJourneyProps) {
   const [currentSection, setCurrentSection] = useState(0);
   const [hasReadAll, setHasReadAll] = useState(false);
 
@@ -150,11 +210,23 @@ export function InfoJourney({ onBackToHome, onStartChat }: InfoJourneyProps) {
   const currentInfo = infoSections[currentSection];
   const Icon = currentInfo.icon;
 
+  const handleDirectOrder = () => {
+    if (onDirectOrder) {
+      onDirectOrder();
+    } else {
+      // Fallback to home and trigger order modal
+      onBackToHome();
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('openOrderModal'));
+      }, 100);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-brand-navy via-brand-purple to-brand-pink flex flex-col">
       {/* Header */}
       <motion.div
-        className="flex items-center justify-between p-4 glass-effect"
+        className="flex items-center justify-between p-3 md:p-4 glass-effect"
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
       >
@@ -163,27 +235,27 @@ export function InfoJourney({ onBackToHome, onStartChat }: InfoJourneyProps) {
           className="flex items-center space-x-2 text-white/80 hover:text-white transition-colors"
         >
           <ArrowLeftIcon className="w-5 h-5" />
-          <span>Terug</span>
+          <span className="hidden sm:inline">Terug</span>
         </button>
         
         <div className="text-center">
-          <Logo size="sm" showText={false} className="mx-auto mb-2" />
-          <h1 className="text-white font-bold text-xl">WarmeLeads Info</h1>
-          <p className="text-white/60 text-sm">
+          <Logo size="sm" showText={false} className="mx-auto mb-1" />
+          <h1 className="text-white font-bold text-lg md:text-xl">WarmeLeads Info</h1>
+          <p className="text-white/60 text-xs md:text-sm">
             {currentSection + 1} van {infoSections.length}
           </p>
         </div>
         
         <button
           onClick={() => onStartChat('info')}
-          className="chat-button px-4 py-2 text-sm"
+          className="chat-button px-3 py-2 text-xs md:text-sm"
         >
-          💬 Chat Nu
+          💬 <span className="hidden sm:inline">Chat</span>
         </button>
       </motion.div>
 
       {/* Progress Bar */}
-      <div className="px-4 pb-2">
+      <div className="px-4 pb-2 pt-1">
         <div className="w-full bg-white/20 rounded-full h-2">
           <motion.div
             className="bg-white h-2 rounded-full"
@@ -191,6 +263,20 @@ export function InfoJourney({ onBackToHome, onStartChat }: InfoJourneyProps) {
             animate={{ width: `${((currentSection + 1) / infoSections.length) * 100}%` }}
             transition={{ duration: 0.5 }}
           />
+        </div>
+        {/* Section Labels - Desktop Only */}
+        <div className="hidden md:flex justify-between mt-2 text-xs text-white/60">
+          {infoSections.map((section, index) => (
+            <button
+              key={index}
+              onClick={() => setCurrentSection(index)}
+              className={`hover:text-white transition-colors ${
+                index === currentSection ? 'text-white font-semibold' : ''
+              }`}
+            >
+              {section.title}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -200,7 +286,7 @@ export function InfoJourney({ onBackToHome, onStartChat }: InfoJourneyProps) {
           <AnimatePresence mode="wait">
             <motion.div
               key={currentSection}
-              className="bg-white/95 backdrop-blur-sm rounded-2xl p-8 shadow-2xl"
+              className="bg-white/95 backdrop-blur-sm rounded-2xl p-6 md:p-8 shadow-2xl"
               initial={{ opacity: 0, x: 50 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -50 }}
@@ -208,13 +294,13 @@ export function InfoJourney({ onBackToHome, onStartChat }: InfoJourneyProps) {
             >
               {/* Icon */}
               <div className="flex justify-center mb-6">
-                <div className="w-16 h-16 bg-lisa-gradient rounded-2xl flex items-center justify-center">
+                <div className="w-16 h-16 bg-button-gradient rounded-2xl flex items-center justify-center shadow-lg">
                   <Icon className="w-8 h-8 text-white" />
                 </div>
               </div>
 
               {/* Title */}
-              <h2 className="text-3xl font-bold text-brand-navy text-center mb-6">
+              <h2 className="text-2xl md:text-3xl font-bold text-brand-navy text-center mb-6">
                 {currentInfo.title}
               </h2>
 
@@ -223,8 +309,8 @@ export function InfoJourney({ onBackToHome, onStartChat }: InfoJourneyProps) {
                 <StyledContent content={currentInfo.content} />
               </div>
 
-              {/* CTA Button */}
-              <div className="text-center mb-6">
+              {/* CTA Buttons */}
+              <div className="flex flex-col sm:flex-row gap-3 mb-6">
                 <motion.button
                   onClick={() => {
                     // Bepaal context op basis van sectie
@@ -232,17 +318,28 @@ export function InfoJourney({ onBackToHome, onStartChat }: InfoJourneyProps) {
                     if (currentInfo.id === 'what-are-leads') context = 'examples';
                     if (currentInfo.id === 'our-branches') context = 'branches';
                     if (currentInfo.id === 'pricing') context = 'pricing';
-                    if (currentInfo.id === 'why-15-minutes') context = 'delivery';
+                    if (currentInfo.id === 'how-it-works') context = 'delivery';
+                    if (currentInfo.id === 'your-portal') context = 'customer';
                     if (currentInfo.id === 'success-stories') context = 'roi';
                     if (currentInfo.id === 'guarantee') context = 'quality';
                     onStartChat(context);
                   }}
-                  className="chat-button inline-flex items-center space-x-2"
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
+                  className="flex-1 chat-button inline-flex items-center justify-center space-x-2"
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
                 >
                   <ChatBubbleLeftRightIcon className="w-5 h-5" />
                   <span>{currentInfo.cta}</span>
+                </motion.button>
+                
+                <motion.button
+                  onClick={handleDirectOrder}
+                  className="flex-1 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-semibold py-3 px-6 rounded-xl shadow-lg hover:shadow-xl transition-all inline-flex items-center justify-center space-x-2"
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  <RocketLaunchIcon className="w-5 h-5" />
+                  <span>Direct bestellen</span>
                 </motion.button>
               </div>
 
@@ -260,7 +357,7 @@ export function InfoJourney({ onBackToHome, onStartChat }: InfoJourneyProps) {
                   `}
                 >
                   <ArrowLeftIcon className="w-4 h-4" />
-                  <span>Vorige</span>
+                  <span className="hidden sm:inline">Vorige</span>
                 </button>
 
                 <div className="flex space-x-2">
@@ -269,12 +366,13 @@ export function InfoJourney({ onBackToHome, onStartChat }: InfoJourneyProps) {
                       key={index}
                       onClick={() => setCurrentSection(index)}
                       className={`
-                        w-3 h-3 rounded-full transition-all duration-300
+                        w-2 h-2 md:w-3 md:h-3 rounded-full transition-all duration-300
                         ${index === currentSection 
                           ? 'bg-brand-pink scale-125' 
                           : 'bg-gray-300 hover:bg-gray-400'
                         }
                       `}
+                      aria-label={`Ga naar ${infoSections[index].title}`}
                     />
                   ))}
                 </div>
@@ -283,10 +381,11 @@ export function InfoJourney({ onBackToHome, onStartChat }: InfoJourneyProps) {
                   onClick={nextSection}
                   className="flex items-center space-x-2 px-4 py-2 rounded-lg text-brand-purple hover:bg-brand-purple/10 transition-all"
                 >
-                  <span>
+                  <span className="hidden sm:inline">
                     {currentSection === infoSections.length - 1 ? 'Klaar' : 'Volgende'}
                   </span>
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <span className="sm:hidden">→</span>
+                  <svg className="w-4 h-4 hidden sm:block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                   </svg>
                 </button>
@@ -296,18 +395,34 @@ export function InfoJourney({ onBackToHome, onStartChat }: InfoJourneyProps) {
         </div>
       </div>
 
-      {/* Floating Chat Button */}
-      <motion.button
-        onClick={() => onStartChat('info')}
-        className="fixed bottom-6 right-6 w-16 h-16 bg-button-gradient rounded-full shadow-2xl flex items-center justify-center z-50"
-        initial={{ scale: 0 }}
-        animate={{ scale: 1 }}
-        transition={{ delay: 1.2, type: 'spring', stiffness: 200 }}
-        whileHover={{ scale: 1.1 }}
-        whileTap={{ scale: 0.9 }}
-      >
-        <ChatBubbleLeftRightIcon className="w-8 h-8 text-white" />
-      </motion.button>
+      {/* Floating Action Buttons */}
+      <div className="fixed bottom-6 right-6 flex flex-col gap-3 z-40">
+        <motion.button
+          onClick={handleDirectOrder}
+          className="w-14 h-14 bg-gradient-to-r from-green-500 to-emerald-600 rounded-full shadow-2xl flex items-center justify-center"
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          transition={{ delay: 0.8, type: 'spring', stiffness: 200 }}
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.9 }}
+          title="Direct bestellen"
+        >
+          <RocketLaunchIcon className="w-7 h-7 text-white" />
+        </motion.button>
+        
+        <motion.button
+          onClick={() => onStartChat('info')}
+          className="w-14 h-14 bg-button-gradient rounded-full shadow-2xl flex items-center justify-center"
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          transition={{ delay: 1, type: 'spring', stiffness: 200 }}
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.9 }}
+          title="Chat met Lisa"
+        >
+          <ChatBubbleLeftRightIcon className="w-7 h-7 text-white" />
+        </motion.button>
+      </div>
 
       {/* Completion Modal */}
       <AnimatePresence>
@@ -327,8 +442,8 @@ export function InfoJourney({ onBackToHome, onStartChat }: InfoJourneyProps) {
               exit={{ scale: 0.9, y: 20 }}
             >
               <div className="text-center">
-                <div className="w-16 h-16 bg-lisa-gradient rounded-2xl flex items-center justify-center mx-auto mb-4">
-                  <StarIcon className="w-8 h-8 text-white" />
+                <div className="w-16 h-16 bg-button-gradient rounded-2xl flex items-center justify-center mx-auto mb-4">
+                  <ChartBarIcon className="w-8 h-8 text-white" />
                 </div>
                 
                 <h3 className="text-2xl font-bold text-brand-navy mb-4">
@@ -341,12 +456,22 @@ export function InfoJourney({ onBackToHome, onStartChat }: InfoJourneyProps) {
                 
                 <div className="space-y-3">
                   <motion.button
+                    onClick={handleDirectOrder}
+                    className="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white font-semibold py-3 px-6 rounded-xl shadow-lg hover:shadow-xl transition-all inline-flex items-center justify-center space-x-2"
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                  >
+                    <RocketLaunchIcon className="w-5 h-5" />
+                    <span>Direct bestellen</span>
+                  </motion.button>
+                  
+                  <motion.button
                     onClick={() => onStartChat('info')}
                     className="w-full chat-button"
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                   >
-                    💬 Ja, start chat met Lisa!
+                    💬 Chat met Lisa
                   </motion.button>
                   
                   <button
