@@ -16,6 +16,25 @@
 }
 
 @layer components {
+  /* ========================================
+     WARMELEADS BRAND GRADIENT - UNIFORM
+     ======================================== */
+  
+  /* Main background gradient - USE THIS EVERYWHERE */
+  .bg-warmeleads-gradient {
+    background: linear-gradient(to bottom right, #1A1A2E, #3B2F75, #E74C8C);
+    /* This is: from-brand-navy via-brand-purple to-brand-pink */
+  }
+  
+  /* Alternative: utility class name */
+  .bg-brand-gradient {
+    @apply bg-gradient-to-br from-brand-navy via-brand-purple to-brand-pink;
+  }
+  
+  /* ========================================
+     CHAT COMPONENTS
+     ======================================== */
+  
   /* Chat Components */
   .chat-container {
     @apply bg-white/95 backdrop-blur-sm rounded-chat shadow-chat;

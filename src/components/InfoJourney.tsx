@@ -151,7 +151,7 @@ export function InfoJourney({ onBackToHome, onStartChat }: InfoJourneyProps) {
   const Icon = currentInfo.icon;
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen bg-gradient-to-br from-brand-navy via-brand-purple to-brand-pink flex flex-col">
       {/* Header */}
       <motion.div
         className="flex items-center justify-between p-4 glass-effect"

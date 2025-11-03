@@ -76,7 +76,7 @@ export function AccountCreation({ onSuccess, onSkip }: AccountCreationProps) {
 
   return (
     <motion.div
-      className="min-h-screen flex flex-col"
+      className="min-h-screen bg-gradient-to-br from-brand-navy via-brand-purple to-brand-pink flex flex-col"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
     >
