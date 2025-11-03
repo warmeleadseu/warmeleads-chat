@@ -45,7 +45,7 @@ export default function ResetPasswordPage() {
             console.log('✅ Password recovery session detected - link is valid!');
             hasReceivedRecoveryEvent = true;
             clearTimeout(verificationTimeout);
-            setError(null);
+            setError('');
             setIsVerifying(false);
           }
           // Ignore all other events (SIGNED_OUT, INITIAL_SESSION, etc) during verification
