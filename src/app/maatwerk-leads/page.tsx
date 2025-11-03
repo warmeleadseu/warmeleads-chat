@@ -8,7 +8,7 @@ export const metadata = {
 
 export default function MaatwerkLeadsPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-900 via-indigo-900 to-blue-900 text-white">
+    <div className="min-h-screen bg-gradient-to-br from-brand-navy via-brand-purple to-brand-pink text-white">
       {/* Hero Section */}
       <div className="container mx-auto px-4 py-16">
         <div className="max-w-6xl mx-auto">

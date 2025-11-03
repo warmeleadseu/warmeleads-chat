@@ -1225,7 +1225,7 @@ export default function CustomerLeadsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-brand-purple to-brand-pink">
+    <div className="min-h-screen bg-gradient-to-br from-brand-navy via-brand-purple to-brand-pink">
       {/* Header - Desktop & Mobile optimized */}
       <div className="bg-white/10 backdrop-blur-sm border-b border-white/20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
