@@ -140,15 +140,31 @@ export default function ResetPasswordPage() {
     setIsLoading(true);
 
     try {
-      // Update password using Supabase
-      const { error: updateError } = await supabase.auth.updateUser({
-        password: password,
-      });
+      // Extract token from URL hash
+      const hashParams = new URLSearchParams(window.location.hash.substring(1));
+      const accessToken = hashParams.get('access_token');
 
-      if (updateError) {
-        throw updateError;
+      if (!accessToken) {
+        throw new Error('No recovery token found');
       }
 
+      // Update password via server-side API
+      console.log('🔄 Updating password via server...');
+      const response = await fetch('/api/auth/update-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          accessToken, 
+          newPassword: password 
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to update password');
+      }
+
+      console.log('✅ Password updated successfully!');
       setSuccess(true);
 
       // Redirect to login after 3 seconds
@@ -156,7 +172,7 @@ export default function ResetPasswordPage() {
         router.push('/?login=true');
       }, 3000);
     } catch (error: any) {
-      console.error('Password reset error:', error);
+      console.error('❌ Password reset error:', error);
       setError(error.message || 'Er ging iets mis. Probeer het opnieuw.');
     } finally {
       setIsLoading(false);
