@@ -38,6 +38,23 @@ https://www.warmeleads.eu
 
 ---
 
+## Stap 1.5: Email Auth Flow Type Checken ⚡ **BELANGRIJK**
+
+### **DIT IS CRUCIAAL VOOR PASSWORD RESET!**
+
+1. Ga naar **Authentication** → **URL Configuration**
+2. Scroll naar beneden naar **Email Auth**
+3. **Controleer de Flow Type:**
+   - Er zijn twee opties: `Magic Link` of `PKCE`
+   - **Voor password reset moet dit PKCE zijn!**
+4. Als het op `Magic Link` staat:
+   - Verander naar **PKCE**
+   - Klik op **Save**
+
+**Waarom?** PKCE is veiliger en werkt beter met moderne browsers en password reset flows.
+
+---
+
 ## Stap 2: Email Afzender Configureren 📧
 
 ### 1. Ga naar Project Settings
