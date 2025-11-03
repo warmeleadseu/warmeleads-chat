@@ -33,15 +33,22 @@ export interface LeadPackage {
   id: string;
   name: string;
   description: string;
-  basePrice: number; // Deprecated - use pricing tiers instead
-  price: number; // Deprecated
+  basePrice: number; // in cents
+  price: number; // in cents
   currency: string;
   industry: string;
-  type: 'exclusive' | 'shared';
+  type: 'exclusive' | 'shared_fresh' | 'bulk';
   quantity: number;
-  minQuantity?: number; // For exclusive leads
-  pricingTiers?: PricingTier[]; // For tiered pricing
+  minQuantity?: number;
+  pricingTiers?: PricingTier[];
   features: string[];
+  deliveryTime: string;
+  deliveryMethod: string;
+}
+
+// Helper function to calculate 1/3 of exclusive price
+function getSharedPrice(exclusivePrice: number): number {
+  return Math.round(exclusivePrice / 3);
 }
 
 export const leadPackages: Record<string, LeadPackage[]> = {
@@ -50,50 +57,26 @@ export const leadPackages: Record<string, LeadPackage[]> = {
       id: 'test_exclusive',
       name: '🧪 Test Exclusieve Leads',
       description: 'Test exclusieve leads - €0,01 per lead voor het testen van de betaalflow',
-      basePrice: 1, // €0.01
+      basePrice: 1,
       price: 1,
       currency: 'eur',
       industry: 'Test',
       type: 'exclusive',
       quantity: 1,
-      minQuantity: 1, // Minimum 1 lead voor testen
-      pricingTiers: [
-        { minQuantity: 1, pricePerLead: 1 }, // €0.01 per lead
-      ],
-      features: [
-        '🧪 TEST MODUS - Alleen voor testen',
-        '€0,01 per lead',
-        'Minimum 1 lead',
-        'Ideaal voor het testen van betaalflow',
-        'iDEAL, Bancontact en Card betaling'
-      ]
-    },
-    {
-      id: 'test_shared',
-      name: '🧪 Test Gedeelde Leads',
-      description: 'Test gedeelde leads - €0,01 per lead voor het testen van de betaalflow',
-      basePrice: 1, // €0.01
-      price: 1,
-      currency: 'eur',
-      industry: 'Test',
-      type: 'shared',
-      quantity: 10, // Vaste batch van 10 leads
-      features: [
-        '🧪 TEST MODUS - Alleen voor testen',
-        '€0,01 per lead',
-        'Vaste batch van 10 leads',
-        'Totaal: €0,10',
-        'Ideaal voor het testen van betaalflow'
-      ]
+      minQuantity: 1,
+      pricingTiers: [{ minQuantity: 1, pricePerLead: 1 }],
+      features: ['🧪 TEST MODUS', '€0,01 per lead', 'Minimum 1 lead'],
+      deliveryTime: 'Direct',
+      deliveryMethod: 'Portal'
     }
   ],
   'Thuisbatterijen': [
     {
       id: 'thuisbatterij_exclusive',
-      name: 'Exclusieve Thuisbatterij Leads',
-      description: 'Exclusieve thuisbatterij leads met staffelkorting',
+      name: '💎 Verse Exclusieve Thuisbatterij Leads',
+      description: '100% exclusieve verse thuisbatterij leads uit eigen campagnes',
       basePrice: 4250,
-      price: 4250, // Base price per lead
+      price: 4250,
       currency: 'eur',
       industry: 'Thuisbatterijen',
       type: 'exclusive',
@@ -105,206 +88,381 @@ export const leadPackages: Record<string, LeadPackage[]> = {
         { minQuantity: 75, pricePerLead: 3750 }, // €37.50
       ],
       features: [
-        '100% exclusieve leads',
-        'Verse leads binnen 15 minuten',
-        'Staffelkorting vanaf 50 leads',
-        'Nederlandse prospects',
-        '24/7 support'
-      ]
+        '💎 100% exclusief voor u',
+        '⚡ Campagnes starten binnen 24u',
+        '📊 Real-time in uw persoonlijk portal',
+        '🎯 Geen concurrentie',
+        '🇳🇱🇧🇪 Nederlandse & Belgische prospects',
+        '📈 25-40% conversie'
+      ],
+      deliveryTime: 'Campagnes binnen 24u, leads real-time',
+      deliveryMethod: 'Persoonlijk CRM Portal'
     },
     {
-      id: 'thuisbatterij_shared',
-      name: 'Gedeelde Thuisbatterij Leads',
-      description: '500 gedeelde thuisbatterij leads (gedeeld met max 2 anderen)',
-      basePrice: 1250,
-      price: 1250, // €12.50 per lead
+      id: 'thuisbatterij_shared_fresh',
+      name: '🤝 Gedeelde Verse Thuisbatterij Leads',
+      description: 'Verse thuisbatterij leads uit eigen campagnes (gedeeld met 2 anderen)',
+      basePrice: 1417, // €14.17 (1/3 van €42.50)
+      price: 1417,
       currency: 'eur',
       industry: 'Thuisbatterijen',
-      type: 'shared',
-      quantity: 500,
+      type: 'shared_fresh',
+      quantity: 250,
+      minQuantity: 250,
       features: [
-        'Gedeeld met max 2 anderen',
-        'Verse leads binnen 15 minuten',
-        'Vaste batch van 500 leads',
-        'Nederlandse prospects',
-        'Email support'
-      ]
+        '🤝 Gedeeld met 3 partijen totaal',
+        '⚡ Verse leads uit campagnes',
+        '💰 1/3 van de prijs van exclusief',
+        '📧 Excel binnen 24u per email',
+        '🇳🇱🇧🇪 Nederlandse & Belgische prospects',
+        '📈 15-25% conversie'
+      ],
+      deliveryTime: 'Binnen 24u per email',
+      deliveryMethod: 'Excel bestand'
+    },
+    {
+      id: 'thuisbatterij_bulk',
+      name: '📦 Bulk Thuisbatterij Leads',
+      description: 'Thuisbatterij leads uit onze database (tot 6 maanden oud)',
+      basePrice: 425, // €4.25 for 100
+      price: 425,
+      currency: 'eur',
+      industry: 'Thuisbatterijen',
+      type: 'bulk',
+      quantity: 100,
+      minQuantity: 100,
+      pricingTiers: [
+        { minQuantity: 100, maxQuantity: 199, pricePerLead: 425 }, // €4.25
+        { minQuantity: 200, maxQuantity: 299, pricePerLead: 400 }, // €4.00
+        { minQuantity: 300, maxQuantity: 499, pricePerLead: 375 }, // €3.75
+        { minQuantity: 500, pricePerLead: 350 }, // €3.50
+      ],
+      features: [
+        '📦 Database leads (tot 6 mnd oud)',
+        '💰 Laagste prijs per lead',
+        '📧 Excel binnen 24u per email',
+        '🎯 Ideaal voor grote volumes',
+        '🇳🇱🇧🇪 Nederlandse & Belgische prospects',
+        '📈 5-10% conversie'
+      ],
+      deliveryTime: 'Binnen 24u per email',
+      deliveryMethod: 'Excel bestand'
     }
   ],
   'Zonnepanelen': [
     {
       id: 'zonnepanelen_exclusive',
-      name: 'Exclusieve Zonnepanelen Leads',
-      description: 'Exclusieve zonnepanelen leads met staffelkorting',
-      basePrice: 4250,
-      price: 4250,
+      name: '💎 Verse Exclusieve Zonnepanelen Leads',
+      description: '100% exclusieve verse zonnepanelen leads uit eigen campagnes',
+      basePrice: 4500,
+      price: 4500,
       currency: 'eur',
       industry: 'Zonnepanelen',
       type: 'exclusive',
       quantity: 30,
       minQuantity: 30,
       pricingTiers: [
-        { minQuantity: 30, maxQuantity: 49, pricePerLead: 4250 },
-        { minQuantity: 50, maxQuantity: 74, pricePerLead: 4000 },
-        { minQuantity: 75, pricePerLead: 3750 },
+        { minQuantity: 30, maxQuantity: 49, pricePerLead: 4500 }, // €45.00
+        { minQuantity: 50, maxQuantity: 74, pricePerLead: 4250 }, // €42.50
+        { minQuantity: 75, pricePerLead: 4000 }, // €40.00
       ],
       features: [
-        '100% exclusieve leads',
-        'Verse leads binnen 15 minuten',
-        'Staffelkorting vanaf 50 leads',
-        'Nederlandse prospects',
-        '24/7 support'
-      ]
+        '💎 100% exclusief voor u',
+        '⚡ Campagnes starten binnen 24u',
+        '📊 Real-time in uw persoonlijk portal',
+        '🎯 Geen concurrentie',
+        '🇳🇱🇧🇪 Nederlandse & Belgische prospects',
+        '📈 25-40% conversie'
+      ],
+      deliveryTime: 'Campagnes binnen 24u, leads real-time',
+      deliveryMethod: 'Persoonlijk CRM Portal'
     },
     {
-      id: 'zonnepanelen_shared',
-      name: 'Gedeelde Zonnepanelen Leads',
-      description: '500 gedeelde zonnepanelen leads (gedeeld met max 2 anderen)',
-      basePrice: 1250,
-      price: 1250,
+      id: 'zonnepanelen_shared_fresh',
+      name: '🤝 Gedeelde Verse Zonnepanelen Leads',
+      description: 'Verse zonnepanelen leads uit eigen campagnes (gedeeld met 2 anderen)',
+      basePrice: 1500, // €15.00 (1/3 van €45.00)
+      price: 1500,
       currency: 'eur',
       industry: 'Zonnepanelen',
-      type: 'shared',
-      quantity: 500,
+      type: 'shared_fresh',
+      quantity: 250,
+      minQuantity: 250,
       features: [
-        'Gedeeld met max 2 anderen',
-        'Verse leads binnen 15 minuten',
-        'Vaste batch van 500 leads',
-        'Nederlandse prospects',
-        'Email support'
-      ]
+        '🤝 Gedeeld met 3 partijen totaal',
+        '⚡ Verse leads uit campagnes',
+        '💰 1/3 van de prijs van exclusief',
+        '📧 Excel binnen 24u per email',
+        '🇳🇱🇧🇪 Nederlandse & Belgische prospects',
+        '📈 15-25% conversie'
+      ],
+      deliveryTime: 'Binnen 24u per email',
+      deliveryMethod: 'Excel bestand'
+    },
+    {
+      id: 'zonnepanelen_bulk',
+      name: '📦 Bulk Zonnepanelen Leads',
+      description: 'Zonnepanelen leads uit onze database (tot 6 maanden oud)',
+      basePrice: 425,
+      price: 425,
+      currency: 'eur',
+      industry: 'Zonnepanelen',
+      type: 'bulk',
+      quantity: 100,
+      minQuantity: 100,
+      pricingTiers: [
+        { minQuantity: 100, maxQuantity: 199, pricePerLead: 425 },
+        { minQuantity: 200, maxQuantity: 299, pricePerLead: 400 },
+        { minQuantity: 300, maxQuantity: 499, pricePerLead: 375 },
+        { minQuantity: 500, pricePerLead: 350 },
+      ],
+      features: [
+        '📦 Database leads (tot 6 mnd oud)',
+        '💰 Laagste prijs per lead',
+        '📧 Excel binnen 24u per email',
+        '🎯 Ideaal voor grote volumes',
+        '🇳🇱🇧🇪 Nederlandse & Belgische prospects',
+        '📈 5-10% conversie'
+      ],
+      deliveryTime: 'Binnen 24u per email',
+      deliveryMethod: 'Excel bestand'
     }
   ],
   'Warmtepompen': [
     {
       id: 'warmtepomp_exclusive',
-      name: 'Exclusieve Warmtepomp Leads',
-      description: 'Exclusieve warmtepomp leads met staffelkorting',
-      basePrice: 4250,
-      price: 4250,
+      name: '💎 Verse Exclusieve Warmtepomp Leads',
+      description: '100% exclusieve verse warmtepomp leads uit eigen campagnes',
+      basePrice: 5000,
+      price: 5000,
       currency: 'eur',
       industry: 'Warmtepompen',
       type: 'exclusive',
       quantity: 30,
       minQuantity: 30,
       pricingTiers: [
-        { minQuantity: 30, maxQuantity: 49, pricePerLead: 4250 },
-        { minQuantity: 50, maxQuantity: 74, pricePerLead: 4000 },
-        { minQuantity: 75, pricePerLead: 3750 },
+        { minQuantity: 30, maxQuantity: 49, pricePerLead: 5000 }, // €50.00
+        { minQuantity: 50, maxQuantity: 74, pricePerLead: 4750 }, // €47.50
+        { minQuantity: 75, pricePerLead: 4500 }, // €45.00
       ],
       features: [
-        '100% exclusieve leads',
-        'Verse leads binnen 15 minuten',
-        'Staffelkorting vanaf 50 leads',
-        'Nederlandse prospects',
-        '24/7 support'
-      ]
+        '💎 100% exclusief voor u',
+        '⚡ Campagnes starten binnen 24u',
+        '📊 Real-time in uw persoonlijk portal',
+        '🎯 Geen concurrentie',
+        '🇳🇱🇧🇪 Nederlandse & Belgische prospects',
+        '📈 25-40% conversie'
+      ],
+      deliveryTime: 'Campagnes binnen 24u, leads real-time',
+      deliveryMethod: 'Persoonlijk CRM Portal'
     },
     {
-      id: 'warmtepomp_shared',
-      name: 'Gedeelde Warmtepomp Leads',
-      description: '500 gedeelde warmtepomp leads (gedeeld met max 2 anderen)',
-      basePrice: 1250,
-      price: 1250,
+      id: 'warmtepomp_shared_fresh',
+      name: '🤝 Gedeelde Verse Warmtepomp Leads',
+      description: 'Verse warmtepomp leads uit eigen campagnes (gedeeld met 2 anderen)',
+      basePrice: 1667, // €16.67 (1/3 van €50.00)
+      price: 1667,
       currency: 'eur',
       industry: 'Warmtepompen',
-      type: 'shared',
-      quantity: 500,
+      type: 'shared_fresh',
+      quantity: 250,
+      minQuantity: 250,
       features: [
-        'Gedeeld met max 2 anderen',
-        'Verse leads binnen 15 minuten',
-        'Vaste batch van 500 leads',
-        'Nederlandse prospects',
-        'Email support'
-      ]
+        '🤝 Gedeeld met 3 partijen totaal',
+        '⚡ Verse leads uit campagnes',
+        '💰 1/3 van de prijs van exclusief',
+        '📧 Excel binnen 24u per email',
+        '🇳🇱🇧🇪 Nederlandse & Belgische prospects',
+        '📈 15-25% conversie'
+      ],
+      deliveryTime: 'Binnen 24u per email',
+      deliveryMethod: 'Excel bestand'
+    },
+    {
+      id: 'warmtepomp_bulk',
+      name: '📦 Bulk Warmtepomp Leads',
+      description: 'Warmtepomp leads uit onze database (tot 6 maanden oud)',
+      basePrice: 425,
+      price: 425,
+      currency: 'eur',
+      industry: 'Warmtepompen',
+      type: 'bulk',
+      quantity: 100,
+      minQuantity: 100,
+      pricingTiers: [
+        { minQuantity: 100, maxQuantity: 199, pricePerLead: 425 },
+        { minQuantity: 200, maxQuantity: 299, pricePerLead: 400 },
+        { minQuantity: 300, maxQuantity: 499, pricePerLead: 375 },
+        { minQuantity: 500, pricePerLead: 350 },
+      ],
+      features: [
+        '📦 Database leads (tot 6 mnd oud)',
+        '💰 Laagste prijs per lead',
+        '📧 Excel binnen 24u per email',
+        '🎯 Ideaal voor grote volumes',
+        '🇳🇱🇧🇪 Nederlandse & Belgische prospects',
+        '📈 5-10% conversie'
+      ],
+      deliveryTime: 'Binnen 24u per email',
+      deliveryMethod: 'Excel bestand'
     }
   ],
   'Airco': [
     {
       id: 'airco_exclusive',
-      name: 'Exclusieve Airco Leads',
-      description: 'Exclusieve airco leads met staffelkorting',
-      basePrice: 4250,
-      price: 4250,
+      name: '💎 Verse Exclusieve Airco Leads',
+      description: '100% exclusieve verse airco leads uit eigen campagnes',
+      basePrice: 4000,
+      price: 4000,
       currency: 'eur',
       industry: 'Airco',
       type: 'exclusive',
       quantity: 30,
       minQuantity: 30,
       pricingTiers: [
-        { minQuantity: 30, maxQuantity: 49, pricePerLead: 4250 },
-        { minQuantity: 50, maxQuantity: 74, pricePerLead: 4000 },
-        { minQuantity: 75, pricePerLead: 3750 },
+        { minQuantity: 30, maxQuantity: 49, pricePerLead: 4000 }, // €40.00
+        { minQuantity: 50, maxQuantity: 74, pricePerLead: 3750 }, // €37.50
+        { minQuantity: 75, pricePerLead: 3500 }, // €35.00
       ],
       features: [
-        '100% exclusieve leads',
-        'Verse leads binnen 15 minuten',
-        'Staffelkorting vanaf 50 leads',
-        'Nederlandse prospects',
-        '24/7 support'
-      ]
+        '💎 100% exclusief voor u',
+        '⚡ Campagnes starten binnen 24u',
+        '📊 Real-time in uw persoonlijk portal',
+        '🎯 Geen concurrentie',
+        '🇳🇱🇧🇪 Nederlandse & Belgische prospects',
+        '📈 25-40% conversie'
+      ],
+      deliveryTime: 'Campagnes binnen 24u, leads real-time',
+      deliveryMethod: 'Persoonlijk CRM Portal'
     },
     {
-      id: 'airco_shared',
-      name: 'Gedeelde Airco Leads',
-      description: '500 gedeelde airco leads (gedeeld met max 2 anderen)',
-      basePrice: 1250,
-      price: 1250,
+      id: 'airco_shared_fresh',
+      name: '🤝 Gedeelde Verse Airco Leads',
+      description: 'Verse airco leads uit eigen campagnes (gedeeld met 2 anderen)',
+      basePrice: 1333, // €13.33 (1/3 van €40.00)
+      price: 1333,
       currency: 'eur',
       industry: 'Airco',
-      type: 'shared',
-      quantity: 500,
+      type: 'shared_fresh',
+      quantity: 250,
+      minQuantity: 250,
       features: [
-        'Gedeeld met max 2 anderen',
-        'Verse leads binnen 15 minuten',
-        'Vaste batch van 500 leads',
-        'Nederlandse prospects',
-        'Email support'
-      ]
+        '🤝 Gedeeld met 3 partijen totaal',
+        '⚡ Verse leads uit campagnes',
+        '💰 1/3 van de prijs van exclusief',
+        '📧 Excel binnen 24u per email',
+        '🇳🇱🇧🇪 Nederlandse & Belgische prospects',
+        '📈 15-25% conversie'
+      ],
+      deliveryTime: 'Binnen 24u per email',
+      deliveryMethod: 'Excel bestand'
+    },
+    {
+      id: 'airco_bulk',
+      name: '📦 Bulk Airco Leads',
+      description: 'Airco leads uit onze database (tot 6 maanden oud)',
+      basePrice: 425,
+      price: 425,
+      currency: 'eur',
+      industry: 'Airco',
+      type: 'bulk',
+      quantity: 100,
+      minQuantity: 100,
+      pricingTiers: [
+        { minQuantity: 100, maxQuantity: 199, pricePerLead: 425 },
+        { minQuantity: 200, maxQuantity: 299, pricePerLead: 400 },
+        { minQuantity: 300, maxQuantity: 499, pricePerLead: 375 },
+        { minQuantity: 500, pricePerLead: 350 },
+      ],
+      features: [
+        '📦 Database leads (tot 6 mnd oud)',
+        '💰 Laagste prijs per lead',
+        '📧 Excel binnen 24u per email',
+        '🎯 Ideaal voor grote volumes',
+        '🇳🇱🇧🇪 Nederlandse & Belgische prospects',
+        '📈 5-10% conversie'
+      ],
+      deliveryTime: 'Binnen 24u per email',
+      deliveryMethod: 'Excel bestand'
     }
   ],
   'Financial Lease': [
     {
       id: 'lease_exclusive',
-      name: 'Exclusieve Financial Lease Leads',
-      description: 'Exclusieve financial lease leads met staffelkorting',
-      basePrice: 4250,
-      price: 4250,
+      name: '💎 Verse Exclusieve Financial Lease Leads',
+      description: '100% exclusieve verse financial lease leads uit eigen campagnes',
+      basePrice: 5500,
+      price: 5500,
       currency: 'eur',
       industry: 'Financial Lease',
       type: 'exclusive',
       quantity: 30,
       minQuantity: 30,
       pricingTiers: [
-        { minQuantity: 30, maxQuantity: 49, pricePerLead: 4250 },
-        { minQuantity: 50, maxQuantity: 74, pricePerLead: 4000 },
-        { minQuantity: 75, pricePerLead: 3750 },
+        { minQuantity: 30, maxQuantity: 49, pricePerLead: 5500 }, // €55.00
+        { minQuantity: 50, maxQuantity: 74, pricePerLead: 5000 }, // €50.00
+        { minQuantity: 75, pricePerLead: 4500 }, // €45.00
       ],
       features: [
-        '100% exclusieve leads',
-        'Verse leads binnen 15 minuten',
-        'Staffelkorting vanaf 50 leads',
-        'Nederlandse zakelijke prospects',
-        '24/7 support'
-      ]
+        '💎 100% exclusief voor u',
+        '⚡ Campagnes starten binnen 24u',
+        '📊 Real-time in uw persoonlijk portal',
+        '🎯 Geen concurrentie',
+        '🇳🇱🇧🇪 Nederlandse & Belgische zakelijke prospects',
+        '📈 25-40% conversie'
+      ],
+      deliveryTime: 'Campagnes binnen 24u, leads real-time',
+      deliveryMethod: 'Persoonlijk CRM Portal'
     },
     {
-      id: 'lease_shared',
-      name: 'Gedeelde Financial Lease Leads',
-      description: '500 gedeelde financial lease leads (gedeeld met max 2 anderen)',
-      basePrice: 1250,
-      price: 1250,
+      id: 'lease_shared_fresh',
+      name: '🤝 Gedeelde Verse Financial Lease Leads',
+      description: 'Verse financial lease leads uit eigen campagnes (gedeeld met 2 anderen)',
+      basePrice: 1833, // €18.33 (1/3 van €55.00)
+      price: 1833,
       currency: 'eur',
       industry: 'Financial Lease',
-      type: 'shared',
-      quantity: 500,
+      type: 'shared_fresh',
+      quantity: 250,
+      minQuantity: 250,
       features: [
-        'Gedeeld met max 2 anderen',
-        'Verse leads binnen 15 minuten',
-        'Vaste batch van 500 leads',
-        'Nederlandse zakelijke prospects',
-        'Email support'
-      ]
+        '🤝 Gedeeld met 3 partijen totaal',
+        '⚡ Verse leads uit campagnes',
+        '💰 1/3 van de prijs van exclusief',
+        '📧 Excel binnen 24u per email',
+        '🇳🇱🇧🇪 Nederlandse & Belgische zakelijke prospects',
+        '📈 15-25% conversie'
+      ],
+      deliveryTime: 'Binnen 24u per email',
+      deliveryMethod: 'Excel bestand'
+    },
+    {
+      id: 'lease_bulk',
+      name: '📦 Bulk Financial Lease Leads',
+      description: 'Financial lease leads uit onze database (tot 6 maanden oud)',
+      basePrice: 425,
+      price: 425,
+      currency: 'eur',
+      industry: 'Financial Lease',
+      type: 'bulk',
+      quantity: 100,
+      minQuantity: 100,
+      pricingTiers: [
+        { minQuantity: 100, maxQuantity: 199, pricePerLead: 425 },
+        { minQuantity: 200, maxQuantity: 299, pricePerLead: 400 },
+        { minQuantity: 300, maxQuantity: 499, pricePerLead: 375 },
+        { minQuantity: 500, pricePerLead: 350 },
+      ],
+      features: [
+        '📦 Database leads (tot 6 mnd oud)',
+        '💰 Laagste prijs per lead',
+        '📧 Excel binnen 24u per email',
+        '🎯 Ideaal voor grote volumes',
+        '🇳🇱🇧🇪 Nederlandse & Belgische zakelijke prospects',
+        '📈 5-10% conversie'
+      ],
+      deliveryTime: 'Binnen 24u per email',
+      deliveryMethod: 'Excel bestand'
     }
   ]
 };
@@ -320,7 +478,6 @@ export async function createPaymentIntent(
   }
 ): Promise<{ clientSecret: string; paymentIntentId: string }> {
   try {
-    // Find the package
     const allPackages = Object.values(leadPackages).flat();
     const selectedPackage = allPackages.find(pkg => pkg.id === packageId);
     
@@ -328,9 +485,9 @@ export async function createPaymentIntent(
       throw new Error('Package not found');
     }
 
-    const totalAmount = selectedPackage.price * quantity;
+    const pricing = calculatePackagePrice(selectedPackage, quantity);
+    const totalAmount = pricing.totalPrice;
 
-    // Create or retrieve customer
     let customer;
     const existingCustomers = await stripe.customers.list({
       email: customerInfo.email,
@@ -350,7 +507,6 @@ export async function createPaymentIntent(
       });
     }
 
-    // Create payment intent
     const paymentIntent = await stripe.paymentIntents.create({
       amount: totalAmount,
       currency: selectedPackage.currency,
@@ -390,7 +546,6 @@ export async function handleSuccessfulPayment(paymentIntentId: string) {
     const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
     
     if (paymentIntent.status === 'succeeded') {
-      // Extract order information
       const orderData = {
         paymentIntentId,
         customerId: paymentIntent.customer as string,
@@ -405,12 +560,6 @@ export async function handleSuccessfulPayment(paymentIntentId: string) {
         createdAt: new Date(paymentIntent.created * 1000),
       };
 
-      // Here you would typically:
-      // 1. Save order to database
-      // 2. Trigger lead delivery process
-      // 3. Send confirmation email
-      // 4. Update CRM system
-      
       console.log('Order processed:', orderData);
       
       return orderData;
@@ -443,21 +592,19 @@ export function formatPrice(amountInCents: number, currency: string = 'EUR'): st
   }).format(amountInCents / 100);
 }
 
-// Calculate price based on quantity and pricing tiers
 export function calculatePackagePrice(pkg: LeadPackage, quantity: number): { pricePerLead: number; totalPrice: number; tierInfo?: string } {
-  // For shared leads, quantity is fixed
-  if (pkg.type === 'shared') {
-    const totalPrice = pkg.price * pkg.quantity; // €12.50 * 500 = €6250
+  // For shared_fresh leads, quantity is fixed
+  if (pkg.type === 'shared_fresh') {
+    const totalPrice = pkg.price * pkg.quantity;
     return {
       pricePerLead: pkg.price,
       totalPrice,
-      tierInfo: `Vaste batch van ${pkg.quantity} leads`
+      tierInfo: `Vaste batch van ${pkg.quantity} verse gedeelde leads`
     };
   }
   
-  // For exclusive leads, use pricing tiers
+  // For exclusive and bulk leads, use pricing tiers
   if (pkg.pricingTiers && pkg.pricingTiers.length > 0) {
-    // Find the applicable tier
     const tier = pkg.pricingTiers.find(t => {
       if (t.maxQuantity) {
         return quantity >= t.minQuantity && quantity <= t.maxQuantity;

@@ -70,35 +70,37 @@ const infoSections = [
     id: 'pricing',
     icon: CurrencyEuroIcon,
     title: 'Transparante prijzen',
-    content: `**Exclusieve leads (alleen voor u):**
+    content: `**1️⃣ Verse Exclusieve Leads** 💎
     
-    • Thuisbatterijen: €37,50 - €42,50 per lead
-    • Zonnepanelen: €40,00 - €45,00 per lead
-    • Warmtepompen: €45,00 - €50,00 per lead
-    • Airco: €35,00 - €40,00 per lead
-    • Financial Lease: €45,00 - €55,00 per lead
+    • Thuisbatterijen: €37,50 - €42,50
+    • Zonnepanelen: €40,00 - €45,00
+    • Warmtepompen: €45,00 - €50,00
+    • Airco: €35,00 - €40,00
+    • Financial Lease: €45,00 - €55,00
     
-    📦 Campagnes starten binnen 24 uur
-    ⚡ Leads real-time in uw persoonlijke portal
-    🎯 100% exclusief, geen concurrentie
+    📦 Min. 30 leads • Campagnes binnen 24u
+    ⚡ Real-time in uw portal • 100% exclusief
     
-    **Bulk leads (gedeeld, voordelig):**
+    **2️⃣ Gedeelde Verse Leads** 🤝
     
-    • Thuisbatterijen: €12,50 per lead (min. 500)
-    • Zonnepanelen: €15,00 per lead (min. 500)
-    • Warmtepompen: €16,50 per lead (min. 500)
+    • 1/3 van exclusieve prijs (€12-€18)
+    • Min. 250 leads • Verse campagnes
+    • Binnen 24u per email • 3 partijen totaal
     
-    📦 Excel bestand binnen 24u per email
-    💰 1/3 van de prijs van exclusieve leads
+    **3️⃣ Bulk Leads** 📦
     
-    ✅ Geen setup kosten • Geen abonnementen • Alleen resultaat!`,
+    • €3,50 - €4,25 per lead (alle branches)
+    • Min. 100 leads • Binnen 24u per email
+    • Database (tot 6 mnd oud) • Laagste prijs
+    
+    ✅ Geen setup kosten • Geen abonnementen!`,
     cta: 'Bereken mijn investering',
   },
   {
     id: 'how-it-works',
     icon: ClockIcon,
     title: 'Zo werkt het',
-    content: `**Voor Exclusieve Leads:**
+    content: `**Verse Exclusieve Leads** 💎
     
     1️⃣ U kiest uw pakket en betaalt
     2️⃣ Wij starten binnen 24u campagnes voor u
@@ -106,14 +108,21 @@ const infoSections = [
     4️⃣ U ontvangt automatisch notificaties
     5️⃣ Direct contact opnemen = maximale conversie!
     
-    **Voor Bulk Leads:**
+    **Gedeelde Verse Leads** 🤝
     
-    1️⃣ U bestelt een bulk pakket (min. 500)
+    1️⃣ U bestelt min. 250 leads
+    2️⃣ Wij starten binnen 24u campagnes
+    3️⃣ Leads worden binnen 24u per email geleverd
+    4️⃣ Gedeeld met 2 andere partijen (3 totaal)
+    
+    **Bulk Leads** 📦
+    
+    1️⃣ U bestelt vanaf 100 leads
     2️⃣ Wij bereiden het Excel bestand voor
     3️⃣ Binnen 24u ontvangt u de leads per email
-    4️⃣ Importeren in uw CRM en aan de slag!
+    4️⃣ Database leads (tot 6 mnd oud)
     
-    💡 **Tip:** Start met bulk om te testen, schakel over naar exclusief voor maximale ROI!`,
+    💡 **Tip:** Start met bulk (€425) om te testen!`,
     cta: 'Start nu',
   },
   {
@@ -147,13 +156,15 @@ const infoSections = [
     content: `**Echte statistieken van onze klanten:**
     
     📈 **Gemiddelde conversieratio:**
-    • Exclusieve leads: 25-40% conversie
-    • Bulk leads: 8-15% conversie
+    • Verse Exclusieve leads: 25-40% conversie
+    • Gedeelde Verse leads: 15-25% conversie
+    • Bulk leads: 5-10% conversie
     • Koude acquisitie: 2-5% conversie
     
     💰 **ROI binnen 3 maanden:**
     • Exclusieve klanten: 280-450% ROI
-    • Bulk klanten: 180-250% ROI
+    • Gedeelde verse klanten: 180-280% ROI
+    • Bulk klanten: 120-180% ROI
     
     ⚡ **Snelheid maakt verschil:**
     • Contact binnen 5 min: 80% hogere conversie
