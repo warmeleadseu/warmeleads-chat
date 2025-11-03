@@ -2782,7 +2782,7 @@ export default function CustomerLeadsPage() {
             >
               <div className="p-6">
                 <div className="flex justify-between items-center mb-6">
-                  <h3 className="text-2xl font-bold text-gray-900">Nieuwe Lead Toevoegen</h3>
+                  <h3 className="text-2xl font-bold text-gray-900">Nieuwe lead toevoegen</h3>
                   <button
                     onClick={() => setShowAddForm(false)}
                     className="text-gray-400 hover:text-gray-600"

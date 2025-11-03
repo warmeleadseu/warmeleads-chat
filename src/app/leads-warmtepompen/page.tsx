@@ -52,7 +52,7 @@ export default function WarmtepompLeadsPage() {
                 <div className="w-16 h-16 bg-gradient-to-r from-green-400 to-blue-500 rounded-full flex items-center justify-center mx-auto mb-4">
                   <span className="text-2xl">🌡️</span>
                 </div>
-                <h3 className="text-2xl font-bold mb-4">Exclusieve HVAC Leads</h3>
+                <h3 className="text-2xl font-bold mb-4">Exclusieve HVAC leads</h3>
                 <div className="text-4xl font-bold mb-2">€45,00 - €50,00</div>
                 <div className="text-white/70 mb-6">per lead</div>
                 <ul className="text-left space-y-2 mb-8">
@@ -73,7 +73,7 @@ export default function WarmtepompLeadsPage() {
                 <div className="w-16 h-16 bg-gradient-to-r from-purple-400 to-pink-500 rounded-full flex items-center justify-center mx-auto mb-4">
                   <span className="text-2xl">🤝</span>
                 </div>
-                <h3 className="text-2xl font-bold mb-4">Gedeelde Warmtepomp Leads</h3>
+                <h3 className="text-2xl font-bold mb-4">Gedeelde warmtepomp leads</h3>
                 <div className="text-4xl font-bold mb-2">€16,50</div>
                 <div className="text-white/70 mb-6">per lead (min. 75)</div>
                 <ul className="text-left space-y-2 mb-8">
@@ -91,7 +91,7 @@ export default function WarmtepompLeadsPage() {
 
           {/* Market Trends Section */}
           <div className="bg-white/5 backdrop-blur-sm rounded-3xl p-8 border border-white/20 mb-12">
-            <h2 className="text-3xl font-bold mb-8">Nederlandse Warmtepomp Markt 2025</h2>
+            <h2 className="text-3xl font-bold mb-8">Nederlandse warmtepomp markt 2025</h2>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
               <div className="text-center">
                 <div className="text-4xl mb-4">🚫</div>

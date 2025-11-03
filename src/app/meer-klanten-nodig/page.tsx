@@ -24,7 +24,7 @@ export default function MeerKlantenNodigPage() {
           <div className="text-center max-w-4xl mx-auto">
             <h1 className="text-5xl md:text-6xl font-bold mb-6 leading-tight">
               Meer Klanten Nodig? 🚀<br />
-              <span className="text-orange-200">Krijg Ze Binnen 15 Minuten</span>
+              <span className="text-orange-200">Krijg ze binnen 15 minuten</span>
             </h1>
             <p className="text-xl md:text-2xl text-orange-100 mb-8 leading-relaxed">
               Als installateur in duurzame energie weet je: nieuwe klanten = groei.<br />
@@ -82,7 +82,7 @@ export default function MeerKlantenNodigPage() {
         <div className="grid md:grid-cols-2 gap-8 max-w-5xl mx-auto">
           <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-8">
             <div className="text-4xl mb-4">❌</div>
-            <h3 className="text-xl font-bold text-gray-900 mb-3">Te Weinig Klanten</h3>
+            <h3 className="text-xl font-bold text-gray-900 mb-3">Te weinig klanten</h3>
             <p className="text-gray-700">
               Je hebt capaciteit, je monteurs staan klaar, maar de telefoon gaat niet over. 
               Google Ads is duur en levert weinig op. Mond-tot-mond reclame duurt té lang.
@@ -100,7 +100,7 @@ export default function MeerKlantenNodigPage() {
 
           <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-8">
             <div className="text-4xl mb-4">⏰</div>
-            <h3 className="text-xl font-bold text-gray-900 mb-3">Geen Tijd Voor Acquisitie</h3>
+            <h3 className="text-xl font-bold text-gray-900 mb-3">Geen tijd voor acquisitie</h3>
             <p className="text-gray-700">
               Je bent installateur, geen marketeer. Je wilt installeren, niet urenlang campagnes 
               opzetten, content maken en social media beheren.
@@ -109,7 +109,7 @@ export default function MeerKlantenNodigPage() {
 
           <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-8">
             <div className="text-4xl mb-4">🎯</div>
-            <h3 className="text-xl font-bold text-gray-900 mb-3">Slechte Lead Kwaliteit</h3>
+            <h3 className="text-xl font-bold text-gray-900 mb-3">Slechte lead kwaliteit</h3>
             <p className="text-gray-700">
               Je krijgt wel leads, maar het zijn trekkers, prijsvechters of mensen die "nog even 
               nadenken". Je wilt serieuze prospects die nu willen kopen.
@@ -155,7 +155,7 @@ export default function MeerKlantenNodigPage() {
               <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-6">
                 <CurrencyEuroIcon className="w-8 h-8 text-green-600" />
               </div>
-              <h3 className="text-2xl font-bold text-gray-900 mb-3">Geen Vaste Kosten</h3>
+              <h3 className="text-2xl font-bold text-gray-900 mb-3">Geen vaste kosten</h3>
               <p className="text-gray-700 leading-relaxed">
                 Betaal alleen voor leads die je afneemt. <strong>Geen abonnement, geen verrassingen.</strong>
               </p>
@@ -174,7 +174,7 @@ export default function MeerKlantenNodigPage() {
                   1
                 </div>
                 <div>
-                  <h4 className="text-xl font-bold text-gray-900 mb-2">Kies Je Product</h4>
+                  <h4 className="text-xl font-bold text-gray-900 mb-2">Kies je product</h4>
                   <p className="text-gray-700">
                     Thuisbatterijen, zonnepanelen, warmtepompen of airco's? Selecteer wat je wilt installeren.
                   </p>
@@ -186,7 +186,7 @@ export default function MeerKlantenNodigPage() {
                   2
                 </div>
                 <div>
-                  <h4 className="text-xl font-bold text-gray-900 mb-2">Ontvang Leads Binnen 15 Min</h4>
+                  <h4 className="text-xl font-bold text-gray-900 mb-2">Ontvang leads binnen 15 min</h4>
                   <p className="text-gray-700">
                     Direct na bestelling krijg je verse leads. Naam, telefoonnummer, e-mail, interesse - alles wat je nodig hebt.
                   </p>

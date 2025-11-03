@@ -97,7 +97,7 @@ export default function MaatwerkLeadsPage() {
 
           {/* What We Deliver */}
           <div className="bg-white/5 backdrop-blur-sm rounded-3xl p-8 border border-white/20 mb-12">
-            <h2 className="text-3xl font-bold mb-8">Wat Wij Leveren</h2>
+            <h2 className="text-3xl font-bold mb-8">Wat wij leveren</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               <div>
                 <h4 className="font-bold text-xl mb-4">📋 Strategie & Planning</h4>
@@ -122,7 +122,7 @@ export default function MaatwerkLeadsPage() {
 
           {/* Process Section */}
           <div className="bg-white/5 backdrop-blur-sm rounded-3xl p-8 border border-white/20 mb-12">
-            <h2 className="text-3xl font-bold mb-8">Ons Maatwerk Proces</h2>
+            <h2 className="text-3xl font-bold mb-8">Ons maatwerk proces</h2>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
               <div className="text-center">
                 <div className="text-4xl mb-4">📋</div>
@@ -149,7 +149,7 @@ export default function MaatwerkLeadsPage() {
 
           {/* Final CTA */}
           <div className="text-center">
-            <h2 className="text-3xl font-bold mb-4">Laten We Uw Campagne Bespreken</h2>
+            <h2 className="text-3xl font-bold mb-4">Laten we uw campagne bespreken</h2>
             <p className="text-xl text-white/80 mb-8">
               Vertel ons over uw branche en wij maken de perfecte leadgeneratie strategie
             </p>

@@ -52,7 +52,7 @@ export default function ThuisbatterijLeadsPage() {
                 <div className="w-16 h-16 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full flex items-center justify-center mx-auto mb-4">
                   <span className="text-2xl">💎</span>
                 </div>
-                <h3 className="text-2xl font-bold mb-4">Exclusieve Thuisbatterij Leads</h3>
+                <h3 className="text-2xl font-bold mb-4">Exclusieve thuisbatterij leads</h3>
                 <div className="text-4xl font-bold mb-2">€37,50 - €42,50</div>
                 <div className="text-white/70 mb-6">per lead</div>
                 <ul className="text-left space-y-2 mb-8">
@@ -73,7 +73,7 @@ export default function ThuisbatterijLeadsPage() {
                 <div className="w-16 h-16 bg-gradient-to-r from-blue-400 to-purple-500 rounded-full flex items-center justify-center mx-auto mb-4">
                   <span className="text-2xl">🤝</span>
                 </div>
-                <h3 className="text-2xl font-bold mb-4">Gedeelde Thuisbatterij Leads</h3>
+                <h3 className="text-2xl font-bold mb-4">Gedeelde thuisbatterij leads</h3>
                 <div className="text-4xl font-bold mb-2">€12,50</div>
                 <div className="text-white/70 mb-6">per lead (min. 100)</div>
                 <ul className="text-left space-y-2 mb-8">

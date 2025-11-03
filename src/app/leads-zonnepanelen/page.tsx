@@ -52,7 +52,7 @@ export default function ZonnepanelenLeadsPage() {
                 <div className="w-16 h-16 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full flex items-center justify-center mx-auto mb-4">
                   <span className="text-2xl">☀️</span>
                 </div>
-                <h3 className="text-2xl font-bold mb-4">Exclusieve Solar Leads</h3>
+                <h3 className="text-2xl font-bold mb-4">Exclusieve solar leads</h3>
                 <div className="text-4xl font-bold mb-2">€40,00 - €45,00</div>
                 <div className="text-white/70 mb-6">per lead</div>
                 <ul className="text-left space-y-2 mb-8">
@@ -73,7 +73,7 @@ export default function ZonnepanelenLeadsPage() {
                 <div className="w-16 h-16 bg-gradient-to-r from-blue-400 to-purple-500 rounded-full flex items-center justify-center mx-auto mb-4">
                   <span className="text-2xl">🤝</span>
                 </div>
-                <h3 className="text-2xl font-bold mb-4">Gedeelde Solar Leads</h3>
+                <h3 className="text-2xl font-bold mb-4">Gedeelde solar leads</h3>
                 <div className="text-4xl font-bold mb-2">€15,00</div>
                 <div className="text-white/70 mb-6">per lead (min. 100)</div>
                 <ul className="text-left space-y-2 mb-8">
@@ -91,7 +91,7 @@ export default function ZonnepanelenLeadsPage() {
 
           {/* Features Section */}
           <div className="bg-white/5 backdrop-blur-sm rounded-3xl p-8 border border-white/20 mb-12">
-            <h2 className="text-3xl font-bold mb-8">Nederlandse Solar Markt Expertise</h2>
+            <h2 className="text-3xl font-bold mb-8">Nederlandse solar markt expertise</h2>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
               <div className="text-center">
                 <div className="text-4xl mb-4">🏠</div>
