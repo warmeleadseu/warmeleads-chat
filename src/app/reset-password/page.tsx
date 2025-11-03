@@ -21,44 +21,45 @@ export default function ResetPasswordPage() {
   // Verify the session on mount
   useEffect(() => {
     let mounted = true;
-    let hasReceivedRecoveryEvent = false;
 
-    const handleAuthStateChange = async () => {
+    const verifyResetToken = async () => {
       try {
-        // Set a timeout: if no PASSWORD_RECOVERY event within 5 seconds, show error
-        const verificationTimeout = setTimeout(() => {
-          if (mounted && !hasReceivedRecoveryEvent) {
-            console.log('⏱️ No PASSWORD_RECOVERY event received - link expired or invalid');
-            setError('Deze reset link is verlopen of ongeldig. Vraag een nieuwe aan.');
-            setIsVerifying(false);
-          }
-        }, 5000);
-
-        // Listen for auth state changes (this will handle the hash tokens automatically)
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-          console.log('🔐 Auth state changed:', event, session ? 'Session exists' : 'No session');
-          
-          if (!mounted) return;
-
-          // PASSWORD_RECOVERY is the ONLY event that confirms a valid reset link
-          if (event === 'PASSWORD_RECOVERY') {
-            console.log('✅ Password recovery session detected - link is valid!');
-            hasReceivedRecoveryEvent = true;
-            clearTimeout(verificationTimeout);
-            setError('');
-            setIsVerifying(false);
-          }
-          // Ignore all other events (SIGNED_OUT, INITIAL_SESSION, etc) during verification
-          // They are normal during the password reset flow
+        console.log('🔍 Starting password reset verification...');
+        console.log('📍 Current URL hash:', window.location.hash);
+        
+        // Give Supabase time to process the URL hash (it does this automatically)
+        // The detectSessionInUrl option in the client config will handle this
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        if (!mounted) return;
+        
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        console.log('🔐 Session check result:', { 
+          hasSession: !!session, 
+          error: error?.message,
+          user: session?.user?.email 
         });
-
-        return () => {
-          mounted = false;
-          clearTimeout(verificationTimeout);
-          subscription.unsubscribe();
-        };
+        
+        if (!mounted) return;
+        
+        if (error) {
+          console.error('❌ Session error:', error);
+          setError('Deze reset link is verlopen of ongeldig. Vraag een nieuwe aan.');
+          setIsVerifying(false);
+          return;
+        }
+        
+        if (session && session.user) {
+          console.log('✅ Valid password reset session found for:', session.user.email);
+          setIsVerifying(false);
+        } else {
+          console.log('❌ No valid session found - link may be expired or invalid');
+          setError('Deze reset link is verlopen of ongeldig. Vraag een nieuwe aan.');
+          setIsVerifying(false);
+        }
       } catch (error) {
-        console.error('Session check error:', error);
+        console.error('❌ Verification error:', error);
         if (mounted) {
           setError('Er ging iets mis. Probeer het opnieuw.');
           setIsVerifying(false);
@@ -66,7 +67,11 @@ export default function ResetPasswordPage() {
       }
     };
 
-    handleAuthStateChange();
+    verifyResetToken();
+
+    return () => {
+      mounted = false;
+    };
   }, [supabase]);
 
   // Show loading state while verifying session
