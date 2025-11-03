@@ -25,36 +25,47 @@ export default function ResetPasswordPage() {
     const verifyResetToken = async () => {
       try {
         console.log('🔍 Starting password reset verification...');
-        console.log('📍 Current URL hash:', window.location.hash);
         
-        // Give Supabase time to process the URL hash (it does this automatically)
-        // The detectSessionInUrl option in the client config will handle this
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        // Extract token from URL hash manually
+        const hashParams = new URLSearchParams(window.location.hash.substring(1));
+        const accessToken = hashParams.get('access_token');
+        const refreshToken = hashParams.get('refresh_token');
+        const tokenType = hashParams.get('type');
         
-        if (!mounted) return;
+        console.log('📍 Extracted from hash:', { 
+          hasAccessToken: !!accessToken, 
+          hasRefreshToken: !!refreshToken,
+          type: tokenType 
+        });
         
-        const { data: { session }, error } = await supabase.auth.getSession();
+        if (!accessToken || tokenType !== 'recovery') {
+          console.error('❌ No valid recovery token in URL');
+          setError('Deze reset link is ongeldig. Vraag een nieuwe aan.');
+          setIsVerifying(false);
+          return;
+        }
         
-        console.log('🔐 Session check result:', { 
-          hasSession: !!session, 
-          error: error?.message,
-          user: session?.user?.email 
+        // Manually set the session using the tokens from the URL
+        console.log('🔄 Setting session with recovery token...');
+        const { data, error } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken || '',
         });
         
         if (!mounted) return;
         
         if (error) {
-          console.error('❌ Session error:', error);
+          console.error('❌ Error setting session:', error);
           setError('Deze reset link is verlopen of ongeldig. Vraag een nieuwe aan.');
           setIsVerifying(false);
           return;
         }
         
-        if (session && session.user) {
-          console.log('✅ Valid password reset session found for:', session.user.email);
+        if (data.session && data.user) {
+          console.log('✅ Valid password reset session established for:', data.user.email);
           setIsVerifying(false);
         } else {
-          console.log('❌ No valid session found - link may be expired or invalid');
+          console.log('❌ Could not establish session');
           setError('Deze reset link is verlopen of ongeldig. Vraag een nieuwe aan.');
           setIsVerifying(false);
         }
