@@ -112,7 +112,7 @@ export function LandingPage({ onPathSelect }: LandingPageProps) {
         default:
           return {
             title: "Welkom bij WarmeLeads! 🚀",
-            subtitle: "Koop exclusieve en gedeelde leads voor thuisbatterijen, zonnepanelen, warmtepompen, airco installatie en financial lease. Nederlandse prospects uit onze campagnes, realtime delivery in 15 minuten."
+            subtitle: "Groei uw bedrijf met warme leads die écht converteren. Nederlandse en Belgische prospects met koopintentie, realtime geleverd in uw portal. Exclusief voor u, of voordelig gedeeld."
           };
       }
     }
