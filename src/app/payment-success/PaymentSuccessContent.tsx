@@ -125,6 +125,113 @@ export default function PaymentSuccessContent() {
               </ul>
             </div>
 
+            {/* Process Timeline */}
+            <div className="bg-white rounded-2xl p-6 mb-6 border-2 border-gray-200">
+              <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
+                <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                De komende stappen
+              </h3>
+
+              <div className="space-y-4 relative">
+                {/* Vertical line */}
+                <div className="absolute left-4 top-8 bottom-8 w-0.5 bg-gradient-to-b from-green-500 via-blue-500 to-gray-300"></div>
+
+                {/* Step 1 - COMPLETED */}
+                <div className="flex gap-4 relative">
+                  <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center text-white relative z-10">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                  <div className="flex-1 pt-0.5">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h5 className="font-bold text-gray-900">Betaling afgerond</h5>
+                      <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs font-semibold rounded-full">NU</span>
+                    </div>
+                    <p className="text-sm text-gray-600">
+                      Je betaling is binnen en wij gaan direct aan de slag.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Step 2 */}
+                <div className="flex gap-4 relative">
+                  <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center text-white font-bold text-sm relative z-10">
+                    2
+                  </div>
+                  <div className="flex-1 pt-0.5">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h5 className="font-bold text-gray-900">Persoonlijk contact</h5>
+                      <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full">BINNEN 24U</span>
+                    </div>
+                    <p className="text-sm text-gray-600">
+                      We bellen of mailen om campagnevoorkeuren en informatie te bespreken.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Step 3 */}
+                <div className="flex gap-4 relative">
+                  <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-600 rounded-full flex items-center justify-center text-white font-bold text-sm relative z-10">
+                    3
+                  </div>
+                  <div className="flex-1 pt-0.5">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h5 className="font-bold text-gray-900">
+                        {isExclusive ? 'Campagnes live' : 'Excel verzonden'}
+                      </h5>
+                      <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-semibold rounded-full">
+                        {isExclusive ? 'DEZE WEEK' : 'BINNEN 24U'}
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-600">
+                      {isExclusive 
+                        ? 'Jouw persoonlijke campagnes worden strategisch opgezet en gestart.'
+                        : 'Je ontvangt het Excel bestand per email, direct te gebruiken.'}
+                    </p>
+                  </div>
+                </div>
+
+                {isExclusive && (
+                  <>
+                    {/* Step 4 - Only for exclusive */}
+                    <div className="flex gap-4 relative">
+                      <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-orange-500 to-red-600 rounded-full flex items-center justify-center text-white font-bold text-sm relative z-10">
+                        4
+                      </div>
+                      <div className="flex-1 pt-0.5">
+                        <div className="flex items-center gap-2 mb-1">
+                          <h5 className="font-bold text-gray-900">CRM toegang + onboarding</h5>
+                          <span className="px-2 py-0.5 bg-orange-100 text-orange-700 text-xs font-semibold rounded-full">DEZE WEEK</span>
+                        </div>
+                        <p className="text-sm text-gray-600">
+                          Toegang tot je spreadsheet en een korte onboarding van het WarmeLeads CRM.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Step 5 - Only for exclusive */}
+                    <div className="flex gap-4 relative">
+                      <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-yellow-500 to-amber-600 rounded-full flex items-center justify-center text-white font-bold text-sm relative z-10">
+                        5
+                      </div>
+                      <div className="flex-1 pt-0.5">
+                        <div className="flex items-center gap-2 mb-1">
+                          <h5 className="font-bold text-gray-900">Leads + doorlopende support</h5>
+                          <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 text-xs font-semibold rounded-full">BINNENKORT</span>
+                        </div>
+                        <p className="text-sm text-gray-600">
+                          Eerste leads komen binnen en wij blijven monitoren, optimaliseren en beschikbaar.
+                        </p>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+
             <div className="space-y-3">
               <Link 
                 href="/"

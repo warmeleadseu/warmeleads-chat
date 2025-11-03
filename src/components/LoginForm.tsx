@@ -23,6 +23,10 @@ interface LoginFormProps {
 export function LoginForm({ onBack, onSwitchToRegister, onSwitchToGuest, onSuccess }: LoginFormProps) {
   const [isLogin, setIsLogin] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetSent, setResetSent] = useState(false);
+  const [resetError, setResetError] = useState('');
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -57,6 +61,28 @@ export function LoginForm({ onBack, onSwitchToRegister, onSwitchToGuest, onSucce
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handlePasswordReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setResetError('');
+    
+    try {
+      // Call Supabase password reset
+      const response = await fetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: resetEmail }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Er ging iets mis');
+      }
+
+      setResetSent(true);
+    } catch (error) {
+      setResetError('Er ging iets mis. Probeer het opnieuw.');
+    }
   };
 
   return (
@@ -144,6 +170,17 @@ export function LoginForm({ onBack, onSwitchToRegister, onSwitchToGuest, onSucce
                     )}
                   </button>
                 </div>
+                {isLogin && (
+                  <div className="text-right mt-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowResetModal(true)}
+                      className="text-sm text-white/60 hover:text-white transition-colors"
+                    >
+                      Wachtwoord vergeten?
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Additional fields for registration */}
@@ -258,6 +295,115 @@ export function LoginForm({ onBack, onSwitchToRegister, onSwitchToGuest, onSucce
           </div>
         </motion.div>
       </div>
+
+      {/* Password Reset Modal */}
+      <AnimatePresence>
+        {showResetModal && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowResetModal(false)}
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
+            />
+
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            >
+              <div 
+                className="bg-gradient-to-br from-white to-gray-50 rounded-2xl shadow-2xl max-w-md w-full p-8"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {!resetSent ? (
+                  <>
+                    <h3 className="text-2xl font-bold text-gray-900 mb-2">
+                      Wachtwoord vergeten?
+                    </h3>
+                    <p className="text-gray-600 mb-6">
+                      Geen probleem! Vul je email adres in en we sturen je een link om je wachtwoord opnieuw in te stellen.
+                    </p>
+
+                    <form onSubmit={handlePasswordReset} className="space-y-4">
+                      <div>
+                        <label className="block text-gray-700 text-sm font-medium mb-2">
+                          Email adres
+                        </label>
+                        <div className="relative">
+                          <EnvelopeIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                          <input
+                            type="email"
+                            value={resetEmail}
+                            onChange={(e) => setResetEmail(e.target.value)}
+                            className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-pink focus:border-transparent"
+                            placeholder="jouw@email.nl"
+                            required
+                          />
+                        </div>
+                      </div>
+
+                      {resetError && (
+                        <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm">
+                          {resetError}
+                        </div>
+                      )}
+
+                      <div className="flex gap-3">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowResetModal(false);
+                            setResetEmail('');
+                            setResetError('');
+                          }}
+                          className="flex-1 px-4 py-3 border border-gray-300 rounded-xl text-gray-700 font-medium hover:bg-gray-50 transition-colors"
+                        >
+                          Annuleren
+                        </button>
+                        <button
+                          type="submit"
+                          className="flex-1 px-4 py-3 bg-gradient-to-r from-brand-purple to-brand-pink text-white font-semibold rounded-xl hover:shadow-lg transition-all"
+                        >
+                          Verstuur link
+                        </button>
+                      </div>
+                    </form>
+                  </>
+                ) : (
+                  <>
+                    <div className="text-center">
+                      <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      </div>
+                      <h3 className="text-2xl font-bold text-gray-900 mb-2">
+                        Email verstuurd! ✅
+                      </h3>
+                      <p className="text-gray-600 mb-6">
+                        We hebben een wachtwoord reset link gestuurd naar <span className="font-semibold">{resetEmail}</span>. Check je inbox!
+                      </p>
+                      <button
+                        onClick={() => {
+                          setShowResetModal(false);
+                          setResetSent(false);
+                          setResetEmail('');
+                        }}
+                        className="w-full px-4 py-3 bg-gradient-to-r from-brand-purple to-brand-pink text-white font-semibold rounded-xl hover:shadow-lg transition-all"
+                      >
+                        Sluiten
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }

@@ -49,6 +49,7 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
   const [authError, setAuthError] = useState('');
   const [currentStep, setCurrentStep] = useState<number>(1);
   const [isSummaryOpen, setIsSummaryOpen] = useState(false); // For mobile collapsible summary
+  const [isProcessInfoOpen, setIsProcessInfoOpen] = useState(false); // For "Zo werkt het" section
   
   const { login, register, isAuthenticated } = useAuthStore();
 
@@ -840,6 +841,136 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
                                 </div>
                               </div>
                             </div>
+                          )}
+
+                          {/* "Zo werkt het" Info Section - Between Step 2 & 3 */}
+                          {selectedPackage && (
+                            <motion.div
+                              initial={{ opacity: 0, y: 20 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              className="mb-6"
+                            >
+                              <button
+                                onClick={() => setIsProcessInfoOpen(!isProcessInfoOpen)}
+                                className="w-full bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-2xl p-5 hover:border-blue-300 transition-all duration-200 group"
+                              >
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center flex-shrink-0">
+                                      <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                      </svg>
+                                    </div>
+                                    <div className="text-left">
+                                      <h4 className="text-lg font-bold text-gray-900 group-hover:text-blue-600 transition-colors">
+                                        📋 Hoe werkt het na je bestelling?
+                                      </h4>
+                                      <p className="text-sm text-gray-600">
+                                        {isProcessInfoOpen ? 'Klik om te sluiten' : 'Klik om te bekijken'}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <motion.div
+                                    animate={{ rotate: isProcessInfoOpen ? 180 : 0 }}
+                                    transition={{ duration: 0.3 }}
+                                  >
+                                    <ChevronDownIcon className="w-6 h-6 text-blue-600" />
+                                  </motion.div>
+                                </div>
+                              </button>
+
+                              <AnimatePresence>
+                                {isProcessInfoOpen && (
+                                  <motion.div
+                                    initial={{ height: 0, opacity: 0 }}
+                                    animate={{ height: 'auto', opacity: 1 }}
+                                    exit={{ height: 0, opacity: 0 }}
+                                    transition={{ duration: 0.3 }}
+                                    className="overflow-hidden"
+                                  >
+                                    <div className="bg-white border-2 border-blue-200 border-t-0 rounded-b-2xl p-6 space-y-4">
+                                      <p className="text-gray-700 font-medium mb-4">
+                                        Voordat je afrekent: zo werkt het bij WarmeLeads 👇
+                                      </p>
+
+                                      {/* Process Steps */}
+                                      <div className="space-y-4">
+                                        {/* Step 1 */}
+                                        <div className="flex gap-4">
+                                          <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                                            1
+                                          </div>
+                                          <div className="flex-1">
+                                            <h5 className="font-bold text-gray-900 mb-1">Je rekent je leadbatch af</h5>
+                                            <p className="text-sm text-gray-600">
+                                              Zodra je betaling binnen is, gaan wij direct aan de slag.
+                                            </p>
+                                          </div>
+                                        </div>
+
+                                        {/* Step 2 */}
+                                        <div className="flex gap-4">
+                                          <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                                            2
+                                          </div>
+                                          <div className="flex-1">
+                                            <h5 className="font-bold text-gray-900 mb-1">Wij nemen persoonlijk contact op</h5>
+                                            <p className="text-sm text-gray-600">
+                                              Binnen korte tijd bellen of mailen we om jouw campagnevoorkeuren en benodigde informatie te bespreken.
+                                            </p>
+                                          </div>
+                                        </div>
+
+                                        {/* Step 3 */}
+                                        <div className="flex gap-4">
+                                          <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-600 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                                            3
+                                          </div>
+                                          <div className="flex-1">
+                                            <h5 className="font-bold text-gray-900 mb-1">We starten jouw persoonlijke campagnes</h5>
+                                            <p className="text-sm text-gray-600">
+                                              Op basis van jouw wensen zetten we alles strategisch en doelgericht op.
+                                            </p>
+                                          </div>
+                                        </div>
+
+                                        {/* Step 4 */}
+                                        <div className="flex gap-4">
+                                          <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-orange-500 to-red-600 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                                            4
+                                          </div>
+                                          <div className="flex-1">
+                                            <h5 className="font-bold text-gray-900 mb-1">Je krijgt toegang tot ons CRM-systeem</h5>
+                                            <p className="text-sm text-gray-600">
+                                              We delen een overzichtelijke spreadsheet én geven een korte onboarding van het WarmeLeads CRM — zodat je eenvoudig al je leads kunt beheren.
+                                            </p>
+                                          </div>
+                                        </div>
+
+                                        {/* Step 5 */}
+                                        <div className="flex gap-4">
+                                          <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-yellow-500 to-amber-600 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                                            5
+                                          </div>
+                                          <div className="flex-1">
+                                            <h5 className="font-bold text-gray-900 mb-1">Leads geleverd, wij blijven betrokken</h5>
+                                            <p className="text-sm text-gray-600">
+                                              Je ontvangt je leadbatch en wij blijven monitoren, optimaliseren en beschikbaar voor vragen of hulp.
+                                            </p>
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      <div className="mt-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200">
+                                        <p className="text-sm text-blue-900 font-medium text-center">
+                                          💡 Zo weet je precies wat je kunt verwachten.
+                                        </p>
+                                      </div>
+                                    </div>
+                                  </motion.div>
+                                )}
+                              </AnimatePresence>
+                            </motion.div>
                           )}
 
                           {/* Step 3: Quantity & Confirmation */}
