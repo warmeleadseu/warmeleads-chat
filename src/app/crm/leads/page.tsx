@@ -135,30 +135,47 @@ export default function CustomerLeadsPage() {
   // Load branch mappings for table columns
   const loadBranchMappings = async (branchId: string) => {
     try {
+      console.log(`📊 Loading branch mappings for branch: ${branchId}`);
       const mappingsResponse = await fetch(`/api/branches/${branchId}/mappings`);
+      
       if (mappingsResponse.ok) {
         const mappingsData = await mappingsResponse.json();
         const mappings = mappingsData.mappings || [];
+        console.log(`✅ Loaded ${mappings.length} branch mappings`);
         setBranchMappings(mappings);
         
         // Set table columns based on mappings that should be shown in list
         const columns = mappings
           .filter((m: any) => m.showInList !== false)
-          .sort((a: any, b: any) => (a.sortOrder || a.columnIndex) - (b.sortOrder || b.columnIndex));
+          .sort((a: any, b: any) => (a.sortOrder || a.columnIndex || 0) - (b.sortOrder || b.columnIndex || 0));
+        
+        console.log(`📋 Setting ${columns.length} table columns (filtered from ${mappings.length} mappings)`);
         setTableColumns(columns);
         
         // Also fetch branch name
-        const branchResponse = await fetch(`/api/admin/branches/${branchId}`);
-        if (branchResponse.ok) {
-          const branchData = await branchResponse.json();
-          setBranchName(branchData.branch?.display_name || branchData.branch?.name || 'Specifiek');
+        try {
+          const branchResponse = await fetch(`/api/admin/branches/${branchId}`);
+          if (branchResponse.ok) {
+            const branchData = await branchResponse.json();
+            const displayName = branchData.branch?.display_name || branchData.branch?.name || 'Specifiek';
+            console.log(`🏷️ Branch name: ${displayName}`);
+            setBranchName(displayName);
+          }
+        } catch (branchError) {
+          console.warn('Could not fetch branch name, using default:', branchError);
+          setBranchName('Specifiek');
         }
+      } else {
+        console.warn(`⚠️ Failed to load branch mappings: ${mappingsResponse.status} ${mappingsResponse.statusText}`);
+        setBranchMappings([]);
+        setTableColumns([]);
+        setBranchName('Specifiek');
       }
     } catch (error) {
-      console.error('Error loading branch mappings:', error);
+      console.error('❌ Error loading branch mappings:', error);
       setBranchMappings([]);
       setTableColumns([]);
-      setBranchName('Thuisbatterij Specifiek');
+      setBranchName('Specifiek');
     }
   };
 
@@ -1952,24 +1969,29 @@ export default function CustomerLeadsPage() {
                       )}
                     </div>
 
-                    {/* Status Badge & Branch Info */}
+                    {/* Status Badge & Branch Info - Dynamic */}
                     <div className="flex items-center justify-between">
                       <div className="flex flex-wrap gap-2 flex-1">
-                        {lead.branchData?.zonnepanelen && (
-                          <span className="px-3 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-full font-medium">
-                            🌞 {lead.branchData.zonnepanelen}
-                          </span>
-                        )}
-                        {lead.branchData?.stroomverbruik && (
-                          <span className="px-3 py-1 bg-blue-100 text-blue-800 text-xs rounded-full font-medium">
-                            ⚡ {lead.branchData.stroomverbruik}
-                          </span>
-                        )}
-                        {lead.branchData?.koopintentie && (
-                          <span className="px-3 py-1 bg-purple-100 text-purple-800 text-xs rounded-full font-medium">
-                            🎯 {lead.branchData.koopintentie}
-                          </span>
-                        )}
+                        {/* Show first 3 branch-specific fields dynamically */}
+                        {lead.branchData && Object.entries(lead.branchData)
+                          .filter(([key, value]) => {
+                            // Skip core fields that are already shown
+                            const coreFields = ['name', 'email', 'phone', 'city', 'postcode', 'huisnummer', 'datumInteresse', 'notes'];
+                            return !coreFields.includes(key) && value && value !== '';
+                          })
+                          .slice(0, 3)
+                          .map(([key, value]) => {
+                            // Format the key for display
+                            const displayKey = key.replace(/([A-Z])/g, ' $1').replace(/_/g, ' ').trim();
+                            return (
+                              <span 
+                                key={key}
+                                className="px-3 py-1 bg-purple-100 text-purple-800 text-xs rounded-full font-medium"
+                              >
+                                {String(value).substring(0, 30)}
+                              </span>
+                            );
+                          })}
                       </div>
                       
                       <div className="text-xs text-gray-400 text-right ml-2 flex-shrink-0">
@@ -1987,12 +2009,12 @@ export default function CustomerLeadsPage() {
                   <tr>
                     {tableColumns.length > 0 ? (
                       // Dynamic columns based on branch mappings
-                      tableColumns.map((column) => (
+                      tableColumns.map((column, idx) => (
                         <th 
-                          key={column.id} 
+                          key={column.id || `col-${idx}`} 
                           className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
                         >
-                          {column.fieldLabel || column.headerName}
+                          {column.fieldLabel || column.headerName || 'Kolom'}
                         </th>
                       ))
                     ) : (
@@ -2027,59 +2049,62 @@ export default function CustomerLeadsPage() {
                     >
                       {tableColumns.length > 0 ? (
                         // Dynamic cells based on branch mappings
-                        tableColumns.map((column) => {
-                          // ALWAYS try branchData first - this is where the data is stored
-                          const possibleKeys = [
-                            column.fieldKey,
-                            column.fieldKey?.toLowerCase(),
-                            column.fieldKey?.replace(/([A-Z])/g, '_$1').toLowerCase(),
-                            column.headerName?.toLowerCase().replace(/\s+/g, ''),
-                            // Also try header name variations
-                            column.headerName?.toLowerCase().replace(/\s+/g, '_'),
-                            column.headerName?.toLowerCase().replace(/\s+/g, ''),
-                          ];
-                          
-                          let value: any = '';
-                          for (const key of possibleKeys) {
-                            if (key && lead.branchData?.[key] !== undefined && lead.branchData?.[key] !== null && lead.branchData?.[key] !== '') {
-                              value = lead.branchData[key];
-                              break;
+                        tableColumns.map((column, idx) => {
+                          try {
+                            // ALWAYS try branchData first - this is where the data is stored
+                            const possibleKeys = [
+                              column.fieldKey,
+                              column.fieldKey?.toLowerCase(),
+                              column.fieldKey?.replace(/([A-Z])/g, '_$1').toLowerCase(),
+                              column.headerName?.toLowerCase().replace(/\s+/g, ''),
+                              // Also try header name variations
+                              column.headerName?.toLowerCase().replace(/\s+/g, '_'),
+                              column.headerName?.toLowerCase().replace(/\s+/g, ''),
+                            ].filter(Boolean); // Remove undefined/null values
+                            
+                            let value: any = '';
+                            for (const key of possibleKeys) {
+                              if (key && lead.branchData?.[key] !== undefined && lead.branchData?.[key] !== null && lead.branchData?.[key] !== '') {
+                                value = lead.branchData[key];
+                                break;
+                              }
                             }
-                          }
-                          
-                          // Fallback: try core Lead fields ONLY if headerName matches core field
-                          if (!value || value === '') {
-                            const coreFieldMap: Record<string, keyof Lead> = {
-                              customerName: 'name',
-                              email: 'email',
-                              phone: 'phone',
-                              city: 'city',
-                              company: 'company',
-                              address: 'address',
-                            };
-                            const coreField = coreFieldMap[column.fieldKey];
-                            // Only use core field if headerName actually matches (e.g., "Naam klant" → name, but "Datum interesse klant" → NOT name)
-                            if (coreField && isCoreFieldHeader(column.headerName, coreField) && lead[coreField]) {
-                              value = String(lead[coreField]);
+                            
+                            // Fallback: try core Lead fields ONLY if headerName matches core field
+                            if (!value || value === '') {
+                              const coreFieldMap: Record<string, keyof Lead> = {
+                                customerName: 'name',
+                                email: 'email',
+                                phone: 'phone',
+                                city: 'city',
+                                company: 'company',
+                                address: 'address',
+                              };
+                              const coreField = column.fieldKey ? coreFieldMap[column.fieldKey] : undefined;
+                              // Only use core field if headerName actually matches (e.g., "Naam klant" → name, but "Datum interesse klant" → NOT name)
+                              if (coreField && column.headerName && isCoreFieldHeader(column.headerName, coreField) && lead[coreField]) {
+                                value = String(lead[coreField]);
+                              }
                             }
+                            
+                            // Format date values
+                            if (value instanceof Date) {
+                              value = value.toLocaleDateString('nl-NL');
+                            }
+                            
+                            return (
+                              <td key={column.id || `cell-${idx}`} className="px-6 py-4 text-sm text-gray-900 whitespace-nowrap">
+                                {value || '-'}
+                              </td>
+                            );
+                          } catch (error) {
+                            console.error(`Error rendering cell for column ${column.fieldLabel || column.headerName}:`, error);
+                            return (
+                              <td key={column.id || `cell-${idx}`} className="px-6 py-4 text-sm text-gray-500">
+                                Error
+                              </td>
+                            );
                           }
-                          
-                          // Format date values
-                          if (value instanceof Date) {
-                            value = value.toLocaleDateString('nl-NL');
-                          }
-                          
-                          console.log(`🔍 Table cell: ${column.fieldLabel} (key: ${column.fieldKey})`, {
-                            value,
-                            branchDataKeys: Object.keys(lead.branchData || {}),
-                            branchDataValue: lead.branchData?.[column.fieldKey]
-                          });
-                          
-                          return (
-                            <td key={column.id} className="px-6 py-4 text-sm text-gray-900 whitespace-nowrap">
-                              {value || '-'}
-                            </td>
-                          );
                         })
                       ) : (
                         // Fallback: Default cells
