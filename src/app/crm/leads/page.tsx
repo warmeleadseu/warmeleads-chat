@@ -2008,15 +2008,26 @@ export default function CustomerLeadsPage() {
                 <thead className="bg-gray-50">
                   <tr>
                     {tableColumns.length > 0 ? (
-                      // Dynamic columns based on branch mappings
-                      tableColumns.map((column, idx) => (
-                        <th 
-                          key={column.id || `col-${idx}`} 
-                          className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                        >
-                          {column.fieldLabel || column.headerName || 'Kolom'}
+                      // Dynamic columns based on branch mappings + fixed columns
+                      <>
+                        {tableColumns.map((column, idx) => (
+                          <th 
+                            key={column.id || `col-${idx}`} 
+                            className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                          >
+                            {column.fieldLabel || column.headerName || 'Kolom'}
+                          </th>
+                        ))}
+                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Interesse & Budget
                         </th>
-                      ))
+                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Status
+                        </th>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Acties
+                        </th>
+                      </>
                     ) : (
                       // Fallback: Default columns
                       <>
@@ -2047,20 +2058,153 @@ export default function CustomerLeadsPage() {
                       onClick={() => handleViewLead(lead)}
                       title="Klik voor lead details"
                     >
-                      {tableColumns.length > 0 ? (
+                      {tableColumns.length > 0 && (
                         // Dynamic cells based on branch mappings
                         tableColumns.map((column, idx) => {
                           try {
-                            // ALWAYS try branchData first - this is where the data is stored
+                            // Special handling for first column (name) - show avatar and styled layout
+                            if (idx === 0) {
+                              const possibleKeys = [
+                                column.fieldKey,
+                                column.fieldKey?.toLowerCase(),
+                                'customerName',
+                                'name',
+                              ].filter(Boolean);
+                              
+                              let nameValue = '';
+                              for (const key of possibleKeys) {
+                                if (key && lead.branchData?.[key]) {
+                                  nameValue = String(lead.branchData[key]);
+                                  break;
+                                }
+                              }
+                              if (!nameValue && lead.name) {
+                                nameValue = lead.name;
+                              }
+                              
+                              return (
+                                <td key={column.id || `cell-${idx}`} className="px-6 py-4">
+                                  <div className="flex items-center">
+                                    <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-500 rounded-xl flex items-center justify-center">
+                                      <span className="text-white font-bold">
+                                        {nameValue.charAt(0).toUpperCase()}
+                                      </span>
+                                    </div>
+                                    <div className="ml-4">
+                                      <div className="text-sm font-bold text-gray-900">
+                                        {nameValue}
+                                      </div>
+                                      {lead.company && (
+                                        <div className="text-sm text-gray-600 flex items-center">
+                                          <BuildingOfficeIcon className="w-4 h-4 mr-1" />
+                                          {lead.company}
+                                        </div>
+                                      )}
+                                      {lead.sheetRowNumber && (
+                                        <div className="text-xs text-gray-400">
+                                          Sheet rij: {lead.sheetRowNumber}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </td>
+                              );
+                            }
+                            
+                            // Special handling for email column
+                            if (column.fieldKey?.toLowerCase().includes('email') || column.headerName?.toLowerCase().includes('e-mail')) {
+                              const possibleKeys = ['email', 'e-mail', 'mail'].filter(Boolean);
+                              let emailValue = '';
+                              for (const key of possibleKeys) {
+                                if (lead.branchData?.[key]) {
+                                  emailValue = String(lead.branchData[key]);
+                                  break;
+                                }
+                              }
+                              if (!emailValue && lead.email) {
+                                emailValue = lead.email;
+                              }
+                              
+                              return (
+                                <td key={column.id || `cell-${idx}`} className="px-6 py-4">
+                                  <div className="flex items-center text-sm text-gray-600">
+                                    <EnvelopeIcon className="w-4 h-4 mr-2" />
+                                    <a href={`mailto:${emailValue}`} className="hover:text-brand-purple">
+                                      {emailValue}
+                                    </a>
+                                  </div>
+                                </td>
+                              );
+                            }
+                            
+                            // Special handling for phone column
+                            if (column.fieldKey?.toLowerCase().includes('phone') || column.fieldKey?.toLowerCase().includes('telefoon') || column.headerName?.toLowerCase().includes('telefoon')) {
+                              const possibleKeys = ['phone', 'telefoonnummer', 'telefoon'].filter(Boolean);
+                              let phoneValue = '';
+                              for (const key of possibleKeys) {
+                                if (lead.branchData?.[key]) {
+                                  phoneValue = String(lead.branchData[key]);
+                                  break;
+                                }
+                              }
+                              if (!phoneValue && lead.phone) {
+                                phoneValue = lead.phone;
+                              }
+                              
+                              return (
+                                <td key={column.id || `cell-${idx}`} className="px-6 py-4">
+                                  <div className="flex items-center text-sm text-gray-600">
+                                    <PhoneIcon className="w-4 h-4 mr-2" />
+                                    <a href={`tel:${phoneValue}`} className="hover:text-brand-purple">
+                                      {phoneValue}
+                                    </a>
+                                  </div>
+                                </td>
+                              );
+                            }
+                            
+                            // Special handling for date columns
+                            if (column.fieldKey?.toLowerCase().includes('datum') || column.fieldType === 'date') {
+                              const possibleKeys = [
+                                column.fieldKey,
+                                column.fieldKey?.toLowerCase(),
+                                column.fieldKey?.replace(/([A-Z])/g, '_$1').toLowerCase(),
+                                column.headerName?.toLowerCase().replace(/\s+/g, ''),
+                              ].filter(Boolean);
+                              
+                              let dateValue: any = '';
+                              for (const key of possibleKeys) {
+                                if (key && lead.branchData?.[key] !== undefined && lead.branchData?.[key] !== null && lead.branchData?.[key] !== '') {
+                                  dateValue = lead.branchData[key];
+                                  break;
+                                }
+                              }
+                              
+                              if (dateValue) {
+                                const dateAny = dateValue as any;
+                                if (dateAny instanceof Date) {
+                                  dateValue = dateAny.toLocaleDateString('nl-NL');
+                                } else {
+                                  dateValue = String(dateValue);
+                                }
+                              }
+                              
+                              return (
+                                <td key={column.id || `cell-${idx}`} className="px-6 py-4 text-sm text-gray-600">
+                                  {dateValue || '-'}
+                                </td>
+                              );
+                            }
+                            
+                            // Default: ALWAYS try branchData first - this is where the data is stored
                             const possibleKeys = [
                               column.fieldKey,
                               column.fieldKey?.toLowerCase(),
                               column.fieldKey?.replace(/([A-Z])/g, '_$1').toLowerCase(),
                               column.headerName?.toLowerCase().replace(/\s+/g, ''),
-                              // Also try header name variations
                               column.headerName?.toLowerCase().replace(/\s+/g, '_'),
                               column.headerName?.toLowerCase().replace(/\s+/g, ''),
-                            ].filter(Boolean); // Remove undefined/null values
+                            ].filter(Boolean);
                             
                             let value: any = '';
                             for (const key of possibleKeys) {
@@ -2081,20 +2225,29 @@ export default function CustomerLeadsPage() {
                                 address: 'address',
                               };
                               const coreField = column.fieldKey ? coreFieldMap[column.fieldKey] : undefined;
-                              // Only use core field if headerName actually matches (e.g., "Naam klant" → name, but "Datum interesse klant" → NOT name)
                               if (coreField && column.headerName && isCoreFieldHeader(column.headerName, coreField) && lead[coreField]) {
                                 value = String(lead[coreField]);
                               }
                             }
                             
                             // Format date values
-                            if (value instanceof Date) {
-                              value = value.toLocaleDateString('nl-NL');
+                            const valueAny = value as any;
+                            if (valueAny && typeof valueAny === 'object' && valueAny instanceof Date) {
+                              value = valueAny.toLocaleDateString('nl-NL');
+                            } else if (value) {
+                              value = String(value);
                             }
                             
+                            // Show as badge for non-empty values (similar to thuisbatterijen styling)
                             return (
-                              <td key={column.id || `cell-${idx}`} className="px-6 py-4 text-sm text-gray-900 whitespace-nowrap">
-                                {value || '-'}
+                              <td key={column.id || `cell-${idx}`} className="px-6 py-4">
+                                {value ? (
+                                  <span className="px-3 py-1 bg-purple-100 text-purple-800 text-xs rounded-full font-medium">
+                                    {value}
+                                  </span>
+                                ) : (
+                                  <span className="text-sm text-gray-400">-</span>
+                                )}
                               </td>
                             );
                           } catch (error) {
@@ -2106,7 +2259,88 @@ export default function CustomerLeadsPage() {
                             );
                           }
                         })
-                      ) : (
+                      )}
+                      
+                      {/* Always show Interesse & Budget, Status, and Acties columns */}
+                      {tableColumns.length > 0 && (
+                        <>
+                          <td className="px-6 py-4">
+                            <div className="space-y-2">
+                              <div className="font-medium text-gray-900">{lead.interest}</div>
+                              {lead.budget && (
+                                <div className="flex items-center text-sm text-gray-600">
+                                  <CurrencyEuroIcon className="w-4 h-4 mr-2" />
+                                  {lead.budget}
+                                </div>
+                              )}
+                              
+                              {/* Clean table view - branch details only in popup */}
+                              <div className="text-xs text-gray-500 italic">
+                                📋 Klik voor alle lead details
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <select
+                              value={lead.status}
+                              onChange={(e) => handleUpdateLeadStatus(lead.id, e.target.value as Lead['status'])}
+                              onClick={(e) => e.stopPropagation()} // Prevent row click
+                              className={`px-3 py-2 text-sm font-medium rounded-lg border-0 ${getStatusColor(lead.status)}`}
+                            >
+                              {customStages.map(stage => (
+                                <option key={stage.id} value={stage.id}>
+                                  {stage.icon} {stage.name}
+                                </option>
+                              ))}
+                            </select>
+                            <div className="text-xs text-gray-500 mt-1">
+                              Datum: {new Date(lead.createdAt).toLocaleDateString('nl-NL')}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex space-x-2">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation(); // Prevent row click
+                                  setEditingLead(lead);
+                                }}
+                                className="text-blue-600 hover:text-blue-800 transition-colors p-2 hover:bg-blue-50 rounded-lg"
+                                title="Bewerken"
+                              >
+                                <PencilIcon className="w-4 h-4" />
+                              </button>
+                              <a
+                                href={`mailto:${lead.email}`}
+                                onClick={(e) => e.stopPropagation()}
+                                className="text-green-600 hover:text-green-800 transition-colors p-2 hover:bg-green-50 rounded-lg"
+                                title="Email versturen"
+                              >
+                                <EnvelopeIcon className="w-4 h-4" />
+                              </a>
+                              <a
+                                href={`tel:${lead.phone}`}
+                                onClick={(e) => e.stopPropagation()}
+                                className="text-purple-600 hover:text-purple-800 transition-colors p-2 hover:bg-purple-50 rounded-lg"
+                                title="Bellen"
+                              >
+                                <PhoneIcon className="w-4 h-4" />
+                              </a>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation(); // Prevent row click
+                                  handleDeleteLead(lead);
+                                }}
+                                className="text-red-600 hover:text-red-800 transition-colors p-2 hover:bg-red-50 rounded-lg"
+                                title="Verwijderen"
+                              >
+                                <TrashIcon className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </>
+                      )}
+                      
+                      {tableColumns.length === 0 && (
                         // Fallback: Default cells
                         <>
                           <td className="px-6 py-4">
