@@ -70,7 +70,7 @@ export async function GET(request: NextRequest) {
         }
 
         // Lees leads uit Google Sheets
-        const sheetLeads = await readCustomerLeads(googleSheetUrl);
+        const sheetLeads = await readCustomerLeads(googleSheetUrl, undefined, customer.branch_id);
         const existingLeads = customer.leadData || [];
         
         // Smart nieuwe leads detectie: combineer rijnummer en lead content

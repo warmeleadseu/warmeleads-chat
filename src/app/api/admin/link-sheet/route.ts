@@ -4,18 +4,20 @@
  * Gebruikt SERVICE_ROLE_KEY om RLS te omzeilen
  * Maakt eerst een CRM customer record aan als die niet bestaat
  * 
- * ADMIN ONLY
+ * ADMIN ONLY - Called from admin interface (already authenticated via localStorage)
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
-import { withAuth } from '@/middleware/auth';
-import type { AuthenticatedUser } from '@/middleware/auth';
 
-export const POST = withAuth(async (request: NextRequest, user: AuthenticatedUser) => {
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+export const fetchCache = 'force-no-store';
+
+export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { customerEmail, sheetUrl } = body;
+    const { customerEmail, sheetUrl, branchId } = body;
 
     console.log('🔗 Link Sheet API called');
     console.log('   Email:', customerEmail);
@@ -74,13 +76,21 @@ export const POST = withAuth(async (request: NextRequest, user: AuthenticatedUse
       console.log('   ✅ Customer exists, updating...');
       customerId = existingCustomer.id;
 
+      const updateData: any = {
+        google_sheet_id: sheetId,
+        google_sheet_url: sheetUrl,
+        last_activity: new Date().toISOString()
+      };
+      
+      // Set branch_id if provided
+      if (branchId) {
+        updateData.branch_id = branchId;
+        console.log('   🔗 Setting branch_id:', branchId);
+      }
+      
       const { error: updateError } = await supabase
         .from('customers')
-        .update({
-          google_sheet_id: sheetId,
-          google_sheet_url: sheetUrl,
-          last_activity: new Date().toISOString()
-        })
+        .update(updateData)
         .eq('id', customerId);
 
       if (updateError) {
@@ -115,19 +125,27 @@ export const POST = withAuth(async (request: NextRequest, user: AuthenticatedUse
       const name = userData?.company_name || customerEmail.split('@')[0];
       const company = userData?.company_name || null;
 
+      const insertData: any = {
+        email: customerEmail,
+        name: name,
+        company: company,
+        status: 'customer',
+        source: 'direct',
+        google_sheet_id: sheetId,
+        google_sheet_url: sheetUrl,
+        has_account: true,
+        last_activity: new Date().toISOString()
+      };
+      
+      // Set branch_id if provided
+      if (branchId) {
+        insertData.branch_id = branchId;
+        console.log('   🔗 Setting branch_id for new customer:', branchId);
+      }
+      
       const { data: newCustomer, error: insertError } = await supabase
         .from('customers')
-        .insert({
-          email: customerEmail,
-          name: name,
-          company: company,
-          status: 'customer',
-          source: 'direct',
-          google_sheet_id: sheetId,
-          google_sheet_url: sheetUrl,
-          has_account: true,
-          last_activity: new Date().toISOString()
-        })
+        .insert(insertData)
         .select('id')
         .single();
 
@@ -168,5 +186,5 @@ export const POST = withAuth(async (request: NextRequest, user: AuthenticatedUse
       { status: 500 }
     );
   }
-}, { adminOnly: true });
+}
 

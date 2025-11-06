@@ -44,6 +44,8 @@ export interface Customer {
     newLeads: boolean;
     lastNotificationSent?: Date;
   };
+  branch_id?: string; // Branch Configuration System
+  branch_config_version?: number;
 }
 
 export interface Order {
@@ -145,6 +147,8 @@ function transformSupabaseCustomer(data: any): Customer {
     accountCreatedAt: data.account_created_at ? new Date(data.account_created_at) : undefined,
     googleSheetId: data.google_sheet_id,
     googleSheetUrl: data.google_sheet_url,
+    branch_id: data.branch_id,
+    branch_config_version: data.branch_config_version,
     emailNotifications: {
       enabled: data.email_notifications_enabled,
       newLeads: data.email_notifications_new_leads,

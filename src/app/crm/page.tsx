@@ -96,7 +96,7 @@ export default function CRMDashboard() {
         console.log('📊 CRM Dashboard: Reading leads DIRECTLY from Google Sheets...');
         try {
           const { readCustomerLeads } = await import('@/lib/googleSheetsAPI');
-          const freshLeads = await readCustomerLeads(customer.googleSheetUrl);
+          const freshLeads = await readCustomerLeads(customer.googleSheetUrl, undefined, customer.branch_id);
           
           // Update customer with fresh leads from sheet
           // Google Sheet is the single source of truth - NO database writes!

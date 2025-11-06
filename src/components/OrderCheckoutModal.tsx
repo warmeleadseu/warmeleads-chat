@@ -78,11 +78,13 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
 
   const handleSelectPackage = (pkg: LeadPackage) => {
     setSelectedPackage(pkg);
-    // Reset quantity to minimum for exclusive or fixed for shared
+    // Reset quantity based on type
     if (pkg.type === 'exclusive') {
       setQuantity(pkg.minQuantity || 30);
+    } else if (pkg.type === 'bulk') {
+      setQuantity(pkg.minQuantity || 100);
     } else {
-      setQuantity(pkg.quantity); // Fixed 500 for shared
+      setQuantity(pkg.quantity); // Fixed 250 for shared_fresh
     }
     
     // Auto-scroll to quantity section after package selection
@@ -588,25 +590,25 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
 
                             {/* Mobile: No card, direct buttons with larger spacing */}
                             <div className="lg:hidden">
-                              <div className="flex items-center gap-2 mb-4">
-                                <div className="w-8 h-8 bg-gradient-to-br from-orange-500 to-red-500 rounded-lg flex items-center justify-center text-white font-bold text-sm">
+                              <div className="flex items-center gap-2 mb-3">
+                                <div className="w-6 h-6 bg-gradient-to-br from-orange-500 to-red-500 rounded-lg flex items-center justify-center text-white font-bold text-xs">
                                   1
                                 </div>
-                                <h3 className="text-lg font-bold text-gray-900">Kies je branche</h3>
+                                <h3 className="text-base font-bold text-gray-900">Kies je branche</h3>
                               </div>
-                              <div className="grid grid-cols-2 gap-3">
+                              <div className="grid grid-cols-2 gap-2">
                                 {industries.map((industry) => (
                                   <motion.button
                                     key={industry}
-                                    whileTap={{ scale: 0.95 }}
+                                    whileTap={{ scale: 0.97 }}
                                     onClick={() => {
                                       setSelectedIndustry(industry);
                                       setSelectedPackage(null);
                                     }}
-                                    className={`p-5 rounded-xl font-medium transition-all text-sm shadow-md ${
+                                    className={`p-3 rounded-lg font-medium transition-all text-xs shadow-sm ${
                                       selectedIndustry === industry
-                                        ? 'bg-gradient-to-br from-orange-500 to-red-500 text-white shadow-lg ring-2 ring-orange-300'
-                                        : 'bg-white text-gray-700 active:bg-orange-50 border-2 border-gray-200'
+                                        ? 'bg-gradient-to-br from-orange-500 to-red-500 text-white shadow-md'
+                                        : 'bg-white text-gray-700 active:bg-orange-50 border border-gray-200'
                                     }`}
                                   >
                                     {industry}
@@ -779,96 +781,92 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
 
                               {/* Mobile: Simplified cards, no nested bg */}
                               <div className="lg:hidden">
-                                <div className="flex items-center gap-2 mb-4">
-                                  <div className="w-8 h-8 bg-gradient-to-br from-orange-500 to-red-500 rounded-lg flex items-center justify-center text-white font-bold text-sm">
+                                <div className="flex items-center gap-2 mb-3">
+                                  <div className="w-6 h-6 bg-gradient-to-br from-orange-500 to-red-500 rounded-lg flex items-center justify-center text-white font-bold text-xs">
                                     2
                                   </div>
-                                  <h3 className="text-lg font-bold text-gray-900">Kies je pakket</h3>
+                                  <h3 className="text-base font-bold text-gray-900">Kies je pakket</h3>
                                 </div>
-                                <div className="space-y-3">
+                                <div className="space-y-2">
                                   {leadPackages[selectedIndustry]?.map((pkg) => (
                                     <motion.button
                                       key={pkg.id}
                                       whileTap={{ scale: 0.98 }}
                                       onClick={() => handleSelectPackage(pkg)}
-                                      className={`w-full text-left p-5 rounded-xl transition-all border-2 shadow-md ${
+                                      className={`w-full text-left p-3 rounded-lg transition-all border shadow-sm ${
                                         selectedPackage?.id === pkg.id
-                                          ? 'bg-gradient-to-br from-green-500 to-emerald-600 text-white border-green-400 shadow-lg'
+                                          ? 'bg-gradient-to-br from-green-500 to-emerald-600 text-white border-green-400 shadow-md'
                                           : 'bg-white border-gray-200 active:border-orange-400'
                                       }`}
                                     >
-                                      <div className="flex items-start justify-between mb-3">
-                                        <div>
-                                          <div className={`text-lg font-bold mb-1 ${
-                                            selectedPackage?.id === pkg.id ? 'text-white' : 'text-gray-900'
-                                          }`}>
-                                            {pkg.name}
+                                      <div className="flex items-start justify-between mb-2">
+                                        <div className="flex-1">
+                                          <div className="flex items-center gap-2 mb-1">
+                                            {pkg.type === 'exclusive' ? (
+                                              <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                                selectedPackage?.id === pkg.id
+                                                  ? 'bg-white/20 text-white'
+                                                  : 'bg-gradient-to-r from-orange-500 to-red-500 text-white'
+                                              }`}>
+                                                💎 EXCLUSIEF
+                                              </span>
+                                            ) : pkg.type === 'shared_fresh' ? (
+                                              <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                                selectedPackage?.id === pkg.id
+                                                  ? 'bg-white/20 text-white'
+                                                  : 'bg-blue-500 text-white'
+                                              }`}>
+                                                🤝 GEDEELD
+                                              </span>
+                                            ) : (
+                                              <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                                selectedPackage?.id === pkg.id
+                                                  ? 'bg-white/20 text-white'
+                                                  : 'bg-purple-500 text-white'
+                                              }`}>
+                                                📦 BULK
+                                              </span>
+                                            )}
+                                            <div className={`text-base font-bold ${
+                                              selectedPackage?.id === pkg.id ? 'text-white' : 'text-gray-900'
+                                            }`}>
+                                              {pkg.name}
+                                            </div>
                                           </div>
-                                          {pkg.type === 'exclusive' ? (
-                                            <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-bold ${
-                                              selectedPackage?.id === pkg.id
-                                                ? 'bg-white/20 text-white'
-                                                : 'bg-gradient-to-r from-orange-500 to-red-500 text-white'
-                                            }`}>
-                                              💎 EXCLUSIEF
-                                            </span>
-                                          ) : pkg.type === 'shared_fresh' ? (
-                                            <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-bold ${
-                                              selectedPackage?.id === pkg.id
-                                                ? 'bg-white/20 text-white'
-                                                : 'bg-blue-500 text-white'
-                                            }`}>
-                                              🤝 GEDEELD VERS
-                                            </span>
-                                          ) : (
-                                            <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-bold ${
-                                              selectedPackage?.id === pkg.id
-                                                ? 'bg-white/20 text-white'
-                                                : 'bg-purple-500 text-white'
-                                            }`}>
-                                              📦 BULK
-                                            </span>
-                                          )}
+                                          <div className={`text-lg font-bold mb-1 ${
+                                            selectedPackage?.id === pkg.id ? 'text-white' : 'text-orange-600'
+                                          }`}>
+                                            {pkg.type === 'exclusive' && pkg.pricingTiers 
+                                              ? `Vanaf ${formatPrice(pkg.pricingTiers[0].pricePerLead)}/lead`
+                                              : pkg.type === 'bulk' && pkg.pricingTiers
+                                              ? '€3,50 - €4,25/lead'
+                                              : formatPrice(pkg.price * pkg.quantity)
+                                            }
+                                          </div>
                                         </div>
                                         {selectedPackage?.id === pkg.id && (
-                                          <CheckCircleIcon className="w-6 h-6 text-white flex-shrink-0" />
+                                          <CheckCircleIcon className="w-5 h-5 text-white flex-shrink-0 mt-1" />
                                         )}
                                       </div>
                                       
-                                      <div className={`text-2xl font-bold mb-2 ${
-                                        selectedPackage?.id === pkg.id ? 'text-white' : 'text-orange-600'
-                                      }`}>
-                                        {pkg.type === 'exclusive' && pkg.pricingTiers 
-                                          ? `Vanaf ${formatPrice(pkg.pricingTiers[0].pricePerLead)}/lead`
-                                          : pkg.type === 'bulk' && pkg.pricingTiers
-                                          ? '€3,50 - €4,25/lead'
-                                          : formatPrice(pkg.price * pkg.quantity)
-                                        }
-                                      </div>
-                                      
-                                      <p className={`text-sm mb-3 ${
+                                      <p className={`text-xs mb-2 line-clamp-2 ${
                                         selectedPackage?.id === pkg.id ? 'text-white/90' : 'text-gray-600'
                                       }`}>
                                         {pkg.description}
                                       </p>
 
-                                      {/* Delivery info mobile */}
-                                      <div className={`text-xs p-2 rounded-lg ${
+                                      {/* Delivery info mobile - more compact */}
+                                      <div className={`text-[11px] px-2 py-1 rounded ${
                                         selectedPackage?.id === pkg.id 
                                           ? 'bg-white/10' 
                                           : 'bg-blue-50'
                                       }`}>
-                                        <span className={`font-semibold ${
-                                          selectedPackage?.id === pkg.id ? 'text-white' : 'text-blue-900'
-                                        }`}>
-                                          📦{' '}
-                                        </span>
                                         <span className={selectedPackage?.id === pkg.id ? 'text-white/90' : 'text-blue-800'}>
                                           {pkg.type === 'exclusive' 
-                                            ? 'Campagnes binnen 24u • Portal'
+                                            ? '⚡ Start 24u • Real-time portal'
                                             : pkg.type === 'shared_fresh'
-                                            ? 'Verse campagnes • Excel 24u'
-                                            : 'Database • Excel 24u'}
+                                            ? '🌱 Vers • Excel 24u • 3 partijen'
+                                            : '📦 Database • Excel 24u • Laagste prijs'}
                                         </span>
                                       </div>
                                     </motion.button>
@@ -1048,19 +1046,30 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
                                     3
                                   </div>
                                   <h3 className="text-xl font-bold text-gray-900">
-                                    {selectedPackage.type === 'exclusive' 
-                                      ? 'Kies aantal leads' 
-                                      : selectedPackage.type === 'shared_fresh'
+                                    {selectedPackage.type === 'shared_fresh'
                                       ? 'Bevestig je bestelling'
                                       : 'Kies aantal leads'}
                                   </h3>
                                 </div>
 
-                                {selectedPackage.type === 'exclusive' ? (
+                                {selectedPackage.type === 'shared_fresh' ? (
+                                  <div className="p-4 bg-gradient-to-br from-blue-50 to-purple-50 border-2 border-blue-200 rounded-xl">
+                                    <div className="flex items-center justify-between">
+                                      <div>
+                                        <div className="text-sm font-medium text-gray-700">Vaste batch grootte</div>
+                                        <div className="text-2xl font-bold text-gray-900">{selectedPackage.quantity} leads</div>
+                                      </div>
+                                      <CheckCircleIcon className="w-12 h-12 text-blue-500" />
+                                    </div>
+                                  </div>
+                                ) : (
                                   <div className="space-y-4">
                                     <div>
                                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        Aantal exclusieve leads (minimum {selectedPackage.minQuantity || 30})
+                                        {selectedPackage.type === 'exclusive' 
+                                          ? `Aantal exclusieve leads (minimum ${selectedPackage.minQuantity || 30})`
+                                          : `Aantal bulk leads (minimum ${selectedPackage.minQuantity || 100})`
+                                        }
                                       </label>
                                       <div className="flex items-center gap-3">
                                         <button
@@ -1095,16 +1104,6 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
                                       </div>
                                     )}
                                   </div>
-                                ) : (
-                                  <div className="p-4 bg-gradient-to-br from-blue-50 to-purple-50 border-2 border-blue-200 rounded-xl">
-                                    <div className="flex items-center justify-between">
-                                      <div>
-                                        <div className="text-sm font-medium text-gray-700">Vaste batch grootte</div>
-                                        <div className="text-2xl font-bold text-gray-900">{selectedPackage.quantity} leads</div>
-                                      </div>
-                                      <CheckCircleIcon className="w-12 h-12 text-blue-500" />
-                                    </div>
-                                  </div>
                                 )}
 
                                 {/* Trust Badges */}
@@ -1136,35 +1135,45 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
 
                               {/* Mobile: Simplified, no card wrapper */}
                               <div className="lg:hidden">
-                                <div className="flex items-center gap-2 mb-4">
-                                  <div className="w-8 h-8 bg-gradient-to-br from-orange-500 to-red-500 rounded-lg flex items-center justify-center text-white font-bold text-sm">
+                                <div className="flex items-center gap-2 mb-3">
+                                  <div className="w-6 h-6 bg-gradient-to-br from-orange-500 to-red-500 rounded-lg flex items-center justify-center text-white font-bold text-xs">
                                     3
                                   </div>
-                                  <h3 className="text-lg font-bold text-gray-900">
-                                    {selectedPackage.type === 'exclusive' ? 'Kies aantal' : 'Bevestigen'}
+                                  <h3 className="text-base font-bold text-gray-900">
+                                    {selectedPackage.type === 'shared_fresh' ? 'Bevestigen' : 'Kies aantal'}
                                   </h3>
                                 </div>
 
-                                {selectedPackage.type === 'exclusive' ? (
-                                  <div className="bg-white rounded-xl shadow-md p-4 space-y-4">
+                                {selectedPackage.type === 'shared_fresh' ? (
+                                  <div className="bg-gradient-to-br from-blue-50 to-purple-50 border-2 border-blue-200 rounded-lg p-4">
+                                    <div className="flex items-center justify-between">
+                                      <div>
+                                        <div className="text-xs font-medium text-gray-600">Vaste batch</div>
+                                        <div className="text-2xl font-bold text-gray-900">{selectedPackage.quantity} leads</div>
+                                      </div>
+                                      <CheckCircleIcon className="w-10 h-10 text-blue-500" />
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="bg-white rounded-lg shadow-sm p-3 space-y-3">
                                     <div>
-                                      <label className="block text-xs font-medium text-gray-600 mb-3 text-center">
+                                      <label className="block text-[11px] font-medium text-gray-500 mb-2 text-center">
                                         Minimum {selectedPackage.minQuantity || 30} leads
                                       </label>
                                       <div className="flex items-center justify-center gap-2">
                                         <button
                                           onClick={() => setQuantity(Math.max((selectedPackage.minQuantity || 30), quantity - 10))}
-                                          className="w-14 h-14 bg-gradient-to-br from-gray-100 to-gray-200 active:from-gray-200 active:to-gray-300 rounded-xl transition-all flex items-center justify-center shadow-sm flex-shrink-0"
+                                          className="w-12 h-12 bg-gradient-to-br from-gray-100 to-gray-200 active:from-gray-200 active:to-gray-300 rounded-lg transition-all flex items-center justify-center shadow-sm flex-shrink-0"
                                         >
-                                          <span className="text-2xl font-bold text-gray-700">−</span>
+                                          <span className="text-xl font-bold text-gray-700">−</span>
                                         </button>
-                                        <div className="flex-1 min-w-0 max-w-[140px]">
+                                        <div className="flex-1 min-w-0 max-w-[120px]">
                                           <input
                                             type="number"
                                             min={selectedPackage.minQuantity || 30}
                                             value={quantity}
                                             onChange={(e) => setQuantity(Math.max(selectedPackage.minQuantity || 30, parseInt(e.target.value) || 0))}
-                                            className="w-full px-2 py-3 text-3xl font-bold text-center text-gray-900 bg-gradient-to-br from-orange-50 to-red-50 border-2 border-orange-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                                            className="w-full px-2 py-2 text-2xl font-bold text-center text-gray-900 bg-gradient-to-br from-orange-50 to-red-50 border-2 border-orange-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                                             style={{ 
                                               WebkitAppearance: 'none',
                                               MozAppearance: 'textfield'
@@ -1173,51 +1182,41 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
                                         </div>
                                         <button
                                           onClick={() => setQuantity(quantity + 10)}
-                                          className="w-14 h-14 bg-gradient-to-br from-gray-100 to-gray-200 active:from-gray-200 active:to-gray-300 rounded-xl transition-all flex items-center justify-center shadow-sm flex-shrink-0"
+                                          className="w-12 h-12 bg-gradient-to-br from-gray-100 to-gray-200 active:from-gray-200 active:to-gray-300 rounded-lg transition-all flex items-center justify-center shadow-sm flex-shrink-0"
                                         >
-                                          <span className="text-2xl font-bold text-gray-700">+</span>
+                                          <span className="text-xl font-bold text-gray-700">+</span>
                                         </button>
                                       </div>
                                     </div>
 
                                     {/* Tier Info */}
                                     {pricing && (
-                                      <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                                        <div className="flex items-center gap-2 text-blue-700 text-xs font-medium">
+                                      <div className="p-2 bg-blue-50 border border-blue-200 rounded-lg">
+                                        <div className="flex items-center gap-2 text-blue-700 text-[11px] font-medium">
                                           <SparklesIcon className="w-4 h-4 flex-shrink-0" />
                                           <span className="truncate">{pricing.tierInfo}</span>
                                         </div>
                                       </div>
                                     )}
                                   </div>
-                                ) : (
-                                  <div className="bg-gradient-to-br from-blue-50 to-purple-50 border-2 border-blue-200 rounded-xl p-5">
-                                    <div className="flex items-center justify-between">
-                                      <div>
-                                        <div className="text-sm font-medium text-gray-700">Vaste batch</div>
-                                        <div className="text-3xl font-bold text-gray-900">{selectedPackage.quantity} leads</div>
-                                      </div>
-                                      <CheckCircleIcon className="w-12 h-12 text-blue-500" />
-                                    </div>
-                                  </div>
                                 )}
 
-                                {/* Trust Badges - Mobile */}
-                                <div className="grid grid-cols-3 gap-3 mt-4">
-                                  <div className="text-center bg-white rounded-lg p-3 shadow-sm">
-                                    <ShieldCheckIcon className="w-6 h-6 text-blue-600 mx-auto mb-1" />
-                                    <div className="text-xs font-medium text-gray-900">Gegarandeerd</div>
+                                {/* Trust Badges - Mobile - More compact */}
+                                <div className="grid grid-cols-3 gap-2 mt-3">
+                                  <div className="text-center bg-white rounded-lg p-2 shadow-sm">
+                                    <ShieldCheckIcon className="w-5 h-5 text-blue-600 mx-auto mb-1" />
+                                    <div className="text-[10px] font-medium text-gray-900">Kwaliteit</div>
                                   </div>
-                                  <div className="text-center bg-white rounded-lg p-3 shadow-sm">
-                                    <BoltIcon className="w-6 h-6 text-green-600 mx-auto mb-1" />
-                                    <div className="text-xs font-medium text-gray-900">
-                                      {selectedPackage?.type === 'exclusive' ? '< 24u Start' : '< 24u Excel'}
+                                  <div className="text-center bg-white rounded-lg p-2 shadow-sm">
+                                    <BoltIcon className="w-5 h-5 text-green-600 mx-auto mb-1" />
+                                    <div className="text-[10px] font-medium text-gray-900">
+                                      {selectedPackage?.type === 'exclusive' ? '< 24u Start' : '< 24u'}
                                     </div>
                                   </div>
-                                  <div className="text-center bg-white rounded-lg p-3 shadow-sm">
-                                    <SparklesIcon className="w-6 h-6 text-purple-600 mx-auto mb-1" />
-                                    <div className="text-xs font-medium text-gray-900">
-                                      {selectedPackage?.type === 'exclusive' ? 'Exclusief' : 'Klaar'}
+                                  <div className="text-center bg-white rounded-lg p-2 shadow-sm">
+                                    <SparklesIcon className="w-5 h-5 text-purple-600 mx-auto mb-1" />
+                                    <div className="text-[10px] font-medium text-gray-900">
+                                      {selectedPackage?.type === 'exclusive' ? 'Exclusief' : 'Direct'}
                                     </div>
                                   </div>
                                 </div>
@@ -1347,19 +1346,19 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
                 </div>
               </div>
 
-              {/* Mobile: Sticky Bottom Bar with Summary */}
+              {/* Mobile: Sticky Bottom Bar with Summary - Compact */}
               {!showAuthFlow && selectedPackage && pricing && (
-                <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t-2 border-gray-200 shadow-2xl z-20">
+                <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-2xl z-20">
                   {/* Collapsible Summary */}
                   <button
                     onClick={() => setIsSummaryOpen(!isSummaryOpen)}
-                    className="w-full px-4 py-3 flex items-center justify-between border-b border-gray-200"
+                    className="w-full px-3 py-2 flex items-center justify-between"
                   >
                     <div className="flex items-center gap-2">
-                      <ShoppingCartIcon className="w-5 h-5 text-gray-600" />
+                      <ShoppingCartIcon className="w-4 h-4 text-gray-600" />
                       <div className="text-left">
-                        <div className="text-xs text-gray-500">Totaal (incl. BTW)</div>
-                        <div className="text-lg font-bold text-orange-600">
+                        <div className="text-[10px] text-gray-500">Totaal (incl. BTW)</div>
+                        <div className="text-base font-bold text-orange-600">
                           {formatPrice(Math.round(pricing.totalPrice * 1.21))}
                         </div>
                       </div>
@@ -1368,7 +1367,7 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
                       animate={{ rotate: isSummaryOpen ? 180 : 0 }}
                       transition={{ duration: 0.3 }}
                     >
-                      <ChevronDownIcon className="w-5 h-5 text-gray-600" />
+                      <ChevronDownIcon className="w-4 h-4 text-gray-600" />
                     </motion.div>
                   </button>
 
@@ -1381,30 +1380,30 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
                         exit={{ height: 0, opacity: 0 }}
                         className="overflow-hidden"
                       >
-                        <div className="p-4 space-y-3 border-b border-gray-200 max-h-64 overflow-y-auto">
-                          <div className="flex justify-between text-sm">
+                        <div className="p-3 space-y-2 border-t border-gray-100 max-h-48 overflow-y-auto">
+                          <div className="flex justify-between text-xs">
                             <span className="text-gray-600">Branche</span>
-                            <span className="font-semibold text-gray-900">{selectedIndustry}</span>
+                            <span className="font-medium text-gray-900">{selectedIndustry}</span>
                           </div>
-                          <div className="flex justify-between text-sm">
+                          <div className="flex justify-between text-xs">
                             <span className="text-gray-600">Pakket</span>
-                            <span className="font-semibold text-gray-900">{selectedPackage.name}</span>
+                            <span className="font-medium text-gray-900">{selectedPackage.name}</span>
                           </div>
-                          <div className="flex justify-between text-sm">
+                          <div className="flex justify-between text-xs">
                             <span className="text-gray-600">Aantal</span>
-                            <span className="font-semibold text-gray-900">{quantity} leads</span>
+                            <span className="font-medium text-gray-900">{quantity} leads</span>
                           </div>
-                          <div className="flex justify-between text-sm">
+                          <div className="flex justify-between text-xs">
                             <span className="text-gray-600">Per lead</span>
-                            <span className="font-semibold text-gray-900">{formatPrice(pricing.pricePerLead)}</span>
+                            <span className="font-medium text-gray-900">{formatPrice(pricing.pricePerLead)}</span>
                           </div>
-                          <div className="flex justify-between text-sm">
+                          <div className="flex justify-between text-xs">
                             <span className="text-gray-600">Subtotaal</span>
-                            <span className="font-semibold text-gray-900">{formatPrice(pricing.totalPrice)}</span>
+                            <span className="font-medium text-gray-900">{formatPrice(pricing.totalPrice)}</span>
                           </div>
-                          <div className="flex justify-between text-sm">
+                          <div className="flex justify-between text-xs">
                             <span className="text-gray-600">BTW (21%)</span>
-                            <span className="font-semibold text-gray-900">{formatPrice(Math.round(pricing.totalPrice * 0.21))}</span>
+                            <span className="font-medium text-gray-900">{formatPrice(Math.round(pricing.totalPrice * 0.21))}</span>
                           </div>
                         </div>
                       </motion.div>

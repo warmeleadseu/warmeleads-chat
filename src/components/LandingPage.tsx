@@ -79,6 +79,19 @@ export function LandingPage({ onPathSelect }: LandingPageProps) {
     }
   }, [isAuthenticated, user]);
 
+  // Listen for openOrderModal event from other components
+  useEffect(() => {
+    const handleOpenOrderModal = () => {
+      setShowCheckoutModal(true);
+    };
+
+    window.addEventListener('openOrderModal', handleOpenOrderModal);
+    
+    return () => {
+      window.removeEventListener('openOrderModal', handleOpenOrderModal);
+    };
+  }, []);
+
   const getPersonalizedMessage = () => {
     if (isAuthenticated && user) {
       if (user.isGuest) {
@@ -126,7 +139,7 @@ export function LandingPage({ onPathSelect }: LandingPageProps) {
         id: 'direct',
         icon: RocketLaunchIcon,
         title: 'Direct leads bestellen',
-        description: 'Ik weet wat ik wil - start de chat!',
+        description: 'Kies je pakket en bestel direct!',
         gradient: 'from-brand-pink to-brand-orange',
         delay: 0,
       },

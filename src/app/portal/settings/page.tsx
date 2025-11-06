@@ -173,7 +173,7 @@ export default function AccountSettingsPage() {
         </button>
         
         <div className="text-center flex-1 px-4">
-          <h1 className="text-white font-bold text-xl">Account Instellingen</h1>
+          <h1 className="text-white font-bold text-xl">Account instellingen</h1>
           <p className="text-white/60 text-sm">
             Beheer uw profiel en beveiligingsinstellingen
           </p>
@@ -362,7 +362,7 @@ export default function AccountSettingsPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label className="block text-white/80 text-sm font-medium mb-2">
-                    Nieuw Wachtwoord
+                    Nieuw wachtwoord
                   </label>
                   <input
                     type="password"
@@ -377,7 +377,7 @@ export default function AccountSettingsPage() {
 
                 <div>
                   <label className="block text-white/80 text-sm font-medium mb-2">
-                    Bevestig Nieuw Wachtwoord
+                    Bevestig nieuw wachtwoord
                   </label>
                   <input
                     type="password"

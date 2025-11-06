@@ -76,6 +76,8 @@ export const GET = withAuth(async (request: NextRequest, user: AuthenticatedUser
         accountCreatedAt: customer.account_created_at,
         googleSheetId: customer.google_sheet_id,
         googleSheetUrl: customer.google_sheet_url,
+        branch_id: customer.branch_id, // ✅ Include branch_id for dynamic parsing
+        branch_config_version: customer.branch_config_version,
         emailNotifications: {
           enabled: customer.email_notifications_enabled,
           newLeads: customer.email_notifications_new_leads,
@@ -167,8 +169,8 @@ export const POST = withAuth(async (request: NextRequest, user: AuthenticatedUse
         account_created_at: customerData.accountCreatedAt,
         google_sheet_id: customerData.googleSheetId,
         google_sheet_url: customerData.googleSheetUrl,
-        email_notifications_enabled: customerData.emailNotifications?.enabled ?? true,
-        email_notifications_new_leads: customerData.emailNotifications?.newLeads ?? true,
+        email_notifications_enabled: customerData.emailNotifications?.enabled ?? false,
+        email_notifications_new_leads: customerData.emailNotifications?.newLeads ?? false,
         last_notification_sent: customerData.emailNotifications?.lastNotificationSent,
         last_activity: new Date().toISOString(),
       }, {

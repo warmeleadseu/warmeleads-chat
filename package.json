@@ -29,6 +29,7 @@
     "@tanstack/react-query": "^5.90.6",
     "@tanstack/react-virtual": "^3.13.12",
     "@types/bcryptjs": "^2.4.6",
+    "@types/handlebars": "^4.0.40",
     "@types/uuid": "^10.0.0",
     "@vercel/blob": "^2.0.0",
     "@vercel/kv": "^3.0.0",
@@ -37,6 +38,7 @@
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
     "framer-motion": "^12.23.12",
+    "handlebars": "^4.7.8",
     "lottie-react": "^2.4.1",
     "lucide-react": "^0.542.0",
     "next": "^14.2.15",
@@ -51,6 +53,7 @@
     "tailwind-merge": "^3.3.1",
     "uuid": "^13.0.0",
     "whatsapp-web.js": "^1.34.1",
+    "xlsx": "^0.18.5",
     "zod": "^4.1.12",
     "zustand": "^5.0.8"
   },

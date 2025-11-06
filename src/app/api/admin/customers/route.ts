@@ -64,6 +64,7 @@ export async function GET(request: NextRequest) {
       accountCreatedAt: customer.account_created_at,
       googleSheetId: customer.google_sheet_id,  // ✅ Transform to camelCase
       googleSheetUrl: customer.google_sheet_url, // ✅ Transform to camelCase
+      branch_id: customer.branch_id, // ✅ Include branch_id for dynamic parsing
       emailNotifications: {
         enabled: customer.email_notifications_enabled || false,
         newLeads: customer.email_notifications_new_leads || false,
@@ -109,4 +110,5 @@ export async function GET(request: NextRequest) {
     );
   }
 }
+
 

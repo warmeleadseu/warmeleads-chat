@@ -141,6 +141,14 @@ export default function HomePage() {
     }
   };
 
+  const handleDirectOrder = () => {
+    // Go back to home and open order modal directly
+    setCurrentPage('landing');
+    setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('openOrderModal'));
+    }, 100);
+  };
+
   const handleLoginSuccess = () => {
     window.location.href = '/portal';
   };
@@ -178,9 +186,9 @@ export default function HomePage() {
         const chatContext = ChatContextManager.getContext();
         return <ChatInterface entryPoint={chatContext} onBackToHome={handleBackToHome} onShowAccountCreation={() => setCurrentPage('account-creation')} />;
       case 'info':
-        return <InfoJourney onBackToHome={handleBackToHome} onStartChat={(context: ChatContext) => handleStartChat(context)} onDirectOrder={() => handlePathSelect('direct')} />;
+        return <InfoJourney onBackToHome={handleBackToHome} onStartChat={(context: ChatContext) => handleStartChat(context)} onDirectOrder={handleDirectOrder} />;
       case 'faq':
-        return <SmartFAQ onBackToHome={handleBackToHome} onStartChat={(context) => handleStartChat(context)} />;
+        return <SmartFAQ onBackToHome={handleBackToHome} onStartChat={(context) => handleStartChat(context)} onDirectOrder={handleDirectOrder} />;
       case 'customer':
         return <CustomerPortal onBackToHome={handleBackToHome} onStartChat={() => handleStartChat('customer')} />;
       case 'login':

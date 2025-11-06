@@ -15,12 +15,14 @@ import {
   BellIcon,
   Bars3Icon,
   XMarkIcon,
+  RectangleGroupIcon,
 } from '@heroicons/react/24/outline';
 
 const navigation = [
   { name: 'Dashboard', href: '/admin', icon: HomeIcon },
   { name: 'Klanten', href: '/admin/customers', icon: UserGroupIcon },
   { name: 'Bestellingen', href: '/admin/orders', icon: DocumentTextIcon },
+  { name: 'Branches', href: '/admin/branches', icon: RectangleGroupIcon },
   { name: 'Prijsbeheer', href: '/admin/pricing', icon: CurrencyEuroIcon },
   { name: 'Analytics', href: '/admin/analytics', icon: ChartBarIcon },
   { name: 'Content', href: '/admin/content', icon: DocumentTextIcon },

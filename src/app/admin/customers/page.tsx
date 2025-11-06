@@ -13,6 +13,7 @@ import {
   XMarkIcon,
   ClockIcon,
   CurrencyEuroIcon,
+  BellIcon,
 } from '@heroicons/react/24/outline';
 import { crmSystem, type Customer } from '@/lib/crmSystem';
 import { ADMIN_CONFIG, getFirstAdminEmail } from '@/config/admin';
@@ -22,6 +23,15 @@ function CustomerDetailModal({ customer, onClose, onRefresh }: { customer: Custo
   const [activeTab, setActiveTab] = useState<'info' | 'chat' | 'orders' | 'invoices' | 'notes' | 'account'>('info');
   const [notes, setNotes] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [emailNotificationsEnabled, setEmailNotificationsEnabled] = useState(customer.emailNotifications?.enabled ?? false);
+  const [emailNewLeadsEnabled, setEmailNewLeadsEnabled] = useState(customer.emailNotifications?.newLeads ?? false);
+  const [isSavingNotifications, setIsSavingNotifications] = useState(false);
+
+  // Update state when customer prop changes
+  useEffect(() => {
+    setEmailNotificationsEnabled(customer.emailNotifications?.enabled ?? false);
+    setEmailNewLeadsEnabled(customer.emailNotifications?.newLeads ?? false);
+  }, [customer.emailNotifications]);
 
   return (
     <motion.div
@@ -141,6 +151,104 @@ function CustomerDetailModal({ customer, onClose, onRefresh }: { customer: Custo
                     <div><strong>Bestellingen:</strong> {customer.orders.length}</div>
                     <div><strong>Totale waarde:</strong> €{customer.orders.reduce((sum, o) => sum + o.amount, 0).toFixed(2)}</div>
                   </div>
+                </div>
+              </div>
+
+              {/* Email Notificaties Sectie */}
+              <div className="border-t border-gray-200 pt-6">
+                <div className="flex items-center space-x-2 mb-4">
+                  <BellIcon className="w-5 h-5 text-brand-purple" />
+                  <h3 className="font-semibold text-gray-900 text-sm sm:text-base">E-mail Notificaties</h3>
+                </div>
+                
+                <div className="space-y-4 bg-gray-50 rounded-lg p-4">
+                  {/* Algemene toggle */}
+                  <div className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200">
+                    <div className="flex-1">
+                      <h4 className="font-medium text-gray-900 text-sm">E-mail notificaties inschakelen</h4>
+                      <p className="text-xs text-gray-600 mt-1">Algemene aan/uit schakelaar voor alle e-mail notificaties</p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer flex-shrink-0 ml-4">
+                      <input
+                        type="checkbox"
+                        checked={emailNotificationsEnabled}
+                        onChange={(e) => {
+                          setEmailNotificationsEnabled(e.target.checked);
+                          if (!e.target.checked) {
+                            setEmailNewLeadsEnabled(false);
+                          }
+                        }}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-brand-purple/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-purple"></div>
+                    </label>
+                  </div>
+
+                  {/* Nieuwe leads toggle */}
+                  <div className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200">
+                    <div className="flex-1">
+                      <h4 className="font-medium text-gray-900 text-sm">Nieuwe Leads</h4>
+                      <p className="text-xs text-gray-600 mt-1">Ontvang een e-mail wanneer een nieuwe lead wordt toegevoegd</p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer flex-shrink-0 ml-4">
+                      <input
+                        type="checkbox"
+                        checked={emailNewLeadsEnabled && emailNotificationsEnabled}
+                        disabled={!emailNotificationsEnabled}
+                        onChange={(e) => setEmailNewLeadsEnabled(e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className={`w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-brand-purple/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-purple ${!emailNotificationsEnabled ? 'opacity-50 cursor-not-allowed' : ''}`}></div>
+                    </label>
+                  </div>
+
+                  {/* Status info */}
+                  <div className="text-xs text-gray-600 bg-blue-50 border border-blue-200 rounded-lg p-3">
+                    <strong>Status:</strong> {emailNotificationsEnabled && emailNewLeadsEnabled 
+                      ? '✅ Klant ontvangt e-mails voor nieuwe leads' 
+                      : emailNotificationsEnabled 
+                        ? '⚠️ E-mails ingeschakeld maar nieuwe leads uitgeschakeld'
+                        : '❌ E-mail notificaties zijn uitgeschakeld'}
+                  </div>
+
+                  {/* Save button */}
+                  <button
+                    onClick={async () => {
+                      if (isSavingNotifications) return;
+                      setIsSavingNotifications(true);
+                      
+                      try {
+                        const response = await fetch('/api/admin/update-customer-notifications', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            customerEmail: customer.email,
+                            emailNotifications: {
+                              enabled: emailNotificationsEnabled,
+                              newLeads: emailNewLeadsEnabled && emailNotificationsEnabled
+                            }
+                          })
+                        });
+
+                        if (!response.ok) {
+                          const errorData = await response.json();
+                          throw new Error(errorData.error || 'Failed to update notifications');
+                        }
+
+                        alert('✅ E-mail notificatie instellingen bijgewerkt!');
+                        onRefresh(); // Refresh customer data
+                      } catch (error) {
+                        console.error('❌ Error updating notifications:', error);
+                        alert('❌ Fout bij bijwerken van notificaties. Probeer het opnieuw.');
+                      } finally {
+                        setIsSavingNotifications(false);
+                      }
+                    }}
+                    disabled={isSavingNotifications}
+                    className="w-full bg-brand-purple hover:bg-brand-purple/90 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isSavingNotifications ? 'Opslaan...' : '💾 Instellingen opslaan'}
+                  </button>
                 </div>
               </div>
 
@@ -479,6 +587,12 @@ export default function CustomersPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [filterStatus, setFilterStatus] = useState<'all' | 'lead' | 'customer' | 'open_invoices'>('all');
+  const [showLinkSheetModal, setShowLinkSheetModal] = useState(false);
+  const [linkSheetCustomer, setLinkSheetCustomer] = useState<Customer | null>(null);
+  const [linkSheetUrl, setLinkSheetUrl] = useState('');
+  const [linkSheetBranchId, setLinkSheetBranchId] = useState<string>('');
+  const [branches, setBranches] = useState<any[]>([]);
+  const [isLinkingSheet, setIsLinkingSheet] = useState(false);
 
   useEffect(() => {
     const loadCustomers = async () => {
@@ -679,6 +793,62 @@ export default function CustomersPage() {
     const interval = setInterval(loadCustomers, 30000);
     return () => clearInterval(interval);
   }, []);
+
+  // Load branches when modal opens
+  useEffect(() => {
+    if (showLinkSheetModal) {
+      const loadBranches = async () => {
+        try {
+          const response = await fetch('/api/admin/branches');
+          if (response.ok) {
+            const data = await response.json();
+            setBranches(data.branches || []);
+          }
+        } catch (error) {
+          console.error('Error loading branches:', error);
+        }
+      };
+      loadBranches();
+    }
+  }, [showLinkSheetModal]);
+
+  const handleLinkSheet = async () => {
+    if (!linkSheetCustomer || !linkSheetUrl || !linkSheetUrl.includes('docs.google.com/spreadsheets')) {
+      alert('❌ Voer een geldige Google Sheets URL in');
+      return;
+    }
+
+    setIsLinkingSheet(true);
+    try {
+      const response = await fetch('/api/admin/link-sheet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customerEmail: linkSheetCustomer.email,
+          sheetUrl: linkSheetUrl,
+          branchId: linkSheetBranchId || undefined
+        })
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        alert(`✅ ${result.message}`);
+        setShowLinkSheetModal(false);
+        setLinkSheetCustomer(null);
+        setLinkSheetUrl('');
+        setLinkSheetBranchId('');
+        window.location.reload();
+      } else {
+        alert(`❌ ${result.error}`);
+      }
+    } catch (error) {
+      console.error('❌ Error:', error);
+      alert('❌ Fout bij koppelen Google Sheet');
+    } finally {
+      setIsLinkingSheet(false);
+    }
+  };
 
   const filteredCustomers = customers.filter(customer => 
     customer.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -991,41 +1161,13 @@ export default function CustomersPage() {
                               📊 Gekoppeld
                             </a>
                             <button
-                              onClick={async (e) => {
+                              onClick={(e) => {
                                 e.stopPropagation();
-                                const currentUrl = customer.googleSheetUrl || '';
-                                const sheetUrl = prompt(
-                                  `Google Sheets URL wijzigen:\n\nHuidige URL:\n${currentUrl}\n\nVoer nieuwe URL in:`,
-                                  currentUrl
-                                );
-                                
-                                if (sheetUrl && sheetUrl.includes('docs.google.com/spreadsheets')) {
-                                  try {
-                                    console.log('📊 Wijzigen Google Sheet via API...');
-                                    const response = await fetch('/api/admin/link-sheet', {
-                                      method: 'POST',
-                                      headers: { 'Content-Type': 'application/json' },
-                                      body: JSON.stringify({
-                                        customerEmail: customer.email,
-                                        sheetUrl: sheetUrl
-                                      })
-                                    });
-
-                                    const result = await response.json();
-                                    
-                                    if (result.success) {
-                                      alert(`✅ ${result.message}`);
-                                      window.location.reload();
-                                    } else {
-                                      alert(`❌ ${result.error}`);
-                                    }
-                                  } catch (error) {
-                                    console.error('❌ Error:', error);
-                                    alert('❌ Fout bij bijwerken Google Sheet');
-                                  }
-                                } else if (sheetUrl !== null && sheetUrl !== '') {
-                                  alert('❌ Ongeldige Google Sheets URL');
-                                }
+                                setLinkSheetCustomer(customer);
+                                setLinkSheetUrl(customer.googleSheetUrl || '');
+                                // Try to get current branch_id from customer if available
+                                setLinkSheetBranchId(customer.branch_id || '');
+                                setShowLinkSheetModal(true);
                               }}
                               className="text-blue-600 hover:text-blue-800 transition-colors text-sm"
                               title="Sheet URL wijzigen"
@@ -1035,39 +1177,12 @@ export default function CustomersPage() {
                           </>
                         ) : (
                           <button
-                            onClick={async (e) => {
+                            onClick={(e) => {
                               e.stopPropagation();
-                              const sheetUrl = prompt(
-                                `Google Sheets URL koppelen aan ${customer.name || customer.email}:\n\nVoer URL in:\n(Bijv: https://docs.google.com/spreadsheets/d/1ABC.../edit)`
-                              );
-                              
-                              if (sheetUrl && sheetUrl.includes('docs.google.com/spreadsheets')) {
-                                try {
-                                  console.log('📊 Koppelen Google Sheet via API...');
-                                  const response = await fetch('/api/admin/link-sheet', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({
-                                      customerEmail: customer.email,
-                                      sheetUrl: sheetUrl
-                                    })
-                                  });
-
-                                  const result = await response.json();
-                                  
-                                  if (result.success) {
-                                    alert(`✅ ${result.message}`);
-                                    window.location.reload();
-                                  } else {
-                                    alert(`❌ ${result.error}`);
-                                  }
-                                } catch (error) {
-                                  console.error('❌ Error:', error);
-                                  alert('❌ Fout bij koppelen Google Sheet');
-                                }
-                              } else if (sheetUrl !== null && sheetUrl !== '') {
-                                alert('❌ Ongeldige Google Sheets URL');
-                              }
+                              setLinkSheetCustomer(customer);
+                              setLinkSheetUrl('');
+                              setLinkSheetBranchId('');
+                              setShowLinkSheetModal(true);
                             }}
                             className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
                             title="Google Sheet koppelen"
@@ -1347,6 +1462,100 @@ export default function CustomersPage() {
               }
             }}
           />
+        )}
+
+        {/* Link Sheet Modal */}
+        {showLinkSheetModal && linkSheetCustomer && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={() => setShowLinkSheetModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-bold text-gray-900">
+                  {linkSheetCustomer?.googleSheetUrl ? 'Google Sheet wijzigen' : 'Google Sheet koppelen'}
+                </h2>
+                <button
+                  onClick={() => setShowLinkSheetModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <XMarkIcon className="w-6 h-6" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Klant
+                  </label>
+                  <div className="text-sm text-gray-900 bg-gray-50 p-3 rounded-lg">
+                    {linkSheetCustomer.name || linkSheetCustomer.email}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Google Sheets URL *
+                  </label>
+                  <input
+                    type="url"
+                    value={linkSheetUrl}
+                    onChange={(e) => setLinkSheetUrl(e.target.value)}
+                    placeholder="https://docs.google.com/spreadsheets/d/1ABC.../edit"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-purple focus:border-brand-purple"
+                  />
+                </div>
+
+                {branches.length > 0 && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Branch (optioneel)
+                    </label>
+                    <select
+                      value={linkSheetBranchId}
+                      onChange={(e) => setLinkSheetBranchId(e.target.value)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-purple focus:border-brand-purple"
+                    >
+                      <option value="">-- Geen branch (Thuisbatterijen) --</option>
+                      {branches.map((branch) => (
+                        <option key={branch.id} value={branch.id}>
+                          {branch.display_name || branch.name}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Selecteer de branch om de juiste kolom mapping te gebruiken
+                    </p>
+                  </div>
+                )}
+
+                <div className="flex space-x-3 pt-4">
+                  <button
+                    onClick={() => setShowLinkSheetModal(false)}
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    Annuleren
+                  </button>
+                  <button
+                    onClick={handleLinkSheet}
+                    disabled={isLinkingSheet || !linkSheetUrl}
+                    className="flex-1 px-4 py-2 bg-brand-purple text-white rounded-lg hover:bg-brand-purple/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isLinkingSheet ? 'Koppelen...' : 'Koppelen'}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>

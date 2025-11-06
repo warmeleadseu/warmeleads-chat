@@ -598,8 +598,11 @@ export class GoogleSheetsService {
 }
 
 // Helper functions for easy use
-export const readCustomerLeads = async (spreadsheetUrl: string, apiKey?: string): Promise<Lead[]> => {
-  const service = new GoogleSheetsService(apiKey);
+export const readCustomerLeads = async (
+  spreadsheetUrl: string, 
+  apiKey?: string,
+  branchId?: string
+): Promise<Lead[]> => {
   const spreadsheetId = GoogleSheetsService.extractSpreadsheetId(spreadsheetUrl);
   
   if (!spreadsheetId) {
@@ -607,6 +610,24 @@ export const readCustomerLeads = async (spreadsheetUrl: string, apiKey?: string)
   }
 
   console.log('📊 Reading customer leads from spreadsheet:', spreadsheetId.substring(0, 10) + '...');
+  
+  // If branchId is provided, use DynamicSheetParser (database-driven)
+  if (branchId) {
+    console.log(`🔧 Using DynamicSheetParser for branch: ${branchId}`);
+    try {
+      const { dynamicSheetParser } = await import('./branchSystem/dynamicSheetParser');
+      const leads = await dynamicSheetParser.parseLeadsForBranch(spreadsheetUrl, branchId);
+      console.log(`✅ Successfully parsed ${leads.length} leads using branch configuration`);
+      return leads;
+    } catch (error) {
+      console.error('❌ Error using DynamicSheetParser, falling back to default parser:', error);
+      // Fall through to default parser
+    }
+  }
+
+  // Fallback to hardcoded parser (for backward compatibility with Thuisbatterijen)
+  console.log('🔧 Using default parser (Thuisbatterijen hardcoded mapping)');
+  const service = new GoogleSheetsService(apiKey);
 
   // Try different sheet names and ranges - 18 columns (A-R) for Thuisbatterijen
   const possibleRanges = [
@@ -645,7 +666,7 @@ export const readCustomerLeads = async (spreadsheetUrl: string, apiKey?: string)
     throw new Error('Geen data gevonden in spreadsheet. Controleer of de sheet data bevat en publiek toegankelijk is.');
   }
   
-  // Parse to Lead objects
+  // Parse to Lead objects using hardcoded Thuisbatterijen mapping
   const leads = service.parseLeadsFromSheet(rows);
   console.log(`📊 Successfully parsed ${leads.length} leads from range ${usedRange}`);
   

@@ -75,17 +75,17 @@ export const leadPackages: Record<string, LeadPackage[]> = {
       id: 'thuisbatterij_exclusive',
       name: '💎 Verse Exclusieve Thuisbatterij Leads',
       description: '100% exclusieve verse thuisbatterij leads uit eigen campagnes',
-      basePrice: 4250,
-      price: 4250,
+      basePrice: 3750,
+      price: 3750,
       currency: 'eur',
       industry: 'Thuisbatterijen',
       type: 'exclusive',
       quantity: 30,
       minQuantity: 30,
       pricingTiers: [
-        { minQuantity: 30, maxQuantity: 49, pricePerLead: 4250 }, // €42.50
-        { minQuantity: 50, maxQuantity: 74, pricePerLead: 4000 }, // €40.00
-        { minQuantity: 75, pricePerLead: 3750 }, // €37.50
+        { minQuantity: 30, maxQuantity: 49, pricePerLead: 3750 }, // €37.50
+        { minQuantity: 50, maxQuantity: 74, pricePerLead: 3500 }, // €35.00
+        { minQuantity: 75, pricePerLead: 3250 }, // €32.50
       ],
       features: [
         '💎 100% exclusief voor u',
@@ -102,8 +102,8 @@ export const leadPackages: Record<string, LeadPackage[]> = {
       id: 'thuisbatterij_shared_fresh',
       name: '🤝 Gedeelde Verse Thuisbatterij Leads',
       description: 'Verse thuisbatterij leads uit eigen campagnes (gedeeld met 2 anderen)',
-      basePrice: 1417, // €14.17 (1/3 van €42.50)
-      price: 1417,
+      basePrice: 1250, // €12.50 (1/3 van €37.50)
+      price: 1250,
       currency: 'eur',
       industry: 'Thuisbatterijen',
       type: 'shared_fresh',
@@ -154,17 +154,17 @@ export const leadPackages: Record<string, LeadPackage[]> = {
       id: 'zonnepanelen_exclusive',
       name: '💎 Verse Exclusieve Zonnepanelen Leads',
       description: '100% exclusieve verse zonnepanelen leads uit eigen campagnes',
-      basePrice: 4500,
-      price: 4500,
+      basePrice: 3750,
+      price: 3750,
       currency: 'eur',
       industry: 'Zonnepanelen',
       type: 'exclusive',
       quantity: 30,
       minQuantity: 30,
       pricingTiers: [
-        { minQuantity: 30, maxQuantity: 49, pricePerLead: 4500 }, // €45.00
-        { minQuantity: 50, maxQuantity: 74, pricePerLead: 4250 }, // €42.50
-        { minQuantity: 75, pricePerLead: 4000 }, // €40.00
+        { minQuantity: 30, maxQuantity: 49, pricePerLead: 3750 }, // €37.50
+        { minQuantity: 50, maxQuantity: 74, pricePerLead: 3500 }, // €35.00
+        { minQuantity: 75, pricePerLead: 3250 }, // €32.50
       ],
       features: [
         '💎 100% exclusief voor u',
@@ -181,8 +181,8 @@ export const leadPackages: Record<string, LeadPackage[]> = {
       id: 'zonnepanelen_shared_fresh',
       name: '🤝 Gedeelde Verse Zonnepanelen Leads',
       description: 'Verse zonnepanelen leads uit eigen campagnes (gedeeld met 2 anderen)',
-      basePrice: 1500, // €15.00 (1/3 van €45.00)
-      price: 1500,
+      basePrice: 1250, // €12.50 (1/3 van €37.50)
+      price: 1250,
       currency: 'eur',
       industry: 'Zonnepanelen',
       type: 'shared_fresh',
@@ -233,17 +233,17 @@ export const leadPackages: Record<string, LeadPackage[]> = {
       id: 'warmtepomp_exclusive',
       name: '💎 Verse Exclusieve Warmtepomp Leads',
       description: '100% exclusieve verse warmtepomp leads uit eigen campagnes',
-      basePrice: 5000,
-      price: 5000,
+      basePrice: 3750,
+      price: 3750,
       currency: 'eur',
       industry: 'Warmtepompen',
       type: 'exclusive',
       quantity: 30,
       minQuantity: 30,
       pricingTiers: [
-        { minQuantity: 30, maxQuantity: 49, pricePerLead: 5000 }, // €50.00
-        { minQuantity: 50, maxQuantity: 74, pricePerLead: 4750 }, // €47.50
-        { minQuantity: 75, pricePerLead: 4500 }, // €45.00
+        { minQuantity: 30, maxQuantity: 49, pricePerLead: 3750 }, // €37.50
+        { minQuantity: 50, maxQuantity: 74, pricePerLead: 3500 }, // €35.00
+        { minQuantity: 75, pricePerLead: 3250 }, // €32.50
       ],
       features: [
         '💎 100% exclusief voor u',
@@ -260,8 +260,8 @@ export const leadPackages: Record<string, LeadPackage[]> = {
       id: 'warmtepomp_shared_fresh',
       name: '🤝 Gedeelde Verse Warmtepomp Leads',
       description: 'Verse warmtepomp leads uit eigen campagnes (gedeeld met 2 anderen)',
-      basePrice: 1667, // €16.67 (1/3 van €50.00)
-      price: 1667,
+      basePrice: 1250, // €12.50 (1/3 van €37.50)
+      price: 1250,
       currency: 'eur',
       industry: 'Warmtepompen',
       type: 'shared_fresh',
@@ -312,17 +312,17 @@ export const leadPackages: Record<string, LeadPackage[]> = {
       id: 'airco_exclusive',
       name: '💎 Verse Exclusieve Airco Leads',
       description: '100% exclusieve verse airco leads uit eigen campagnes',
-      basePrice: 4000,
-      price: 4000,
+      basePrice: 3750,
+      price: 3750,
       currency: 'eur',
       industry: 'Airco',
       type: 'exclusive',
       quantity: 30,
       minQuantity: 30,
       pricingTiers: [
-        { minQuantity: 30, maxQuantity: 49, pricePerLead: 4000 }, // €40.00
-        { minQuantity: 50, maxQuantity: 74, pricePerLead: 3750 }, // €37.50
-        { minQuantity: 75, pricePerLead: 3500 }, // €35.00
+        { minQuantity: 30, maxQuantity: 49, pricePerLead: 3750 }, // €37.50
+        { minQuantity: 50, maxQuantity: 74, pricePerLead: 3500 }, // €35.00
+        { minQuantity: 75, pricePerLead: 3250 }, // €32.50
       ],
       features: [
         '💎 100% exclusief voor u',
@@ -339,8 +339,8 @@ export const leadPackages: Record<string, LeadPackage[]> = {
       id: 'airco_shared_fresh',
       name: '🤝 Gedeelde Verse Airco Leads',
       description: 'Verse airco leads uit eigen campagnes (gedeeld met 2 anderen)',
-      basePrice: 1333, // €13.33 (1/3 van €40.00)
-      price: 1333,
+      basePrice: 1250, // €12.50 (1/3 van €37.50)
+      price: 1250,
       currency: 'eur',
       industry: 'Airco',
       type: 'shared_fresh',
@@ -391,17 +391,17 @@ export const leadPackages: Record<string, LeadPackage[]> = {
       id: 'lease_exclusive',
       name: '💎 Verse Exclusieve Financial Lease Leads',
       description: '100% exclusieve verse financial lease leads uit eigen campagnes',
-      basePrice: 5500,
-      price: 5500,
+      basePrice: 3750,
+      price: 3750,
       currency: 'eur',
       industry: 'Financial Lease',
       type: 'exclusive',
       quantity: 30,
       minQuantity: 30,
       pricingTiers: [
-        { minQuantity: 30, maxQuantity: 49, pricePerLead: 5500 }, // €55.00
-        { minQuantity: 50, maxQuantity: 74, pricePerLead: 5000 }, // €50.00
-        { minQuantity: 75, pricePerLead: 4500 }, // €45.00
+        { minQuantity: 30, maxQuantity: 49, pricePerLead: 3750 }, // €37.50
+        { minQuantity: 50, maxQuantity: 74, pricePerLead: 3500 }, // €35.00
+        { minQuantity: 75, pricePerLead: 3250 }, // €32.50
       ],
       features: [
         '💎 100% exclusief voor u',
@@ -418,8 +418,8 @@ export const leadPackages: Record<string, LeadPackage[]> = {
       id: 'lease_shared_fresh',
       name: '🤝 Gedeelde Verse Financial Lease Leads',
       description: 'Verse financial lease leads uit eigen campagnes (gedeeld met 2 anderen)',
-      basePrice: 1833, // €18.33 (1/3 van €55.00)
-      price: 1833,
+      basePrice: 1250, // €12.50 (1/3 van €37.50)
+      price: 1250,
       currency: 'eur',
       industry: 'Financial Lease',
       type: 'shared_fresh',

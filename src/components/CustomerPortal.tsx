@@ -246,6 +246,7 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
             email: customer?.email,
             hasGoogleSheet: !!customer?.googleSheetUrl,
             googleSheetUrl: customer?.googleSheetUrl,
+            branch_id: customer?.branch_id,
             leadsCount: customer?.leadData?.length || 0
           });
           
@@ -293,7 +294,8 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
   const syncWithGoogleSheetsInBackground = async (customer: any, email: string) => {
     try {
       const { readCustomerLeads } = await import('@/lib/googleSheetsAPI');
-      const freshLeads = await readCustomerLeads(customer.googleSheetUrl);
+      // Use branch_id if available, otherwise fallback to default parser
+      const freshLeads = await readCustomerLeads(customer.googleSheetUrl, undefined, customer.branch_id);
       
       console.log(`📊 Loaded ${freshLeads.length} leads DIRECTLY from Google Sheets (real-time)`);
       
@@ -735,13 +737,13 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
                 Maak uw eerste bestelling en begin met het genereren van leads!
               </p>
               <motion.button
-                onClick={onStartChat}
-                className="chat-button inline-flex items-center space-x-2"
+                onClick={() => setShowCheckoutModal(true)}
+                className="bg-gradient-to-r from-green-500 to-emerald-600 text-white font-semibold py-3 px-6 rounded-xl shadow-lg hover:shadow-xl transition-all inline-flex items-center space-x-2"
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
               >
                 <PlusIcon className="w-5 h-5" />
-                <span>Eerste Bestelling via Lisa</span>
+                <span>Direct leads bestellen</span>
               </motion.button>
             </motion.div>
           )}
@@ -807,7 +809,7 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
                       <CheckCircleIcon className="w-8 h-8" />
                     </div>
                     <div>
-                      <h2 className="text-3xl font-bold">Betaling Gelukt! 🎉</h2>
+                      <h2 className="text-3xl font-bold">Betaling gelukt! 🎉</h2>
                       <p className="text-green-100 mt-1">
                         Uw bestelling is verwerkt
                       </p>
@@ -837,7 +839,7 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                   >
-                    Bekijk Mijn Bestellingen
+                    Bekijk mijn bestellingen
                   </motion.button>
                 </div>
               </div>

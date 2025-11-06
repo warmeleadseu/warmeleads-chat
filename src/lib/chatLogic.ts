@@ -40,61 +40,61 @@ export const leadPricing: Record<string, LeadPricing> = {
   'Thuisbatterijen': {
     industry: 'Thuisbatterijen',
     exclusive: {
-      '30+': 42.50,
-      '50+': 40.00,
-      '75+': 37.50,
+      '30+': 37.50,
+      '50+': 35.00,
+      '75+': 32.50,
     },
     shared: {
       price: 12.50,
-      minQuantity: 500,
+      minQuantity: 250,
     },
   },
   'Zonnepanelen': {
     industry: 'Zonnepanelen',
     exclusive: {
-      '30+': 45.00,
-      '50+': 42.50,
-      '75+': 40.00,
+      '30+': 37.50,
+      '50+': 35.00,
+      '75+': 32.50,
     },
     shared: {
-      price: 15.00,
-      minQuantity: 500,
+      price: 12.50,
+      minQuantity: 250,
     },
   },
   'Warmtepompen': {
     industry: 'Warmtepompen',
     exclusive: {
-      '30+': 50.00,
-      '50+': 47.50,
-      '75+': 45.00,
+      '30+': 37.50,
+      '50+': 35.00,
+      '75+': 32.50,
     },
     shared: {
-      price: 16.50,
-      minQuantity: 500,
+      price: 12.50,
+      minQuantity: 250,
     },
   },
   'Airco\'s': {
     industry: 'Airco\'s',
     exclusive: {
-      '30+': 35.00,
-      '50+': 32.50,
-      '75+': 30.00,
+      '30+': 37.50,
+      '50+': 35.00,
+      '75+': 32.50,
     },
     shared: {
-      price: 11.00,
-      minQuantity: 500,
+      price: 12.50,
+      minQuantity: 250,
     },
   },
   'Financial Lease': {
     industry: 'Financial Lease',
     exclusive: {
-      '30+': 55.00,
-      '50+': 52.50,
-      '75+': 50.00,
+      '30+': 37.50,
+      '50+': 35.00,
+      '75+': 32.50,
     },
     shared: {
-      price: 18.00,
-      minQuantity: 500,
+      price: 12.50,
+      minQuantity: 250,
     },
   },
 };
@@ -204,7 +204,7 @@ export const chatFlow: Record<string, ChatStep> = {
     id: 'quantity_selection',
     message: (profile: UserProfile) => {
       if (profile.leadType === 'Gedeelde leads') {
-        return 'Perfect! Gedeelde leads worden per 500 stuks geleverd voor de beste prijs-kwaliteit verhouding. Hoeveel wilt u bestellen?';
+        return 'Perfect! Gedeelde verse leads worden vanaf 250 stuks geleverd. Hoeveel wilt u bestellen?';
       } else {
         return 'Uitstekend! Hoeveel exclusieve leads wilt u per maand?';
       }
@@ -212,6 +212,7 @@ export const chatFlow: Record<string, ChatStep> = {
     options: (profile: UserProfile) => {
       if (profile.leadType === 'Gedeelde leads') {
         return [
+          '250 leads - €3.125 totaal',
           '500 leads - €6.250 totaal',
           '1000 leads - €12.500 totaal',
           'Ander aantal (maatwerk)'
@@ -1022,3 +1023,4 @@ export function generatePersonalizedRecommendation(profile: UserProfile): string
 
   return `Ik raad een mix van beide aan: start met gedeelde leads om te testen, schakel over naar exclusieve leads voor uw beste campagnes!`;
 }
+

@@ -29,7 +29,7 @@ export default function CRMSettingsPage() {
   
   // Settings states
   const [googleSheetUrl, setGoogleSheetUrl] = useState('');
-  const [newLeadsNotification, setNewLeadsNotification] = useState(true);
+  const [newLeadsNotification, setNewLeadsNotification] = useState(false);
   const [weeklyReportsNotification, setWeeklyReportsNotification] = useState(false);
   const [branchSettings, setBranchSettings] = useState({
     autoDetection: true,
@@ -72,7 +72,9 @@ export default function CRMSettingsPage() {
         setGoogleSheetUrl(customer.googleSheetUrl || '');
         
         if (customer.emailNotifications) {
-          setNewLeadsNotification(customer.emailNotifications.newLeads ?? true);
+          setNewLeadsNotification(customer.emailNotifications.newLeads ?? false);
+        } else {
+          setNewLeadsNotification(false);
         }
       }
       
@@ -121,13 +123,53 @@ export default function CRMSettingsPage() {
 
   // Save email notification settings
   const handleSaveEmailSettings = async () => {
-    if (!customerData) return;
+    if (!customerData || !user?.email) return;
 
     try {
-      console.log('✅ Email notification settings saved');
-      alert('E-mail notificatie instellingen opgeslagen!');
+      setIsLoading(true);
+      
+      // Update customer data via API
+      const response = await fetch('/api/customer-data', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${user.email}` // Use email as token for authenticated fetch
+        },
+        body: JSON.stringify({
+          customerId: customerData.email,
+          customerData: {
+            ...customerData,
+            emailNotifications: {
+              enabled: newLeadsNotification || weeklyReportsNotification, // Enabled if any notification is on
+              newLeads: newLeadsNotification,
+              lastNotificationSent: customerData.emailNotifications?.lastNotificationSent
+            }
+          }
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to save email settings');
+      }
+
+      // Update local state
+      setCustomerData(prev => prev ? {
+        ...prev,
+        emailNotifications: {
+          enabled: newLeadsNotification || weeklyReportsNotification,
+          newLeads: newLeadsNotification,
+          lastNotificationSent: prev.emailNotifications?.lastNotificationSent
+        }
+      } : null);
+
+      console.log('✅ Email notification settings saved to Supabase');
+      alert('✅ E-mail notificatie instellingen opgeslagen!');
     } catch (error) {
       console.error('❌ Error saving email settings:', error);
+      alert('❌ Fout bij opslaan van e-mail instellingen. Probeer het opnieuw.');
+    } finally {
+      setIsLoading(false);
     }
   };
 

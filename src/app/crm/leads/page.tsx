@@ -58,6 +58,9 @@ export default function CustomerLeadsPage() {
   const [viewingLead, setViewingLead] = useState<Lead | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [leadReclamation, setLeadReclamation] = useState<{hasReclamation: boolean, reclamation?: any}>({ hasReclamation: false });
+  const [branchMappings, setBranchMappings] = useState<any[]>([]);
+  const [branchName, setBranchName] = useState<string>('Thuisbatterij Specifiek');
+  const [tableColumns, setTableColumns] = useState<any[]>([]); // For dynamic table columns
   
   // Custom pipeline stages
   const [customStages, setCustomStages] = useState<CustomStage[]>([]);
@@ -111,6 +114,54 @@ export default function CustomerLeadsPage() {
     }
   }, [customerData, user]);
   
+  // Helper function to check if header name matches core field
+  const isCoreFieldHeader = (headerName: string | undefined, coreField: keyof Lead): boolean => {
+    if (!headerName) return false;
+    const headerLower = headerName.toLowerCase();
+    
+    const expectedHeaders: Partial<Record<keyof Lead, string[]>> = {
+      name: ['naam klant', 'naam', 'name', 'klant', 'customer'],
+      email: ['e-mail', 'email', 'mail'],
+      phone: ['telefoonnummer', 'telefoon', 'phone'],
+      city: ['plaatsnaam', 'plaats', 'city', 'stad'],
+      company: ['bedrijf', 'company', 'organisatie'],
+      address: ['adres', 'address', 'straat'],
+    };
+    
+    const expected = expectedHeaders[coreField];
+    return expected ? expected.some(h => headerLower.includes(h)) : false;
+  };
+
+  // Load branch mappings for table columns
+  const loadBranchMappings = async (branchId: string) => {
+    try {
+      const mappingsResponse = await fetch(`/api/branches/${branchId}/mappings`);
+      if (mappingsResponse.ok) {
+        const mappingsData = await mappingsResponse.json();
+        const mappings = mappingsData.mappings || [];
+        setBranchMappings(mappings);
+        
+        // Set table columns based on mappings that should be shown in list
+        const columns = mappings
+          .filter((m: any) => m.showInList !== false)
+          .sort((a: any, b: any) => (a.sortOrder || a.columnIndex) - (b.sortOrder || b.columnIndex));
+        setTableColumns(columns);
+        
+        // Also fetch branch name
+        const branchResponse = await fetch(`/api/admin/branches/${branchId}`);
+        if (branchResponse.ok) {
+          const branchData = await branchResponse.json();
+          setBranchName(branchData.branch?.display_name || branchData.branch?.name || 'Specifiek');
+        }
+      }
+    } catch (error) {
+      console.error('Error loading branch mappings:', error);
+      setBranchMappings([]);
+      setTableColumns([]);
+      setBranchName('Thuisbatterij Specifiek');
+    }
+  };
+
   // Force refresh lead data when viewing
   const handleViewLead = async (lead: Lead) => {
     console.log('🔍 Opening lead details for:', lead.name);
@@ -121,6 +172,31 @@ export default function CustomerLeadsPage() {
     console.log('🔍 Fresh lead branchData:', freshLead.branchData);
     
     setViewingLead(freshLead);
+    
+    // Load branch mappings if branch_id exists
+    if (customerData?.branch_id) {
+      try {
+        const mappingsResponse = await fetch(`/api/branches/${customerData.branch_id}/mappings`);
+        if (mappingsResponse.ok) {
+          const mappingsData = await mappingsResponse.json();
+          setBranchMappings(mappingsData.mappings || []);
+          
+          // Also fetch branch name
+          const branchResponse = await fetch(`/api/admin/branches/${customerData.branch_id}`);
+          if (branchResponse.ok) {
+            const branchData = await branchResponse.json();
+            setBranchName(branchData.branch?.display_name || branchData.branch?.name || 'Specifiek');
+          }
+        }
+      } catch (error) {
+        console.error('Error loading branch mappings:', error);
+        setBranchMappings([]);
+        setBranchName('Thuisbatterij Specifiek');
+      }
+    } else {
+      setBranchMappings([]);
+      setBranchName('Thuisbatterij Specifiek');
+    }
     
     // Check of er een reclamatie bestaat voor deze lead
     if (customerData && lead.sheetRowNumber) {
@@ -384,7 +460,7 @@ export default function CustomerLeadsPage() {
       if (customer.googleSheetUrl) {
         addDebugLog('info', '📊 STEP 2: Syncing with Google Sheets', { googleSheetUrl: customer.googleSheetUrl });
         try {
-          const freshLeads = await readCustomerLeads(customer.googleSheetUrl);
+          const freshLeads = await readCustomerLeads(customer.googleSheetUrl, undefined, customer.branch_id);
           addDebugLog('success', `✅ GOOGLE SHEETS: Successfully read ${freshLeads.length} leads`, { 
             leadsCount: freshLeads.length,
             firstLeadName: freshLeads[0]?.name || 'none',
@@ -435,6 +511,11 @@ export default function CustomerLeadsPage() {
       setCustomerData(customer);
       setLeads(customer.leadData || []);
       addDebugLog('success', '✅ STATE UPDATED: setCustomerData and setLeads called', { leadsSet: customer.leadData?.length || 0 });
+      
+      // Load branch mappings for dynamic table columns
+      if (customer.branch_id) {
+        loadBranchMappings(customer.branch_id);
+      }
       
       // Generate branch analytics
       if (customer.leadData && customer.leadData.length > 0) {
@@ -528,7 +609,7 @@ export default function CustomerLeadsPage() {
           console.log('🔄 Smart sync: checking for new leads...');
           
           // Read current data from Google Sheets
-          const sheetLeads = await readCustomerLeads(customerData.googleSheetUrl!);
+          const sheetLeads = await readCustomerLeads(customerData.googleSheetUrl!, undefined, customerData.branch_id);
           const existingLeads = customerData.leadData || [];
           
           // Find new leads by comparing sheet row numbers
@@ -1123,7 +1204,7 @@ export default function CustomerLeadsPage() {
             }
 
             // Read actual data from Google Sheets
-            const realLeads = await readCustomerLeads(customerData.googleSheetUrl);
+            const realLeads = await readCustomerLeads(customerData.googleSheetUrl, undefined, customerData.branch_id);
             
             console.log('📊 Real leads loaded from Google Sheets:', realLeads.length);
 
@@ -1899,26 +1980,41 @@ export default function CustomerLeadsPage() {
                 ))}
               </div>
 
-              {/* Desktop Table View */}
+              {/* Desktop Table View - Dynamic based on branch mappings */}
               <div className="hidden md:block overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Lead Info
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Contact & Locatie
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Interesse & Budget
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Status
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Acties
-                    </th>
+                    {tableColumns.length > 0 ? (
+                      // Dynamic columns based on branch mappings
+                      tableColumns.map((column) => (
+                        <th 
+                          key={column.id} 
+                          className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                        >
+                          {column.fieldLabel || column.headerName}
+                        </th>
+                      ))
+                    ) : (
+                      // Fallback: Default columns
+                      <>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Lead Info
+                        </th>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Contact & Locatie
+                        </th>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Interesse & Budget
+                        </th>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Status
+                        </th>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Acties
+                        </th>
+                      </>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
@@ -1929,131 +2025,192 @@ export default function CustomerLeadsPage() {
                       onClick={() => handleViewLead(lead)}
                       title="Klik voor lead details"
                     >
-                      <td className="px-6 py-4">
-                        <div className="flex items-center">
-                          <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-500 rounded-xl flex items-center justify-center">
-                            <span className="text-white font-bold">
-                              {lead.name.charAt(0)}
-                            </span>
-                          </div>
-                          <div className="ml-4">
-                            <div className="text-sm font-bold text-gray-900">
-                              {lead.name}
-                            </div>
-                            {lead.company && (
-                              <div className="text-sm text-gray-600 flex items-center">
-                                <BuildingOfficeIcon className="w-4 h-4 mr-1" />
-                                {lead.company}
-                              </div>
-                            )}
-                            {lead.sheetRowNumber && (
-                              <div className="text-xs text-gray-400">
-                                Sheet rij: {lead.sheetRowNumber}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="space-y-2">
-                          <div className="flex items-center text-sm text-gray-600">
-                            <EnvelopeIcon className="w-4 h-4 mr-2" />
-                            <a href={`mailto:${lead.email}`} className="hover:text-brand-purple">
-                              {lead.email}
-                            </a>
-                          </div>
-                          <div className="flex items-center text-sm text-gray-600">
-                            <PhoneIcon className="w-4 h-4 mr-2" />
-                            <a href={`tel:${lead.phone}`} className="hover:text-brand-purple">
-                              {lead.phone}
-                            </a>
-                          </div>
-                          {lead.branchData?.postcode && lead.branchData?.huisnummer && (
-                            <div className="flex items-center text-sm text-gray-600">
-                              <MapPinIcon className="w-4 h-4 mr-2" />
-                              {lead.branchData.postcode} {lead.branchData.huisnummer}
-                            </div>
-                          )}
-                          {lead.branchData?.datumInteresse && (
-                            <div className="text-xs text-gray-500">
-                              Interesse: {lead.branchData.datumInteresse}
-                            </div>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="space-y-2">
-                          <div className="font-medium text-gray-900">{lead.interest}</div>
-                          {lead.budget && (
-                            <div className="flex items-center text-sm text-gray-600">
-                              <CurrencyEuroIcon className="w-4 h-4 mr-2" />
-                              {lead.budget}
-                            </div>
-                          )}
+                      {tableColumns.length > 0 ? (
+                        // Dynamic cells based on branch mappings
+                        tableColumns.map((column) => {
+                          // ALWAYS try branchData first - this is where the data is stored
+                          const possibleKeys = [
+                            column.fieldKey,
+                            column.fieldKey?.toLowerCase(),
+                            column.fieldKey?.replace(/([A-Z])/g, '_$1').toLowerCase(),
+                            column.headerName?.toLowerCase().replace(/\s+/g, ''),
+                            // Also try header name variations
+                            column.headerName?.toLowerCase().replace(/\s+/g, '_'),
+                            column.headerName?.toLowerCase().replace(/\s+/g, ''),
+                          ];
                           
-                          {/* Clean table view - branch details only in popup */}
-                          <div className="text-xs text-gray-500 italic">
-                            📋 Klik voor alle thuisbatterij details
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <select
-                          value={lead.status}
-                          onChange={(e) => handleUpdateLeadStatus(lead.id, e.target.value as Lead['status'])}
-                          onClick={(e) => e.stopPropagation()} // Prevent row click
-                          className={`px-3 py-2 text-sm font-medium rounded-lg border-0 ${getStatusColor(lead.status)}`}
-                        >
-                          {customStages.map(stage => (
-                            <option key={stage.id} value={stage.id}>
-                              {stage.icon} {stage.name}
-                            </option>
-                          ))}
-                        </select>
-                        <div className="text-xs text-gray-500 mt-1">
-                          Datum: {new Date(lead.createdAt).toLocaleDateString('nl-NL')}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex space-x-2">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation(); // Prevent row click
-                              setEditingLead(lead);
-                            }}
-                            className="text-blue-600 hover:text-blue-800 transition-colors p-2 hover:bg-blue-50 rounded-lg"
-                            title="Bewerken"
-                          >
-                            <PencilIcon className="w-4 h-4" />
-                          </button>
-                          <a
-                            href={`mailto:${lead.email}`}
-                            onClick={(e) => e.stopPropagation()} // Prevent row click
-                            className="text-green-600 hover:text-green-800 transition-colors p-2 hover:bg-green-50 rounded-lg"
-                            title="Email versturen"
-                          >
-                            <EnvelopeIcon className="w-4 h-4" />
-                          </a>
-                          <a
-                            href={`tel:${lead.phone}`}
-                            onClick={(e) => e.stopPropagation()} // Prevent row click
-                            className="text-purple-600 hover:text-purple-800 transition-colors p-2 hover:bg-purple-50 rounded-lg"
-                            title="Bellen"
-                          >
-                            <PhoneIcon className="w-4 h-4" />
-                          </a>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation(); // Prevent row click
-                              handleDeleteLead(lead);
-                            }}
-                            className="text-red-600 hover:text-red-800 transition-colors p-2 hover:bg-red-50 rounded-lg"
-                            title="Verwijderen"
-                          >
-                            <TrashIcon className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
+                          let value: any = '';
+                          for (const key of possibleKeys) {
+                            if (key && lead.branchData?.[key] !== undefined && lead.branchData?.[key] !== null && lead.branchData?.[key] !== '') {
+                              value = lead.branchData[key];
+                              break;
+                            }
+                          }
+                          
+                          // Fallback: try core Lead fields ONLY if headerName matches core field
+                          if (!value || value === '') {
+                            const coreFieldMap: Record<string, keyof Lead> = {
+                              customerName: 'name',
+                              email: 'email',
+                              phone: 'phone',
+                              city: 'city',
+                              company: 'company',
+                              address: 'address',
+                            };
+                            const coreField = coreFieldMap[column.fieldKey];
+                            // Only use core field if headerName actually matches (e.g., "Naam klant" → name, but "Datum interesse klant" → NOT name)
+                            if (coreField && isCoreFieldHeader(column.headerName, coreField) && lead[coreField]) {
+                              value = String(lead[coreField]);
+                            }
+                          }
+                          
+                          // Format date values
+                          if (value instanceof Date) {
+                            value = value.toLocaleDateString('nl-NL');
+                          }
+                          
+                          console.log(`🔍 Table cell: ${column.fieldLabel} (key: ${column.fieldKey})`, {
+                            value,
+                            branchDataKeys: Object.keys(lead.branchData || {}),
+                            branchDataValue: lead.branchData?.[column.fieldKey]
+                          });
+                          
+                          return (
+                            <td key={column.id} className="px-6 py-4 text-sm text-gray-900 whitespace-nowrap">
+                              {value || '-'}
+                            </td>
+                          );
+                        })
+                      ) : (
+                        // Fallback: Default cells
+                        <>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center">
+                              <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-500 rounded-xl flex items-center justify-center">
+                                <span className="text-white font-bold">
+                                  {lead.name.charAt(0)}
+                                </span>
+                              </div>
+                              <div className="ml-4">
+                                <div className="text-sm font-bold text-gray-900">
+                                  {lead.name}
+                                </div>
+                                {lead.company && (
+                                  <div className="text-sm text-gray-600 flex items-center">
+                                    <BuildingOfficeIcon className="w-4 h-4 mr-1" />
+                                    {lead.company}
+                                  </div>
+                                )}
+                                {lead.sheetRowNumber && (
+                                  <div className="text-xs text-gray-400">
+                                    Sheet rij: {lead.sheetRowNumber}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="space-y-2">
+                              <div className="flex items-center text-sm text-gray-600">
+                                <EnvelopeIcon className="w-4 h-4 mr-2" />
+                                <a href={`mailto:${lead.email}`} className="hover:text-brand-purple">
+                                  {lead.email}
+                                </a>
+                              </div>
+                              <div className="flex items-center text-sm text-gray-600">
+                                <PhoneIcon className="w-4 h-4 mr-2" />
+                                <a href={`tel:${lead.phone}`} className="hover:text-brand-purple">
+                                  {lead.phone}
+                                </a>
+                              </div>
+                              {lead.branchData?.postcode && lead.branchData?.huisnummer && (
+                                <div className="flex items-center text-sm text-gray-600">
+                                  <MapPinIcon className="w-4 h-4 mr-2" />
+                                  {lead.branchData.postcode} {lead.branchData.huisnummer}
+                                </div>
+                              )}
+                              {lead.branchData?.datumInteresse && (
+                                <div className="text-xs text-gray-500">
+                                  Interesse: {lead.branchData.datumInteresse}
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="space-y-2">
+                              <div className="font-medium text-gray-900">{lead.interest}</div>
+                              {lead.budget && (
+                                <div className="flex items-center text-sm text-gray-600">
+                                  <CurrencyEuroIcon className="w-4 h-4 mr-2" />
+                                  {lead.budget}
+                                </div>
+                              )}
+                              
+                              {/* Clean table view - branch details only in popup */}
+                              <div className="text-xs text-gray-500 italic">
+                                📋 Klik voor alle lead details
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <select
+                              value={lead.status}
+                              onChange={(e) => handleUpdateLeadStatus(lead.id, e.target.value as Lead['status'])}
+                              onClick={(e) => e.stopPropagation()} // Prevent row click
+                              className={`px-3 py-2 text-sm font-medium rounded-lg border-0 ${getStatusColor(lead.status)}`}
+                            >
+                              {customStages.map(stage => (
+                                <option key={stage.id} value={stage.id}>
+                                  {stage.icon} {stage.name}
+                                </option>
+                              ))}
+                            </select>
+                            <div className="text-xs text-gray-500 mt-1">
+                              Datum: {new Date(lead.createdAt).toLocaleDateString('nl-NL')}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex space-x-2">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation(); // Prevent row click
+                                  setEditingLead(lead);
+                                }}
+                                className="text-blue-600 hover:text-blue-800 transition-colors p-2 hover:bg-blue-50 rounded-lg"
+                                title="Bewerken"
+                              >
+                                <PencilIcon className="w-4 h-4" />
+                              </button>
+                              <a
+                                href={`mailto:${lead.email}`}
+                                onClick={(e) => e.stopPropagation()} // Prevent row click
+                                className="text-green-600 hover:text-green-800 transition-colors p-2 hover:bg-green-50 rounded-lg"
+                                title="Email versturen"
+                              >
+                                <EnvelopeIcon className="w-4 h-4" />
+                              </a>
+                              <a
+                                href={`tel:${lead.phone}`}
+                                onClick={(e) => e.stopPropagation()} // Prevent row click
+                                className="text-purple-600 hover:text-purple-800 transition-colors p-2 hover:bg-purple-50 rounded-lg"
+                                title="Bellen"
+                              >
+                                <PhoneIcon className="w-4 h-4" />
+                              </a>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation(); // Prevent row click
+                                  handleDeleteLead(lead);
+                                }}
+                                className="text-red-600 hover:text-red-800 transition-colors p-2 hover:bg-red-50 rounded-lg"
+                                title="Verwijderen"
+                              >
+                                <TrashIcon className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -2263,74 +2420,112 @@ export default function CustomerLeadsPage() {
                     <div>
                       <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                         <ChartBarIcon className="w-5 h-5 mr-2 text-purple-600" />
-                        Thuisbatterij Specifiek
+                        {branchName} Specifiek
                       </h4>
                       
-                      
                       <div className="space-y-4">
-                        {/* Zonnepanelen - FORCE SHOW */}
-                        <div className="flex items-center justify-between p-3 bg-yellow-50 rounded-lg">
-                          <div className="flex items-center">
-                            <div className="w-3 h-3 bg-yellow-400 rounded-full mr-3"></div>
-                            <span className="text-sm font-medium text-gray-700">Zonnepanelen</span>
-                          </div>
-                          <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
-                            {viewingLead.branchData?.zonnepanelen || 'Geen data'}
-                          </span>
-                        </div>
-
-                        {/* Dynamisch Contract - FORCE SHOW */}
-                        <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
-                          <div className="flex items-center">
-                            <div className="w-3 h-3 bg-blue-400 rounded-full mr-3"></div>
-                            <span className="text-sm font-medium text-gray-700">Dynamisch Contract</span>
-                          </div>
-                          <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
-                            {viewingLead.branchData?.dynamischContract || 'Geen data'}
-                          </span>
-                        </div>
-
-                        {/* Stroomverbruik - FORCE SHOW */}
-                        <div className="flex items-center justify-between p-3 bg-purple-50 rounded-lg">
-                          <div className="flex items-center">
-                            <div className="w-3 h-3 bg-purple-400 rounded-full mr-3"></div>
-                            <span className="text-sm font-medium text-gray-700">Stroomverbruik</span>
-                          </div>
-                          <span className="px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-xs font-medium">
-                            {viewingLead.branchData?.stroomverbruik || 'Geen data'} kWh
-                          </span>
-                        </div>
-
-                        {/* Reden Thuisbatterij - FORCE SHOW */}
-                        <div className="p-3 bg-indigo-50 rounded-lg">
-                          <div className="flex items-center mb-2">
-                            <div className="w-3 h-3 bg-indigo-400 rounded-full mr-3"></div>
-                            <span className="text-sm font-medium text-gray-700">Reden Thuisbatterij</span>
-                          </div>
-                          <p className="text-sm text-gray-900 ml-6">{viewingLead.branchData?.redenThuisbatterij || 'Geen data'}</p>
-                        </div>
-
-                        {/* Koopintentie - FORCE SHOW */}
-                        <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
-                          <div className="flex items-center">
-                            <div className="w-3 h-3 bg-green-400 rounded-full mr-3"></div>
-                            <span className="text-sm font-medium text-gray-700">Koopintentie</span>
-                          </div>
-                          <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium">
-                            {viewingLead.branchData?.koopintentie || 'Geen data'}
-                          </span>
-                        </div>
-
-                        {/* Nieuwsbrief - FORCE SHOW */}
-                        <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                          <div className="flex items-center">
-                            <div className="w-3 h-3 bg-gray-400 rounded-full mr-3"></div>
-                            <span className="text-sm font-medium text-gray-700">Nieuwsbrief</span>
-                          </div>
-                          <span className="px-3 py-1 bg-gray-100 text-gray-800 rounded-full text-xs font-medium">
-                            {viewingLead.branchData?.nieuwsbrief || 'Geen data'}
-                          </span>
-                        </div>
+                        {branchMappings.length > 0 ? (
+                          // Dynamic fields based on branch mappings
+                          branchMappings
+                            .filter(mapping => mapping.showInDetail !== false)
+                            .map((mapping, index) => {
+                              // Try multiple possible keys (camelCase, snake_case, original)
+                              const possibleKeys = [
+                                mapping.fieldKey,
+                                mapping.fieldKey.toLowerCase(),
+                                mapping.fieldKey.replace(/([A-Z])/g, '_$1').toLowerCase(),
+                                mapping.headerName?.toLowerCase().replace(/\s+/g, ''),
+                              ];
+                              
+                              let value = '';
+                              for (const key of possibleKeys) {
+                                if (viewingLead.branchData?.[key] !== undefined && viewingLead.branchData?.[key] !== '') {
+                                  value = viewingLead.branchData[key];
+                                  break;
+                                }
+                              }
+                              
+                              // Fallback: try to find by header name match
+                              if (!value && viewingLead.branchData) {
+                                const headerMatch = Object.keys(viewingLead.branchData).find(k => 
+                                  k.toLowerCase() === mapping.headerName?.toLowerCase().replace(/\s+/g, '')
+                                );
+                                if (headerMatch) {
+                                  value = viewingLead.branchData[headerMatch];
+                                }
+                              }
+                              
+                              console.log(`🔍 Field: ${mapping.fieldLabel} (key: ${mapping.fieldKey})`, {
+                                value,
+                                branchData: viewingLead.branchData,
+                                possibleKeys
+                              });
+                              
+                              const colors = [
+                                { bg: 'bg-yellow-50', dot: 'bg-yellow-400', badge: 'bg-yellow-100 text-yellow-800' },
+                                { bg: 'bg-blue-50', dot: 'bg-blue-400', badge: 'bg-blue-100 text-blue-800' },
+                                { bg: 'bg-purple-50', dot: 'bg-purple-400', badge: 'bg-purple-100 text-purple-800' },
+                                { bg: 'bg-indigo-50', dot: 'bg-indigo-400', badge: 'bg-indigo-100 text-indigo-800' },
+                                { bg: 'bg-green-50', dot: 'bg-green-400', badge: 'bg-green-100 text-green-800' },
+                                { bg: 'bg-gray-50', dot: 'bg-gray-400', badge: 'bg-gray-100 text-gray-800' },
+                              ];
+                              const color = colors[index % colors.length];
+                              
+                              // For text fields, show as paragraph
+                              if (mapping.fieldType === 'text' || mapping.fieldType === 'textarea') {
+                                return (
+                                  <div key={mapping.id} className={`p-3 ${color.bg} rounded-lg`}>
+                                    <div className="flex items-center mb-2">
+                                      <div className={`w-3 h-3 ${color.dot} rounded-full mr-3`}></div>
+                                      <span className="text-sm font-medium text-gray-700">{mapping.fieldLabel}</span>
+                                    </div>
+                                    <p className="text-sm text-gray-900 ml-6">{value || 'Geen data'}</p>
+                                  </div>
+                                );
+                              }
+                              
+                              // For other fields, show as badge
+                              return (
+                                <div key={mapping.id} className={`flex items-center justify-between p-3 ${color.bg} rounded-lg`}>
+                                  <div className="flex items-center">
+                                    <div className={`w-3 h-3 ${color.dot} rounded-full mr-3`}></div>
+                                    <span className="text-sm font-medium text-gray-700">{mapping.fieldLabel}</span>
+                                  </div>
+                                  <span className={`px-3 py-1 ${color.badge} rounded-full text-xs font-medium`}>
+                                    {value || 'Geen data'}
+                                    {mapping.fieldType === 'number' && mapping.fieldKey.includes('verbruik') && ' kWh'}
+                                  </span>
+                                </div>
+                              );
+                            })
+                        ) : (
+                          // Fallback: Show all branchData fields if no mappings
+                          Object.entries(viewingLead.branchData || {}).map(([key, value], index) => {
+                            if (!value || value === '') return null;
+                            const colors = [
+                              { bg: 'bg-yellow-50', dot: 'bg-yellow-400', badge: 'bg-yellow-100 text-yellow-800' },
+                              { bg: 'bg-blue-50', dot: 'bg-blue-400', badge: 'bg-blue-100 text-blue-800' },
+                              { bg: 'bg-purple-50', dot: 'bg-purple-400', badge: 'bg-purple-100 text-purple-800' },
+                              { bg: 'bg-indigo-50', dot: 'bg-indigo-400', badge: 'bg-indigo-100 text-indigo-800' },
+                              { bg: 'bg-green-50', dot: 'bg-green-400', badge: 'bg-green-100 text-green-800' },
+                              { bg: 'bg-gray-50', dot: 'bg-gray-400', badge: 'bg-gray-100 text-gray-800' },
+                            ];
+                            const color = colors[index % colors.length];
+                            const label = key.charAt(0).toUpperCase() + key.slice(1).replace(/([A-Z])/g, ' $1');
+                            
+                            return (
+                              <div key={key} className={`flex items-center justify-between p-3 ${color.bg} rounded-lg`}>
+                                <div className="flex items-center">
+                                  <div className={`w-3 h-3 ${color.dot} rounded-full mr-3`}></div>
+                                  <span className="text-sm font-medium text-gray-700">{label}</span>
+                                </div>
+                                <span className={`px-3 py-1 ${color.badge} rounded-full text-xs font-medium`}>
+                                  {String(value)}
+                                </span>
+                              </div>
+                            );
+                          })
+                        )}
                       </div>
                     </div>
 
