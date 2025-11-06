@@ -2156,7 +2156,9 @@ export default function CustomerLeadsPage() {
                               )}
                               {lead.branchData?.datumInteresse && (
                                 <div className="text-xs text-gray-500">
-                                  Interesse: {lead.branchData.datumInteresse}
+                                  Interesse: {lead.branchData.datumInteresse instanceof Date 
+                                    ? lead.branchData.datumInteresse.toLocaleDateString('nl-NL')
+                                    : String(lead.branchData.datumInteresse)}
                                 </div>
                               )}
                             </div>
@@ -2433,7 +2435,11 @@ export default function CustomerLeadsPage() {
                         {viewingLead.branchData?.datumInteresse && (
                           <div>
                             <span className="text-sm text-gray-500">Datum interesse:</span>
-                            <p className="font-medium text-gray-900">{viewingLead.branchData.datumInteresse}</p>
+                            <p className="font-medium text-gray-900">
+                              {viewingLead.branchData.datumInteresse instanceof Date
+                                ? viewingLead.branchData.datumInteresse.toLocaleDateString('nl-NL')
+                                : String(viewingLead.branchData.datumInteresse)}
+                            </p>
                           </div>
                         )}
                       </div>
@@ -2496,6 +2502,17 @@ export default function CustomerLeadsPage() {
                               ];
                               const color = colors[index % colors.length];
                               
+                              // Convert Date objects to strings
+                              let displayValue: string;
+                              const valueAny = value as any;
+                              if (valueAny && typeof valueAny === 'object' && valueAny instanceof Date) {
+                                displayValue = valueAny.toLocaleDateString('nl-NL');
+                              } else if (value !== '' && value !== null && value !== undefined) {
+                                displayValue = String(value);
+                              } else {
+                                displayValue = 'Geen data';
+                              }
+                              
                               // For text fields, show as paragraph
                               if (mapping.fieldType === 'text' || mapping.fieldType === 'textarea') {
                                 return (
@@ -2504,7 +2521,7 @@ export default function CustomerLeadsPage() {
                                       <div className={`w-3 h-3 ${color.dot} rounded-full mr-3`}></div>
                                       <span className="text-sm font-medium text-gray-700">{mapping.fieldLabel}</span>
                                     </div>
-                                    <p className="text-sm text-gray-900 ml-6">{value || 'Geen data'}</p>
+                                    <p className="text-sm text-gray-900 ml-6">{displayValue}</p>
                                   </div>
                                 );
                               }
@@ -2517,7 +2534,7 @@ export default function CustomerLeadsPage() {
                                     <span className="text-sm font-medium text-gray-700">{mapping.fieldLabel}</span>
                                   </div>
                                   <span className={`px-3 py-1 ${color.badge} rounded-full text-xs font-medium`}>
-                                    {value || 'Geen data'}
+                                    {displayValue}
                                     {mapping.fieldType === 'number' && mapping.fieldKey.includes('verbruik') && ' kWh'}
                                   </span>
                                 </div>
@@ -2527,6 +2544,16 @@ export default function CustomerLeadsPage() {
                           // Fallback: Show all branchData fields if no mappings
                           Object.entries(viewingLead.branchData || {}).map(([key, value], index) => {
                             if (!value || value === '') return null;
+                            
+                            // Convert Date objects to strings
+                            let displayValue: string;
+                            const valueAny = value as any;
+                            if (valueAny && typeof valueAny === 'object' && valueAny instanceof Date) {
+                              displayValue = valueAny.toLocaleDateString('nl-NL');
+                            } else {
+                              displayValue = String(value);
+                            }
+                            
                             const colors = [
                               { bg: 'bg-yellow-50', dot: 'bg-yellow-400', badge: 'bg-yellow-100 text-yellow-800' },
                               { bg: 'bg-blue-50', dot: 'bg-blue-400', badge: 'bg-blue-100 text-blue-800' },
@@ -2545,7 +2572,7 @@ export default function CustomerLeadsPage() {
                                   <span className="text-sm font-medium text-gray-700">{label}</span>
                                 </div>
                                 <span className={`px-3 py-1 ${color.badge} rounded-full text-xs font-medium`}>
-                                  {String(value)}
+                                  {displayValue}
                                 </span>
                               </div>
                             );
