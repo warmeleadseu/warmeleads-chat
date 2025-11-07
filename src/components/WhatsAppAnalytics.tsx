@@ -54,7 +54,6 @@ interface AnalyticsData {
 export function WhatsAppAnalytics({ customerId }: WhatsAppAnalyticsProps) {
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchAnalytics();
@@ -72,7 +71,8 @@ export function WhatsAppAnalytics({ customerId }: WhatsAppAnalyticsProps) {
       const data = await response.json();
       setAnalytics(data.analytics);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown error');
+      console.error('Failed to load WhatsApp analytics', err);
+      setAnalytics(null);
     } finally {
       setLoading(false);
     }
@@ -123,23 +123,6 @@ export function WhatsAppAnalytics({ customerId }: WhatsAppAnalyticsProps) {
               <div key={i} className="h-20 bg-gray-200 rounded-lg"></div>
             ))}
           </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <div className="text-center text-red-600">
-          <ExclamationTriangleIcon className="w-8 h-8 mx-auto mb-2" />
-          <p>Fout bij laden van analytics: {error}</p>
-          <button 
-            onClick={fetchAnalytics}
-            className="mt-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-          >
-            Opnieuw proberen
-          </button>
         </div>
       </div>
     );
