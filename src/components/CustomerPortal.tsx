@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { 
@@ -140,6 +140,10 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
   const [showSupportModal, setShowSupportModal] = useState(false); // NEW - for support modal
   const [showEmployeeModal, setShowEmployeeModal] = useState(false); // NEW - for employee management
+  const [lastSync, setLastSync] = useState<Date | null>(null);
+  const [goalModalOpen, setGoalModalOpen] = useState(false);
+  const [growthGoal, setGrowthGoal] = useState<number>(500);
+  const [goalFrequency, setGoalFrequency] = useState<'maand' | 'kwartaal'>('maand');
   const { user, isAuthenticated, logout } = useAuthStore();
   const router = useRouter();
   const searchParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
@@ -154,6 +158,20 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
       isGuest: user?.isGuest 
     });
   }, [user, isAuthenticated]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const stored = window.localStorage.getItem('warmeleads-portal-goal');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed?.growthGoal) setGrowthGoal(Number(parsed.growthGoal) || 500);
+        if (parsed?.goalFrequency) setGoalFrequency(parsed.goalFrequency === 'kwartaal' ? 'kwartaal' : 'maand');
+      }
+    } catch (error) {
+      console.warn('⚠️ Could not parse stored goal', error);
+    }
+  }, []);
 
   // Track when logout function is called
   useEffect(() => {
@@ -301,6 +319,7 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
       
       setCustomerData(updatedCustomer);
       console.log(`✅ CustomerPortal: ${freshLeads.length} leads from Google Sheets ready`);
+      setLastSync(new Date());
       
     } catch (syncError) {
       console.error('❌ CustomerPortal: Failed to read Google Sheets:', syncError);
@@ -441,7 +460,39 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
     : 0;
 
   const latestOrder = recentOrders[0] || null;
- 
+
+  const derivedBranchName = useMemo(() => {
+    const fromCustomer = (customerData as any)?.branch_name || (customerData as any)?.branchName;
+    if (typeof fromCustomer === 'string' && fromCustomer.trim().length > 0) {
+      return fromCustomer;
+    }
+    if (customerData?.branch_id && customerData.branch_id !== 'default') {
+      return customerData.branch_id;
+    }
+    return 'Algemeen';
+  }, [customerData?.branch_id, customerData]);
+
+  const branchInsightMessages: Record<string, string> = {
+    kozijnen: 'Klanten reageren het best binnen 2 uur – maak gebruik van de follow-up reminder hieronder.',
+    thuisbatterij: 'Thuisbatterij leads converteren gemiddeld 22% sneller met een ROI-berekening in de eerste call.',
+    zonnepanelen: 'Zonnepaneel klanten waarderen een WhatsApp-bericht na de offerte – plan deze direct vanuit het portaal.',
+    warmtepomp: 'Warmtepomp leads hebben in de winter een piek – bereid je voor met een pakket op voorraad.',
+  };
+
+  const branchKey = derivedBranchName.toLowerCase();
+  const insightCopy = Object.entries(branchInsightMessages).find(([key]) => branchKey.includes(key))?.[1] || 'Gebruik het leadportaal om je nieuwste leads binnen 15 minuten op te volgen voor maximale conversie.';
+
+  const goalProgress = totalLeads > 0 ? Math.min((totalLeads / growthGoal) * 100, 999) : 0;
+
+  const handleSaveGoal = (newGoal: number, frequency: 'maand' | 'kwartaal') => {
+    setGrowthGoal(newGoal);
+    setGoalFrequency(frequency);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('warmeleads-portal-goal', JSON.stringify({ growthGoal: newGoal, goalFrequency: frequency }));
+    }
+    setGoalModalOpen(false);
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-brand-navy via-brand-purple to-brand-pink">
       <div className="max-w-6xl mx-auto px-4 py-6 md:py-10 space-y-6 md:space-y-8">
@@ -483,7 +534,7 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
 
         {/* Hero & Status */}
         <motion.section
-          className="relative overflow-hidden rounded-3xl border border-white/15 bg-white/10 backdrop-blur-xl p-6 md:p-10 shadow-[0_45px_90px_-65px_rgba(24,9,64,0.85)]"
+          className="relative overflow-hidden rounded-3xl border border-white/15 bg-white/10 backdrop-blur-xl p-6 md:p-10 shadow-[0_45px_90px_-45px_rgba(25,14,64,0.8)]"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
         >
@@ -502,7 +553,7 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
               <div className="space-y-2">
                 <h2 className="text-2xl md:text-4xl font-bold text-white">Klaar voor de volgende groeispurt?</h2>
                 <p className="text-white/70 max-w-xl text-sm md:text-base">
-                  Beheer uw leads, bestellingen en team vanuit één overzichtelijk portaal. Alles sluit naadloos aan op het leadportaal en uw Google Sheets integratie.
+                  Branch: <span className="text-white font-semibold">{derivedBranchName}</span>. {insightCopy}
                 </p>
               </div>
 
@@ -522,6 +573,51 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
                 <div className="rounded-2xl border border-white/15 bg-white/10 p-4">
                   <p className="text-xs text-white/50">Gegenereerde winst</p>
                   <p className="mt-1 text-2xl font-semibold text-purple-200">{formatRevenue(totalProfit)}</p>
+                </div>
+                <div className="col-span-2 rounded-2xl border border-white/15 bg-white/10 p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                  <div>
+                    <p className="text-xs text-white/50">Doelstelling ({goalFrequency === 'maand' ? 'maandelijks' : 'per kwartaal'})</p>
+                    <p className="text-lg font-semibold text-white">{totalLeads}/{growthGoal} leads</p>
+                    <p className="text-xs text-white/60">{goalProgress.toFixed(1)}% behaald</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="relative h-12 w-12">
+                      <svg className="h-12 w-12 -rotate-90" viewBox="0 0 36 36">
+                        <path
+                          className="text-white/15"
+                          strokeWidth="3"
+                          stroke="currentColor"
+                          fill="transparent"
+                          strokeDasharray="100"
+                          strokeDashoffset="0"
+                          d="M18 2.0845
+                          a 15.9155 15.9155 0 0 1 0 31.831
+                          a 15.9155 15.9155 0 0 1 0 -31.831"
+                        />
+                        <path
+                          className="text-brand-pink"
+                          strokeWidth="3"
+                          strokeLinecap="round"
+                          stroke="currentColor"
+                          fill="transparent"
+                          strokeDasharray="100"
+                          strokeDashoffset={`${100 - Math.min(goalProgress, 100)}`}
+                          d="M18 2.0845
+                          a 15.9155 15.9155 0 0 1 0 31.831
+                          a 15.9155 15.9155 0 0 1 0 -31.831"
+                        />
+                      </svg>
+                      <span className="absolute inset-0 flex items-center justify-center text-xs font-semibold text-white">
+                        {Math.min(goalProgress, 999).toFixed(0)}%
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => setGoalModalOpen(true)}
+                      className="rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-xs font-medium text-white/70 hover:text-white"
+                    >
+                      Doel aanpassen
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -555,7 +651,7 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
                   </div>
                   <div className="flex-1">
                     <p className="text-sm font-semibold text-white">Google Sheets sync</p>
-                    <p className="text-xs text-white/60">{customerData?.googleSheetUrl ? 'Actief en up-to-date' : 'Nog niet gekoppeld'}</p>
+                    <p className="text-xs text-white/60">{customerData?.googleSheetUrl ? `Actief en up-to-date${lastSync ? ` • Laatste sync ${lastSync.toLocaleTimeString('nl-NL')}` : ''}` : 'Nog niet gekoppeld'}</p>
                   </div>
                   <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${customerData?.googleSheetUrl ? 'bg-emerald-500/15 text-emerald-200' : 'bg-yellow-500/20 text-yellow-200'}`}>
                     {customerData?.googleSheetUrl ? 'Actief' : 'Activeren'}
@@ -602,6 +698,88 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
             </div>
           </div>
         </motion.section>
+
+        {/* Goal modal */}
+        <AnimatePresence>
+          {goalModalOpen && (
+            <motion.div
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            >
+              <motion.div
+                className="w-full max-w-md rounded-3xl border border-white/20 bg-brand-navy/80 p-6 text-white shadow-2xl"
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+              >
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h3 className="text-xl font-semibold">Doelstelling aanpassen</h3>
+                    <p className="text-sm text-white/60">Kies hoeveel leads je deze periode wilt behalen.</p>
+                  </div>
+                  <button onClick={() => setGoalModalOpen(false)} className="rounded-full bg-white/10 p-1 text-white/60 hover:text-white">
+                    <XMarkIcon className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <div className="mt-6 space-y-4">
+                  <label className="block text-sm text-white/70">
+                    Aantal leads
+                    <input
+                      type="number"
+                      min={50}
+                      step={10}
+                      value={growthGoal}
+                      onChange={(e) => setGrowthGoal(Math.max(50, Number(e.target.value) || 50))}
+                      className="mt-2 w-full rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-white focus:border-white/40 focus:outline-none"
+                    />
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <label className="flex items-center gap-2 text-sm text-white/70">
+                      <input
+                        type="radio"
+                        name="goalFrequency"
+                        value="maand"
+                        checked={goalFrequency === 'maand'}
+                        onChange={() => setGoalFrequency('maand')}
+                        className="accent-brand-pink"
+                      />
+                      Maandelijks doel
+                    </label>
+                    <label className="flex items-center gap-2 text-sm text-white/70">
+                      <input
+                        type="radio"
+                        name="goalFrequency"
+                        value="kwartaal"
+                        checked={goalFrequency === 'kwartaal'}
+                        onChange={() => setGoalFrequency('kwartaal')}
+                        className="accent-brand-pink"
+                      />
+                      Kwartaaldoel
+                    </label>
+                  </div>
+                </div>
+
+                <div className="mt-6 flex justify-end gap-2">
+                  <button
+                    onClick={() => setGoalModalOpen(false)}
+                    className="rounded-xl border border-white/20 px-4 py-2 text-sm text-white/70 hover:text-white"
+                  >
+                    Annuleren
+                  </button>
+                  <button
+                    onClick={() => handleSaveGoal(growthGoal, goalFrequency)}
+                    className="rounded-xl bg-gradient-to-r from-brand-pink to-brand-purple px-4 py-2 text-sm font-semibold text-white"
+                  >
+                    Opslaan
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Quick actions */}
         <motion.section
