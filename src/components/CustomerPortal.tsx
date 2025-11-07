@@ -96,14 +96,6 @@ const quickActions = [
   },
   {
     icon: Cog6ToothIcon,
-    title: 'CRM Dashboard',
-    description: 'Enterprise-grade lead management & analytics',
-    action: 'crm',
-    color: 'bg-purple-600',
-    requiresAccount: true,
-  },
-  {
-    icon: Cog6ToothIcon,
     title: 'Account instellingen',
     description: 'Wijzig uw voorkeuren en gegevens',
     action: 'settings',
@@ -345,11 +337,8 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
     } else if (action === 'support') {
       setShowSupportModal(true);
     } else if (action === 'leads') {
-      // Navigate to CRM leads page
+      // Open het leadportaal
       router.push('/crm/leads');
-    } else if (action === 'crm') {
-      // Navigate to CRM dashboard
-      router.push('/crm');
     } else if (action === 'settings') {
       // Navigate to account settings page
       router.push('/portal/settings');

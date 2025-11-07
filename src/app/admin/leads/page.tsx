@@ -310,7 +310,7 @@ export default function LeadsPage() {
                     <td className="px-6 py-4">
                       <div className="flex gap-2">
                         <button
-                          onClick={() => router.push(`/crm?customer=${summary.customerEmail}`)}
+                          onClick={() => router.push(`/crm/leads?customer=${summary.customerEmail}`)}
                           className="text-brand-purple hover:text-brand-pink transition-colors"
                           title="Open CRM"
                         >
@@ -352,7 +352,7 @@ export default function LeadsPage() {
                   </div>
                   <div className="flex gap-2 ml-2">
                     <button
-                      onClick={() => router.push(`/crm?customer=${summary.customerEmail}`)}
+                      onClick={() => router.push(`/crm/leads?customer=${summary.customerEmail}`)}
                       className="text-brand-purple hover:text-brand-pink transition-colors"
                     >
                       <EyeIcon className="w-5 h-5" />

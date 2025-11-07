@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import {
   ArrowLeftIcon,
   PlusIcon,
@@ -20,10 +21,14 @@ import {
   XCircleIcon,
   MapPinIcon,
   DocumentTextIcon,
+  LinkIcon,
   ArrowTopRightOnSquareIcon,
   ChartBarIcon,
   Cog6ToothIcon,
-  BellIcon
+  BellIcon,
+  DocumentArrowDownIcon,
+  ChatBubbleLeftRightIcon,
+  SparklesIcon
 } from '@heroicons/react/24/outline';
 import { useAuthStore, authenticatedFetch } from '@/lib/auth';
 import { Loading } from '@/components/ui';
@@ -32,6 +37,20 @@ import { readCustomerLeads, GoogleSheetsService, addLeadToSheet } from '@/lib/go
 import { branchIntelligence, type Branch, type BranchIntelligence, type BranchAnalytics } from '@/lib/branchIntelligence';
 import { PipelineBoard } from '@/components/PipelineBoard';
 import { type CustomStage, PipelineStagesManager } from '@/lib/pipelineStages';
+import { WhatsAppSettings } from '@/components/WhatsAppSettings';
+
+const WhatsAppAnalytics = dynamic(
+  () => import('@/components/WhatsAppAnalytics').then((mod) => mod.WhatsAppAnalytics),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 text-white text-center">
+        <div className="w-10 h-10 border-4 border-white/30 border-t-white rounded-full animate-spin mx-auto mb-3" />
+        <p className="text-sm text-white/70">WhatsApp analytics laden...</p>
+      </div>
+    )
+  }
+);
 
 export default function CustomerLeadsPage() {
   const router = useRouter();
@@ -60,6 +79,10 @@ export default function CustomerLeadsPage() {
   const [leadReclamation, setLeadReclamation] = useState<{hasReclamation: boolean, reclamation?: any}>({ hasReclamation: false });
   const [branchMappings, setBranchMappings] = useState<any[]>([]);
   const [branchName, setBranchName] = useState<string>('Thuisbatterij Specifiek');
+  const [googleSheetUrlInput, setGoogleSheetUrlInput] = useState('');
+  const [isSavingSheet, setIsSavingSheet] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [showWhatsAppSettings, setShowWhatsAppSettings] = useState(false);
   
   // Custom pipeline stages
   const [customStages, setCustomStages] = useState<CustomStage[]>([]);
@@ -101,6 +124,10 @@ export default function CustomerLeadsPage() {
       });
     }
   }, [customerData]);
+  
+  useEffect(() => {
+    setGoogleSheetUrlInput(customerData?.googleSheetUrl || '');
+  }, [customerData?.googleSheetUrl]);
   
   // Load custom pipeline stages when customer changes
   useEffect(() => {
@@ -1298,6 +1325,106 @@ export default function CustomerLeadsPage() {
     return <Loading fullScreen text="Leads laden..." />;
   }
 
+  const overallStats = useMemo(() => {
+    const revenue = branchAnalytics.reduce((total, analytics) => total + (analytics.revenue || 0), 0);
+    const totalLeads = leads.length;
+    const conversions = leads.filter(lead =>
+      lead.status === 'qualified' || lead.status === 'deal_closed' || lead.status === 'converted'
+    ).length;
+    const conversionRate = totalLeads > 0 ? (conversions / totalLeads) * 100 : 0;
+    const avgLeadValue = totalLeads > 0 ? revenue / totalLeads : 0;
+
+    return {
+      revenue,
+      totalLeads,
+      conversions,
+      conversionRate,
+      avgLeadValue
+    };
+  }, [branchAnalytics, leads]);
+
+  const topConversionBranches = useMemo(() => {
+    return [...branchAnalytics]
+      .sort((a, b) => (b.conversionRate || 0) - (a.conversionRate || 0))
+      .slice(0, 3);
+  }, [branchAnalytics]);
+
+  const growthOpportunities = useMemo(() => {
+    return [...branchAnalytics]
+      .sort((a, b) => (b.trends?.growth || 0) - (a.trends?.growth || 0))
+      .slice(0, 3);
+  }, [branchAnalytics]);
+
+  const handleSaveGoogleSheetUrl = async () => {
+    if (!customerData) {
+      alert('❌ Geen klantprofiel gevonden. Vernieuw de pagina en probeer opnieuw.');
+      return;
+    }
+
+    const trimmedUrl = googleSheetUrlInput.trim();
+    if (!trimmedUrl) {
+      alert('❌ Vul een geldige Google Sheets URL in.');
+      return;
+    }
+
+    setIsSavingSheet(true);
+    try {
+      const success = await crmSystem.linkGoogleSheet(customerData.id, trimmedUrl);
+      if (success) {
+        const spreadsheetId = GoogleSheetsService.extractSpreadsheetId(trimmedUrl);
+        setCustomerData(prev => prev ? {
+          ...prev,
+          googleSheetUrl: trimmedUrl,
+          googleSheetId: spreadsheetId || prev.googleSheetId
+        } : prev);
+
+        await loadCustomerData();
+        alert('✅ Google Sheet succesvol gekoppeld!');
+      } else {
+        alert('❌ Opslaan van de Google Sheet is mislukt. Neem contact op met support.');
+      }
+    } catch (error) {
+      console.error('❌ Error saving Google Sheet URL:', error);
+      alert('❌ Er is een fout opgetreden bij het opslaan van de Google Sheet URL.');
+    } finally {
+      setIsSavingSheet(false);
+    }
+  };
+
+  const handleExportData = () => {
+    if (!customerData || !customerData.leadData || customerData.leadData.length === 0) {
+      alert('❌ Geen leads om te exporteren.');
+      return;
+    }
+
+    setIsExporting(true);
+    try {
+      const payload = {
+        customer: customerData.name,
+        email: customerData.email,
+        exportDate: new Date().toISOString(),
+        leads: customerData.leadData
+      };
+
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `warmeleads-export-${customerData.name?.replace(/\s+/g, '-') || 'klant'}-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      alert('📁 Export succesvol gedownload.');
+    } catch (error) {
+      console.error('❌ Error exporting leads:', error);
+      alert('❌ Exporteren is mislukt. Probeer het opnieuw.');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-brand-navy via-brand-purple to-brand-pink">
       {/* Header - Desktop & Mobile optimized */}
@@ -1311,7 +1438,7 @@ export default function CustomerLeadsPage() {
                 className="flex items-center space-x-2 text-white/80 hover:text-white transition-colors"
               >
                 <ArrowLeftIcon className="w-5 h-5" />
-                <span>Terug naar CRM</span>
+                <span>Terug naar portal</span>
               </button>
               
               <div className="h-6 w-px bg-white/30"></div>
@@ -1383,7 +1510,7 @@ export default function CustomerLeadsPage() {
                 className="flex items-center space-x-2 text-white/90 hover:text-white transition-colors"
               >
                 <ArrowLeftIcon className="w-5 h-5" />
-                <span className="text-sm">Terug naar CRM</span>
+                <span className="text-sm">Terug naar portal</span>
               </button>
               
               <button
@@ -1667,108 +1794,187 @@ export default function CustomerLeadsPage() {
           </div>
         </motion.div>
 
-        {/* Analytics moved to /crm - this section removed for clean leads interface */}
-        {false && (
+        <div className="space-y-8">
+          {branchAnalytics.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.7 }}
+              className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 shadow-lg border border-white/10"
+            >
+              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6">
+                <div>
+                  <h2 className="text-2xl font-bold text-white flex items-center gap-2">
+                    <ChartBarIcon className="w-6 h-6 text-purple-300" />
+                    Branch prestaties
+                  </h2>
+                  <p className="text-sm text-white/70 max-w-2xl">
+                    Direct inzicht in resultaten per branche op basis van je meest actuele leads.
+                  </p>
+                </div>
+                <div className="inline-flex items-center gap-2 bg-white/10 border border-white/10 rounded-xl px-4 py-2 text-white">
+                  <span className="text-sm text-white/70">Actieve branches</span>
+                  <span className="text-lg font-semibold">{branchAnalytics.length}</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                {branchAnalytics.slice(0, 6).map((analytics, index) => (
+                  <motion.div
+                    key={analytics.branch}
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: 0.75 + index * 0.1 }}
+                    className="bg-white/5 border border-white/10 rounded-xl p-5"
+                  >
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                          <span>
+                            {analytics.branch === 'Thuisbatterijen' && '🔋'}
+                            {analytics.branch === 'Financial Lease' && '🚗'}
+                            {analytics.branch === 'Warmtepompen' && '🔥'}
+                            {analytics.branch === 'Zonnepanelen' && '☀️'}
+                            {analytics.branch === 'Airco' && '❄️'}
+                            {analytics.branch === 'Custom' && '🎯'}
+                            {analytics.branch === 'Unknown' && '❓'}
+                          </span>
+                          {analytics.branch}
+                        </h3>
+                        <p className="text-xs text-white/60 mt-1">Gem. leadwaarde €{Math.round(analytics.avgLeadValue || 0)}</p>
+                      </div>
+                      <span className="px-3 py-1 rounded-full text-xs font-semibold bg-green-500/20 text-green-200">
+                        {analytics.conversionRate.toFixed(1)}% conversie
+                      </span>
+                    </div>
+
+                    <div className="space-y-2 text-sm text-white/80">
+                      <div className="flex items-center justify-between">
+                        <span>Leads</span>
+                        <span className="font-semibold text-white">{analytics.totalLeads}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span>Omzet (geprognotiseerd)</span>
+                        <span className="font-semibold text-white">
+                          €{Math.round(analytics.revenue || 0).toLocaleString('nl-NL')}
+                        </span>
+                      </div>
+                      {typeof analytics.trends?.growth === 'number' && (
+                        <div className="flex items-center justify-between">
+                          <span>Groei</span>
+                          <span className={`font-semibold ${analytics.trends.growth >= 0 ? 'text-green-200' : 'text-red-200'}`}>
+                            {analytics.trends.growth >= 0 ? '▲' : '▼'} {Math.abs(analytics.trends.growth).toFixed(1)}%
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            </motion.div>
+          )}
+
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.7 }}
-            className="bg-gradient-to-r from-purple-600 to-blue-600 rounded-2xl p-6 mb-8 shadow-xl text-white"
+            transition={{ delay: 0.8 }}
+            className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 text-white border border-white/10"
           >
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 mb-6">
               <div>
-                <h2 className="text-2xl font-bold mb-2">🧠 Branch Intelligence Dashboard</h2>
-                <p className="text-white/80">AI-powered insights per branche - Better dan Salesforce!</p>
+                <h2 className="text-2xl font-bold flex items-center gap-2">
+                  <SparklesIcon className="w-6 h-6 text-yellow-200" />
+                  Slimme aanbevelingen
+                </h2>
+                <p className="text-sm text-white/70 max-w-3xl">
+                  Automatisch gegenereerde inzichten op basis van je actuele leads. Gebruik ze om campagnes en opvolging te verfijnen.
+                </p>
               </div>
-              <div className="text-right">
-                <div className="text-3xl font-bold">{branchAnalytics.length}</div>
-                <div className="text-white/80 text-sm">Actieve branches</div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-white/5 rounded-xl px-4 py-3 text-center">
+                  <p className="text-xs text-white/60">Totale omzetpotentie</p>
+                  <p className="text-lg font-semibold">
+                    €{Math.round(overallStats.revenue || 0).toLocaleString('nl-NL')}
+                  </p>
+                </div>
+                <div className="bg-white/5 rounded-xl px-4 py-3 text-center">
+                  <p className="text-xs text-white/60">Conversieratio</p>
+                  <p className="text-lg font-semibold">{overallStats.conversionRate.toFixed(1)}%</p>
+                </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {(branchAnalytics.length > 0 ? branchAnalytics.slice(0, 4) : [
-                { branch: 'Thuisbatterijen', totalLeads: 12, revenue: 54000, conversionRate: 28.5, avgLeadValue: 4500, trends: { growth: 15 }, topPerformingFactors: ['Zonnepanelen eigenaar', 'Dynamisch contract', 'Hoog verbruik'] },
-                { branch: 'Financial Lease', totalLeads: 8, revenue: 360000, conversionRate: 37.5, avgLeadValue: 45000, trends: { growth: 22 }, topPerformingFactors: ['Bedrijfsomvang 10+', 'Krediet score A', 'Lease expertise'] },
-                { branch: 'Warmtepompen', totalLeads: 15, revenue: 172500, conversionRate: 33.3, avgLeadValue: 11500, trends: { growth: 8 }, topPerformingFactors: ['Goede isolatie', 'CV vervangen', 'Energie besparing'] },
-                { branch: 'Zonnepanelen', totalLeads: 6, revenue: 48000, conversionRate: 25.0, avgLeadValue: 8000, trends: { growth: 5 }, topPerformingFactors: ['Dak geschikt', 'Minimaal schaduw', 'Stijgende energieprijzen'] }
-              ]).map((analytics, index) => (
-                <motion.div
-                  key={analytics.branch}
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: 0.8 + index * 0.1 }}
-                  className="bg-white/10 backdrop-blur-sm rounded-xl p-4 hover:bg-white/20 transition-all cursor-pointer"
-                >
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="font-semibold text-sm">
-                      {analytics.branch === 'Thuisbatterijen' && '🔋'}
-                      {analytics.branch === 'Financial Lease' && '🚗'}
-                      {analytics.branch === 'Warmtepompen' && '🔥'}
-                      {analytics.branch === 'Zonnepanelen' && '☀️'}
-                      {analytics.branch === 'Airco' && '❄️'}
-                      {analytics.branch === 'Custom' && '🎯'}
-                      {analytics.branch === 'Unknown' && '❓'}
-                      {' '}{analytics.branch}
-                    </h3>
-                    <span className="text-xs bg-white/20 px-2 py-1 rounded-full">
-                      {analytics.conversionRate.toFixed(1)}%
-                    </span>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-white/70">Leads:</span>
-                      <span className="font-semibold">{analytics.totalLeads}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-white/70">Revenue:</span>
-                      <span className="font-semibold">€{Math.round(analytics.revenue / 1000)}K</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-white/70">Growth:</span>
-                      <span className={`font-semibold ${analytics.trends.growth > 0 ? 'text-green-300' : analytics.trends.growth < 0 ? 'text-red-300' : 'text-white/70'}`}>
-                        {analytics.trends.growth > 0 ? '+' : ''}{analytics.trends.growth}%
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="bg-white/5 border border-white/10 rounded-xl p-5">
+                <h3 className="text-lg font-semibold mb-3">🎯 Beste presterende branches</h3>
+                <p className="text-sm text-white/70 mb-4">
+                  Richt je acquisitie eerst op deze branches. Hier liggen de grootste kansen.
+                </p>
+                <div className="space-y-3">
+                  {topConversionBranches.length === 0 && (
+                    <p className="text-sm text-white/60">Nog onvoldoende data voor aanbevelingen.</p>
+                  )}
+                  {topConversionBranches.map((branch) => (
+                    <div
+                      key={branch.branch}
+                      className="flex items-center justify-between bg-white/5 rounded-lg px-4 py-3"
+                    >
+                      <div>
+                        <p className="font-medium">{branch.branch}</p>
+                        <p className="text-xs text-white/60">
+                          Gem. waarde €{Math.round(branch.avgLeadValue || 0)}
+                        </p>
+                      </div>
+                      <span className="text-sm font-semibold text-green-200">
+                        {branch.conversionRate.toFixed(1)}%
                       </span>
                     </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-white/70">AVG Lead:</span>
-                      <span className="font-semibold">€{Math.round(analytics.avgLeadValue)}</span>
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
+                  ))}
+                </div>
+              </div>
 
-            {/* Top Performing Factors */}
-            <div className="mt-6 pt-6 border-t border-white/20">
-              <h3 className="text-lg font-semibold mb-4">🎯 Top Performing Factors</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {branchAnalytics.map((analytics, index) => (
-                  <div key={analytics.branch} className="bg-white/5 rounded-lg p-4">
-                    <h4 className="font-semibold text-sm mb-2">
-                      {analytics.branch === 'Thuisbatterijen' && '🔋'}
-                      {analytics.branch === 'Financial Lease' && '🚗'}
-                      {analytics.branch === 'Warmtepompen' && '🔥'}
-                      {analytics.branch === 'Zonnepanelen' && '☀️'}
-                      {analytics.branch === 'Airco' && '❄️'}
-                      {analytics.branch === 'Custom' && '🎯'}
-                      {analytics.branch === 'Unknown' && '❓'}
-                      {' '}{analytics.branch}
-                    </h4>
-                    <div className="text-xs text-white/70">
-                      {analytics.topPerformingFactors.slice(0, 3).map((factor, i) => (
-                        <div key={i} className="py-1">• {factor}</div>
-                      ))}
+              <div className="bg-white/5 border border-white/10 rounded-xl p-5">
+                <h3 className="text-lg font-semibold mb-3">✨ Groei kansen</h3>
+                <p className="text-sm text-white/70 mb-4">
+                  Branches met momentum. Ideaal om campagnes op te schalen.
+                </p>
+                <div className="space-y-3">
+                  {growthOpportunities.length === 0 && (
+                    <p className="text-sm text-white/60">Nog onvoldoende data voor groei-inschatting.</p>
+                  )}
+                  {growthOpportunities.map((branch) => (
+                    <div
+                      key={`${branch.branch}-growth`}
+                      className="flex items-center justify-between bg-white/5 rounded-lg px-4 py-3"
+                    >
+                      <div>
+                        <p className="font-medium">{branch.branch}</p>
+                        <p className="text-xs text-white/60">
+                          Conversie {branch.conversionRate.toFixed(1)}%
+                        </p>
+                      </div>
+                      <span className="text-sm font-semibold text-purple-200">
+                        +{Math.round(branch.trends?.growth || 0)}%
+                      </span>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             </div>
           </motion.div>
-        )}
 
-          {/* Leads Table */}
+          {(customerData?.email || user?.email) && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.85 }}
+            >
+              <WhatsAppAnalytics customerId={customerData?.email || user?.email || ''} />
+            </motion.div>
+          )}
+        </div>
+
+        {/* Leads Table */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -3271,6 +3477,72 @@ export default function CustomerLeadsPage() {
                 <div className="space-y-6">
                   <div className="border-b border-gray-200 pb-4">
                     <h4 className="text-lg font-semibold text-gray-900 mb-2 flex items-center space-x-2">
+                      <LinkIcon className="w-5 h-5 text-brand-purple" />
+                      <span>Google Sheets integratie</span>
+                    </h4>
+                    <p className="text-sm text-gray-600 mb-4">
+                      Het leadportaal leest realtime uit jouw Google Sheet. Pas de koppeling aan of open de spreadsheet direct.
+                    </p>
+
+                    <div className="space-y-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-3 space-y-3 sm:space-y-0">
+                        <input
+                          type="url"
+                          value={googleSheetUrlInput}
+                          onChange={(e) => setGoogleSheetUrlInput(e.target.value)}
+                          placeholder="https://docs.google.com/spreadsheets/d/..."
+                          className="flex-1 w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-purple focus:border-brand-purple text-sm"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleSaveGoogleSheetUrl}
+                          disabled={isSavingSheet || !googleSheetUrlInput.trim()}
+                          className={`px-5 py-3 rounded-xl font-semibold transition-colors w-full sm:w-auto ${
+                            isSavingSheet || !googleSheetUrlInput.trim()
+                              ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                              : 'bg-gradient-to-r from-brand-purple to-brand-pink text-white hover:opacity-90'
+                          }`}
+                        >
+                          {isSavingSheet ? 'Opslaan…' : 'Opslaan'}
+                        </button>
+                      </div>
+
+                      {customerData?.googleSheetUrl ? (
+                        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-sm text-gray-700 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                          <div>
+                            <p className="font-medium text-gray-900">Gekoppelde spreadsheet</p>
+                            <p className="text-gray-600 break-all">{customerData.googleSheetUrl}</p>
+                          </div>
+                          <div className="flex flex-col sm:flex-row gap-2">
+                            <button
+                              type="button"
+                              onClick={() => window.open(customerData.googleSheetUrl!, '_blank', 'noopener')}
+                              className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100"
+                            >
+                              <ArrowTopRightOnSquareIcon className="w-4 h-4" />
+                              Open sheet
+                            </button>
+                            <button
+                              type="button"
+                              onClick={syncWithGoogleSheets}
+                              className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-white text-brand-purple border border-brand-purple/30 hover:bg-purple-50"
+                            >
+                              <DocumentTextIcon className="w-4 h-4" />
+                              Forceer sync
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-700">
+                          <p className="font-medium">Nog geen spreadsheet gekoppeld</p>
+                          <p>Koppel jouw Google Sheet om leads realtime in te laden. Kom je er niet uit? Stuur ons even een bericht.</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="border-b border-gray-200 pb-4">
+                    <h4 className="text-lg font-semibold text-gray-900 mb-2 flex items-center space-x-2">
                       <BellIcon className="w-5 h-5 text-brand-purple" />
                       <span>Email notificaties</span>
                     </h4>
@@ -3279,7 +3551,6 @@ export default function CustomerLeadsPage() {
                     </p>
 
                     <div className="space-y-4">
-                      {/* Enable/Disable Email Notifications */}
                       <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
                         <div className="flex-1">
                           <label htmlFor="email-notifications-enabled" className="font-medium text-gray-900 cursor-pointer">
@@ -3306,7 +3577,6 @@ export default function CustomerLeadsPage() {
                         </div>
                       </div>
 
-                      {/* New Leads Notification */}
                       {emailNotifications.enabled && (
                         <div className="flex items-center justify-between p-4 bg-blue-50 rounded-xl border border-blue-200">
                           <div className="flex-1">
@@ -3335,7 +3605,6 @@ export default function CustomerLeadsPage() {
                         </div>
                       )}
 
-                      {/* Info Box */}
                       {emailNotifications.enabled && (
                         <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
                           <div className="flex items-start space-x-3">
@@ -3352,129 +3621,176 @@ export default function CustomerLeadsPage() {
                     </div>
                   </div>
 
-                  {/* Debug Console Section */}
-                  {debugLogs.length > 0 && (
-                    <div className="border-b border-gray-200 pb-4">
-                      <div 
-                        onClick={() => setShowDebugPanel(!showDebugPanel)}
-                        className="cursor-pointer"
-                      >
-                        <h4 className="text-lg font-semibold text-gray-900 mb-2 flex items-center space-x-2">
-                          <span className="text-xl">🐛</span>
-                          <span>Debug console</span>
-                          <span className={`text-xs px-2 py-0.5 rounded-full ${
-                            debugLogs.some(l => l.level === 'error') ? 'bg-red-100 text-red-700' :
-                            debugLogs.some(l => l.level === 'warning') ? 'bg-yellow-100 text-yellow-700' :
-                            'bg-blue-100 text-blue-700'
-                          }`}>
-                            {debugLogs.length} logs
-                          </span>
-                          <motion.svg 
-                            animate={{ rotate: showDebugPanel ? 180 : 0 }}
-                            className="w-4 h-4 text-gray-400"
-                            fill="none" 
-                            viewBox="0 0 24 24" 
-                            stroke="currentColor"
-                          >
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                          </motion.svg>
-                        </h4>
-                        <p className="text-sm text-gray-600 mb-3">
-                          Technische logs voor troubleshooting bij problemen met het laden van leads
-                        </p>
-                      </div>
-
-                      <AnimatePresence>
-                        {showDebugPanel && (
-                          <motion.div
-                            initial={{ height: 0, opacity: 0 }}
-                            animate={{ height: 'auto', opacity: 1 }}
-                            exit={{ height: 0, opacity: 0 }}
-                            className="space-y-2"
-                          >
-                            <div className="flex gap-2 mb-3">
-                              <button
-                                onClick={() => {
-                                  const logText = debugLogs.map(log => 
-                                    `[${log.timestamp}] ${log.level.toUpperCase()}: ${log.message}\n${log.data ? JSON.stringify(log.data, null, 2) : ''}`
-                                  ).join('\n\n');
-                                  navigator.clipboard.writeText(logText);
-                                  alert('Logs gekopieerd!');
-                                }}
-                                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-medium transition-colors"
-                              >
-                                📋 Kopieer logs
-                              </button>
-                              <button
-                                onClick={() => setDebugLogs([])}
-                                className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-medium transition-colors"
-                              >
-                                🗑️ Wis logs
-                              </button>
-                              <button
-                                onClick={() => loadCustomerData()}
-                                className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-medium transition-colors"
-                              >
-                                🔄 Herlaad
-                              </button>
-                            </div>
-                            <div className="bg-gray-50 rounded-lg p-3 max-h-64 overflow-y-auto space-y-1.5 border border-gray-200">
-                              {debugLogs.map((log, index) => (
-                                <div 
-                                  key={index} 
-                                  className={`p-2 rounded text-xs ${
-                                    log.level === 'success' ? 'bg-green-50 border border-green-200 text-green-800' :
-                                    log.level === 'error' ? 'bg-red-50 border border-red-200 text-red-800' :
-                                    log.level === 'warning' ? 'bg-yellow-50 border border-yellow-200 text-yellow-800' :
-                                    'bg-blue-50 border border-blue-200 text-blue-800'
-                                  }`}
-                                >
-                                  <div className="flex items-start gap-2">
-                                    <span className="text-sm flex-shrink-0">
-                                      {log.level === 'success' ? '✅' : log.level === 'error' ? '❌' : log.level === 'warning' ? '⚠️' : 'ℹ️'}
-                                    </span>
-                                    <div className="flex-1 min-w-0">
-                                      <div className="font-mono text-[10px] text-gray-500 mb-0.5">{log.timestamp}</div>
-                                      <div className="font-medium">{log.message}</div>
-                                      {log.data && (
-                                        <details className="mt-1">
-                                          <summary className="text-[10px] text-gray-600 cursor-pointer hover:text-gray-800">Bekijk data</summary>
-                                          <pre className="text-[10px] mt-1 p-2 bg-black/5 rounded overflow-x-auto">
-                                            {JSON.stringify(log.data, null, 2)}
-                                          </pre>
-                                        </details>
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </div>
-                  )}
-
-                  {/* Save Button */}
-                  <div className="flex justify-end space-x-3">
+                  <div className="border-b border-gray-200 pb-4">
+                    <h4 className="text-lg font-semibold text-gray-900 mb-2 flex items-center space-x-2">
+                      <DocumentArrowDownIcon className="w-5 h-5 text-brand-purple" />
+                      <span>Data export</span>
+                    </h4>
+                    <p className="text-sm text-gray-600 mb-4">
+                      Download een JSON-export van alle leads inclusief metadata voor eigen analyses of back-ups.
+                    </p>
                     <button
                       type="button"
-                      onClick={() => setShowSettings(false)}
-                      className="px-6 py-2.5 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 font-medium transition-colors"
+                      onClick={handleExportData}
+                      disabled={isExporting}
+                      className={`w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl font-semibold transition-colors ${
+                        isExporting
+                          ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                          : 'bg-white text-brand-purple border border-brand-purple/40 hover:bg-purple-50'
+                      }`}
                     >
-                      Annuleren
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        handleSaveEmailNotifications();
-                        setShowSettings(false);
-                      }}
-                      className="px-6 py-2.5 bg-gradient-to-r from-brand-purple to-brand-pink text-white rounded-xl hover:opacity-90 font-semibold transition-opacity"
-                    >
-                      Instellingen opslaan
+                      <DocumentArrowDownIcon className="w-5 h-5" />
+                      {isExporting ? 'Export voorbereiden…' : 'Download export'}
                     </button>
                   </div>
+
+                  <div>
+                    <h4 className="text-lg font-semibold text-gray-900 mb-2 flex items-center space-x-2">
+                      <ChatBubbleLeftRightIcon className="w-5 h-5 text-brand-purple" />
+                      <span>WhatsApp automatisering</span>
+                    </h4>
+                    <p className="text-sm text-gray-600 mb-4">
+                      Activeer automatische WhatsApp opvolging voor nieuwe leads of configureer je eigen bedrijfsnummer.
+                    </p>
+                    <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                      <div>
+                        <p className="font-medium text-gray-900">WhatsApp Business API</p>
+                        <p className="text-sm text-gray-600">Verhoog de opvolgsnelheid met directe WhatsApp-berichten.</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowWhatsAppSettings(true)}
+                        className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-green-500 to-emerald-500 text-white font-semibold hover:opacity-90"
+                      >
+                        <ChatBubbleLeftRightIcon className="w-5 h-5" />
+                        Open configuratie
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Debug Console Section */}
+                {debugLogs.length > 0 && (
+                  <div className="border-b border-gray-200 pb-4">
+                    <div 
+                      onClick={() => setShowDebugPanel(!showDebugPanel)}
+                      className="cursor-pointer"
+                    >
+                      <h4 className="text-lg font-semibold text-gray-900 mb-2 flex items-center space-x-2">
+                        <span className="text-xl">🐛</span>
+                        <span>Debug console</span>
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${
+                          debugLogs.some(l => l.level === 'error') ? 'bg-red-100 text-red-700' :
+                          debugLogs.some(l => l.level === 'warning') ? 'bg-yellow-100 text-yellow-700' :
+                          'bg-blue-100 text-blue-700'
+                        }`}>
+                          {debugLogs.length} logs
+                        </span>
+                        <motion.svg 
+                          animate={{ rotate: showDebugPanel ? 180 : 0 }}
+                          className="w-4 h-4 text-gray-400"
+                          fill="none" 
+                          viewBox="0 0 24 24" 
+                          stroke="currentColor"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </motion.svg>
+                      </h4>
+                      <p className="text-sm text-gray-600 mb-3">
+                        Technische logs voor troubleshooting bij problemen met het laden van leads
+                      </p>
+                    </div>
+
+                    <AnimatePresence>
+                      {showDebugPanel && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          className="space-y-2"
+                        >
+                          <div className="flex gap-2 mb-3">
+                            <button
+                              onClick={() => {
+                                const logText = debugLogs.map(log => 
+                                  `[${log.timestamp}] ${log.level.toUpperCase()}: ${log.message}\n${log.data ? JSON.stringify(log.data, null, 2) : ''}`
+                                ).join('\n\n');
+                                navigator.clipboard.writeText(logText);
+                                alert('Logs gekopieerd!');
+                              }}
+                              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-medium transition-colors"
+                            >
+                              📋 Kopieer logs
+                            </button>
+                            <button
+                              onClick={() => setDebugLogs([])}
+                              className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-medium transition-colors"
+                            >
+                              🗑️ Wis logs
+                            </button>
+                            <button
+                              onClick={() => loadCustomerData()}
+                              className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-medium transition-colors"
+                            >
+                              🔄 Herlaad
+                            </button>
+                          </div>
+                          <div className="bg-gray-50 rounded-lg p-3 max-h-64 overflow-y-auto space-y-1.5 border border-gray-200">
+                            {debugLogs.map((log, index) => (
+                              <div 
+                                key={index} 
+                                className={`p-2 rounded text-xs ${
+                                  log.level === 'success' ? 'bg-green-50 border border-green-200 text-green-800' :
+                                  log.level === 'error' ? 'bg-red-50 border border-red-200 text-red-800' :
+                                  log.level === 'warning' ? 'bg-yellow-50 border border-yellow-200 text-yellow-800' :
+                                  'bg-blue-50 border border-blue-200 text-blue-800'
+                                }`}
+                              >
+                                <div className="flex items-start gap-2">
+                                  <span className="text-sm flex-shrink-0">
+                                    {log.level === 'success' ? '✅' : log.level === 'error' ? '❌' : log.level === 'warning' ? '⚠️' : 'ℹ️'}
+                                  </span>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="font-mono text-[10px] text-gray-500 mb-0.5">{log.timestamp}</div>
+                                    <div className="font-medium">{log.message}</div>
+                                    {log.data && (
+                                      <details className="mt-1">
+                                        <summary className="text-[10px] text-gray-600 cursor-pointer hover:text-gray-800">Bekijk data</summary>
+                                        <pre className="text-[10px] mt-1 p-2 bg-black/5 rounded overflow-x-auto">
+                                          {JSON.stringify(log.data, null, 2)}
+                                        </pre>
+                                      </details>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                )}
+
+                {/* Save Button */}
+                <div className="flex justify-end space-x-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowSettings(false)}
+                    className="px-6 py-2.5 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 font-medium transition-colors"
+                  >
+                    Annuleren
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleSaveEmailNotifications();
+                      setShowSettings(false);
+                    }}
+                    className="px-6 py-2.5 bg-gradient-to-r from-brand-purple to-brand-pink text-white rounded-xl hover:opacity-90 font-semibold transition-opacity"
+                  >
+                    Instellingen opslaan
+                  </button>
                 </div>
               </div>
             </motion.div>
@@ -3569,6 +3885,12 @@ export default function CustomerLeadsPage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <WhatsAppSettings
+        customerId={customerData?.email || user?.email || ''}
+        isOpen={showWhatsAppSettings}
+        onClose={() => setShowWhatsAppSettings(false)}
+      />
     </div>
   );
 }
