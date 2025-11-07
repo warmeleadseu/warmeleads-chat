@@ -287,8 +287,6 @@ export default function CustomerLeadsPage() {
         
         if (!hasValidAuth) {
           router.replace('/');
-        } else {
-          loadCustomerData();
         }
       } catch (error) {
         router.replace('/');
