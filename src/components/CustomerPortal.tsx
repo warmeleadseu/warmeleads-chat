@@ -494,6 +494,116 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
   const branchKey = derivedBranchName.toLowerCase();
   const insightCopy = Object.entries(branchInsightMessages).find(([key]) => branchKey.includes(key))?.[1] || 'Gebruik het leadportaal om je nieuwste leads binnen 15 minuten op te volgen voor maximale conversie.';
 
+  const leadHealth = useMemo(() => {
+    const leads = (customerData?.leadData || []).map(lead => {
+      const toDate = (value: any) => {
+        if (!value) return null;
+        if (value instanceof Date) return Number.isFinite(value.getTime()) ? value : null;
+        const parsed = new Date(value);
+        return Number.isFinite(parsed.getTime()) ? parsed : null;
+      };
+
+      return {
+        ...lead,
+        createdAt: toDate(lead.createdAt),
+        updatedAt: toDate(lead.updatedAt || lead.createdAt),
+        status: (lead.status || 'new').toLowerCase()
+      };
+    });
+
+    if (leads.length === 0) {
+      return {
+        total: 0,
+        newThisWeek: 0,
+        stale: 0,
+        hot: 0,
+        closed: 0,
+        followUpRate: 0,
+        stageBreakdown: [] as { status: string; count: number; percentage: number }[],
+        actions: [
+          {
+            type: 'order',
+            title: 'Nog geen leads actief',
+            description: 'Plaats een bestelling of koppel je sheet om direct met verse leads aan de slag te gaan.'
+          }
+        ]
+      };
+    }
+
+    const now = new Date();
+    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const fortyEightHoursAgo = new Date(now.getTime() - 48 * 60 * 60 * 1000);
+
+    const newThisWeek = leads.filter(lead => lead.createdAt && lead.createdAt >= weekAgo).length;
+    const stale = leads.filter(lead => ['new', 'contacted', 'qualified'].includes(lead.status) && (!lead.updatedAt || lead.updatedAt < fortyEightHoursAgo)).length;
+    const hot = leads.filter(lead => ['qualified', 'proposal', 'negotiation'].includes(lead.status)).length;
+    const closed = leads.filter(lead => lead.status === 'deal_closed').length;
+    const followUpRate = leads.length > 0 ? Math.max(0, Math.min(100, ((leads.length - stale) / leads.length) * 100)) : 0;
+
+    const stageCounts: Record<string, number> = {};
+    leads.forEach(lead => {
+      const status = lead.status || 'new';
+      stageCounts[status] = (stageCounts[status] || 0) + 1;
+    });
+
+    const stageLabels: Record<string, string> = {
+      new: 'Nieuw',
+      contacted: 'Gecontacteerd',
+      qualified: 'Gekwalificeerd',
+      proposal: 'Offerte',
+      negotiation: 'Onderhandeling',
+      converted: 'Geconverteerd',
+      deal_closed: 'Deal gesloten',
+      lost: 'Verloren'
+    };
+
+    const stageBreakdown = Object.entries(stageCounts)
+      .map(([status, count]) => ({
+        status: stageLabels[status] || status,
+        count,
+        percentage: Math.round((count / leads.length) * 100)
+      }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 4);
+
+    const actions: { type: string; title: string; description: string }[] = [];
+
+    if (stale > 0) {
+      actions.push({
+        type: 'follow-up',
+        title: `${stale} leads wachten op opvolging`,
+        description: 'Plan een belmoment of stuur een WhatsApp zodat je top-of-mind blijft.'
+      });
+    }
+
+    if (hot > 0) {
+      actions.push({
+        type: 'hot',
+        title: `${hot} hot leads staan klaar in de funnel`,
+        description: 'Zorg voor een scherpe aanbieding om ze vandaag nog binnen te halen.'
+      });
+    }
+
+    if (newThisWeek > 0) {
+      actions.push({
+        type: 'new',
+        title: `${newThisWeek} nieuwe leads deze week`,
+        description: 'Neem binnen 15 minuten contact op voor de hoogste conversie.'
+      });
+    }
+
+    return {
+      total: leads.length,
+      newThisWeek,
+      stale,
+      hot,
+      closed,
+      followUpRate,
+      stageBreakdown,
+      actions
+    };
+  }, [customerData?.leadData]);
+
   useEffect(() => {
     if (!customerData) return;
     if (typeof customerData.portalLeadGoal === 'number' && customerData.portalLeadGoal > 0) {
@@ -506,6 +616,24 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
 
   const safeGoalTarget = Math.max(growthGoal || 0, 1);
   const goalProgress = totalLeads > 0 ? Math.min((totalLeads / safeGoalTarget) * 100, 999) : 0;
+
+  const handleLeadHealthAction = (type: string) => {
+    if (type === 'follow-up') {
+      router.push('/portal/leads?focus=follow-up');
+      return;
+    }
+    if (type === 'new') {
+      router.push('/portal/leads?sort=recent');
+      return;
+    }
+    if (type === 'hot') {
+      router.push('/portal/leads?filter=hot');
+      return;
+    }
+    if (type === 'order') {
+      setShowCheckoutModal(true);
+    }
+  };
 
   const handleSaveGoal = async (newGoal: number, frequency: 'maand' | 'kwartaal') => {
     if (!user?.email) return;
@@ -841,6 +969,141 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Lead health */}
+        <motion.section
+          className="grid gap-4 md:grid-cols-[1.2fr_1fr]"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.08 }}
+        >
+          <div className="rounded-3xl border border-white/15 bg-white/10 p-6 md:p-7 shadow-[0_40px_80px_-55px_rgba(18,8,44,0.85)] backdrop-blur-xl">
+            <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="text-xs uppercase tracking-[0.3em] text-white/50">Lead health</p>
+                <h3 className="mt-2 text-xl font-semibold text-white">Pipeline overzicht</h3>
+                <p className="text-sm text-white/60">Zie waar je leads zich bevinden en wie prioriteit heeft voor opvolging.</p>
+              </div>
+              <div className="relative flex h-24 w-24 items-center justify-center">
+                <svg className="h-24 w-24 -rotate-90" viewBox="0 0 36 36">
+                  <path
+                    className="text-white/15"
+                    strokeWidth="4"
+                    stroke="currentColor"
+                    fill="transparent"
+                    strokeDasharray="100"
+                    strokeDashoffset="0"
+                    d="M18 2.0845
+                    a 15.9155 15.9155 0 0 1 0 31.831
+                    a 15.9155 15.9155 0 0 1 0 -31.831"
+                  />
+                  <path
+                    className={leadHealth.followUpRate > 70 ? 'text-emerald-300' : leadHealth.followUpRate > 40 ? 'text-amber-300' : 'text-red-300'}
+                    strokeWidth="4.5"
+                    strokeLinecap="round"
+                    stroke="currentColor"
+                    fill="transparent"
+                    strokeDasharray="100"
+                    strokeDashoffset={`${100 - Math.min(leadHealth.followUpRate, 100)}`}
+                    d="M18 2.0845
+                    a 15.9155 15.9155 0 0 1 0 31.831
+                    a 15.9155 15.9155 0 0 1 0 -31.831"
+                  />
+                </svg>
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-white">
+                  <span className="text-lg font-semibold">{leadHealth.followUpRate.toFixed(0)}%</span>
+                  <span className="text-[11px] text-white/60">opvolging</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <p className="text-xs text-white/45">Nieuwe leads (7d)</p>
+                <p className="mt-1 text-2xl font-semibold text-white">{leadHealth.newThisWeek}</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <p className="text-xs text-white/45">Wachten op opvolging</p>
+                <p className="mt-1 text-2xl font-semibold text-amber-200">{leadHealth.stale}</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <p className="text-xs text-white/45">Hot in funnel</p>
+                <p className="mt-1 text-2xl font-semibold text-pink-200">{leadHealth.hot}</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <p className="text-xs text-white/45">Deals gesloten</p>
+                <p className="mt-1 text-2xl font-semibold text-emerald-200">{leadHealth.closed}</p>
+              </div>
+            </div>
+
+            {leadHealth.stageBreakdown.length > 0 && (
+              <div className="mt-6">
+                <p className="text-xs uppercase tracking-[0.3em] text-white/40">Segmenten</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {leadHealth.stageBreakdown.map(segment => (
+                    <span
+                      key={segment.status}
+                      className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-medium text-white/80"
+                    >
+                      {segment.status} • {segment.count} ({segment.percentage}%)
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="mt-6 flex flex-wrap gap-3">
+              <button
+                onClick={() => handleQuickAction('leads')}
+                className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-medium text-white/80 hover:text-white"
+              >
+                <ChartBarIcon className="w-4 h-4" />
+                Open leadportaal
+              </button>
+              {leadHealth.stale > 0 && (
+                <button
+                  onClick={() => handleLeadHealthAction('follow-up')}
+                  className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-orange-500/30"
+                >
+                  Follow-up inplannen
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-3xl border border-white/15 bg-white/8 p-6 shadow-[0_35px_72px_-55px_rgba(15,8,40,0.85)] backdrop-blur-xl">
+            <p className="text-xs uppercase tracking-[0.3em] text-white/40">Aanbevolen acties</p>
+            <div className="mt-4 space-y-4">
+              {leadHealth.actions.length > 0 ? (
+                leadHealth.actions.map((item, index) => (
+                  <div
+                    key={`${item.type}-${index}`}
+                    className="rounded-2xl border border-white/10 bg-white/5 p-4"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-white">{item.title}</p>
+                        <p className="mt-1 text-xs text-white/60">{item.description}</p>
+                      </div>
+                      <button
+                        onClick={() => handleLeadHealthAction(item.type)}
+                        className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[11px] font-medium text-white/70 hover:text-white"
+                      >
+                        Actie
+                      </button>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <p className="text-sm font-semibold text-white">Je pipeline is volledig up-to-date</p>
+                  <p className="mt-1 text-xs text-white/60">Mooi werk! Blijf leads toevoegen of bestel een extra batch om het momentum vast te houden.</p>
+                </div>
+              )}
+            </div>
+            <p className="mt-4 text-[11px] text-white/40">Lead health wordt realtime bijgewerkt wanneer je statusaanpassingen doet in het leadportaal.</p>
+          </div>
+        </motion.section>
 
         {/* Quick actions */}
         <motion.section
