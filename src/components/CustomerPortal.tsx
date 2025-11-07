@@ -144,6 +144,7 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
   const [goalModalOpen, setGoalModalOpen] = useState(false);
   const [growthGoal, setGrowthGoal] = useState<number>(500);
   const [goalFrequency, setGoalFrequency] = useState<'maand' | 'kwartaal'>('maand');
+  const [savingGoal, setSavingGoal] = useState(false);
   const { user, isAuthenticated, logout } = useAuthStore();
   const router = useRouter();
   const searchParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
@@ -159,19 +160,22 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
     });
   }, [user, isAuthenticated]);
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    try {
-      const stored = window.localStorage.getItem('warmeleads-portal-goal');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (parsed?.growthGoal) setGrowthGoal(Number(parsed.growthGoal) || 500);
-        if (parsed?.goalFrequency) setGoalFrequency(parsed.goalFrequency === 'kwartaal' ? 'kwartaal' : 'maand');
-      }
-    } catch (error) {
-      console.warn('⚠️ Could not parse stored goal', error);
-    }
-  }, []);
+  const normalizeCustomerGoalData = (customer: any): Customer | null => {
+    if (!customer) return null;
+    const parsedGoal = typeof customer.portalLeadGoal === 'number'
+      ? customer.portalLeadGoal
+      : Number(customer.portalLeadGoal) || 500;
+    const parsedFrequency = customer.portalGoalFrequency === 'kwartaal' ? 'kwartaal' : 'maand';
+
+    return {
+      ...customer,
+      portalLeadGoal: parsedGoal,
+      portalGoalFrequency: parsedFrequency,
+      portalGoalUpdatedAt: customer.portalGoalUpdatedAt
+        ? new Date(customer.portalGoalUpdatedAt)
+        : customer.portalGoalUpdatedAt,
+    };
+  };
 
   // Track when logout function is called
   useEffect(() => {
@@ -268,7 +272,7 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
             console.log('🔄 CustomerPortal: No leads found but sheet is linked - doing initial sync...');
             await syncWithGoogleSheetsInBackground(customer, user.email);
           } else {
-            setCustomerData(customer);
+            setCustomerData(normalizeCustomerGoalData(customer));
             
             // Background sync with Google Sheets if sheet is linked (non-blocking)
             if (customer?.googleSheetUrl) {
@@ -280,7 +284,7 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
           // Fallback to crmSystem
           console.log('ℹ️ CustomerPortal: API failed, falling back to crmSystem');
           const customer = await crmSystem.getCustomerById(user.email);
-          setCustomerData(customer || null);
+          setCustomerData(normalizeCustomerGoalData(customer));
           
           // If customer has sheet but no leads, sync immediately
           if (customer?.googleSheetUrl && (!customer?.leadData || customer.leadData.length === 0)) {
@@ -292,7 +296,7 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
         console.error('❌ CustomerPortal: Error loading data:', error);
         // Fallback to crmSystem
         const customer = await crmSystem.getCustomerById(user.email);
-        setCustomerData(customer || null);
+        setCustomerData(normalizeCustomerGoalData(customer));
       } finally {
         setLoadingCustomerData(false);
       }
@@ -310,10 +314,15 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
       
       console.log(`📊 Loaded ${freshLeads.length} leads DIRECTLY from Google Sheets (real-time)`);
       
+      const normalizedCustomer = normalizeCustomerGoalData(customer);
+      if (!normalizedCustomer) {
+        return;
+      }
+
       // Update customer data with fresh leads from sheet
       // NO writing to Supabase - sheet is the single source of truth!
       const updatedCustomer = {
-        ...customer,
+        ...normalizedCustomer,
         leadData: freshLeads
       };
       
@@ -324,10 +333,13 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
     } catch (syncError) {
       console.error('❌ CustomerPortal: Failed to read Google Sheets:', syncError);
       // Set customer data without leads if sheet read fails
-      setCustomerData({
-        ...customer,
-        leadData: []
-      });
+      const normalizedCustomer = normalizeCustomerGoalData(customer);
+      if (normalizedCustomer) {
+        setCustomerData({
+          ...normalizedCustomer,
+          leadData: []
+        });
+      }
     }
   };
   
@@ -482,15 +494,60 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
   const branchKey = derivedBranchName.toLowerCase();
   const insightCopy = Object.entries(branchInsightMessages).find(([key]) => branchKey.includes(key))?.[1] || 'Gebruik het leadportaal om je nieuwste leads binnen 15 minuten op te volgen voor maximale conversie.';
 
-  const goalProgress = totalLeads > 0 ? Math.min((totalLeads / growthGoal) * 100, 999) : 0;
-
-  const handleSaveGoal = (newGoal: number, frequency: 'maand' | 'kwartaal') => {
-    setGrowthGoal(newGoal);
-    setGoalFrequency(frequency);
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem('warmeleads-portal-goal', JSON.stringify({ growthGoal: newGoal, goalFrequency: frequency }));
+  useEffect(() => {
+    if (!customerData) return;
+    if (typeof customerData.portalLeadGoal === 'number' && customerData.portalLeadGoal > 0) {
+      setGrowthGoal(customerData.portalLeadGoal);
     }
-    setGoalModalOpen(false);
+    if (customerData.portalGoalFrequency) {
+      setGoalFrequency(customerData.portalGoalFrequency === 'kwartaal' ? 'kwartaal' : 'maand');
+    }
+  }, [customerData?.portalLeadGoal, customerData?.portalGoalFrequency]);
+
+  const safeGoalTarget = Math.max(growthGoal || 0, 1);
+  const goalProgress = totalLeads > 0 ? Math.min((totalLeads / safeGoalTarget) * 100, 999) : 0;
+
+  const handleSaveGoal = async (newGoal: number, frequency: 'maand' | 'kwartaal') => {
+    if (!user?.email) return;
+    setSavingGoal(true);
+
+    try {
+      const response = await authenticatedFetch('/api/customer-goal', {
+        method: 'POST',
+        body: JSON.stringify({
+          customerId: user.email,
+          leadGoal: newGoal,
+          goalFrequency: frequency,
+        }),
+      });
+
+      if (!response.ok) {
+        console.error('❌ Opslaan portal-doel mislukt:', await response.text());
+        return;
+      }
+
+      const data = await response.json();
+      const updatedGoal = Number(data.leadGoal) || newGoal;
+      const updatedFrequency = data.goalFrequency === 'kwartaal' ? 'kwartaal' : 'maand';
+      const updatedAt = data.goalUpdatedAt ? new Date(data.goalUpdatedAt) : new Date();
+
+      setGrowthGoal(updatedGoal);
+      setGoalFrequency(updatedFrequency);
+      setCustomerData(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          portalLeadGoal: updatedGoal,
+          portalGoalFrequency: updatedFrequency,
+          portalGoalUpdatedAt: updatedAt,
+        };
+      });
+      setGoalModalOpen(false);
+    } catch (error) {
+      console.error('❌ Unexpected error bij opslaan doel:', error);
+    } finally {
+      setSavingGoal(false);
+    }
   };
 
   return (
@@ -579,6 +636,9 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
                     <p className="text-xs text-white/50">Doelstelling ({goalFrequency === 'maand' ? 'maandelijks' : 'per kwartaal'})</p>
                     <p className="text-lg font-semibold text-white">{totalLeads}/{growthGoal} leads</p>
                     <p className="text-xs text-white/60">{goalProgress.toFixed(1)}% behaald</p>
+                    {customerData?.portalGoalUpdatedAt && (
+                      <p className="text-[11px] text-white/40">Laatste update {new Date(customerData.portalGoalUpdatedAt).toLocaleString('nl-NL')}</p>
+                    )}
                   </div>
                   <div className="flex items-center gap-3">
                     <div className="relative h-12 w-12">
@@ -771,9 +831,10 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
                   </button>
                   <button
                     onClick={() => handleSaveGoal(growthGoal, goalFrequency)}
-                    className="rounded-xl bg-gradient-to-r from-brand-pink to-brand-purple px-4 py-2 text-sm font-semibold text-white"
+                    className={`rounded-xl bg-gradient-to-r from-brand-pink to-brand-purple px-4 py-2 text-sm font-semibold text-white ${savingGoal ? 'opacity-70 cursor-not-allowed' : ''}`}
+                    disabled={savingGoal}
                   >
-                    Opslaan
+                    {savingGoal ? 'Opslaan...' : 'Opslaan'}
                   </button>
                 </div>
               </motion.div>

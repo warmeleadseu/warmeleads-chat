@@ -46,6 +46,9 @@ export interface Customer {
   };
   branch_id?: string; // Branch Configuration System
   branch_config_version?: number;
+  portalLeadGoal?: number;
+  portalGoalFrequency?: 'maand' | 'kwartaal' | string | null;
+  portalGoalUpdatedAt?: Date;
 }
 
 export interface Order {
@@ -149,6 +152,9 @@ function transformSupabaseCustomer(data: any): Customer {
     googleSheetUrl: data.google_sheet_url,
     branch_id: data.branch_id,
     branch_config_version: data.branch_config_version,
+    portalLeadGoal: data.portal_lead_goal ?? undefined,
+    portalGoalFrequency: data.portal_goal_frequency ?? null,
+    portalGoalUpdatedAt: data.portal_goal_updated_at ? new Date(data.portal_goal_updated_at) : undefined,
     emailNotifications: {
       enabled: data.email_notifications_enabled,
       newLeads: data.email_notifications_new_leads,

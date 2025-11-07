@@ -83,6 +83,9 @@ export const GET = withAuth(async (request: NextRequest, user: AuthenticatedUser
           newLeads: customer.email_notifications_new_leads,
           lastNotificationSent: customer.last_notification_sent,
         },
+        portalLeadGoal: customer.portal_lead_goal ?? 500,
+        portalGoalFrequency: customer.portal_goal_frequency || 'maand',
+        portalGoalUpdatedAt: customer.portal_goal_updated_at,
         createdAt: customer.created_at,
         lastActivity: customer.last_activity,
         chatHistory: customer.chat_messages || [],
@@ -172,6 +175,9 @@ export const POST = withAuth(async (request: NextRequest, user: AuthenticatedUse
         email_notifications_enabled: customerData.emailNotifications?.enabled ?? false,
         email_notifications_new_leads: customerData.emailNotifications?.newLeads ?? false,
         last_notification_sent: customerData.emailNotifications?.lastNotificationSent,
+        portal_lead_goal: customerData.portalLeadGoal ?? null,
+        portal_goal_frequency: customerData.portalGoalFrequency ?? null,
+        portal_goal_updated_at: customerData.portalGoalUpdatedAt ?? null,
         last_activity: new Date().toISOString(),
       }, {
         onConflict: 'email'
