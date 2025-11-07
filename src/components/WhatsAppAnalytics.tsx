@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { 
-  ChartBarIcon, 
   ChatBubbleLeftRightIcon, 
   CheckCircleIcon, 
   EyeIcon,
@@ -129,14 +128,7 @@ export function WhatsAppAnalytics({ customerId }: WhatsAppAnalyticsProps) {
   }
 
   if (!analytics) {
-    return (
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <div className="text-center text-gray-500">
-          <ChartBarIcon className="w-8 h-8 mx-auto mb-2" />
-          <p>Geen analytics data beschikbaar</p>
-        </div>
-      </div>
-    );
+    return null;
   }
 
   return (
