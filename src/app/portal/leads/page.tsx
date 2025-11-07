@@ -160,7 +160,7 @@ export default function CustomerLeadsPage() {
   const loadBranchMappings = async (branchId: string) => {
     try {
       console.log(`📊 Loading branch mappings for branch: ${branchId}`);
-      const mappingsResponse = await fetch(`/api/branches/${branchId}/mappings`);
+      const mappingsResponse = await authenticatedFetch(`/api/branches/${branchId}/mappings`);
       
       if (mappingsResponse.ok) {
         const mappingsData = await mappingsResponse.json();
@@ -170,7 +170,7 @@ export default function CustomerLeadsPage() {
         
         // Also fetch branch name
         try {
-          const branchResponse = await fetch(`/api/admin/branches/${branchId}`);
+          const branchResponse = await authenticatedFetch(`/api/admin/branches/${branchId}`);
           if (branchResponse.ok) {
             const branchData = await branchResponse.json();
             const displayName = branchData.branch?.display_name || branchData.branch?.name || 'Specifiek';
@@ -207,13 +207,13 @@ export default function CustomerLeadsPage() {
     // Load branch mappings if branch_id exists
     if (customerData?.branch_id) {
       try {
-        const mappingsResponse = await fetch(`/api/branches/${customerData.branch_id}/mappings`);
+        const mappingsResponse = await authenticatedFetch(`/api/branches/${customerData.branch_id}/mappings`);
         if (mappingsResponse.ok) {
           const mappingsData = await mappingsResponse.json();
           setBranchMappings(mappingsData.mappings || []);
           
           // Also fetch branch name
-          const branchResponse = await fetch(`/api/admin/branches/${customerData.branch_id}`);
+          const branchResponse = await authenticatedFetch(`/api/admin/branches/${customerData.branch_id}`);
           if (branchResponse.ok) {
             const branchData = await branchResponse.json();
             setBranchName(branchData.branch?.display_name || branchData.branch?.name || 'Specifiek');
@@ -232,7 +232,7 @@ export default function CustomerLeadsPage() {
     // Check of er een reclamatie bestaat voor deze lead
     if (customerData && lead.sheetRowNumber) {
       try {
-        const response = await fetch(`/api/reclaim-lead?customerId=${customerData.id}&sheetRowNumber=${lead.sheetRowNumber}`);
+        const response = await authenticatedFetch(`/api/reclaim-lead?customerId=${customerData.id}&sheetRowNumber=${lead.sheetRowNumber}`);
         const data = await response.json();
         setLeadReclamation(data);
         
@@ -503,7 +503,7 @@ export default function CustomerLeadsPage() {
           // Update blob storage with fresh data
           try {
             addDebugLog('info', '💾 STEP 3: Updating Blob Storage with fresh data', {});
-            await fetch('/api/customer-data', {
+            await authenticatedFetch('/api/customer-data', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -562,7 +562,7 @@ export default function CustomerLeadsPage() {
     if (!customerData?.id) return;
     
     try {
-      const response = await fetch(`/api/user-preferences?customerId=${customerData.id}`);
+      const response = await authenticatedFetch(`/api/user-preferences?customerId=${customerData.id}`);
       if (response.ok) {
         const { preferences } = await response.json();
         setViewMode(preferences.viewMode || 'list');
@@ -586,7 +586,7 @@ export default function CustomerLeadsPage() {
         notifications: true
       };
       
-      const response = await fetch('/api/user-preferences', {
+      const response = await authenticatedFetch('/api/user-preferences', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -877,7 +877,7 @@ export default function CustomerLeadsPage() {
     // Sync to Blob Storage for cross-device persistence
     try {
       console.log('💾 Status update: Syncing to Blob Storage...');
-      await fetch('/api/customer-data', {
+      await authenticatedFetch('/api/customer-data', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -971,7 +971,7 @@ export default function CustomerLeadsPage() {
     
     // Sync to Blob Storage
     try {
-      await fetch('/api/customer-data', {
+      await authenticatedFetch('/api/customer-data', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1167,7 +1167,7 @@ export default function CustomerLeadsPage() {
       // Save to Blob Storage voor server-side toegang (cron job)
       try {
         console.log('💾 Saving customer data to Blob Storage...');
-        const response = await fetch('/api/customer-data', {
+        const response = await authenticatedFetch('/api/customer-data', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -2563,29 +2563,30 @@ export default function CustomerLeadsPage() {
                     </div>
                   ) : (
                     <button
-                      onClick={() => {
+                      onClick={async () => {
                         const reden = prompt('⚠️ Waarom wil je deze lead reclameren?\n\nGeef een duidelijke reden op zodat wij je verzoek kunnen beoordelen:');
                         if (reden && reden.trim()) {
-                          // Verstuur reclamatie naar admin
-                          fetch('/api/reclaim-lead', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                              customerId: customerData?.id,
-                              customerEmail: user?.email,
-                              customerName: user?.name,
-                              lead: {
-                                name: viewingLead.name,
-                                email: viewingLead.email,
-                                phone: viewingLead.phone,
-                                sheetRowNumber: viewingLead.sheetRowNumber
-                              },
-                              reason: reden,
-                              timestamp: new Date().toISOString()
-                            })
-                          })
-                          .then(res => res.json())
-                          .then(data => {
+                          try {
+                            const response = await authenticatedFetch('/api/reclaim-lead', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                customerId: customerData?.id,
+                                customerEmail: user?.email,
+                                customerName: user?.name,
+                                lead: {
+                                  name: viewingLead.name,
+                                  email: viewingLead.email,
+                                  phone: viewingLead.phone,
+                                  sheetRowNumber: viewingLead.sheetRowNumber
+                                },
+                                reason: reden,
+                                timestamp: new Date().toISOString()
+                              })
+                            });
+
+                            const data = await response.json();
+
                             if (data.success) {
                               alert('✅ Je reclamatieverzoek is verstuurd naar ons team. We nemen zo snel mogelijk contact met je op!');
                               setLeadReclamation({ hasReclamation: true, reclamation: data });
@@ -2595,11 +2596,10 @@ export default function CustomerLeadsPage() {
                             } else {
                               alert('❌ Er is iets misgegaan. Probeer het later opnieuw.');
                             }
-                          })
-                          .catch(error => {
-                            console.error('Error submitting reclamation:', error);
+                          } catch (error) {
+                            console.error('❌ Fout bij reclamatieverzoek:', error);
                             alert('❌ Er is iets misgegaan. Probeer het later opnieuw.');
-                          });
+                          }
                         }
                       }}
                       className="w-full px-4 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl transition-colors flex items-center justify-center space-x-2 shadow-lg font-semibold"
@@ -3024,7 +3024,7 @@ export default function CustomerLeadsPage() {
                             
                             // 🔄 Trigger WhatsApp message for new lead
                             try {
-                              const whatsappResponse = await fetch('/api/whatsapp/trigger-new-lead', {
+                              const whatsappResponse = await authenticatedFetch('/api/whatsapp/trigger-new-lead', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({

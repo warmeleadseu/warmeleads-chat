@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { 
@@ -141,7 +141,10 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [orders, setOrders] = useState<any[]>([]);
   const [loadingOrders, setLoadingOrders] = useState(false);
+  const [ordersError, setOrdersError] = useState<string | null>(null);
   const [loadingCustomerData, setLoadingCustomerData] = useState(false);
+  const [customerError, setCustomerError] = useState<string | null>(null);
+  const [initialFetchComplete, setInitialFetchComplete] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
   const [showSupportModal, setShowSupportModal] = useState(false); // NEW - for support modal
   const [showEmployeeModal, setShowEmployeeModal] = useState(false); // NEW - for employee management
@@ -158,6 +161,8 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
   const { user, isAuthenticated, logout } = useAuthStore();
   const router = useRouter();
   const searchParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
+  const previousEmailRef = useRef<string | undefined>(undefined);
+  const [isSheetSyncing, setIsSheetSyncing] = useState(false);
   
   // Debug logging to track auth state changes
   useEffect(() => {
@@ -169,6 +174,16 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
       isGuest: user?.isGuest 
     });
   }, [user, isAuthenticated]);
+
+  useEffect(() => {
+    const currentEmail = user?.email || undefined;
+    if (previousEmailRef.current !== currentEmail) {
+      if (previousEmailRef.current !== undefined) {
+        setInitialFetchComplete(false);
+      }
+      previousEmailRef.current = currentEmail;
+    }
+  }, [user?.email]);
 
   useEffect(() => {
     const customerId = customerData?.id || user?.email;
@@ -236,9 +251,10 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
   }, [searchParams, user]);
 
   // Load orders from Supabase
-  const loadOrders = async (email: string) => {
+  const loadOrders = useCallback(async (email: string) => {
     try {
       setLoadingOrders(true);
+      setOrdersError(null);
       console.log('📦 Loading orders for:', email);
       
       const response = await authenticatedFetch(`/api/orders?customerEmail=${encodeURIComponent(email)}`);
@@ -246,92 +262,107 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
         const data = await response.json();
         setOrders(data.orders || []);
         console.log(`✅ Loaded ${data.orders?.length || 0} order(s)`);
+        setOrdersError(null);
       } else {
-        console.error('Failed to load orders:', await response.text());
+        const errorText = await response.text();
+        console.error('Failed to load orders:', errorText);
         setOrders([]);
+        setOrdersError('We konden je bestellingen niet laden. Probeer het later opnieuw.');
       }
     } catch (error) {
       console.error('Error loading orders:', error);
       setOrders([]);
+      setOrdersError('Er ging iets mis bij het ophalen van je bestellingen. Controleer je verbinding en probeer het opnieuw.');
     } finally {
       setLoadingOrders(false);
     }
-  };
+  }, []);
 
   // Load orders when user changes
   useEffect(() => {
     if (user?.email) {
       loadOrders(user.email);
     }
-  }, [user?.email]);
+  }, [loadOrders, user?.email]);
 
-  // Load customer data from Supabase
-  useEffect(() => {
-    const loadCustomerData = async () => {
-      if (!user?.email) return;
-      
-      setLoadingCustomerData(true);
-      
-      try {
-        console.log('📦 CustomerPortal: Loading data for', user.email);
-        
-        // Load from Supabase via API
-        const response = await authenticatedFetch(`/api/customer-data?customerId=${encodeURIComponent(user.email)}`);
-        if (response.ok) {
-          const data = await response.json();
-          const customer = data.customerData || data.customer || null;
-          
-          console.log('✅ CustomerPortal: Data loaded from Supabase:', {
-            email: customer?.email,
-            hasGoogleSheet: !!customer?.googleSheetUrl,
-            googleSheetUrl: customer?.googleSheetUrl,
-            branch_id: customer?.branch_id,
-            leadsCount: customer?.leadData?.length || 0
-          });
-          
-          // Check if we need to do initial Google Sheets sync
-          const needsInitialSync = customer?.googleSheetUrl && (!customer?.leadData || customer.leadData.length === 0);
-          
-          if (needsInitialSync) {
-            console.log('🔄 CustomerPortal: No leads found but sheet is linked - doing initial sync...');
-            await syncWithGoogleSheetsInBackground(customer, user.email);
-          } else {
-            setCustomerData(normalizeCustomerGoalData(customer));
-            
-            // Background sync with Google Sheets if sheet is linked (non-blocking)
-            if (customer?.googleSheetUrl) {
-              console.log('🔄 CustomerPortal: Starting background Google Sheets sync...');
-              syncWithGoogleSheetsInBackground(customer, user.email);
-            }
-          }
+  const fetchCustomerData = useCallback(async () => {
+    if (!user?.email) return;
+
+    setLoadingCustomerData(true);
+    setCustomerError(null);
+
+    try {
+      console.log('📦 CustomerPortal: Loading data for', user.email);
+
+      const response = await authenticatedFetch(`/api/customer-data?customerId=${encodeURIComponent(user.email)}`);
+
+      if (response.ok) {
+        const data = await response.json();
+        const customer = data.customerData || data.customer || null;
+
+        console.log('✅ CustomerPortal: Data loaded from Supabase:', {
+          email: customer?.email,
+          hasGoogleSheet: !!customer?.googleSheetUrl,
+          googleSheetUrl: customer?.googleSheetUrl,
+          branch_id: customer?.branch_id,
+          leadsCount: customer?.leadData?.length || 0
+        });
+
+        const needsInitialSync = customer?.googleSheetUrl && (!customer?.leadData || customer.leadData.length === 0);
+
+        if (needsInitialSync) {
+          console.log('🔄 CustomerPortal: No leads found but sheet is linked - doing initial sync...');
+          await syncWithGoogleSheetsInBackground(customer, user.email);
         } else {
-          // Fallback to crmSystem
-          console.log('ℹ️ CustomerPortal: API failed, falling back to crmSystem');
-          const customer = await crmSystem.getCustomerById(user.email);
           setCustomerData(normalizeCustomerGoalData(customer));
-          
-          // If customer has sheet but no leads, sync immediately
-          if (customer?.googleSheetUrl && (!customer?.leadData || customer.leadData.length === 0)) {
-            console.log('🔄 CustomerPortal: Syncing with Google Sheets...');
-            await syncWithGoogleSheetsInBackground(customer, user.email);
+
+          if (customer?.googleSheetUrl) {
+            console.log('🔄 CustomerPortal: Starting background Google Sheets sync...');
+            syncWithGoogleSheetsInBackground(customer, user.email);
           }
         }
-      } catch (error) {
-        console.error('❌ CustomerPortal: Error loading data:', error);
-        // Fallback to crmSystem
+
+        setCustomerError(null);
+      } else {
+        console.warn('ℹ️ CustomerPortal: API returned non-OK response, status:', response.status);
+        setCustomerError('Realtime data is tijdelijk niet bereikbaar. We tonen de laatst opgeslagen gegevens.');
+
         const customer = await crmSystem.getCustomerById(user.email);
-        setCustomerData(normalizeCustomerGoalData(customer));
-      } finally {
-        setLoadingCustomerData(false);
+        const normalized = normalizeCustomerGoalData(customer);
+        setCustomerData(normalized);
+
+        if (customer?.googleSheetUrl && (!customer?.leadData || customer.leadData.length === 0)) {
+          console.log('🔄 CustomerPortal: Syncing with Google Sheets na fallback...');
+          await syncWithGoogleSheetsInBackground(customer, user.email);
+        }
       }
-    };
-    
-    loadCustomerData();
-  }, [user]);
+    } catch (error) {
+      console.error('❌ CustomerPortal: Error loading data:', error);
+      setCustomerError('We konden je accountgegevens niet laden. We tonen een offline versie.');
+
+      const customer = await crmSystem.getCustomerById(user.email);
+      const normalized = normalizeCustomerGoalData(customer);
+      if (normalized) {
+        setCustomerData(normalized);
+      } else {
+        console.warn('❌ CustomerPortal: Geen klantgegevens gevonden in fallback.');
+        setCustomerData(null);
+      }
+    } finally {
+      setLoadingCustomerData(false);
+      setInitialFetchComplete(true);
+    }
+  }, [user?.email]);
+
+  // Load customer data from Supabase (or fallback)
+  useEffect(() => {
+    fetchCustomerData();
+  }, [fetchCustomerData]);
 
   // Read leads DIRECTLY from Google Sheets (real-time, no Supabase storage)
   const syncWithGoogleSheetsInBackground = async (customer: any, email: string) => {
     try {
+      setIsSheetSyncing(true);
       const { readCustomerLeads } = await import('@/lib/googleSheetsAPI');
       // Use branch_id if available, otherwise fallback to default parser
       const freshLeads = await readCustomerLeads(customer.googleSheetUrl, undefined, customer.branch_id);
@@ -353,6 +384,7 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
       setCustomerData(updatedCustomer);
       console.log(`✅ CustomerPortal: ${freshLeads.length} leads from Google Sheets ready`);
       setLastSync(new Date());
+      setCustomerError((current) => (current && current.includes('Google Sheets') ? null : current));
       
     } catch (syncError) {
       console.error('❌ CustomerPortal: Failed to read Google Sheets:', syncError);
@@ -364,9 +396,25 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
           leadData: []
         });
       }
+      setCustomerError((current) => current ?? 'Synchroniseren met Google Sheets is niet gelukt. Controleer de spreadsheetrechten en probeer het later opnieuw.');
+    } finally {
+      setIsSheetSyncing(false);
     }
   };
   
+  const handlePortalRefresh = useCallback(() => {
+    fetchCustomerData();
+    if (user?.email) {
+      loadOrders(user.email);
+    }
+  }, [fetchCustomerData, loadOrders, user?.email]);
+
+  const handleOrdersRetry = useCallback(() => {
+    if (user?.email) {
+      loadOrders(user.email);
+    }
+  }, [loadOrders, user?.email]);
+
   // Use real orders from Blob Storage, or demo data for demo account
   const recentOrders = orders.length > 0 
     ? orders.map(order => ({
@@ -681,6 +729,16 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
 
   const safeGoalTarget = Math.max(growthGoal || 0, 1);
   const goalProgress = totalLeads > 0 ? Math.min((totalLeads / safeGoalTarget) * 100, 999) : 0;
+  const safeGoalProgress = Number.isFinite(goalProgress) ? goalProgress : 0;
+  const safeConversionRate = Number.isFinite(conversionRate) ? conversionRate : 0;
+  const syncStatusLabel = isSheetSyncing
+    ? 'Synchroniseren met Google Sheets...'
+    : lastSync
+      ? `Laatste sync ${lastSync.toLocaleString('nl-NL')}`
+      : 'Nog niet gesynchroniseerd';
+  const syncStatusClass = isSheetSyncing
+    ? 'border-amber-400/40 bg-amber-500/10 text-amber-100'
+    : 'border-emerald-400/30 bg-emerald-500/15 text-emerald-100';
 
   const handleLeadHealthAction = (type: string) => {
     if (type.startsWith('stage:')) {
@@ -946,6 +1004,48 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
   const primaryRecommendation = recommendedPackages.find(pkg => pkg.isPrimary);
   const secondaryRecommendations = recommendedPackages.filter(pkg => !pkg.isPrimary);
 
+  if (loadingCustomerData && !initialFetchComplete) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-brand-navy via-brand-purple to-brand-pink flex items-center justify-center px-6">
+        <div className="flex flex-col items-center gap-4 text-white/80">
+          <div className="h-14 w-14 rounded-full border-2 border-white/30 border-t-white animate-spin" aria-label="Laden" />
+          <p className="text-sm md:text-base">Portal aan het laden...</p>
+          <p className="text-xs text-white/60">We halen je realtime gegevens op uit Google Sheets en Supabase.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (initialFetchComplete && !customerData) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-brand-navy via-brand-purple to-brand-pink flex items-center justify-center px-6">
+        <div className="max-w-md w-full rounded-3xl border border-white/20 bg-white/10 backdrop-blur-xl p-8 text-center text-white space-y-4 shadow-[0_45px_90px_-45px_rgba(25,14,64,0.8)]">
+          <div className="flex justify-center">
+            <Logo />
+          </div>
+          <h1 className="text-2xl font-semibold">Kon portalgegevens niet laden</h1>
+          <p className="text-white/70 text-sm">
+            {customerError || 'We konden je accountgegevens niet ophalen. Controleer je internetverbinding of probeer het later opnieuw.'}
+          </p>
+          <div className="flex flex-col gap-2">
+            <button
+              onClick={handlePortalRefresh}
+              className="w-full rounded-xl bg-white/15 px-4 py-2 text-sm font-medium text-white hover:bg-white/25 transition"
+            >
+              Opnieuw proberen
+            </button>
+            <button
+              onClick={onBackToHome}
+              className="w-full rounded-xl border border-white/20 px-4 py-2 text-sm font-medium text-white/70 hover:text-white hover:border-white/40 transition"
+            >
+              Terug naar home
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-brand-navy via-brand-purple to-brand-pink">
       <div className="max-w-6xl mx-auto px-4 py-6 md:py-10 space-y-6 md:space-y-8">
@@ -998,10 +1098,36 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
 
           <div className="relative flex flex-col gap-8 md:flex-row md:items-start">
             <div className="flex-1 space-y-6">
-              <div className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-1 text-xs font-medium text-white/70">
-                <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_0_3px_rgba(56,189,248,0.25)]" />
-                Realtime accountoverzicht
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-1 text-xs font-medium text-white/70">
+                  <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_0_3px_rgba(56,189,248,0.25)]" />
+                  Realtime accountoverzicht
+                </div>
+                <div className={`inline-flex items-center gap-2 rounded-full border px-4 py-1 text-xs font-medium ${syncStatusClass}`}>
+                  <span className={`h-2 w-2 rounded-full ${isSheetSyncing ? 'bg-amber-200 animate-pulse' : 'bg-emerald-200'}`} />
+                  {syncStatusLabel}
+                </div>
+                <button
+                  onClick={handlePortalRefresh}
+                  className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-medium text-white/70 hover:text-white hover:border-white/40 transition"
+                >
+                  <ArrowPathIcon className="w-4 h-4" />
+                  Ververs gegevens
+                </button>
               </div>
+
+              {customerError && (
+                <div className="rounded-2xl border border-amber-400/40 bg-amber-500/10 px-4 py-3 text-amber-100 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div className="text-sm md:text-left text-center">{customerError}</div>
+                  <button
+                    onClick={handlePortalRefresh}
+                    className="inline-flex items-center justify-center gap-2 rounded-full border border-amber-300/40 px-3 py-1 text-xs font-medium text-amber-100 hover:bg-amber-500/20 transition"
+                  >
+                    <ArrowPathIcon className="w-4 h-4" />
+                    Opnieuw synchroniseren
+                  </button>
+                </div>
+              )}
 
               <div className="space-y-2">
                 <h2 className="text-2xl md:text-4xl font-bold text-white">Klaar voor de volgende groeispurt?</h2>
@@ -1017,7 +1143,7 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
                 </div>
                 <div className="rounded-2xl border border-white/15 bg-white/10 p-4">
                   <p className="text-xs text-white/50">Conversieratio</p>
-                  <p className="mt-1 text-2xl font-semibold text-emerald-200">{conversionRate.toFixed(1)}%</p>
+                  <p className="mt-1 text-2xl font-semibold text-emerald-200">{safeConversionRate.toFixed(1)}%</p>
                 </div>
                 <div className="rounded-2xl border border-white/15 bg-white/10 p-4">
                   <p className="text-xs text-white/50">Gegenereerde omzet</p>
@@ -1031,7 +1157,7 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
                   <div>
                     <p className="text-xs text-white/50">Doelstelling ({goalFrequency === 'maand' ? 'maandelijks' : 'per kwartaal'})</p>
                     <p className="text-lg font-semibold text-white">{totalLeads}/{growthGoal} leads</p>
-                    <p className="text-xs text-white/60">{goalProgress.toFixed(1)}% behaald</p>
+                    <p className="text-xs text-white/60">{safeGoalProgress.toFixed(1)}% behaald</p>
                     {customerData?.portalGoalUpdatedAt && (
                       <p className="text-[11px] text-white/40">Laatste update {new Date(customerData.portalGoalUpdatedAt).toLocaleString('nl-NL')}</p>
                     )}
@@ -1057,15 +1183,15 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
                           stroke="currentColor"
                           fill="transparent"
                           strokeDasharray="100"
-                          strokeDashoffset={`${100 - Math.min(goalProgress, 100)}`}
+                          strokeDashoffset={`${100 - Math.min(safeGoalProgress, 100)}`}
                           d="M18 2.0845
                           a 15.9155 15.9155 0 0 1 0 31.831
                           a 15.9155 15.9155 0 0 1 0 -31.831"
                         />
                       </svg>
-                      <span className="absolute inset-0 flex items-center justify-center text-xs font-semibold text-white">
-                        {Math.min(goalProgress, 999).toFixed(0)}%
-                      </span>
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <span className="text-xs font-semibold text-white">{Math.min(safeGoalProgress, 999).toFixed(0)}%</span>
+                      </div>
                     </div>
                     <button
                       onClick={() => setGoalModalOpen(true)}
@@ -1453,7 +1579,20 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
             </button>
           </div>
 
-          <div className="mt-6">
+          <div className="mt-6 space-y-4">
+            {ordersError && (
+              <div className="flex flex-col gap-3 rounded-2xl border border-amber-400/40 bg-amber-500/10 p-4 text-amber-100 md:flex-row md:items-center md:justify-between">
+                <span className="text-sm md:text-left text-center">{ordersError}</span>
+                <button
+                  onClick={handleOrdersRetry}
+                  className="inline-flex items-center justify-center gap-2 rounded-full border border-amber-300/40 px-3 py-1 text-xs font-medium text-amber-100 hover:bg-amber-500/20 transition"
+                >
+                  <ArrowPathIcon className="w-4 h-4" />
+                  Opnieuw proberen
+                </button>
+              </div>
+            )}
+
             {loadingOrders ? (
               <div className="space-y-4">
                 {[1,2,3].map(i => (

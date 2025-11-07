@@ -35,6 +35,13 @@ export function clearAuthToken() {
   cachedToken = null;
 }
 
+type ExtendedRequestInit = RequestInit & {
+  next?: {
+    revalidate?: number | false;
+    tags?: string[];
+  };
+};
+
 /**
  * Make an authenticated API request
  * Automatically includes the auth token
@@ -60,10 +67,19 @@ export async function authenticatedFetch(url: string, options: RequestInit = {})
     console.warn('⚠️ No auth token found for request to:', url);
   }
   
-  return fetch(url, {
+  const fetchOptions: ExtendedRequestInit = {
+    cache: 'no-store',
     ...options,
     headers,
-  });
+  };
+
+  if (!fetchOptions.next) {
+    fetchOptions.next = { revalidate: 0 };
+  } else if (typeof fetchOptions.next.revalidate === 'undefined') {
+    fetchOptions.next.revalidate = 0;
+  }
+  
+  return fetch(url, fetchOptions);
 }
 
 export interface UserPermissions {
