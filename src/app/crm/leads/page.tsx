@@ -1309,20 +1309,6 @@ export default function CustomerLeadsPage() {
     }
   };
 
-  // Show loading while auth is loading
-  if (authLoading) {
-    return <Loading fullScreen text="Authenticatie controleren..." />;
-  }
-
-  // Don't render anything if not authenticated (redirect will happen)
-  if (!isAuthenticated) {
-    return null;
-  }
-
-  if (isLoading) {
-    return <Loading fullScreen text="Leads laden..." />;
-  }
-
   const sanitizedBranchAnalytics = useMemo(() => {
     return branchAnalytics.map((item) => {
       const revenue = Number.isFinite(item.revenue) ? item.revenue : 0;
@@ -1377,6 +1363,20 @@ export default function CustomerLeadsPage() {
   const whatsappCustomerId = useMemo(() => {
     return customerData?.email || user?.email || '';
   }, [customerData?.email, user?.email]);
+
+  // Show loading while auth is loading
+  if (authLoading) {
+    return <Loading fullScreen text="Authenticatie controleren..." />;
+  }
+
+  // Don't render anything if not authenticated (redirect will happen)
+  if (!isAuthenticated) {
+    return null;
+  }
+
+  if (isLoading) {
+    return <Loading fullScreen text="Leads laden..." />;
+  }
 
   const handleSaveGoogleSheetUrl = async () => {
     if (!customerData) {
