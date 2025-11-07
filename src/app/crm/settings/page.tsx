@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 
-export default function LegacyCRMSettingsRedirect() {
-  redirect('/crm/leads#instellingen');
+export default function CRMSettingsRedirect() {
+  redirect('/portal/leads#instellingen');
 }
 

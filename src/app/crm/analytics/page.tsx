@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 
-export default function LegacyCRMAnalyticsRedirect() {
-  redirect('/crm/leads#analytics');
+export default function CRMAnalyticsRedirect() {
+  redirect('/portal/leads#analytics');
 }
 

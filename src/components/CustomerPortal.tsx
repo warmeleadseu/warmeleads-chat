@@ -338,7 +338,7 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
       setShowSupportModal(true);
     } else if (action === 'leads') {
       // Open het leadportaal
-      router.push('/crm/leads');
+      router.push('/portal/leads');
     } else if (action === 'settings') {
       // Navigate to account settings page
       router.push('/portal/settings');
