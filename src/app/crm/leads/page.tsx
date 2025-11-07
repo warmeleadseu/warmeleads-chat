@@ -27,14 +27,13 @@ import {
   Cog6ToothIcon,
   BellIcon,
   DocumentArrowDownIcon,
-  ChatBubbleLeftRightIcon,
-  SparklesIcon
+  ChatBubbleLeftRightIcon
 } from '@heroicons/react/24/outline';
 import { useAuthStore, authenticatedFetch } from '@/lib/auth';
 import { Loading } from '@/components/ui';
 import { crmSystem, type Customer, type Lead } from '@/lib/crmSystem';
 import { readCustomerLeads, GoogleSheetsService, addLeadToSheet } from '@/lib/googleSheetsAPI';
-import { branchIntelligence, type Branch, type BranchIntelligence, type BranchAnalytics } from '@/lib/branchIntelligence';
+import { branchIntelligence, type Branch } from '@/lib/branchIntelligence';
 import { PipelineBoard } from '@/components/PipelineBoard';
 import { type CustomStage, PipelineStagesManager } from '@/lib/pipelineStages';
 import { WhatsAppSettings } from '@/components/WhatsAppSettings';
@@ -69,7 +68,6 @@ export default function CustomerLeadsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | Lead['status']>('all');
   const [filterBranch, setFilterBranch] = useState<'all' | Branch>('all');
-  const [branchAnalytics, setBranchAnalytics] = useState<BranchAnalytics[]>([]);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [viewMode, setViewMode] = useState<'list' | 'pipeline'>('list');
   const [preferencesLoaded, setPreferencesLoaded] = useState(false);
@@ -546,15 +544,6 @@ export default function CustomerLeadsPage() {
       // Load branch mappings for dynamic table columns
       if (customer.branch_id) {
         loadBranchMappings(customer.branch_id);
-      }
-      
-      // Generate branch analytics
-      if (customer.leadData && customer.leadData.length > 0) {
-        const analytics = branchIntelligence.analyzeBranchPerformance(customer.leadData);
-        setBranchAnalytics(analytics);
-        addDebugLog('info', '📊 Branch analytics generated', { analyticsCount: analytics.length });
-      } else {
-        addDebugLog('info', '📊 No leads for branch analytics', { leadsCount: customer.leadData?.length || 0 });
       }
       
       setIsLoading(false);
@@ -1309,57 +1298,6 @@ export default function CustomerLeadsPage() {
     }
   };
 
-  const sanitizedBranchAnalytics = useMemo(() => {
-    return branchAnalytics.map((item) => {
-      const revenue = Number.isFinite(item.revenue) ? item.revenue : 0;
-      const conversionRate = Number.isFinite(item.conversionRate) ? item.conversionRate : 0;
-      const avgLeadValue = Number.isFinite(item.avgLeadValue) ? item.avgLeadValue : 0;
-      const growthRaw = item.trends?.growth ?? 0;
-      const growth = Number.isFinite(growthRaw) ? growthRaw : 0;
-
-      return {
-        ...item,
-        revenue,
-        conversionRate,
-        avgLeadValue,
-        trends: {
-          growth,
-          seasonalPattern: item.trends?.seasonalPattern
-        }
-      };
-    });
-  }, [branchAnalytics]);
-
-  const overallStats = useMemo(() => {
-    const revenue = sanitizedBranchAnalytics.reduce((total, analytics) => total + analytics.revenue, 0);
-    const totalLeads = leads.length;
-    const conversions = leads.filter(lead =>
-      lead.status === 'qualified' || lead.status === 'deal_closed' || lead.status === 'converted'
-    ).length;
-    const conversionRate = totalLeads > 0 ? (conversions / totalLeads) * 100 : 0;
-    const avgLeadValue = totalLeads > 0 ? revenue / totalLeads : 0;
-
-    return {
-      revenue,
-      totalLeads,
-      conversions,
-      conversionRate,
-      avgLeadValue
-    };
-  }, [sanitizedBranchAnalytics, leads]);
-
-  const topConversionBranches = useMemo(() => {
-    return [...sanitizedBranchAnalytics]
-      .sort((a, b) => b.conversionRate - a.conversionRate)
-      .slice(0, 3);
-  }, [sanitizedBranchAnalytics]);
-
-  const growthOpportunities = useMemo(() => {
-    return [...sanitizedBranchAnalytics]
-      .sort((a, b) => b.trends.growth - a.trends.growth)
-      .slice(0, 3);
-  }, [sanitizedBranchAnalytics]);
-
   const whatsappCustomerId = useMemo(() => {
     return customerData?.email || user?.email || '';
   }, [customerData?.email, user?.email]);
@@ -1818,179 +1756,11 @@ export default function CustomerLeadsPage() {
         </motion.div>
 
         <div className="space-y-8">
-          {sanitizedBranchAnalytics.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.7 }}
-              className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 shadow-lg border border-white/10"
-            >
-              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6">
-                <div>
-                  <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-                    <ChartBarIcon className="w-6 h-6 text-purple-300" />
-                    Branch prestaties
-                  </h2>
-                  <p className="text-sm text-white/70 max-w-2xl">
-                    Direct inzicht in resultaten per branche op basis van je meest actuele leads.
-                  </p>
-                </div>
-                <div className="inline-flex items-center gap-2 bg-white/10 border border-white/10 rounded-xl px-4 py-2 text-white">
-                  <span className="text-sm text-white/70">Actieve branches</span>
-                  <span className="text-lg font-semibold">{sanitizedBranchAnalytics.length}</span>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                {sanitizedBranchAnalytics.slice(0, 6).map((analytics, index) => (
-                  <motion.div
-                    key={analytics.branch}
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ delay: 0.75 + index * 0.1 }}
-                    className="bg-white/5 border border-white/10 rounded-xl p-5"
-                  >
-                    <div className="flex items-center justify-between mb-4">
-                      <div>
-                        <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-                          <span>
-                            {analytics.branch === 'Thuisbatterijen' && '🔋'}
-                            {analytics.branch === 'Financial Lease' && '🚗'}
-                            {analytics.branch === 'Warmtepompen' && '🔥'}
-                            {analytics.branch === 'Zonnepanelen' && '☀️'}
-                            {analytics.branch === 'Airco' && '❄️'}
-                            {analytics.branch === 'Custom' && '🎯'}
-                            {analytics.branch === 'Unknown' && '❓'}
-                          </span>
-                          {analytics.branch}
-                        </h3>
-                        <p className="text-xs text-white/60 mt-1">Gem. leadwaarde €{Math.round(analytics.avgLeadValue || 0)}</p>
-                      </div>
-                      <span className="px-3 py-1 rounded-full text-xs font-semibold bg-green-500/20 text-green-200">
-                        {analytics.conversionRate.toFixed(1)}% conversie
-                      </span>
-                    </div>
-
-                    <div className="space-y-2 text-sm text-white/80">
-                      <div className="flex items-center justify-between">
-                        <span>Leads</span>
-                        <span className="font-semibold text-white">{analytics.totalLeads}</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span>Omzet (geprognotiseerd)</span>
-                        <span className="font-semibold text-white">
-                          €{Math.round(analytics.revenue).toLocaleString('nl-NL')}
-                        </span>
-                      </div>
-                      {Number.isFinite(analytics.trends.growth) && (
-                        <div className="flex items-center justify-between">
-                          <span>Groei</span>
-                          <span className={`font-semibold ${analytics.trends.growth >= 0 ? 'text-green-200' : 'text-red-200'}`}>
-                            {analytics.trends.growth >= 0 ? '▲' : '▼'} {Math.abs(analytics.trends.growth).toFixed(1)}%
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
-            </motion.div>
-          )}
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.8 }}
-            className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 text-white border border-white/10"
-          >
-            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 mb-6">
-              <div>
-                <h2 className="text-2xl font-bold flex items-center gap-2">
-                  <SparklesIcon className="w-6 h-6 text-yellow-200" />
-                  Slimme aanbevelingen
-                </h2>
-                <p className="text-sm text-white/70 max-w-3xl">
-                  Automatisch gegenereerde inzichten op basis van je actuele leads. Gebruik ze om campagnes en opvolging te verfijnen.
-                </p>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-white/5 rounded-xl px-4 py-3 text-center">
-                  <p className="text-xs text-white/60">Totale omzetpotentie</p>
-                  <p className="text-lg font-semibold">
-                    €{Math.round(overallStats.revenue || 0).toLocaleString('nl-NL')}
-                  </p>
-                </div>
-                <div className="bg-white/5 rounded-xl px-4 py-3 text-center">
-                  <p className="text-xs text-white/60">Conversieratio</p>
-                  <p className="text-lg font-semibold">{overallStats.conversionRate.toFixed(1)}%</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <div className="bg-white/5 border border-white/10 rounded-xl p-5">
-                <h3 className="text-lg font-semibold mb-3">🎯 Beste presterende branches</h3>
-                <p className="text-sm text-white/70 mb-4">
-                  Richt je acquisitie eerst op deze branches. Hier liggen de grootste kansen.
-                </p>
-                <div className="space-y-3">
-                  {topConversionBranches.length === 0 && (
-                    <p className="text-sm text-white/60">Nog onvoldoende data voor aanbevelingen.</p>
-                  )}
-                  {topConversionBranches.map((branch) => (
-                    <div
-                      key={branch.branch}
-                      className="flex items-center justify-between bg-white/5 rounded-lg px-4 py-3"
-                    >
-                      <div>
-                        <p className="font-medium">{branch.branch}</p>
-                        <p className="text-xs text-white/60">
-                          Gem. waarde €{Math.round(branch.avgLeadValue || 0)}
-                        </p>
-                      </div>
-                      <span className="text-sm font-semibold text-green-200">
-                        {branch.conversionRate.toFixed(1)}%
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="bg-white/5 border border-white/10 rounded-xl p-5">
-                <h3 className="text-lg font-semibold mb-3">✨ Groei kansen</h3>
-                <p className="text-sm text-white/70 mb-4">
-                  Branches met momentum. Ideaal om campagnes op te schalen.
-                </p>
-                <div className="space-y-3">
-                  {growthOpportunities.length === 0 && (
-                    <p className="text-sm text-white/60">Nog onvoldoende data voor groei-inschatting.</p>
-                  )}
-                  {growthOpportunities.map((branch) => (
-                    <div
-                      key={`${branch.branch}-growth`}
-                      className="flex items-center justify-between bg-white/5 rounded-lg px-4 py-3"
-                    >
-                      <div>
-                        <p className="font-medium">{branch.branch}</p>
-                        <p className="text-xs text-white/60">
-                          Conversie {branch.conversionRate.toFixed(1)}%
-                        </p>
-                      </div>
-                      <span className="text-sm font-semibold text-purple-200">
-                        +{Math.round(branch.trends.growth)}%
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </motion.div>
-
           {whatsappCustomerId && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.85 }}
+              transition={{ delay: 0.7 }}
             >
               <WhatsAppAnalytics customerId={whatsappCustomerId} />
             </motion.div>
