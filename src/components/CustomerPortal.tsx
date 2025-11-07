@@ -14,7 +14,8 @@ import {
   Cog6ToothIcon,
   UserIcon,
   XMarkIcon,
-  UserPlusIcon
+  UserPlusIcon,
+  ShoppingCartIcon
 } from '@heroicons/react/24/outline';
 import { Logo } from './Logo';
 import { useAuthStore, authenticatedFetch } from '../lib/auth';
@@ -323,6 +324,8 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
         leads: order.leads || order.quantity,
         conversions: order.conversions || 0,
         invoiceUrl: order.invoiceUrl, // Add invoice URL for download
+        invoiceNumber: order.invoiceNumber,
+        raw: order,
       }))
     : getRecentOrders(user); // Fallback to demo data for demo account
 
@@ -382,366 +385,424 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
     }
   };
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-brand-navy via-brand-purple to-brand-pink flex flex-col">
-      {/* Header */}
-      <motion.div
-        className="flex items-center justify-between p-3 md:p-4 glass-effect"
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-      >
-        {/* Back button - icon only on mobile */}
-        <button
-          onClick={onBackToHome}
-          className="flex items-center space-x-1 md:space-x-2 text-white/80 hover:text-white transition-colors min-w-fit"
-        >
-          <ArrowLeftIcon className="w-5 h-5" />
-          <span className="hidden md:inline text-sm">Home</span>
-        </button>
-        
-        {/* Center - Title */}
-        <div className="text-center flex-1 px-2">
-          <h1 className="text-white font-bold text-base md:text-xl">Mijn Account</h1>
-          <p className="text-white/60 text-xs md:text-sm hidden md:block">
-            Welkom terug, {user?.name || (user?.isGuest ? 'Gast' : 'Gebruiker')}!
-            {user?.isGuest && (
-              <span className="block text-xs text-brand-pink mt-1">
-                Gast account - <button 
-                  onClick={() => {/* TODO: Show account creation */}}
-                  className="underline hover:text-brand-orange"
-                >
-                  Maak account aan
-                </button>
-              </span>
-            )}
-          </p>
-        </div>
-        
-        {/* Right buttons - compact on mobile */}
-        <div className="flex items-center space-x-1 md:space-x-2 min-w-fit">
-          <button
-            onClick={() => setShowSupportModal(true)}
-            className="chat-button px-2 py-2 md:px-4 md:py-2 text-xs md:text-sm"
-            title="Support & Contact"
-          >
-            <span className="md:hidden">💬</span>
-            <span className="hidden md:inline">💬 Support</span>
-          </button>
-          <button
-            onClick={handleLogout}
-            className="flex items-center space-x-1 md:space-x-2 px-2 py-2 md:px-3 bg-white/10 hover:bg-white/20 rounded-lg text-white/80 hover:text-white transition-all"
-            title="Uitloggen"
-          >
-            <UserIcon className="w-4 h-4" />
-            <span className="text-xs md:text-sm hidden md:inline">Uitloggen</span>
-          </button>
-        </div>
-      </motion.div>
+  const isDemoAccount = ADMIN_CONFIG.demoAccount && user?.email === ADMIN_CONFIG.demoAccount.email;
+  const leadData = customerData?.leadData ?? [];
+  const hasLeadData = leadData.length > 0;
+  const revenueStats = hasLeadData ? calculateRevenueFromLeads(leadData) : null;
 
-      <div className="flex-1 p-4 space-y-6">
-        {/* Account Summary */}
-        <motion.div
-          className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 border border-white/20"
+  const parseEuroValue = (value: any): number => {
+    if (typeof value === 'number') return value;
+    if (!value) return 0;
+    let str = String(value).trim();
+    let multiplier = 1;
+    if (/[kK]$/.test(str)) {
+      multiplier = 1000;
+      str = str.slice(0, -1);
+    }
+    str = str.replace(/€/g, '').replace(/\./g, '').replace(',', '.');
+    const numeric = parseFloat(str);
+    return Number.isFinite(numeric) ? numeric * multiplier : 0;
+  };
+
+  const totalLeadsFromOrders = recentOrders.reduce((sum: number, order: any) => {
+    const leadsValue = typeof order.leads === 'number' ? order.leads : parseEuroValue(order.leads);
+    return sum + (Number.isFinite(leadsValue) ? leadsValue : 0);
+  }, 0);
+
+  const totalConversionsFromOrders = recentOrders.reduce((sum: number, order: any) => {
+    const conversionsValue = typeof order.conversions === 'number' ? order.conversions : parseEuroValue(order.conversions);
+    return sum + (Number.isFinite(conversionsValue) ? conversionsValue : 0);
+  }, 0);
+
+  const totalLeads = hasLeadData ? leadData.length : totalLeadsFromOrders;
+  let conversionRate = hasLeadData
+    ? (revenueStats ? revenueStats.conversionRate : 0)
+    : totalLeads > 0
+      ? (totalConversionsFromOrders / totalLeads) * 100
+      : 0;
+
+  const totalRevenueFromOrdersCents = orders.reduce((sum, order) => {
+    const value = order.totalAmountInclVAT ?? order.totalAmount ?? 0;
+    return sum + (Number.isFinite(value) ? value : 0);
+  }, 0);
+
+  let totalRevenue = hasLeadData
+    ? (revenueStats ? revenueStats.totalRevenue : 0)
+    : totalRevenueFromOrdersCents / 100;
+
+  if (!hasLeadData && totalRevenue === 0 && recentOrders.length > 0) {
+    totalRevenue = recentOrders.reduce((sum: number, order: any) => sum + parseEuroValue(order.amount), 0);
+  }
+
+  const totalProfit = hasLeadData
+    ? leadData
+        .filter(lead => lead.status === 'deal_closed' && lead.profit)
+        .reduce((sum, lead) => sum + (lead.profit || 0), 0)
+    : 0;
+
+  const latestOrder = recentOrders[0] || null;
+ 
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-brand-navy via-brand-purple to-brand-pink">
+      <div className="max-w-6xl mx-auto px-4 py-6 md:py-10 space-y-6 md:space-y-8">
+        <motion.nav
+          className="flex items-center justify-between rounded-2xl border border-white/15 bg-white/10 backdrop-blur-xl px-3 md:px-6 py-3 md:py-4 shadow-[0_20px_45px_-25px_rgba(28,12,64,0.65)]"
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          <button
+            onClick={onBackToHome}
+            className="flex items-center space-x-2 text-white/80 hover:text-white transition-colors"
+          >
+            <ArrowLeftIcon className="w-5 h-5" />
+            <span className="hidden sm:inline text-sm font-medium">Home</span>
+          </button>
+
+          <div className="text-center flex-1 px-2">
+            <p className="text-xs text-white/50 uppercase tracking-[0.3em]">Warme Leads Portal</p>
+            <h1 className="text-white font-semibold text-base md:text-lg">Welkom terug, {user?.name || (user?.isGuest ? 'Gast' : 'partner')}!</h1>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowSupportModal(true)}
+              className="hidden sm:inline-flex items-center gap-2 rounded-xl bg-white/10 px-3 py-2 text-sm font-medium text-white/80 hover:bg-white/20 hover:text-white transition"
+            >
+              <ChatBubbleLeftRightIcon className="w-4 h-4" />
+              Support
+            </button>
+            <button
+              onClick={handleLogout}
+              className="inline-flex items-center gap-1 rounded-xl bg-white/10 px-3 py-2 text-sm font-medium text-white/80 hover:bg-white/20 hover:text-white transition"
+            >
+              <UserIcon className="w-4 h-4" />
+              <span className="hidden sm:inline">Uitloggen</span>
+            </button>
+          </div>
+        </motion.nav>
+
+        {/* Hero & Status */}
+        <motion.section
+          className="relative overflow-hidden rounded-3xl border border-white/15 bg-white/10 backdrop-blur-xl p-6 md:p-10 shadow-[0_45px_90px_-65px_rgba(24,9,64,0.85)]"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
         >
-          <h2 className="text-white font-bold text-xl mb-4">Account overzicht</h2>
-          
-          {loadingCustomerData ? (
-            // Loading skeleton
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="text-center">
-                  <div className="w-16 h-16 bg-white/10 rounded-xl mx-auto mb-2 animate-pulse"></div>
-                  <div className="h-4 bg-white/10 rounded animate-pulse"></div>
-                </div>
-              ))}
-            </div>
-          ) : (recentOrders.length > 0 || (customerData?.leadData && customerData.leadData.length > 0)) ? (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="text-center">
-                <div className="text-3xl font-bold text-white">
-                  {(() => {
-                    if (customerData?.leadData && customerData.leadData.length > 0) {
-                      return customerData.leadData.length.toLocaleString();
-                    }
-                    // Fallback to demo data for demo user
-                    if (ADMIN_CONFIG.demoAccount && user?.email === ADMIN_CONFIG.demoAccount.email) {
-                      return recentOrders.reduce((total: number, order: any) => total + (order.leads || 0), 0).toLocaleString();
-                    }
-                    return '0';
-                  })()}
-                </div>
-                <div className="text-white/60 text-sm">Totaal Leads</div>
-              </div>
-              <div className="text-center">
-                <div className="text-3xl font-bold text-green-400">
-                  {(() => {
-                    if (customerData?.leadData && customerData.leadData.length > 0) {
-                      const revenueStats = calculateRevenueFromLeads(customerData.leadData);
-                      return revenueStats.conversionRate.toFixed(1);
-                    }
-                    // Fallback to demo data for demo user
-                    if (ADMIN_CONFIG.demoAccount && user?.email === ADMIN_CONFIG.demoAccount.email) {
-                      const totalLeads = recentOrders.reduce((total: number, order: any) => total + (order.leads || 0), 0);
-                      const totalConversions = recentOrders.reduce((total: number, order: any) => total + (order.conversions || 0), 0);
-                      return totalLeads > 0 ? ((totalConversions / totalLeads) * 100).toFixed(1) : '0.0';
-                    }
-                    return '0.0';
-                  })()}%
-                </div>
-                <div className="text-white/60 text-sm">Conversie Rate</div>
-              </div>
-              <div className="text-center">
-                <div className="text-3xl font-bold text-blue-400">
-                  {(() => {
-                    if (customerData?.leadData && customerData.leadData.length > 0) {
-                      const revenueStats = calculateRevenueFromLeads(customerData.leadData);
-                      return formatRevenue(revenueStats.totalRevenue);
-                    }
-                    // Fallback to demo data for demo user
-                    if (ADMIN_CONFIG.demoAccount && user?.email === ADMIN_CONFIG.demoAccount.email) {
-                      return recentOrders.reduce((total: number, order: any) => {
-                        const amount = parseFloat(order.amount.replace('€', '').replace('K', '000'));
-                        return total + (isNaN(amount) ? 0 : amount);
-                      }, 0).toLocaleString();
-                    }
-                    return '€0';
-                  })()}
-                </div>
-                <div className="text-white/60 text-sm">Gegenereerde Omzet</div>
-              </div>
-              <div className="text-center">
-                <div className="text-3xl font-bold text-emerald-400">
-                  {(() => {
-                    if (customerData?.leadData && customerData.leadData.length > 0) {
-                      // Calculate total profit from closed deals
-                      const totalProfit = customerData.leadData
-                        .filter(lead => lead.status === 'deal_closed' && lead.profit)
-                        .reduce((sum, lead) => sum + (lead.profit || 0), 0);
-                      return formatRevenue(totalProfit);
-                    }
-                    return '€0';
-                  })()}
-                </div>
-                <div className="text-white/60 text-sm">Gegenereerde Winst</div>
-              </div>
-            </div>
-          ) : (
-            <div className="text-center py-8">
-              <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                <PlusIcon className="w-8 h-8 text-white/60" />
-              </div>
-              <h3 className="text-white/80 text-lg font-medium mb-2">Start uw leadgeneratie reis</h3>
-              <p className="text-white/60 text-sm">
-                Maak uw eerste bestelling en zie hier uw resultaten verschijnen!
-              </p>
-            </div>
-          )}
-        </motion.div>
+          <div className="absolute inset-0 pointer-events-none">
+            <div className="absolute -right-24 -top-24 h-56 w-56 rounded-full bg-brand-pink/30 blur-3xl" />
+            <div className="absolute -left-16 bottom-0 h-48 w-48 rounded-full bg-brand-purple/40 blur-3xl" />
+          </div>
 
-        {/* Quick Actions */}
-        <motion.div
-          className="grid grid-cols-1 md:grid-cols-2 gap-4"
+          <div className="relative flex flex-col gap-8 md:flex-row md:items-start">
+            <div className="flex-1 space-y-6">
+              <div className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-1 text-xs font-medium text-white/70">
+                <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_0_3px_rgba(56,189,248,0.25)]" />
+                Realtime accountoverzicht
+              </div>
+
+              <div className="space-y-2">
+                <h2 className="text-2xl md:text-4xl font-bold text-white">Klaar voor de volgende groeispurt?</h2>
+                <p className="text-white/70 max-w-xl text-sm md:text-base">
+                  Beheer uw leads, bestellingen en team vanuit één overzichtelijk portaal. Alles sluit naadloos aan op het leadportaal en uw Google Sheets integratie.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                <div className="rounded-2xl border border-white/15 bg-white/10 p-4">
+                  <p className="text-xs text-white/50">Totaal leads</p>
+                  <p className="mt-1 text-2xl font-semibold text-white">{totalLeads}</p>
+                </div>
+                <div className="rounded-2xl border border-white/15 bg-white/10 p-4">
+                  <p className="text-xs text-white/50">Conversieratio</p>
+                  <p className="mt-1 text-2xl font-semibold text-emerald-200">{conversionRate.toFixed(1)}%</p>
+                </div>
+                <div className="rounded-2xl border border-white/15 bg-white/10 p-4">
+                  <p className="text-xs text-white/50">Gegenereerde omzet</p>
+                  <p className="mt-1 text-2xl font-semibold text-sky-200">{formatRevenue(totalRevenue)}</p>
+                </div>
+                <div className="rounded-2xl border border-white/15 bg-white/10 p-4">
+                  <p className="text-xs text-white/50">Gegenereerde winst</p>
+                  <p className="mt-1 text-2xl font-semibold text-purple-200">{formatRevenue(totalProfit)}</p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-3">
+                <button
+                  onClick={() => handleQuickAction('reorder')}
+                  className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-green-500 to-emerald-500 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-500/30 transition-transform hover:-translate-y-0.5"
+                >
+                  <PlusIcon className="w-4 h-4" />
+                  Nieuwe bestelling
+                </button>
+                <button
+                  onClick={() => handleQuickAction('leads')}
+                  className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-5 py-3 text-sm font-semibold text-white/80 hover:text-white hover:border-white/40 transition"
+                >
+                  <ChartBarIcon className="w-4 h-4" />
+                  Ga naar mijn leads
+                </button>
+              </div>
+            </div>
+
+            <div className="w-full md:max-w-xs space-y-5 rounded-3xl border border-white/15 bg-white/10 p-6 shadow-[0_35px_60px_-35px_rgba(13,28,64,0.7)]">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold text-white/80">Systeemstatus</p>
+                <span className="text-xs text-white/50">Realtime</span>
+              </div>
+              <div className="space-y-4">
+                <div className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 p-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/15">
+                    <CheckCircleIcon className="w-5 h-5 text-emerald-300" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-white">Google Sheets sync</p>
+                    <p className="text-xs text-white/60">{customerData?.googleSheetUrl ? 'Actief en up-to-date' : 'Nog niet gekoppeld'}</p>
+                  </div>
+                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${customerData?.googleSheetUrl ? 'bg-emerald-500/15 text-emerald-200' : 'bg-yellow-500/20 text-yellow-200'}`}>
+                    {customerData?.googleSheetUrl ? 'Actief' : 'Activeren'}
+                  </span>
+                </div>
+                <div className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 p-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/15">
+                    <CurrencyEuroIcon className="w-5 h-5 text-blue-300" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-white">Facturen & betalingen</p>
+                    <p className="text-xs text-white/60">{recentOrders.some((order: any) => order.invoiceUrl) ? 'Facturen beschikbaar' : 'Geen facturen gevonden'}</p>
+                  </div>
+                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${recentOrders.some((order: any) => order.invoiceUrl) ? 'bg-sky-500/20 text-sky-200' : 'bg-white/10 text-white/60'}`}>
+                    {recentOrders.some((order: any) => order.invoiceUrl) ? 'Download' : 'Later'}
+                  </span>
+                </div>
+                <div className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 p-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-500/15">
+                    <ChatBubbleLeftRightIcon className="w-5 h-5 text-orange-200" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-white">Support beschikbaar</p>
+                    <p className="text-xs text-white/60">Ons team staat voor je klaar</p>
+                  </div>
+                  <button
+                    onClick={() => setShowSupportModal(true)}
+                    className="rounded-full bg-white/10 px-2.5 py-0.5 text-[11px] font-medium text-white/70 hover:text-white"
+                  >
+                    Chat
+                  </button>
+                </div>
+                {recentOrders.length > 0 && (
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                    <p className="text-xs text-white/50 mb-1">Laatste bestelling</p>
+                    <p className="text-sm font-semibold text-white">{latestOrder?.type}</p>
+                    <div className="mt-2 flex items-center justify-between text-xs text-white/60">
+                      <span>{latestOrder?.date}</span>
+                      <span>{latestOrder?.amount}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </motion.section>
+
+        {/* Quick actions */}
+        <motion.section
+          className="grid grid-cols-1 gap-4 md:grid-cols-2"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+        >
+          {getQuickActions(user)
+            .filter(action => {
+              if (!action.requiresAccount) {
+                if (action.action === 'reorder') return user?.permissions?.canCheckout !== false;
+                return true;
+              }
+              if (action.action === 'leads') return isAuthenticated;
+              if (action.action === 'team') return user?.permissions?.canManageEmployees !== false;
+              return isAuthenticated && user && !user.isGuest;
+            })
+            .map((action, index) => {
+              const Icon = action.icon;
+              return (
+                <motion.button
+                  key={action.action}
+                  onClick={() => handleQuickAction(action.action)}
+                  className="group relative overflow-hidden rounded-3xl border border-white/15 bg-white/8 p-6 text-left shadow-[0_35px_60px_-35px_rgba(17,10,48,0.75)] transition-all hover:border-white/35 hover:bg-white/12"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.08 }}
+                >
+                  <div className="absolute inset-0 opacity-0 transition group-hover:opacity-100" style={{ background: 'radial-gradient(circle at top right, rgba(255,255,255,0.15), transparent)' }} />
+                  <div className="relative flex items-start gap-4">
+                    <div className={`flex h-12 w-12 items-center justify-center rounded-2xl ${action.color} bg-opacity-20 backdrop-blur-md text-white shadow-lg shadow-black/20`}> 
+                      <Icon className="w-6 h-6" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-lg font-semibold text-white">{action.title}</h3>
+                      <p className="mt-1 text-sm text-white/70">{action.description}</p>
+                      <div className="mt-4 inline-flex items-center gap-2 text-xs font-medium text-brand-pink group-hover:translate-x-1 transition-transform">
+                        <span>Openen</span>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </div>
+                    </div>
+                  </div>
+                </motion.button>
+              );
+            })}
+        </motion.section>
+
+        {/* Orders timeline */}
+        <motion.section
+          className="rounded-3xl border border-white/15 bg-white/8 p-6 md:p-8 shadow-[0_45px_85px_-60px_rgba(16,8,40,0.9)]"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
         >
-          {getQuickActions(user)
-            .filter(action => {
-              // Always show non-account actions (but check permissions for checkout)
-              if (!action.requiresAccount) {
-                // For reorder action, only show if user can checkout
-                if (action.action === 'reorder') return user?.permissions?.canCheckout !== false;
-                return true;
-              }
-              
-              // For leads action, always show if authenticated (regardless of guest status)
-              if (action.action === 'leads') return isAuthenticated;
-              
-              // For team management, only show if user can manage employees
-              if (action.action === 'team') return user?.permissions?.canManageEmployees !== false;
-              
-              // For other account-required actions, show if user is authenticated and not a guest
-              return isAuthenticated && user && !user.isGuest;
-            })
-            .map((action, index) => {
-            const Icon = action.icon;
-            return (
-              <motion.button
-                key={action.action}
-                onClick={() => handleQuickAction(action.action)}
-                className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20 text-left hover:bg-white/20 transition-all group"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.1 }}
-                whileHover={{ scale: 1.02, y: -2 }}
-                whileTap={{ scale: 0.98 }}
-              >
-                <div className="flex items-start space-x-4">
-                  <div className={`w-12 h-12 ${action.color} rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform`}>
-                    <Icon className="w-6 h-6 text-white" />
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="text-white font-semibold mb-1">{action.title}</h3>
-                    <p className="text-white/70 text-sm">{action.description}</p>
-                  </div>
-                  <svg className="w-5 h-5 text-white/40 group-hover:text-white/80 group-hover:translate-x-1 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
-                </div>
-              </motion.button>
-            );
-          })}
-        </motion.div>
-
-        {/* Recent Orders */}
-        <motion.div
-          className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 border border-white/20"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4 }}
-        >
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-white font-bold text-xl">Recente bestellingen</h2>
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 className="text-xl font-semibold text-white">Recente bestellingen</h2>
+              <p className="text-sm text-white/60">Bekijk uw voorgeschiedenis en download facturen.</p>
+            </div>
             <button
-              onClick={onStartChat}
-              className="text-brand-pink hover:text-brand-orange transition-colors text-sm"
+              onClick={() => handleQuickAction('reorder')}
+              className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-medium text-white/80 hover:text-white hover:border-white/40 transition"
             >
-              Nieuwe bestelling →
+              Nieuwe bestelling
+              <PlusIcon className="w-4 h-4" />
             </button>
           </div>
 
-          {loadingOrders ? (
-            // Loading skeleton for orders
-            <div className="space-y-4">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="bg-white/5 rounded-xl p-4 border border-white/10">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex-1">
-                      <div className="h-4 bg-white/10 rounded animate-pulse mb-2"></div>
-                      <div className="h-3 bg-white/5 rounded animate-pulse w-2/3"></div>
-                    </div>
-                    <div className="h-6 bg-white/10 rounded-full animate-pulse w-20"></div>
-                  </div>
-                  <div className="grid grid-cols-3 gap-4">
-                    {[1, 2, 3].map((j) => (
-                      <div key={j}>
-                        <div className="h-3 bg-white/5 rounded animate-pulse mb-1"></div>
-                        <div className="h-4 bg-white/10 rounded animate-pulse"></div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : recentOrders.length > 0 ? (
-            <div className="space-y-4">
-              {recentOrders.map((order: any, index: number) => (
-                <motion.div
-                  key={order.id}
-                  onClick={() => {
-                    // Find the full order object from orders state
-                    const fullOrder = orders.find(o => o.orderNumber === order.id);
-                    if (fullOrder) {
-                      setSelectedOrder(fullOrder);
-                    }
-                  }}
-                  className="bg-white/5 rounded-xl p-4 border border-white/10 cursor-pointer hover:bg-white/10 hover:border-white/20 transition-all"
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: index * 0.1 }}
-                >
-                  <div className="flex items-center justify-between mb-3">
-                    <div>
-                      <div className="text-white font-medium">{order.type}</div>
-                      <div className="text-white/60 text-sm">{order.id} • {order.date}</div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className={`
-                        px-3 py-1 rounded-full text-xs font-medium
-                        ${order.status === 'geleverd' 
-                          ? 'bg-green-500/20 text-green-400 border border-green-500/30' 
-                          : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                        }
-                      `}>
-                        {order.status === 'geleverd' ? (
-                          <div className="flex items-center space-x-1">
-                            <CheckCircleIcon className="w-3 h-3" />
-                            <span>Geleverd</span>
-                          </div>
-                        ) : (
-                          <div className="flex items-center space-x-1">
-                            <ClockIcon className="w-3 h-3" />
-                            <span>Actief</span>
-                          </div>
-                        )}
-                      </div>
-                      {order.invoiceUrl && (
-                        <a
-                          href={order.invoiceUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                          className="px-3 py-1 rounded-full text-xs font-medium bg-purple-500/20 text-purple-400 border border-purple-500/30 hover:bg-purple-500/30 transition-colors flex items-center gap-1"
-                          title="Download factuur (PDF)"
-                        >
-                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
-                          </svg>
-                          <span>Factuur</span>
-                        </a>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-4 text-sm">
-                    <div>
-                      <div className="text-white/60">Leads</div>
-                      <div className="text-white font-medium">{order.leads}/{order.quantity}</div>
-                    </div>
-                                         <div>
-                       <div className="text-white/60">Conversies</div>
-                       <div className="text-white font-medium">{order.conversions}</div>
-                     </div>
-                    <div>
-                      <div className="text-white/60">Waarde</div>
-                      <div className="text-white font-medium">{order.amount}</div>
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-          ) : (
-            <motion.div
-              className="text-center py-12"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-            >
-              <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                <PlusIcon className="w-8 h-8 text-white/60" />
+          <div className="mt-6">
+            {loadingOrders ? (
+              <div className="space-y-4">
+                {[1,2,3].map(i => (
+                  <div key={i} className="rounded-2xl border border-white/10 bg-white/5 p-5 animate-pulse" />
+                ))}
               </div>
-              <h3 className="text-white/80 text-lg font-medium mb-2">Nog geen bestellingen</h3>
-              <p className="text-white/60 text-sm mb-6">
-                Maak uw eerste bestelling en begin met het genereren van leads!
+            ) : recentOrders.length > 0 ? (
+              <div className="relative pl-6">
+                <span className="absolute left-2 top-2 bottom-2 w-px bg-white/15" />
+                <div className="space-y-6">
+                  {recentOrders.map((order: any, index: number) => (
+                    <motion.div
+                      key={order.id}
+                      className="relative pl-6"
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: index * 0.06 }}
+                    >
+                      <span className="absolute left-[-14px] top-4 h-3 w-3 rounded-full bg-gradient-to-br from-brand-pink to-brand-purple shadow-[0_0_25px_rgba(216,180,254,0.45)]" />
+                      <div className="rounded-2xl border border-white/10 bg-white/8 p-5 transition hover:border-white/25">
+                        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                          <div>
+                            <p className="text-xs text-white/40">{order.date}</p>
+                            <h3 className="text-lg font-semibold text-white">{order.type}</h3>
+                            <p className="text-sm text-white/60">Ordernummer {order.id}</p>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className={`rounded-full px-3 py-1 text-xs font-medium ${order.status === 'geleverd' ? 'bg-emerald-500/15 text-emerald-200' : order.status === 'actief' ? 'bg-yellow-500/20 text-yellow-200' : 'bg-white/10 text-white/60'}`}>
+                              {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                            </span>
+                            {order.invoiceUrl && (
+                              <a
+                                href={order.invoiceUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="rounded-full px-3 py-1 text-xs font-medium bg-purple-500/20 text-purple-200 hover:bg-purple-500/30 transition"
+                              >
+                                Factuur
+                              </a>
+                            )}
+                            <button
+                              onClick={() => setSelectedOrder(order.raw || order)}
+                              className="rounded-full px-3 py-1 text-xs font-medium bg-white/10 text-white/70 hover:text-white"
+                            >
+                              Details
+                            </button>
+                          </div>
+                        </div>
+                        <div className="mt-4 grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
+                          <div>
+                            <p className="text-white/45 mb-1">Leads</p>
+                            <p className="text-white font-medium">{order.leads}</p>
+                          </div>
+                          <div>
+                            <p className="text-white/45 mb-1">Conversies</p>
+                            <p className="text-white font-medium">{order.conversions}</p>
+                          </div>
+                          <div>
+                            <p className="text-white/45 mb-1">Waarde</p>
+                            <p className="text-white font-medium">{order.amount}</p>
+                          </div>
+                          <div>
+                            <p className="text-white/45 mb-1">Hoeveelheid</p>
+                            <p className="text-white font-medium">{order.quantity}</p>
+                          </div>
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-3xl border border-dashed border-white/20 bg-white/5 px-6 py-12 text-center">
+                <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-white/10">
+                  <ShoppingCartIcon className="w-8 h-8 text-white/60" />
+                </div>
+                <h3 className="text-white text-lg font-semibold">Nog geen bestellingen</h3>
+                <p className="mt-2 text-sm text-white/60 max-w-lg mx-auto">
+                  Start direct met het plaatsen van uw eerste bestelling. Daarna verschijnen alle leveringen en facturen automatisch in dit overzicht.
+                </p>
+                <div className="mt-6">
+                  <button
+                    onClick={() => handleQuickAction('reorder')}
+                    className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-green-500 to-emerald-500 px-5 py-3 text-sm font-semibold text-white shadow-lg hover:-translate-y-0.5 transition"
+                  >
+                    <PlusIcon className="w-4 h-4" />
+                    Direct leads bestellen
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </motion.section>
+
+        {/* CTA banner */}
+        <motion.section
+          className="relative overflow-hidden rounded-3xl border border-white/15 bg-gradient-to-r from-brand-purple via-brand-pink to-orange-400 p-6 md:p-8 text-white shadow-[0_45px_90px_-65px_rgba(24,9,64,0.85)]"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.25 }}
+        >
+          <div className="absolute right-[-80px] top-[-80px] h-56 w-56 rounded-full bg-white/20 blur-3xl" />
+          <div className="relative z-10 flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h3 className="text-2xl font-semibold">Boost uw campagne vandaag nog</h3>
+              <p className="mt-2 max-w-xl text-sm md:text-base text-white/80">
+                Combineer verse exclusieve leads met realtime inzicht in het leadportaal. Ons team helpt u graag bij het kiezen van de beste strategie.
               </p>
-              <motion.button
-                onClick={() => setShowCheckoutModal(true)}
-                className="bg-gradient-to-r from-green-500 to-emerald-600 text-white font-semibold py-3 px-6 rounded-xl shadow-lg hover:shadow-xl transition-all inline-flex items-center space-x-2"
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
+            </div>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button
+                onClick={() => handleQuickAction('support')}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-white/15 px-5 py-3 text-sm font-semibold text-white hover:bg-white/25 transition"
               >
-                <PlusIcon className="w-5 h-5" />
-                <span>Direct leads bestellen</span>
-              </motion.button>
-            </motion.div>
-          )}
-        </motion.div>
-
-
-        {/* Leads section removed - now on dedicated page */}
+                <ChatBubbleLeftRightIcon className="w-4 h-4" />
+                Chat met support
+              </button>
+              <button
+                onClick={() => handleQuickAction('reorder')}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-semibold text-brand-purple hover:bg-white/90 transition"
+              >
+                <PlusIcon className="w-4 h-4" />
+                Bestel leads
+              </button>
+            </div>
+          </div>
+        </motion.section>
       </div>
-      
+
       {/* Order Checkout Modal */}
       <OrderCheckoutModal
         isOpen={showCheckoutModal}
