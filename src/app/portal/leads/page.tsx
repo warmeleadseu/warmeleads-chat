@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { Suspense, useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import {
   ArrowLeftIcon,
@@ -27,7 +27,9 @@ import {
   Cog6ToothIcon,
   BellIcon,
   DocumentArrowDownIcon,
-  ChatBubbleLeftRightIcon
+  ChatBubbleLeftRightIcon,
+  SparklesIcon,
+  InformationCircleIcon
 } from '@heroicons/react/24/outline';
 import { useAuthStore, authenticatedFetch } from '@/lib/auth';
 import { Loading } from '@/components/ui';
@@ -35,7 +37,7 @@ import { crmSystem, type Customer, type Lead } from '@/lib/crmSystem';
 import { readCustomerLeads, GoogleSheetsService, addLeadToSheet } from '@/lib/googleSheetsAPI';
 import { branchIntelligence, type Branch } from '@/lib/branchIntelligence';
 import { PipelineBoard } from '@/components/PipelineBoard';
-import { type CustomStage, PipelineStagesManager } from '@/lib/pipelineStages';
+import { type CustomStage, PipelineStagesManager, DEFAULT_STAGES } from '@/lib/pipelineStages';
 import { WhatsAppSettings } from '@/components/WhatsAppSettings';
 
 const WhatsAppAnalytics = dynamic(
@@ -51,8 +53,20 @@ const WhatsAppAnalytics = dynamic(
   }
 );
 
-export default function CustomerLeadsPage() {
+type ActiveHint = {
+  id: string;
+  title: string;
+  description: string;
+  icon?: 'sparkles' | 'info';
+  actionLabel?: string;
+  onAction?: () => void;
+};
+
+type StageDescriptor = Pick<CustomStage, 'id' | 'name' | 'order' | 'color'>;
+
+function CustomerLeadsPageInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, isAuthenticated, isLoading: authLoading, init } = useAuthStore();
   
   // Initialize auth from localStorage on mount
@@ -81,13 +95,107 @@ export default function CustomerLeadsPage() {
   const [isSavingSheet, setIsSavingSheet] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [showWhatsAppSettings, setShowWhatsAppSettings] = useState(false);
+  const [activeHint, setActiveHint] = useState<ActiveHint | null>(null);
+  const [highlightStage, setHighlightStage] = useState<string | null>(null);
+  const [highlightLeadId, setHighlightLeadId] = useState<string | null>(null);
+  const lastHintIdRef = useRef<string | null>(null);
   
+  const showHint = useCallback((hint: ActiveHint) => {
+    if (lastHintIdRef.current === hint.id && activeHint?.id === hint.id) {
+      return;
+    }
+    lastHintIdRef.current = hint.id;
+    setActiveHint(hint);
+  }, [activeHint]);
+
+  const dismissHint = useCallback(() => {
+    setActiveHint(null);
+    lastHintIdRef.current = null;
+  }, []);
+
+const focusLeadRow = useCallback((leadId: string) => {
+  requestAnimationFrame(() => {
+    const node =
+      document.getElementById(`lead-card-${leadId}`) ||
+      document.getElementById(`lead-row-${leadId}`);
+    if (node) {
+      node.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  });
+}, []);
+
   // Custom pipeline stages
   const [customStages, setCustomStages] = useState<CustomStage[]>([]);
+  const stageDefinitions = useMemo<StageDescriptor[]>(() => {
+    if (customStages.length > 0) {
+      return [...customStages]
+        .sort((a, b) => a.order - b.order)
+        .map(stage => ({
+          id: stage.id,
+          name: stage.name,
+          order: stage.order,
+          color: stage.color
+        }));
+    }
+
+    return DEFAULT_STAGES
+      .map(stage => ({
+        id: stage.id,
+        name: stage.name,
+        order: stage.order,
+        color: stage.color
+      }))
+      .sort((a, b) => a.order - b.order);
+  }, [customStages]);
+  
+  const mapStatusToStageId = useCallback((statusValue: string | null | undefined) => {
+    if (!statusValue) return null;
+    const normalized = statusValue.toString().trim().toLowerCase();
+    if (!normalized) return null;
+
+    const directMatch = stageDefinitions.find(stage => stage.id.toLowerCase() === normalized);
+    if (directMatch) {
+      return directMatch.id;
+    }
+
+    const nameMatch = stageDefinitions.find(stage => stage.name.toLowerCase() === normalized);
+    if (nameMatch) {
+      return nameMatch.id;
+    }
+
+    const fallbackMapping: Record<string, string> = {
+      new: 'new_lead',
+      nieuw: 'new_lead',
+      'nieuwe lead': 'new_lead',
+      'new lead': 'new_lead',
+      new_lead: 'new_lead',
+      contacted: 'contact_made',
+      'contact made': 'contact_made',
+      'contact opgenomen': 'contact_made',
+      contact_made: 'contact_made',
+      qualified: 'proposal_sent',
+      'proposal sent': 'proposal_sent',
+      'offerte verstuurd': 'proposal_sent',
+      proposal_sent: 'proposal_sent',
+      converted: 'deal_closed',
+      'deal closed': 'deal_closed',
+      closed: 'deal_closed',
+      won: 'deal_closed',
+      nazorg: 'aftercare',
+      aftercare: 'aftercare'
+    };
+
+    const mappedId = fallbackMapping[normalized];
+    if (mappedId && stageDefinitions.some(stage => stage.id === mappedId)) {
+      return mappedId;
+    }
+
+    return statusValue.toString();
+  }, [stageDefinitions]);
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
-  const [leadsPerPage, setLeadsPerPage] = useState(10);
+  const leadsPerPage = 25;
   
   // Mobile stats collapse state
   const [statsExpanded, setStatsExpanded] = useState(false);
@@ -98,6 +206,22 @@ export default function CustomerLeadsPage() {
     newLeads: true
   });
   
+  const stageParam = searchParams.get('stage');
+  const viewParam = searchParams.get('view');
+  const leadParam = searchParams.get('lead');
+  const hintParam = searchParams.get('hint');
+
+  const resolveStageById = useCallback(
+    (stageId: string) => {
+      return (
+        customStages.find((stage) => stage.id === stageId) ||
+        DEFAULT_STAGES.find((stage) => stage.id === stageId) ||
+        null
+      );
+    },
+    [customStages]
+  );
+
   // Debug logs state
   const [debugLogs, setDebugLogs] = useState<{timestamp: string, level: string, message: string, data?: any}[]>([]);
   const [showDebugPanel, setShowDebugPanel] = useState(false);
@@ -127,6 +251,167 @@ export default function CustomerLeadsPage() {
     setGoogleSheetUrlInput(customerData?.googleSheetUrl || '');
   }, [customerData?.googleSheetUrl]);
   
+useEffect(() => {
+  if (!customerData) return;
+
+  if (stageParam) {
+    if (stageParam === 'unassigned') {
+      if (highlightStage !== 'unassigned') {
+        setHighlightStage('unassigned');
+        showHint({
+          id: 'stage:unassigned',
+          title: 'Leads zonder status',
+          description: 'We tonen leads die nog geen pipelinefase hebben. Werk de status bij om accurate funnel inzichten te houden.',
+          icon: 'info',
+          actionLabel: 'Toon alle leads',
+          onAction: () => {
+            setHighlightStage(null);
+            setFilterStatus('all');
+            setCurrentPage(1);
+            dismissHint();
+          }
+        });
+      }
+      if (viewMode !== 'list') {
+        setViewMode('list');
+      }
+      return;
+    }
+
+    if (stageParam !== highlightStage) {
+      const stage = resolveStageById(stageParam);
+      if (stage) {
+        if (filterStatus !== stage.id) {
+          setFilterStatus(stage.id as any);
+        }
+        setHighlightStage(stage.id);
+        setCurrentPage(1);
+        if (viewMode !== 'list') {
+          setViewMode('list');
+        }
+        showHint({
+          id: `stage:${stage.id}`,
+          title: `Gefilterd op ${stage.name.toLowerCase()}`,
+          description: `Je ziet nu alle leads in de fase ${stage.name.toLowerCase()}.`,
+          icon: 'sparkles',
+          actionLabel: 'Wis filter',
+          onAction: () => {
+            setFilterStatus('all');
+            setHighlightStage(null);
+            setCurrentPage(1);
+            dismissHint();
+          }
+        });
+      } else {
+        setFilterStatus(stageParam as any);
+        setHighlightStage(stageParam);
+        setCurrentPage(1);
+        if (viewMode !== 'list') {
+          setViewMode('list');
+        }
+        showHint({
+          id: `stage:${stageParam}`,
+          title: 'Filter toegepast',
+          description: 'We tonen nu de leads in de gekozen status.',
+          icon: 'info',
+          actionLabel: 'Wis filter',
+          onAction: () => {
+            setFilterStatus('all');
+            setHighlightStage(null);
+            setCurrentPage(1);
+            dismissHint();
+          }
+        });
+      }
+    }
+  } else if (highlightStage) {
+    setHighlightStage(null);
+  }
+}, [
+  customerData,
+  stageParam,
+  highlightStage,
+  filterStatus,
+  resolveStageById,
+  showHint,
+  dismissHint,
+  viewMode
+]);
+
+useEffect(() => {
+  if (viewParam === 'pipeline' && viewMode !== 'pipeline') {
+    setViewMode('pipeline');
+    showHint({
+      id: 'view:pipeline',
+      title: 'Pipelineweergave actief',
+      description: 'Sleep leads naar een andere fase of gebruik rechtsboven de filters om je pipeline te beheren.',
+      icon: 'info'
+    });
+  } else if (viewParam === 'list' && viewMode !== 'list') {
+    setViewMode('list');
+  }
+}, [viewParam, viewMode, showHint]);
+
+useEffect(() => {
+  if (!hintParam) return;
+
+  if (hintParam === 'order') {
+    const hasAnyLeads = leads.length > 0;
+    const newLeadStage = resolveStageById('new_lead');
+
+    showHint({
+      id: 'hint:order',
+      title: hasAnyLeads ? 'Tip: volg je nieuwe leads op' : 'Nog geen leads zichtbaar',
+      description: hasAnyLeads
+        ? 'Filter op "Nieuwe lead" om direct met je verse leads aan de slag te gaan.'
+        : 'Koppel je Google Sheet of plaats een bestelling voor nieuwe leads.',
+      icon: hasAnyLeads ? 'sparkles' : 'info',
+      actionLabel: hasAnyLeads && newLeadStage ? 'Toon nieuwe leads' : undefined,
+      onAction: hasAnyLeads && newLeadStage
+        ? () => {
+            setFilterStatus(newLeadStage.id as any);
+            setHighlightStage(newLeadStage.id);
+            setCurrentPage(1);
+            dismissHint();
+          }
+        : undefined
+    });
+  } else if (hintParam === 'pipeline') {
+    setViewMode('pipeline');
+    showHint({
+      id: 'hint:pipeline',
+      title: 'Pipeline overzicht',
+      description: 'Gebruik de pipeline weergave om in één oogopslag kansen te spotten en leads te verslepen.',
+      icon: 'info'
+    });
+  }
+}, [hintParam, stageParam, resolveStageById, showHint, dismissHint, leads.length]);
+
+useEffect(() => {
+  if (!highlightStage || highlightStage === 'unassigned') return;
+
+  const timeout = window.setTimeout(() => {
+    const node = document.getElementById(`stage-card-${highlightStage}`);
+    if (node) {
+      node.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+    }
+  }, 150);
+
+  return () => window.clearTimeout(timeout);
+}, [highlightStage]);
+
+useEffect(() => {
+  if (stageParam) return; // handled separately
+  if (filterStatus !== 'all') {
+    const stage = resolveStageById(filterStatus as string);
+    if (stage) {
+      setHighlightStage(stage.id);
+    }
+  } else if (!stageParam) {
+    setHighlightStage(null);
+  }
+}, [filterStatus, stageParam, resolveStageById]);
+
   // Load custom pipeline stages when customer changes
   useEffect(() => {
     if (customerData?.id || user?.email) {
@@ -203,6 +488,7 @@ export default function CustomerLeadsPage() {
     console.log('🔍 Fresh lead branchData:', freshLead.branchData);
     
     setViewingLead(freshLead);
+    setHighlightLeadId(freshLead.id);
     
     // Load branch mappings if branch_id exists
     if (customerData?.branch_id) {
@@ -764,18 +1050,101 @@ export default function CustomerLeadsPage() {
     };
   }, [leads, searchTerm, filterStatus, filterBranch, currentPage, leadsPerPage]);
 
-  // Calculate statistics based on filtered leads - include both converted and deal_closed
-  const stats = {
-    total: filteredLeads.length,
-    new: filteredLeads.filter(l => l.status === 'new').length,
-    contacted: filteredLeads.filter(l => l.status === 'contacted').length,
-    qualified: filteredLeads.filter(l => l.status === 'qualified').length,
-    // Converted includes both 'converted' and 'deal_closed' statuses
-    converted: filteredLeads.filter(l => l.status === 'converted' || l.status === 'deal_closed').length,
-    lost: leads.filter(l => l.status === 'lost').length,
-    // Conversion rate based on both converted and deal_closed
-    conversionRate: leads.length > 0 ? (leads.filter(l => l.status === 'converted' || l.status === 'deal_closed').length / leads.length * 100) : 0
-  };
+useEffect(() => {
+  if (!leadParam) {
+    setHighlightLeadId(null);
+    return;
+  }
+
+  const targetLead = leads.find((lead) => lead.id === leadParam);
+  if (!targetLead) {
+    return;
+  }
+
+  const filteredIndex = filteredLeads.findIndex((lead) => lead.id === targetLead.id);
+  if (filteredIndex >= 0) {
+    const newPage = Math.floor(filteredIndex / leadsPerPage) + 1;
+    if (newPage !== currentPage) {
+      setCurrentPage(newPage);
+      window.setTimeout(() => focusLeadRow(targetLead.id), 200);
+    } else {
+      focusLeadRow(targetLead.id);
+    }
+  }
+
+  setViewingLead(targetLead);
+  setHighlightLeadId(targetLead.id);
+  showHint({
+    id: `lead:${targetLead.id}`,
+    title: `${targetLead.name} geopend`,
+    description: 'We hebben de details van deze lead voor je geopend.',
+    icon: 'sparkles'
+  });
+}, [leadParam, leads, filteredLeads, leadsPerPage, currentPage, focusLeadRow, showHint]);
+
+  // Calculate statistics based on filtered leads and dynamic pipeline stages
+  const stats = useMemo(() => {
+    const total = filteredLeads.length;
+
+    const stageCounts = stageDefinitions.map(stage => ({
+      stage,
+      count: 0,
+    }));
+
+    const stageCountMap = new Map(stageDefinitions.map(stage => [stage.id, 0]));
+
+    filteredLeads.forEach((lead) => {
+      const stageId = mapStatusToStageId(lead.status);
+      if (stageId && stageCountMap.has(stageId)) {
+        stageCountMap.set(stageId, (stageCountMap.get(stageId) || 0) + 1);
+      }
+    });
+
+    stageCounts.forEach((entry) => {
+      entry.count = stageCountMap.get(entry.stage.id) || 0;
+    });
+
+    const firstStage = stageCounts[0] ?? null;
+    const secondStage = stageCounts.length > 1 ? stageCounts[1] : null;
+    const closingStage = stageCounts.length > 0 ? stageCounts[stageCounts.length - 1] : null;
+
+    const conversionCount = closingStage?.count ?? 0;
+    const conversionRate = total > 0 ? (conversionCount / total) * 100 : 0;
+
+    const lostCount = filteredLeads.filter((lead) => {
+      const status = lead.status ? lead.status.toString().toLowerCase() : '';
+      return status.includes('lost') || status.includes('verloren') || status.includes('geannuleerd') || status.includes('cancel') || status.includes('geweigerd');
+    }).length;
+
+    return {
+      total,
+      stageCounts,
+      firstStage,
+      secondStage,
+      closingStage,
+      conversionCount,
+      conversionRate,
+      lostCount,
+    };
+  }, [filteredLeads, stageDefinitions, mapStatusToStageId]);
+
+  const formattedConversionRate = Number.isFinite(stats.conversionRate) ? stats.conversionRate : 0;
+  const firstStageLabel = stats.firstStage?.stage.name ?? 'Nieuwe lead';
+  const closingStageLabel = stats.closingStage?.stage.name ?? 'Deal gesloten';
+  const secondStageCard =
+    stats.secondStage &&
+    stats.secondStage.stage.id !== stats.firstStage?.stage.id &&
+    stats.secondStage.stage.id !== stats.closingStage?.stage.id
+      ? stats.secondStage
+      : null;
+  const closingStageCard =
+    stats.closingStage &&
+    stats.closingStage.stage.id !== stats.firstStage?.stage.id
+      ? stats.closingStage
+      : null;
+  const openLeadCount = Math.max(stats.total - (stats.conversionCount || 0), 0);
+  const secondStageLabel = secondStageCard ? secondStageCard.stage.name : 'Open leads';
+  const secondStageValue = secondStageCard ? secondStageCard.count : openLeadCount;
 
   const getStatusColor = (status: Lead['status']) => {
     // Check if status matches a custom stage
@@ -1511,16 +1880,61 @@ export default function CustomerLeadsPage() {
       {/* Main Content - Conditional container */}
       {viewMode === 'pipeline' ? (
         /* Pipeline view - Full width, no container */
-        <div className="h-[calc(100vh-120px)]">
-          <PipelineBoard 
-            leads={filteredLeads}
-            customerId={customerData?.email || user?.email || 'unknown'}
-            onLeadUpdate={handleUpdateLead}
-            onStagesChange={(stages) => {
-              setCustomStages(stages);
-              console.log('Pipeline stages updated:', stages);
-            }}
-          />
+        <div className="h-[calc(100vh-120px)] flex flex-col gap-4 px-4 sm:px-6">
+          <AnimatePresence>
+            {activeHint && (
+              <motion.div
+                key={activeHint.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="bg-gradient-to-r from-brand-purple/20 via-brand-pink/20 to-brand-purple/10 border border-white/30 text-white rounded-2xl px-4 py-4 sm:px-6 sm:py-5 shadow-[0_25px_65px_-40px_rgba(18,9,45,0.6)]"
+              >
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5 rounded-full bg-white/15 p-2">
+                      {activeHint.icon === 'info' ? (
+                        <InformationCircleIcon className="w-5 h-5 text-white/80" />
+                      ) : (
+                        <SparklesIcon className="w-5 h-5 text-white/80" />
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-white">{activeHint.title}</p>
+                      <p className="text-xs text-white/80 mt-1 leading-relaxed">{activeHint.description}</p>
+                    </div>
+                  </div>
+                  <div className="flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-end">
+                    {activeHint.onAction && activeHint.actionLabel && (
+                      <button
+                        onClick={activeHint.onAction}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl bg-white/15 px-4 py-2 text-xs font-semibold text-white hover:bg-white/25 transition"
+                      >
+                        {activeHint.actionLabel}
+                      </button>
+                    )}
+                    <button
+                      onClick={dismissHint}
+                      className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/20 px-4 py-2 text-xs font-medium text-white/70 hover:text-white hover:border-white/40 transition"
+                    >
+                      Sluiten
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+          <div className="flex-1 min-h-0">
+            <PipelineBoard 
+              leads={filteredLeads}
+              customerId={customerData?.email || user?.email || 'unknown'}
+              onLeadUpdate={handleUpdateLead}
+              onStagesChange={(stages) => {
+                setCustomStages(stages);
+                console.log('Pipeline stages updated:', stages);
+              }}
+            />
+          </div>
         </div>
       ) : (
         /* List view - Normal container */
@@ -1533,77 +1947,95 @@ export default function CustomerLeadsPage() {
            className="mb-8"
          >
            {/* Mobile Collapsible Stats */}
-           <div className="md:hidden">
-             <motion.div
-               className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-lg border border-white/20 overflow-hidden"
-             >
-               {/* Collapsed Header */}
-               <div 
-                 className="p-4 cursor-pointer hover:bg-gray-50 transition-colors"
-                 onClick={() => setStatsExpanded(!statsExpanded)}
-               >
-                 <div className="flex items-center justify-between">
-                   <div className="flex items-center space-x-3">
-                     <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
-                       <ChartBarIcon className="w-6 h-6 text-white" />
-                     </div>
-                     <div>
-                       <h3 className="text-lg font-bold text-gray-900">{stats.total} Leads</h3>
-                       <p className="text-sm text-gray-600">{stats.new} nieuw • {stats.converted} geconverteerd</p>
-                     </div>
-                   </div>
-                   <div className="flex items-center space-x-2">
-                     <span className="text-xs text-purple-600 font-medium">
-                       {statsExpanded ? 'Inklappen' : 'Uitklappen'}
-                     </span>
-                     <motion.div
-                       animate={{ rotate: statsExpanded ? 180 : 0 }}
-                       transition={{ duration: 0.2 }}
-                     >
-                       <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                       </svg>
-                     </motion.div>
-                   </div>
-                 </div>
-               </div>
-               
-               {/* Expanded Content */}
-               <AnimatePresence>
-                 {statsExpanded && (
-                   <motion.div
-                     initial={{ height: 0, opacity: 0 }}
-                     animate={{ height: 'auto', opacity: 1 }}
-                     exit={{ height: 0, opacity: 0 }}
-                     transition={{ duration: 0.3 }}
-                     className="border-t border-gray-100"
-                   >
-                     <div className="p-4 grid grid-cols-2 gap-4">
-                       <div className="text-center p-3 bg-yellow-50 rounded-xl">
-                         <div className="text-2xl font-bold text-yellow-600">{stats.contacted}</div>
-                         <div className="text-xs text-gray-600 mt-1">📞 Gecontacteerd</div>
-                       </div>
-                       <div className="text-center p-3 bg-green-50 rounded-xl">
-                         <div className="text-2xl font-bold text-green-600">{stats.converted}</div>
-                         <div className="text-xs text-gray-600 mt-1">✅ Geconverteerd</div>
-                       </div>
-                       <div className="text-center p-3 bg-purple-50 rounded-xl">
-                         <div className="text-2xl font-bold text-purple-600">{stats.conversionRate.toFixed(1)}%</div>
-                         <div className="text-xs text-gray-600 mt-1">📊 Conversie</div>
-                       </div>
-                       <div className="text-center p-3 bg-red-50 rounded-xl">
-                         <div className="text-2xl font-bold text-red-600">{filteredLeads.filter(l => l.status === 'lost').length}</div>
-                         <div className="text-xs text-gray-600 mt-1">❌ Verloren</div>
-                       </div>
-                     </div>
-                   </motion.div>
-                 )}
-               </AnimatePresence>
-             </motion.div>
-           </div>
+          <div className="md:hidden">
+            <motion.div
+              className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-lg border border-white/20 overflow-hidden"
+            >
+              {/* Collapsed Header */}
+              <div
+                className="p-4 cursor-pointer hover:bg-gray-50 transition-colors"
+                onClick={() => setStatsExpanded(!statsExpanded)}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
+                      <ChartBarIcon className="w-6 h-6 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-bold text-gray-900">{stats.total} leads</h3>
+                      <p className="text-sm text-gray-600">
+                        {stats.firstStage?.count ?? 0} {firstStageLabel.toLowerCase()}
+                        {closingStageCard && (
+                          <>
+                            {' • '}
+                            {stats.conversionCount} {closingStageLabel.toLowerCase()}
+                          </>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-xs text-purple-600 font-medium">
+                      {statsExpanded ? 'Inklappen' : 'Uitklappen'}
+                    </span>
+                    <motion.div
+                      animate={{ rotate: statsExpanded ? 180 : 0 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </motion.div>
+                  </div>
+                </div>
+              </div>
 
-           {/* Desktop Full Stats */}
-           <div className="hidden md:grid grid-cols-5 gap-6">
+              {/* Expanded Content */}
+              <AnimatePresence>
+                {statsExpanded && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.3 }}
+                    className="border-t border-gray-100"
+                  >
+                    <div className="p-4 grid grid-cols-2 gap-4">
+                      <div className="text-center p-3 bg-blue-50 rounded-xl">
+                        <div className="text-2xl font-bold text-blue-600">{stats.firstStage?.count ?? 0}</div>
+                        <div className="text-xs text-gray-600 mt-1">{firstStageLabel}</div>
+                      </div>
+                      {secondStageCard ? (
+                        <div className="text-center p-3 bg-amber-50 rounded-xl">
+                          <div className="text-2xl font-bold text-amber-600">{secondStageCard.count}</div>
+                          <div className="text-xs text-gray-600 mt-1">{secondStageCard.stage.name}</div>
+                        </div>
+                      ) : (
+                        <div className="text-center p-3 bg-indigo-50 rounded-xl">
+                          <div className="text-2xl font-bold text-indigo-600">{openLeadCount}</div>
+                          <div className="text-xs text-gray-600 mt-1">Open leads</div>
+                        </div>
+                      )}
+                      {closingStageCard && (
+                        <div className="text-center p-3 bg-emerald-50 rounded-xl">
+                          <div className="text-2xl font-bold text-emerald-600">{stats.conversionCount}</div>
+                          <div className="text-xs text-gray-600 mt-1">{closingStageLabel}</div>
+                        </div>
+                      )}
+                      <div className={`text-center p-3 bg-purple-50 rounded-xl ${closingStageCard ? '' : 'col-span-2'}`}>
+                        <div className="text-2xl font-bold text-purple-600">{formattedConversionRate.toFixed(1)}%</div>
+                        <div className="text-xs text-gray-600 mt-1">Conversiepercentage</div>
+                        <p className="text-[11px] text-gray-500 mt-1">Verloren: {stats.lostCount}</p>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </motion.div>
+          </div>
+
+          {/* Desktop Full Stats */}
+          <div className="hidden md:grid gap-6 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
              <motion.div
                initial={{ opacity: 0, y: 20 }}
                animate={{ opacity: 1, y: 0 }}
@@ -1611,8 +2043,17 @@ export default function CustomerLeadsPage() {
              >
                <div className="flex items-center justify-between">
                  <div>
-                   <p className="text-sm font-medium text-gray-600">Totaal Leads</p>
+                  <p className="text-sm font-medium text-gray-600">Totaal leads</p>
                    <p className="text-3xl font-bold text-gray-900">{stats.total}</p>
+                  <p className="text-xs text-gray-500 mt-2">
+                    {stats.firstStage?.count ?? 0} {firstStageLabel.toLowerCase()}
+                    {closingStageCard && (
+                      <>
+                        {' • '}
+                        {stats.conversionCount} {closingStageLabel.toLowerCase()}
+                      </>
+                    )}
+                  </p>
                  </div>
                  <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
                    <UserIcon className="w-6 h-6 text-blue-600" />
@@ -1628,11 +2069,11 @@ export default function CustomerLeadsPage() {
              >
                <div className="flex items-center justify-between">
                  <div>
-                   <p className="text-sm font-medium text-gray-600">Nieuwe</p>
-                   <p className="text-3xl font-bold text-blue-600">{stats.new}</p>
+                  <p className="text-sm font-medium text-gray-600">{firstStageLabel}</p>
+                  <p className="text-3xl font-bold text-indigo-600">{stats.firstStage?.count ?? 0}</p>
                  </div>
-                 <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-                   <span className="text-xl">🆕</span>
+                <div className="w-12 h-12 bg-indigo-100 rounded-xl flex items-center justify-center">
+                  <SparklesIcon className="w-6 h-6 text-indigo-600" />
                  </div>
                </div>
              </motion.div>
@@ -1645,11 +2086,15 @@ export default function CustomerLeadsPage() {
              >
                <div className="flex items-center justify-between">
                  <div>
-                   <p className="text-sm font-medium text-gray-600">Gecontacteerd</p>
-                   <p className="text-3xl font-bold text-yellow-600">{stats.contacted}</p>
+                  <p className="text-sm font-medium text-gray-600">{secondStageLabel}</p>
+                  <p className={`text-3xl font-bold ${secondStageCard ? 'text-amber-600' : 'text-indigo-600'}`}>{secondStageValue}</p>
                  </div>
-                 <div className="w-12 h-12 bg-yellow-100 rounded-xl flex items-center justify-center">
-                   <span className="text-xl">📞</span>
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${secondStageCard ? 'bg-amber-100' : 'bg-indigo-100'}`}>
+                  {secondStageCard ? (
+                    <PhoneIcon className="w-6 h-6 text-amber-600" />
+                  ) : (
+                    <FunnelIcon className="w-6 h-6 text-indigo-600" />
+                  )}
                  </div>
                </div>
              </motion.div>
@@ -1662,11 +2107,11 @@ export default function CustomerLeadsPage() {
              >
                <div className="flex items-center justify-between">
                  <div>
-                   <p className="text-sm font-medium text-gray-600">Geconverteerd</p>
-                   <p className="text-3xl font-bold text-green-600">{stats.converted}</p>
+                  <p className="text-sm font-medium text-gray-600">{closingStageLabel}</p>
+                  <p className="text-3xl font-bold text-emerald-600">{stats.conversionCount}</p>
                  </div>
-                 <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
-                   <span className="text-xl">✅</span>
+                <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center">
+                  <CheckCircleIcon className="w-6 h-6 text-emerald-600" />
                  </div>
                </div>
              </motion.div>
@@ -1680,7 +2125,8 @@ export default function CustomerLeadsPage() {
                <div className="flex items-center justify-between">
                  <div>
                    <p className="text-sm font-medium text-gray-600">Conversie</p>
-                   <p className="text-3xl font-bold text-purple-600">{stats.conversionRate.toFixed(1)}%</p>
+                  <p className="text-3xl font-bold text-purple-600">{formattedConversionRate.toFixed(1)}%</p>
+                  <p className="text-xs text-gray-500 mt-2">Verloren: {stats.lostCount}</p>
                  </div>
                  <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
                    <ChartBarIcon className="w-6 h-6 text-purple-600" />
@@ -1717,7 +2163,7 @@ export default function CustomerLeadsPage() {
               <select
                 value={filterStatus}
                 onChange={(e) => setFilterStatus(e.target.value as any)}
-                className="w-full pl-10 pr-10 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-purple focus:border-brand-purple bg-white appearance-none cursor-pointer"
+                className={`w-full pl-10 pr-10 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-purple focus:border-brand-purple bg-white appearance-none cursor-pointer ${highlightStage && filterStatus === highlightStage ? 'ring-2 ring-brand-pink/40 ring-offset-1 ring-offset-white' : ''}`}
               >
                 <option value="all">Alle statussen</option>
                 {customStages.map(stage => (
@@ -1754,6 +2200,50 @@ export default function CustomerLeadsPage() {
             </div>
           </div>
         </motion.div>
+
+        <AnimatePresence>
+          {activeHint && (
+            <motion.div
+              key={activeHint.id}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="bg-gradient-to-r from-brand-purple/20 via-brand-pink/20 to-brand-purple/10 border border-white/30 text-white rounded-2xl px-4 py-4 sm:px-6 sm:py-5 shadow-[0_25px_65px_-40px_rgba(18,9,45,0.6)] mb-8 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"
+            >
+              <div className="flex items-start gap-3">
+                <div className="mt-0.5 rounded-full bg-white/15 p-2">
+                  {activeHint.icon === 'info' ? (
+                    <InformationCircleIcon className="w-5 h-5 text-white/80" />
+                  ) : (
+                    <SparklesIcon className="w-5 h-5 text-white/80" />
+                  )}
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-white">{activeHint.title}</p>
+                  <p className="text-xs text-white/80 mt-1 leading-relaxed">
+                    {activeHint.description}
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-end">
+                {activeHint.onAction && activeHint.actionLabel && (
+                  <button
+                    onClick={activeHint.onAction}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-white/15 px-4 py-2 text-xs font-semibold text-white hover:bg-white/25 transition"
+                  >
+                    {activeHint.actionLabel}
+                  </button>
+                )}
+                <button
+                  onClick={dismissHint}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/20 px-4 py-2 text-xs font-medium text-white/70 hover:text-white hover:border-white/40 transition"
+                >
+                  Sluiten
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         <div className="space-y-8">
           {whatsappCustomerId && (
@@ -1799,14 +2289,17 @@ export default function CustomerLeadsPage() {
             <>
               {/* Mobile Card View - Gebruiksvriendelijk */}
               <div className="md:hidden space-y-3 p-4">
-                {paginatedLeads.map((lead) => (
-                  <motion.div
-                    key={lead.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="bg-white rounded-2xl shadow-sm border border-gray-200 p-5 cursor-pointer hover:shadow-md transition-all"
-                    onClick={() => handleViewLead(lead)}
-                  >
+                {paginatedLeads.map((lead) => {
+                  const isHighlighted = highlightLeadId === lead.id;
+                  return (
+                    <motion.div
+                      key={lead.id}
+                      id={`lead-card-${lead.id}`}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className={`bg-white rounded-2xl shadow-sm border border-gray-200 p-5 cursor-pointer hover:shadow-md transition-all ${isHighlighted ? 'border-brand-pink/40 shadow-brand-pink/30 ring-2 ring-brand-pink/30' : ''}`}
+                      onClick={() => handleViewLead(lead)}
+                    >
                     {/* Header met Avatar en Naam */}
                     <div className="flex items-start mb-4">
                       <div className="flex items-center space-x-3 flex-1 min-w-0">
@@ -1986,8 +2479,9 @@ export default function CustomerLeadsPage() {
                         Tik voor details →
                       </div>
                     </div>
-                  </motion.div>
-                ))}
+                    </motion.div>
+                  );
+                })}
               </div>
 
               {/* Desktop Table View - Dynamic based on branch mappings */}
@@ -2022,6 +2516,7 @@ export default function CustomerLeadsPage() {
                     const postcode = branchData.postcode as string | undefined;
                     const huisnummer = branchData.huisnummer as string | undefined;
                     const datumInteresseRaw = branchData.datumInteresse as unknown;
+                    const isHighlighted = highlightLeadId === lead.id;
 
                     let datumInteresse = '';
                     if (datumInteresseRaw instanceof Date) {
@@ -2033,13 +2528,14 @@ export default function CustomerLeadsPage() {
                     return (
                       <tr 
                         key={lead.id} 
-                        className="hover:bg-gray-50 cursor-pointer" 
+                        id={`lead-row-${lead.id}`}
+                        className={`hover:bg-gray-50 cursor-pointer transition ${isHighlighted ? 'bg-brand-purple/5 border-l-4 border-brand-pink/50' : ''}`} 
                         onClick={() => handleViewLead(lead)}
                         title="Klik voor lead details"
                       >
                         <td className="px-6 py-4">
                           <div className="flex items-center">
-                            <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-500 rounded-xl flex items-center justify-center">
+                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${isHighlighted ? 'bg-gradient-to-r from-brand-pink to-brand-purple shadow-lg shadow-brand-pink/30' : 'bg-gradient-to-r from-blue-500 to-purple-500'}`}>
                               <span className="text-white font-bold">
                                 {avatarInitial || '?'}
                               </span>
@@ -2222,20 +2718,8 @@ export default function CustomerLeadsPage() {
                   </button>
                 </div>
                 
-                <div className="text-center">
-                  <select
-                    value={leadsPerPage}
-                    onChange={(e) => {
-                      setLeadsPerPage(Number(e.target.value));
-                      setCurrentPage(1); // Reset to first page
-                    }}
-                    className="px-4 py-2 border border-gray-300 rounded-xl text-sm bg-white font-medium"
-                  >
-                    <option value={10}>📄 10 per pagina</option>
-                    <option value={25}>📄 25 per pagina</option>
-                    <option value={50}>📄 50 per pagina</option>
-                    <option value={100}>📄 100 per pagina</option>
-                  </select>
+                <div className="text-center text-xs text-gray-500">
+                  25 leads per pagina
                 </div>
               </div>
 
@@ -2245,20 +2729,7 @@ export default function CustomerLeadsPage() {
                   <span className="text-sm text-gray-700">
                     Toon {((currentPage - 1) * leadsPerPage) + 1}-{Math.min(currentPage * leadsPerPage, filteredLeads.length)} van {filteredLeads.length} leads
                   </span>
-                  
-                  <select
-                    value={leadsPerPage}
-                    onChange={(e) => {
-                      setLeadsPerPage(Number(e.target.value));
-                      setCurrentPage(1); // Reset to first page
-                    }}
-                    className="px-3 py-1 border border-gray-300 rounded-lg text-sm"
-                  >
-                    <option value={10}>10 per pagina</option>
-                    <option value={25}>25 per pagina</option>
-                    <option value={50}>50 per pagina</option>
-                    <option value={100}>100 per pagina</option>
-                  </select>
+                  <span className="text-xs text-gray-400">25 per pagina</span>
                 </div>
                 
                 <div className="flex items-center space-x-2">
@@ -3685,5 +4156,24 @@ export default function CustomerLeadsPage() {
         onClose={() => setShowWhatsAppSettings(false)}
       />
     </div>
+  );
+}
+
+export default function CustomerLeadsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-gradient-to-br from-brand-navy via-brand-purple to-brand-pink flex items-center justify-center">
+          <div className="flex flex-col items-center text-white space-y-4">
+            <div className="w-12 h-12 border-4 border-white/30 border-t-white rounded-full animate-spin" />
+            <p className="text-sm tracking-wide uppercase text-white/70">
+              Leadportaal laden...
+            </p>
+          </div>
+        </div>
+      }
+    >
+      <CustomerLeadsPageInner />
+    </Suspense>
   );
 }

@@ -163,6 +163,16 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
   const searchParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
   const previousEmailRef = useRef<string | undefined>(undefined);
   const [isSheetSyncing, setIsSheetSyncing] = useState(false);
+  const navigateToLeads = useCallback((query?: Record<string, string | undefined>) => {
+    const params = new URLSearchParams();
+    if (query) {
+      Object.entries(query).forEach(([key, value]) => {
+        if (value) params.set(key, value);
+      });
+    }
+    const search = params.toString();
+    router.push(`/portal/leads${search ? `?${search}` : ''}`);
+  }, [router]);
   
   // Debug logging to track auth state changes
   useEffect(() => {
@@ -446,8 +456,7 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
     } else if (action === 'support') {
       setShowSupportModal(true);
     } else if (action === 'leads') {
-      // Open het leadportaal
-      router.push('/portal/leads');
+      navigateToLeads({ view: 'list' });
     } else if (action === 'settings') {
       // Navigate to account settings page
       router.push('/portal/settings');
@@ -743,9 +752,7 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
   const handleLeadHealthAction = (type: string) => {
     if (type.startsWith('stage:')) {
       const stageId = type.split(':')[1];
-      const params = new URLSearchParams();
-      params.set('filter', stageId);
-      router.push(`/portal/leads?${params.toString()}`);
+      navigateToLeads({ stage: stageId, hint: 'stage', view: 'list' });
       return;
     }
     if (type === 'order') {

@@ -9,6 +9,11 @@ import type { AuthenticatedUser } from '@/middleware/auth';
  * AUTHENTICATED - Service account, but still requires auth for tracking/logging
  */
 
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+export const fetchCache = 'force-no-store';
+
 const SERVICE_ACCOUNT = {
   type: "service_account",
   project_id: "warmeleads-spreadsheet-api",
