@@ -522,59 +522,75 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
   const insightCopy = Object.entries(branchInsightMessages).find(([key]) => branchKey.includes(key))?.[1] || 'Gebruik het leadportaal om je nieuwste leads binnen 15 minuten op te volgen voor maximale conversie.';
 
   const leadHealth = useMemo(() => {
+    const sortedStages = [...leadStages].sort((a, b) => a.order - b.order);
+    const firstStageId = sortedStages[0]?.id ?? null;
+    const stageMapById = new Map(sortedStages.map(stage => [stage.id, stage]));
+    const stageMapByName = new Map(sortedStages.map(stage => [stage.name.trim().toLowerCase(), stage]));
+
+    const toDate = (value: any) => {
+      if (!value) return null;
+      if (value instanceof Date) return Number.isFinite(value.getTime()) ? value : null;
+      const parsed = new Date(value);
+      return Number.isFinite(parsed.getTime()) ? parsed : null;
+    };
+
     const leads = (customerData?.leadData || []).map(lead => {
-      const toDate = (value: any) => {
-        if (!value) return null;
-        if (value instanceof Date) return Number.isFinite(value.getTime()) ? value : null;
-        const parsed = new Date(value);
-        return Number.isFinite(parsed.getTime()) ? parsed : null;
-      };
+      const rawStatus = typeof lead.status === 'string' ? lead.status : '';
+      const trimmedStatus = rawStatus.trim();
+      let normalizedStatus: string;
+
+      if (!trimmedStatus) {
+        normalizedStatus = firstStageId || 'unassigned';
+      } else if (stageMapById.has(trimmedStatus)) {
+        normalizedStatus = trimmedStatus;
+      } else {
+        const lower = trimmedStatus.toLowerCase();
+        const matchedStage = stageMapByName.get(lower);
+        normalizedStatus = matchedStage ? matchedStage.id : trimmedStatus;
+      }
+
+      if (!stageMapById.has(normalizedStatus) && normalizedStatus !== 'unassigned') {
+        normalizedStatus = firstStageId || 'unassigned';
+      }
 
       return {
         ...lead,
         createdAt: toDate(lead.createdAt),
         updatedAt: toDate(lead.updatedAt || lead.createdAt),
-        status: lead.status || 'new_lead'
+        status: normalizedStatus
       };
     });
 
     const total = leads.length;
-    const sortedStages = [...leadStages].sort((a, b) => a.order - b.order);
     const now = new Date();
     const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-    const stageStats = sortedStages.map(stage => {
-      const stageLeads = leads.filter(lead => lead.status === stage.id);
-      const count = stageLeads.length;
-      const recent = stageLeads.filter(lead => lead.updatedAt && lead.updatedAt >= weekAgo).length;
+    const stageCounters = new Map<string, { count: number; recent: number }>();
+    sortedStages.forEach(stage => stageCounters.set(stage.id, { count: 0, recent: 0 }));
 
-      return {
-        stage,
-        count,
-        percentage: total > 0 ? Math.round((count / total) * 100) : 0,
-        recent
-      };
+    let unassignedCount = 0;
+
+    leads.forEach(lead => {
+      const stats = stageCounters.get(lead.status);
+      const isRecent = lead.updatedAt ? lead.updatedAt >= weekAgo : lead.createdAt ? lead.createdAt >= weekAgo : false;
+
+      if (stats) {
+        stats.count += 1;
+        if (isRecent) stats.recent += 1;
+      } else {
+        unassignedCount += 1;
+      }
     });
 
-    const assignedCount = stageStats.reduce((sum, stat) => sum + stat.count, 0);
-    const unassignedCount = Math.max(0, total - assignedCount);
-
-    if (unassignedCount > 0) {
-      stageStats.push({
-        stage: {
-          id: 'unassigned',
-          name: 'Onbekende status',
-          order: Number.MAX_SAFE_INTEGER,
-          color: 'bg-red-500',
-          icon: '❓',
-          isDefault: false,
-          customerId: customerData?.id || user?.email || 'unknown'
-        },
-        count: unassignedCount,
-        percentage: total > 0 ? Math.round((unassignedCount / total) * 100) : 0,
-        recent: 0
-      });
-    }
+    const stageStats = sortedStages.map(stage => {
+      const stats = stageCounters.get(stage.id) ?? { count: 0, recent: 0 };
+      return {
+        stage,
+        count: stats.count,
+        percentage: total > 0 ? Math.round((stats.count / total) * 100) : 0,
+        recent: stats.recent
+      };
+    });
 
     if (total === 0) {
       return {
@@ -582,6 +598,7 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
         progressRate: 0,
         stageStats,
         primaryStages: stageStats.slice(0, 4),
+        firstStageStat: stageStats[0] || null,
         actions: [
           {
             type: 'order',
@@ -589,28 +606,22 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
             description: 'Plaats een bestelling of koppel je sheet om direct met verse leads aan de slag te gaan.'
           }
         ]
-      };
+      } as const;
     }
 
-    const firstStage = stageStats.find(stat => stat.stage.order === 0);
-    const progressRate = firstStage ? Math.max(0, Math.min(100, ((total - firstStage.count) / total) * 100)) : 100;
+    const firstStageStat = stageStats[0] || null;
+    const progressRate = firstStageStat ? Math.max(0, Math.min(100, ((total - firstStageStat.count) / total) * 100)) : 100;
 
-    const pipelineStagesOnly = stageStats.filter(stat => stat.stage.id !== 'unassigned');
-    const highestOrderStage = pipelineStagesOnly.reduce((current, stat) => {
-      if (!current) return stat;
-      return stat.stage.order > current.stage.order ? stat : current;
-    }, pipelineStagesOnly[0] || null);
-
-    const secondaryStage = pipelineStagesOnly
-      .filter(stat => stat.stage.order > (firstStage?.stage.order ?? -1))
-      .sort((a, b) => b.count - a.count)[0];
+    const pipelineStagesOnly = stageStats;
+    const highestOrderStage = pipelineStagesOnly[pipelineStagesOnly.length - 1] || null;
+    const secondaryStage = pipelineStagesOnly.slice(1).sort((a, b) => b.count - a.count)[0];
 
     const actions: { type: string; title: string; description: string }[] = [];
 
-    if (firstStage && firstStage.count > 0) {
+    if (firstStageStat && firstStageStat.count > 0) {
       actions.push({
-        type: `stage:${firstStage.stage.id}`,
-        title: `${firstStage.count} lead(s) staan op ${firstStage.stage.name}`,
+        type: `stage:${firstStageStat.stage.id}`,
+        title: `${firstStageStat.count} lead(s) staan op ${firstStageStat.stage.name}`,
         description: `Plan directe opvolging en verplaats ze naar ${secondaryStage ? secondaryStage.stage.name : 'de volgende fase'}.`
       });
     }
@@ -623,7 +634,7 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
       });
     }
 
-    if (highestOrderStage && highestOrderStage.count > 0) {
+    if (highestOrderStage && highestOrderStage.count > 0 && highestOrderStage.stage.id !== firstStageStat?.stage.id) {
       actions.push({
         type: `stage:${highestOrderStage.stage.id}`,
         title: `${highestOrderStage.count} lead(s) in ${highestOrderStage.stage.name}`,
@@ -652,9 +663,11 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
       progressRate,
       stageStats,
       primaryStages: pipelineStagesOnly.slice(0, 4),
+      firstStageStat,
+      unassignedCount,
       actions
     };
-  }, [customerData?.leadData, leadStages, customerData?.id, user?.email]);
+  }, [customerData?.leadData, leadStages]);
 
   useEffect(() => {
     if (!customerData) return;
@@ -785,7 +798,7 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
     }
   };
 
-  const firstPipelineStage = leadHealth.primaryStages?.[0];
+  const firstPipelineStage = leadHealth.firstStageStat;
   const feedbackModalData = feedbackOrder
     ? {
         orderNumber: feedbackOrder.id,
@@ -1141,16 +1154,19 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
                 leadHealth.primaryStages.map(stat => (
                   <div key={stat.stage.id} className="rounded-2xl border border-white/10 bg-white/5 p-4">
                     <div className="flex items-center gap-3">
-                      <span className={`flex h-10 w-10 items-center justify-center rounded-2xl text-white ${stat.stage.color}`.trim()}>
-                        {stat.stage.icon}
-                      </span>
+                      <div className="relative flex h-10 w-10 items-center justify-center rounded-2xl bg-white/10 border border-white/10">
+                        <span className={`absolute inset-[6px] rounded-full ${stat.stage.color}`} />
+                        <span className="relative text-xs font-semibold text-white/70">
+                          {String(stat.stage.order + 1).padStart(2, '0')}
+                        </span>
+                      </div>
                       <div>
-                        <p className="text-xs text-white/50">{stat.stage.name}</p>
+                        <p className="text-xs text-white/55 font-medium tracking-wide uppercase">{stat.stage.name}</p>
                         <p className="mt-1 text-2xl font-semibold text-white">{stat.count}</p>
                       </div>
                     </div>
                     {stat.recent > 0 && (
-                      <p className="mt-2 text-[11px] text-white/50">+{stat.recent} laatste 7 dagen</p>
+                      <p className="mt-2 text-[11px] text-white/45">+{stat.recent} laatste 7 dagen</p>
                     )}
                   </div>
                 ))
@@ -1168,8 +1184,9 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
                   {leadHealth.stageStats.map(segment => (
                     <span
                       key={segment.stage.id}
-                      className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-medium text-white/80"
+                      className="flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-medium text-white/80"
                     >
+                      <span className={`h-2.5 w-2.5 rounded-full ${segment.stage.color}`} />
                       {segment.stage.name} • {segment.count} ({segment.percentage}%)
                     </span>
                   ))}
