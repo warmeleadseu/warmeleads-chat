@@ -22,6 +22,13 @@ import { useAuthStore, authenticatedFetch } from '@/lib/auth';
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || '');
 
+export type OrderPrefillConfig = {
+  industry?: string;
+  packageId?: string;
+  leadType?: 'exclusive' | 'shared' | 'shared_fresh' | 'bulk';
+  quantity?: number;
+};
+
 interface OrderCheckoutModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -32,9 +39,10 @@ interface OrderCheckoutModalProps {
   userPermissions?: {
     canCheckout: boolean;
   };
+  prefillConfig?: OrderPrefillConfig | null;
 }
 
-export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userCompany, requireAuth = false, userPermissions }: OrderCheckoutModalProps) {
+export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userCompany, requireAuth = false, userPermissions, prefillConfig }: OrderCheckoutModalProps) {
   const [selectedIndustry, setSelectedIndustry] = useState<string>('Thuisbatterijen');
   const [selectedPackage, setSelectedPackage] = useState<LeadPackage | null>(null);
   const [quantity, setQuantity] = useState<number>(30);
@@ -63,6 +71,46 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
       setCurrentStep(3);
     }
   }, [selectedIndustry, selectedPackage, currentStep]);
+
+  useEffect(() => {
+    if (!isOpen || !prefillConfig) {
+      return;
+    }
+
+    const industryFromPrefill = prefillConfig.industry && leadPackages[prefillConfig.industry]
+      ? prefillConfig.industry
+      : null;
+
+    const industryToUse = industryFromPrefill || selectedIndustry;
+
+    if (industryToUse && industries.includes(industryToUse)) {
+      setSelectedIndustry(industryToUse);
+      const packagesForIndustry = leadPackages[industryToUse];
+      let targetPackage = prefillConfig.packageId
+        ? packagesForIndustry.find(pkg => pkg.id === prefillConfig.packageId)
+        : undefined;
+
+      if (!targetPackage && prefillConfig.leadType) {
+        const normalizedType = prefillConfig.leadType === 'shared' ? 'shared_fresh' : prefillConfig.leadType;
+        targetPackage = packagesForIndustry.find(pkg => pkg.type === normalizedType);
+      }
+
+      if (targetPackage) {
+        setSelectedPackage(targetPackage);
+        const minQty = targetPackage.minQuantity || targetPackage.quantity;
+        const desiredQuantity = prefillConfig.quantity ? Math.max(prefillConfig.quantity, minQty) : minQty;
+        setQuantity(desiredQuantity);
+        setCurrentStep(3);
+
+        setTimeout(() => {
+          const quantitySection = document.getElementById('quantity-section');
+          if (quantitySection) {
+            quantitySection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }, 150);
+      }
+    }
+  }, [isOpen, prefillConfig, industries, selectedIndustry]);
 
   // Calculate pricing
   const pricing = selectedPackage ? calculatePackagePrice(selectedPackage, quantity) : null;

@@ -15,7 +15,9 @@ import {
   UserIcon,
   XMarkIcon,
   UserPlusIcon,
-  ShoppingCartIcon
+  ShoppingCartIcon,
+  ArrowPathIcon,
+  StarIcon
 } from '@heroicons/react/24/outline';
 import { Logo } from './Logo';
 import { useAuthStore, authenticatedFetch } from '../lib/auth';
@@ -23,10 +25,12 @@ import { CustomerLeadsSection } from './CustomerLeadsSection';
 import { crmSystem, type Customer, type Lead } from '@/lib/crmSystem';
 import { calculateRevenueFromLeads, formatRevenue } from '@/lib/revenueCalculator';
 import { ADMIN_CONFIG } from '@/config/admin';
-import { OrderCheckoutModal } from './OrderCheckoutModal';
+import { OrderCheckoutModal, type OrderPrefillConfig } from './OrderCheckoutModal';
+import { OrderFeedbackModal } from './OrderFeedbackModal';
 import { OrderDetailModal } from './OrderDetailModal';
 import { SupportModal } from './SupportModal';
 import { EmployeeManagementModal } from './EmployeeManagementModal';
+import { PipelineStagesManager, type CustomStage } from '@/lib/pipelineStages';
 
 interface CustomerPortalProps {
   onBackToHome: () => void;
@@ -145,6 +149,11 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
   const [growthGoal, setGrowthGoal] = useState<number>(500);
   const [goalFrequency, setGoalFrequency] = useState<'maand' | 'kwartaal'>('maand');
   const [savingGoal, setSavingGoal] = useState(false);
+  const [leadStages, setLeadStages] = useState<CustomStage[]>([]);
+  const [checkoutPrefill, setCheckoutPrefill] = useState<OrderPrefillConfig | null>(null);
+  const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
+  const [feedbackOrder, setFeedbackOrder] = useState<any | null>(null);
+  const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
   const { user, isAuthenticated, logout } = useAuthStore();
   const router = useRouter();
   const searchParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
@@ -159,6 +168,20 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
       isGuest: user?.isGuest 
     });
   }, [user, isAuthenticated]);
+
+  useEffect(() => {
+    const customerId = customerData?.id || user?.email;
+    if (!customerId) return;
+
+    try {
+      const manager = new PipelineStagesManager(customerId);
+      const stages = manager.getStages();
+      setLeadStages(stages);
+    } catch (error) {
+      console.error('❌ Kon pipeline stages niet laden in portal:', error);
+      setLeadStages([]);
+    }
+  }, [customerData?.id, user?.email]);
 
   const normalizeCustomerGoalData = (customer: any): Customer | null => {
     if (!customer) return null;
@@ -356,6 +379,9 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
         conversions: order.conversions || 0,
         invoiceUrl: order.invoiceUrl, // Add invoice URL for download
         invoiceNumber: order.invoiceNumber,
+        feedbackRating: order.feedbackRating,
+        feedbackNotes: order.feedbackNotes,
+        feedbackSubmittedAt: order.feedbackSubmittedAt,
         raw: order,
       }))
     : getRecentOrders(user); // Fallback to demo data for demo account
@@ -367,6 +393,7 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
 
   const handleQuickAction = (action: string) => {
     if (action === 'reorder') {
+      setCheckoutPrefill(null);
       setShowCheckoutModal(true);
     } else if (action === 'support') {
       setShowSupportModal(true);
@@ -507,19 +534,54 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
         ...lead,
         createdAt: toDate(lead.createdAt),
         updatedAt: toDate(lead.updatedAt || lead.createdAt),
-        status: (lead.status || 'new').toLowerCase()
+        status: lead.status || 'new_lead'
       };
     });
 
-    if (leads.length === 0) {
+    const total = leads.length;
+    const sortedStages = [...leadStages].sort((a, b) => a.order - b.order);
+    const now = new Date();
+    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    const stageStats = sortedStages.map(stage => {
+      const stageLeads = leads.filter(lead => lead.status === stage.id);
+      const count = stageLeads.length;
+      const recent = stageLeads.filter(lead => lead.updatedAt && lead.updatedAt >= weekAgo).length;
+
       return {
-        total: 0,
-        newThisWeek: 0,
-        stale: 0,
-        hot: 0,
-        closed: 0,
-        followUpRate: 0,
-        stageBreakdown: [] as { status: string; count: number; percentage: number }[],
+        stage,
+        count,
+        percentage: total > 0 ? Math.round((count / total) * 100) : 0,
+        recent
+      };
+    });
+
+    const assignedCount = stageStats.reduce((sum, stat) => sum + stat.count, 0);
+    const unassignedCount = Math.max(0, total - assignedCount);
+
+    if (unassignedCount > 0) {
+      stageStats.push({
+        stage: {
+          id: 'unassigned',
+          name: 'Onbekende status',
+          order: Number.MAX_SAFE_INTEGER,
+          color: 'bg-red-500',
+          icon: '❓',
+          isDefault: false,
+          customerId: customerData?.id || user?.email || 'unknown'
+        },
+        count: unassignedCount,
+        percentage: total > 0 ? Math.round((unassignedCount / total) * 100) : 0,
+        recent: 0
+      });
+    }
+
+    if (total === 0) {
+      return {
+        total,
+        progressRate: 0,
+        stageStats,
+        primaryStages: stageStats.slice(0, 4),
         actions: [
           {
             type: 'order',
@@ -530,79 +592,69 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
       };
     }
 
-    const now = new Date();
-    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    const fortyEightHoursAgo = new Date(now.getTime() - 48 * 60 * 60 * 1000);
+    const firstStage = stageStats.find(stat => stat.stage.order === 0);
+    const progressRate = firstStage ? Math.max(0, Math.min(100, ((total - firstStage.count) / total) * 100)) : 100;
 
-    const newThisWeek = leads.filter(lead => lead.createdAt && lead.createdAt >= weekAgo).length;
-    const stale = leads.filter(lead => ['new', 'contacted', 'qualified'].includes(lead.status) && (!lead.updatedAt || lead.updatedAt < fortyEightHoursAgo)).length;
-    const hot = leads.filter(lead => ['qualified', 'proposal', 'negotiation'].includes(lead.status)).length;
-    const closed = leads.filter(lead => lead.status === 'deal_closed').length;
-    const followUpRate = leads.length > 0 ? Math.max(0, Math.min(100, ((leads.length - stale) / leads.length) * 100)) : 0;
+    const pipelineStagesOnly = stageStats.filter(stat => stat.stage.id !== 'unassigned');
+    const highestOrderStage = pipelineStagesOnly.reduce((current, stat) => {
+      if (!current) return stat;
+      return stat.stage.order > current.stage.order ? stat : current;
+    }, pipelineStagesOnly[0] || null);
 
-    const stageCounts: Record<string, number> = {};
-    leads.forEach(lead => {
-      const status = lead.status || 'new';
-      stageCounts[status] = (stageCounts[status] || 0) + 1;
-    });
-
-    const stageLabels: Record<string, string> = {
-      new: 'Nieuw',
-      contacted: 'Gecontacteerd',
-      qualified: 'Gekwalificeerd',
-      proposal: 'Offerte',
-      negotiation: 'Onderhandeling',
-      converted: 'Geconverteerd',
-      deal_closed: 'Deal gesloten',
-      lost: 'Verloren'
-    };
-
-    const stageBreakdown = Object.entries(stageCounts)
-      .map(([status, count]) => ({
-        status: stageLabels[status] || status,
-        count,
-        percentage: Math.round((count / leads.length) * 100)
-      }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 4);
+    const secondaryStage = pipelineStagesOnly
+      .filter(stat => stat.stage.order > (firstStage?.stage.order ?? -1))
+      .sort((a, b) => b.count - a.count)[0];
 
     const actions: { type: string; title: string; description: string }[] = [];
 
-    if (stale > 0) {
+    if (firstStage && firstStage.count > 0) {
       actions.push({
-        type: 'follow-up',
-        title: `${stale} leads wachten op opvolging`,
-        description: 'Plan een belmoment of stuur een WhatsApp zodat je top-of-mind blijft.'
+        type: `stage:${firstStage.stage.id}`,
+        title: `${firstStage.count} lead(s) staan op ${firstStage.stage.name}`,
+        description: `Plan directe opvolging en verplaats ze naar ${secondaryStage ? secondaryStage.stage.name : 'de volgende fase'}.`
       });
     }
 
-    if (hot > 0) {
+    if (secondaryStage && secondaryStage.count > 0) {
       actions.push({
-        type: 'hot',
-        title: `${hot} hot leads staan klaar in de funnel`,
-        description: 'Zorg voor een scherpe aanbieding om ze vandaag nog binnen te halen.'
+        type: `stage:${secondaryStage.stage.id}`,
+        title: `${secondaryStage.count} lead(s) wachten in ${secondaryStage.stage.name}`,
+        description: 'Check of alle offertes en opvolgacties verstuurd zijn.'
       });
     }
 
-    if (newThisWeek > 0) {
+    if (highestOrderStage && highestOrderStage.count > 0) {
       actions.push({
-        type: 'new',
-        title: `${newThisWeek} nieuwe leads deze week`,
-        description: 'Neem binnen 15 minuten contact op voor de hoogste conversie.'
+        type: `stage:${highestOrderStage.stage.id}`,
+        title: `${highestOrderStage.count} lead(s) in ${highestOrderStage.stage.name}`,
+        description: 'Plan nazorg of upsell-kansen en bekijk of je klaar bent voor een nieuwe bestelling.'
+      });
+    }
+
+    if (unassignedCount > 0) {
+      actions.push({
+        type: 'stage:unassigned',
+        title: `${unassignedCount} lead(s) zonder status`,
+        description: 'Werk je statusvelden bij zodat het portaal accurate funnel inzichten geeft.'
+      });
+    }
+
+    if (actions.length === 0) {
+      actions.push({
+        type: 'order',
+        title: 'Alle leads zijn up-to-date',
+        description: 'Houd het momentum vast en bestel een nieuwe batch wanneer je klaar bent voor meer.'
       });
     }
 
     return {
-      total: leads.length,
-      newThisWeek,
-      stale,
-      hot,
-      closed,
-      followUpRate,
-      stageBreakdown,
+      total,
+      progressRate,
+      stageStats,
+      primaryStages: pipelineStagesOnly.slice(0, 4),
       actions
     };
-  }, [customerData?.leadData]);
+  }, [customerData?.leadData, leadStages, customerData?.id, user?.email]);
 
   useEffect(() => {
     if (!customerData) return;
@@ -618,20 +670,75 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
   const goalProgress = totalLeads > 0 ? Math.min((totalLeads / safeGoalTarget) * 100, 999) : 0;
 
   const handleLeadHealthAction = (type: string) => {
-    if (type === 'follow-up') {
-      router.push('/portal/leads?focus=follow-up');
-      return;
-    }
-    if (type === 'new') {
-      router.push('/portal/leads?sort=recent');
-      return;
-    }
-    if (type === 'hot') {
-      router.push('/portal/leads?filter=hot');
+    if (type.startsWith('stage:')) {
+      const stageId = type.split(':')[1];
+      const params = new URLSearchParams();
+      params.set('filter', stageId);
+      router.push(`/portal/leads?${params.toString()}`);
       return;
     }
     if (type === 'order') {
       setShowCheckoutModal(true);
+    }
+  };
+
+  const handlePrefillFromOrder = (orderEntry: any) => {
+    const raw = orderEntry?.raw || orderEntry;
+    if (!raw) {
+      setCheckoutPrefill(null);
+      setShowCheckoutModal(true);
+      return;
+    }
+
+    const pref: OrderPrefillConfig = {
+      industry: raw.industry,
+      packageId: raw.packageId,
+      leadType: raw.leadType === 'shared' ? 'shared_fresh' : raw.leadType,
+      quantity: raw.quantity,
+    };
+
+    setCheckoutPrefill(pref);
+    setShowCheckoutModal(true);
+  };
+
+  const handleOpenFeedback = (orderEntry: any) => {
+    setFeedbackOrder(orderEntry);
+    setFeedbackModalOpen(true);
+  };
+
+  const handleSubmitFeedback = async (orderNumber: string, rating: number, notes: string) => {
+    setIsSubmittingFeedback(true);
+    try {
+      const response = await authenticatedFetch('/api/orders/feedback', {
+        method: 'POST',
+        body: JSON.stringify({ orderNumber, rating, notes }),
+      });
+
+      if (!response.ok) {
+        console.error('❌ Feedback opslaan mislukt:', await response.text());
+        return;
+      }
+
+      const data = await response.json();
+      const submittedAt = data?.order?.feedbackSubmittedAt || new Date().toISOString();
+
+      setOrders(prev => prev.map(order =>
+        order.orderNumber === orderNumber
+          ? {
+              ...order,
+              feedbackRating: rating,
+              feedbackNotes: notes,
+              feedbackSubmittedAt: submittedAt,
+            }
+          : order
+      ));
+
+      setFeedbackModalOpen(false);
+      setFeedbackOrder(null);
+    } catch (error) {
+      console.error('❌ Onverwachte feedbackfout:', error);
+    } finally {
+      setIsSubmittingFeedback(false);
     }
   };
 
@@ -677,6 +784,18 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
       setSavingGoal(false);
     }
   };
+
+  const firstPipelineStage = leadHealth.primaryStages?.[0];
+  const feedbackModalData = feedbackOrder
+    ? {
+        orderNumber: feedbackOrder.id,
+        type: feedbackOrder.type,
+        date: feedbackOrder.date,
+        amount: feedbackOrder.amount,
+        feedbackRating: feedbackOrder.feedbackRating,
+        feedbackNotes: feedbackOrder.feedbackNotes,
+      }
+    : null;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-brand-navy via-brand-purple to-brand-pink">
@@ -998,54 +1117,60 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
                     a 15.9155 15.9155 0 0 1 0 -31.831"
                   />
                   <path
-                    className={leadHealth.followUpRate > 70 ? 'text-emerald-300' : leadHealth.followUpRate > 40 ? 'text-amber-300' : 'text-red-300'}
+                    className={leadHealth.progressRate > 70 ? 'text-emerald-300' : leadHealth.progressRate > 40 ? 'text-amber-300' : 'text-red-300'}
                     strokeWidth="4.5"
                     strokeLinecap="round"
                     stroke="currentColor"
                     fill="transparent"
                     strokeDasharray="100"
-                    strokeDashoffset={`${100 - Math.min(leadHealth.followUpRate, 100)}`}
+                    strokeDashoffset={`${100 - Math.min(leadHealth.progressRate, 100)}`}
                     d="M18 2.0845
                     a 15.9155 15.9155 0 0 1 0 31.831
                     a 15.9155 15.9155 0 0 1 0 -31.831"
                   />
                 </svg>
                 <div className="absolute inset-0 flex flex-col items-center justify-center text-white">
-                  <span className="text-lg font-semibold">{leadHealth.followUpRate.toFixed(0)}%</span>
-                  <span className="text-[11px] text-white/60">opvolging</span>
+                  <span className="text-lg font-semibold">{leadHealth.progressRate.toFixed(0)}%</span>
+                  <span className="text-[11px] text-white/60">pipeline flow</span>
                 </div>
               </div>
             </div>
 
             <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                <p className="text-xs text-white/45">Nieuwe leads (7d)</p>
-                <p className="mt-1 text-2xl font-semibold text-white">{leadHealth.newThisWeek}</p>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                <p className="text-xs text-white/45">Wachten op opvolging</p>
-                <p className="mt-1 text-2xl font-semibold text-amber-200">{leadHealth.stale}</p>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                <p className="text-xs text-white/45">Hot in funnel</p>
-                <p className="mt-1 text-2xl font-semibold text-pink-200">{leadHealth.hot}</p>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                <p className="text-xs text-white/45">Deals gesloten</p>
-                <p className="mt-1 text-2xl font-semibold text-emerald-200">{leadHealth.closed}</p>
-              </div>
+              {leadHealth.primaryStages.length > 0 ? (
+                leadHealth.primaryStages.map(stat => (
+                  <div key={stat.stage.id} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <div className="flex items-center gap-3">
+                      <span className={`flex h-10 w-10 items-center justify-center rounded-2xl text-white ${stat.stage.color}`.trim()}>
+                        {stat.stage.icon}
+                      </span>
+                      <div>
+                        <p className="text-xs text-white/50">{stat.stage.name}</p>
+                        <p className="mt-1 text-2xl font-semibold text-white">{stat.count}</p>
+                      </div>
+                    </div>
+                    {stat.recent > 0 && (
+                      <p className="mt-2 text-[11px] text-white/50">+{stat.recent} laatste 7 dagen</p>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <p className="text-sm text-white/70">Geen pipeline fases gevonden. Configureer je statussen in het leadportaal.</p>
+                </div>
+              )}
             </div>
 
-            {leadHealth.stageBreakdown.length > 0 && (
+            {leadHealth.stageStats.length > 0 && (
               <div className="mt-6">
                 <p className="text-xs uppercase tracking-[0.3em] text-white/40">Segmenten</p>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  {leadHealth.stageBreakdown.map(segment => (
+                  {leadHealth.stageStats.map(segment => (
                     <span
-                      key={segment.status}
+                      key={segment.stage.id}
                       className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-medium text-white/80"
                     >
-                      {segment.status} • {segment.count} ({segment.percentage}%)
+                      {segment.stage.name} • {segment.count} ({segment.percentage}%)
                     </span>
                   ))}
                 </div>
@@ -1060,12 +1185,12 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
                 <ChartBarIcon className="w-4 h-4" />
                 Open leadportaal
               </button>
-              {leadHealth.stale > 0 && (
+              {firstPipelineStage && firstPipelineStage.count > 0 && (
                 <button
-                  onClick={() => handleLeadHealthAction('follow-up')}
+                  onClick={() => handleLeadHealthAction(`stage:${firstPipelineStage.stage.id}`)}
                   className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-orange-500/30"
                 >
-                  Follow-up inplannen
+                  {firstPipelineStage.stage.name} opvolgen
                 </button>
               )}
             </div>
@@ -1217,6 +1342,26 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
                               </a>
                             )}
                             <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handlePrefillFromOrder(order);
+                              }}
+                              className="flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium bg-white/10 text-white/70 hover:text-white"
+                            >
+                              <ArrowPathIcon className="w-4 h-4" />
+                              Opnieuw
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenFeedback(order);
+                              }}
+                              className={`flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium ${order.feedbackRating ? 'bg-purple-500/20 text-purple-200 hover:text-purple-100' : 'bg-white/10 text-white/70 hover:text-white'}`}
+                            >
+                              <StarIcon className="w-4 h-4" />
+                              {order.feedbackRating ? 'Feedback' : 'Feedback geven'}
+                            </button>
+                            <button
                               onClick={() => setSelectedOrder(order.raw || order)}
                               className="rounded-full px-3 py-1 text-xs font-medium bg-white/10 text-white/70 hover:text-white"
                             >
@@ -1240,6 +1385,19 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
                           <div>
                             <p className="text-white/45 mb-1">Hoeveelheid</p>
                             <p className="text-white font-medium">{order.quantity}</p>
+                            {order.feedbackRating && (
+                              <div className="mt-2 flex items-center gap-1 text-[11px] text-white/70">
+                                {Array.from({ length: 5 }).map((_, idx) => (
+                                  <StarIcon
+                                    key={idx}
+                                    className={`w-3.5 h-3.5 ${idx < (order.feedbackRating || 0) ? 'text-yellow-300' : 'text-white/20'}`}
+                                  />
+                                ))}
+                                {order.feedbackSubmittedAt && (
+                                  <span className="ml-1 text-white/40">{new Date(order.feedbackSubmittedAt).toLocaleDateString('nl-NL')}</span>
+                                )}
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -1313,6 +1471,7 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
         userName={user?.name || ''}
         userCompany={user?.company}
         userPermissions={user?.permissions}
+        prefillConfig={checkoutPrefill}
       />
 
       {/* Order Detail Modal */}
@@ -1327,7 +1486,18 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
         isOpen={showSupportModal}
         onClose={() => setShowSupportModal(false)}
       />
-      
+
+      <OrderFeedbackModal
+        isOpen={feedbackModalOpen}
+        onClose={() => {
+          setFeedbackModalOpen(false);
+          setFeedbackOrder(null);
+        }}
+        order={feedbackModalData}
+        onSubmit={handleSubmitFeedback}
+        isSubmitting={isSubmittingFeedback}
+      />
+
       {/* Payment Success Modal */}
       {showSuccessModal && (
         <AnimatePresence>

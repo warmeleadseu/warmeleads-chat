@@ -30,6 +30,9 @@ export interface Order {
   deliveredAt?: string;
   leads?: number;
   conversions?: number;
+  feedbackRating?: number;
+  feedbackNotes?: string;
+  feedbackSubmittedAt?: string;
 }
 
 // Helper to check if user is admin
@@ -108,6 +111,9 @@ export const GET = withAuth(async (req: NextRequest, user: AuthenticatedUser) =>
       deliveredAt: order.delivered_at,
       leads: order.leads_delivered,
       conversions: order.conversions,
+      feedbackRating: order.feedback_rating || undefined,
+      feedbackNotes: order.feedback_notes || undefined,
+      feedbackSubmittedAt: order.feedback_submitted_at || undefined,
     }));
 
     return NextResponse.json({ orders: transformedOrders });
@@ -214,6 +220,9 @@ export const POST = withAuth(async (req: NextRequest, user: AuthenticatedUser) =
         leads_delivered: order.leads || 0,
         conversions: order.conversions || 0,
         delivered_at: order.deliveredAt,
+        feedback_rating: order.feedbackRating ?? null,
+        feedback_notes: order.feedbackNotes ?? null,
+        feedback_submitted_at: order.feedbackSubmittedAt ?? null,
       })
       .select()
       .single();
