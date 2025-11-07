@@ -1048,26 +1048,26 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-brand-navy via-brand-purple to-brand-pink">
-      <div className="max-w-6xl mx-auto px-4 py-6 md:py-10 space-y-6 md:space-y-8">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 md:py-10 space-y-6 md:space-y-8">
         <motion.nav
-          className="flex items-center justify-between rounded-2xl border border-white/15 bg-white/10 backdrop-blur-xl px-3 md:px-6 py-3 md:py-4 shadow-[0_20px_45px_-25px_rgba(28,12,64,0.65)]"
+          className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 rounded-2xl border border-white/15 bg-white/10 backdrop-blur-xl px-3 sm:px-5 md:px-6 py-3 md:py-4 shadow-[0_20px_45px_-25px_rgba(28,12,64,0.65)]"
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
         >
           <button
             onClick={onBackToHome}
-            className="flex items-center space-x-2 text-white/80 hover:text-white transition-colors"
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-sm font-medium text-white/80 hover:text-white transition-colors sm:border-none sm:bg-transparent sm:px-0 sm:py-0"
           >
             <ArrowLeftIcon className="w-5 h-5" />
-            <span className="hidden sm:inline text-sm font-medium">Home</span>
+            <span className="text-sm font-medium">Home</span>
           </button>
 
-          <div className="text-center flex-1 px-2">
-            <p className="text-xs text-white/50 uppercase tracking-[0.3em]">Warme Leads Portal</p>
+          <div className="text-center sm:flex-1 sm:px-2">
+            <p className="text-[11px] text-white/50 uppercase tracking-[0.28em]">Warme Leads Portal</p>
             <h1 className="text-white font-semibold text-base md:text-lg">Welkom terug, {user?.name || (user?.isGuest ? 'Gast' : 'partner')}!</h1>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center justify-center gap-2 sm:justify-end">
             <button
               onClick={() => setShowSupportModal(true)}
               className="hidden sm:inline-flex items-center gap-2 rounded-xl bg-white/10 px-3 py-2 text-sm font-medium text-white/80 hover:bg-white/20 hover:text-white transition"
@@ -1077,7 +1077,7 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
             </button>
             <button
               onClick={handleLogout}
-              className="inline-flex items-center gap-1 rounded-xl bg-white/10 px-3 py-2 text-sm font-medium text-white/80 hover:bg-white/20 hover:text-white transition"
+              className="inline-flex items-center gap-1 rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-sm font-medium text-white/80 hover:bg-white/20 hover:text-white transition"
             >
               <UserIcon className="w-4 h-4" />
               <span className="hidden sm:inline">Uitloggen</span>
@@ -1087,7 +1087,7 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
 
         {/* Hero & Status */}
         <motion.section
-          className="relative overflow-hidden rounded-3xl border border-white/15 bg-white/10 backdrop-blur-xl p-6 md:p-10 shadow-[0_45px_90px_-45px_rgba(25,14,64,0.8)]"
+          className="relative overflow-hidden rounded-3xl border border-white/15 bg-white/10 backdrop-blur-xl p-5 sm:p-6 md:p-10 shadow-[0_45px_90px_-45px_rgba(25,14,64,0.8)]"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
         >
@@ -1096,20 +1096,20 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
             <div className="absolute -left-16 bottom-0 h-48 w-48 rounded-full bg-brand-purple/40 blur-3xl" />
           </div>
 
-          <div className="relative flex flex-col gap-8 md:flex-row md:items-start">
-            <div className="flex-1 space-y-6">
-              <div className="flex flex-wrap items-center gap-3">
+          <div className="relative flex flex-col gap-6 md:gap-8 md:flex-row md:items-start">
+            <div className="flex-1 space-y-5 md:space-y-6">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                 <div className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-1 text-xs font-medium text-white/70">
                   <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_0_3px_rgba(56,189,248,0.25)]" />
                   Realtime accountoverzicht
                 </div>
-                <div className={`inline-flex items-center gap-2 rounded-full border px-4 py-1 text-xs font-medium ${syncStatusClass}`}>
+                <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] font-medium ${syncStatusClass}`}>
                   <span className={`h-2 w-2 rounded-full ${isSheetSyncing ? 'bg-amber-200 animate-pulse' : 'bg-emerald-200'}`} />
                   {syncStatusLabel}
                 </div>
                 <button
                   onClick={handlePortalRefresh}
-                  className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-medium text-white/70 hover:text-white hover:border-white/40 transition"
+                  className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[11px] font-medium text-white/70 hover:text-white hover:border-white/40 transition"
                 >
                   <ArrowPathIcon className="w-4 h-4" />
                   Ververs gegevens
@@ -1129,31 +1129,31 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
                 </div>
               )}
 
-              <div className="space-y-2">
-                <h2 className="text-2xl md:text-4xl font-bold text-white">Klaar voor de volgende groeispurt?</h2>
-                <p className="text-white/70 max-w-xl text-sm md:text-base">
+              <div className="space-y-1.5">
+                <h2 className="text-xl sm:text-2xl md:text-4xl font-bold text-white">Klaar voor de volgende groeispurt?</h2>
+                <p className="text-white/70 max-w-xl text-sm md:text-base leading-relaxed">
                   Branch: <span className="text-white font-semibold">{derivedBranchName}</span>. {insightCopy}
                 </p>
               </div>
 
-              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                <div className="rounded-2xl border border-white/15 bg-white/10 p-4">
+              <div className="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 md:grid-cols-4">
+                <div className="rounded-2xl border border-white/15 bg-white/10 p-3 sm:p-4">
                   <p className="text-xs text-white/50">Totaal leads</p>
-                  <p className="mt-1 text-2xl font-semibold text-white">{totalLeads}</p>
+                  <p className="mt-1 text-xl sm:text-2xl font-semibold text-white">{totalLeads}</p>
                 </div>
-                <div className="rounded-2xl border border-white/15 bg-white/10 p-4">
+                <div className="rounded-2xl border border-white/15 bg-white/10 p-3 sm:p-4">
                   <p className="text-xs text-white/50">Conversieratio</p>
-                  <p className="mt-1 text-2xl font-semibold text-emerald-200">{safeConversionRate.toFixed(1)}%</p>
+                  <p className="mt-1 text-xl sm:text-2xl font-semibold text-emerald-200">{safeConversionRate.toFixed(1)}%</p>
                 </div>
-                <div className="rounded-2xl border border-white/15 bg-white/10 p-4">
+                <div className="rounded-2xl border border-white/15 bg-white/10 p-3 sm:p-4">
                   <p className="text-xs text-white/50">Gegenereerde omzet</p>
-                  <p className="mt-1 text-2xl font-semibold text-sky-200">{formatRevenue(totalRevenue)}</p>
+                  <p className="mt-1 text-xl sm:text-2xl font-semibold text-sky-200">{formatRevenue(totalRevenue)}</p>
                 </div>
-                <div className="rounded-2xl border border-white/15 bg-white/10 p-4">
+                <div className="rounded-2xl border border-white/15 bg-white/10 p-3 sm:p-4">
                   <p className="text-xs text-white/50">Gegenereerde winst</p>
-                  <p className="mt-1 text-2xl font-semibold text-purple-200">{formatRevenue(totalProfit)}</p>
+                  <p className="mt-1 text-xl sm:text-2xl font-semibold text-purple-200">{formatRevenue(totalProfit)}</p>
                 </div>
-                <div className="col-span-2 rounded-2xl border border-white/15 bg-white/10 p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div className="col-span-2 rounded-2xl border border-white/15 bg-white/10 p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                   <div>
                     <p className="text-xs text-white/50">Doelstelling ({goalFrequency === 'maand' ? 'maandelijks' : 'per kwartaal'})</p>
                     <p className="text-lg font-semibold text-white">{totalLeads}/{growthGoal} leads</p>
@@ -1163,8 +1163,8 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
                     )}
                   </div>
                   <div className="flex items-center gap-3">
-                    <div className="relative h-12 w-12">
-                      <svg className="h-12 w-12 -rotate-90" viewBox="0 0 36 36">
+                    <div className="relative h-11 w-11 sm:h-12 sm:w-12">
+                      <svg className="h-11 w-11 sm:h-12 sm:w-12 -rotate-90" viewBox="0 0 36 36">
                         <path
                           className="text-white/15"
                           strokeWidth="3"
@@ -1203,17 +1203,17 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
                 </div>
               </div>
 
-              <div className="flex flex-wrap gap-3">
+              <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 sm:gap-3">
                 <button
                   onClick={() => handleQuickAction('reorder')}
-                  className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-green-500 to-emerald-500 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-500/30 transition-transform hover:-translate-y-0.5"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-green-500 to-emerald-500 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-emerald-500/30 transition-transform hover:-translate-y-0.5"
                 >
                   <PlusIcon className="w-4 h-4" />
                   Nieuwe bestelling
                 </button>
                 <button
                   onClick={() => handleQuickAction('leads')}
-                  className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-5 py-3 text-sm font-semibold text-white/80 hover:text-white hover:border-white/40 transition"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white/80 hover:text-white hover:border-white/40 transition"
                 >
                   <ChartBarIcon className="w-4 h-4" />
                   Ga naar mijn leads
@@ -1221,14 +1221,14 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
               </div>
             </div>
 
-            <div className="w-full md:max-w-xs space-y-5 rounded-3xl border border-white/15 bg-white/10 p-6 shadow-[0_35px_60px_-35px_rgba(13,28,64,0.7)]">
+            <div className="w-full md:max-w-xs space-y-4 sm:space-y-5 rounded-3xl border border-white/15 bg-white/10 p-5 sm:p-6 shadow-[0_35px_60px_-35px_rgba(13,28,64,0.7)]">
               <div className="flex items-center justify-between">
                 <p className="text-sm font-semibold text-white/80">Systeemstatus</p>
                 <span className="text-xs text-white/50">Realtime</span>
               </div>
-              <div className="space-y-4">
+              <div className="space-y-3.5 sm:space-y-4">
                 <div className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 p-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/15">
+                  <div className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-emerald-500/15">
                     <CheckCircleIcon className="w-5 h-5 text-emerald-300" />
                   </div>
                   <div className="flex-1">
@@ -1240,7 +1240,7 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
                   </span>
                 </div>
                 <div className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 p-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/15">
+                  <div className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-blue-500/15">
                     <CurrencyEuroIcon className="w-5 h-5 text-blue-300" />
                   </div>
                   <div className="flex-1">
@@ -1252,7 +1252,7 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
                   </span>
                 </div>
                 <div className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 p-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-500/15">
+                  <div className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-orange-500/15">
                     <ChatBubbleLeftRightIcon className="w-5 h-5 text-orange-200" />
                   </div>
                   <div className="flex-1">
@@ -1366,20 +1366,20 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
 
         {/* Lead health */}
         <motion.section
-          className="grid gap-4 md:grid-cols-[1.2fr_1fr]"
+          className="grid gap-4 lg:grid-cols-[1.2fr_1fr]"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.08 }}
         >
-          <div className="rounded-3xl border border-white/15 bg-white/10 p-6 md:p-7 shadow-[0_40px_80px_-55px_rgba(18,8,44,0.85)] backdrop-blur-xl">
-            <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+          <div className="rounded-3xl border border-white/15 bg-white/10 p-5 sm:p-6 md:p-7 shadow-[0_40px_80px_-55px_rgba(18,8,44,0.85)] backdrop-blur-xl">
+            <div className="flex flex-col gap-5 sm:gap-6 md:flex-row md:items-center md:justify-between">
               <div>
                 <p className="text-xs uppercase tracking-[0.3em] text-white/50">Lead health</p>
-                <h3 className="mt-2 text-xl font-semibold text-white">Pipeline overzicht</h3>
-                <p className="text-sm text-white/60">Zie waar je leads zich bevinden en wie prioriteit heeft voor opvolging.</p>
+                <h3 className="mt-2 text-lg sm:text-xl font-semibold text-white">Pipeline overzicht</h3>
+                <p className="text-sm text-white/60 leading-relaxed">Zie waar je leads zich bevinden en wie prioriteit heeft voor opvolging.</p>
               </div>
-              <div className="relative flex h-24 w-24 items-center justify-center">
-                <svg className="h-24 w-24 -rotate-90" viewBox="0 0 36 36">
+              <div className="relative flex h-20 w-20 sm:h-24 sm:w-24 items-center justify-center">
+                <svg className="h-20 w-20 sm:h-24 sm:w-24 -rotate-90" viewBox="0 0 36 36">
                   <path
                     className="text-white/15"
                     strokeWidth="4"
@@ -1405,13 +1405,13 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
                   />
                 </svg>
                 <div className="absolute inset-0 flex flex-col items-center justify-center text-white">
-                  <span className="text-lg font-semibold">{leadHealth.progressRate.toFixed(0)}%</span>
+                  <span className="text-base sm:text-lg font-semibold">{leadHealth.progressRate.toFixed(0)}%</span>
                   <span className="text-[11px] text-white/60">pipeline flow</span>
                 </div>
               </div>
             </div>
 
-            <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {leadHealth.primaryStages.length > 0 ? (
                 leadHealth.primaryStages.map(stat => (
                   <div key={stat.stage.id} className="rounded-2xl border border-white/10 bg-white/5 p-4">
@@ -1511,7 +1511,7 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
 
         {/* Quick actions */}
         <motion.section
-          className="grid grid-cols-1 gap-4 md:grid-cols-2"
+          className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
@@ -1532,20 +1532,20 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
                 <motion.button
                   key={action.action}
                   onClick={() => handleQuickAction(action.action)}
-                  className="group relative overflow-hidden rounded-3xl border border-white/15 bg-white/8 p-6 text-left shadow-[0_35px_60px_-35px_rgba(17,10,48,0.75)] transition-all hover:border-white/35 hover:bg-white/12"
+                  className="group relative overflow-hidden rounded-3xl border border-white/15 bg-white/8 p-5 sm:p-6 text-left shadow-[0_35px_60px_-35px_rgba(17,10,48,0.75)] transition-all hover:border-white/35 hover:bg-white/12"
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.08 }}
                 >
                   <div className="absolute inset-0 opacity-0 transition group-hover:opacity-100" style={{ background: 'radial-gradient(circle at top right, rgba(255,255,255,0.15), transparent)' }} />
                   <div className="relative flex items-start gap-4">
-                    <div className={`flex h-12 w-12 items-center justify-center rounded-2xl ${action.color} bg-opacity-20 backdrop-blur-md text-white shadow-lg shadow-black/20`}> 
-                      <Icon className="w-6 h-6" />
+                    <div className={`flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-2xl ${action.color} bg-opacity-20 backdrop-blur-md text-white shadow-lg shadow-black/20`}> 
+                      <Icon className="w-5 h-5 sm:w-6 sm:h-6" />
                     </div>
                     <div className="flex-1">
-                      <h3 className="text-lg font-semibold text-white">{action.title}</h3>
-                      <p className="mt-1 text-sm text-white/70">{action.description}</p>
-                      <div className="mt-4 inline-flex items-center gap-2 text-xs font-medium text-brand-pink group-hover:translate-x-1 transition-transform">
+                      <h3 className="text-base sm:text-lg font-semibold text-white">{action.title}</h3>
+                      <p className="mt-1 text-sm text-white/70 leading-relaxed">{action.description}</p>
+                      <div className="mt-3 inline-flex items-center gap-2 text-xs font-medium text-brand-pink group-hover:translate-x-1 transition-transform">
                         <span>Openen</span>
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -1560,19 +1560,19 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
 
         {/* Orders timeline */}
         <motion.section
-          className="rounded-3xl border border-white/15 bg-white/8 p-6 md:p-8 shadow-[0_45px_85px_-60px_rgba(16,8,40,0.9)]"
+          className="rounded-3xl border border-white/15 bg-white/8 p-5 sm:p-6 md:p-8 shadow-[0_45px_85px_-60px_rgba(16,8,40,0.9)]"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
         >
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
-              <h2 className="text-xl font-semibold text-white">Recente bestellingen</h2>
-              <p className="text-sm text-white/60">Bekijk uw voorgeschiedenis en download facturen.</p>
+              <h2 className="text-lg sm:text-xl font-semibold text-white">Recente bestellingen</h2>
+              <p className="text-sm text-white/60 leading-relaxed">Bekijk uw voorgeschiedenis en download facturen.</p>
             </div>
             <button
               onClick={() => handleQuickAction('reorder')}
-              className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-medium text-white/80 hover:text-white hover:border-white/40 transition"
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-medium text-white/80 hover:text-white hover:border-white/40 transition"
             >
               Nieuwe bestelling
               <PlusIcon className="w-4 h-4" />
@@ -1600,24 +1600,24 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
                 ))}
               </div>
             ) : recentOrders.length > 0 ? (
-              <div className="relative pl-6">
-                <span className="absolute left-2 top-2 bottom-2 w-px bg-white/15" />
+              <div className="relative md:pl-6">
+                <span className="absolute left-2 top-2 bottom-2 hidden md:block w-px bg-white/15" />
                 <div className="space-y-6">
                   {recentOrders.map((order: any, index: number) => (
                     <motion.div
                       key={order.id}
-                      className="relative pl-6"
+                      className="relative md:pl-6"
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: index * 0.06 }}
                     >
-                      <span className="absolute left-[-14px] top-4 h-3 w-3 rounded-full bg-gradient-to-br from-brand-pink to-brand-purple shadow-[0_0_25px_rgba(216,180,254,0.45)]" />
-                      <div className="rounded-2xl border border-white/10 bg-white/8 p-5 transition hover:border-white/25">
+                      <span className="absolute left-0 top-4 hidden md:block h-3 w-3 rounded-full bg-gradient-to-br from-brand-pink to-brand-purple shadow-[0_0_25px_rgba(216,180,254,0.45)]" />
+                      <div className="rounded-2xl border border-white/10 bg-white/8 p-4 sm:p-5 transition hover:border-white/25">
                         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                           <div>
                             <p className="text-xs text-white/40">{order.date}</p>
-                            <h3 className="text-lg font-semibold text-white">{order.type}</h3>
-                            <p className="text-sm text-white/60">Ordernummer {order.id}</p>
+                            <h3 className="text-base sm:text-lg font-semibold text-white">{order.type}</h3>
+                            <p className="text-sm text-white/60 break-words">Ordernummer {order.id}</p>
                           </div>
                           <div className="flex flex-wrap items-center gap-2">
                             <span className={`rounded-full px-3 py-1 text-xs font-medium ${order.status === 'geleverd' ? 'bg-emerald-500/15 text-emerald-200' : order.status === 'actief' ? 'bg-yellow-500/20 text-yellow-200' : 'bg-white/10 text-white/60'}`}>
@@ -1661,24 +1661,24 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
                             </button>
                           </div>
                         </div>
-                        <div className="mt-4 grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
+                        <div className="mt-4 grid grid-cols-2 gap-3 text-sm sm:gap-4 md:grid-cols-4">
                           <div>
-                            <p className="text-white/45 mb-1">Leads</p>
+                            <p className="text-white/45 mb-1 text-xs uppercase tracking-wide">Leads</p>
                             <p className="text-white font-medium">{order.leads}</p>
                           </div>
                           <div>
-                            <p className="text-white/45 mb-1">Conversies</p>
+                            <p className="text-white/45 mb-1 text-xs uppercase tracking-wide">Conversies</p>
                             <p className="text-white font-medium">{order.conversions}</p>
                           </div>
                           <div>
-                            <p className="text-white/45 mb-1">Waarde</p>
+                            <p className="text-white/45 mb-1 text-xs uppercase tracking-wide">Waarde</p>
                             <p className="text-white font-medium">{order.amount}</p>
                           </div>
                           <div>
-                            <p className="text-white/45 mb-1">Hoeveelheid</p>
+                            <p className="text-white/45 mb-1 text-xs uppercase tracking-wide">Hoeveelheid</p>
                             <p className="text-white font-medium">{order.quantity}</p>
                             {order.feedbackRating && (
-                              <div className="mt-2 flex items-center gap-1 text-[11px] text-white/70">
+                              <div className="mt-2 flex flex-wrap items-center gap-1 text-[11px] text-white/70">
                                 {Array.from({ length: 5 }).map((_, idx) => (
                                   <StarIcon
                                     key={idx}
@@ -1722,49 +1722,49 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
 
         {recommendedPackages.length > 0 && (
           <motion.section
-            className="rounded-3xl border border-white/15 bg-white/8 p-6 md:p-8 shadow-[0_45px_90px_-60px_rgba(18,10,48,0.85)]"
+            className="rounded-3xl border border-white/15 bg-white/8 p-5 sm:p-6 md:p-8 shadow-[0_45px_90px_-60px_rgba(18,10,48,0.85)]"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.22 }}
           >
-            <div className="space-y-6">
+            <div className="space-y-5 sm:space-y-6">
               <div className="space-y-2">
-                <p className="text-xs uppercase tracking-[0.3em] text-white/45">Aanbevolen voor jou</p>
-                <h2 className="text-xl font-semibold text-white">Opschalen met minimale keuze-stress</h2>
-                <p className="text-sm text-white/60">
+                <p className="text-[11px] uppercase tracking-[0.3em] text-white/45">Aanbevolen voor jou</p>
+                <h2 className="text-lg sm:text-xl font-semibold text-white">Opschalen met minimale keuze-stress</h2>
+                <p className="text-sm text-white/60 leading-relaxed">
                   Op basis van je pipeline ({leadHealth.progressRate.toFixed(0)}% actief) adviseren wij het volgende pakket.
                 </p>
               </div>
 
-              <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_280px]">
+              <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_280px]">
                 <div>
                   {primaryRecommendation && (
-                    <div className="relative overflow-hidden rounded-3xl border border-white/20 bg-white/12 p-6 backdrop-blur-xl shadow-[0_35px_80px_-50px_rgba(20,10,40,0.9)] space-y-5">
+                    <div className="relative overflow-hidden rounded-3xl border border-white/20 bg-white/12 p-5 sm:p-6 backdrop-blur-xl shadow-[0_35px_80px_-50px_rgba(20,10,40,0.9)] space-y-5">
                       <div className="absolute right-[-70px] top-[-70px] h-40 w-40 rounded-full bg-white/10 blur-3xl" />
                       <div className="relative space-y-2">
                         <span className="inline-flex items-center rounded-full bg-white/15 px-3 py-1 text-[11px] font-semibold text-white/75">
                           Beste keuze voor jouw pipeline
                         </span>
-                        <h3 className="text-2xl font-semibold text-white">{primaryRecommendation.title}</h3>
+                        <h3 className="text-xl sm:text-2xl font-semibold text-white">{primaryRecommendation.title}</h3>
                         <p className="text-xs text-white/50 uppercase tracking-wide">{primaryRecommendation.subtitle}</p>
-                        <p className="text-sm text-white/70 leading-relaxed max-w-xl">{primaryRecommendation.description}</p>
+                        <p className="text-sm text-white/70 leading-relaxed">{primaryRecommendation.description}</p>
                       </div>
                       <div className="relative grid gap-3 sm:grid-cols-2">
                         {primaryRecommendation.metrics.slice(0, 2).map(metric => (
-                          <div key={`${primaryRecommendation.id}-${metric.label}`} className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3">
+                          <div key={`${primaryRecommendation.id}-${metric.label}`} className="rounded-2xl border border-white/15 bg-white/10 px-3 py-3 sm:px-4">
                             <p className="text-[11px] uppercase tracking-wide text-white/50">{metric.label}</p>
-                            <p className="mt-1 text-lg font-semibold text-white">{metric.value}</p>
+                            <p className="mt-1 text-base sm:text-lg font-semibold text-white">{metric.value}</p>
                           </div>
                         ))}
-                        <div className="rounded-2xl border border-white/10 bg-white/8 px-4 py-3">
+                        <div className="rounded-2xl border border-white/10 bg-white/8 px-3 py-3 sm:px-4">
                           <p className="text-[11px] uppercase tracking-wide text-white/50">Pipeline activatie</p>
-                          <p className="mt-1 text-lg font-semibold text-white">{leadHealth.progressRate.toFixed(0)}%</p>
+                          <p className="mt-1 text-base sm:text-lg font-semibold text-white">{leadHealth.progressRate.toFixed(0)}%</p>
                         </div>
                       </div>
-                      <div className="relative flex flex-wrap items-center gap-3">
+                      <div className="relative flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2 sm:gap-3">
                         <button
                           onClick={() => openCheckoutWithPrefill(primaryRecommendation.prefill)}
-                          className="rounded-xl bg-white px-5 py-3 text-sm font-semibold text-brand-purple transition hover:bg-white/90"
+                          className="rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-brand-purple transition hover:bg-white/90"
                         >
                           {primaryRecommendation.ctaLabel}
                         </button>
@@ -1779,11 +1779,11 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
                   )}
                 </div>
 
-                <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-3.5 sm:gap-4">
                   {secondaryRecommendations.map(pkg => (
                     <div
                       key={pkg.id}
-                      className="rounded-3xl border border-white/12 bg-white/6 px-4 py-4 backdrop-blur-lg"
+                      className="rounded-3xl border border-white/12 bg-white/6 px-4 py-3.5 sm:py-4 backdrop-blur-lg"
                     >
                       <div className="flex items-center justify-between gap-2">
                         <div>
@@ -1814,20 +1814,20 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
 
         {/* CTA banner */}
         <motion.section
-          className="relative overflow-hidden rounded-3xl border border-white/15 bg-gradient-to-r from-brand-purple via-brand-pink to-orange-400 p-6 md:p-8 text-white shadow-[0_45px_90px_-65px_rgba(24,9,64,0.85)]"
+          className="relative overflow-hidden rounded-3xl border border-white/15 bg-gradient-to-r from-brand-purple via-brand-pink to-orange-400 p-5 sm:p-6 md:p-8 text-white shadow-[0_45px_90px_-65px_rgba(24,9,64,0.85)]"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.25 }}
         >
           <div className="absolute right-[-80px] top-[-80px] h-56 w-56 rounded-full bg-white/20 blur-3xl" />
-          <div className="relative z-10 flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+          <div className="relative z-10 flex flex-col gap-5 md:flex-row md:items-center md:justify-between text-center md:text-left">
             <div>
-              <h3 className="text-2xl font-semibold">Boost uw campagne vandaag nog</h3>
-              <p className="mt-2 max-w-xl text-sm md:text-base text-white/80">
+              <h3 className="text-xl sm:text-2xl font-semibold">Boost uw campagne vandaag nog</h3>
+              <p className="mt-2 max-w-xl text-sm md:text-base text-white/80 leading-relaxed">
                 Combineer verse exclusieve leads met realtime inzicht in het leadportaal. Ons team helpt u graag bij het kiezen van de beste strategie.
               </p>
             </div>
-            <div className="flex flex-col sm:flex-row gap-3">
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
               <button
                 onClick={() => handleQuickAction('support')}
                 className="inline-flex items-center justify-center gap-2 rounded-xl bg-white/15 px-5 py-3 text-sm font-semibold text-white hover:bg-white/25 transition"
