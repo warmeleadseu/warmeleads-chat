@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { stripe, handleSuccessfulPayment, formatPrice } from '@/lib/stripe';
+import { createServerClient } from '@/lib/supabase';
 import { generateInvoiceNumber, generateInvoiceHTML, type InvoiceData } from '@/lib/invoiceGenerator';
 import Stripe from 'stripe';
 
@@ -484,48 +485,112 @@ async function saveOrderFromSession(session: Stripe.Checkout.Session) {
       sessionId: session.id,
       paymentIntentId: session.payment_intent as string || undefined,
       createdAt: new Date().toISOString(),
+      invoiceUrl: undefined as string | undefined,
+      invoiceNumber: undefined as string | undefined,
     };
 
-    console.log('📋 Saving order from session to Blob Storage:', orderData.orderNumber);
-    
-    // Save order via API
-    const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'https://www.warmeleads.eu'}/api/orders`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ order: orderData }),
-    });
+    console.log('📋 Saving order from session to Supabase:', orderData.orderNumber);
 
-    if (response.ok) {
-      console.log('✅ Order from session saved successfully:', orderNumber);
-      
-      // Generate PDF invoice and store it
-      const invoiceUrl = await generateAndStorePDFInvoice(orderData);
-      
-      if (invoiceUrl) {
-        // Update order with invoice URL
-        const updatedOrderData = {
-          ...orderData,
-          invoiceUrl,
-          invoiceNumber: `INV-${orderData.orderNumber}`
-        };
-        
-        // Re-save order with invoice URL
-        await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'https://www.warmeleads.eu'}/api/orders`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ order: updatedOrderData }),
-        });
-        
-        console.log('✅ Invoice generated and stored:', invoiceUrl);
-        return updatedOrderData;
-      }
-      
-      return orderData;
+    const supabase = createServerClient();
+
+    // Ensure customer exists and get ID
+    let customerId: string | null = null;
+    const { data: existingCustomer } = await supabase
+      .from('customers')
+      .select('id')
+      .eq('email', customerEmail)
+      .single();
+
+    if (existingCustomer?.id) {
+      customerId = existingCustomer.id;
     } else {
-      const error = await response.text();
-      console.error('❌ Failed to save order from session:', error);
-      throw new Error(`Failed to save order: ${error}`);
+      const { data: newCustomer, error: createCustomerError } = await supabase
+        .from('customers')
+        .insert({
+          email: customerEmail,
+          name: orderData.customerName,
+          company: orderData.customerCompany || null,
+          source: 'checkout',
+          status: 'active',
+        })
+        .select('id')
+        .single();
+
+      if (createCustomerError) {
+        console.warn('⚠️ Failed to create customer for order:', createCustomerError.message);
+      } else if (newCustomer?.id) {
+        customerId = newCustomer.id;
+      }
     }
+
+    // Insert order
+    const { data: insertedOrder, error: insertError } = await supabase
+      .from('orders')
+      .insert({
+        customer_id: customerId,
+        order_number: orderData.orderNumber,
+        customer_email: orderData.customerEmail,
+        customer_name: orderData.customerName,
+        customer_company: orderData.customerCompany || null,
+        package_id: orderData.packageId,
+        package_name: orderData.packageName,
+        industry: orderData.industry,
+        lead_type: orderData.leadType,
+        quantity: orderData.quantity,
+        price_per_lead: orderData.pricePerLead,
+        total_amount: orderData.totalAmount,
+        vat_amount: orderData.vatAmount,
+        total_amount_incl_vat: orderData.totalAmountInclVAT,
+        vat_percentage: orderData.vatPercentage,
+        currency: orderData.currency,
+        status: orderData.status,
+        payment_method: orderData.paymentMethod,
+        session_id: orderData.sessionId,
+        stripe_session_id: orderData.sessionId,
+        payment_intent_id: orderData.paymentIntentId,
+        stripe_payment_intent_id: orderData.paymentIntentId,
+        created_at: orderData.createdAt,
+      })
+      .select('id')
+      .single();
+
+    if (insertError) {
+      console.error('❌ Failed to save order from session:', insertError.message);
+      throw new Error(insertError.message);
+    }
+
+    let savedOrder = {
+      ...orderData,
+      id: insertedOrder?.id,
+    };
+
+    // Generate PDF invoice and store it
+    const invoiceUrl = await generateAndStorePDFInvoice(orderData);
+
+    if (invoiceUrl && insertedOrder?.id) {
+      const invoiceNumber = `INV-${orderData.orderNumber}`;
+
+      const { error: updateError } = await supabase
+        .from('orders')
+        .update({
+          invoice_url: invoiceUrl,
+          invoice_number: invoiceNumber,
+        })
+        .eq('id', insertedOrder.id);
+
+      if (updateError) {
+        console.warn('⚠️ Failed to update order with invoice URL:', updateError.message);
+      } else {
+        console.log('✅ Invoice generated and stored:', invoiceUrl);
+        savedOrder = {
+          ...savedOrder,
+          invoiceUrl,
+          invoiceNumber,
+        };
+      }
+    }
+
+    return savedOrder;
     
   } catch (error) {
     console.error('❌ Error saving order from session:', error);
