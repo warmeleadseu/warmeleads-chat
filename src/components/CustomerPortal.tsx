@@ -1588,80 +1588,86 @@ export function CustomerPortal({ onBackToHome, onStartChat }: CustomerPortalProp
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.22 }}
           >
-            <div className="grid gap-6 md:grid-cols-[minmax(0,320px)_1fr]">
-              <div className="space-y-5">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.3em] text-white/45">Aanbevolen voor jou</p>
-                  <h2 className="text-xl font-semibold text-white">Slim opschalen met de juiste pakketten</h2>
-                  <p className="text-sm text-white/60">Advies op basis van je huidige pipeline, ordergeschiedenis en groeipotentieel.</p>
-                </div>
-
-                {primaryRecommendation && (
-                  <div className="rounded-3xl border border-white/15 bg-white/10 p-5 space-y-4">
-                    <div className="space-y-1">
-                      <span className="inline-flex items-center rounded-full bg-white/15 px-3 py-1 text-[11px] font-semibold text-white/75">Top aanbeveling</span>
-                      <h3 className="text-lg font-semibold text-white">{primaryRecommendation.title}</h3>
-                      <p className="text-xs text-white/50 uppercase tracking-wide">{primaryRecommendation.subtitle}</p>
-                    </div>
-                    <p className="text-sm text-white/70 leading-relaxed">{primaryRecommendation.description}</p>
-                    <div className="grid grid-cols-2 gap-3 text-sm text-white/75">
-                      {primaryRecommendation.metrics.slice(0, 2).map(metric => (
-                        <div key={`${primaryRecommendation.id}-${metric.label}`} className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
-                          <p className="text-[11px] uppercase tracking-wide text-white/45">{metric.label}</p>
-                          <p className="text-sm font-medium text-white">{metric.value}</p>
-                        </div>
-                      ))}
-                      <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
-                        <p className="text-[11px] uppercase tracking-wide text-white/45">Pipeline actief</p>
-                        <p className="text-sm font-medium text-white">{leadHealth.progressRate.toFixed(0)}% flow</p>
-                      </div>
-                      <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
-                        <p className="text-[11px] uppercase tracking-wide text-white/45">Nieuwe leads</p>
-                        <p className="text-sm font-medium text-white">{leadHealth.firstStageStat?.count ?? 0} in {leadHealth.firstStageStat?.stage.name ?? 'pipeline'}</p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => openCheckoutWithPrefill(primaryRecommendation.prefill)}
-                      className="w-full rounded-xl bg-gradient-to-r from-brand-pink to-brand-purple px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-brand-purple/30 transition hover:from-brand-pink/90 hover:to-brand-purple/90"
-                    >
-                      {primaryRecommendation.ctaLabel}
-                    </button>
-                  </div>
-                )}
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <p className="text-xs uppercase tracking-[0.3em] text-white/45">Aanbevolen voor jou</p>
+                <h2 className="text-xl font-semibold text-white">Opschalen met minimale keuze-stress</h2>
+                <p className="text-sm text-white/60">
+                  Op basis van je pipeline ({leadHealth.progressRate.toFixed(0)}% actief) adviseren wij het volgende pakket.
+                </p>
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                {secondaryRecommendations.map(pkg => (
-                  <div
-                    key={pkg.id}
-                    className={`h-full rounded-3xl border ${pkg.isPrimary ? 'border-white/25 bg-white/12 shadow-[0_25px_65px_-45px_rgba(20,10,40,0.9)]' : 'border-white/10 bg-white/6'} p-5 backdrop-blur-lg space-y-4 transition hover:border-white/20`}
-                  >
-                    <div className="space-y-1">
+              <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_280px]">
+                <div>
+                  {primaryRecommendation && (
+                    <div className="relative overflow-hidden rounded-3xl border border-white/20 bg-white/12 p-6 backdrop-blur-xl shadow-[0_35px_80px_-50px_rgba(20,10,40,0.9)] space-y-5">
+                      <div className="absolute right-[-70px] top-[-70px] h-40 w-40 rounded-full bg-white/10 blur-3xl" />
+                      <div className="relative space-y-2">
+                        <span className="inline-flex items-center rounded-full bg-white/15 px-3 py-1 text-[11px] font-semibold text-white/75">
+                          Beste keuze voor jouw pipeline
+                        </span>
+                        <h3 className="text-2xl font-semibold text-white">{primaryRecommendation.title}</h3>
+                        <p className="text-xs text-white/50 uppercase tracking-wide">{primaryRecommendation.subtitle}</p>
+                        <p className="text-sm text-white/70 leading-relaxed max-w-xl">{primaryRecommendation.description}</p>
+                      </div>
+                      <div className="relative grid gap-3 sm:grid-cols-2">
+                        {primaryRecommendation.metrics.slice(0, 2).map(metric => (
+                          <div key={`${primaryRecommendation.id}-${metric.label}`} className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3">
+                            <p className="text-[11px] uppercase tracking-wide text-white/50">{metric.label}</p>
+                            <p className="mt-1 text-lg font-semibold text-white">{metric.value}</p>
+                          </div>
+                        ))}
+                        <div className="rounded-2xl border border-white/10 bg-white/8 px-4 py-3">
+                          <p className="text-[11px] uppercase tracking-wide text-white/50">Pipeline activatie</p>
+                          <p className="mt-1 text-lg font-semibold text-white">{leadHealth.progressRate.toFixed(0)}%</p>
+                        </div>
+                      </div>
+                      <div className="relative flex flex-wrap items-center gap-3">
+                        <button
+                          onClick={() => openCheckoutWithPrefill(primaryRecommendation.prefill)}
+                          className="rounded-xl bg-white px-5 py-3 text-sm font-semibold text-brand-purple transition hover:bg-white/90"
+                        >
+                          {primaryRecommendation.ctaLabel}
+                        </button>
+                        <button
+                          onClick={() => openCheckoutWithPrefill(primaryRecommendation.prefill)}
+                          className="text-sm font-medium text-white/70 underline-offset-4 hover:underline"
+                        >
+                          Meer details tonen
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex flex-col gap-4">
+                  {secondaryRecommendations.map(pkg => (
+                    <div
+                      key={pkg.id}
+                      className="rounded-3xl border border-white/12 bg-white/6 px-4 py-4 backdrop-blur-lg"
+                    >
                       <div className="flex items-center justify-between gap-2">
-                        <p className="text-sm font-semibold text-white">{pkg.title}</p>
+                        <div>
+                          <p className="text-sm font-semibold text-white">{pkg.title}</p>
+                          <p className="text-xs text-white/45 uppercase tracking-wide">{pkg.subtitle}</p>
+                        </div>
                         {pkg.badge && (
-                          <span className="rounded-full bg-white/12 px-3 py-1 text-[11px] font-medium text-white/70">{pkg.badge}</span>
+                          <span className="rounded-full bg-white/12 px-3 py-1 text-[10px] font-medium text-white/70">{pkg.badge}</span>
                         )}
                       </div>
-                      <p className="text-xs text-white/50 uppercase tracking-wide">{pkg.subtitle}</p>
+                      <div className="mt-3 flex items-center justify-between text-xs text-white/60">
+                        <span>{pkg.metrics[0]?.value || ''}</span>
+                        <span>{pkg.metrics[1]?.value || ''}</span>
+                      </div>
+                      <button
+                        onClick={() => openCheckoutWithPrefill(pkg.prefill)}
+                        className="mt-3 w-full rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-medium text-white/80 transition hover:bg-white/15"
+                      >
+                        {pkg.ctaLabel}
+                      </button>
                     </div>
-                    <p className="text-sm text-white/65 leading-relaxed">{pkg.description}</p>
-                    <div className="space-y-2">
-                      {pkg.metrics.map(metric => (
-                        <div key={`${pkg.id}-${metric.label}`} className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/4 px-3 py-2 text-xs text-white/65">
-                          <span className="uppercase tracking-wide">{metric.label}</span>
-                          <span className="text-sm font-medium text-white/80">{metric.value}</span>
-                        </div>
-                      ))}
-                    </div>
-                    <button
-                      onClick={() => openCheckoutWithPrefill(pkg.prefill)}
-                      className={`w-full rounded-xl ${pkg.isPrimary ? 'bg-white text-brand-purple' : 'bg-gradient-to-r from-brand-purple to-brand-pink text-white'} px-4 py-2.5 text-sm font-semibold transition hover:opacity-90`}
-                    >
-                      {pkg.ctaLabel}
-                    </button>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             </div>
           </motion.section>
