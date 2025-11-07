@@ -10,7 +10,7 @@ import {
   PencilIcon,
   CheckIcon
 } from '@heroicons/react/24/outline';
-import { useAuthStore, type UserPermissions, type User } from '@/lib/auth';
+import { useAuthStore, type UserPermissions, type User, authenticatedFetch } from '@/lib/auth';
 
 interface EmployeeAccount {
   email: string;
@@ -84,7 +84,7 @@ export function EmployeeManagementModal({ isOpen, onClose, user }: EmployeeManag
     }
     
     try {
-      const response = await fetch(`/api/auth/company?ownerEmail=${encodeURIComponent(user.email)}`);
+      const response = await authenticatedFetch(`/api/auth/company?ownerEmail=${encodeURIComponent(user.email)}`);
       const data = await response.json();
       
       // Double-check component is still mounted before updating state
@@ -93,7 +93,11 @@ export function EmployeeManagementModal({ isOpen, onClose, user }: EmployeeManag
       if (response.ok && data.success) {
         setCompany(data.company);
       } else {
-        setError(data.error || 'Fout bij het laden van bedrijfsgegevens');
+        if (response.status === 401) {
+          setError('Je sessie is verlopen. Log opnieuw in om je team te beheren.');
+        } else {
+          setError(data.error || 'Fout bij het laden van bedrijfsgegevens');
+        }
       }
     } catch (err) {
       if (isMountedRef.current) {
@@ -123,7 +127,7 @@ export function EmployeeManagementModal({ isOpen, onClose, user }: EmployeeManag
     setError(null);
 
     try {
-      const response = await fetch('/api/auth/invite-employee', {
+      const response = await authenticatedFetch('/api/auth/invite-employee', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -151,7 +155,11 @@ export function EmployeeManagementModal({ isOpen, onClose, user }: EmployeeManag
           }
         });
       } else {
-        setError(result.error || 'Fout bij het uitnodigen van werknemer');
+        if (response.status === 401) {
+          setError('Je sessie is verlopen. Log opnieuw in om werknemers uit te nodigen.');
+        } else {
+          setError(result.error || 'Fout bij het uitnodigen van werknemer');
+        }
       }
     } catch (err) {
       setError('Fout bij het uitnodigen van werknemer');
@@ -181,8 +189,8 @@ export function EmployeeManagementModal({ isOpen, onClose, user }: EmployeeManag
     try {
       const deleteUrl = `/api/auth/company?ownerEmail=${encodeURIComponent(user.email)}&employeeEmail=${encodeURIComponent(employeeEmail)}`;
       console.log('🗑️ Delete URL:', deleteUrl);
-      
-      const response = await fetch(deleteUrl, { method: 'DELETE' });
+
+      const response = await authenticatedFetch(deleteUrl, { method: 'DELETE' });
 
       console.log('🗑️ Delete response status:', response.status);
       console.log('🗑️ Delete response ok:', response.ok);
@@ -212,7 +220,7 @@ export function EmployeeManagementModal({ isOpen, onClose, user }: EmployeeManag
           if (!isMountedRef.current || !user?.email) return;
           
           try {
-            const verifyResponse = await fetch(`/api/auth/company?ownerEmail=${encodeURIComponent(user.email)}`);
+            const verifyResponse = await authenticatedFetch(`/api/auth/company?ownerEmail=${encodeURIComponent(user.email)}`);
             const verifyData = await verifyResponse.json();
             
             // Only update if there's a discrepancy (employee still exists in backend but not in UI)
@@ -245,7 +253,9 @@ export function EmployeeManagementModal({ isOpen, onClose, user }: EmployeeManag
         }, 5000);
       } else {
         console.error('❌ Delete failed:', { status: response.status, result });
-        const errorMessage = result.error || 'Fout bij het verwijderen van werknemer';
+        const errorMessage = response.status === 401
+          ? 'Je sessie is verlopen. Log opnieuw in om werknemers te verwijderen.'
+          : result.error || 'Fout bij het verwijderen van werknemer';
         setError(errorMessage);
         console.error('❌ Error message set:', errorMessage);
       }
