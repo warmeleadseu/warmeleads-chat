@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { list } from '@vercel/blob';
 import { ADMIN_CONFIG } from '@/config/admin';
 import { withAuth } from '@/middleware/auth';
 import type { AuthenticatedUser } from '@/middleware/auth';
-
-const BLOB_STORE_PREFIX = 'auth-accounts';
+import { createServerClient } from '@/lib/supabase';
 
 // Force dynamic rendering for this route
 export const dynamic = 'force-dynamic';
@@ -25,50 +23,32 @@ export const GET = withAuth(async (request: NextRequest, user: AuthenticatedUser
     
     console.log('✅ Authorized admin access:', user.email);
     
-    console.log('📊 GET /api/auth/list-accounts - Fetching all accounts');
-    console.log('🔍 Looking for blobs with prefix:', BLOB_STORE_PREFIX);
-    
-    // List all auth accounts from Blob Storage
-    const { blobs } = await list({
-      prefix: BLOB_STORE_PREFIX,
-      token: process.env.BLOB_READ_WRITE_TOKEN
-    });
-    
-    console.log(`✅ Found ${blobs.length} account blob(s) in Blob Storage`);
-    console.log('📋 Blob pathnames:', blobs.map(b => b.pathname));
-    
-    // Fetch each account's data (without password)
-    const accounts = await Promise.all(
-      blobs.map(async (blob) => {
-        try {
-          const response = await fetch(blob.url);
-          const data = await response.json();
-          
-          // Return account info without password
-          return {
-            email: data.email,
-            name: data.name,
-            company: data.company,
-            phone: data.phone,
-            createdAt: data.createdAt,
-            isGuest: data.isGuest || false
-          };
-        } catch (error) {
-          console.error(`Error fetching blob ${blob.pathname}:`, error);
-          return null;
-        }
-      })
-    );
-    
-    // Filter out nulls and sort by creation date
-    const validAccounts = accounts
-      .filter(a => a !== null)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    
+    const supabase = createServerClient();
+    const { data: users, error: fetchError } = await supabase
+      .from('users')
+      .select('email, name, company, phone, created_at, role, is_active, needs_password_reset')
+      .order('created_at', { ascending: false });
+
+    if (fetchError) {
+      console.error('❌ Supabase error fetching users:', fetchError);
+      return NextResponse.json({ error: 'Failed to list accounts' }, { status: 500 });
+    }
+
+    const accounts = (users || []).map((user) => ({
+      email: user.email,
+      name: user.name,
+      company: user.company,
+      phone: user.phone,
+      createdAt: user.created_at,
+      role: user.role,
+      isActive: user.is_active,
+      needsPasswordReset: user.needs_password_reset,
+    }));
+
     return NextResponse.json({
       success: true,
-      count: validAccounts.length,
-      accounts: validAccounts
+      count: accounts.length,
+      accounts
     });
     
   } catch (error) {

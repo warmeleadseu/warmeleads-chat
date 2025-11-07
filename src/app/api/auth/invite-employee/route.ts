@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { put, list } from '@vercel/blob';
 import bcrypt from 'bcryptjs';
 import { sendEmployeeInvitationEmail } from '@/lib/emailService';
 import { withAuth } from '@/middleware/auth';
 import type { AuthenticatedUser } from '@/middleware/auth';
+import { createServerClient } from '@/lib/supabase';
 
 // Helper to check if user is admin
 function isAdmin(email: string): boolean {
@@ -32,57 +32,31 @@ export const POST = withAuth(async (request: NextRequest, user: AuthenticatedUse
 
     console.log('📧 POST /api/auth/invite-employee - Inviting:', { ownerEmail, employeeEmail });
 
-    if (!process.env.BLOB_READ_WRITE_TOKEN) {
-      console.error('❌ BLOB_READ_WRITE_TOKEN environment variable is not set');
+    const supabase = createServerClient();
+    const normalizedOwner = ownerEmail.toLowerCase();
+    const normalizedEmployee = employeeEmail.toLowerCase();
+
+    // Check if Supabase user already exists
+    const { data: existingUser } = await supabase
+      .from('users')
+      .select('email')
+      .eq('email', normalizedEmployee)
+      .maybeSingle();
+
+    if (existingUser) {
       return NextResponse.json(
-        { error: 'Server configuratie fout' },
-        { status: 500 }
+        { error: 'Er bestaat al een account met dit emailadres' },
+        { status: 409 }
       );
     }
 
-    // Check if employee account already exists
-    const employeeBlobKey = `auth-accounts/${employeeEmail.replace('@', '_at_').replace(/\./g, '_dot_')}.json`;
-    
-    try {
-      const { blobs } = await list({
-        prefix: employeeBlobKey,
-        token: process.env.BLOB_READ_WRITE_TOKEN
-      });
-
-      if (blobs.length > 0) {
-        return NextResponse.json(
-          { error: 'Er bestaat al een account met dit emailadres' },
-          { status: 409 }
-        );
-      }
-    } catch (error) {
-      console.log('Employee account check:', error);
-    }
-
-    // Add employee to company
-    const companyResponse = await fetch(`${request.nextUrl.origin}/api/auth/company`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ownerEmail,
-        employeeEmail,
-        employeeName,
-        permissions: permissions || {
-          canViewLeads: true,
-          canViewOrders: true,
-          canManageEmployees: false,
-          canCheckout: false,
-        }
-      })
-    });
-
-    if (!companyResponse.ok) {
-      const error = await companyResponse.json();
-      return NextResponse.json(
-        { error: error.error || 'Fout bij het toevoegen aan bedrijf' },
-        { status: 500 }
-      );
-    }
+    // Ensure company record exists
+    await supabase
+      .from('companies')
+      .upsert({
+        owner_email: normalizedOwner,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'owner_email' });
 
     // Create temporary password (employee will reset it on first login)
     const tempPassword = Math.random().toString(36).slice(-12) + 'A1!';
@@ -105,43 +79,71 @@ export const POST = withAuth(async (request: NextRequest, user: AuthenticatedUse
       console.log('Could not fetch owner data for email:', error);
     }
 
-    // Create employee account data
-    const employeeAccountData = {
-      email: employeeEmail,
-      password: hashedPassword,
-      name: employeeName,
-      company: companyName,
-      phone: '',
-      createdAt: new Date().toISOString(),
-      isGuest: false,
-      role: 'employee',
-      companyId: ownerEmail,
-      ownerEmail: ownerEmail,
-      permissions: permissions || {
-        canViewLeads: true,
-        canViewOrders: true,
-        canManageEmployees: false,
-        canCheckout: false,
-      },
-      needsPasswordReset: true, // Employee must set password on first login
-      invitedAt: new Date().toISOString(),
-      isActive: false // Will be activated when they set password
+    const now = new Date().toISOString();
+
+    const employeePermissions = {
+      canViewLeads: permissions?.canViewLeads ?? true,
+      canViewOrders: permissions?.canViewOrders ?? true,
+      canManageEmployees: permissions?.canManageEmployees ?? false,
+      canCheckout: permissions?.canCheckout ?? false,
     };
 
-    // Save employee account
-    await put(employeeBlobKey, JSON.stringify(employeeAccountData, null, 2), {
-      access: 'public',
-      token: process.env.BLOB_READ_WRITE_TOKEN,
-    });
+    // Create employee user in Supabase
+    const { error: insertError } = await supabase
+      .from('users')
+      .insert({
+        email: normalizedEmployee,
+        password_hash: hashedPassword,
+        name: employeeName,
+        company: companyName || null,
+        role: 'employee',
+        owner_email: normalizedOwner,
+        company_id: normalizedOwner,
+        can_view_leads: employeePermissions.canViewLeads,
+        can_view_orders: employeePermissions.canViewOrders,
+        can_manage_employees: employeePermissions.canManageEmployees,
+        can_checkout: employeePermissions.canCheckout,
+        is_active: false,
+        needs_password_reset: true,
+        created_at: now,
+        updated_at: now,
+      });
 
-    console.log('✅ Employee account created:', employeeEmail);
+    if (insertError) {
+      console.error('❌ Failed to create employee user in Supabase:', insertError);
+      return NextResponse.json({ error: 'Kon werknemer niet aanmaken' }, { status: 500 });
+    }
+
+    const { error: employeeRelationError } = await supabase
+      .from('company_employees')
+      .upsert({
+        owner_email: normalizedOwner,
+        employee_email: normalizedEmployee,
+        employee_name: employeeName,
+        invited_at: now,
+        is_active: false,
+        needs_password_reset: true,
+        can_view_leads: employeePermissions.canViewLeads,
+        can_view_orders: employeePermissions.canViewOrders,
+        can_manage_employees: employeePermissions.canManageEmployees,
+        can_checkout: employeePermissions.canCheckout,
+        created_at: now,
+        updated_at: now,
+      }, { onConflict: 'owner_email, employee_email' });
+
+    if (employeeRelationError) {
+      console.error('❌ Failed to upsert company employee record:', employeeRelationError);
+      return NextResponse.json({ error: 'Kon werknemer niet koppelen aan bedrijf' }, { status: 500 });
+    }
+
+    console.log('✅ Employee account created:', normalizedEmployee);
 
     // Send invitation email
     const setupUrl = `${request.nextUrl.origin}/portal?setup=${encodeURIComponent(employeeEmail)}`;
     
     const emailSent = await sendEmployeeInvitationEmail({
       employeeName,
-      employeeEmail,
+      employeeEmail: normalizedEmployee,
       ownerName,
       companyName,
       setupUrl
@@ -155,11 +157,11 @@ export const POST = withAuth(async (request: NextRequest, user: AuthenticatedUse
       success: true,
       message: emailSent ? 'Werknemer is uitgenodigd en email is verzonden' : 'Werknemer is uitgenodigd (email kon niet worden verzonden)',
       employee: {
-        email: employeeEmail,
+        email: normalizedEmployee,
         name: employeeName,
         needsPasswordReset: true,
         isActive: false,
-        invitedAt: employeeAccountData.invitedAt
+        invitedAt: now
       }
     });
 

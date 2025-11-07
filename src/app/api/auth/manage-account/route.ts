@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { put, del, list } from '@vercel/blob';
 import { isAdminEmail } from '@/config/admin';
 import { withAuth } from '@/middleware/auth';
 import type { AuthenticatedUser } from '@/middleware/auth';
+import { createServerClient } from '@/lib/supabase';
 
 // Manage account: activate, deactivate, or delete (ADMIN ONLY)
 export const POST = withAuth(async (request: NextRequest, user: AuthenticatedUser) => {
@@ -20,72 +20,50 @@ export const POST = withAuth(async (request: NextRequest, user: AuthenticatedUse
 
     console.log(`🔧 Account management: ${action} for ${email}`);
 
-    // Get all users from Blob Storage (use correct prefix!)
-    const { blobs } = await list({ 
-      prefix: 'auth-accounts/',
-      token: process.env.BLOB_READ_WRITE_TOKEN 
-    });
-    
-    console.log(`📦 Found ${blobs.length} accounts in Blob Storage`);
-    console.log('📋 Looking for:', `auth-accounts/${email.replace('@', '_at_').replace(/\./g, '_dot_')}.json`);
+    const supabase = createServerClient();
+    const normalizedEmail = email.toLowerCase();
     
     if (action === 'delete') {
-      // Find and delete the user blob - use consistent formatting
-      const emailPath = `auth-accounts/${email.replace('@', '_at_').replace(/\./g, '_dot_')}.json`;
-      const userBlob = blobs.find(blob => blob.pathname === emailPath);
-      
-      if (userBlob) {
-        await del(userBlob.url);
-        console.log(`✅ Deleted account: ${email}`);
-        return NextResponse.json({ 
-          success: true, 
-          message: `Account ${email} verwijderd` 
-        });
-      } else {
-        console.warn(`⚠️ Account not found in Blob Storage: ${email}`);
-        return NextResponse.json({ 
-          success: false, 
-          message: 'Account niet gevonden in Blob Storage' 
-        }, { status: 404 });
-      }
+      await supabase.from('users').delete().eq('email', normalizedEmail);
+      await supabase.from('company_employees').delete().eq('employee_email', normalizedEmail);
+
+      console.log(`✅ Deleted account: ${normalizedEmail}`);
+      return NextResponse.json({
+        success: true,
+        message: `Account ${normalizedEmail} verwijderd`
+      });
     }
 
     if (action === 'activate' || action === 'deactivate') {
-      // Find the user blob - use consistent formatting
-      const emailPath = `auth-accounts/${email.replace('@', '_at_').replace(/\./g, '_dot_')}.json`;
-      const userBlob = blobs.find(blob => blob.pathname === emailPath);
-      
-      if (!userBlob) {
-        return NextResponse.json({ 
-          error: 'Account niet gevonden' 
-        }, { status: 404 });
+      const isActive = action === 'activate';
+      const now = new Date().toISOString();
+
+      const { data: updatedUser, error: updateError } = await supabase
+        .from('users')
+        .update({
+          is_active: isActive,
+          updated_at: now,
+        })
+        .eq('email', normalizedEmail)
+        .select('email, name, company, phone, is_active, role')
+        .single();
+
+      if (updateError) {
+        console.error('❌ Failed to update account:', updateError);
+        return NextResponse.json({ error: 'Account niet gevonden' }, { status: 404 });
       }
 
-      // Fetch current user data
-      const userResponse = await fetch(userBlob.url);
-      const userData = await userResponse.json();
+      await supabase
+        .from('company_employees')
+        .update({ is_active: isActive, updated_at: now })
+        .eq('employee_email', normalizedEmail);
 
-      // Update active status
-      const updatedUser = {
-        ...userData,
-        isActive: action === 'activate',
-        updatedAt: new Date().toISOString()
-      };
+      console.log(`✅ Account ${action}d: ${normalizedEmail}`);
 
-      // Save back to Blob Storage with correct path (reuse emailPath from above)
-      const blob = await put(emailPath, JSON.stringify(updatedUser), {
-        access: 'public',
-        addRandomSuffix: false,
-        contentType: 'application/json',
-        token: process.env.BLOB_READ_WRITE_TOKEN
-      });
-
-      console.log(`✅ Account ${action}d: ${email}`);
-
-      return NextResponse.json({ 
-        success: true, 
-        message: `Account ${action === 'activate' ? 'geactiveerd' : 'gedeactiveerd'}`,
-        user: updatedUser
+      return NextResponse.json({
+        success: true,
+        message: `Account ${isActive ? 'geactiveerd' : 'gedeactiveerd'}`,
+        user: updatedUser,
       });
     }
 

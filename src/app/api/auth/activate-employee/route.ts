@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { put, list, head } from '@vercel/blob';
 import bcrypt from 'bcryptjs';
+import { createServerClient } from '@/lib/supabase';
 
 // Public endpoint - employee activation with email/password only
 // Security: No auth required, but validates employee account exists
@@ -9,176 +9,74 @@ export async function POST(request: NextRequest) {
     const { email, password } = await request.json();
 
     if (!email || !password) {
-      return NextResponse.json(
-        { error: 'Email en wachtwoord zijn verplicht' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Email en wachtwoord zijn verplicht' }, { status: 400 });
     }
 
-      console.log('🔑 POST /api/auth/activate-employee - Activating:', email);
-      console.log('🔍 Looking for employee blob key:', `auth-accounts/${email.replace('@', '_at_').replace(/\./g, '_dot_')}.json`);
+    console.log('🔑 POST /api/auth/activate-employee - Activating:', email);
 
-    if (!process.env.BLOB_READ_WRITE_TOKEN) {
-      console.error('❌ BLOB_READ_WRITE_TOKEN environment variable is not set');
-      return NextResponse.json(
-        { error: 'Server configuratie fout' },
-        { status: 500 }
-      );
+    const supabase = createServerClient();
+    const normalizedEmail = email.toLowerCase();
+
+    const { data: accountData, error: fetchError } = await supabase
+      .from('users')
+      .select('*')
+      .eq('email', normalizedEmail)
+      .single();
+
+    if (fetchError || !accountData) {
+      console.error('❌ Employee account not found:', fetchError);
+      return NextResponse.json({ error: 'Account niet gevonden' }, { status: 404 });
     }
 
-    // Hash the new password
+    if (accountData.role !== 'employee' || !accountData.needs_password_reset) {
+      return NextResponse.json({ error: 'Account kan niet worden geactiveerd' }, { status: 400 });
+    }
+
     const hashedPassword = await bcrypt.hash(password, 12);
+    const now = new Date().toISOString();
 
-    // Get employee account
-    const employeeBlobKey = `auth-accounts/${email.replace('@', '_at_').replace(/\./g, '_dot_')}.json`;
-    
-    try {
-      const blobExists = await head(employeeBlobKey, {
-        token: process.env.BLOB_READ_WRITE_TOKEN,
-      });
+    const { error: updateError } = await supabase
+      .from('users')
+      .update({
+        password_hash: hashedPassword,
+        needs_password_reset: false,
+        is_active: true,
+        updated_at: now,
+      })
+      .eq('email', normalizedEmail);
 
-      if (!blobExists) {
-        return NextResponse.json(
-          { error: 'Account niet gevonden' },
-          { status: 404 }
-        );
-      }
-
-      const response = await fetch(blobExists.url);
-      if (!response.ok) {
-        throw new Error('Failed to fetch account data');
-      }
-
-      const accountData = await response.json();
-
-      // Check if this is an employee account that needs activation
-      if (accountData.role !== 'employee' || !accountData.needsPasswordReset) {
-        return NextResponse.json(
-          { error: 'Account kan niet worden geactiveerd' },
-          { status: 400 }
-        );
-      }
-
-      // Update account data
-      const updatedAccountData = {
-        ...accountData,
-        password: hashedPassword,
-        needsPasswordReset: false,
-        isActive: true,
-        activatedAt: new Date().toISOString()
-      };
-
-      console.log('💾 Saving updated account data:', {
-        email,
-        isActive: true,
-        needsPasswordReset: false,
-        blobKey: employeeBlobKey
-      });
-
-      // Save updated account
-      await put(employeeBlobKey, JSON.stringify(updatedAccountData, null, 2), {
-        access: 'public',
-        token: process.env.BLOB_READ_WRITE_TOKEN,
-        allowOverwrite: true,
-      });
-      
-      console.log('✅ Account data saved successfully');
-      
-      // Verify the save was successful by reading it back
-      try {
-        const verifyBlobExists = await head(employeeBlobKey, {
-          token: process.env.BLOB_READ_WRITE_TOKEN,
-        });
-        
-        if (verifyBlobExists) {
-          const verifyResponse = await fetch(verifyBlobExists.url, {
-            headers: {
-              'Cache-Control': 'no-cache',
-              'Pragma': 'no-cache'
-            }
-          });
-          
-          if (verifyResponse.ok) {
-            const verifyData = await verifyResponse.json();
-            console.log('✅ Verification: Account data persisted correctly', {
-              email: verifyData.email,
-              isActive: verifyData.isActive,
-              needsPasswordReset: verifyData.needsPasswordReset
-            });
-          } else {
-            console.warn('⚠️ Could not verify saved account data:', verifyResponse.status);
-          }
-        }
-      } catch (verifyError) {
-        console.warn('⚠️ Error verifying saved account data:', verifyError);
-      }
-
-      // Update company data to mark employee as active
-      if (accountData.ownerEmail) {
-        const companyBlobKey = `companies/${accountData.ownerEmail.replace('@', '_at_').replace(/\./g, '_dot_')}.json`;
-        
-        try {
-          const companyBlobExists = await head(companyBlobKey, {
-            token: process.env.BLOB_READ_WRITE_TOKEN,
-          });
-
-          if (companyBlobExists) {
-            const companyResponse = await fetch(companyBlobExists.url);
-            if (companyResponse.ok) {
-              const companyData = await companyResponse.json();
-              
-              // Update employee status in company data
-              const employeeIndex = companyData.employees.findIndex(
-                (emp: any) => emp.email === email
-              );
-              
-              if (employeeIndex >= 0) {
-                companyData.employees[employeeIndex] = {
-                  ...companyData.employees[employeeIndex],
-                  isActive: true,
-                  acceptedAt: new Date().toISOString()
-                };
-
-                // Save updated company data
-                await put(companyBlobKey, JSON.stringify(companyData, null, 2), {
-                  access: 'public',
-                  token: process.env.BLOB_READ_WRITE_TOKEN,
-                  allowOverwrite: true,
-                });
-              }
-            }
-          }
-        } catch (error) {
-          console.warn('Could not update company data:', error);
-        }
-      }
-
-      console.log('✅ Employee account activated:', email);
-
-      return NextResponse.json({
-        success: true,
-        message: 'Account succesvol geactiveerd',
-        employee: {
-          email,
-          name: accountData.name,
-          isActive: true,
-          activatedAt: updatedAccountData.activatedAt
-        }
-      });
-
-    } catch (error) {
-      console.error('❌ Error activating employee account:', error);
-      return NextResponse.json(
-        { error: 'Fout bij het activeren van account' },
-        { status: 500 }
-      );
+    if (updateError) {
+      console.error('❌ Failed to update employee account:', updateError);
+      return NextResponse.json({ error: 'Fout bij het activeren van account' }, { status: 500 });
     }
 
+    if (accountData.owner_email) {
+      await supabase
+        .from('company_employees')
+        .update({
+          is_active: true,
+          needs_password_reset: false,
+          accepted_at: now,
+          updated_at: now,
+        })
+        .eq('owner_email', accountData.owner_email)
+        .eq('employee_email', normalizedEmail);
+    }
+
+    console.log('✅ Employee account activated:', email);
+
+    return NextResponse.json({
+      success: true,
+      message: 'Account succesvol geactiveerd',
+      employee: {
+        email: normalizedEmail,
+        name: accountData.name,
+        isActive: true,
+        activatedAt: now,
+      }
+    });
   } catch (error) {
     console.error('❌ Error in POST /api/auth/activate-employee:', error);
-    return NextResponse.json(
-      { error: 'Er is een onverwachte fout opgetreden' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Er is een onverwachte fout opgetreden' }, { status: 500 });
   }
 }
