@@ -1325,8 +1325,29 @@ export default function CustomerLeadsPage() {
     return <Loading fullScreen text="Leads laden..." />;
   }
 
+  const sanitizedBranchAnalytics = useMemo(() => {
+    return branchAnalytics.map((item) => {
+      const revenue = Number.isFinite(item.revenue) ? item.revenue : 0;
+      const conversionRate = Number.isFinite(item.conversionRate) ? item.conversionRate : 0;
+      const avgLeadValue = Number.isFinite(item.avgLeadValue) ? item.avgLeadValue : 0;
+      const growthRaw = item.trends?.growth ?? 0;
+      const growth = Number.isFinite(growthRaw) ? growthRaw : 0;
+
+      return {
+        ...item,
+        revenue,
+        conversionRate,
+        avgLeadValue,
+        trends: {
+          growth,
+          seasonalPattern: item.trends?.seasonalPattern
+        }
+      };
+    });
+  }, [branchAnalytics]);
+
   const overallStats = useMemo(() => {
-    const revenue = branchAnalytics.reduce((total, analytics) => total + (analytics.revenue || 0), 0);
+    const revenue = sanitizedBranchAnalytics.reduce((total, analytics) => total + analytics.revenue, 0);
     const totalLeads = leads.length;
     const conversions = leads.filter(lead =>
       lead.status === 'qualified' || lead.status === 'deal_closed' || lead.status === 'converted'
@@ -1341,19 +1362,23 @@ export default function CustomerLeadsPage() {
       conversionRate,
       avgLeadValue
     };
-  }, [branchAnalytics, leads]);
+  }, [sanitizedBranchAnalytics, leads]);
 
   const topConversionBranches = useMemo(() => {
-    return [...branchAnalytics]
-      .sort((a, b) => (b.conversionRate || 0) - (a.conversionRate || 0))
+    return [...sanitizedBranchAnalytics]
+      .sort((a, b) => b.conversionRate - a.conversionRate)
       .slice(0, 3);
-  }, [branchAnalytics]);
+  }, [sanitizedBranchAnalytics]);
 
   const growthOpportunities = useMemo(() => {
-    return [...branchAnalytics]
-      .sort((a, b) => (b.trends?.growth || 0) - (a.trends?.growth || 0))
+    return [...sanitizedBranchAnalytics]
+      .sort((a, b) => b.trends.growth - a.trends.growth)
       .slice(0, 3);
-  }, [branchAnalytics]);
+  }, [sanitizedBranchAnalytics]);
+
+  const whatsappCustomerId = useMemo(() => {
+    return customerData?.email || user?.email || '';
+  }, [customerData?.email, user?.email]);
 
   const handleSaveGoogleSheetUrl = async () => {
     if (!customerData) {
@@ -1795,7 +1820,7 @@ export default function CustomerLeadsPage() {
         </motion.div>
 
         <div className="space-y-8">
-          {branchAnalytics.length > 0 && (
+          {sanitizedBranchAnalytics.length > 0 && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -1814,12 +1839,12 @@ export default function CustomerLeadsPage() {
                 </div>
                 <div className="inline-flex items-center gap-2 bg-white/10 border border-white/10 rounded-xl px-4 py-2 text-white">
                   <span className="text-sm text-white/70">Actieve branches</span>
-                  <span className="text-lg font-semibold">{branchAnalytics.length}</span>
+                  <span className="text-lg font-semibold">{sanitizedBranchAnalytics.length}</span>
                 </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                {branchAnalytics.slice(0, 6).map((analytics, index) => (
+                {sanitizedBranchAnalytics.slice(0, 6).map((analytics, index) => (
                   <motion.div
                     key={analytics.branch}
                     initial={{ opacity: 0, scale: 0.95 }}
@@ -1856,10 +1881,10 @@ export default function CustomerLeadsPage() {
                       <div className="flex items-center justify-between">
                         <span>Omzet (geprognotiseerd)</span>
                         <span className="font-semibold text-white">
-                          €{Math.round(analytics.revenue || 0).toLocaleString('nl-NL')}
+                          €{Math.round(analytics.revenue).toLocaleString('nl-NL')}
                         </span>
                       </div>
-                      {typeof analytics.trends?.growth === 'number' && (
+                      {Number.isFinite(analytics.trends.growth) && (
                         <div className="flex items-center justify-between">
                           <span>Groei</span>
                           <span className={`font-semibold ${analytics.trends.growth >= 0 ? 'text-green-200' : 'text-red-200'}`}>
@@ -1954,7 +1979,7 @@ export default function CustomerLeadsPage() {
                         </p>
                       </div>
                       <span className="text-sm font-semibold text-purple-200">
-                        +{Math.round(branch.trends?.growth || 0)}%
+                        +{Math.round(branch.trends.growth)}%
                       </span>
                     </div>
                   ))}
@@ -1963,13 +1988,13 @@ export default function CustomerLeadsPage() {
             </div>
           </motion.div>
 
-          {(customerData?.email || user?.email) && (
+          {whatsappCustomerId && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.85 }}
             >
-              <WhatsAppAnalytics customerId={customerData?.email || user?.email || ''} />
+              <WhatsAppAnalytics customerId={whatsappCustomerId} />
             </motion.div>
           )}
         </div>
