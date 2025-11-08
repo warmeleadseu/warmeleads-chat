@@ -15,7 +15,7 @@ export const GET = withAuth(async (req: NextRequest, user: AuthenticatedUser) =>
     const { searchParams } = new URL(req.url);
     const customerId = searchParams.get('customerId');
     const sheetRowNumber = searchParams.get('sheetRowNumber');
-
+    
     if (!customerId || !sheetRowNumber) {
       return NextResponse.json(
         { error: 'Customer ID and sheet row number are required' },
@@ -91,7 +91,7 @@ export const POST = withAuth(async (req: NextRequest, user: AuthenticatedUser) =
     }
 
     if (!lead.sheetRowNumber) {
-      return NextResponse.json(
+        return NextResponse.json(
         { error: 'Lead must have a sheet row number' },
         { status: 400 }
       );
@@ -159,7 +159,7 @@ export const POST = withAuth(async (req: NextRequest, user: AuthenticatedUser) =
       })
       .select()
       .single();
-
+    
     if (error) {
       console.error('❌ Error creating reclamation:', error);
       return NextResponse.json(
@@ -169,7 +169,7 @@ export const POST = withAuth(async (req: NextRequest, user: AuthenticatedUser) =
     }
 
     console.log('✅ Reclamation created successfully');
-
+    
     return NextResponse.json({
       success: true,
       reclamation: reclamation,
