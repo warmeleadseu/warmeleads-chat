@@ -16,6 +16,7 @@ import {
   Bars3Icon,
   XMarkIcon,
   RectangleGroupIcon,
+  MapPinIcon,
 } from '@heroicons/react/24/outline';
 
 const navigation = [
@@ -23,6 +24,7 @@ const navigation = [
   { name: 'Klanten', href: '/admin/customers', icon: UserGroupIcon },
   { name: 'Bestellingen', href: '/admin/orders', icon: DocumentTextIcon },
   { name: 'Branches', href: '/admin/branches', icon: RectangleGroupIcon },
+  { name: 'Meta Ads', href: '/admin/meta-campaigns', icon: MapPinIcon },
   { name: 'Prijsbeheer', href: '/admin/pricing', icon: CurrencyEuroIcon },
   { name: 'Analytics', href: '/admin/analytics', icon: ChartBarIcon },
   { name: 'Content', href: '/admin/content', icon: DocumentTextIcon },

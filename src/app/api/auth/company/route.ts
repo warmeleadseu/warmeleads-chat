@@ -213,8 +213,8 @@ export const DELETE = withAuth(async (request: NextRequest, user: AuthenticatedU
 
     const companyData = await fetchCompanyData(supabase, normalizedOwner);
 
-    return NextResponse.json({
-      success: true,
+      return NextResponse.json({
+        success: true,
       message: 'Werknemer succesvol verwijderd',
       company: companyData,
     });

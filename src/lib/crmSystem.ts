@@ -108,6 +108,11 @@ export interface Lead {
   source: 'campaign' | 'manual' | 'import';
   sheetRowNumber?: number;
   branchData?: any;
+  // Meta Ads fields
+  metaLeadId?: string;
+  metaCampaignId?: string;
+  qualificationScore?: number;
+  territoryDistance?: number;
 }
 
 // Helper to get Supabase client (CLIENT-SIDE - uses anon key)
