@@ -57,25 +57,63 @@ export async function GET(request: NextRequest) {
     // Get distribution details for each lead
     const leadsWithDetails = await Promise.all(
       (leads || []).map(async (lead) => {
-        // Get distribution count and customers
+        // Get full distribution history with customer details and batch info
         const { data: distributions } = await supabase
           .from('lead_distributions')
           .select(`
+            id,
             customer_email,
             distributed_at,
             distribution_type,
-            customers!lead_distributions_customer_email_fkey(company_name)
+            distance_km,
+            territory_match_type,
+            priority_score,
+            added_to_sheet,
+            sheet_row_number,
+            sheet_sync_error,
+            is_returning_lead,
+            is_reuse_distribution,
+            batch_id,
+            customers!lead_distributions_customer_email_fkey(
+              email,
+              company_name,
+              contact_person
+            ),
+            customer_batches!lead_distributions_batch_id_fkey(
+              batch_number
+            )
           `)
-          .eq('lead_id', lead.id);
+          .eq('lead_id', lead.id)
+          .order('distributed_at', { ascending: false });
 
         const uniqueCustomers = new Set(distributions?.map(d => d.customer_email) || []);
+
+        // Format distributions for frontend
+        const formattedDistributions = (distributions || []).map(dist => ({
+          id: dist.id,
+          customerEmail: dist.customer_email,
+          customerName: dist.customers?.company_name || dist.customers?.contact_person || dist.customer_email,
+          batchId: dist.batch_id,
+          batchNumber: dist.customer_batches?.batch_number || 'N/A',
+          distributedAt: dist.distributed_at,
+          distributionType: dist.distribution_type,
+          distanceKm: dist.distance_km,
+          territoryMatchType: dist.territory_match_type,
+          priorityScore: dist.priority_score,
+          addedToSheet: dist.added_to_sheet,
+          sheetRowNumber: dist.sheet_row_number,
+          sheetSyncError: dist.sheet_sync_error,
+          isReturningLead: dist.is_returning_lead,
+          isReuseDistribution: dist.is_reuse_distribution,
+        }));
 
         return {
           ...lead,
           distributionCount: lead.total_distribution_count || 0,
           uniqueCustomersCount: uniqueCustomers.size,
+          distributions: formattedDistributions,
           lastDistributedAt: distributions && distributions.length > 0
-            ? new Date(Math.max(...distributions.map(d => new Date(d.distributed_at).getTime())))
+            ? distributions[0].distributed_at
             : null
         };
       })
