@@ -14,9 +14,9 @@ import {
   TrashIcon,
   Cog6ToothIcon,
   CheckCircleIcon,
-  XCircleIcon
+  XCircleIcon,
+  RectangleGroupIcon,
 } from '@heroicons/react/24/outline';
-import { Loading } from '@/components/ui';
 
 interface Branch {
   id: string;
@@ -44,7 +44,9 @@ export default function AdminBranchesPage() {
   const loadBranches = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch('/api/admin/branches');
+      const response = await fetch('/api/admin/branches', {
+        cache: 'no-store'
+      });
       
       if (!response.ok) {
         throw new Error('Failed to load branches');
@@ -93,132 +95,157 @@ export default function AdminBranchesPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-brand-navy via-brand-purple to-brand-pink flex items-center justify-center">
-        <Loading />
+      <div className="p-6">
+        <div className="max-w-7xl mx-auto">
+          <div className="animate-pulse">
+            <div className="h-8 bg-gray-200 rounded w-1/4 mb-6"></div>
+            <div className="space-y-4">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-32 bg-gray-200 rounded"></div>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-brand-navy via-brand-purple to-brand-pink p-4 md:p-8">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-3xl font-bold text-white mb-2">
-              Branch Configuratie
-            </h1>
-            <p className="text-white/70">
-              Beheer alle branches en hun spreadsheet configuraties
-            </p>
-          </div>
-
-          <motion.button
-            onClick={handleCreateBranch}
-            className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg hover:shadow-lg transition-all font-medium"
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-          >
-            <PlusIcon className="w-5 h-5" />
-            Nieuwe Branch
-          </motion.button>
+    <div className="space-y-6">
+      {/* Header */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 sm:gap-4"
+      >
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Branches</h1>
+          <p className="text-xs sm:text-sm text-gray-600 mt-1">
+            {branches.length} totaal • {branches.filter(b => b.is_active).length} actief
+          </p>
         </div>
 
-        {/* Error message */}
-        {error && (
-          <div className="mb-6 p-4 bg-red-500/20 border border-red-500 rounded-lg text-white">
-            <p className="font-medium">Fout bij laden branches:</p>
-            <p className="text-sm text-white/80">{error}</p>
-          </div>
-        )}
+        <button
+          onClick={handleCreateBranch}
+          className="bg-green-600 hover:bg-green-700 text-white px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors flex items-center gap-2"
+        >
+          <PlusIcon className="w-4 h-4" />
+          Nieuwe branch
+        </button>
+      </motion.div>
 
-        {/* Branches Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {/* Error message */}
+      {error && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-red-50 border border-red-200 rounded-lg p-4"
+        >
+          <p className="font-medium text-red-900">Fout bij laden branches:</p>
+          <p className="text-sm text-red-700">{error}</p>
+        </motion.div>
+      )}
+
+      {/* Branches Grid */}
+      {branches.length === 0 && !isLoading ? (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-center py-12 bg-white rounded-lg shadow"
+        >
+          <RectangleGroupIcon className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+          <h3 className="text-xl font-semibold text-gray-900 mb-2">Nog geen branches</h3>
+          <p className="text-gray-600 mb-4">
+            Maak je eerste branch aan om te beginnen met configuratie
+          </p>
+          <button
+            onClick={handleCreateBranch}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
+          >
+            <PlusIcon className="w-5 h-5" />
+            Eerste branch aanmaken
+          </button>
+        </motion.div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
           <AnimatePresence>
             {branches.map((branch) => (
               <motion.div
                 key={branch.id}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                className="bg-white/10 backdrop-blur-md rounded-xl p-6 border border-white/20 hover:border-white/40 transition-all"
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="bg-white rounded-lg shadow hover:shadow-lg transition-shadow p-6 border border-gray-200"
               >
                 {/* Branch Header */}
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center gap-3">
-                    <span className="text-4xl">{branch.icon}</span>
+                    <div className="w-12 h-12 bg-gradient-to-r from-brand-purple to-brand-pink rounded-lg flex items-center justify-center text-2xl">
+                      {branch.icon}
+                    </div>
                     <div>
-                      <h3 className="text-lg font-semibold text-white">
+                      <h3 className="text-lg font-semibold text-gray-900">
                         {branch.display_name}
                       </h3>
-                      <p className="text-sm text-white/60">{branch.name}</p>
+                      <p className="text-sm text-gray-500">{branch.name}</p>
                     </div>
                   </div>
 
                   {branch.is_active ? (
-                    <CheckCircleIcon className="w-6 h-6 text-green-400" />
+                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700">
+                      ✓ Actief
+                    </span>
                   ) : (
-                    <XCircleIcon className="w-6 h-6 text-red-400" />
+                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-700">
+                      ○ Inactief
+                    </span>
                   )}
                 </div>
 
                 {/* Description */}
                 {branch.description && (
-                  <p className="text-white/70 text-sm mb-4 line-clamp-2">
+                  <p className="text-gray-600 text-sm mb-4 line-clamp-2">
                     {branch.description}
                   </p>
                 )}
 
+                {/* Metadata */}
+                <div className="mb-4 pt-4 border-t border-gray-200">
+                  <p className="text-xs text-gray-500">
+                    Aangemaakt: {new Date(branch.created_at).toLocaleDateString('nl-NL', {
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric'
+                    })}
+                  </p>
+                </div>
+
                 {/* Actions */}
-                <div className="flex gap-2 mt-4 pt-4 border-t border-white/10">
-                  <motion.button
+                <div className="flex gap-2">
+                  <button
                     onClick={() => handleEditBranch(branch.id)}
-                    className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-all text-sm"
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
+                    className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 bg-brand-purple hover:bg-brand-purple/90 text-white rounded-lg transition-all text-sm font-medium"
                   >
                     <Cog6ToothIcon className="w-4 h-4" />
                     Configureren
-                  </motion.button>
+                  </button>
 
-                  <motion.button
+                  <button
                     onClick={() => handleDeleteBranch(branch.id, branch.display_name)}
-                    className="px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-300 rounded-lg transition-all text-sm"
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
+                    className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition-all text-sm"
+                    title="Verwijderen"
                   >
                     <TrashIcon className="w-4 h-4" />
-                  </motion.button>
-                </div>
-
-                {/* Metadata */}
-                <div className="mt-4 pt-4 border-t border-white/10">
-                  <p className="text-xs text-white/50">
-                    Aangemaakt: {new Date(branch.created_at).toLocaleDateString('nl-NL')}
-                  </p>
+                  </button>
                 </div>
               </motion.div>
             ))}
           </AnimatePresence>
         </div>
+      )}
 
-        {/* Empty State */}
-        {branches.length === 0 && !isLoading && (
-          <div className="text-center py-12">
-            <p className="text-white/60 mb-4">Nog geen branches geconfigureerd</p>
-            <motion.button
-              onClick={handleCreateBranch}
-              className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg hover:shadow-lg transition-all font-medium"
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-            >
-              <PlusIcon className="w-5 h-5" />
-              Maak je eerste branch
-            </motion.button>
-          </div>
-        )}
-
-        {/* Create Branch Modal */}
+      {/* Create Branch Modal */}
+      <AnimatePresence>
         {showCreateModal && (
           <CreateBranchModal
             onClose={() => setShowCreateModal(false)}
@@ -228,7 +255,7 @@ export default function AdminBranchesPage() {
             }}
           />
         )}
-      </div>
+      </AnimatePresence>
     </div>
   );
 }
@@ -280,97 +307,108 @@ function CreateBranchModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+    <>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40"
+        onClick={onClose}
+      />
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="bg-white rounded-xl p-6 max-w-md w-full"
+        exit={{ opacity: 0, scale: 0.95 }}
+        className="fixed inset-0 z-50 flex items-center justify-center p-4"
       >
-        <h2 className="text-2xl font-bold mb-4">Nieuwe Branch Aanmaken</h2>
+        <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6">
+          <h2 className="text-2xl font-bold text-gray-900 mb-6">Nieuwe branch</h2>
 
-        {error && (
-          <div className="mb-4 p-3 bg-red-100 border border-red-300 rounded-lg text-red-800 text-sm">
-            {error}
-          </div>
-        )}
+          {error && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
+              {error}
+            </div>
+          )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Branch Naam (intern)
-            </label>
-            <input
-              type="text"
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-              placeholder="bijv. financial_lease"
-              required
-            />
-          </div>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Branch naam (intern) *
+              </label>
+              <input
+                type="text"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-purple focus:border-transparent"
+                placeholder="bijv. financial_lease"
+                required
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Lowercase, geen spaties (gebruik underscores)
+              </p>
+            </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Display Naam
-            </label>
-            <input
-              type="text"
-              value={formData.displayName}
-              onChange={(e) => setFormData({ ...formData, displayName: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-              placeholder="bijv. Financial Lease"
-              required
-            />
-          </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Weergave naam *
+              </label>
+              <input
+                type="text"
+                value={formData.displayName}
+                onChange={(e) => setFormData({ ...formData, displayName: e.target.value })}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-purple focus:border-transparent"
+                placeholder="bijv. Financial Lease"
+                required
+              />
+            </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Omschrijving
-            </label>
-            <textarea
-              value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-              rows={3}
-              placeholder="Lead tracking voor..."
-            />
-          </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Omschrijving (optioneel)
+              </label>
+              <textarea
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-purple focus:border-transparent"
+                rows={3}
+                placeholder="Lead tracking voor..."
+              />
+            </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Icon (emoji)
-            </label>
-            <input
-              type="text"
-              value={formData.icon}
-              onChange={(e) => setFormData({ ...formData, icon: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-2xl text-center"
-              placeholder="📋"
-              maxLength={2}
-            />
-          </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Icon (emoji)
+              </label>
+              <input
+                type="text"
+                value={formData.icon}
+                onChange={(e) => setFormData({ ...formData, icon: e.target.value })}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-purple focus:border-transparent text-2xl text-center"
+                placeholder="📋"
+                maxLength={2}
+              />
+            </div>
 
-          <div className="flex gap-3 pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-all"
-              disabled={isSubmitting}
-            >
-              Annuleren
-            </button>
-            <button
-              type="submit"
-              className="flex-1 px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:shadow-lg transition-all font-medium disabled:opacity-50"
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? 'Aanmaken...' : 'Aanmaken'}
-            </button>
-          </div>
-        </form>
+            <div className="flex gap-3 pt-4">
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                disabled={isSubmitting}
+              >
+                Annuleren
+              </button>
+              <button
+                type="submit"
+                className="flex-1 px-4 py-2 bg-brand-purple hover:bg-brand-purple/90 text-white rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? 'Aanmaken...' : 'Branch aanmaken'}
+              </button>
+            </div>
+          </form>
+        </div>
       </motion.div>
-    </div>
+    </>
   );
 }
-
-
