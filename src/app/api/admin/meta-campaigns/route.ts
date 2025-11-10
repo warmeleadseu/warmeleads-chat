@@ -5,11 +5,12 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
-import { withAuth } from '@/middleware/auth';
-import type { AuthenticatedUser } from '@/middleware/auth';
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 // GET /api/admin/meta-campaigns - List all campaigns
-export const GET = withAuth(async (request: NextRequest, user: AuthenticatedUser) => {
+export async function GET(request: NextRequest) {
   try {
     const supabase = createServerClient();
 
@@ -31,10 +32,10 @@ export const GET = withAuth(async (request: NextRequest, user: AuthenticatedUser
       { status: 500 }
     );
   }
-});
+}
 
 // POST /api/admin/meta-campaigns - Create new campaign
-export const POST = withAuth(async (request: NextRequest, user: AuthenticatedUser) => {
+export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const {
@@ -117,4 +118,4 @@ export const POST = withAuth(async (request: NextRequest, user: AuthenticatedUse
       { status: 500 }
     );
   }
-});
+}

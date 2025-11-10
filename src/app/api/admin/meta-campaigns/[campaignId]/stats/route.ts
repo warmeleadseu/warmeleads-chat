@@ -5,14 +5,14 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
-import { withAuth } from '@/middleware/auth';
-import type { AuthenticatedUser } from '@/middleware/auth';
 
-export const GET = withAuth(async (
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
+export async function GET(
   request: NextRequest,
-  user: AuthenticatedUser,
-  context?: { params: { campaignId: string } }
-) => {
+  context: { params: { campaignId: string } }
+) {
   try {
     const campaignId = context?.params?.campaignId;
     if (!campaignId) {
@@ -135,4 +135,4 @@ export const GET = withAuth(async (
       { status: 500 }
     );
   }
-});
+}

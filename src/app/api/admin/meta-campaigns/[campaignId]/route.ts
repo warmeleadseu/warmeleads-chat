@@ -5,15 +5,15 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
-import { withAuth } from '@/middleware/auth';
-import type { AuthenticatedUser } from '@/middleware/auth';
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 // PUT /api/admin/meta-campaigns/[campaignId] - Update campaign
-export const PUT = withAuth(async (
+export async function PUT(
   request: NextRequest,
-  user: AuthenticatedUser,
-  context?: { params: { campaignId: string } }
-) => {
+  context: { params: { campaignId: string } }
+) {
   try {
     const campaignId = context?.params?.campaignId;
     if (!campaignId) {
@@ -75,14 +75,13 @@ export const PUT = withAuth(async (
       { status: 500 }
     );
   }
-});
+}
 
 // DELETE /api/admin/meta-campaigns/[campaignId] - Delete campaign
-export const DELETE = withAuth(async (
+export async function DELETE(
   request: NextRequest,
-  user: AuthenticatedUser,
-  context?: { params: { campaignId: string } }
-) => {
+  context: { params: { campaignId: string } }
+) {
   try {
     const campaignId = context?.params?.campaignId;
     if (!campaignId) {
@@ -148,4 +147,4 @@ export const DELETE = withAuth(async (
       { status: 500 }
     );
   }
-});
+}
