@@ -1,12 +1,12 @@
 /**
  * Meta/Facebook Leads Webhook Endpoint
- * Receives leads from Meta ads and processes them through the qualifying pipeline
+ * Central lead pool system - receives leads and intelligently distributes them
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
-import { MetaLeadQualifier, type MetaLeadData, type CampaignConfig } from '@/lib/metaLeadQualifier';
-import { BatchManager } from '@/lib/batchManager';
+import { processAndDistributeLead } from '@/lib/centralLeadDistribution';
+import { postcodeToCoords } from '@/lib/geographicUtils';
 
 // Meta App verification token (should match what's set in Meta)
 const VERIFY_TOKEN = process.env.META_WEBHOOK_VERIFY_TOKEN || 'warmeleads_verify_token';
@@ -79,102 +79,87 @@ export async function POST(request: NextRequest) {
 }
 
 /**
- * Process a single Meta lead
+ * Process a single Meta lead through central distribution system
  */
 async function processMetaLead(metaLeadData: any): Promise<{
   leadId: string;
-  status: 'qualified' | 'rejected';
+  status: 'distributed' | 'no_customers' | 'error';
+  distributionsCount: number;
+  distributedTo: string[];
   reason?: string;
-  batchCompleted?: boolean;
 }> {
   const supabase = createServerClient();
 
   try {
-    console.log(`🎯 Processing Meta lead ${metaLeadData.id} from campaign ${metaLeadData.campaign_id}`);
+    console.log(`🎯 Processing Meta lead ${metaLeadData.id}`);
 
     // 1. Log incoming lead in processing table
     const processingLogId = await logLeadProcessing(metaLeadData, 'received');
 
-    // 2. Find matching campaign
-    const campaign = await getCampaignByMetaId(metaLeadData.campaign_id);
+    // 2. Extract lead data from Meta format
+    const leadData = await extractLeadDataFromMeta(metaLeadData);
 
-    if (!campaign) {
+    if (!leadData.email) {
       await updateProcessingLog(processingLogId, {
-        processing_status: 'rejected',
-        rejection_reason: 'Campaign not found'
+        processing_status: 'no_eligible_customers',
+        error_message: 'No email found in lead data'
       });
-      return { leadId: metaLeadData.id, status: 'rejected', reason: 'Campaign not found' };
-    }
-
-    // 3. Qualify the lead
-    const qualifyingResult = await MetaLeadQualifier.qualifyLead(metaLeadData, campaign);
-
-    console.log(`🔍 Lead qualification result:`, {
-      qualified: qualifyingResult.isQualified,
-      score: qualifyingResult.score,
-      reasons: qualifyingResult.reasons
-    });
-
-    // 4. Update processing log with qualification results
-    await updateProcessingLog(processingLogId, {
-      customer_email: campaign.customerEmail,
-      branch_match: qualifyingResult.branchMatch,
-      territory_match: qualifyingResult.territoryMatch,
-      batch_capacity_available: qualifyingResult.batchCapacity,
-      qualification_score: qualifyingResult.score,
-      lead_postcode: metaLeadData.field_data?.find((f: any) => f.name.toLowerCase().includes('postcode'))?.values[0],
-      lead_lat: qualifyingResult.coordinates?.lat,
-      lead_lng: qualifyingResult.coordinates?.lng,
-      distance_to_center_km: qualifyingResult.territoryDistance,
-      processed_lead_data: MetaLeadQualifier.metaLeadToLeadFormat(metaLeadData, qualifyingResult, campaign)
-    });
-
-    // 5. Process qualified leads
-    if (qualifyingResult.isQualified) {
-      const distributionResult = await BatchManager.processQualifiedLead(
-        metaLeadData.id,
-        campaign.id,
-        MetaLeadQualifier.metaLeadToLeadFormat(metaLeadData, qualifyingResult, campaign)
-      );
-
-      if (distributionResult.success) {
-        await updateProcessingLog(processingLogId, {
-          processing_status: 'distributed',
-          created_lead_id: distributionResult.leadId,
-          distributed_at: new Date().toISOString()
-        });
-
-        return {
-          leadId: metaLeadData.id,
-          status: 'qualified',
-          batchCompleted: distributionResult.batchCompleted
-        };
-      } else {
-        await updateProcessingLog(processingLogId, {
-          processing_status: 'rejected',
-          rejection_reason: `Distribution failed: ${distributionResult.error}`,
-          error_message: distributionResult.error
-        });
-
-        return {
-          leadId: metaLeadData.id,
-          status: 'rejected',
-          reason: distributionResult.error
-        };
-      }
-    } else {
-      // Lead rejected during qualification
-      const rejectionReason = getRejectionReason(qualifyingResult);
-      await updateProcessingLog(processingLogId, {
-        processing_status: 'rejected',
-        rejection_reason: rejectionReason,
-        rejected_at: new Date().toISOString()
-      });
-
       return {
         leadId: metaLeadData.id,
-        status: 'rejected',
-        reason: rejectionReason
+        status: 'error',
+        distributionsCount: 0,
+        distributedTo: [],
+        reason: 'No email found'
+      };
+    }
+
+    // 3. Get coordinates if postcode is available
+    if (leadData.postcode && !leadData.lat) {
+      const coords = await postcodeToCoords(leadData.postcode);
+      if (coords) {
+        leadData.lat = coords.lat;
+        leadData.lng = coords.lng;
+      }
+    }
+
+    // 4. Process through central distribution engine
+    const distributionResult = await processAndDistributeLead({
+      ...leadData,
+      source: 'meta_ads',
+      meta_lead_id: metaLeadData.id
+    });
+
+    // 5. Update processing log
+    await updateProcessingLog(processingLogId, {
+      email: leadData.email,
+      phone: leadData.phone,
+      name: leadData.name,
+      branch_id: leadData.branch,
+      postcode: leadData.postcode,
+      processing_status: distributionResult.success 
+        ? (distributionResult.distributions_made > 0 ? 'distributed' : 'no_eligible_customers')
+        : 'no_eligible_customers',
+      is_duplicate: distributionResult.details.some(d => d.distribution_type !== 'fresh'),
+      distributions_made: distributionResult.distributions_made,
+      distributed_to_customers: distributionResult.distributed_to,
+      processed_at: new Date().toISOString(),
+      error_message: distributionResult.error
+    });
+
+    if (distributionResult.success && distributionResult.distributions_made > 0) {
+      return {
+        leadId: metaLeadData.id,
+        status: 'distributed',
+        distributionsCount: distributionResult.distributions_made,
+        distributedTo: distributionResult.distributed_to
+      };
+    } else {
+      return {
+        leadId: metaLeadData.id,
+        status: 'no_customers',
+        distributionsCount: 0,
+        distributedTo: [],
+        reason: distributionResult.error || 'No eligible customers found'
       };
     }
 
@@ -186,8 +171,7 @@ async function processMetaLead(metaLeadData: any): Promise<{
       try {
         const processingLogId = await logLeadProcessing(metaLeadData, 'received');
         await updateProcessingLog(processingLogId, {
-          processing_status: 'rejected',
-          rejection_reason: 'Processing error',
+          processing_status: 'no_eligible_customers',
           error_message: error instanceof Error ? error.message : 'Unknown error'
         });
       } catch (logError) {
@@ -197,47 +181,109 @@ async function processMetaLead(metaLeadData: any): Promise<{
 
     return {
       leadId: metaLeadData.id,
-      status: 'rejected',
+      status: 'error',
+      distributionsCount: 0,
+      distributedTo: [],
       reason: error instanceof Error ? error.message : 'Processing error'
     };
   }
 }
 
 /**
- * Get campaign configuration by Meta campaign ID
+ * Extract lead data from Meta webhook format
  */
-async function getCampaignByMetaId(metaCampaignId: string): Promise<CampaignConfig | null> {
-  const supabase = createServerClient();
+async function extractLeadDataFromMeta(metaLeadData: any): Promise<{
+  email?: string;
+  phone?: string;
+  name?: string;
+  branch?: string;
+  postcode?: string;
+  address?: string;
+  lat?: number;
+  lng?: number;
+}> {
+  const fieldData = metaLeadData.field_data || [];
+  
+  const result: any = {};
 
-  const { data, error } = await supabase
-    .from('customer_meta_campaigns')
-    .select('*')
-    .eq('meta_campaign_id', metaCampaignId)
-    .eq('is_active', true)
-    .single();
+  for (const field of fieldData) {
+    const fieldName = field.name?.toLowerCase() || '';
+    const value = field.values?.[0];
 
-  if (error || !data) {
-    console.error('Campaign lookup failed:', error);
-    return null;
+    if (!value) continue;
+
+    // Match email
+    if (fieldName.includes('email') || fieldName.includes('e-mail')) {
+      result.email = value;
+    }
+    // Match phone
+    else if (fieldName.includes('phone') || fieldName.includes('telefoon') || fieldName.includes('mobiel')) {
+      result.phone = value;
+    }
+    // Match name
+    else if (fieldName.includes('name') || fieldName.includes('naam') || fieldName.includes('full_name')) {
+      result.name = value;
+    }
+    // Match postcode
+    else if (fieldName.includes('postcode') || fieldName.includes('postal') || fieldName.includes('zip')) {
+      result.postcode = value;
+    }
+    // Match address
+    else if (fieldName.includes('address') || fieldName.includes('adres') || fieldName.includes('straat')) {
+      result.address = value;
+    }
   }
 
-  return {
-    id: data.id,
-    customerEmail: data.customer_email,
-    metaCampaignId: data.meta_campaign_id,
-    metaFormId: data.meta_form_id,
-    branchId: data.branch_id,
-    totalBatchSize: data.total_batch_size,
-    currentBatchCount: data.current_batch_count,
-    isBatchActive: data.is_batch_active,
-    territoryType: data.territory_type,
-    centerPostcode: data.center_postcode,
-    centerLat: data.center_lat,
-    centerLng: data.center_lng,
-    radiusKm: data.radius_km,
-    allowedRegions: data.allowed_regions,
-    isActive: data.is_active
-  };
+  // Get branch from form ID lookup
+  const formId = metaLeadData.form_id;
+  if (formId) {
+    const supabase = createServerClient();
+    const { data: form } = await supabase
+      .from('meta_lead_forms')
+      .select('branch_id')
+      .eq('form_id', formId)
+      .eq('is_active', true)
+      .single();
+
+    if (form) {
+      result.branch = form.branch_id;
+      
+      // Update form stats
+      const { data: currentForm } = await supabase
+        .from('meta_lead_forms')
+        .select('total_leads_received')
+        .eq('form_id', formId)
+        .single();
+
+      await supabase
+        .from('meta_lead_forms')
+        .update({
+          total_leads_received: (currentForm?.total_leads_received || 0) + 1,
+          last_lead_received_at: new Date().toISOString()
+        })
+        .eq('form_id', formId);
+    }
+  }
+
+  // Fallback: try to extract branch from campaign/form name
+  if (!result.branch) {
+    const campaignName = metaLeadData.campaign_name?.toLowerCase() || '';
+    const formName = metaLeadData.form_name?.toLowerCase() || '';
+    
+    if (campaignName.includes('thuisbatterij') || formName.includes('thuisbatterij')) {
+      result.branch = 'thuisbatterijen';
+    } else if (campaignName.includes('zonnepanelen') || formName.includes('zonnepanelen')) {
+      result.branch = 'zonnepanelen';
+    } else if (campaignName.includes('kozijn') || formName.includes('kozijn')) {
+      result.branch = 'kozijnen';
+    } else if (campaignName.includes('airco') || formName.includes('airco')) {
+      result.branch = 'airco';
+    } else {
+      result.branch = 'general';
+    }
+  }
+
+  return result;
 }
 
 /**
@@ -250,7 +296,6 @@ async function logLeadProcessing(metaLeadData: any, status: string): Promise<str
     .from('meta_lead_processing')
     .insert({
       meta_lead_id: metaLeadData.id,
-      meta_campaign_id: metaLeadData.campaign_id,
       raw_meta_data: metaLeadData,
       processing_status: status,
       received_at: new Date().toISOString()
@@ -273,43 +318,10 @@ async function updateProcessingLog(logId: string, updates: any): Promise<void> {
 
   const { error } = await supabase
     .from('meta_lead_processing')
-    .update({
-      ...updates,
-      updated_at: new Date().toISOString()
-    })
+    .update(updates)
     .eq('id', logId);
 
   if (error) {
     console.error('Failed to update processing log:', error);
   }
-}
-
-/**
- * Convert qualifying result to rejection reason
- */
-function getRejectionReason(result: any): string {
-  const reasons = [];
-
-  if (!result.branchMatch) reasons.push('wrong_branch');
-  if (!result.territoryMatch) reasons.push('outside_territory');
-  if (!result.batchCapacity) reasons.push('batch_full');
-
-  return reasons.join(', ') || 'qualification_failed';
-}
-
-/**
- * Webhook signature verification (for production security)
- */
-function verifySignature(body: string, signature: string | null): boolean {
-  if (!signature) return false;
-
-  // TODO: Implement HMAC SHA256 verification
-  // const expectedSignature = crypto
-  //   .createHmac('sha256', process.env.META_APP_SECRET!)
-  //   .update(body, 'utf8')
-  //   .digest('hex');
-  //
-  // return signature === `sha256=${expectedSignature}`;
-
-  return true; // For now, accept all in development
 }

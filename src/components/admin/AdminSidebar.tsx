@@ -17,14 +17,18 @@ import {
   XMarkIcon,
   RectangleGroupIcon,
   MapPinIcon,
+  UserIcon,
+  RectangleStackIcon,
 } from '@heroicons/react/24/outline';
 
 const navigation = [
   { name: 'Dashboard', href: '/admin', icon: HomeIcon },
   { name: 'Klanten', href: '/admin/customers', icon: UserGroupIcon },
+  { name: 'Batches', href: '/admin/batches', icon: RectangleStackIcon },
+  { name: 'Leads', href: '/admin/leads', icon: UserIcon },
+  { name: 'Lead formulieren', href: '/admin/lead-forms', icon: DocumentTextIcon },
   { name: 'Bestellingen', href: '/admin/orders', icon: DocumentTextIcon },
   { name: 'Branches', href: '/admin/branches', icon: RectangleGroupIcon },
-  { name: 'Meta Ads', href: '/admin/meta-campaigns', icon: MapPinIcon },
   { name: 'Prijsbeheer', href: '/admin/pricing', icon: CurrencyEuroIcon },
   { name: 'Analytics', href: '/admin/analytics', icon: ChartBarIcon },
   { name: 'Content', href: '/admin/content', icon: DocumentTextIcon },
