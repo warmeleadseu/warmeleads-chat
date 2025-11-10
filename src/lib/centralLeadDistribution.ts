@@ -249,13 +249,17 @@ async function findEligibleCustomers(
     .from('customer_batches')
     .select('*')
     .eq('branch_id', lead.branch)
-    .eq('is_active', true)
-    .lt('current_batch_count', supabase.raw('total_batch_size'));
+    .eq('is_active', true);
 
   if (batchError || !batches) {
     console.error('Error fetching batches:', batchError);
     return { fresh: [], reuse: [] };
   }
+
+  // Filter batches that still have capacity
+  const availableBatches = batches.filter(
+    (b: CustomerBatch) => b.current_batch_count < b.total_batch_size
+  );
 
   // Get existing distributions for this lead
   const { data: existingDistributions } = await supabase
@@ -274,7 +278,7 @@ async function findEligibleCustomers(
   const freshCandidates: DistributionCandidate[] = [];
   const reuseCandidates: DistributionCandidate[] = [];
 
-  for (const batch of batches as CustomerBatch[]) {
+  for (const batch of availableBatches as CustomerBatch[]) {
     const lastDistribution = distributedCustomers.get(batch.customer_email);
 
     if (!lastDistribution) {
