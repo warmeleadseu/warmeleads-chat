@@ -62,15 +62,26 @@ export default function MetaCampaignsAdmin() {
 
   const loadCampaigns = async () => {
     try {
+      setLoading(true);
+      console.log('📊 Loading Meta campaigns...');
+      
       const response = await fetch('/api/admin/meta-campaigns', {
         cache: 'no-store'
       });
+      
+      console.log('📊 Response status:', response.status);
+      
       if (response.ok) {
         const data = await response.json();
+        console.log('📊 Campaigns data:', data);
         setCampaigns(data.campaigns || []);
+      } else {
+        console.error('❌ Failed to load campaigns:', response.statusText);
+        setCampaigns([]);
       }
     } catch (error) {
-      console.error('Failed to load campaigns:', error);
+      console.error('❌ Error loading campaigns:', error);
+      setCampaigns([]);
     } finally {
       setLoading(false);
     }

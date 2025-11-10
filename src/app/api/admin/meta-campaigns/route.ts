@@ -24,7 +24,33 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to fetch campaigns' }, { status: 500 });
     }
 
-    return NextResponse.json({ campaigns: campaigns || [] });
+    // Map database columns to camelCase
+    const formattedCampaigns = (campaigns || []).map(c => ({
+      id: c.id,
+      customerEmail: c.customer_email,
+      metaCampaignId: c.meta_campaign_id,
+      metaFormId: c.meta_form_id,
+      campaignName: c.campaign_name,
+      branchId: c.branch_id,
+      totalBatchSize: c.total_batch_size,
+      currentBatchCount: c.current_batch_count,
+      isBatchActive: c.is_batch_active,
+      territoryType: c.territory_type,
+      centerPostcode: c.center_postcode,
+      centerLat: c.center_lat,
+      centerLng: c.center_lng,
+      radiusKm: c.radius_km,
+      allowedRegions: c.allowed_regions,
+      webhookToken: c.webhook_token,
+      isWebhookActive: c.is_webhook_active,
+      isActive: c.is_active,
+      createdAt: c.created_at,
+      updatedAt: c.updated_at,
+      lastLeadReceived: c.last_lead_received,
+      batchCompletedAt: c.batch_completed_at
+    }));
+
+    return NextResponse.json({ campaigns: formattedCampaigns });
   } catch (error) {
     console.error('GET /api/admin/meta-campaigns error:', error);
     return NextResponse.json(
