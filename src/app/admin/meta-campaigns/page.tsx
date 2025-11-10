@@ -16,7 +16,6 @@ import {
   EyeIcon
 } from '@heroicons/react/24/outline';
 import { Logo } from '@/components/Logo';
-import { authenticatedFetch } from '@/lib/auth';
 import { GeographicUtils } from '@/lib/geographicUtils';
 
 interface MetaCampaign {
@@ -63,7 +62,9 @@ export default function MetaCampaignsAdmin() {
 
   const loadCampaigns = async () => {
     try {
-      const response = await authenticatedFetch('/api/admin/meta-campaigns');
+      const response = await fetch('/api/admin/meta-campaigns', {
+        cache: 'no-store'
+      });
       if (response.ok) {
         const data = await response.json();
         setCampaigns(data.campaigns || []);
@@ -91,8 +92,9 @@ export default function MetaCampaignsAdmin() {
     }
 
     try {
-      const response = await authenticatedFetch(`/api/admin/meta-campaigns/${campaignId}`, {
-        method: 'DELETE'
+      const response = await fetch(`/api/admin/meta-campaigns/${campaignId}`, {
+        method: 'DELETE',
+        cache: 'no-store'
       });
 
       if (response.ok) {
@@ -107,7 +109,9 @@ export default function MetaCampaignsAdmin() {
   const handleViewStats = async (campaign: MetaCampaign) => {
     setStatsLoading(true);
     try {
-      const response = await authenticatedFetch(`/api/admin/meta-campaigns/${campaign.id}/stats`);
+      const response = await fetch(`/api/admin/meta-campaigns/${campaign.id}/stats`, {
+        cache: 'no-store'
+      });
       if (response.ok) {
         const stats = await response.json();
         setSelectedStats(stats);
@@ -491,9 +495,13 @@ function CampaignModal({ campaign, onClose, onSave }: {
         ? `/api/admin/meta-campaigns/${campaign.id}`
         : '/api/admin/meta-campaigns';
 
-      const response = await authenticatedFetch(url, {
+      const response = await fetch(url, {
         method: campaign ? 'PUT' : 'POST',
-        body: JSON.stringify(formData)
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+        cache: 'no-store'
       });
 
       if (response.ok) {
