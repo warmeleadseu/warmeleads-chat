@@ -8,7 +8,7 @@
  * - 30-day reuse rule for returning leads
  */
 
-import { supabase } from './crmSystem';
+import { createServerClient } from './supabase';
 import { calculateDistance } from './geographicUtils';
 
 interface Lead {
@@ -150,6 +150,7 @@ export async function processAndDistributeLead(
  * Find existing lead by email or phone
  */
 async function findExistingLead(email: string, phone?: string): Promise<Lead | null> {
+  const supabase = createServerClient();
   const { data, error } = await supabase
     .from('leads')
     .select('*')
@@ -165,6 +166,7 @@ async function findExistingLead(email: string, phone?: string): Promise<Lead | n
  * Create new lead in database
  */
 async function createNewLead(leadData: any): Promise<Lead> {
+  const supabase = createServerClient();
   const { data, error } = await supabase
     .from('leads')
     .insert({
@@ -198,6 +200,7 @@ async function createNewLead(leadData: any): Promise<Lead> {
  * Update existing lead with new submission
  */
 async function updateExistingLead(leadId: string, leadData: any): Promise<Lead> {
+  const supabase = createServerClient();
   // First get current count
   const { data: current } = await supabase
     .from('leads')
@@ -240,6 +243,7 @@ async function findEligibleCustomers(
   fresh: DistributionCandidate[];
   reuse: DistributionCandidate[];
 }> {
+  const supabase = createServerClient();
   // Get all active batches for this branch
   const { data: batches, error: batchError } = await supabase
     .from('customer_batches')
@@ -439,6 +443,7 @@ async function createDistribution(
   candidate: DistributionCandidate,
   distributionType: string
 ): Promise<void> {
+  const supabase = createServerClient();
   const daysSinceFirstSeen = Math.floor(
     (Date.now() - new Date(lead.first_seen_at).getTime()) / (1000 * 60 * 60 * 24)
   );
@@ -476,6 +481,7 @@ async function createDistribution(
  * Increment batch count for customer
  */
 async function incrementBatchCount(batchId: string): Promise<void> {
+  const supabase = createServerClient();
   // First fetch current count
   const { data: batch } = await supabase
     .from('customer_batches')
@@ -566,6 +572,7 @@ async function updateLeadDistributionStats(
   leadId: string,
   newDistributionsCount: number
 ): Promise<void> {
+  const supabase = createServerClient();
   // Fetch current stats
   const { data: lead } = await supabase
     .from('leads')
@@ -592,6 +599,7 @@ async function updateLeadDistributionStats(
  * Get lead distribution history (for admin UI)
  */
 export async function getLeadDistributionHistory(leadId: string) {
+  const supabase = createServerClient();
   const { data, error } = await supabase
     .from('lead_distributions')
     .select(`

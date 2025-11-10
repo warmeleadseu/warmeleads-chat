@@ -233,3 +233,21 @@ export class GeographicUtils {
     }
   }
 }
+
+// Export convenience functions for easier importing
+export const postcodeToCoords = GeographicUtils.postcodeToCoordinates;
+export const calculateDistance = (
+  lat1: number,
+  lng1: number,
+  lat2: number,
+  lng2: number
+): number => {
+  return GeographicUtils.calculateDistance(
+    { lat: lat1, lng: lng1 },
+    { lat: lat2, lng: lng2 }
+  );
+};
+export const isValidPostcode = GeographicUtils.isValidPostcode;
+export const coordinatesInTerritory = GeographicUtils.coordinatesInTerritory;
+export const postcodeInTerritory = GeographicUtils.postcodeInTerritory;
+export const getTerritoryDescription = GeographicUtils.getTerritoryDescription;
