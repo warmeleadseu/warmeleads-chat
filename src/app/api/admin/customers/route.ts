@@ -111,4 +111,84 @@ export async function GET(request: NextRequest) {
   }
 }
 
+/**
+ * POST /api/admin/customers
+ * 
+ * Create a new customer manually
+ */
+export async function POST(request: NextRequest) {
+  try {
+    const supabase = createServerClient();
+    const body = await request.json();
 
+    const { email, name, phone, company, contactPerson } = body;
+
+    // Validation
+    if (!email || !email.includes('@')) {
+      return NextResponse.json(
+        { success: false, error: 'Geldig email adres is verplicht' },
+        { status: 400 }
+      );
+    }
+
+    // Check if customer already exists
+    const { data: existingCustomer } = await supabase
+      .from('customers')
+      .select('email')
+      .eq('email', email)
+      .single();
+
+    if (existingCustomer) {
+      return NextResponse.json(
+        { success: false, error: 'Een klant met dit email adres bestaat al' },
+        { status: 409 }
+      );
+    }
+
+    // Create new customer
+    const { data: newCustomer, error } = await supabase
+      .from('customers')
+      .insert({
+        email,
+        name: name || null,
+        phone: phone || null,
+        company: company || null,
+        contact_person: contactPerson || null,
+        status: 'customer',
+        source: 'manual',
+        has_account: false,
+        created_at: new Date().toISOString(),
+        last_activity: new Date().toISOString(),
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('❌ Error creating customer:', error);
+      return NextResponse.json(
+        { success: false, error: error.message },
+        { status: 500 }
+      );
+    }
+
+    console.log(`✅ Created new customer: ${newCustomer.email}`);
+
+    return NextResponse.json({
+      success: true,
+      customer: {
+        id: newCustomer.id,
+        email: newCustomer.email,
+        name: newCustomer.name,
+        phone: newCustomer.phone,
+        company: newCustomer.company,
+        contactPerson: newCustomer.contact_person,
+      }
+    });
+  } catch (error: any) {
+    console.error('💥 Unexpected error in POST /api/admin/customers:', error);
+    return NextResponse.json(
+      { success: false, error: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}

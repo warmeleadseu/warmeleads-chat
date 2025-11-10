@@ -593,6 +593,15 @@ export default function CustomersPage() {
   const [linkSheetBranchId, setLinkSheetBranchId] = useState<string>('');
   const [branches, setBranches] = useState<any[]>([]);
   const [isLinkingSheet, setIsLinkingSheet] = useState(false);
+  const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
+  const [isCreatingCustomer, setIsCreatingCustomer] = useState(false);
+  const [newCustomerData, setNewCustomerData] = useState({
+    email: '',
+    name: '',
+    phone: '',
+    company: '',
+    contactPerson: '',
+  });
 
   useEffect(() => {
     const loadCustomers = async () => {
@@ -850,6 +859,51 @@ export default function CustomersPage() {
     }
   };
 
+  const handleAddCustomer = async () => {
+    if (!newCustomerData.email) {
+      alert('❌ Email adres is verplicht');
+      return;
+    }
+
+    // Basic email validation
+    if (!newCustomerData.email.includes('@')) {
+      alert('❌ Voer een geldig email adres in');
+      return;
+    }
+
+    setIsCreatingCustomer(true);
+    try {
+      const response = await fetch('/api/admin/customers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newCustomerData)
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        alert(`✅ Klant succesvol aangemaakt!`);
+        setShowAddCustomerModal(false);
+        setNewCustomerData({
+          email: '',
+          name: '',
+          phone: '',
+          company: '',
+          contactPerson: '',
+        });
+        // Reload customers list
+        window.location.reload();
+      } else {
+        alert(`❌ ${result.error || 'Fout bij aanmaken klant'}`);
+      }
+    } catch (error) {
+      console.error('❌ Error:', error);
+      alert('❌ Fout bij aanmaken klant');
+    } finally {
+      setIsCreatingCustomer(false);
+    }
+  };
+
   const filteredCustomers = customers.filter(customer => 
     customer.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     customer.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -871,6 +925,14 @@ export default function CustomersPage() {
         </div>
         
         <div className="flex gap-2 sm:gap-3">
+          <button
+            onClick={() => setShowAddCustomerModal(true)}
+            className="bg-green-600 hover:bg-green-700 text-white px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors flex items-center gap-2"
+          >
+            <UserGroupIcon className="w-4 h-4" />
+            Nieuwe klant
+          </button>
+          
           <button
             onClick={() => {
               // Force reload to sync auth data
@@ -1551,6 +1613,119 @@ export default function CustomersPage() {
                     className="flex-1 px-4 py-2 bg-brand-purple text-white rounded-lg hover:bg-brand-purple/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isLinkingSheet ? 'Koppelen...' : 'Koppelen'}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {/* Add Customer Modal */}
+        {showAddCustomerModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={() => setShowAddCustomerModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-bold text-gray-900">Nieuwe klant aanmaken</h2>
+                <button
+                  onClick={() => setShowAddCustomerModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <XMarkIcon className="w-6 h-6" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Email adres *
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={newCustomerData.email}
+                    onChange={(e) => setNewCustomerData({ ...newCustomerData, email: e.target.value })}
+                    placeholder="klant@bedrijf.nl"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-purple focus:border-brand-purple"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Naam (optioneel)
+                  </label>
+                  <input
+                    type="text"
+                    value={newCustomerData.name}
+                    onChange={(e) => setNewCustomerData({ ...newCustomerData, name: e.target.value })}
+                    placeholder="Jan Jansen"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-purple focus:border-brand-purple"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Telefoonnummer (optioneel)
+                  </label>
+                  <input
+                    type="tel"
+                    value={newCustomerData.phone}
+                    onChange={(e) => setNewCustomerData({ ...newCustomerData, phone: e.target.value })}
+                    placeholder="06 12345678"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-purple focus:border-brand-purple"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Bedrijfsnaam (optioneel)
+                  </label>
+                  <input
+                    type="text"
+                    value={newCustomerData.company}
+                    onChange={(e) => setNewCustomerData({ ...newCustomerData, company: e.target.value })}
+                    placeholder="Bedrijf BV"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-purple focus:border-brand-purple"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Contactpersoon (optioneel)
+                  </label>
+                  <input
+                    type="text"
+                    value={newCustomerData.contactPerson}
+                    onChange={(e) => setNewCustomerData({ ...newCustomerData, contactPerson: e.target.value })}
+                    placeholder="Jan Jansen"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-purple focus:border-brand-purple"
+                  />
+                </div>
+
+                <div className="flex space-x-3 pt-4">
+                  <button
+                    onClick={() => setShowAddCustomerModal(false)}
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    Annuleren
+                  </button>
+                  <button
+                    onClick={handleAddCustomer}
+                    disabled={isCreatingCustomer || !newCustomerData.email}
+                    className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isCreatingCustomer ? 'Aanmaken...' : 'Klant aanmaken'}
                   </button>
                 </div>
               </div>
