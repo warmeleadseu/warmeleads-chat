@@ -89,23 +89,28 @@ export async function GET(request: NextRequest) {
         const uniqueCustomers = new Set(distributions?.map(d => d.customer_email) || []);
 
         // Format distributions for frontend
-        const formattedDistributions = (distributions || []).map(dist => ({
-          id: dist.id,
-          customerEmail: dist.customer_email,
-          customerName: dist.customers?.company_name || dist.customers?.contact_person || dist.customer_email,
-          batchId: dist.batch_id,
-          batchNumber: dist.customer_batches?.batch_number || 'N/A',
-          distributedAt: dist.distributed_at,
-          distributionType: dist.distribution_type,
-          distanceKm: dist.distance_km,
-          territoryMatchType: dist.territory_match_type,
-          priorityScore: dist.priority_score,
-          addedToSheet: dist.added_to_sheet,
-          sheetRowNumber: dist.sheet_row_number,
-          sheetSyncError: dist.sheet_sync_error,
-          isReturningLead: dist.is_returning_lead,
-          isReuseDistribution: dist.is_reuse_distribution,
-        }));
+        const formattedDistributions = (distributions || []).map((dist: any) => {
+          const customer = Array.isArray(dist.customers) ? dist.customers[0] : dist.customers;
+          const batch = Array.isArray(dist.customer_batches) ? dist.customer_batches[0] : dist.customer_batches;
+          
+          return {
+            id: dist.id,
+            customerEmail: dist.customer_email,
+            customerName: customer?.company_name || customer?.contact_person || dist.customer_email,
+            batchId: dist.batch_id,
+            batchNumber: batch?.batch_number || 'N/A',
+            distributedAt: dist.distributed_at,
+            distributionType: dist.distribution_type,
+            distanceKm: dist.distance_km,
+            territoryMatchType: dist.territory_match_type,
+            priorityScore: dist.priority_score,
+            addedToSheet: dist.added_to_sheet,
+            sheetRowNumber: dist.sheet_row_number,
+            sheetSyncError: dist.sheet_sync_error,
+            isReturningLead: dist.is_returning_lead,
+            isReuseDistribution: dist.is_reuse_distribution,
+          };
+        });
 
         return {
           ...lead,
