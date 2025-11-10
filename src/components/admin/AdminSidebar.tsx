@@ -19,6 +19,7 @@ import {
   MapPinIcon,
   UserIcon,
   RectangleStackIcon,
+  BeakerIcon,
 } from '@heroicons/react/24/outline';
 
 const navigation = [
@@ -27,6 +28,7 @@ const navigation = [
   { name: 'Batches', href: '/admin/batches', icon: RectangleStackIcon },
   { name: 'Leads', href: '/admin/leads', icon: UserIcon },
   { name: 'Lead formulieren', href: '/admin/lead-forms', icon: DocumentTextIcon },
+  { name: 'Test distributie', href: '/admin/test-distribution', icon: BeakerIcon },
   { name: 'Bestellingen', href: '/admin/orders', icon: DocumentTextIcon },
   { name: 'Branches', href: '/admin/branches', icon: RectangleGroupIcon },
   { name: 'Prijsbeheer', href: '/admin/pricing', icon: CurrencyEuroIcon },
