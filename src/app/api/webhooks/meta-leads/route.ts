@@ -124,7 +124,14 @@ async function processMetaLead(metaLeadData: any): Promise<{
 
     // 4. Process through central distribution engine
     const distributionResult = await processAndDistributeLead({
-      ...leadData,
+      email: leadData.email!,
+      phone: leadData.phone,
+      name: leadData.name,
+      branch: leadData.branch || 'general',
+      postcode: leadData.postcode,
+      address: leadData.address,
+      lat: leadData.lat,
+      lng: leadData.lng,
       source: 'meta_ads',
       meta_lead_id: metaLeadData.id
     });
