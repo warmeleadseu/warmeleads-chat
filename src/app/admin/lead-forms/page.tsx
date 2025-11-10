@@ -23,18 +23,18 @@ interface LeadForm {
   notes: string | null;
 }
 
-const BRANCHES = [
-  { id: 'thuisbatterijen', name: 'Thuisbatterijen' },
-  { id: 'zonnepanelen', name: 'Zonnepanelen' },
-  { id: 'kozijnen', name: 'Kozijnen' },
-  { id: 'airco', name: 'Airco' },
-  { id: 'warmtepompen', name: 'Warmtepompen' },
-  { id: 'isolatie', name: 'Isolatie' },
-];
+interface Branch {
+  id: string;
+  name: string;
+  displayName: string;
+  icon: string;
+}
 
 export default function AdminLeadFormsPage() {
   const [forms, setForms] = useState<LeadForm[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingBranches, setLoadingBranches] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingForm, setEditingForm] = useState<LeadForm | null>(null);
   const [formData, setFormData] = useState({
@@ -46,7 +46,23 @@ export default function AdminLeadFormsPage() {
 
   useEffect(() => {
     loadForms();
+    loadBranches();
   }, []);
+
+  const loadBranches = async () => {
+    try {
+      setLoadingBranches(true);
+      const response = await fetch('/api/admin/configured-branches', {
+        cache: 'no-store',
+      });
+      const data = await response.json();
+      setBranches(data.branches || []);
+    } catch (error) {
+      console.error('Error loading branches:', error);
+    } finally {
+      setLoadingBranches(false);
+    }
+  };
 
   const loadForms = async () => {
     try {
@@ -246,7 +262,7 @@ export default function AdminLeadFormsPage() {
                         <div>
                           <span className="text-sm text-gray-500">Branche:</span>
                           <span className="ml-2 text-sm font-medium text-brand-navy">
-                            {BRANCHES.find((b) => b.id === form.branchId)?.name || form.branchId}
+                            {branches.find((b) => b.id === form.branchId)?.displayName || form.branchId}
                           </span>
                         </div>
                         <div>
@@ -356,19 +372,32 @@ export default function AdminLeadFormsPage() {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Branche *
                     </label>
-                    <select
-                      required
-                      value={formData.branchId}
-                      onChange={(e) => setFormData({ ...formData, branchId: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      <option value="">Selecteer branche...</option>
-                      {BRANCHES.map((branch) => (
-                        <option key={branch.id} value={branch.id}>
-                          {branch.name}
-                        </option>
-                      ))}
-                    </select>
+                    {loadingBranches ? (
+                      <div className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-500">
+                        Branches laden...
+                      </div>
+                    ) : branches.length === 0 ? (
+                      <div className="w-full px-4 py-2 border border-red-300 bg-red-50 rounded-lg text-red-700 text-sm">
+                        ⚠️ Geen geconfigureerde branches gevonden. Configureer eerst branches in het Branches tabblad.
+                      </div>
+                    ) : (
+                      <select
+                        required
+                        value={formData.branchId}
+                        onChange={(e) => setFormData({ ...formData, branchId: e.target.value })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="">Selecteer branche...</option>
+                        {branches.map((branch) => (
+                          <option key={branch.id} value={branch.id}>
+                            {branch.icon} {branch.displayName}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                    <p className="text-xs text-gray-500 mt-1">
+                      Alleen branches met geconfigureerde spreadsheet mappings
+                    </p>
                   </div>
 
                   <div>

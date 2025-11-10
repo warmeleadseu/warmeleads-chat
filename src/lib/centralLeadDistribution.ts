@@ -522,7 +522,7 @@ async function incrementBatchCount(batchId: string): Promise<void> {
 }
 
 /**
- * Sync lead to customer's Google Sheet
+ * Sync lead to customer's Google Sheet using branch-specific field mappings
  */
 async function syncToCustomerSheet(
   lead: Lead,
@@ -531,43 +531,89 @@ async function syncToCustomerSheet(
   try {
     console.log(`📊 Syncing to sheet for ${candidate.customer_email}`);
     
-    // Import Google Sheets function
-    const { addLeadToSheet } = await import('./googleSheetsAPI');
+    const supabase = createServerClient();
     
-    // Convert to Lead format expected by Google Sheets
-    const leadForSheet: any = {
-      id: lead.id,
-      name: lead.name || lead.email,
-      email: lead.email,
-      phone: lead.phone || '',
-      branch: lead.branch,
-      city: '', // Extract from address if needed
-      budget: '',
-      status: 'new',
-      branchData: {
-        postcode: lead.postcode || '',
-        huisnummer: '',
-        zonnepanelen: '',
-        dynamischContract: '',
-        stroomverbruik: '',
-        nieuwsbrief: '',
-        redenThuisbatterij: '',
-        koopintentie: ''
-      },
-      notes: `Lead vanaf ${new Date().toLocaleDateString('nl-NL')}`
-    };
+    // 1. Get branch field mappings for this branch
+    const { data: mappings, error: mappingError } = await supabase
+      .from('branch_field_mappings')
+      .select('sheet_column_name, lead_field_path')
+      .eq('branch_id', candidate.branch_id);
     
-    // Add to Google Sheets
-    await addLeadToSheet(
+    if (mappingError || !mappings || mappings.length === 0) {
+      console.error(`⚠️ No field mappings found for branch ${candidate.branch_id}`);
+      throw new Error(`No field mappings configured for branch ${candidate.branch_id}`);
+    }
+    
+    console.log(`📋 Found ${mappings.length} field mappings for branch ${candidate.branch_id}`);
+    
+    // 2. Build row data using mappings
+    const rowData: Record<string, any> = {};
+    
+    for (const mapping of mappings) {
+      const sheetColumn = mapping.sheet_column_name;
+      const leadFieldPath = mapping.lead_field_path;
+      
+      // Resolve lead field value (supports nested paths like "branchData.postcode")
+      let value: any;
+      
+      if (leadFieldPath.includes('.')) {
+        // Handle nested path (e.g., "branchData.postcode")
+        const parts = leadFieldPath.split('.');
+        value = lead;
+        for (const part of parts) {
+          value = value?.[part];
+        }
+      } else {
+        // Handle direct field (e.g., "email", "phone")
+        value = (lead as any)[leadFieldPath];
+      }
+      
+      // Convert value to string (Google Sheets expects strings)
+      rowData[sheetColumn] = value !== null && value !== undefined ? String(value) : '';
+    }
+    
+    console.log(`📝 Mapped lead data to ${Object.keys(rowData).length} columns:`, rowData);
+    
+    // 3. Sync to Google Sheets
+    const { addRowToSheet } = await import('./googleSheetsAPI');
+    
+    await addRowToSheet(
       candidate.spreadsheet_url,
-      leadForSheet,
+      rowData,
+      candidate.sheet_name || 'Leads',
       process.env.GOOGLE_SHEETS_API_KEY
     );
     
     console.log(`✅ Successfully synced to sheet for ${candidate.customer_email}`);
+    
+    // 4. Update distribution record
+    await supabase
+      .from('lead_distributions')
+      .update({
+        added_to_sheet: true,
+        synced_at: new Date().toISOString()
+      })
+      .eq('lead_id', lead.id)
+      .eq('customer_email', candidate.customer_email)
+      .order('distributed_at', { ascending: false })
+      .limit(1);
+      
   } catch (error) {
     console.error('Failed to sync to sheet:', error);
-    // Don't throw - we still want to mark the distribution as complete
+    
+    // Log sync error to distribution record
+    const supabase = createServerClient();
+    await supabase
+      .from('lead_distributions')
+      .update({
+        sheet_sync_error: error instanceof Error ? error.message : 'Unknown error'
+      })
+      .eq('lead_id', lead.id)
+      .eq('customer_email', candidate.customer_email)
+      .order('distributed_at', { ascending: false })
+      .limit(1);
+    
+    throw error;  // Re-throw to mark distribution as failed
   }
 }
 

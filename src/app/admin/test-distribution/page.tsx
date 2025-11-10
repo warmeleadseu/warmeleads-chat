@@ -48,6 +48,13 @@ interface DistributionCandidate {
   rejectionReason?: string;
 }
 
+interface Branch {
+  id: string;
+  name: string;
+  displayName: string;
+  icon: string;
+}
+
 interface TestResult {
   success: boolean;
   leadId?: string;

@@ -802,4 +802,74 @@ export const addLeadToSheet = async (
   }
 };
 
+/**
+ * Add a row to Google Sheets using dynamic column mapping
+ * Used by the central lead distribution system
+ * 
+ * @param spreadsheetUrl - Full URL to the Google Sheet
+ * @param rowData - Object with column names as keys and values as strings
+ * @param sheetName - Name of the sheet tab (default: 'Leads')
+ * @param apiKey - Optional API key (falls back to env variable)
+ */
+export const addRowToSheet = async (
+  spreadsheetUrl: string,
+  rowData: Record<string, string>,
+  sheetName: string = 'Leads',
+  apiKey?: string
+): Promise<boolean> => {
+  const service = new GoogleSheetsService(apiKey);
+  const spreadsheetId = GoogleSheetsService.extractSpreadsheetId(spreadsheetUrl);
+  
+  if (!spreadsheetId) {
+    throw new Error('Invalid spreadsheet URL');
+  }
+
+  console.log(`🔄 Adding new row to Google Sheets (${sheetName})`);
+  console.log(`📊 Row data:`, rowData);
+
+  try {
+    // 1. Read headers from first row
+    const headerRange = `${sheetName}!A1:ZZ1`;
+    const headerData = await service.readSheet(spreadsheetId, headerRange);
+    
+    if (headerData.length === 0 || headerData[0].length === 0) {
+      throw new Error('Could not read spreadsheet headers');
+    }
+
+    const headers = headerData[0];
+    console.log(`📋 Found ${headers.length} columns:`, headers);
+
+    // 2. Read all current data to find next available row
+    const dataRange = `${sheetName}!A:A`;
+    const currentData = await service.readSheet(spreadsheetId, dataRange);
+    const nextRowIndex = currentData.length + 1;
+
+    console.log(`➕ Next available row: ${nextRowIndex}`);
+
+    // 3. Build row array in correct column order
+    const rowArray: string[] = [];
+    
+    for (let i = 0; i < headers.length; i++) {
+      const columnName = headers[i];
+      const value = rowData[columnName];
+      
+      // Use provided value or empty string
+      rowArray.push(value !== undefined ? value : '');
+    }
+
+    console.log(`✏️ Writing ${rowArray.length} values to row ${nextRowIndex}`);
+
+    // 4. Write row to sheet
+    const writeRange = `${sheetName}!A${nextRowIndex}`;
+    await service.updateSheet(spreadsheetId, writeRange, [rowArray]);
+    
+    console.log(`✅ Successfully added row ${nextRowIndex} to ${sheetName}`);
+    return true;
+    
+  } catch (error) {
+    console.error(`❌ Failed to add row to Google Sheets:`, error);
+    throw error;
+  }
+};
+
 // GoogleSheetsService is already exported above
