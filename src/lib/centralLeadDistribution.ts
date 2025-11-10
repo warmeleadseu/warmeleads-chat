@@ -33,6 +33,8 @@ interface CustomerBatch {
   branch_id: string;
   total_batch_size: number;
   current_batch_count: number;
+  spreadsheet_url: string;
+  sheet_name?: string;
   territory_type: 'radius' | 'full_country' | 'regions';
   center_postcode?: string;
   center_lat?: number;
