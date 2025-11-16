@@ -14,7 +14,11 @@ import {
   LockClosedIcon,
   ChevronRightIcon,
   ChevronDownIcon,
-  CreditCardIcon
+  CreditCardIcon,
+  UserGroupIcon,
+  MapPinIcon,
+  ChartBarIcon,
+  ArchiveBoxIcon
 } from '@heroicons/react/24/outline';
 import { leadPackages, formatPrice, calculatePackagePrice, type LeadPackage } from '@/lib/stripe';
 import { loadStripe } from '@stripe/stripe-js';
@@ -693,28 +697,28 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
                                       {/* Badge */}
                                       <div className="absolute top-3 right-3">
                                         {pkg.type === 'exclusive' ? (
-                                          <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                                          <span className={`px-2.5 py-1 rounded-full text-xs font-bold flex items-center gap-1 ${
                                             selectedPackage?.id === pkg.id
                                               ? 'bg-white/20 text-white'
                                               : 'bg-gradient-to-r from-orange-500 to-red-500 text-white'
                                           }`}>
-                                            💎 EXCLUSIEF
+                                            <SparklesIcon className="w-3.5 h-3.5" /> EXCLUSIEF
                                           </span>
                                         ) : pkg.type === 'shared_fresh' ? (
-                                          <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                                          <span className={`px-2.5 py-1 rounded-full text-xs font-bold flex items-center gap-1 ${
                                             selectedPackage?.id === pkg.id
                                               ? 'bg-white/20 text-white'
                                               : 'bg-blue-500 text-white'
                                           }`}>
-                                            🤝 GEDEELD VERS
+                                            <UserGroupIcon className="w-3.5 h-3.5" /> GEDEELD VERS
                                           </span>
                                         ) : (
-                                          <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                                          <span className={`px-2.5 py-1 rounded-full text-xs font-bold flex items-center gap-1 ${
                                             selectedPackage?.id === pkg.id
                                               ? 'bg-white/20 text-white'
                                               : 'bg-purple-500 text-white'
                                           }`}>
-                                            📦 BULK
+                                            <ArchiveBoxIcon className="w-3.5 h-3.5" /> BULK
                                           </span>
                                         )}
                                       </div>
@@ -738,10 +742,10 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
                                             ? 'bg-white/10 border-white/20' 
                                             : 'bg-blue-50 border-blue-200'
                                         }`}>
-                                          <div className={`text-xs font-semibold mb-1 ${
+                                          <div className={`text-xs font-semibold mb-1 flex items-center gap-1 ${
                                             selectedPackage?.id === pkg.id ? 'text-white' : 'text-blue-900'
                                           }`}>
-                                            📦 Levering:
+                                            <ArchiveBoxIcon className="w-3.5 h-3.5" /> Levering:
                                           </div>
                                           <div className={`text-xs ${
                                             selectedPackage?.id === pkg.id ? 'text-white/90' : 'text-blue-800'
@@ -851,28 +855,28 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
                                         <div className="flex-1">
                                           <div className="flex items-center gap-2 mb-1">
                                             {pkg.type === 'exclusive' ? (
-                                              <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                              <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold flex items-center gap-0.5 ${
                                                 selectedPackage?.id === pkg.id
                                                   ? 'bg-white/20 text-white'
                                                   : 'bg-gradient-to-r from-orange-500 to-red-500 text-white'
                                               }`}>
-                                                💎 EXCLUSIEF
+                                                <SparklesIcon className="w-3 h-3" /> EXCLUSIEF
                                               </span>
                                             ) : pkg.type === 'shared_fresh' ? (
-                                              <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                              <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold flex items-center gap-0.5 ${
                                                 selectedPackage?.id === pkg.id
                                                   ? 'bg-white/20 text-white'
                                                   : 'bg-blue-500 text-white'
                                               }`}>
-                                                🤝 GEDEELD
+                                                <UserGroupIcon className="w-3 h-3" /> GEDEELD
                                               </span>
                                             ) : (
-                                              <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                              <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold flex items-center gap-0.5 ${
                                                 selectedPackage?.id === pkg.id
                                                   ? 'bg-white/20 text-white'
                                                   : 'bg-purple-500 text-white'
                                               }`}>
-                                                📦 BULK
+                                                <ArchiveBoxIcon className="w-3 h-3" /> BULK
                                               </span>
                                             )}
                                             <div className={`text-base font-bold ${
@@ -911,10 +915,10 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
                                       }`}>
                                         <span className={selectedPackage?.id === pkg.id ? 'text-white/90' : 'text-blue-800'}>
                                           {pkg.type === 'exclusive' 
-                                            ? '⚡ Start 24u • Real-time portal'
+                                            ? 'Start 24u • Real-time portal'
                                             : pkg.type === 'shared_fresh'
-                                            ? '🌱 Vers • Excel 24u • 3 partijen'
-                                            : '📦 Database • Excel 24u • Laagste prijs'}
+                                            ? 'Vers • Excel 24u • 3 partijen'
+                                            : 'Database • Excel 24u • Laagste prijs'}
                                         </span>
                                       </div>
                                     </motion.button>
@@ -981,28 +985,36 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
                                             <div className="flex gap-4">
                                               <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center text-white font-bold text-sm">1</div>
                                               <div className="flex-1">
-                                                <h5 className="font-bold text-gray-900 mb-1">💎 Je bestelt exclusieve leads</h5>
+                                                <h5 className="font-bold text-gray-900 mb-1 flex items-center gap-2">
+                                                  <SparklesIcon className="w-4 h-4 text-orange-500" /> Je bestelt exclusieve leads
+                                                </h5>
                                                 <p className="text-sm text-gray-600">Na betaling starten we binnen 24u campagnes speciaal voor jou.</p>
                                               </div>
                                             </div>
                                             <div className="flex gap-4">
                                               <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center text-white font-bold text-sm">2</div>
                                               <div className="flex-1">
-                                                <h5 className="font-bold text-gray-900 mb-1">📊 Toegang tot persoonlijk portal</h5>
+                                                <h5 className="font-bold text-gray-900 mb-1 flex items-center gap-2">
+                                                  <ChartBarIcon className="w-4 h-4 text-blue-500" /> Toegang tot persoonlijk portal
+                                                </h5>
                                                 <p className="text-sm text-gray-600">Je krijgt direct toegang tot je CRM portal met Google Sheets integratie.</p>
                                               </div>
                                             </div>
                                             <div className="flex gap-4">
                                               <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-600 rounded-full flex items-center justify-center text-white font-bold text-sm">3</div>
                                               <div className="flex-1">
-                                                <h5 className="font-bold text-gray-900 mb-1">⚡ Leads real-time binnen</h5>
+                                                <h5 className="font-bold text-gray-900 mb-1 flex items-center gap-2">
+                                                  <BoltIcon className="w-4 h-4 text-purple-500" /> Leads real-time binnen
+                                                </h5>
                                                 <p className="text-sm text-gray-600">Zodra leads gegenereerd worden, verschijnen ze direct in je portal.</p>
                                               </div>
                                             </div>
                                             <div className="flex gap-4">
                                               <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-orange-500 to-red-600 rounded-full flex items-center justify-center text-white font-bold text-sm">4</div>
                                               <div className="flex-1">
-                                                <h5 className="font-bold text-gray-900 mb-1">🎯 100% exclusief voor jou</h5>
+                                                <h5 className="font-bold text-gray-900 mb-1 flex items-center gap-2">
+                                                  <MapPinIcon className="w-4 h-4 text-orange-500" /> 100% exclusief voor jou
+                                                </h5>
                                                 <p className="text-sm text-gray-600">Geen concurrentie - jij bent de enige die deze leads ontvangt.</p>
                                               </div>
                                             </div>
@@ -1012,28 +1024,36 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
                                             <div className="flex gap-4">
                                               <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center text-white font-bold text-sm">1</div>
                                               <div className="flex-1">
-                                                <h5 className="font-bold text-gray-900 mb-1">🤝 Je bestelt gedeelde verse leads</h5>
+                                                <h5 className="font-bold text-gray-900 mb-1 flex items-center gap-2">
+                                                  <UserGroupIcon className="w-4 h-4 text-green-500" /> Je bestelt gedeelde verse leads
+                                                </h5>
                                                 <p className="text-sm text-gray-600">Na betaling starten we binnen 24u campagnes (gedeeld met 2 anderen).</p>
                                               </div>
                                             </div>
                                             <div className="flex gap-4">
                                               <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center text-white font-bold text-sm">2</div>
                                               <div className="flex-1">
-                                                <h5 className="font-bold text-gray-900 mb-1">📧 Excel binnen 24 uur</h5>
+                                                <h5 className="font-bold text-gray-900 mb-1 flex items-center gap-2">
+                                                  <EnvelopeIcon className="w-4 h-4 text-blue-500" /> Excel binnen 24 uur
+                                                </h5>
                                                 <p className="text-sm text-gray-600">Je ontvangt een Excel bestand per email met alle lead data.</p>
                                               </div>
                                             </div>
                                             <div className="flex gap-4">
                                               <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-600 rounded-full flex items-center justify-center text-white font-bold text-sm">3</div>
                                               <div className="flex-1">
-                                                <h5 className="font-bold text-gray-900 mb-1">⚡ Verse leads uit campagnes</h5>
+                                                <h5 className="font-bold text-gray-900 mb-1 flex items-center gap-2">
+                                                  <BoltIcon className="w-4 h-4 text-purple-500" /> Verse leads uit campagnes
+                                                </h5>
                                                 <p className="text-sm text-gray-600">Alle leads zijn vers gegenereerd met bewezen koopintentie.</p>
                                               </div>
                                             </div>
                                             <div className="flex gap-4">
                                               <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-orange-500 to-red-600 rounded-full flex items-center justify-center text-white font-bold text-sm">4</div>
                                               <div className="flex-1">
-                                                <h5 className="font-bold text-gray-900 mb-1">💰 1/3 van de prijs</h5>
+                                                <h5 className="font-bold text-gray-900 mb-1 flex items-center gap-2">
+                                                  <CreditCardIcon className="w-4 h-4 text-orange-500" /> 1/3 van de prijs
+                                                </h5>
                                                 <p className="text-sm text-gray-600">Verse leads voor een fractie van de exclusieve prijs!</p>
                                               </div>
                                             </div>
@@ -1043,28 +1063,36 @@ export function OrderCheckoutModal({ isOpen, onClose, userEmail, userName, userC
                                             <div className="flex gap-4">
                                               <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center text-white font-bold text-sm">1</div>
                                               <div className="flex-1">
-                                                <h5 className="font-bold text-gray-900 mb-1">📦 Je bestelt bulk leads</h5>
+                                                <h5 className="font-bold text-gray-900 mb-1 flex items-center gap-2">
+                                                  <ArchiveBoxIcon className="w-4 h-4 text-green-500" /> Je bestelt bulk leads
+                                                </h5>
                                                 <p className="text-sm text-gray-600">Na betaling bereiden we direct je pakket voor uit onze database.</p>
                                               </div>
                                             </div>
                                             <div className="flex gap-4">
                                               <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center text-white font-bold text-sm">2</div>
                                               <div className="flex-1">
-                                                <h5 className="font-bold text-gray-900 mb-1">📧 Excel binnen 24 uur</h5>
+                                                <h5 className="font-bold text-gray-900 mb-1 flex items-center gap-2">
+                                                  <EnvelopeIcon className="w-4 h-4 text-blue-500" /> Excel binnen 24 uur
+                                                </h5>
                                                 <p className="text-sm text-gray-600">Je ontvangt een Excel bestand per email met alle leads.</p>
                                               </div>
                                             </div>
                                             <div className="flex gap-4">
                                               <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-600 rounded-full flex items-center justify-center text-white font-bold text-sm">3</div>
                                               <div className="flex-1">
-                                                <h5 className="font-bold text-gray-900 mb-1">💰 Laagste prijs per lead</h5>
+                                                <h5 className="font-bold text-gray-900 mb-1 flex items-center gap-2">
+                                                  <CreditCardIcon className="w-4 h-4 text-purple-500" /> Laagste prijs per lead
+                                                </h5>
                                                 <p className="text-sm text-gray-600">Vanaf €3,50/lead - perfect voor grote volumes en testen.</p>
                                               </div>
                                             </div>
                                             <div className="flex gap-4">
                                               <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-orange-500 to-red-600 rounded-full flex items-center justify-center text-white font-bold text-sm">4</div>
                                               <div className="flex-1">
-                                                <h5 className="font-bold text-gray-900 mb-1">📊 Database leads</h5>
+                                                <h5 className="font-bold text-gray-900 mb-1 flex items-center gap-2">
+                                                  <ChartBarIcon className="w-4 h-4 text-orange-500" /> Database leads
+                                                </h5>
                                                 <p className="text-sm text-gray-600">Leads tot 6 maanden oud - ideaal voor cold outreach campaigns.</p>
                                               </div>
                                             </div>
