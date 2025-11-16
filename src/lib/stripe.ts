@@ -73,7 +73,7 @@ export const leadPackages: Record<string, LeadPackage[]> = {
   'Thuisbatterijen': [
     {
       id: 'thuisbatterij_exclusive',
-      name: '💎 Verse Exclusieve Thuisbatterij Leads',
+      name: 'Verse Exclusieve Thuisbatterij Leads',
       description: '100% exclusieve verse thuisbatterij leads uit eigen campagnes',
       basePrice: 3750,
       price: 3750,
@@ -88,19 +88,19 @@ export const leadPackages: Record<string, LeadPackage[]> = {
         { minQuantity: 75, pricePerLead: 3250 }, // €32.50
       ],
       features: [
-        '💎 100% exclusief voor u',
-        '⚡ Campagnes starten binnen 24u',
-        '📊 Real-time in uw persoonlijk portal',
-        '🎯 Geen concurrentie',
-        '🇳🇱🇧🇪 Nederlandse & Belgische prospects',
-        '📈 25-40% conversie'
+        '100% exclusief voor u',
+        'Campagnes starten binnen 24u',
+        'Real-time in uw persoonlijk portal',
+        'Geen concurrentie',
+        'Nederlandse & Belgische prospects',
+        '25-40% conversie'
       ],
       deliveryTime: 'Campagnes binnen 24u, leads real-time',
       deliveryMethod: 'Persoonlijk CRM Portal'
     },
     {
       id: 'thuisbatterij_shared_fresh',
-      name: '🤝 Gedeelde Verse Thuisbatterij Leads',
+      name: 'Gedeelde Verse Thuisbatterij Leads',
       description: 'Verse thuisbatterij leads uit eigen campagnes (gedeeld met 2 anderen)',
       basePrice: 1250, // €12.50 (1/3 van €37.50)
       price: 1250,
@@ -110,19 +110,19 @@ export const leadPackages: Record<string, LeadPackage[]> = {
       quantity: 250,
       minQuantity: 250,
       features: [
-        '🤝 Gedeeld met 3 partijen totaal',
-        '⚡ Verse leads uit campagnes',
-        '💰 1/3 van de prijs van exclusief',
-        '📧 Excel binnen 24u per email',
-        '🇳🇱🇧🇪 Nederlandse & Belgische prospects',
-        '📈 15-25% conversie'
+        'Gedeeld met 3 partijen totaal',
+        'Verse leads uit campagnes',
+        '1/3 van de prijs van exclusief',
+        'Excel binnen 24u per email',
+        'Nederlandse & Belgische prospects',
+        '15-25% conversie'
       ],
       deliveryTime: 'Binnen 24u per email',
       deliveryMethod: 'Excel bestand'
     },
     {
       id: 'thuisbatterij_bulk',
-      name: '📦 Bulk Thuisbatterij Leads',
+      name: 'Bulk Thuisbatterij Leads',
       description: 'Thuisbatterij leads uit onze database (tot 6 maanden oud)',
       basePrice: 425, // €4.25 for 100
       price: 425,
@@ -138,12 +138,12 @@ export const leadPackages: Record<string, LeadPackage[]> = {
         { minQuantity: 500, pricePerLead: 350 }, // €3.50
       ],
       features: [
-        '📦 Database leads (tot 6 mnd oud)',
-        '💰 Laagste prijs per lead',
-        '📧 Excel binnen 24u per email',
-        '🎯 Ideaal voor grote volumes',
-        '🇳🇱🇧🇪 Nederlandse & Belgische prospects',
-        '📈 5-10% conversie'
+        'Database leads (tot 6 mnd oud)',
+        'Laagste prijs per lead',
+        'Excel binnen 24u per email',
+        'Ideaal voor grote volumes',
+        'Nederlandse & Belgische prospects',
+        '5-10% conversie'
       ],
       deliveryTime: 'Binnen 24u per email',
       deliveryMethod: 'Excel bestand'
@@ -152,7 +152,7 @@ export const leadPackages: Record<string, LeadPackage[]> = {
   'Zonnepanelen': [
     {
       id: 'zonnepanelen_exclusive',
-      name: '💎 Verse Exclusieve Zonnepanelen Leads',
+      name: 'Verse Exclusieve Zonnepanelen Leads',
       description: '100% exclusieve verse zonnepanelen leads uit eigen campagnes',
       basePrice: 3750,
       price: 3750,
@@ -167,19 +167,19 @@ export const leadPackages: Record<string, LeadPackage[]> = {
         { minQuantity: 75, pricePerLead: 3250 }, // €32.50
       ],
       features: [
-        '💎 100% exclusief voor u',
-        '⚡ Campagnes starten binnen 24u',
-        '📊 Real-time in uw persoonlijk portal',
-        '🎯 Geen concurrentie',
-        '🇳🇱🇧🇪 Nederlandse & Belgische prospects',
-        '📈 25-40% conversie'
+        '100% exclusief voor u',
+        'Campagnes starten binnen 24u',
+        'Real-time in uw persoonlijk portal',
+        'Geen concurrentie',
+        'Nederlandse & Belgische prospects',
+        '25-40% conversie'
       ],
       deliveryTime: 'Campagnes binnen 24u, leads real-time',
       deliveryMethod: 'Persoonlijk CRM Portal'
     },
     {
       id: 'zonnepanelen_shared_fresh',
-      name: '🤝 Gedeelde Verse Zonnepanelen Leads',
+      name: 'Gedeelde Verse Zonnepanelen Leads',
       description: 'Verse zonnepanelen leads uit eigen campagnes (gedeeld met 2 anderen)',
       basePrice: 1250, // €12.50 (1/3 van €37.50)
       price: 1250,
@@ -189,19 +189,19 @@ export const leadPackages: Record<string, LeadPackage[]> = {
       quantity: 250,
       minQuantity: 250,
       features: [
-        '🤝 Gedeeld met 3 partijen totaal',
-        '⚡ Verse leads uit campagnes',
-        '💰 1/3 van de prijs van exclusief',
-        '📧 Excel binnen 24u per email',
-        '🇳🇱🇧🇪 Nederlandse & Belgische prospects',
-        '📈 15-25% conversie'
+        'Gedeeld met 3 partijen totaal',
+        'Verse leads uit campagnes',
+        '1/3 van de prijs van exclusief',
+        'Excel binnen 24u per email',
+        'Nederlandse & Belgische prospects',
+        '15-25% conversie'
       ],
       deliveryTime: 'Binnen 24u per email',
       deliveryMethod: 'Excel bestand'
     },
     {
       id: 'zonnepanelen_bulk',
-      name: '📦 Bulk Zonnepanelen Leads',
+      name: 'Bulk Zonnepanelen Leads',
       description: 'Zonnepanelen leads uit onze database (tot 6 maanden oud)',
       basePrice: 425,
       price: 425,
@@ -217,12 +217,12 @@ export const leadPackages: Record<string, LeadPackage[]> = {
         { minQuantity: 500, pricePerLead: 350 },
       ],
       features: [
-        '📦 Database leads (tot 6 mnd oud)',
-        '💰 Laagste prijs per lead',
-        '📧 Excel binnen 24u per email',
-        '🎯 Ideaal voor grote volumes',
-        '🇳🇱🇧🇪 Nederlandse & Belgische prospects',
-        '📈 5-10% conversie'
+        'Database leads (tot 6 mnd oud)',
+        'Laagste prijs per lead',
+        'Excel binnen 24u per email',
+        'Ideaal voor grote volumes',
+        'Nederlandse & Belgische prospects',
+        '5-10% conversie'
       ],
       deliveryTime: 'Binnen 24u per email',
       deliveryMethod: 'Excel bestand'
@@ -231,7 +231,7 @@ export const leadPackages: Record<string, LeadPackage[]> = {
   'Warmtepompen': [
     {
       id: 'warmtepomp_exclusive',
-      name: '💎 Verse Exclusieve Warmtepomp Leads',
+      name: 'Verse Exclusieve Warmtepomp Leads',
       description: '100% exclusieve verse warmtepomp leads uit eigen campagnes',
       basePrice: 3750,
       price: 3750,
@@ -246,19 +246,19 @@ export const leadPackages: Record<string, LeadPackage[]> = {
         { minQuantity: 75, pricePerLead: 3250 }, // €32.50
       ],
       features: [
-        '💎 100% exclusief voor u',
-        '⚡ Campagnes starten binnen 24u',
-        '📊 Real-time in uw persoonlijk portal',
-        '🎯 Geen concurrentie',
-        '🇳🇱🇧🇪 Nederlandse & Belgische prospects',
-        '📈 25-40% conversie'
+        '100% exclusief voor u',
+        'Campagnes starten binnen 24u',
+        'Real-time in uw persoonlijk portal',
+        'Geen concurrentie',
+        'Nederlandse & Belgische prospects',
+        '25-40% conversie'
       ],
       deliveryTime: 'Campagnes binnen 24u, leads real-time',
       deliveryMethod: 'Persoonlijk CRM Portal'
     },
     {
       id: 'warmtepomp_shared_fresh',
-      name: '🤝 Gedeelde Verse Warmtepomp Leads',
+      name: 'Gedeelde Verse Warmtepomp Leads',
       description: 'Verse warmtepomp leads uit eigen campagnes (gedeeld met 2 anderen)',
       basePrice: 1250, // €12.50 (1/3 van €37.50)
       price: 1250,
@@ -268,19 +268,19 @@ export const leadPackages: Record<string, LeadPackage[]> = {
       quantity: 250,
       minQuantity: 250,
       features: [
-        '🤝 Gedeeld met 3 partijen totaal',
-        '⚡ Verse leads uit campagnes',
-        '💰 1/3 van de prijs van exclusief',
-        '📧 Excel binnen 24u per email',
-        '🇳🇱🇧🇪 Nederlandse & Belgische prospects',
-        '📈 15-25% conversie'
+        'Gedeeld met 3 partijen totaal',
+        'Verse leads uit campagnes',
+        '1/3 van de prijs van exclusief',
+        'Excel binnen 24u per email',
+        'Nederlandse & Belgische prospects',
+        '15-25% conversie'
       ],
       deliveryTime: 'Binnen 24u per email',
       deliveryMethod: 'Excel bestand'
     },
     {
       id: 'warmtepomp_bulk',
-      name: '📦 Bulk Warmtepomp Leads',
+      name: 'Bulk Warmtepomp Leads',
       description: 'Warmtepomp leads uit onze database (tot 6 maanden oud)',
       basePrice: 425,
       price: 425,
@@ -296,12 +296,12 @@ export const leadPackages: Record<string, LeadPackage[]> = {
         { minQuantity: 500, pricePerLead: 350 },
       ],
       features: [
-        '📦 Database leads (tot 6 mnd oud)',
-        '💰 Laagste prijs per lead',
-        '📧 Excel binnen 24u per email',
-        '🎯 Ideaal voor grote volumes',
-        '🇳🇱🇧🇪 Nederlandse & Belgische prospects',
-        '📈 5-10% conversie'
+        'Database leads (tot 6 mnd oud)',
+        'Laagste prijs per lead',
+        'Excel binnen 24u per email',
+        'Ideaal voor grote volumes',
+        'Nederlandse & Belgische prospects',
+        '5-10% conversie'
       ],
       deliveryTime: 'Binnen 24u per email',
       deliveryMethod: 'Excel bestand'
@@ -310,7 +310,7 @@ export const leadPackages: Record<string, LeadPackage[]> = {
   'Airco': [
     {
       id: 'airco_exclusive',
-      name: '💎 Verse Exclusieve Airco Leads',
+      name: 'Verse Exclusieve Airco Leads',
       description: '100% exclusieve verse airco leads uit eigen campagnes',
       basePrice: 3750,
       price: 3750,
@@ -325,19 +325,19 @@ export const leadPackages: Record<string, LeadPackage[]> = {
         { minQuantity: 75, pricePerLead: 3250 }, // €32.50
       ],
       features: [
-        '💎 100% exclusief voor u',
-        '⚡ Campagnes starten binnen 24u',
-        '📊 Real-time in uw persoonlijk portal',
-        '🎯 Geen concurrentie',
-        '🇳🇱🇧🇪 Nederlandse & Belgische prospects',
-        '📈 25-40% conversie'
+        '100% exclusief voor u',
+        'Campagnes starten binnen 24u',
+        'Real-time in uw persoonlijk portal',
+        'Geen concurrentie',
+        'Nederlandse & Belgische prospects',
+        '25-40% conversie'
       ],
       deliveryTime: 'Campagnes binnen 24u, leads real-time',
       deliveryMethod: 'Persoonlijk CRM Portal'
     },
     {
       id: 'airco_shared_fresh',
-      name: '🤝 Gedeelde Verse Airco Leads',
+      name: 'Gedeelde Verse Airco Leads',
       description: 'Verse airco leads uit eigen campagnes (gedeeld met 2 anderen)',
       basePrice: 1250, // €12.50 (1/3 van €37.50)
       price: 1250,
@@ -347,19 +347,19 @@ export const leadPackages: Record<string, LeadPackage[]> = {
       quantity: 250,
       minQuantity: 250,
       features: [
-        '🤝 Gedeeld met 3 partijen totaal',
-        '⚡ Verse leads uit campagnes',
-        '💰 1/3 van de prijs van exclusief',
-        '📧 Excel binnen 24u per email',
-        '🇳🇱🇧🇪 Nederlandse & Belgische prospects',
-        '📈 15-25% conversie'
+        'Gedeeld met 3 partijen totaal',
+        'Verse leads uit campagnes',
+        '1/3 van de prijs van exclusief',
+        'Excel binnen 24u per email',
+        'Nederlandse & Belgische prospects',
+        '15-25% conversie'
       ],
       deliveryTime: 'Binnen 24u per email',
       deliveryMethod: 'Excel bestand'
     },
     {
       id: 'airco_bulk',
-      name: '📦 Bulk Airco Leads',
+      name: 'Bulk Airco Leads',
       description: 'Airco leads uit onze database (tot 6 maanden oud)',
       basePrice: 425,
       price: 425,
@@ -375,12 +375,12 @@ export const leadPackages: Record<string, LeadPackage[]> = {
         { minQuantity: 500, pricePerLead: 350 },
       ],
       features: [
-        '📦 Database leads (tot 6 mnd oud)',
-        '💰 Laagste prijs per lead',
-        '📧 Excel binnen 24u per email',
-        '🎯 Ideaal voor grote volumes',
-        '🇳🇱🇧🇪 Nederlandse & Belgische prospects',
-        '📈 5-10% conversie'
+        'Database leads (tot 6 mnd oud)',
+        'Laagste prijs per lead',
+        'Excel binnen 24u per email',
+        'Ideaal voor grote volumes',
+        'Nederlandse & Belgische prospects',
+        '5-10% conversie'
       ],
       deliveryTime: 'Binnen 24u per email',
       deliveryMethod: 'Excel bestand'
@@ -389,7 +389,7 @@ export const leadPackages: Record<string, LeadPackage[]> = {
   'Financial Lease': [
     {
       id: 'lease_exclusive',
-      name: '💎 Verse Exclusieve Financial Lease Leads',
+      name: 'Verse Exclusieve Financial Lease Leads',
       description: '100% exclusieve verse financial lease leads uit eigen campagnes',
       basePrice: 3750,
       price: 3750,
@@ -404,19 +404,19 @@ export const leadPackages: Record<string, LeadPackage[]> = {
         { minQuantity: 75, pricePerLead: 3250 }, // €32.50
       ],
       features: [
-        '💎 100% exclusief voor u',
-        '⚡ Campagnes starten binnen 24u',
-        '📊 Real-time in uw persoonlijk portal',
-        '🎯 Geen concurrentie',
-        '🇳🇱🇧🇪 Nederlandse & Belgische zakelijke prospects',
-        '📈 25-40% conversie'
+        '100% exclusief voor u',
+        'Campagnes starten binnen 24u',
+        'Real-time in uw persoonlijk portal',
+        'Geen concurrentie',
+        'Nederlandse & Belgische zakelijke prospects',
+        '25-40% conversie'
       ],
       deliveryTime: 'Campagnes binnen 24u, leads real-time',
       deliveryMethod: 'Persoonlijk CRM Portal'
     },
     {
       id: 'lease_shared_fresh',
-      name: '🤝 Gedeelde Verse Financial Lease Leads',
+      name: 'Gedeelde Verse Financial Lease Leads',
       description: 'Verse financial lease leads uit eigen campagnes (gedeeld met 2 anderen)',
       basePrice: 1250, // €12.50 (1/3 van €37.50)
       price: 1250,
@@ -426,19 +426,19 @@ export const leadPackages: Record<string, LeadPackage[]> = {
       quantity: 250,
       minQuantity: 250,
       features: [
-        '🤝 Gedeeld met 3 partijen totaal',
-        '⚡ Verse leads uit campagnes',
-        '💰 1/3 van de prijs van exclusief',
-        '📧 Excel binnen 24u per email',
-        '🇳🇱🇧🇪 Nederlandse & Belgische zakelijke prospects',
-        '📈 15-25% conversie'
+        'Gedeeld met 3 partijen totaal',
+        'Verse leads uit campagnes',
+        '1/3 van de prijs van exclusief',
+        'Excel binnen 24u per email',
+        'Nederlandse & Belgische zakelijke prospects',
+        '15-25% conversie'
       ],
       deliveryTime: 'Binnen 24u per email',
       deliveryMethod: 'Excel bestand'
     },
     {
       id: 'lease_bulk',
-      name: '📦 Bulk Financial Lease Leads',
+      name: 'Bulk Financial Lease Leads',
       description: 'Financial lease leads uit onze database (tot 6 maanden oud)',
       basePrice: 425,
       price: 425,
@@ -454,12 +454,12 @@ export const leadPackages: Record<string, LeadPackage[]> = {
         { minQuantity: 500, pricePerLead: 350 },
       ],
       features: [
-        '📦 Database leads (tot 6 mnd oud)',
-        '💰 Laagste prijs per lead',
-        '📧 Excel binnen 24u per email',
-        '🎯 Ideaal voor grote volumes',
-        '🇳🇱🇧🇪 Nederlandse & Belgische zakelijke prospects',
-        '📈 5-10% conversie'
+        'Database leads (tot 6 mnd oud)',
+        'Laagste prijs per lead',
+        'Excel binnen 24u per email',
+        'Ideaal voor grote volumes',
+        'Nederlandse & Belgische zakelijke prospects',
+        '5-10% conversie'
       ],
       deliveryTime: 'Binnen 24u per email',
       deliveryMethod: 'Excel bestand'
