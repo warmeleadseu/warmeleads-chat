@@ -169,26 +169,23 @@ export async function PUT(req: NextRequest) {
     }
 
     console.log('📝 Updating pricing for:', branchId);
+    console.log('📊 Updates:', updates);
 
     const supabase = createServerClient();
 
-    // Build update object
-    const updateData: any = {};
-    if (updates.branchName) updateData.branch_name = updates.branchName;
-    if (updates.exclusive) {
-      if (updates.exclusive.basePrice) updateData.exclusive_base_price = updates.exclusive.basePrice;
-      if (updates.exclusive.tiers) updateData.exclusive_tiers = updates.exclusive.tiers;
-    }
-    if (updates.shared) {
-      if (updates.shared.basePrice) updateData.shared_base_price = updates.shared.basePrice;
-      if (updates.shared.minQuantity) updateData.shared_min_quantity = updates.shared.minQuantity;
-    }
-
-    // Update pricing
+    // Use UPSERT to handle both insert and update
     const { data, error } = await supabase
       .from('pricing_config')
-      .update(updateData)
-      .eq('branch_id', branchId)
+      .upsert({
+        branch_id: branchId,
+        branch_name: updates.branchName || branchId,
+        exclusive_base_price: updates.exclusive?.basePrice || 0,
+        exclusive_tiers: updates.exclusive?.tiers || [],
+        shared_base_price: updates.shared?.basePrice || 0,
+        shared_min_quantity: updates.shared?.minQuantity || 500
+      }, {
+        onConflict: 'branch_id'
+      })
       .select()
       .single();
 
