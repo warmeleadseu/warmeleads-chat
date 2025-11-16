@@ -81,9 +81,8 @@ export default function AdminPricingPage() {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          adminEmail,
           branchId: editedPricing.branchId,
-          branchPricing: editedPricing
+          updates: editedPricing
         })
       });
 
