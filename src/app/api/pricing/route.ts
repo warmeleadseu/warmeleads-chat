@@ -60,7 +60,7 @@ export async function GET(req: NextRequest) {
 
       return NextResponse.json(pricing);
     } else {
-      // Get all pricing
+      // Get all pricing - MERGE database data with defaults
       const { data, error } = await supabase
         .from('pricing_config')
         .select('*');
@@ -71,13 +71,8 @@ export async function GET(req: NextRequest) {
         return NextResponse.json(DEFAULT_PRICING);
       }
 
-      if (!data || data.length === 0) {
-        // Return defaults if empty
-        return NextResponse.json(DEFAULT_PRICING);
-      }
-
-      // Transform to expected format
-      const pricing: BranchPricingConfig[] = data.map(p => ({
+      // Transform database data to expected format
+      const dbPricing: BranchPricingConfig[] = (data || []).map(p => ({
         branchId: p.branch_id,
         branchName: p.branch_name,
         exclusive: {
@@ -90,7 +85,16 @@ export async function GET(req: NextRequest) {
         }
       }));
 
-      return NextResponse.json(pricing);
+      // Create a map of database pricing by branchId
+      const dbPricingMap = new Map(dbPricing.map(p => [p.branchId, p]));
+
+      // Merge: Use database values if available, otherwise use defaults
+      const mergedPricing = DEFAULT_PRICING.map(defaultPricing => {
+        const dbVersion = dbPricingMap.get(defaultPricing.branchId);
+        return dbVersion || defaultPricing;
+      });
+
+      return NextResponse.json(mergedPricing);
     }
   } catch (error) {
     console.error('❌ Error in GET /api/pricing:', error);
