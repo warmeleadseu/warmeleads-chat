@@ -1,233 +1,165 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { motion } from 'framer-motion';
+import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import {
+  ChartBarSquareIcon,
   UserGroupIcon,
-  DocumentTextIcon,
-  CurrencyEuroIcon,
-  ChartBarIcon,
   ArrowTrendingUpIcon,
-  ArrowTrendingDownIcon,
+  ClockIcon,
 } from '@heroicons/react/24/outline';
-import { Loading } from '@/components/ui';
+import { adminFetch } from '@/lib/adminAuth';
 
-interface DashboardStats {
-  totalCustomers: number;
-  newCustomersThisMonth: number;
-  totalOrders: number;
-  activeOrders: number;
-  ordersThisMonth: number;
-  totalRevenue: number;
-  revenueThisMonth: number;
-  conversionRate: number;
-  trends: {
-    revenue: string;
-    orders: string;
-    customers: string;
-  };
+interface Stats {
+  total: number;
+  thisWeek: number;
+  thisMonth: number;
+  byStatus: Record<string, number>;
+  byBranch: Record<string, number>;
+  byCustomer: Record<string, number>;
+  recentLeads: any[];
 }
 
-export default function AdminPage() {
-  const router = useRouter();
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+const STATUS_COLORS: Record<string, string> = {
+  nieuw: 'bg-blue-500',
+  gecontacteerd: 'bg-amber-500',
+  offerte: 'bg-purple-500',
+  verkocht: 'bg-emerald-500',
+  afgewezen: 'bg-red-400',
+};
+
+export default function AdminDashboard() {
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadStats();
+    adminFetch('/api/admin/stats')
+      .then(r => r.json())
+      .then(d => { setStats(d); setLoading(false); })
+      .catch(() => setLoading(false));
   }, []);
 
-  const loadStats = async () => {
-    try {
-      setIsLoading(true);
-      console.log('📊 Dashboard: Loading stats...');
-      
-      const response = await fetch('/api/admin/stats');
-      
-      if (!response.ok) {
-        throw new Error('Failed to load stats');
-      }
-      
-      const data = await response.json();
-      
-      if (data.success) {
-        console.log('✅ Dashboard stats loaded:', data.stats);
-        setStats(data.stats);
-      } else {
-        console.error('❌ Failed to load stats:', data.error);
-      }
-    } catch (error) {
-      console.error('❌ Error loading stats:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const formatCurrency = (cents: number) => {
-    return `€${(cents / 100).toFixed(2).replace('.', ',')}`;
-  };
-
-  const getTrendIcon = (trend: string) => {
-    if (trend.startsWith('+')) {
-      return <ArrowTrendingUpIcon className="w-4 h-4 sm:w-5 sm:h-5 text-green-500" />;
-    } else if (trend.startsWith('-')) {
-      return <ArrowTrendingDownIcon className="w-4 h-4 sm:w-5 sm:h-5 text-red-500" />;
-    }
-    return null;
-  };
-
-  const getTrendColor = (trend: string) => {
-    if (trend.startsWith('+')) return 'text-green-600';
-    if (trend.startsWith('-')) return 'text-red-600';
-    return 'text-gray-600';
-  };
-
-  const displayStats = stats ? [
-    { 
-      name: 'Totaal Klanten', 
-      value: stats.totalCustomers.toString(), 
-      icon: UserGroupIcon, 
-      color: 'from-blue-500 to-blue-600',
-      trend: stats.trends.customers,
-      subtitle: `${stats.newCustomersThisMonth} deze maand`
-    },
-    { 
-      name: 'Actieve Bestellingen', 
-      value: stats.activeOrders.toString(), 
-      icon: DocumentTextIcon, 
-      color: 'from-purple-500 to-purple-600',
-      trend: stats.trends.orders,
-      subtitle: `${stats.ordersThisMonth} deze maand`
-    },
-    { 
-      name: 'Omzet Deze Maand', 
-      value: formatCurrency(stats.revenueThisMonth), 
-      icon: CurrencyEuroIcon, 
-      color: 'from-green-500 to-green-600',
-      trend: stats.trends.revenue,
-      subtitle: `${formatCurrency(stats.totalRevenue)} totaal`
-    },
-    { 
-      name: 'Conversie Rate', 
-      value: `${stats.conversionRate}%`, 
-      icon: ChartBarIcon, 
-      color: 'from-pink-500 to-pink-600',
-      subtitle: 'Klanten → Bestellingen'
-    },
-  ] : [];
-
-  const quickActions = [
-    { name: 'Klanten Beheren', href: '/admin/customers', icon: UserGroupIcon },
-    { name: 'Bestellingen', href: '/admin/orders', icon: DocumentTextIcon },
-    { name: 'Prijsbeheer', href: '/admin/pricing', icon: CurrencyEuroIcon },
-    { name: 'Analytics', href: '/admin/analytics', icon: ChartBarIcon },
-  ];
-
-  if (isLoading) {
+  if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-96">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-brand-purple/30 border-t-brand-purple rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">Dashboard laden...</p>
-        </div>
+      <div className="flex items-center justify-center py-20">
+        <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-slate-200 border-t-brand-purple" />
       </div>
     );
   }
 
-  return (
-    <div className="space-y-4 sm:space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 sm:gap-4">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-sm sm:text-base text-gray-600 mt-1 sm:mt-2">Welkom terug! Hier is een overzicht van je bedrijf.</p>
-        </div>
-        
-        <button
-          onClick={loadStats}
-          className="bg-brand-purple hover:bg-brand-purple/90 text-white px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors"
-        >
-          🔄 Ververs
-        </button>
-      </div>
+  if (!stats) return <p className="py-20 text-center text-slate-400">Kon statistieken niet laden.</p>;
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
-        {displayStats.map((stat, index) => (
-          <motion.div
-            key={stat.name}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.1 }}
-            className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6"
-          >
-            <div className="flex items-center justify-between mb-3">
-              <div className={`w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-r ${stat.color} rounded-lg flex items-center justify-center flex-shrink-0`}>
-                <stat.icon className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
-              </div>
-              {stat.trend && (
-                <div className={`flex items-center gap-1 ${getTrendColor(stat.trend)}`}>
-                  {getTrendIcon(stat.trend)}
-                  <span className="text-xs sm:text-sm font-semibold">{stat.trend}</span>
-                </div>
-              )}
+  const maxStatus = Math.max(...Object.values(stats.byStatus), 1);
+
+  return (
+    <div>
+      <h1 className="mb-6 text-xl font-bold text-slate-900 sm:text-2xl">Dashboard</h1>
+
+      {/* KPI Cards */}
+      <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {[
+          { label: 'Totaal leads', value: stats.total, icon: ChartBarSquareIcon, color: 'text-brand-purple bg-brand-purple/10' },
+          { label: 'Deze week', value: stats.thisWeek, icon: ArrowTrendingUpIcon, color: 'text-emerald-600 bg-emerald-50' },
+          { label: 'Deze maand', value: stats.thisMonth, icon: ClockIcon, color: 'text-amber-600 bg-amber-50' },
+          { label: 'Klanten', value: Object.keys(stats.byCustomer).length, icon: UserGroupIcon, color: 'text-sky-600 bg-sky-50' },
+        ].map(kpi => (
+          <div key={kpi.label} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className={`mb-3 inline-flex h-9 w-9 items-center justify-center rounded-lg ${kpi.color}`}>
+              <kpi.icon className="h-[18px] w-[18px]" />
             </div>
-            <div>
-              <p className="text-xs sm:text-sm font-medium text-gray-600">{stat.name}</p>
-              <p className="text-2xl sm:text-3xl font-bold text-gray-900 mt-1">{stat.value}</p>
-              {stat.subtitle && (
-                <p className="text-xs text-gray-500 mt-1">{stat.subtitle}</p>
-              )}
-            </div>
-          </motion.div>
+            <p className="text-2xl font-bold text-slate-900">{kpi.value.toLocaleString()}</p>
+            <p className="text-xs text-slate-500">{kpi.label}</p>
+          </div>
         ))}
       </div>
 
-      {/* Quick Actions */}
-      <div>
-        <h2 className="text-lg sm:text-xl font-bold text-gray-900 mb-3 sm:mb-4">Snelle Acties</h2>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-          {quickActions.map((action) => (
-            <motion.button
-              key={action.name}
-              onClick={() => router.push(action.href)}
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              className="bg-white border-2 border-gray-200 hover:border-brand-purple rounded-xl p-4 sm:p-6 text-left transition-all group"
-            >
-              <action.icon className="w-6 h-6 sm:w-8 sm:h-8 text-brand-purple mb-2 sm:mb-3 group-hover:scale-110 transition-transform" />
-              <h3 className="font-semibold text-gray-900 text-sm sm:text-base">{action.name}</h3>
-            </motion.button>
-          ))}
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Status breakdown */}
+        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="mb-4 text-sm font-semibold text-slate-900">Leads per status</h2>
+          <div className="space-y-3">
+            {Object.entries(stats.byStatus).map(([status, count]) => (
+              <div key={status}>
+                <div className="mb-1 flex items-center justify-between text-sm">
+                  <span className="capitalize text-slate-600">{status}</span>
+                  <span className="font-medium text-slate-900">{count}</span>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                  <div className={`h-full rounded-full ${STATUS_COLORS[status] || 'bg-slate-400'}`} style={{ width: `${(count / maxStatus) * 100}%` }} />
+                </div>
+              </div>
+            ))}
+            {Object.keys(stats.byStatus).length === 0 && <p className="text-sm text-slate-400">Nog geen data</p>}
+          </div>
+        </div>
+
+        {/* Branch breakdown */}
+        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="mb-4 text-sm font-semibold text-slate-900">Leads per branche</h2>
+          <div className="space-y-4">
+            {Object.entries(stats.byBranch).map(([branch, count]) => (
+              <div key={branch} className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className={`inline-block h-3 w-3 rounded-full ${branch === 'thuisbatterij' ? 'bg-emerald-500' : 'bg-sky-500'}`} />
+                  <span className="text-sm capitalize text-slate-600">{branch}</span>
+                </div>
+                <span className="text-sm font-semibold text-slate-900">{count}</span>
+              </div>
+            ))}
+            {Object.keys(stats.byBranch).length === 0 && <p className="text-sm text-slate-400">Nog geen data</p>}
+          </div>
+
+          <h2 className="mb-3 mt-6 border-t border-slate-100 pt-5 text-sm font-semibold text-slate-900">Leads per klant</h2>
+          <div className="space-y-2">
+            {Object.entries(stats.byCustomer).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([name, count]) => (
+              <div key={name} className="flex items-center justify-between">
+                <span className="truncate text-sm text-slate-600">{name}</span>
+                <span className="text-sm font-medium text-slate-900">{count}</span>
+              </div>
+            ))}
+            {Object.keys(stats.byCustomer).length === 0 && <p className="text-sm text-slate-400">Nog geen data</p>}
+          </div>
         </div>
       </div>
 
-      {/* Recent Activity Preview */}
-      {stats && stats.ordersThisMonth > 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.5 }}
-          className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6"
-        >
-          <h2 className="text-lg sm:text-xl font-bold text-gray-900 mb-3 sm:mb-4">Deze Maand</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
-            <div className="text-center p-3 sm:p-4 bg-blue-50 rounded-lg">
-              <div className="text-2xl sm:text-3xl font-bold text-blue-600">{stats.newCustomersThisMonth}</div>
-              <div className="text-xs sm:text-sm text-gray-600 mt-1">Nieuwe Klanten</div>
-            </div>
-            <div className="text-center p-3 sm:p-4 bg-purple-50 rounded-lg">
-              <div className="text-2xl sm:text-3xl font-bold text-purple-600">{stats.ordersThisMonth}</div>
-              <div className="text-xs sm:text-sm text-gray-600 mt-1">Bestellingen</div>
-            </div>
-            <div className="text-center p-3 sm:p-4 bg-green-50 rounded-lg">
-              <div className="text-2xl sm:text-3xl font-bold text-green-600">{formatCurrency(stats.revenueThisMonth)}</div>
-              <div className="text-xs sm:text-sm text-gray-600 mt-1">Omzet (incl. BTW)</div>
-            </div>
-          </div>
-        </motion.div>
-      )}
+      {/* Recent leads */}
+      <div className="mt-6 rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+          <h2 className="text-sm font-semibold text-slate-900">Laatste leads</h2>
+          <Link href="/admin/leads" className="text-xs font-medium text-brand-purple hover:underline">Alles bekijken</Link>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className="border-b border-slate-50 text-xs text-slate-500">
+                <th className="px-5 py-2.5">Naam</th>
+                <th className="px-3 py-2.5">Branche</th>
+                <th className="px-3 py-2.5">Klant</th>
+                <th className="px-3 py-2.5">Status</th>
+                <th className="px-3 py-2.5">Datum</th>
+              </tr>
+            </thead>
+            <tbody>
+              {stats.recentLeads.map((lead: any) => (
+                <tr key={lead.id} className="border-b border-slate-50 last:border-0">
+                  <td className="px-5 py-2.5 font-medium text-slate-800">{lead.naam_klant}</td>
+                  <td className="px-3 py-2.5">
+                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${lead.branch === 'thuisbatterij' ? 'bg-emerald-100 text-emerald-700' : 'bg-sky-100 text-sky-700'}`}>
+                      {lead.branch === 'thuisbatterij' ? 'Batterij' : 'Airco'}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2.5 text-slate-500">{lead.customers?.name || '—'}</td>
+                  <td className="px-3 py-2.5 capitalize text-slate-500">{lead.status}</td>
+                  <td className="px-3 py-2.5 text-slate-400">{lead.wervingsdatum || '—'}</td>
+                </tr>
+              ))}
+              {stats.recentLeads.length === 0 && (
+                <tr><td colSpan={5} className="px-5 py-8 text-center text-slate-400">Nog geen leads</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 }

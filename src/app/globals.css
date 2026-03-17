@@ -10,7 +10,7 @@
   
   body {
     @apply font-sans antialiased;
-    background: linear-gradient(135deg, #3B2F75 0%, #E74C8C 35%, #FF6B35 70%, #FF4757 100%);
+    background: #ffffff;
     min-height: 100vh;
   }
 }
@@ -101,9 +101,16 @@
     @apply transition-all duration-200;
   }
   
-  /* Gradient Text */
+  /* Gradient Text — matches the logo wordmark gradient */
   .gradient-text {
-    background: linear-gradient(135deg, #E74C8C, #FF6B35);
+    background: linear-gradient(135deg, #FF6B35, #FF4757, #E74C8C);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .gradient-text-logo {
+    background: linear-gradient(135deg, #1A1A2E, #3B2F75, #9B1B50, #C2183C);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;

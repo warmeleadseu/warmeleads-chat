@@ -1,210 +1,401 @@
-import React from 'react';
 import Link from 'next/link';
+import {
+  ArrowRightIcon,
+  ShieldCheckIcon,
+  BoltIcon,
+  ChartBarIcon,
+  AdjustmentsHorizontalIcon,
+  MagnifyingGlassIcon,
+  BuildingOffice2Icon,
+  HomeModernIcon,
+  LightBulbIcon,
+  MapPinIcon,
+  ClipboardDocumentListIcon,
+  RocketLaunchIcon,
+  CheckIcon,
+  SparklesIcon,
+} from '@heroicons/react/24/outline';
+import { Header } from '@/components/Header';
+import { Footer } from '@/components/Footer';
 
 export const metadata = {
   title: 'Maatwerk Leadgeneratie | Custom Lead Campaigns | Warmeleads.eu',
-  description: 'Op maat gemaakte leadgeneratie campagnes voor uw specifieke branche. Van niche markten tot grootschalige B2B campagnes. Exclusieve leads op basis van uw wensen.',
+  description:
+    'Op maat gemaakte leadgeneratie campagnes voor uw specifieke branche. Van niche markten tot grootschalige B2B campagnes. Exclusieve leads op basis van uw wensen.',
 };
 
 export default function MaatwerkLeadsPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-brand-navy via-brand-purple to-brand-pink text-white">
-      {/* Hero Section */}
-      <div className="container mx-auto px-4 py-16">
-        <div className="max-w-6xl mx-auto">
-          {/* Back Button */}
-          <Link href="/" className="inline-flex items-center text-white/80 hover:text-white mb-8 transition-colors">
-            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-            Terug naar home
-          </Link>
+    <>
+      <Header />
+      <main className="min-h-screen bg-white text-slate-900">
 
-          {/* Header */}
-          <div className="text-center mb-16">
-            <h1 className="text-5xl md:text-6xl font-bold mb-6">
-              🎯 Maatwerk Leadgeneratie
+      {/* ── Hero ── */}
+      <section className="relative overflow-hidden bg-brand-navy">
+        <div className="pointer-events-none absolute inset-0">
+          <div className="absolute -left-20 bottom-0 h-[400px] w-[400px] rounded-full bg-brand-purple/20 blur-[120px]" />
+          <div className="absolute right-1/4 top-0 h-[300px] w-[300px] rounded-full bg-brand-pink/10 blur-[100px]" />
+        </div>
+
+        <div className="relative z-10 mx-auto max-w-7xl px-5 pb-14 pt-14 md:pb-24 md:pt-24 lg:px-8">
+          <div className="max-w-3xl">
+            <p className="mb-4 inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-white/80 backdrop-blur md:mb-5 md:text-[12px]">
+              <SparklesIcon className="h-3.5 w-3.5 text-brand-orange" />
+              Custom leadgeneratie
+            </p>
+
+            <h1 className="text-[2rem] font-extrabold leading-[1.1] tracking-tight text-white sm:text-[2.5rem] md:text-[3.75rem]">
+              Maatwerk leadgeneratie{' '}
+              <span className="gradient-text">voor uw branche.</span>
             </h1>
-            <p className="text-xl md:text-2xl text-white/90 mb-4">
-              Op maat gemaakte campagnes voor uw specifieke branche
+
+            <p className="mt-4 max-w-xl text-[15px] leading-relaxed text-white/70 md:mt-6 md:text-lg">
+              Werkt u in een niche markt? Heeft u specifieke targeting wensen? Wij
+              ontwikkelen custom leadgeneratie campagnes volledig afgestemd op uw
+              bedrijf, doelgroep en regio.
             </p>
-            <p className="text-lg text-white/70 max-w-3xl mx-auto">
-              Werkt u in een niche markt? Heeft u specifieke targeting wensen? Wij ontwikkelen custom leadgeneratie campagnes volledig afgestemd op uw bedrijf.
-            </p>
-          </div>
 
-          {/* Benefits Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16">
-            <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-8 border border-white/20">
-              <div className="text-4xl mb-4">🎨</div>
-              <h3 className="text-2xl font-bold mb-4">100% Op Maat</h3>
-              <p className="text-white/80">
-                Elke campagne wordt speciaal voor u ontwikkeld. Van messaging tot targeting, alles afgestemd op uw doelgroep en markt.
-              </p>
-            </div>
-
-            <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-8 border border-white/20">
-              <div className="text-4xl mb-4">🔍</div>
-              <h3 className="text-2xl font-bold mb-4">Niche Expertise</h3>
-              <p className="text-white/80">
-                Ook voor specialistische branches en nichemarkten ontwikkelen wij effectieve leadgeneratie strategieën die resultaat opleveren.
-              </p>
-            </div>
-
-            <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-8 border border-white/20">
-              <div className="text-4xl mb-4">📊</div>
-              <h3 className="text-2xl font-bold mb-4">Data-Driven</h3>
-              <p className="text-white/80">
-                Continue optimalisatie op basis van real-time data en performance metrics. Uw ROI staat centraal.
-              </p>
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row md:mt-8">
+              <Link
+                href="/meer-klanten-nodig"
+                className="group inline-flex items-center justify-center gap-2 rounded-lg bg-button-gradient px-6 py-3.5 text-sm font-bold text-white shadow-lg shadow-brand-orange/30 transition hover:shadow-brand-orange/40 hover:brightness-110"
+              >
+                Bespreek uw maatwerk campagne
+                <ArrowRightIcon className="h-4 w-4 transition group-hover:translate-x-0.5" />
+              </Link>
             </div>
           </div>
 
-          {/* Use Cases */}
-          <div className="bg-white/5 backdrop-blur-sm rounded-3xl p-8 border border-white/20 mb-12">
-            <h2 className="text-3xl font-bold mb-8">Perfect Voor</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="flex items-start space-x-4">
-                <div className="text-3xl">🏗️</div>
+          {/* Hero metrics */}
+          <div className="mt-10 grid grid-cols-1 gap-3 sm:grid-cols-3 md:mt-14 md:gap-4 lg:max-w-3xl">
+            {[
+              { value: '100%', label: 'Op maat ontwikkeld', icon: AdjustmentsHorizontalIcon },
+              { value: '8+', label: 'Actieve niches', icon: MagnifyingGlassIcon },
+              { value: 'NL & BE', label: 'Volledige dekking', icon: MapPinIcon },
+            ].map((item) => (
+              <div
+                key={item.label}
+                className="flex items-center gap-3 rounded-xl bg-white/[0.07] px-4 py-3 backdrop-blur md:gap-4 md:px-5 md:py-4"
+              >
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 md:h-10 md:w-10">
+                  <item.icon className="h-4 w-4 text-brand-orange md:h-5 md:w-5" />
+                </div>
                 <div>
-                  <h4 className="font-bold mb-2">Specialistische B2B</h4>
-                  <p className="text-white/70">Industriële installaties, technische dienstverlening, zakelijke oplossingen</p>
+                  <p className="text-lg font-bold text-white md:text-xl">{item.value}</p>
+                  <p className="text-[11px] text-white/60 md:text-[12px]">{item.label}</p>
                 </div>
               </div>
-              <div className="flex items-start space-x-4">
-                <div className="text-3xl">🏡</div>
-                <div>
-                  <h4 className="font-bold mb-2">Premium B2C</h4>
-                  <p className="text-white/70">Luxe renovaties, exclusieve producten, high-end diensten</p>
-                </div>
-              </div>
-              <div className="flex items-start space-x-4">
-                <div className="text-3xl">🌱</div>
-                <div>
-                  <h4 className="font-bold mb-2">Nieuwe Markten</h4>
-                  <p className="text-white/70">Innovatieve producten, emerging technologies, nieuwe branches</p>
-                </div>
-              </div>
-              <div className="flex items-start space-x-4">
-                <div className="text-3xl">📍</div>
-                <div>
-                  <h4 className="font-bold mb-2">Regionale Focus</h4>
-                  <p className="text-white/70">Hyper-local targeting, specifieke regio's of gemeentes</p>
-                </div>
-              </div>
-            </div>
+            ))}
           </div>
+        </div>
+      </section>
 
-          {/* What We Deliver */}
-          <div className="bg-white/5 backdrop-blur-sm rounded-3xl p-8 border border-white/20 mb-12">
-            <h2 className="text-3xl font-bold mb-8">Wat wij leveren</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div>
-                <h4 className="font-bold text-xl mb-4">📋 Strategie & Planning</h4>
-                <ul className="text-left space-y-2 mb-8">
-                  <li className="flex items-center"><span className="text-green-400 mr-2">✓</span> Marktanalyse voor uw sector</li>
-                  <li className="flex items-center"><span className="text-green-400 mr-2">✓</span> Campagne strategie ontwikkeling</li>
-                  <li className="flex items-center"><span className="text-green-400 mr-2">✓</span> Targeting optimalisatie</li>
-                  <li className="flex items-center"><span className="text-green-400 mr-2">✓</span> ROI maximalisatie</li>
-                </ul>
-              </div>
-              <div>
-                <h4 className="font-bold text-xl mb-4">🚀 Uitvoering & Support</h4>
-                <ul className="text-left space-y-2 mb-8">
-                  <li className="flex items-center"><span className="text-green-400 mr-2">✓</span> Custom creatives & landing pages</li>
-                  <li className="flex items-center"><span className="text-green-400 mr-2">✓</span> Multi-channel campagnes</li>
-                  <li className="flex items-center"><span className="text-green-400 mr-2">✓</span> Dedicated account manager</li>
-                  <li className="flex items-center"><span className="text-green-400 mr-2">✓</span> Maandelijkse rapportages</li>
-                </ul>
-              </div>
-            </div>
-          </div>
-
-          {/* Process Section */}
-          <div className="bg-white/5 backdrop-blur-sm rounded-3xl p-8 border border-white/20 mb-12">
-            <h2 className="text-3xl font-bold mb-8">Ons maatwerk proces</h2>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-              <div className="text-center">
-                <div className="text-4xl mb-4">📋</div>
-                <h4 className="font-bold mb-2">1. Intake</h4>
-                <p className="text-white/70">Analyse van uw doelgroep en markt</p>
-              </div>
-              <div className="text-center">
-                <div className="text-4xl mb-4">🎨</div>
-                <h4 className="font-bold mb-2">2. Campagne Design</h4>
-                <p className="text-white/70">Custom creatives en messaging</p>
-              </div>
-              <div className="text-center">
-                <div className="text-4xl mb-4">🚀</div>
-                <h4 className="font-bold mb-2">3. Launch</h4>
-                <p className="text-white/70">Campagne activatie en monitoring</p>
-              </div>
-              <div className="text-center">
-                <div className="text-4xl mb-4">📊</div>
-                <h4 className="font-bold mb-2">4. Optimalisatie</h4>
-                <p className="text-white/70">Continue verbetering en scaling</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Final CTA */}
-          <div className="text-center">
-            <h2 className="text-3xl font-bold mb-4">Laten we uw campagne bespreken</h2>
-            <p className="text-xl text-white/80 mb-8">
-              Vertel ons over uw branche en wij maken de perfecte leadgeneratie strategie
+      {/* ── Benefits ── */}
+      <section className="bg-gradient-to-b from-white to-orange-50/40">
+        <div className="mx-auto max-w-7xl px-5 py-14 md:py-20 lg:px-8">
+          <div className="mb-8 max-w-2xl md:mb-12">
+            <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-brand-purple md:mb-3 md:text-[12px]">
+              Waarom maatwerk
             </p>
-            <a 
-              href="/"
-              className="inline-block bg-white text-brand-purple px-12 py-6 rounded-2xl font-bold text-xl hover:scale-110 transition-all duration-300 shadow-2xl"
-            >
-              🎯 Bespreek Maatwerk Leads
-            </a>
+            <h2 className="text-2xl font-bold tracking-tight md:text-4xl">
+              Geen standaard aanpak.{' '}
+              <span className="text-slate-500">Wél bewezen resultaat.</span>
+            </h2>
+            <p className="mt-3 text-[14px] leading-relaxed text-slate-500 md:mt-4 md:text-[16px]">
+              Elke branche is anders. Daarom bouwen we elke campagne vanaf de grond
+              op, afgestemd op uw doelgroep, propositie en markt.
+            </p>
           </div>
 
-          {/* Footer Links */}
-          <div className="mt-16 text-center border-t border-white/20 pt-8">
-            <p className="text-white/60 text-sm mb-4">
-              🔒 Uw gegevens zijn veilig • 💰 Geen verborgen kosten • ⚡ Direct resultaat
+          <div className="grid gap-4 md:grid-cols-3 md:gap-5">
+            {[
+              {
+                title: '100% Op Maat',
+                description:
+                  'Elke campagne wordt speciaal voor u ontwikkeld. Van messaging tot targeting, alles afgestemd op uw doelgroep en markt.',
+                icon: AdjustmentsHorizontalIcon,
+                accent: 'bg-brand-purple',
+              },
+              {
+                title: 'Niche Expertise',
+                description:
+                  'Ook voor specialistische branches en nichemarkten ontwikkelen wij effectieve leadgeneratie strategieën die resultaat opleveren.',
+                icon: MagnifyingGlassIcon,
+                accent: 'bg-brand-pink',
+              },
+              {
+                title: 'Data-Driven',
+                description:
+                  'Continue optimalisatie op basis van real-time data en performance metrics. Uw ROI staat centraal.',
+                icon: ChartBarIcon,
+                accent: 'bg-brand-orange',
+              },
+            ].map((item) => (
+              <article
+                key={item.title}
+                className="group relative overflow-hidden rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-lg md:p-7"
+              >
+                <div
+                  className={`mb-4 inline-flex h-10 w-10 items-center justify-center rounded-lg md:mb-5 md:h-11 md:w-11 ${item.accent}`}
+                >
+                  <item.icon className="h-5 w-5 text-white" />
+                </div>
+                <h3 className="text-[16px] font-bold text-slate-900 md:text-lg">
+                  {item.title}
+                </h3>
+                <p className="mt-1.5 text-[13px] leading-relaxed text-slate-600 md:mt-2 md:text-sm">
+                  {item.description}
+                </p>
+                <div
+                  className={`absolute bottom-0 left-0 h-[3px] w-full ${item.accent} opacity-0 transition-opacity group-hover:opacity-100`}
+                />
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── Use Cases ── */}
+      <section className="border-y border-slate-100 bg-slate-50">
+        <div className="mx-auto max-w-7xl px-5 py-14 md:py-20 lg:px-8">
+          <div className="mb-8 text-center md:mb-12">
+            <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-brand-pink md:mb-3 md:text-[12px]">
+              Toepassingen
             </p>
-            <div className="space-x-4">
-              <a 
-                href="/leadgeneratie-gids" 
-                className="text-white/50 hover:text-white/80 text-xs underline transition-colors"
+            <h2 className="text-2xl font-bold tracking-tight md:text-4xl">
+              Perfect voor deze markten
+            </h2>
+            <p className="mx-auto mt-3 max-w-lg text-[14px] leading-relaxed text-slate-500 md:mt-4 md:text-[16px]">
+              Van industriële B2B tot premium consumentenmarkten — onze maatwerk
+              aanpak levert in elke niche.
+            </p>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2 md:gap-5">
+            {[
+              {
+                title: 'Specialistische B2B',
+                description:
+                  'Industriële installaties, technische dienstverlening, zakelijke oplossingen',
+                icon: BuildingOffice2Icon,
+                accent: 'bg-brand-navy',
+              },
+              {
+                title: 'Premium B2C',
+                description:
+                  'Luxe renovaties, exclusieve producten, high-end diensten',
+                icon: HomeModernIcon,
+                accent: 'bg-brand-purple',
+              },
+              {
+                title: 'Nieuwe Markten',
+                description:
+                  'Innovatieve producten, emerging technologies, nieuwe branches',
+                icon: LightBulbIcon,
+                accent: 'bg-brand-pink',
+              },
+              {
+                title: 'Regionale Focus',
+                description:
+                  'Hyper-local targeting, specifieke regio\'s of gemeentes',
+                icon: MapPinIcon,
+                accent: 'bg-brand-orange',
+              },
+            ].map((item) => (
+              <article
+                key={item.title}
+                className="flex items-start gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm md:p-6"
               >
-                📖 Leadgeneratie gids
-              </a>
-              <span className="text-white/30">•</span>
-              <a 
-                href="/blog" 
-                className="text-white/50 hover:text-white/80 text-xs underline transition-colors"
-              >
-                📝 Blog & Tips
-              </a>
-              <span className="text-white/30">•</span>
-              <a 
-                href="/algemene-voorwaarden" 
-                className="text-white/50 hover:text-white/80 text-xs underline transition-colors"
-              >
-                📋 Algemene voorwaarden
-              </a>
-              <span className="text-white/30">•</span>
-              <a 
-                href="/privacyverklaring" 
-                className="text-white/50 hover:text-white/80 text-xs underline transition-colors"
-              >
-                🔒 Privacyverklaring
-              </a>
+                <div
+                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${item.accent}`}
+                >
+                  <item.icon className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-[15px] font-bold text-slate-900 md:text-[16px]">
+                    {item.title}
+                  </h3>
+                  <p className="mt-1 text-[13px] leading-relaxed text-slate-600 md:text-sm">
+                    {item.description}
+                  </p>
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── What We Deliver ── */}
+      <section className="bg-white">
+        <div className="mx-auto max-w-7xl px-5 py-14 md:py-20 lg:px-8">
+          <div className="mb-8 max-w-2xl md:mb-12">
+            <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-brand-purple md:mb-3 md:text-[12px]">
+              Wat u krijgt
+            </p>
+            <h2 className="text-2xl font-bold tracking-tight md:text-4xl">
+              Compleet pakket.{' '}
+              <span className="text-slate-500">Van strategie tot resultaat.</span>
+            </h2>
+          </div>
+
+          <div className="grid gap-5 md:grid-cols-2 md:gap-8">
+            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm md:p-7">
+              <div className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-lg bg-brand-purple md:mb-5 md:h-11 md:w-11">
+                <ClipboardDocumentListIcon className="h-5 w-5 text-white" />
+              </div>
+              <h3 className="text-[16px] font-bold text-slate-900 md:text-lg">
+                Strategie &amp; Planning
+              </h3>
+              <ul className="mt-4 space-y-2.5">
+                {[
+                  'Marktanalyse voor uw sector',
+                  'Campagne strategie ontwikkeling',
+                  'Targeting optimalisatie',
+                  'ROI maximalisatie',
+                ].map((item) => (
+                  <li key={item} className="flex items-center gap-2.5 text-[13px] text-slate-700 md:text-sm">
+                    <CheckIcon className="h-4 w-4 shrink-0 text-brand-orange" />
+                    {item}
+                  </li>
+                ))}
+              </ul>
             </div>
-            
-            {/* Bedrijfsgegevens */}
-            <div className="mt-6 pt-6 border-t border-white/20">
-              <p className="text-white/50 text-xs">
-                Warmeleads.eu • KvK: 88929280 • Stavangerweg 21-1, 9723 JC Groningen
-              </p>
+
+            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm md:p-7">
+              <div className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-lg bg-brand-pink md:mb-5 md:h-11 md:w-11">
+                <RocketLaunchIcon className="h-5 w-5 text-white" />
+              </div>
+              <h3 className="text-[16px] font-bold text-slate-900 md:text-lg">
+                Uitvoering &amp; Support
+              </h3>
+              <ul className="mt-4 space-y-2.5">
+                {[
+                  'Custom creatives & landing pages',
+                  'Multi-channel campagnes',
+                  'Dedicated account manager',
+                  'Maandelijkse rapportages',
+                ].map((item) => (
+                  <li key={item} className="flex items-center gap-2.5 text-[13px] text-slate-700 md:text-sm">
+                    <CheckIcon className="h-4 w-4 shrink-0 text-brand-orange" />
+                    {item}
+                  </li>
+                ))}
+              </ul>
             </div>
           </div>
         </div>
-      </div>
-    </div>
+      </section>
+
+      {/* ── Process ── */}
+      <section className="bg-slate-950 text-white">
+        <div className="mx-auto max-w-7xl px-5 py-14 md:py-20 lg:px-8">
+          <div className="mb-8 max-w-2xl md:mb-12">
+            <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-brand-orange md:mb-3 md:text-[12px]">
+              Ons proces
+            </p>
+            <h2 className="text-2xl font-bold tracking-tight md:text-4xl">
+              Van intake naar resultaat in vier stappen.
+            </h2>
+            <p className="mt-3 text-[14px] leading-relaxed text-white/50 md:mt-4 md:text-[16px]">
+              Gestructureerd, transparant en altijd gericht op meetbaar rendement.
+            </p>
+          </div>
+
+          <div className="relative grid gap-4 md:grid-cols-4 md:gap-0">
+            <div className="pointer-events-none absolute left-0 right-0 top-1/2 z-0 hidden -translate-y-1/2 md:block">
+              <div className="mx-auto h-px w-[calc(100%-120px)] bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+            </div>
+
+            {[
+              {
+                step: '01',
+                title: 'Intake',
+                description: 'Analyse van uw doelgroep, markt en gewenst volume. U krijgt een helder plan.',
+                icon: ClipboardDocumentListIcon,
+              },
+              {
+                step: '02',
+                title: 'Campagne Design',
+                description: 'Custom creatives, messaging en targeting op basis van uw propositie.',
+                icon: AdjustmentsHorizontalIcon,
+              },
+              {
+                step: '03',
+                title: 'Launch',
+                description: 'Campagne activatie en directe levering van leads. Klaar in 24-72 uur.',
+                icon: RocketLaunchIcon,
+              },
+              {
+                step: '04',
+                title: 'Optimalisatie',
+                description: 'Continue verbetering op data, kwaliteit en conversie. U stuurt mee.',
+                icon: ChartBarIcon,
+              },
+            ].map((item) => (
+              <article
+                key={item.step}
+                className="group relative z-10 overflow-hidden rounded-xl border border-white/10 bg-white/[0.04] p-5 transition hover:bg-white/[0.08] md:mx-2 md:p-7"
+              >
+                <p className="absolute -right-2 -top-4 select-none text-[60px] font-black leading-none text-white/[0.04] md:text-[80px]">
+                  {item.step}
+                </p>
+                <div className="relative z-10">
+                  <div className="mb-4 flex items-center gap-3 md:mb-5">
+                    <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-brand-orange text-[13px] font-bold text-slate-950">
+                      {item.step}
+                    </span>
+                    <div className="h-px flex-1 bg-white/10" />
+                  </div>
+                  <h3 className="text-[16px] font-bold md:text-lg">{item.title}</h3>
+                  <p className="mt-1.5 text-[13px] leading-relaxed text-white/60 md:mt-2 md:text-sm">
+                    {item.description}
+                  </p>
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── Final CTA ── */}
+      <section className="relative overflow-hidden bg-brand-navy">
+        <div className="pointer-events-none absolute inset-0">
+          <div className="absolute -right-32 top-0 h-[300px] w-[300px] rounded-full bg-brand-purple/30 blur-[100px] md:h-[400px] md:w-[400px]" />
+          <div className="absolute -left-20 bottom-0 h-[200px] w-[200px] rounded-full bg-brand-orange/20 blur-[80px] md:h-[300px] md:w-[300px]" />
+        </div>
+        <div className="relative z-10 mx-auto max-w-7xl px-5 py-14 text-white md:py-20 lg:px-8">
+          <div className="max-w-2xl">
+            <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-brand-orange md:mb-3 md:text-[12px]">
+              Aan de slag
+            </p>
+            <h2 className="text-2xl font-bold tracking-tight md:text-4xl lg:text-5xl">
+              Laten we uw campagne bespreken
+            </h2>
+            <p className="mt-3 text-[15px] leading-relaxed text-white/70 md:mt-4 md:text-lg">
+              Vertel ons over uw branche en wij maken de perfecte leadgeneratie
+              strategie — volledig op maat, zonder verplichtingen.
+            </p>
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row md:mt-8">
+              <Link
+                href="/meer-klanten-nodig"
+                className="group inline-flex items-center justify-center gap-2 rounded-lg bg-button-gradient px-6 py-3.5 text-sm font-bold text-white shadow-lg shadow-brand-orange/30 transition hover:shadow-brand-orange/40 hover:brightness-110"
+              >
+                Bespreek maatwerk leads
+                <ArrowRightIcon className="h-4 w-4 transition group-hover:translate-x-0.5" />
+              </Link>
+              <Link
+                href="/"
+                className="inline-flex items-center justify-center rounded-lg border border-white/25 bg-white/10 px-6 py-3.5 text-sm font-semibold text-white backdrop-blur transition hover:bg-white/20"
+              >
+                Terug naar overzicht
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      </main>
+      <Footer />
+    </>
   );
 }

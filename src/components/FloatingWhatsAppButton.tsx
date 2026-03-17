@@ -9,11 +9,6 @@ export function FloatingWhatsAppButton() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const pathname = usePathname();
   
-  // Hide WhatsApp button on admin pages
-  if (pathname?.startsWith('/admin')) {
-    return null;
-  }
-
   // Listen for modal open/close events
   useEffect(() => {
     const handleModalOpen = () => setIsModalOpen(true);
@@ -40,7 +35,7 @@ export function FloatingWhatsAppButton() {
   return (
     <AnimatePresence>
       <motion.div
-        className="fixed bottom-6 right-6 z-50"
+        className="fixed right-5 z-50 bottom-[4.5rem] sm:bottom-6"
         initial={{ scale: 0, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0, opacity: 0 }}

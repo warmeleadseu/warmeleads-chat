@@ -1,6 +1,8 @@
 'use client';
 
 import React from 'react';
+import { Header } from '@/components/Header';
+import { Footer } from '@/components/Footer';
 import {
   SparklesIcon,
   UserGroupIcon,
@@ -9,12 +11,8 @@ import {
   ChartBarIcon,
   ShieldCheckIcon,
   RocketLaunchIcon,
-  LockClosedIcon,
-  CurrencyEuroIcon,
-  BookOpenIcon,
-  DocumentTextIcon,
-  NewspaperIcon,
   CheckCircleIcon,
+  ArrowRightIcon,
 } from '@heroicons/react/24/outline';
 
 interface BranchLeadsPageProps {
@@ -30,7 +28,10 @@ interface BranchLeadsPageProps {
 
 export function BranchLeadsPageContent({ metadata }: BranchLeadsPageProps) {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-brand-navy via-brand-purple to-brand-pink">
+    <>
+      <Header />
+      <div className="min-h-screen bg-white text-slate-900">
+
       {/* SEO Hidden Content */}
       <div className="sr-only">
         <h1>{metadata.title}</h1>
@@ -38,200 +39,161 @@ export function BranchLeadsPageContent({ metadata }: BranchLeadsPageProps) {
       </div>
 
       {/* Hero Section */}
-      <div className="relative min-h-screen flex items-center justify-center overflow-hidden">
-        {/* Background Effects */}
-        <div className="fixed inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute -top-40 -right-40 w-80 h-80 bg-white/10 rounded-full blur-3xl animate-pulse" />
-          <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-white/10 rounded-full blur-3xl animate-pulse" />
+      <section className="relative overflow-hidden bg-brand-navy py-20 md:py-28">
+        <div className="pointer-events-none absolute inset-0">
+          <div className="absolute -left-20 bottom-0 h-[400px] w-[400px] rounded-full bg-brand-purple/20 blur-[120px]" />
+          <div className="absolute -right-20 top-0 h-[300px] w-[300px] rounded-full bg-brand-pink/15 blur-[100px]" />
         </div>
 
-        <div className="relative z-10 max-w-6xl mx-auto px-4 text-center text-white">
-          {/* Hero Content */}
-          <div className="mb-12">
-            <h1 className="text-5xl md:text-7xl font-bold mb-6 bg-gradient-to-r from-white to-white/80 bg-clip-text text-transparent">
-              {metadata.heroTitle}
-            </h1>
-            <p className="text-2xl md:text-3xl mb-8 text-white/90">
-              {metadata.heroSubtitle}
-            </p>
-            <p className="text-lg text-white/80 max-w-3xl mx-auto">
-              {metadata.heroDescription}
-            </p>
-          </div>
+        <div className="relative z-10 mx-auto max-w-6xl px-5 text-center text-white lg:px-8">
+          <h1 className="mb-4 text-4xl font-bold leading-tight md:text-5xl lg:text-6xl">
+            {metadata.heroTitle}
+          </h1>
+          <p className="mb-4 text-xl text-white/90 md:text-2xl">
+            {metadata.heroSubtitle}
+          </p>
+          <p className="mx-auto max-w-3xl text-base text-white/70 md:text-lg">
+            {metadata.heroDescription}
+          </p>
+        </div>
+      </section>
 
-          {/* Pricing Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
+      {/* Pricing Cards */}
+      <section className="bg-white py-16 md:py-20">
+        <div className="mx-auto max-w-5xl px-5 lg:px-8">
+          <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
             {/* Exclusieve Leads Card */}
-            <div className="bg-white/10 backdrop-blur-sm rounded-3xl p-8 border border-white/20 hover:bg-white/15 transition-all duration-300 hover:scale-105">
+            <div className="rounded-xl border border-slate-200 bg-white p-8 shadow-sm transition hover:shadow-md">
               <div className="text-center">
-                <div className="w-16 h-16 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <SparklesIcon className="w-8 h-8 text-white" />
+                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-brand-orange/10">
+                  <SparklesIcon className="h-7 w-7 text-brand-orange" />
                 </div>
-                <h3 className="text-2xl font-bold mb-4">Exclusieve leads</h3>
-                <div className="text-4xl font-bold mb-2">{metadata.exclusivePrice}</div>
-                <div className="text-white/70 mb-6">per lead</div>
-                <ul className="text-left space-y-2 mb-8">
-                  <li className="flex items-center">
-                    <CheckCircleIcon className="w-5 h-5 text-green-400 mr-2 flex-shrink-0" />
-                    <span>100% exclusief voor uw bedrijf</span>
+                <h3 className="mb-4 text-2xl font-bold text-slate-900">Exclusieve leads</h3>
+                <div className="mb-1 text-4xl font-bold text-brand-purple">{metadata.exclusivePrice}</div>
+                <div className="mb-6 text-sm text-slate-500">per lead</div>
+                <ul className="mb-8 space-y-3 text-left">
+                  <li className="flex items-center gap-2">
+                    <CheckCircleIcon className="h-5 w-5 shrink-0 text-brand-orange" />
+                    <span className="text-slate-700">100% exclusief voor uw bedrijf</span>
                   </li>
-                  <li className="flex items-center">
-                    <CheckCircleIcon className="w-5 h-5 text-green-400 mr-2 flex-shrink-0" />
-                    <span>Geen concurrentie</span>
+                  <li className="flex items-center gap-2">
+                    <CheckCircleIcon className="h-5 w-5 shrink-0 text-brand-orange" />
+                    <span className="text-slate-700">Geen concurrentie</span>
                   </li>
-                  <li className="flex items-center">
-                    <CheckCircleIcon className="w-5 h-5 text-green-400 mr-2 flex-shrink-0" />
-                    <span>Maximale conversiekans</span>
+                  <li className="flex items-center gap-2">
+                    <CheckCircleIcon className="h-5 w-5 shrink-0 text-brand-orange" />
+                    <span className="text-slate-700">Maximale conversiekans</span>
                   </li>
-                  <li className="flex items-center">
-                    <CheckCircleIcon className="w-5 h-5 text-green-400 mr-2 flex-shrink-0" />
-                    <span>Realtime uit campagnes</span>
+                  <li className="flex items-center gap-2">
+                    <CheckCircleIcon className="h-5 w-5 shrink-0 text-brand-orange" />
+                    <span className="text-slate-700">Realtime uit campagnes</span>
                   </li>
                 </ul>
-                <a href="/" className="inline-block w-full bg-gradient-to-r from-yellow-400 to-orange-500 text-black font-semibold py-4 rounded-xl hover:scale-105 transition-transform">
-                  Start met exclusieve leads →
+                <a
+                  href="/"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-button-gradient py-3.5 text-sm font-bold text-white shadow-lg shadow-brand-orange/20 transition hover:shadow-brand-orange/30 hover:brightness-110"
+                >
+                  Start met exclusieve leads
+                  <ArrowRightIcon className="h-4 w-4" />
                 </a>
               </div>
             </div>
 
             {/* Gedeelde Leads Card */}
-            <div className="bg-white/10 backdrop-blur-sm rounded-3xl p-8 border border-white/20 hover:bg-white/15 transition-all duration-300 hover:scale-105">
+            <div className="rounded-xl border border-slate-200 bg-white p-8 shadow-sm transition hover:shadow-md">
               <div className="text-center">
-                <div className="w-16 h-16 bg-gradient-to-r from-blue-400 to-purple-500 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <UserGroupIcon className="w-8 h-8 text-white" />
+                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-brand-purple/10">
+                  <UserGroupIcon className="h-7 w-7 text-brand-purple" />
                 </div>
-                <h3 className="text-2xl font-bold mb-4">Gedeelde leads</h3>
-                <div className="text-4xl font-bold mb-2">{metadata.sharedPrice}</div>
-                <div className="text-white/70 mb-6">per lead (min. 100)</div>
-                <ul className="text-left space-y-2 mb-8">
-                  <li className="flex items-center">
-                    <CheckCircleIcon className="w-5 h-5 text-green-400 mr-2 flex-shrink-0" />
-                    <span>Gedeeld met max 2 anderen</span>
+                <h3 className="mb-4 text-2xl font-bold text-slate-900">Gedeelde leads</h3>
+                <div className="mb-1 text-4xl font-bold text-brand-purple">{metadata.sharedPrice}</div>
+                <div className="mb-6 text-sm text-slate-500">per lead (min. 100)</div>
+                <ul className="mb-8 space-y-3 text-left">
+                  <li className="flex items-center gap-2">
+                    <CheckCircleIcon className="h-5 w-5 shrink-0 text-brand-orange" />
+                    <span className="text-slate-700">Gedeeld met max 2 anderen</span>
                   </li>
-                  <li className="flex items-center">
-                    <CheckCircleIcon className="w-5 h-5 text-green-400 mr-2 flex-shrink-0" />
-                    <span>Zeer kosteneffectief</span>
+                  <li className="flex items-center gap-2">
+                    <CheckCircleIcon className="h-5 w-5 shrink-0 text-brand-orange" />
+                    <span className="text-slate-700">Zeer kosteneffectief</span>
                   </li>
-                  <li className="flex items-center">
-                    <CheckCircleIcon className="w-5 h-5 text-green-400 mr-2 flex-shrink-0" />
-                    <span>Perfect om te starten</span>
+                  <li className="flex items-center gap-2">
+                    <CheckCircleIcon className="h-5 w-5 shrink-0 text-brand-orange" />
+                    <span className="text-slate-700">Perfect om te starten</span>
                   </li>
-                  <li className="flex items-center">
-                    <CheckCircleIcon className="w-5 h-5 text-green-400 mr-2 flex-shrink-0" />
-                    <span>Hoge kwaliteit prospects</span>
+                  <li className="flex items-center gap-2">
+                    <CheckCircleIcon className="h-5 w-5 shrink-0 text-brand-orange" />
+                    <span className="text-slate-700">Hoge kwaliteit prospects</span>
                   </li>
                 </ul>
-                <a href="/" className="inline-block w-full bg-gradient-to-r from-blue-400 to-purple-500 text-white font-semibold py-4 rounded-xl hover:scale-105 transition-transform">
-                  Start met gedeelde leads →
+                <a
+                  href="/"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-button-gradient py-3.5 text-sm font-bold text-white shadow-lg shadow-brand-orange/20 transition hover:shadow-brand-orange/30 hover:brightness-110"
+                >
+                  Start met gedeelde leads
+                  <ArrowRightIcon className="h-4 w-4" />
                 </a>
               </div>
             </div>
           </div>
+        </div>
+      </section>
 
-          {/* Features Section */}
-          <div className="bg-white/5 backdrop-blur-sm rounded-3xl p-8 border border-white/20 mb-12">
-            <h2 className="text-3xl font-bold mb-8">Waarom WarmeLeads?</h2>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-              <div className="text-center">
-                <BoltIcon className="w-12 h-12 mx-auto mb-4 text-yellow-400" />
-                <h4 className="font-bold mb-2">Verse leads</h4>
-                <p className="text-white/70 text-sm">Direct uit campagnes</p>
-              </div>
-              <div className="text-center">
-                <GlobeEuropeAfricaIcon className="w-12 h-12 mx-auto mb-4 text-blue-400" />
-                <h4 className="font-bold mb-2">Nederlandse markt</h4>
-                <p className="text-white/70 text-sm">100% Nederlandse prospects</p>
-              </div>
-              <div className="text-center">
-                <ChartBarIcon className="w-12 h-12 mx-auto mb-4 text-green-400" />
-                <h4 className="font-bold mb-2">Realtime dashboard</h4>
-                <p className="text-white/70 text-sm">Live updates</p>
-              </div>
-              <div className="text-center">
-                <ShieldCheckIcon className="w-12 h-12 mx-auto mb-4 text-purple-400" />
-                <h4 className="font-bold mb-2">Kwaliteitsgarantie</h4>
-                <p className="text-white/70 text-sm">30 dagen geld terug</p>
-              </div>
+      {/* Features Section */}
+      <section className="bg-slate-50 py-16 md:py-20">
+        <div className="mx-auto max-w-6xl px-5 lg:px-8">
+          <h2 className="mb-3 text-center text-3xl font-bold text-slate-900">Waarom WarmeLeads?</h2>
+          <p className="mx-auto mb-12 max-w-2xl text-center text-slate-500">
+            Wij leveren verse, kwalitatieve leads uit eigen campagnes
+          </p>
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-xl border border-slate-200 bg-white p-6 text-center shadow-sm">
+              <BoltIcon className="mx-auto mb-4 h-10 w-10 text-brand-orange" />
+              <h4 className="mb-2 font-bold text-slate-900">Verse leads</h4>
+              <p className="text-sm text-slate-500">Direct uit campagnes</p>
             </div>
-          </div>
-
-          {/* CTA Section */}
-          <div className="text-center">
-            <h2 className="text-3xl font-bold mb-4">Klaar om te starten?</h2>
-            <p className="text-xl text-white/80 mb-8">
-              Ontvang vandaag nog uw eerste verse prospects
-            </p>
-            <a 
-              href="/"
-              className="inline-flex items-center gap-2 bg-white text-brand-purple px-12 py-6 rounded-2xl font-bold text-xl hover:scale-110 transition-all duration-300 shadow-2xl"
-            >
-              <RocketLaunchIcon className="w-6 h-6" />
-              Start direct met leads
-            </a>
-          </div>
-
-          {/* Footer Links */}
-          <div className="mt-16 text-center border-t border-white/20 pt-8">
-            <div className="flex items-center justify-center gap-4 text-white/60 text-sm mb-4 flex-wrap">
-              <div className="flex items-center gap-2">
-                <LockClosedIcon className="w-4 h-4" />
-                <span>Uw gegevens zijn veilig</span>
-              </div>
-              <span className="hidden md:inline">•</span>
-              <div className="flex items-center gap-2">
-                <CurrencyEuroIcon className="w-4 h-4" />
-                <span>Geen verborgen kosten</span>
-              </div>
-              <span className="hidden md:inline">•</span>
-              <div className="flex items-center gap-2">
-                <BoltIcon className="w-4 h-4" />
-                <span>Direct resultaat</span>
-              </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-6 text-center shadow-sm">
+              <GlobeEuropeAfricaIcon className="mx-auto mb-4 h-10 w-10 text-brand-purple" />
+              <h4 className="mb-2 font-bold text-slate-900">Nederlandse markt</h4>
+              <p className="text-sm text-slate-500">100% Nederlandse prospects</p>
             </div>
-            <div className="flex items-center justify-center gap-4 flex-wrap">
-              <a 
-                href="/leadgeneratie-gids" 
-                className="flex items-center gap-1 text-white/50 hover:text-white/80 text-xs underline transition-colors"
-              >
-                <BookOpenIcon className="w-3 h-3" />
-                Leadgeneratie gids
-              </a>
-              <span className="text-white/30">•</span>
-              <a 
-                href="/blog" 
-                className="flex items-center gap-1 text-white/50 hover:text-white/80 text-xs underline transition-colors"
-              >
-                <NewspaperIcon className="w-3 h-3" />
-                Blog & tips
-              </a>
-              <span className="text-white/30">•</span>
-              <a 
-                href="/algemene-voorwaarden" 
-                className="flex items-center gap-1 text-white/50 hover:text-white/80 text-xs underline transition-colors"
-              >
-                <DocumentTextIcon className="w-3 h-3" />
-                Algemene voorwaarden
-              </a>
-              <span className="text-white/30">•</span>
-              <a 
-                href="/privacyverklaring" 
-                className="flex items-center gap-1 text-white/50 hover:text-white/80 text-xs underline transition-colors"
-              >
-                <LockClosedIcon className="w-3 h-3" />
-                Privacyverklaring
-              </a>
+            <div className="rounded-xl border border-slate-200 bg-white p-6 text-center shadow-sm">
+              <ChartBarIcon className="mx-auto mb-4 h-10 w-10 text-brand-orange" />
+              <h4 className="mb-2 font-bold text-slate-900">Realtime dashboard</h4>
+              <p className="text-sm text-slate-500">Live updates</p>
             </div>
-            
-            {/* Bedrijfsgegevens */}
-            <div className="mt-6 pt-6 border-t border-white/20">
-              <p className="text-white/50 text-xs">
-                Warmeleads.eu • KvK: 88929280 • Stavangerweg 21-1, 9723 JC Groningen
-              </p>
+            <div className="rounded-xl border border-slate-200 bg-white p-6 text-center shadow-sm">
+              <ShieldCheckIcon className="mx-auto mb-4 h-10 w-10 text-brand-purple" />
+              <h4 className="mb-2 font-bold text-slate-900">Kwaliteitsgarantie</h4>
+              <p className="text-sm text-slate-500">30 dagen geld terug</p>
             </div>
           </div>
         </div>
+      </section>
+
+      {/* CTA Section */}
+      <section className="relative overflow-hidden bg-brand-navy py-16 md:py-20">
+        <div className="pointer-events-none absolute inset-0">
+          <div className="absolute -right-20 top-0 h-[300px] w-[300px] rounded-full bg-brand-purple/20 blur-[120px]" />
+        </div>
+        <div className="relative z-10 mx-auto max-w-3xl px-5 text-center text-white lg:px-8">
+          <h2 className="mb-4 text-3xl font-bold">Klaar om te starten?</h2>
+          <p className="mb-8 text-lg text-white/70">
+            Ontvang vandaag nog uw eerste verse prospects
+          </p>
+          <a
+            href="/"
+            className="group inline-flex items-center justify-center gap-2 rounded-lg bg-button-gradient px-8 py-4 text-base font-bold text-white shadow-lg shadow-brand-orange/30 transition hover:shadow-brand-orange/40 hover:brightness-110"
+          >
+            <RocketLaunchIcon className="h-5 w-5" />
+            Start direct met leads
+            <ArrowRightIcon className="h-4 w-4 transition group-hover:translate-x-0.5" />
+          </a>
+        </div>
+      </section>
+
       </div>
-    </div>
+      <Footer />
+    </>
   );
 }
-

@@ -1,4 +1,24 @@
 import type { Metadata } from "next";
+import Link from "next/link";
+import { Header } from "@/components/Header";
+import { Footer } from "@/components/Footer";
+import {
+  CheckCircleIcon,
+  XCircleIcon,
+  BoltIcon,
+  SunIcon,
+  FireIcon,
+  CloudIcon,
+  BriefcaseIcon,
+  AdjustmentsHorizontalIcon,
+  SparklesIcon,
+  ArrowRightIcon,
+  ClockIcon,
+  UserGroupIcon,
+  ChartBarIcon,
+  ShieldCheckIcon,
+  RocketLaunchIcon,
+} from "@heroicons/react/24/outline";
 
 export const metadata: Metadata = {
   title: "Leadgeneratie Gids 2025 | Leads Kopen vs Zelf Genereren | WarmeLeads",
@@ -8,7 +28,10 @@ export const metadata: Metadata = {
 
 export default function LeadgeneratieGidsPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-brand-navy via-brand-purple to-brand-pink">
+    <>
+      <Header />
+      <div className="min-h-screen bg-white text-slate-900">
+
       {/* SEO Hidden Content */}
       <div className="sr-only">
         <h1>Leadgeneratie Gids Nederland 2025 - Complete Strategie voor Leads Kopen</h1>
@@ -16,169 +39,275 @@ export default function LeadgeneratieGidsPage() {
       </div>
 
       {/* Hero Section */}
-      <div className="relative min-h-screen flex items-center justify-center overflow-hidden">
-        {/* Background Effects */}
-        <div className="fixed inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute -top-40 -right-40 w-80 h-80 bg-white/10 rounded-full blur-3xl animate-pulse" />
-          <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-white/10 rounded-full blur-3xl animate-pulse" />
+      <section className="relative overflow-hidden bg-brand-navy py-20 md:py-28">
+        <div className="pointer-events-none absolute inset-0">
+          <div className="absolute -left-20 bottom-0 h-[400px] w-[400px] rounded-full bg-brand-purple/20 blur-[120px]" />
+          <div className="absolute -right-20 top-0 h-[300px] w-[300px] rounded-full bg-brand-pink/15 blur-[100px]" />
         </div>
 
-        <div className="relative z-10 max-w-5xl mx-auto px-4 text-white">
-          {/* Hero Content */}
-          <div className="text-center mb-16">
-            <h1 className="text-5xl md:text-7xl font-bold mb-6 bg-gradient-to-r from-white to-white/80 bg-clip-text text-transparent">
-              Leadgeneratie Gids
-            </h1>
-            <p className="text-2xl md:text-3xl mb-8 text-white/90">
-              Complete strategie voor leads kopen in Nederland 2025
-            </p>
-            <p className="text-lg text-white/80 max-w-3xl mx-auto">
-              Ontdek waarom leads kopen effectiever is dan zelf genereren, en hoe u maximale ROI 
-              behaalt uit uw leadgeneratie investering.
-            </p>
-          </div>
+        <div className="relative z-10 mx-auto max-w-5xl px-5 text-center text-white lg:px-8">
+          <p className="mb-3 text-[11px] font-bold uppercase tracking-widest text-brand-orange md:text-[12px]">
+            Complete strategie
+          </p>
+          <h1 className="mb-4 text-4xl font-bold leading-tight md:text-5xl lg:text-6xl">
+            Leadgeneratie Gids
+          </h1>
+          <p className="mb-4 text-xl text-white/90 md:text-2xl">
+            Complete strategie voor leads kopen in Nederland 2025
+          </p>
+          <p className="mx-auto max-w-3xl text-base text-white/70 md:text-lg">
+            Ontdek waarom leads kopen effectiever is dan zelf genereren, en hoe u maximale ROI
+            behaalt uit uw leadgeneratie investering.
+          </p>
+        </div>
+      </section>
 
-          {/* Comparison Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-16">
+      {/* Comparison Section */}
+      <section className="bg-white py-16 md:py-20">
+        <div className="mx-auto max-w-5xl px-5 lg:px-8">
+          <h2 className="mb-12 text-center text-3xl font-bold text-slate-900">
+            Leads Kopen vs Zelf Genereren
+          </h2>
+          <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
             {/* Leads Kopen */}
-            <div className="bg-white/10 backdrop-blur-sm rounded-3xl p-8 border border-white/20">
-              <div className="text-center mb-6">
-                <div className="w-16 h-16 bg-gradient-to-r from-green-400 to-blue-500 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <span className="text-2xl">✅</span>
+            <div className="rounded-xl border border-slate-200 bg-white p-8 shadow-sm">
+              <div className="mb-6 text-center">
+                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-brand-orange/10">
+                  <CheckCircleIcon className="h-7 w-7 text-brand-orange" />
                 </div>
-                <h3 className="text-2xl font-bold mb-4">Leads Kopen</h3>
+                <h3 className="text-2xl font-bold text-slate-900">Leads Kopen</h3>
               </div>
-              <ul className="space-y-3 text-white/90">
-                <li className="flex items-center"><span className="text-green-400 mr-3">✓</span> Directe resultaten binnen 15 minuten</li>
-                <li className="flex items-center"><span className="text-green-400 mr-3">✓</span> Geen setup tijd of expertise vereist</li>
-                <li className="flex items-center"><span className="text-green-400 mr-3">✓</span> Profiteer van onze campagne-ervaring</li>
-                <li className="flex items-center"><span className="text-green-400 mr-3">✓</span> Schaalbaarheid naar behoefte</li>
-                <li className="flex items-center"><span className="text-green-400 mr-3">✓</span> ROI focus - betaal alleen voor kwaliteit</li>
+              <ul className="space-y-3">
+                <li className="flex items-center gap-2">
+                  <CheckCircleIcon className="h-5 w-5 shrink-0 text-brand-orange" />
+                  <span className="text-slate-700">Directe resultaten binnen 15 minuten</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckCircleIcon className="h-5 w-5 shrink-0 text-brand-orange" />
+                  <span className="text-slate-700">Geen setup tijd of expertise vereist</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckCircleIcon className="h-5 w-5 shrink-0 text-brand-orange" />
+                  <span className="text-slate-700">Profiteer van onze campagne-ervaring</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckCircleIcon className="h-5 w-5 shrink-0 text-brand-orange" />
+                  <span className="text-slate-700">Schaalbaarheid naar behoefte</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckCircleIcon className="h-5 w-5 shrink-0 text-brand-orange" />
+                  <span className="text-slate-700">ROI focus - betaal alleen voor kwaliteit</span>
+                </li>
               </ul>
             </div>
 
             {/* Zelf Genereren */}
-            <div className="bg-white/10 backdrop-blur-sm rounded-3xl p-8 border border-white/20">
-              <div className="text-center mb-6">
-                <div className="w-16 h-16 bg-gradient-to-r from-red-400 to-orange-500 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <span className="text-2xl">⚠️</span>
+            <div className="rounded-xl border border-slate-200 bg-white p-8 shadow-sm">
+              <div className="mb-6 text-center">
+                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-brand-purple/10">
+                  <XCircleIcon className="h-7 w-7 text-brand-purple" />
                 </div>
-                <h3 className="text-2xl font-bold mb-4">Zelf Genereren</h3>
+                <h3 className="text-2xl font-bold text-slate-900">Zelf Genereren</h3>
               </div>
-              <ul className="space-y-3 text-white/90">
-                <li className="flex items-center"><span className="text-red-400 mr-3">✗</span> Maanden setup voor eerste resultaten</li>
-                <li className="flex items-center"><span className="text-red-400 mr-3">✗</span> Google Ads & Facebook expertise vereist</li>
-                <li className="flex items-center"><span className="text-red-400 mr-3">✗</span> Hoog budget risico zonder garantie</li>
-                <li className="flex items-center"><span className="text-red-400 mr-3">✗</span> Constante optimalisatie nodig</li>
-                <li className="flex items-center"><span className="text-red-400 mr-3">✗</span> Fulltime aandacht vereist</li>
+              <ul className="space-y-3">
+                <li className="flex items-center gap-2">
+                  <XCircleIcon className="h-5 w-5 shrink-0 text-slate-400" />
+                  <span className="text-slate-700">Maanden setup voor eerste resultaten</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <XCircleIcon className="h-5 w-5 shrink-0 text-slate-400" />
+                  <span className="text-slate-700">Google Ads &amp; Facebook expertise vereist</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <XCircleIcon className="h-5 w-5 shrink-0 text-slate-400" />
+                  <span className="text-slate-700">Hoog budget risico zonder garantie</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <XCircleIcon className="h-5 w-5 shrink-0 text-slate-400" />
+                  <span className="text-slate-700">Constante optimalisatie nodig</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <XCircleIcon className="h-5 w-5 shrink-0 text-slate-400" />
+                  <span className="text-slate-700">Fulltime aandacht vereist</span>
+                </li>
               </ul>
             </div>
           </div>
+        </div>
+      </section>
 
-          {/* Branche Expertise */}
-          <div className="bg-white/5 backdrop-blur-sm rounded-3xl p-8 border border-white/20 mb-16">
-            <h2 className="text-3xl font-bold mb-8 text-center">Onze Branche Expertise</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              <div className="text-center p-6 bg-white/10 rounded-xl">
-                <div className="text-4xl mb-4">🔋</div>
-                <h4 className="font-bold mb-2">Thuisbatterijen</h4>
-                <p className="text-white/70">Huiseigenaren met zonnepanelen die energie-onafhankelijkheid zoeken</p>
-              </div>
-              <div className="text-center p-6 bg-white/10 rounded-xl">
-                <div className="text-4xl mb-4">☀️</div>
-                <h4 className="font-bold mb-2">Zonnepanelen</h4>
-                <p className="text-white/70">Huiseigenaren met hoge energierekeningen en duurzaamheidsfocus</p>
-              </div>
-              <div className="text-center p-6 bg-white/10 rounded-xl">
-                <div className="text-4xl mb-4">🌡️</div>
-                <h4 className="font-bold mb-2">Warmtepompen</h4>
-                <p className="text-white/70">Huiseigenaren die willen verduurzamen en besparen</p>
-              </div>
-              <div className="text-center p-6 bg-white/10 rounded-xl">
-                <div className="text-4xl mb-4">❄️</div>
-                <h4 className="font-bold mb-2">Airco's</h4>
-                <p className="text-white/70">Comfort en klimaatbeheersing voor Nederlandse huishoudens</p>
-              </div>
-              <div className="text-center p-6 bg-white/10 rounded-xl">
-                <div className="text-4xl mb-4">💼</div>
-                <h4 className="font-bold mb-2">Financial Lease</h4>
-                <p className="text-white/70">MKB bedrijven die financiering zoeken voor investeringen</p>
-              </div>
-              <div className="text-center p-6 bg-white/10 rounded-xl">
-                <div className="text-4xl mb-4">🎯</div>
-                <h4 className="font-bold mb-2">Maatwerk</h4>
-                <p className="text-white/70">Custom campagnes voor uw specifieke branche</p>
-              </div>
+      {/* Branche Expertise */}
+      <section className="bg-slate-50 py-16 md:py-20">
+        <div className="mx-auto max-w-6xl px-5 lg:px-8">
+          <h2 className="mb-3 text-center text-3xl font-bold text-slate-900">
+            Onze Branche Expertise
+          </h2>
+          <p className="mx-auto mb-12 max-w-2xl text-center text-slate-500">
+            Gespecialiseerde campagnes voor elke sector
+          </p>
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="rounded-xl border border-slate-200 bg-white p-6 text-center shadow-sm">
+              <BoltIcon className="mx-auto mb-4 h-10 w-10 text-brand-orange" />
+              <h4 className="mb-2 font-bold text-slate-900">Thuisbatterijen</h4>
+              <p className="text-sm text-slate-500">Huiseigenaren met zonnepanelen die energie-onafhankelijkheid zoeken</p>
             </div>
-          </div>
-
-          {/* Why WarmeLeads Section */}
-          <div className="bg-white/5 backdrop-blur-sm rounded-3xl p-8 border border-white/20 mb-16">
-            <h2 className="text-3xl font-bold mb-8 text-center">Waarom WarmeLeads de Beste Keuze is</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div>
-                <h4 className="text-xl font-bold mb-4 text-green-300">✅ Onze Voordelen</h4>
-                <ul className="space-y-3">
-                  <li className="flex items-center"><span className="text-green-400 mr-3">✓</span> 24/7 draaiende campagnes</li>
-                  <li className="flex items-center"><span className="text-green-400 mr-3">✓</span> Verse Nederlandse prospects</li>
-                  <li className="flex items-center"><span className="text-green-400 mr-3">✓</span> Realtime dashboard updates</li>
-                  <li className="flex items-center"><span className="text-green-400 mr-3">✓</span> Branche-specifieke targeting</li>
-                  <li className="flex items-center"><span className="text-green-400 mr-3">✓</span> Kwaliteitsgarantie en support</li>
-                </ul>
-              </div>
-              <div>
-                <h4 className="text-xl font-bold mb-4 text-blue-300">🎯 Uw Resultaat</h4>
-                <ul className="space-y-3">
-                  <li className="flex items-center"><span className="text-blue-400 mr-3">→</span> Meer tijd voor verkopen</li>
-                  <li className="flex items-center"><span className="text-blue-400 mr-3">→</span> Hogere conversiekansen</li>
-                  <li className="flex items-center"><span className="text-blue-400 mr-3">→</span> Voorspelbare leadflow</li>
-                  <li className="flex items-center"><span className="text-blue-400 mr-3">→</span> Snellere business groei</li>
-                  <li className="flex items-center"><span className="text-blue-400 mr-3">→</span> Betere ROI op marketing</li>
-                </ul>
-              </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-6 text-center shadow-sm">
+              <SunIcon className="mx-auto mb-4 h-10 w-10 text-brand-orange" />
+              <h4 className="mb-2 font-bold text-slate-900">Zonnepanelen</h4>
+              <p className="text-sm text-slate-500">Huiseigenaren met hoge energierekeningen en duurzaamheidsfocus</p>
             </div>
-          </div>
-
-          {/* CTA Section */}
-          <div className="text-center">
-            <h2 className="text-3xl font-bold mb-4">Klaar om te Starten?</h2>
-            <p className="text-xl text-white/80 mb-8">
-              Begin vandaag nog met verse Nederlandse prospects uit onze campagnes
-            </p>
-            <a 
-              href="/"
-              className="inline-block bg-white text-brand-purple px-12 py-6 rounded-2xl font-bold text-xl hover:scale-110 transition-all duration-300 shadow-2xl"
-            >
-              🚀 Start met Verse Leads
-            </a>
-          </div>
-
-          {/* Internal Links for SEO */}
-          <div className="mt-16 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <a href="/leads-thuisbatterijen" className="block p-6 bg-white/10 rounded-xl hover:bg-white/20 transition-all">
-              <div className="text-center">
-                <div className="text-3xl mb-2">🔋</div>
-                <h3 className="font-bold text-lg mb-2 text-white">Thuisbatterij Leads</h3>
-                <p className="text-white/70">Verse prospects voor battery storage installateurs</p>
-              </div>
-            </a>
-            <a href="/leads-zonnepanelen" className="block p-6 bg-white/10 rounded-xl hover:bg-white/20 transition-all">
-              <div className="text-center">
-                <div className="text-3xl mb-2">☀️</div>
-                <h3 className="font-bold text-lg mb-2 text-white">Zonnepanelen Leads</h3>
-                <p className="text-white/70">Nederlandse solar prospects uit campagnes</p>
-              </div>
-            </a>
-            <a href="/leads-warmtepompen" className="block p-6 bg-white/10 rounded-xl hover:bg-white/20 transition-all">
-              <div className="text-center">
-                <div className="text-3xl mb-2">🌡️</div>
-                <h3 className="font-bold text-lg mb-2 text-white">Warmtepomp Leads</h3>
-                <p className="text-white/70">HVAC leads voor warmtepomp installateurs</p>
-              </div>
-            </a>
+            <div className="rounded-xl border border-slate-200 bg-white p-6 text-center shadow-sm">
+              <FireIcon className="mx-auto mb-4 h-10 w-10 text-brand-purple" />
+              <h4 className="mb-2 font-bold text-slate-900">Warmtepompen</h4>
+              <p className="text-sm text-slate-500">Huiseigenaren die willen verduurzamen en besparen</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-6 text-center shadow-sm">
+              <CloudIcon className="mx-auto mb-4 h-10 w-10 text-brand-purple" />
+              <h4 className="mb-2 font-bold text-slate-900">Airco&apos;s</h4>
+              <p className="text-sm text-slate-500">Comfort en klimaatbeheersing voor Nederlandse huishoudens</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-6 text-center shadow-sm">
+              <BriefcaseIcon className="mx-auto mb-4 h-10 w-10 text-brand-orange" />
+              <h4 className="mb-2 font-bold text-slate-900">Financial Lease</h4>
+              <p className="text-sm text-slate-500">MKB bedrijven die financiering zoeken voor investeringen</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-6 text-center shadow-sm">
+              <AdjustmentsHorizontalIcon className="mx-auto mb-4 h-10 w-10 text-brand-purple" />
+              <h4 className="mb-2 font-bold text-slate-900">Maatwerk</h4>
+              <p className="text-sm text-slate-500">Custom campagnes voor uw specifieke branche</p>
+            </div>
           </div>
         </div>
+      </section>
+
+      {/* Why WarmeLeads Section */}
+      <section className="bg-white py-16 md:py-20">
+        <div className="mx-auto max-w-5xl px-5 lg:px-8">
+          <h2 className="mb-12 text-center text-3xl font-bold text-slate-900">
+            Waarom WarmeLeads de Beste Keuze is
+          </h2>
+          <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
+            <div className="rounded-xl border border-slate-200 bg-white p-8 shadow-sm">
+              <h4 className="mb-5 flex items-center gap-2 text-xl font-bold text-slate-900">
+                <SparklesIcon className="h-5 w-5 text-brand-orange" />
+                Onze Voordelen
+              </h4>
+              <ul className="space-y-3">
+                <li className="flex items-center gap-2">
+                  <CheckCircleIcon className="h-5 w-5 shrink-0 text-brand-orange" />
+                  <span className="text-slate-700">24/7 draaiende campagnes</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckCircleIcon className="h-5 w-5 shrink-0 text-brand-orange" />
+                  <span className="text-slate-700">Verse Nederlandse prospects</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckCircleIcon className="h-5 w-5 shrink-0 text-brand-orange" />
+                  <span className="text-slate-700">Realtime dashboard updates</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckCircleIcon className="h-5 w-5 shrink-0 text-brand-orange" />
+                  <span className="text-slate-700">Branche-specifieke targeting</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckCircleIcon className="h-5 w-5 shrink-0 text-brand-orange" />
+                  <span className="text-slate-700">Kwaliteitsgarantie en support</span>
+                </li>
+              </ul>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-8 shadow-sm">
+              <h4 className="mb-5 flex items-center gap-2 text-xl font-bold text-slate-900">
+                <ChartBarIcon className="h-5 w-5 text-brand-purple" />
+                Uw Resultaat
+              </h4>
+              <ul className="space-y-3">
+                <li className="flex items-center gap-2">
+                  <ArrowRightIcon className="h-4 w-4 shrink-0 text-brand-purple" />
+                  <span className="text-slate-700">Meer tijd voor verkopen</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <ArrowRightIcon className="h-4 w-4 shrink-0 text-brand-purple" />
+                  <span className="text-slate-700">Hogere conversiekansen</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <ArrowRightIcon className="h-4 w-4 shrink-0 text-brand-purple" />
+                  <span className="text-slate-700">Voorspelbare leadflow</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <ArrowRightIcon className="h-4 w-4 shrink-0 text-brand-purple" />
+                  <span className="text-slate-700">Snellere business groei</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <ArrowRightIcon className="h-4 w-4 shrink-0 text-brand-purple" />
+                  <span className="text-slate-700">Betere ROI op marketing</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* CTA Section */}
+      <section className="relative overflow-hidden bg-brand-navy py-16 md:py-20">
+        <div className="pointer-events-none absolute inset-0">
+          <div className="absolute -right-20 top-0 h-[300px] w-[300px] rounded-full bg-brand-purple/20 blur-[120px]" />
+        </div>
+        <div className="relative z-10 mx-auto max-w-3xl px-5 text-center text-white lg:px-8">
+          <h2 className="mb-4 text-3xl font-bold">Klaar om te Starten?</h2>
+          <p className="mb-8 text-lg text-white/70">
+            Begin vandaag nog met verse Nederlandse prospects uit onze campagnes
+          </p>
+          <a
+            href="/"
+            className="group inline-flex items-center justify-center gap-2 rounded-lg bg-button-gradient px-8 py-4 text-base font-bold text-white shadow-lg shadow-brand-orange/30 transition hover:shadow-brand-orange/40 hover:brightness-110"
+          >
+            <RocketLaunchIcon className="h-5 w-5" />
+            Start met Verse Leads
+            <ArrowRightIcon className="h-4 w-4 transition group-hover:translate-x-0.5" />
+          </a>
+        </div>
+      </section>
+
+      {/* Internal Links for SEO */}
+      <section className="bg-slate-50 py-16 md:py-20">
+        <div className="mx-auto max-w-6xl px-5 lg:px-8">
+          <h2 className="mb-3 text-center text-3xl font-bold text-slate-900">
+            Bekijk onze branches
+          </h2>
+          <p className="mx-auto mb-12 max-w-2xl text-center text-slate-500">
+            Gespecialiseerde leads per sector
+          </p>
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            <Link
+              href="/leads-thuisbatterijen"
+              className="group rounded-xl border border-slate-200 bg-white p-6 text-center shadow-sm transition hover:shadow-md"
+            >
+              <BoltIcon className="mx-auto mb-3 h-8 w-8 text-brand-orange" />
+              <h3 className="mb-2 font-bold text-slate-900 group-hover:text-brand-purple">Thuisbatterij Leads</h3>
+              <p className="text-sm text-slate-500">Verse prospects voor battery storage installateurs</p>
+            </Link>
+            <Link
+              href="/leads-zonnepanelen"
+              className="group rounded-xl border border-slate-200 bg-white p-6 text-center shadow-sm transition hover:shadow-md"
+            >
+              <SunIcon className="mx-auto mb-3 h-8 w-8 text-brand-orange" />
+              <h3 className="mb-2 font-bold text-slate-900 group-hover:text-brand-purple">Zonnepanelen Leads</h3>
+              <p className="text-sm text-slate-500">Nederlandse solar prospects uit campagnes</p>
+            </Link>
+            <Link
+              href="/leads-warmtepompen"
+              className="group rounded-xl border border-slate-200 bg-white p-6 text-center shadow-sm transition hover:shadow-md"
+            >
+              <FireIcon className="mx-auto mb-3 h-8 w-8 text-brand-purple" />
+              <h3 className="mb-2 font-bold text-slate-900 group-hover:text-brand-purple">Warmtepomp Leads</h3>
+              <p className="text-sm text-slate-500">HVAC leads voor warmtepomp installateurs</p>
+            </Link>
+          </div>
+        </div>
+      </section>
+
       </div>
-    </div>
+      <Footer />
+    </>
   );
 }
