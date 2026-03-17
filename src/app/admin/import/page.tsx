@@ -14,7 +14,9 @@ import { adminFetch } from '@/lib/adminAuth';
 
 interface Customer { id: string; name: string; }
 
-const COMMON_FIELDS = [
+interface CrmField { key: string; label: string; required?: boolean; }
+
+const COMMON_FIELDS: CrmField[] = [
   { key: 'naam_klant', label: 'Naam klant', required: true },
   { key: 'email', label: 'E-mail' },
   { key: 'telefoonnummer', label: 'Telefoon' },
@@ -25,14 +27,14 @@ const COMMON_FIELDS = [
   { key: 'wervingsdatum', label: 'Wervingsdatum' },
   { key: 'notities', label: 'Notities' },
 ];
-const THUISBATTERIJ_FIELDS = [
+const THUISBATTERIJ_FIELDS: CrmField[] = [
   { key: 'zonnepanelen', label: 'Zonnepanelen' },
   { key: 'dynamisch_contract', label: 'Dynamisch contract' },
   { key: 'stroomverbruik', label: 'Stroomverbruik' },
   { key: 'budget', label: 'Budget' },
   { key: 'reden_thuisbatterij', label: 'Reden thuisbatterij' },
 ];
-const AIRCO_FIELDS = [
+const AIRCO_FIELDS: CrmField[] = [
   { key: 'type_airco', label: 'Type airco' },
   { key: 'koelen_verwarmen', label: 'Koelen/Verwarmen' },
   { key: 'hoeveel_ruimtes', label: 'Hoeveel ruimtes' },

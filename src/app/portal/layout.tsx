@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, createContext, useContext, useCallback, ReactNode } from 'react';
+import { useState, useEffect, useCallback, ReactNode } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
@@ -8,26 +8,7 @@ import {
   ArrowRightOnRectangleIcon,
   ArrowLeftIcon,
 } from '@heroicons/react/24/outline';
-
-interface PortalCustomer {
-  id: string;
-  name: string;
-  email: string;
-  contact_person: string;
-  branches: string[];
-}
-
-interface PortalCtx {
-  customer: PortalCustomer;
-  logout: () => void;
-}
-
-const PortalContext = createContext<PortalCtx | null>(null);
-export function usePortal() {
-  const ctx = useContext(PortalContext);
-  if (!ctx) throw new Error('usePortal must be used inside PortalLayout');
-  return ctx;
-}
+import { PortalContext, type PortalCustomer } from './portalContext';
 
 function LoginScreen({ onLogin }: { onLogin: (c: PortalCustomer, t: string) => void }) {
   const [email, setEmail] = useState('');

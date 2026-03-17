@@ -11,7 +11,8 @@ import {
   RocketLaunchIcon
 } from '@heroicons/react/24/outline';
 import { Logo } from './Logo';
-import { type ChatContext } from '@/lib/chatContext';
+
+type ChatContext = string;
 
 interface SmartFAQProps {
   onBackToHome: () => void;

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { usePortal } from './layout';
+import { usePortal } from './portalContext';
 import { portalFetch } from '@/lib/portalAuth';
 import { motion, AnimatePresence } from 'framer-motion';
 import {

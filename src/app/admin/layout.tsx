@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, createContext, useContext, useCallback, ReactNode } from 'react';
+import { useState, useEffect, useCallback, ReactNode } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
@@ -16,25 +16,7 @@ import {
   XMarkIcon,
   ChartBarSquareIcon,
 } from '@heroicons/react/24/outline';
-
-interface AdminUser {
-  id: string;
-  email: string;
-  name: string;
-  role: string;
-}
-
-interface AdminCtx {
-  user: AdminUser;
-  logout: () => void;
-}
-
-const AdminContext = createContext<AdminCtx | null>(null);
-export function useAdmin() {
-  const ctx = useContext(AdminContext);
-  if (!ctx) throw new Error('useAdmin must be used inside AdminLayout');
-  return ctx;
-}
+import { AdminContext, type AdminUser } from './adminContext';
 
 const NAV = [
   { label: 'Dashboard', href: '/admin', icon: HomeIcon },

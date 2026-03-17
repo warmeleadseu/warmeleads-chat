@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useAdmin } from '../layout';
+import { useAdmin } from '../adminContext';
 import { adminFetch } from '@/lib/adminAuth';
 import {
   PlusIcon,
