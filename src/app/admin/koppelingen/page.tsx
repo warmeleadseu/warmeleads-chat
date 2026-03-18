@@ -287,26 +287,31 @@ export default function KoppelingenPage() {
                   </button>
                 </div>
 
-                {/* Instructions panel */}
-                <AnimatePresence>
-                  {activeInstructions === k.id && (
-                    <InstructionsPanel
-                      webhookKey={k}
-                      webhookUrl={webhookUrl}
-                      copied={copied}
-                      onCopy={copy}
-                      onClose={() => setActiveInstructions(null)}
-                      onTest={() => testWebhookFromPanel(k.id)}
-                      testing={testing === k.id}
-                      testResult={testResult?.id === k.id ? testResult : null}
-                    />
-                  )}
-                </AnimatePresence>
               </div>
             );
           })}
         </div>
       )}
+
+      {/* Instructions slide-over */}
+      <AnimatePresence>
+        {activeInstructions && (() => {
+          const k = keys.find(x => x.id === activeInstructions);
+          if (!k) return null;
+          return (
+            <InstructionsPanel
+              webhookKey={k}
+              webhookUrl={webhookUrl}
+              copied={copied}
+              onCopy={copy}
+              onClose={() => setActiveInstructions(null)}
+              onTest={() => testWebhookFromPanel(k.id)}
+              testing={testing === k.id}
+              testResult={testResult?.id === k.id ? testResult : null}
+            />
+          );
+        })()}
+      </AnimatePresence>
 
       {/* Admin account */}
       <div className="mt-10 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -332,7 +337,7 @@ export default function KoppelingenPage() {
   );
 }
 
-/* ───────── Instructions Panel ───────── */
+/* ───────── Instructions Panel (slide-over) ───────── */
 
 function InstructionsPanel({
   webhookKey,
@@ -354,7 +359,6 @@ function InstructionsPanel({
   testResult: { id: string; success: boolean; message: string } | null;
 }) {
   const fields = webhookKey.branch === 'thuisbatterij' ? THUISBATTERIJ_FIELDS : AIRCO_FIELDS;
-  const headerValue = `X-API-Key: ${webhookKey.key}`;
 
   const copyAll = () => {
     const lines = [
@@ -377,193 +381,215 @@ function InstructionsPanel({
   };
 
   return (
-    <motion.div
-      initial={{ height: 0, opacity: 0 }}
-      animate={{ height: 'auto', opacity: 1 }}
-      exit={{ height: 0, opacity: 0 }}
-      transition={{ duration: 0.2 }}
-      className="overflow-hidden border-t border-slate-100"
-    >
-      <div className="bg-slate-50/70 p-5">
-        <div className="mb-4 flex items-center justify-between">
-          <h4 className="text-sm font-bold text-slate-900">Zapier instellen — stap voor stap</h4>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={copyAll}
-              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600 transition hover:bg-slate-50"
-            >
-              {copied === `all-${webhookKey.id}` ? (
-                <><CheckIcon className="h-3 w-3 text-emerald-500" /> Gekopieerd!</>
-              ) : (
-                <><ClipboardDocumentIcon className="h-3 w-3" /> Kopieer alles</>
-              )}
-            </button>
-            <button onClick={onClose} className="rounded p-1 text-slate-400 hover:text-slate-600">
-              <XMarkIcon className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-
-        {/* Step 1 */}
-        <div className="mb-4">
-          <div className="mb-1.5 flex items-center gap-2">
-            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-purple text-[10px] font-bold text-white">1</span>
-            <p className="text-xs font-semibold text-slate-800">Voeg een actie toe in je Zap</p>
-          </div>
-          <p className="ml-7 text-xs text-slate-500">
-            Zoek naar <span className="font-medium text-slate-700">&quot;Webhooks by Zapier&quot;</span> en kies <span className="font-medium text-slate-700">&quot;POST&quot;</span> als actie.
-          </p>
-        </div>
-
-        {/* Step 2 */}
-        <div className="mb-4">
-          <div className="mb-1.5 flex items-center gap-2">
-            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-purple text-[10px] font-bold text-white">2</span>
-            <p className="text-xs font-semibold text-slate-800">Plak deze URL</p>
-          </div>
-          <div className="ml-7">
-            <CopyField value={webhookUrl} id={`url-${webhookKey.id}`} copied={copied} onCopy={onCopy} />
-          </div>
-        </div>
-
-        {/* Step 3 */}
-        <div className="mb-4">
-          <div className="mb-1.5 flex items-center gap-2">
-            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-purple text-[10px] font-bold text-white">3</span>
-            <p className="text-xs font-semibold text-slate-800">Voeg deze header toe</p>
-          </div>
-          <div className="ml-7 space-y-1.5">
-            <div className="flex gap-2">
-              <div className="flex-1">
-                <p className="mb-0.5 text-[10px] font-medium text-slate-400">Key</p>
-                <CopyField value="X-API-Key" id={`hkey-${webhookKey.id}`} copied={copied} onCopy={onCopy} />
-              </div>
-              <div className="flex-1">
-                <p className="mb-0.5 text-[10px] font-medium text-slate-400">Value</p>
-                <CopyField value={webhookKey.key} id={`hval-${webhookKey.id}`} copied={copied} onCopy={onCopy} mono />
+    <>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm"
+        onClick={onClose}
+      />
+      <motion.div
+        initial={{ x: '100%' }}
+        animate={{ x: 0 }}
+        exit={{ x: '100%' }}
+        transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+        className="fixed inset-y-0 right-0 z-[60] flex w-full max-w-lg flex-col bg-white shadow-2xl"
+      >
+        {/* Header */}
+        <div className="shrink-0 border-b border-slate-100 bg-white">
+          <div className="h-[3px] bg-warmeleads-gradient" />
+          <div className="flex items-center justify-between px-5 py-4 sm:px-6">
+            <div className="min-w-0 flex-1">
+              <h2 className="text-base font-bold text-slate-900 sm:text-lg">Zapier instellen</h2>
+              <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                <span className="font-medium text-slate-700">{webhookKey.label}</span>
+                <span className="text-slate-300">&middot;</span>
+                <span>{webhookKey.customers?.name || '—'}</span>
+                <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${webhookKey.branch === 'thuisbatterij' ? 'bg-emerald-50 text-emerald-600' : 'bg-sky-50 text-sky-600'}`}>
+                  {webhookKey.branch}
+                </span>
               </div>
             </div>
-            <p className="text-[10px] text-slate-400">
-              In Zapier: scroll naar &quot;Headers&quot; en voeg bovenstaande key + value toe.
-            </p>
+            <div className="ml-3 flex shrink-0 items-center gap-2">
+              <button
+                onClick={copyAll}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50"
+              >
+                {copied === `all-${webhookKey.id}` ? (
+                  <><CheckIcon className="h-3.5 w-3.5 text-emerald-500" /> Gekopieerd</>
+                ) : (
+                  <><ClipboardDocumentIcon className="h-3.5 w-3.5" /> Kopieer alles</>
+                )}
+              </button>
+              <button onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100">
+                <XMarkIcon className="h-5 w-5" />
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Step 4 */}
-        <div>
-          <div className="mb-2 flex items-center gap-2">
-            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-purple text-[10px] font-bold text-white">4</span>
-            <p className="text-xs font-semibold text-slate-800">Map deze velden bij &quot;Data&quot;</p>
-          </div>
-          <div className="ml-7">
-            <p className="mb-2 text-[10px] text-slate-500">
-              In Zapier onder &quot;Data&quot;: vul links de <span className="font-medium">key</span> in en rechts de waarde uit je trigger.
-            </p>
-            <div className="rounded-lg border border-slate-200 bg-white">
-              <div className="grid grid-cols-[1fr_1fr_auto] gap-0 border-b border-slate-100 px-3 py-1.5 text-[10px] font-semibold text-slate-500">
-                <span>Zapier key</span>
-                <span>Omschrijving</span>
-                <span className="w-7" />
+        {/* Scrollable content */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="space-y-6 px-5 py-5 sm:px-6">
+
+            {/* Step 1 */}
+            <StepBlock step={1} title="Voeg een actie toe in je Zap">
+              <p className="text-sm text-slate-600">
+                Zoek naar <span className="font-semibold text-slate-800">&quot;Webhooks by Zapier&quot;</span> en kies <span className="font-semibold text-slate-800">&quot;POST&quot;</span> als actie.
+              </p>
+            </StepBlock>
+
+            {/* Step 2 */}
+            <StepBlock step={2} title="Plak deze URL">
+              <p className="mb-2 text-sm text-slate-600">Vul dit in bij het veld &quot;URL&quot; in Zapier:</p>
+              <CopyField value={webhookUrl} id={`url-${webhookKey.id}`} copied={copied} onCopy={onCopy} />
+            </StepBlock>
+
+            {/* Step 3 */}
+            <StepBlock step={3} title="Voeg deze header toe">
+              <p className="mb-3 text-sm text-slate-600">
+                Scroll in Zapier naar &quot;Headers&quot; en voeg deze key + value toe:
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <p className="mb-1 text-xs font-medium text-slate-500">Key</p>
+                  <CopyField value="X-API-Key" id={`hkey-${webhookKey.id}`} copied={copied} onCopy={onCopy} />
+                </div>
+                <div>
+                  <p className="mb-1 text-xs font-medium text-slate-500">Value</p>
+                  <CopyField value={webhookKey.key} id={`hval-${webhookKey.id}`} copied={copied} onCopy={onCopy} mono />
+                </div>
               </div>
-              <div className="divide-y divide-slate-50">
-                {fields.map(f => (
-                  <div key={f.key} className="grid grid-cols-[1fr_1fr_auto] items-center gap-0 px-3 py-1.5">
-                    <code className="text-[11px] font-mono text-brand-purple">{f.key}</code>
-                    <span className="text-[11px] text-slate-600">
-                      {f.label}
-                      {f.required && <span className="ml-1 text-red-400">*</span>}
-                    </span>
-                    <button
-                      onClick={() => onCopy(f.key, `field-${webhookKey.id}-${f.key}`)}
-                      className="flex h-6 w-6 items-center justify-center rounded text-slate-300 hover:bg-slate-50 hover:text-slate-500"
+            </StepBlock>
+
+            {/* Step 4 */}
+            <StepBlock step={4} title={'Map deze velden bij "Data"'}>
+              <p className="mb-3 text-sm text-slate-600">
+                Vul in Zapier onder &quot;Data&quot; links de <span className="font-semibold text-slate-800">key</span> in en rechts de bijbehorende waarde uit je trigger.
+              </p>
+              <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_32px] border-b border-slate-100 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500">
+                  <span>Zapier key</span>
+                  <span>Omschrijving</span>
+                  <span />
+                </div>
+                <div className="divide-y divide-slate-50">
+                  {fields.map(f => (
+                    <div key={f.key} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_32px] items-center px-3 py-2">
+                      <code className="break-all text-xs font-mono text-brand-purple">{f.key}</code>
+                      <span className="text-xs text-slate-600">
+                        {f.label}
+                        {f.required && <span className="ml-1 text-red-400">*</span>}
+                      </span>
+                      <button
+                        onClick={() => onCopy(f.key, `field-${webhookKey.id}-${f.key}`)}
+                        className="flex h-7 w-7 items-center justify-center rounded text-slate-300 transition hover:bg-slate-50 hover:text-slate-500"
+                      >
+                        {copied === `field-${webhookKey.id}-${f.key}` ? (
+                          <CheckIcon className="h-3.5 w-3.5 text-emerald-500" />
+                        ) : (
+                          <ClipboardDocumentIcon className="h-3.5 w-3.5" />
+                        )}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <p className="mt-2 text-xs text-slate-400">
+                * = verplicht veld. Overige velden zijn optioneel — stuur alleen wat je hebt.
+              </p>
+            </StepBlock>
+
+            {/* Step 5: Test */}
+            <div className="rounded-xl border-2 border-dashed border-emerald-200 bg-emerald-50/50 p-5">
+              <div className="mb-1.5 flex items-center gap-2.5">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500 text-xs font-bold text-white">5</span>
+                <p className="text-sm font-bold text-slate-900">Test de verbinding</p>
+              </div>
+              <p className="mb-4 ml-[34px] text-sm text-slate-600">
+                Klaar met instellen? Test hier of alles goed werkt. Er wordt een test-lead aangemaakt die je daarna kunt verwijderen.
+              </p>
+
+              <div className="ml-[34px]">
+                <AnimatePresence mode="wait">
+                  {testResult?.success ? (
+                    <motion.div
+                      key="success"
+                      initial={{ opacity: 0, y: 5 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0 }}
                     >
-                      {copied === `field-${webhookKey.id}-${f.key}` ? (
-                        <CheckIcon className="h-3 w-3 text-emerald-500" />
-                      ) : (
-                        <ClipboardDocumentIcon className="h-3 w-3" />
-                      )}
-                    </button>
-                  </div>
-                ))}
+                      <div className="flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
+                        <CheckCircleIcon className="h-5 w-5 shrink-0 text-emerald-500" />
+                        <div>
+                          <p className="text-sm font-semibold text-emerald-700">Verbinding werkt!</p>
+                          <p className="text-xs text-emerald-600">{testResult.message} — dit venster sluit automatisch.</p>
+                        </div>
+                      </div>
+                    </motion.div>
+                  ) : testResult && !testResult.success ? (
+                    <motion.div
+                      key="error"
+                      initial={{ opacity: 0, y: 5 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0 }}
+                      className="space-y-3"
+                    >
+                      <div className="flex items-center gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+                        <ExclamationTriangleIcon className="h-5 w-5 shrink-0 text-red-400" />
+                        <div>
+                          <p className="text-sm font-semibold text-red-700">Test mislukt</p>
+                          <p className="text-xs text-red-600">{testResult.message}</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={onTest}
+                        disabled={testing}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                      >
+                        <ArrowPathIcon className={`h-3.5 w-3.5 ${testing ? 'animate-spin' : ''}`} />
+                        Opnieuw testen
+                      </button>
+                    </motion.div>
+                  ) : (
+                    <motion.div key="button" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                      <button
+                        onClick={onTest}
+                        disabled={testing}
+                        className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-600 disabled:opacity-50"
+                      >
+                        {testing ? (
+                          <ArrowPathIcon className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <BoltIcon className="h-4 w-4" />
+                        )}
+                        {testing ? 'Testen...' : 'Test verbinding'}
+                      </button>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             </div>
-            <p className="mt-2 text-[10px] text-slate-400">
-              * = verplicht. Overige velden zijn optioneel — stuur alleen wat je hebt.
-            </p>
+
           </div>
         </div>
+      </motion.div>
+    </>
+  );
+}
 
-        {/* Step 5: Test */}
-        <div className="mt-5 rounded-xl border-2 border-dashed border-emerald-200 bg-emerald-50/50 p-4">
-          <div className="mb-2 flex items-center gap-2">
-            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-[10px] font-bold text-white">5</span>
-            <p className="text-xs font-semibold text-slate-800">Test de verbinding</p>
-          </div>
-          <p className="mb-3 ml-7 text-[10px] text-slate-500">
-            Klaar met instellen? Test hier of alles werkt. Er wordt een test-lead aangemaakt die je kunt verwijderen.
-          </p>
+/* ───────── Step Block ───────── */
 
-          <AnimatePresence mode="wait">
-            {testResult?.success ? (
-              <motion.div
-                key="success"
-                initial={{ opacity: 0, y: 5 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }}
-                className="ml-7"
-              >
-                <div className="flex items-center gap-2.5 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
-                  <CheckCircleIcon className="h-5 w-5 shrink-0 text-emerald-500" />
-                  <div>
-                    <p className="text-sm font-semibold text-emerald-700">Verbinding werkt!</p>
-                    <p className="text-[11px] text-emerald-600">{testResult.message} — dit venster sluit automatisch.</p>
-                  </div>
-                </div>
-              </motion.div>
-            ) : testResult && !testResult.success ? (
-              <motion.div
-                key="error"
-                initial={{ opacity: 0, y: 5 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }}
-                className="ml-7 space-y-2"
-              >
-                <div className="flex items-center gap-2.5 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
-                  <ExclamationTriangleIcon className="h-5 w-5 shrink-0 text-red-400" />
-                  <div>
-                    <p className="text-sm font-semibold text-red-700">Test mislukt</p>
-                    <p className="text-[11px] text-red-600">{testResult.message}</p>
-                  </div>
-                </div>
-                <button
-                  onClick={onTest}
-                  disabled={testing}
-                  className="ml-0 inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
-                >
-                  <ArrowPathIcon className={`h-3.5 w-3.5 ${testing ? 'animate-spin' : ''}`} />
-                  Opnieuw testen
-                </button>
-              </motion.div>
-            ) : (
-              <motion.div key="button" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="ml-7">
-                <button
-                  onClick={onTest}
-                  disabled={testing}
-                  className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-600 disabled:opacity-50"
-                >
-                  {testing ? (
-                    <ArrowPathIcon className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <BoltIcon className="h-4 w-4" />
-                  )}
-                  {testing ? 'Testen...' : 'Test verbinding'}
-                </button>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
+function StepBlock({ step, title, children }: { step: number; title: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="mb-2 flex items-center gap-2.5">
+        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-purple text-xs font-bold text-white">{step}</span>
+        <p className="text-sm font-bold text-slate-900">{title}</p>
       </div>
-    </motion.div>
+      <div className="ml-[34px]">{children}</div>
+    </div>
   );
 }
 
@@ -583,18 +609,18 @@ function CopyField({
   mono?: boolean;
 }) {
   return (
-    <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5">
-      <span className={`min-w-0 flex-1 truncate text-[11px] text-slate-700 ${mono ? 'font-mono' : ''}`}>
+    <div className="flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+      <span className={`min-w-0 flex-1 break-all text-sm text-slate-800 ${mono ? 'font-mono text-xs' : ''}`}>
         {value}
       </span>
       <button
         onClick={() => onCopy(value, id)}
-        className="shrink-0 rounded p-0.5 text-slate-400 hover:text-brand-purple"
+        className="mt-0.5 shrink-0 rounded p-1 text-slate-400 transition hover:bg-white hover:text-brand-purple"
       >
         {copied === id ? (
-          <CheckIcon className="h-3.5 w-3.5 text-emerald-500" />
+          <CheckIcon className="h-4 w-4 text-emerald-500" />
         ) : (
-          <ClipboardDocumentIcon className="h-3.5 w-3.5" />
+          <ClipboardDocumentIcon className="h-4 w-4" />
         )}
       </button>
     </div>
