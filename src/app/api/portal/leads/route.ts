@@ -26,7 +26,10 @@ export async function GET(request: NextRequest) {
     .select('*', { count: 'exact' })
     .eq('customer_id', customer.id);
 
+  const branch = url.searchParams.get('branch');
+
   if (status && status !== 'all') query = query.eq('status', status);
+  if (branch && branch !== 'all') query = query.eq('branch', branch);
   if (search) {
     query = query.or(`naam_klant.ilike.%${search}%,email.ilike.%${search}%,telefoonnummer.ilike.%${search}%,postcode.ilike.%${search}%,plaatsnaam.ilike.%${search}%`);
   }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { usePortal } from './portalContext';
 import { portalFetch } from '@/lib/portalAuth';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -21,7 +21,23 @@ import {
   SparklesIcon,
   ChevronUpDownIcon,
   InboxIcon,
+  ClipboardDocumentIcon,
+  ChartBarIcon,
 } from '@heroicons/react/24/outline';
+
+function WhatsAppIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+    </svg>
+  );
+}
+
+function whatsappUrl(phone: string) {
+  const digits = phone.replace(/\D/g, '');
+  const intl = digits.startsWith('0') ? '31' + digits.slice(1) : digits;
+  return `https://wa.me/${intl}`;
+}
 
 const STATUS_OPTIONS = [
   { value: 'all', label: 'Alle statussen' },
@@ -80,10 +96,87 @@ interface Stats {
   sold: number;
 }
 
+function StatsSkeleton() {
+  return (
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      {[...Array(4)].map((_, i) => (
+        <div key={i} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="h-8 w-8 animate-pulse rounded-lg bg-slate-100" />
+          <div className="mt-3 h-7 w-16 animate-pulse rounded bg-slate-100" />
+          <div className="mt-1.5 h-3 w-24 animate-pulse rounded bg-slate-50" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function TableSkeleton() {
+  return (
+    <>
+      <div className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm md:block">
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-slate-100 bg-slate-50/50">
+              {['Naam', 'Plaats', 'Branche', 'Status', 'Datum', 'Contact'].map(h => (
+                <th key={h} className="px-4 py-3 text-left text-xs font-medium text-slate-400">{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {[...Array(5)].map((_, i) => (
+              <tr key={i}>
+                <td className="px-4 py-3"><div className="space-y-1"><div className="h-4 w-28 animate-pulse rounded bg-slate-100" /><div className="h-3 w-20 animate-pulse rounded bg-slate-50" /></div></td>
+                <td className="px-4 py-3"><div className="h-4 w-20 animate-pulse rounded bg-slate-100" /></td>
+                <td className="px-4 py-3"><div className="h-5 w-20 animate-pulse rounded-full bg-slate-100" /></td>
+                <td className="px-4 py-3"><div className="h-5 w-24 animate-pulse rounded-full bg-slate-100" /></td>
+                <td className="px-4 py-3"><div className="h-4 w-24 animate-pulse rounded bg-slate-100" /></td>
+                <td className="px-4 py-3"><div className="flex gap-1.5"><div className="h-7 w-7 animate-pulse rounded-lg bg-slate-100" /><div className="h-7 w-7 animate-pulse rounded-lg bg-slate-100" /><div className="h-7 w-7 animate-pulse rounded-lg bg-slate-100" /></div></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="space-y-3 md:hidden">
+        {[...Array(3)].map((_, i) => (
+          <div key={i} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="mb-3 flex items-start justify-between">
+              <div className="space-y-1.5">
+                <div className="h-4 w-32 animate-pulse rounded bg-slate-100" />
+                <div className="h-3 w-24 animate-pulse rounded bg-slate-50" />
+              </div>
+              <div className="h-5 w-16 animate-pulse rounded-full bg-slate-100" />
+            </div>
+            <div className="mb-3 flex items-center gap-2">
+              <div className="h-5 w-20 animate-pulse rounded-full bg-slate-100" />
+              <div className="h-3 w-24 animate-pulse rounded bg-slate-50" />
+            </div>
+            <div className="flex gap-2">
+              <div className="h-9 flex-1 animate-pulse rounded-lg bg-slate-100" />
+              <div className="h-9 flex-1 animate-pulse rounded-lg bg-slate-100" />
+              <div className="h-9 flex-1 animate-pulse rounded-lg bg-slate-100" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
+function formatDate(d: string) {
+  if (!d) return '—';
+  return new Date(d).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function formatDateLong(d: string) {
+  if (!d) return '—';
+  return new Date(d).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
 export default function PortalPage() {
   const { customer } = usePortal();
 
   const [stats, setStats] = useState<Stats>({ totalLeads: 0, newThisWeek: 0, contacted: 0, sold: 0 });
+  const [statsLoading, setStatsLoading] = useState(true);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -92,6 +185,7 @@ export default function PortalPage() {
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [branchFilter, setBranchFilter] = useState('all');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [sort, setSort] = useState('created_at');
@@ -100,11 +194,29 @@ export default function PortalPage() {
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [showFilters, setShowFilters] = useState(false);
 
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimer = useRef<NodeJS.Timeout>();
+  const showToast = useCallback((msg: string) => {
+    setToast(msg);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 3000);
+  }, []);
+
+  const showBranchFilter = customer.branches.length > 1;
+  const conversionRate = stats.totalLeads > 0
+    ? Math.round((stats.sold / stats.totalLeads) * 100)
+    : 0;
+
   const fetchStats = useCallback(async () => {
-    const res = await portalFetch('/api/portal/stats');
-    if (res.ok) {
-      const data = await res.json();
-      setStats(data);
+    setStatsLoading(true);
+    try {
+      const res = await portalFetch('/api/portal/stats');
+      if (res.ok) {
+        const data = await res.json();
+        setStats(data);
+      }
+    } finally {
+      setStatsLoading(false);
     }
   }, []);
 
@@ -116,6 +228,7 @@ export default function PortalPage() {
     params.set('sort', sort);
     params.set('order', order);
     if (statusFilter !== 'all') params.set('status', statusFilter);
+    if (branchFilter !== 'all') params.set('branch', branchFilter);
     if (search) params.set('search', search);
     if (dateFrom) params.set('from', dateFrom);
     if (dateTo) params.set('to', dateTo);
@@ -128,7 +241,7 @@ export default function PortalPage() {
       setTotalPages(data.totalPages || 1);
     }
     setLoading(false);
-  }, [page, sort, order, statusFilter, search, dateFrom, dateTo]);
+  }, [page, sort, order, statusFilter, branchFilter, search, dateFrom, dateTo]);
 
   useEffect(() => { fetchStats(); }, [fetchStats]);
   useEffect(() => { fetchLeads(); }, [fetchLeads]);
@@ -149,6 +262,7 @@ export default function PortalPage() {
       body: JSON.stringify({ id: lead.id, status: newStatus }),
     });
     if (res.ok) {
+      showToast('Status bijgewerkt');
       fetchLeads();
       fetchStats();
       if (selectedLead?.id === lead.id) {
@@ -163,6 +277,7 @@ export default function PortalPage() {
       body: JSON.stringify({ id: lead.id, notities: newNotes }),
     });
     if (res.ok) {
+      showToast('Notities opgeslagen');
       fetchLeads();
       if (selectedLead?.id === lead.id) {
         setSelectedLead({ ...lead, notities: newNotes });
@@ -190,18 +305,45 @@ export default function PortalPage() {
   const activeFilters = useMemo(() => {
     let count = 0;
     if (statusFilter !== 'all') count++;
+    if (branchFilter !== 'all') count++;
     if (dateFrom) count++;
     if (dateTo) count++;
     return count;
-  }, [statusFilter, dateFrom, dateTo]);
+  }, [statusFilter, branchFilter, dateFrom, dateTo]);
 
-  const formatDate = (d: string) => {
-    if (!d) return '—';
-    return new Date(d).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' });
+  const resetFilters = () => {
+    setStatusFilter('all');
+    setBranchFilter('all');
+    setDateFrom('');
+    setDateTo('');
+    setPage(1);
+  };
+
+  const viewNewLeads = () => {
+    setStatusFilter('nieuw');
+    setPage(1);
+    setShowFilters(false);
   };
 
   return (
     <div className="space-y-6">
+      {/* Toast */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 50 }}
+            className="fixed bottom-6 left-1/2 z-[100] -translate-x-1/2 rounded-xl bg-slate-900 px-5 py-3 text-sm font-medium text-white shadow-xl"
+          >
+            <div className="flex items-center gap-2">
+              <CheckCircleIcon className="h-4 w-4 text-emerald-400" />
+              {toast}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Welcome */}
       <div>
         <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">
@@ -213,24 +355,69 @@ export default function PortalPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {[
-          { label: 'Totaal leads', value: stats.totalLeads, icon: UserGroupIcon, color: 'text-brand-purple', bg: 'bg-brand-purple/10' },
-          { label: 'Nieuw deze week', value: stats.newThisWeek, icon: SparklesIcon, color: 'text-blue-600', bg: 'bg-blue-50' },
-          { label: 'Gecontacteerd', value: stats.contacted, icon: ArrowTrendingUpIcon, color: 'text-amber-600', bg: 'bg-amber-50' },
-          { label: 'Verkocht', value: stats.sold, icon: CheckCircleIcon, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-        ].map(stat => (
-          <div key={stat.label} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="flex items-center gap-2">
-              <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${stat.bg}`}>
-                <stat.icon className={`h-4 w-4 ${stat.color}`} />
+      {statsLoading ? (
+        <StatsSkeleton />
+      ) : (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {[
+            { label: 'Totaal leads', value: stats.totalLeads, icon: UserGroupIcon, color: 'text-brand-purple', bg: 'bg-brand-purple/10' },
+            { label: 'Nieuw deze week', value: stats.newThisWeek, icon: SparklesIcon, color: 'text-blue-600', bg: 'bg-blue-50' },
+            { label: 'Gecontacteerd', value: stats.contacted, icon: ArrowTrendingUpIcon, color: 'text-amber-600', bg: 'bg-amber-50' },
+            { label: 'Verkocht', value: stats.sold, icon: CheckCircleIcon, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+          ].map(stat => (
+            <div key={stat.label} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="flex items-center gap-2">
+                <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${stat.bg}`}>
+                  <stat.icon className={`h-4 w-4 ${stat.color}`} />
+                </div>
+              </div>
+              <p className="mt-3 text-2xl font-bold text-slate-900">{stat.value}</p>
+              <p className="text-xs text-slate-500">{stat.label}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Conversion rate + New leads banner */}
+      {!statsLoading && stats.totalLeads > 0 && (
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm sm:flex-1">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-purple/10">
+              <ChartBarIcon className="h-5 w-5 text-brand-purple" />
+            </div>
+            <div className="flex-1">
+              <p className="text-xs text-slate-500">Conversieratio</p>
+              <div className="mt-0.5 flex items-center gap-2">
+                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-brand-purple to-brand-pink transition-all duration-500"
+                    style={{ width: `${Math.min(conversionRate, 100)}%` }}
+                  />
+                </div>
+                <span className="text-sm font-bold text-slate-900">{conversionRate}%</span>
               </div>
             </div>
-            <p className="mt-3 text-2xl font-bold text-slate-900">{stat.value}</p>
-            <p className="text-xs text-slate-500">{stat.label}</p>
           </div>
-        ))}
-      </div>
+
+          {stats.newThisWeek > 0 && (
+            <button
+              onClick={viewNewLeads}
+              className="flex items-center gap-3 rounded-xl border border-blue-100 bg-gradient-to-r from-blue-50 to-indigo-50 px-4 py-3 shadow-sm transition hover:shadow-md sm:flex-1"
+            >
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-100">
+                <SparklesIcon className="h-5 w-5 text-blue-600" />
+              </div>
+              <div className="flex-1 text-left">
+                <p className="text-sm font-semibold text-slate-900">
+                  {stats.newThisWeek} nieuwe {stats.newThisWeek === 1 ? 'lead' : 'leads'}
+                </p>
+                <p className="text-xs text-slate-500">Klik om te bekijken</p>
+              </div>
+              <ChevronRightIcon className="h-4 w-4 text-slate-400" />
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Toolbar */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -292,6 +479,21 @@ export default function PortalPage() {
                   {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
               </div>
+              {showBranchFilter && (
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-500">Branche</label>
+                  <select
+                    value={branchFilter}
+                    onChange={(e) => { setBranchFilter(e.target.value); setPage(1); }}
+                    className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-700 outline-none focus:border-brand-purple/50"
+                  >
+                    <option value="all">Alle branches</option>
+                    {customer.branches.map(b => (
+                      <option key={b} value={b}>{BRANCH_LABELS[b] || b}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div>
                 <label className="mb-1 block text-xs font-medium text-slate-500">Datum vanaf</label>
                 <input
@@ -313,7 +515,7 @@ export default function PortalPage() {
               {activeFilters > 0 && (
                 <div className="flex items-end">
                   <button
-                    onClick={() => { setStatusFilter('all'); setDateFrom(''); setDateTo(''); setPage(1); }}
+                    onClick={resetFilters}
                     className="rounded-lg px-3 py-1.5 text-xs font-medium text-red-500 hover:bg-red-50"
                   >
                     Wis filters
@@ -330,11 +532,9 @@ export default function PortalPage() {
         {total} {total === 1 ? 'lead' : 'leads'} gevonden
       </p>
 
-      {/* Desktop table */}
+      {/* Data */}
       {loading ? (
-        <div className="flex justify-center py-16">
-          <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-slate-200 border-t-brand-purple" />
-        </div>
+        <TableSkeleton />
       ) : leads.length === 0 ? (
         <div className="rounded-xl border border-slate-200 bg-white py-16 text-center shadow-sm">
           <InboxIcon className="mx-auto mb-3 h-12 w-12 text-slate-300" />
@@ -343,7 +543,7 @@ export default function PortalPage() {
         </div>
       ) : (
         <>
-          {/* Desktop */}
+          {/* Desktop table */}
           <div className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm md:block">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -377,7 +577,14 @@ export default function PortalPage() {
                       onClick={() => setSelectedLead(lead)}
                       className="cursor-pointer transition hover:bg-slate-50"
                     >
-                      <td className="px-4 py-3 font-medium text-slate-900">{lead.naam_klant || '—'}</td>
+                      <td className="px-4 py-3">
+                        <div>
+                          <p className="font-medium text-slate-900">{lead.naam_klant || '—'}</p>
+                          {lead.telefoonnummer && (
+                            <p className="text-xs text-slate-400">{lead.telefoonnummer}</p>
+                          )}
+                        </div>
+                      </td>
                       <td className="px-4 py-3 text-slate-600">{lead.plaatsnaam || '—'}</td>
                       <td className="px-4 py-3">
                         <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${lead.branch === 'thuisbatterij' ? 'bg-emerald-50 text-emerald-600' : 'bg-sky-50 text-sky-600'}`}>
@@ -398,14 +605,27 @@ export default function PortalPage() {
                       </td>
                       <td className="px-4 py-3 text-slate-500">{formatDate(lead.wervingsdatum)}</td>
                       <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5">
                           {lead.telefoonnummer && (
                             <a
                               href={`tel:${lead.telefoonnummer}`}
                               onClick={(e) => e.stopPropagation()}
                               className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 transition hover:bg-emerald-100"
+                              title="Bellen"
                             >
                               <PhoneIcon className="h-3.5 w-3.5" />
+                            </a>
+                          )}
+                          {lead.telefoonnummer && (
+                            <a
+                              href={whatsappUrl(lead.telefoonnummer)}
+                              onClick={(e) => e.stopPropagation()}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-green-50 text-green-600 transition hover:bg-green-100"
+                              title="WhatsApp"
+                            >
+                              <WhatsAppIcon className="h-3.5 w-3.5" />
                             </a>
                           )}
                           {lead.email && (
@@ -413,6 +633,7 @@ export default function PortalPage() {
                               href={`mailto:${lead.email}`}
                               onClick={(e) => e.stopPropagation()}
                               className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-blue-50 text-blue-600 transition hover:bg-blue-100"
+                              title="E-mail"
                             >
                               <EnvelopeIcon className="h-3.5 w-3.5" />
                             </a>
@@ -437,15 +658,24 @@ export default function PortalPage() {
                 <div className="mb-2 flex items-start justify-between">
                   <div>
                     <p className="font-semibold text-slate-900">{lead.naam_klant || '—'}</p>
-                    {lead.plaatsnaam && (
+                    {(lead.plaatsnaam || lead.postcode) && (
                       <p className="flex items-center gap-1 text-xs text-slate-500">
-                        <MapPinIcon className="h-3 w-3" /> {lead.plaatsnaam}{lead.provincie ? `, ${lead.provincie}` : ''}
+                        <MapPinIcon className="h-3 w-3" />
+                        {[lead.postcode, lead.huisnummer, lead.plaatsnaam].filter(Boolean).join(', ')}
+                        {lead.provincie ? ` (${lead.provincie})` : ''}
                       </p>
                     )}
                   </div>
-                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${STATUS_COLORS[lead.status] || 'bg-slate-100 text-slate-600'}`}>
-                    {lead.status}
-                  </span>
+                  <select
+                    value={lead.status}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => handleStatusUpdate(lead, e.target.value)}
+                    className={`rounded-full border-0 px-2 py-0.5 text-[10px] font-medium outline-none ${STATUS_COLORS[lead.status] || 'bg-slate-100 text-slate-600'}`}
+                  >
+                    {STATUS_OPTIONS.filter(o => o.value !== 'all').map(o => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
                 </div>
                 <div className="mb-3 flex items-center gap-2 text-xs text-slate-500">
                   <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${lead.branch === 'thuisbatterij' ? 'bg-emerald-50 text-emerald-600' : 'bg-sky-50 text-sky-600'}`}>
@@ -464,6 +694,17 @@ export default function PortalPage() {
                       className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-emerald-50 py-2 text-xs font-medium text-emerald-700 transition hover:bg-emerald-100"
                     >
                       <PhoneIcon className="h-3.5 w-3.5" /> Bellen
+                    </a>
+                  )}
+                  {lead.telefoonnummer && (
+                    <a
+                      href={whatsappUrl(lead.telefoonnummer)}
+                      onClick={(e) => e.stopPropagation()}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-green-50 py-2 text-xs font-medium text-green-700 transition hover:bg-green-100"
+                    >
+                      <WhatsAppIcon className="h-3.5 w-3.5" /> WhatsApp
                     </a>
                   )}
                   {lead.email && (
@@ -515,6 +756,7 @@ export default function PortalPage() {
             onClose={() => setSelectedLead(null)}
             onStatusChange={(s) => handleStatusUpdate(selectedLead, s)}
             onNotesChange={(n) => handleNotesUpdate(selectedLead, n)}
+            showToast={showToast}
           />
         )}
       </AnimatePresence>
@@ -527,11 +769,13 @@ function LeadDetailPanel({
   onClose,
   onStatusChange,
   onNotesChange,
+  showToast,
 }: {
   lead: Lead;
   onClose: () => void;
   onStatusChange: (s: string) => void;
   onNotesChange: (n: string) => void;
+  showToast: (msg: string) => void;
 }) {
   const [notes, setNotes] = useState(lead.notities || '');
   const [notesDirty, setNotesDirty] = useState(false);
@@ -544,6 +788,17 @@ function LeadDetailPanel({
   const saveNotes = () => {
     onNotesChange(notes);
     setNotesDirty(false);
+  };
+
+  const copyContactInfo = () => {
+    const lines = [
+      lead.naam_klant,
+      lead.telefoonnummer,
+      lead.email,
+      [lead.postcode, lead.huisnummer, lead.plaatsnaam, lead.provincie].filter(Boolean).join(', '),
+    ].filter(Boolean);
+    navigator.clipboard.writeText(lines.join('\n'));
+    showToast('Contactgegevens gekopieerd');
   };
 
   const branchFields = lead.branch === 'thuisbatterij'
@@ -565,11 +820,6 @@ function LeadDetailPanel({
       ]
     : [];
 
-  const formatDate = (d: string) => {
-    if (!d) return '—';
-    return new Date(d).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' });
-  };
-
   return (
     <>
       <motion.div
@@ -584,16 +834,28 @@ function LeadDetailPanel({
         animate={{ x: 0 }}
         exit={{ x: '100%' }}
         transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-        className="fixed inset-y-0 right-0 z-[60] w-full max-w-md overflow-y-auto bg-white shadow-2xl"
+        drag="x"
+        dragConstraints={{ left: 0, right: 0 }}
+        dragElastic={{ left: 0, right: 0.5 }}
+        dragDirectionLock
+        onDragEnd={(_, info) => {
+          if (info.offset.x > 80 || info.velocity.x > 300) onClose();
+        }}
+        className="fixed inset-y-0 right-0 z-[60] flex w-full max-w-md flex-col bg-white shadow-2xl"
       >
+        {/* Swipe indicator - mobile */}
+        <div className="flex justify-center pt-2 md:hidden">
+          <div className="h-1 w-10 rounded-full bg-slate-200" />
+        </div>
+
         {/* Header */}
-        <div className="sticky top-0 z-10 border-b border-slate-100 bg-white">
+        <div className="shrink-0 border-b border-slate-100 bg-white">
           <div className="h-[3px] bg-warmeleads-gradient" />
           <div className="flex items-center justify-between px-5 py-4">
             <div>
               <h2 className="text-lg font-bold text-slate-900">{lead.naam_klant || 'Lead details'}</h2>
               <p className="text-xs text-slate-500">
-                {BRANCH_LABELS[lead.branch] || lead.branch} &middot; {formatDate(lead.wervingsdatum)}
+                {BRANCH_LABELS[lead.branch] || lead.branch} &middot; {formatDateLong(lead.wervingsdatum)}
               </p>
             </div>
             <button onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100">
@@ -602,89 +864,111 @@ function LeadDetailPanel({
           </div>
         </div>
 
-        <div className="space-y-5 p-5">
-          {/* Status */}
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-slate-500">Status</label>
-            <select
-              value={lead.status}
-              onChange={(e) => onStatusChange(e.target.value)}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 outline-none focus:border-brand-purple/50"
-            >
-              {STATUS_OPTIONS.filter(o => o.value !== 'all').map(o => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Contact info */}
-          <div>
-            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Contactgegevens</h3>
-            <div className="space-y-2 rounded-xl border border-slate-100 bg-slate-50 p-4">
-              {lead.telefoonnummer && (
-                <a href={`tel:${lead.telefoonnummer}`} className="flex items-center gap-3 text-sm text-slate-700 hover:text-brand-purple">
-                  <PhoneIcon className="h-4 w-4 text-slate-400" /> {lead.telefoonnummer}
-                </a>
-              )}
-              {lead.email && (
-                <a href={`mailto:${lead.email}`} className="flex items-center gap-3 text-sm text-slate-700 hover:text-brand-purple">
-                  <EnvelopeIcon className="h-4 w-4 text-slate-400" /> {lead.email}
-                </a>
-              )}
-              {(lead.postcode || lead.plaatsnaam) && (
-                <p className="flex items-center gap-3 text-sm text-slate-700">
-                  <MapPinIcon className="h-4 w-4 text-slate-400" />
-                  {[lead.postcode, lead.huisnummer, lead.plaatsnaam, lead.provincie].filter(Boolean).join(', ')}
-                </p>
-              )}
-            </div>
-          </div>
-
-          {/* Branch-specific fields */}
-          {branchFields.length > 0 && (
+        {/* Scrollable content */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="space-y-5 p-5">
+            {/* Status */}
             <div>
-              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
-                {BRANCH_LABELS[lead.branch]} details
-              </h3>
-              <div className="space-y-1.5 rounded-xl border border-slate-100 bg-slate-50 p-4">
-                {branchFields.map(f => f.value ? (
-                  <div key={f.label} className="flex justify-between text-sm">
-                    <span className="text-slate-500">{f.label}</span>
-                    <span className="font-medium text-slate-700">{f.value}</span>
+              <label className="mb-1.5 block text-xs font-medium text-slate-500">Status</label>
+              <select
+                value={lead.status}
+                onChange={(e) => onStatusChange(e.target.value)}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 outline-none focus:border-brand-purple/50"
+              >
+                {STATUS_OPTIONS.filter(o => o.value !== 'all').map(o => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Contact info */}
+            <div>
+              <div className="mb-2 flex items-center justify-between">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">Contactgegevens</h3>
+                <button
+                  onClick={copyContactInfo}
+                  className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+                >
+                  <ClipboardDocumentIcon className="h-3.5 w-3.5" />
+                  Kopieer
+                </button>
+              </div>
+              <div className="space-y-2 rounded-xl border border-slate-100 bg-slate-50 p-4">
+                {lead.telefoonnummer && (
+                  <div className="flex items-center justify-between">
+                    <a href={`tel:${lead.telefoonnummer}`} className="flex items-center gap-3 text-sm text-slate-700 hover:text-brand-purple">
+                      <PhoneIcon className="h-4 w-4 text-slate-400" /> {lead.telefoonnummer}
+                    </a>
+                    <a
+                      href={whatsappUrl(lead.telefoonnummer)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 rounded-md bg-green-50 px-2 py-1 text-[11px] font-medium text-green-700 transition hover:bg-green-100"
+                    >
+                      <WhatsAppIcon className="h-3 w-3" /> WhatsApp
+                    </a>
                   </div>
-                ) : null)}
-                {branchFields.every(f => !f.value) && (
-                  <p className="text-xs text-slate-400">Geen specifieke details beschikbaar</p>
+                )}
+                {lead.email && (
+                  <a href={`mailto:${lead.email}`} className="flex items-center gap-3 text-sm text-slate-700 hover:text-brand-purple">
+                    <EnvelopeIcon className="h-4 w-4 text-slate-400" /> {lead.email}
+                  </a>
+                )}
+                {(lead.postcode || lead.plaatsnaam) && (
+                  <p className="flex items-center gap-3 text-sm text-slate-700">
+                    <MapPinIcon className="h-4 w-4 text-slate-400" />
+                    {[lead.postcode, lead.huisnummer, lead.plaatsnaam, lead.provincie].filter(Boolean).join(', ')}
+                  </p>
                 )}
               </div>
             </div>
-          )}
 
-          {/* Notes */}
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-slate-500">Notities</label>
-            <textarea
-              value={notes}
-              onChange={(e) => { setNotes(e.target.value); setNotesDirty(true); }}
-              rows={4}
-              placeholder="Voeg hier uw notities toe..."
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 outline-none focus:border-brand-purple/50"
-            />
-            {notesDirty && (
-              <button
-                onClick={saveNotes}
-                className="mt-2 rounded-lg bg-button-gradient px-4 py-1.5 text-xs font-bold text-white shadow-sm"
-              >
-                Notities opslaan
-              </button>
+            {/* Branch-specific fields */}
+            {branchFields.length > 0 && (
+              <div>
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                  {BRANCH_LABELS[lead.branch]} details
+                </h3>
+                <div className="space-y-1.5 rounded-xl border border-slate-100 bg-slate-50 p-4">
+                  {branchFields.map(f => f.value ? (
+                    <div key={f.label} className="flex justify-between text-sm">
+                      <span className="text-slate-500">{f.label}</span>
+                      <span className="font-medium text-slate-700">{f.value}</span>
+                    </div>
+                  ) : null)}
+                  {branchFields.every(f => !f.value) && (
+                    <p className="text-xs text-slate-400">Geen specifieke details beschikbaar</p>
+                  )}
+                </div>
+              </div>
             )}
-          </div>
 
-          {/* Meta info */}
-          <div className="border-t border-slate-100 pt-4">
-            <div className="space-y-1 text-xs text-slate-400">
-              {lead.bron && <p>Bron: {lead.bron}</p>}
-              <p>Aangemaakt: {formatDate(lead.created_at)}</p>
+            {/* Notes */}
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-slate-500">Notities</label>
+              <textarea
+                value={notes}
+                onChange={(e) => { setNotes(e.target.value); setNotesDirty(true); }}
+                rows={4}
+                placeholder="Voeg hier uw notities toe..."
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 outline-none focus:border-brand-purple/50"
+              />
+              {notesDirty && (
+                <button
+                  onClick={saveNotes}
+                  className="mt-2 rounded-lg bg-button-gradient px-4 py-1.5 text-xs font-bold text-white shadow-sm"
+                >
+                  Notities opslaan
+                </button>
+              )}
+            </div>
+
+            {/* Meta info */}
+            <div className="border-t border-slate-100 pt-4">
+              <div className="space-y-1 text-xs text-slate-400">
+                {lead.bron && <p>Bron: {lead.bron}</p>}
+                <p>Aangemaakt: {formatDateLong(lead.created_at)}</p>
+              </div>
             </div>
           </div>
         </div>

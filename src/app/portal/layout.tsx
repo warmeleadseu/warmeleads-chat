@@ -88,6 +88,12 @@ function LoginScreen({ onLogin }: { onLogin: (c: PortalCustomer, t: string) => v
           >
             {loading ? 'Inloggen...' : 'Inloggen'}
           </button>
+          <p className="mt-4 text-center text-[11px] text-white/30">
+            Wachtwoord vergeten? Neem contact op via{' '}
+            <a href="mailto:info@warmeleads.eu" className="text-white/50 underline decoration-white/20 hover:text-white/70">
+              info@warmeleads.eu
+            </a>
+          </p>
         </form>
 
         <p className="mt-6 text-center text-xs text-white/25">
@@ -108,8 +114,8 @@ function PortalHeader({ customer, onLogout }: { customer: PortalCustomer; onLogo
       <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         <div className="flex items-center gap-3">
           <Image src="/warmeleads-logo-2026.png" alt="WarmeLeads" width={120} height={36} className="h-6 w-auto" />
-          <div className="hidden h-5 w-px bg-slate-200 sm:block" />
-          <span className="hidden text-sm font-medium text-slate-600 sm:block">{customer.name}</span>
+          <div className="h-5 w-px bg-slate-200" />
+          <span className="max-w-[120px] truncate text-sm font-medium text-slate-600 sm:max-w-none">{customer.name}</span>
         </div>
         <div className="flex items-center gap-3">
           <div className="hidden items-center gap-2 sm:flex">
@@ -128,6 +134,21 @@ function PortalHeader({ customer, onLogout }: { customer: PortalCustomer; onLogo
         </div>
       </div>
     </header>
+  );
+}
+
+function PortalFooter() {
+  return (
+    <footer className="border-t border-slate-200 bg-white">
+      <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
+        <p className="text-center text-xs text-slate-400">
+          Vragen? Neem contact op met WarmeLeads —{' '}
+          <a href="mailto:info@warmeleads.eu" className="text-brand-purple hover:underline">info@warmeleads.eu</a>
+          {' — '}
+          <a href="tel:0850477067" className="text-brand-purple hover:underline">085 047 7067</a>
+        </p>
+      </div>
+    </footer>
   );
 }
 
@@ -172,11 +193,12 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
 
   return (
     <PortalContext.Provider value={{ customer, logout: handleLogout }}>
-      <div className="min-h-screen bg-slate-50">
+      <div className="flex min-h-screen flex-col bg-slate-50">
         <PortalHeader customer={customer} onLogout={handleLogout} />
-        <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+        <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 lg:px-8">
           {children}
         </main>
+        <PortalFooter />
       </div>
     </PortalContext.Provider>
   );
