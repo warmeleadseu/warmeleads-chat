@@ -5,6 +5,19 @@ interface PDOKResult {
   provincie: string;
 }
 
+function isValidPlace(val: string | undefined): boolean {
+  if (!val) return false;
+  const v = val.trim();
+  if (v.length < 2) return false;
+  if (/^[-–—.…\/\\]+$/.test(v)) return false;
+  if (v.includes('@')) return false;
+  if (/^\+?\d[\d\s\-().]{6,}$/.test(v)) return false;
+  if (/^\d+$/.test(v)) return false;
+  const low = v.toLowerCase();
+  if (['n/a', 'nvt', 'n.v.t.', 'onbekend', 'unknown', 'geen', 'x', 'xx', 'xxx', 'test', '?', '??', 'null', 'undefined', 'none'].includes(low)) return false;
+  return true;
+}
+
 /**
  * Resolve a Dutch address (plaatsnaam + provincie) from postcode + huisnummer
  * using the free PDOK Locatieserver (Kadaster / BAG).
@@ -48,7 +61,9 @@ export async function resolveAddress(
 export async function enrichLeadAddress<
   T extends { postcode?: string; huisnummer?: string; plaatsnaam?: string; provincie?: string }
 >(lead: T): Promise<T> {
-  if ((lead.plaatsnaam && lead.provincie) || !lead.postcode || !lead.huisnummer) {
+  const needsPlace = !isValidPlace(lead.plaatsnaam);
+  const needsProv = !isValidPlace(lead.provincie);
+  if ((!needsPlace && !needsProv) || !lead.postcode || !lead.huisnummer) {
     return lead;
   }
 
@@ -57,8 +72,8 @@ export async function enrichLeadAddress<
 
   return {
     ...lead,
-    plaatsnaam: lead.plaatsnaam || result.plaatsnaam,
-    provincie: lead.provincie || result.provincie,
+    plaatsnaam: needsPlace && result.plaatsnaam ? result.plaatsnaam : lead.plaatsnaam,
+    provincie: needsProv && result.provincie ? result.provincie : lead.provincie,
   };
 }
 

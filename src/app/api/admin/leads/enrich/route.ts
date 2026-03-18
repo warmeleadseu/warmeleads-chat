@@ -3,6 +3,19 @@ import { createServerClient } from '@/lib/supabase';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { resolveAddress } from '@/lib/pdok';
 
+function isValidPlace(val: string | null | undefined): boolean {
+  if (!val || typeof val !== 'string') return false;
+  const v = val.trim();
+  if (v.length < 2) return false;
+  if (/^[-–—.…\/\\]+$/.test(v)) return false;
+  if (v.includes('@')) return false;
+  if (/^\+?\d[\d\s\-().]{6,}$/.test(v)) return false;
+  if (/^\d+$/.test(v)) return false;
+  const low = v.toLowerCase();
+  if (['n/a', 'nvt', 'n.v.t.', 'onbekend', 'unknown', 'geen', 'x', 'xx', 'xxx', 'test', '?', '??', 'null', 'undefined', 'none'].includes(low)) return false;
+  return true;
+}
+
 export async function POST(request: NextRequest) {
   const admin = await verifyAdmin(request);
   if (!admin) return unauthorized();
@@ -15,30 +28,33 @@ export async function POST(request: NextRequest) {
     .not('postcode', 'is', null)
     .not('postcode', 'eq', '')
     .not('huisnummer', 'is', null)
-    .not('huisnummer', 'eq', '')
-    .or('plaatsnaam.is.null,plaatsnaam.eq.,provincie.is.null,provincie.eq.');
+    .not('huisnummer', 'eq', '');
 
   if (error) {
     return NextResponse.json({ error: 'Kon leads niet ophalen' }, { status: 500 });
   }
 
-  if (!leads || leads.length === 0) {
+  const candidates = (leads || []).filter(
+    l => !isValidPlace(l.plaatsnaam) || !isValidPlace(l.provincie)
+  );
+
+  if (candidates.length === 0) {
     return NextResponse.json({ enriched: 0, total: 0 });
   }
 
   const CONCURRENCY = 10;
   let enriched = 0;
 
-  for (let i = 0; i < leads.length; i += CONCURRENCY) {
-    const batch = leads.slice(i, i + CONCURRENCY);
+  for (let i = 0; i < candidates.length; i += CONCURRENCY) {
+    const batch = candidates.slice(i, i + CONCURRENCY);
     const results = await Promise.all(
       batch.map(async (lead) => {
         const result = await resolveAddress(lead.postcode, lead.huisnummer);
         if (!result) return null;
 
         const updates: Record<string, string> = {};
-        if (!lead.plaatsnaam && result.plaatsnaam) updates.plaatsnaam = result.plaatsnaam;
-        if (!lead.provincie && result.provincie) updates.provincie = result.provincie;
+        if (!isValidPlace(lead.plaatsnaam) && result.plaatsnaam) updates.plaatsnaam = result.plaatsnaam;
+        if (!isValidPlace(lead.provincie) && result.provincie) updates.provincie = result.provincie;
 
         if (Object.keys(updates).length === 0) return null;
         return { id: lead.id, updates };
@@ -55,5 +71,5 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  return NextResponse.json({ enriched, total: leads.length });
+  return NextResponse.json({ enriched, total: candidates.length });
 }
