@@ -171,6 +171,12 @@ export default function LeadsCRMPage() {
     setLeads(prev => prev.map(l => l.id === id ? { ...l, status: newStatus } : l));
   };
 
+  const handleDeleteSingle = async (id: string, name: string) => {
+    if (!confirm(`Lead "${name}" verwijderen?`)) return;
+    await adminFetch('/api/admin/leads', { method: 'DELETE', body: JSON.stringify({ ids: [id] }) });
+    fetchLeads();
+  };
+
   const visibleCols = useMemo(() => {
     const base: string[] = ['naam_klant', 'email', 'telefoonnummer', 'postcode', 'plaatsnaam', 'status', 'wervingsdatum'];
     if (branch === 'thuisbatterij') base.push('zonnepanelen', 'budget', 'reden_thuisbatterij');
@@ -319,9 +325,14 @@ export default function LeadsCRMPage() {
                     </td>
                   ))}
                   <td className="px-3 py-2.5">
-                    <button onClick={() => setEditLead(lead)} className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
-                      <PencilSquareIcon className="h-4 w-4" />
-                    </button>
+                    <div className="flex items-center gap-0.5">
+                      <button onClick={() => setEditLead(lead)} className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600" title="Bewerken">
+                        <PencilSquareIcon className="h-4 w-4" />
+                      </button>
+                      <button onClick={() => handleDeleteSingle(lead.id, lead.naam_klant)} className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-500" title="Verwijderen">
+                        <TrashIcon className="h-4 w-4" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
