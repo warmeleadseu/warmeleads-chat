@@ -12,6 +12,7 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   ChevronUpDownIcon,
+  MapPinIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
 
@@ -191,6 +192,24 @@ export default function LeadsCRMPage() {
     fetchLeads();
   };
 
+  const [enriching, setEnriching] = useState(false);
+  const [enrichResult, setEnrichResult] = useState<{ enriched: number; total: number } | null>(null);
+
+  const handleEnrichAll = async () => {
+    setEnriching(true);
+    setEnrichResult(null);
+    try {
+      const res = await adminFetch('/api/admin/leads/enrich', { method: 'POST' });
+      if (res.ok) {
+        const d = await res.json();
+        setEnrichResult(d);
+        if (d.enriched > 0) fetchLeads();
+      }
+    } finally {
+      setEnriching(false);
+    }
+  };
+
   const getBranchBadge = (slug: string) => {
     const b = branchMap[slug];
     const c = COLOR_MAP[b?.color || 'slate'] || COLOR_MAP.slate;
@@ -206,7 +225,14 @@ export default function LeadsCRMPage() {
           <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">Leads CRM</h1>
           <p className="mt-0.5 text-sm text-slate-500">{total} lead{total !== 1 ? 's' : ''} totaal</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <button onClick={handleEnrichAll} disabled={enriching} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-50">
+            {enriching ? (
+              <><span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-300 border-t-brand-purple" /> Verrijken...</>
+            ) : (
+              <><MapPinIcon className="h-4 w-4" /> Adressen aanvullen</>
+            )}
+          </button>
           <button onClick={handleExport} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">
             <ArrowDownTrayIcon className="h-4 w-4" /> Export CSV
           </button>
@@ -215,6 +241,25 @@ export default function LeadsCRMPage() {
           </button>
         </div>
       </div>
+
+      <AnimatePresence>
+        {enrichResult && (
+          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+            <div className="mb-4 flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
+              <p className="text-sm text-emerald-700">
+                {enrichResult.enriched > 0 ? (
+                  <><strong>{enrichResult.enriched}</strong> van {enrichResult.total} leads verrijkt met plaatsnaam/provincie</>
+                ) : enrichResult.total === 0 ? (
+                  <>Alle leads hebben al een plaatsnaam en provincie</>
+                ) : (
+                  <>Geen adressen gevonden voor {enrichResult.total} leads (onbekende postcodes?)</>
+                )}
+              </p>
+              <button onClick={() => setEnrichResult(null)} className="ml-3 text-emerald-400 hover:text-emerald-600"><XMarkIcon className="h-4 w-4" /></button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <div className="mb-2 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
         <select value={branch} onChange={e => setBranch(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700">
