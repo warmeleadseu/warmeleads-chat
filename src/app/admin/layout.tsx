@@ -64,7 +64,7 @@ function LoginScreen({ onLogin }: { onLogin: (u: AdminUser, t: string) => void }
         className="relative z-10 w-full max-w-sm"
       >
         <div className="mb-8 text-center">
-          <Image src="/warmeleads-logo-2026.png" alt="WarmeLeads" width={160} height={48} className="mx-auto h-9 w-auto" />
+          <Image src="/logo-wit.png" alt="WarmeLeads" width={160} height={48} className="mx-auto h-9 w-auto" />
           <p className="mt-3 text-sm text-white/40">Admin Panel</p>
         </div>
         <form onSubmit={submit} className="rounded-2xl border border-white/10 bg-white/[0.05] p-6 backdrop-blur-xl">
@@ -115,7 +115,7 @@ function Sidebar({ user, onLogout }: { user: AdminUser; onLogout: () => void }) 
     <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col bg-brand-navy lg:flex">
       <div className="h-[3px] bg-warmeleads-gradient" />
       <div className="flex h-16 items-center px-5">
-        <Image src="/warmeleads-logo-2026.png" alt="WarmeLeads" width={130} height={39} className="h-7 w-auto" />
+        <Image src="/logo-wit.png" alt="WarmeLeads" width={130} height={39} className="h-7 w-auto" />
       </div>
       <nav className="flex-1 overflow-y-auto px-3 py-4">
         <div className="space-y-0.5">
@@ -195,7 +195,7 @@ function MobileHeader({ user, onLogout }: { user: AdminUser; onLogout: () => voi
             >
               <div className="h-[3px] bg-warmeleads-gradient" />
               <div className="flex h-14 items-center justify-between px-4">
-                <Image src="/warmeleads-logo-2026.png" alt="WarmeLeads" width={110} height={33} className="h-6 w-auto" />
+                <Image src="/logo-wit.png" alt="WarmeLeads" width={110} height={33} className="h-6 w-auto" />
                 <button onClick={() => setOpen(false)} className="text-white/50"><XMarkIcon className="h-5 w-5" /></button>
               </div>
               <nav className="px-3 py-4 space-y-0.5">

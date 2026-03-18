@@ -49,7 +49,7 @@ function LoginScreen({ onLogin }: { onLogin: (c: PortalCustomer, t: string) => v
         className="relative z-10 w-full max-w-sm"
       >
         <div className="mb-8 text-center">
-          <Image src="/warmeleads-logo-2026.png" alt="WarmeLeads" width={180} height={54} className="mx-auto h-10 w-auto" />
+          <Image src="/logo-wit.png" alt="WarmeLeads" width={180} height={54} className="mx-auto h-10 w-auto" />
           <p className="mt-3 text-sm text-white/40">Klantportaal</p>
         </div>
 
