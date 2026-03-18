@@ -2,6 +2,23 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyCustomer, portalUnauthorized } from '@/lib/portalAuth';
 import { createServerClient } from '@/lib/supabase';
 
+async function getCustomerLeadIds(supabase: ReturnType<typeof createServerClient>, customerId: string): Promise<string[]> {
+  const { data: directLeads } = await supabase
+    .from('leads')
+    .select('id')
+    .eq('customer_id', customerId);
+
+  const { data: assignedLeads } = await supabase
+    .from('lead_assignments')
+    .select('lead_id')
+    .eq('customer_id', customerId);
+
+  const ids = new Set<string>();
+  (directLeads || []).forEach(l => ids.add(l.id));
+  (assignedLeads || []).forEach(a => ids.add(a.lead_id));
+  return Array.from(ids);
+}
+
 export async function GET(request: NextRequest) {
   const customer = await verifyCustomer(request);
   if (!customer) return portalUnauthorized();
@@ -17,6 +34,12 @@ export async function GET(request: NextRequest) {
   const order = url.searchParams.get('order') || 'desc';
   const page = parseInt(url.searchParams.get('page') || '1');
   const limit = parseInt(url.searchParams.get('limit') || '25');
+  const branch = url.searchParams.get('branch');
+
+  const leadIds = await getCustomerLeadIds(supabase, customer.id);
+  if (leadIds.length === 0) {
+    return NextResponse.json({ leads: [], total: 0, page, totalPages: 0 });
+  }
 
   const allowedSorts = ['created_at', 'naam_klant', 'email', 'status', 'wervingsdatum', 'plaatsnaam', 'provincie', 'branch'];
   const col = allowedSorts.includes(sort) ? sort : 'created_at';
@@ -24,9 +47,7 @@ export async function GET(request: NextRequest) {
   let query = supabase
     .from('leads')
     .select('*', { count: 'exact' })
-    .eq('customer_id', customer.id);
-
-  const branch = url.searchParams.get('branch');
+    .in('id', leadIds);
 
   if (status && status !== 'all') query = query.eq('status', status);
   if (branch && branch !== 'all') query = query.eq('branch', branch);
@@ -66,14 +87,8 @@ export async function PUT(request: NextRequest) {
 
     const supabase = createServerClient();
 
-    const { data: existing } = await supabase
-      .from('leads')
-      .select('id, customer_id')
-      .eq('id', id)
-      .eq('customer_id', customer.id)
-      .single();
-
-    if (!existing) {
+    const leadIds = await getCustomerLeadIds(supabase, customer.id);
+    if (!leadIds.includes(id)) {
       return NextResponse.json({ error: 'Lead niet gevonden' }, { status: 404 });
     }
 
@@ -89,7 +104,6 @@ export async function PUT(request: NextRequest) {
       .from('leads')
       .update(updates)
       .eq('id', id)
-      .eq('customer_id', customer.id)
       .select()
       .single();
 

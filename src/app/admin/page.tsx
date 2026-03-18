@@ -9,6 +9,7 @@ import {
   ClockIcon,
   ChevronRightIcon,
   MapPinIcon,
+  ArrowsRightLeftIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
 
@@ -90,20 +91,33 @@ function DashboardSkeleton() {
   );
 }
 
+interface BatchSummary { active: number; delivered: number; total: number; }
+
 export default function AdminDashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [branchMeta, setBranchMeta] = useState<Record<string, BranchMeta>>({});
+  const [batchSummary, setBatchSummary] = useState<BatchSummary>({ active: 0, delivered: 0, total: 0 });
+  const [assignmentCount, setAssignmentCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     Promise.all([
       adminFetch('/api/admin/stats').then(r => r.json()),
       adminFetch('/api/admin/branches').then(r => r.json()),
-    ]).then(([statsData, branchData]) => {
+      adminFetch('/api/admin/batches').then(r => r.ok ? r.json() : []),
+      adminFetch('/api/admin/assignments').then(r => r.ok ? r.json() : []),
+    ]).then(([statsData, branchData, batchData, assignData]) => {
       setStats(statsData);
       const m: Record<string, BranchMeta> = {};
       (branchData.branches || []).forEach((b: BranchMeta) => { m[b.slug] = b; });
       setBranchMeta(m);
+      const activeBatches = (batchData || []).filter((b: any) => b.status === 'active');
+      setBatchSummary({
+        active: activeBatches.length,
+        delivered: activeBatches.reduce((s: number, b: any) => s + (b.leads_delivered || 0), 0),
+        total: activeBatches.reduce((s: number, b: any) => s + (b.batch_size || 0), 0),
+      });
+      setAssignmentCount((assignData || []).length);
       setLoading(false);
     }).catch(() => setLoading(false));
   }, []);
@@ -140,6 +154,39 @@ export default function AdminDashboard() {
           </div>
         ))}
       </div>
+
+      {/* Distribution summary */}
+      {batchSummary.active > 0 && (
+        <div className="mb-8 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-3 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-purple-50">
+                <ArrowsRightLeftIcon className="h-4 w-4 text-purple-500" />
+              </div>
+              <h2 className="text-sm font-semibold text-slate-900">Leadverdeling</h2>
+            </div>
+            <Link href="/admin/verdeling" className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-brand-purple transition hover:bg-brand-purple/5">
+              Bekijken <ChevronRightIcon className="h-3 w-3" />
+            </Link>
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <p className="text-xl font-bold text-slate-800">{assignmentCount}</p>
+              <p className="text-xs text-slate-500">Toewijzingen</p>
+            </div>
+            <div>
+              <p className="text-xl font-bold text-slate-800">{batchSummary.active}</p>
+              <p className="text-xs text-slate-500">Actieve batches</p>
+            </div>
+            <div>
+              <p className="text-xl font-bold text-slate-800">
+                {batchSummary.total > 0 ? Math.round((batchSummary.delivered / batchSummary.total) * 100) : 0}%
+              </p>
+              <p className="text-xs text-slate-500">Geleverd ({batchSummary.delivered}/{batchSummary.total})</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Status breakdown */}

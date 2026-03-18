@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { enrichLeadAddress, enrichLeadsAddress } from '@/lib/pdok';
+import { distributeLead, distributeLeads } from '@/lib/distribution';
 
 export async function GET(request: NextRequest) {
   const admin = await verifyAdmin(request);
@@ -53,7 +54,28 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Leads ophalen mislukt' }, { status: 500 });
   }
 
-  return NextResponse.json({ leads: data || [], total: count || 0, page, perPage });
+  const leads = data || [];
+  if (leads.length > 0) {
+    const leadIds = leads.map((l: { id: string }) => l.id);
+    const { data: assignments } = await supabase
+      .from('lead_assignments')
+      .select('lead_id, customer_id, customers(company_name), distance_km')
+      .in('lead_id', leadIds);
+
+    const assignMap: Record<string, { count: number; customers: string[] }> = {};
+    (assignments || []).forEach((a: any) => {
+      if (!assignMap[a.lead_id]) assignMap[a.lead_id] = { count: 0, customers: [] };
+      assignMap[a.lead_id].count++;
+      if (a.customers?.company_name) assignMap[a.lead_id].customers.push(a.customers.company_name);
+    });
+
+    leads.forEach((l: any) => {
+      l.assignment_count = assignMap[l.id]?.count || 0;
+      l.assigned_customers = assignMap[l.id]?.customers || [];
+    });
+  }
+
+  return NextResponse.json({ leads, total: count || 0, page, perPage });
 }
 
 export async function POST(request: NextRequest) {
@@ -71,6 +93,10 @@ export async function POST(request: NextRequest) {
         console.error('Bulk insert error:', error);
         return NextResponse.json({ error: 'Import mislukt', details: error.message }, { status: 500 });
       }
+      const withCoords = (data || []).filter((l: { lat?: number; lng?: number }) => l.lat && l.lng);
+      if (withCoords.length > 0) {
+        try { await distributeLeads(withCoords); } catch { /* non-blocking */ }
+      }
       return NextResponse.json({ success: true, count: data?.length || 0 });
     }
 
@@ -79,6 +105,9 @@ export async function POST(request: NextRequest) {
     if (error) {
       console.error('Insert error:', error);
       return NextResponse.json({ error: 'Lead aanmaken mislukt', details: error.message }, { status: 500 });
+    }
+    if (data.lat && data.lng) {
+      try { await distributeLead({ id: data.id, branch: data.branch, lat: data.lat, lng: data.lng }); } catch { /* non-blocking */ }
     }
     return NextResponse.json({ success: true, lead: data });
   } catch (err) {

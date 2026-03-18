@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { enrichLeadAddress } from '@/lib/pdok';
+import { distributeLead } from '@/lib/distribution';
 
 const COMMON_KEYS = new Set([
   'branch', 'customer_id', 'naam_klant', 'name', 'email', 'telefoonnummer', 'phone',
@@ -82,6 +83,12 @@ export async function POST(request: NextRequest) {
         request_count: (keyRecord.request_count || 0) + 1,
       })
       .eq('id', keyRecord.id);
+
+    if (data.lat && data.lng) {
+      try {
+        await distributeLead({ id: data.id, branch: data.branch, lat: data.lat, lng: data.lng });
+      } catch { /* distribution failure should not block webhook */ }
+    }
 
     return NextResponse.json({ success: true, lead_id: data.id });
   } catch (err) {

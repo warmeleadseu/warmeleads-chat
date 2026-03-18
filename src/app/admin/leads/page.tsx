@@ -352,7 +352,14 @@ export default function LeadsCRMPage() {
                         <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ${badge.light} ${badge.text}`}>{badge.name}</span>
                       </td>
                     )}
-                    <td className="px-3 py-2.5 text-xs text-slate-500">{lead.customers?.name || '—'}</td>
+                    <td className="px-3 py-2.5 text-xs text-slate-500">
+                      <div>{lead.customers?.name || '—'}</div>
+                      {(lead as any).assignment_count > 0 && (
+                        <span className="inline-flex items-center gap-0.5 rounded-full bg-purple-50 px-1.5 py-0.5 text-[10px] font-medium text-purple-600" title={(lead as any).assigned_customers?.join(', ')}>
+                          {(lead as any).assignment_count}x toegewezen
+                        </span>
+                      )}
+                    </td>
                     {visibleCols.map(col => (
                       <td key={col} className="whitespace-nowrap px-3 py-2.5 text-sm text-slate-700">
                         {col === 'status' ? (
@@ -392,7 +399,12 @@ export default function LeadsCRMPage() {
               <div className="mb-2 flex items-start justify-between">
                 <div className="min-w-0 flex-1">
                   <p className="font-semibold text-slate-900">{lead.naam_klant || '—'}</p>
-                  <p className="text-xs text-slate-500">{lead.customers?.name || '—'}</p>
+                  <p className="text-xs text-slate-500">
+                    {lead.customers?.name || '—'}
+                    {(lead as any).assignment_count > 0 && (
+                      <span className="ml-1 text-[10px] text-purple-500">({(lead as any).assignment_count}x)</span>
+                    )}
+                  </p>
                 </div>
                 <select value={lead.status} onChange={e => handleQuickStatus(lead.id, e.target.value)}
                   className={`ml-2 shrink-0 rounded-full border-0 px-2 py-0.5 text-[11px] font-medium ${STATUS_COLORS[lead.status] || 'bg-slate-100 text-slate-600'}`}>

@@ -16,12 +16,14 @@ import {
   XMarkIcon,
   ChartBarSquareIcon,
   Squares2X2Icon,
+  ArrowsRightLeftIcon,
 } from '@heroicons/react/24/outline';
 import { AdminContext, type AdminUser } from './adminContext';
 
 const NAV = [
   { label: 'Dashboard', href: '/admin', icon: HomeIcon },
   { label: 'Leads CRM', href: '/admin/leads', icon: ChartBarSquareIcon },
+  { label: 'Verdeling', href: '/admin/verdeling', icon: ArrowsRightLeftIcon },
   { label: 'Importeren', href: '/admin/import', icon: DocumentArrowUpIcon },
   { label: 'Klanten', href: '/admin/customers', icon: BuildingOfficeIcon },
   { label: 'Branches', href: '/admin/branches', icon: Squares2X2Icon },

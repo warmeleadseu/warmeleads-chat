@@ -3,6 +3,8 @@ const PDOK_URL = 'https://api.pdok.nl/bzk/locatieserver/search/v3_1/free';
 interface PDOKResult {
   plaatsnaam: string;
   provincie: string;
+  lat?: number;
+  lng?: number;
 }
 
 function isValidPlace(val: string | undefined): boolean {
@@ -18,11 +20,6 @@ function isValidPlace(val: string | undefined): boolean {
   return true;
 }
 
-/**
- * Resolve a Dutch address (plaatsnaam + provincie) from postcode + huisnummer
- * using the free PDOK Locatieserver (Kadaster / BAG).
- * Returns null if the address cannot be resolved.
- */
 function extractPostcode(raw: string): string | null {
   const stripped = raw.replace(/\s+/g, '').toUpperCase();
   if (/^\d{4}[A-Z]{2}$/.test(stripped)) return stripped;
@@ -36,6 +33,12 @@ function extractPostcode(raw: string): string | null {
 function extractHuisnummer(raw: string): string {
   const match = raw.trim().match(/^(\d+)/);
   return match ? match[1] : raw.trim();
+}
+
+function parseWKTPoint(wkt: string): { lat: number; lng: number } | null {
+  const m = wkt.match(/POINT\(([\d.]+)\s+([\d.]+)\)/);
+  if (!m) return null;
+  return { lng: parseFloat(m[1]), lat: parseFloat(m[2]) };
 }
 
 export async function resolveAddress(
@@ -53,7 +56,7 @@ export async function resolveAddress(
   try {
     const q = encodeURIComponent(`${clean} ${hnr}`);
     const res = await fetch(
-      `${PDOK_URL}?q=${q}&fq=type:adres&rows=1&fl=woonplaatsnaam,provincienaam`,
+      `${PDOK_URL}?q=${q}&fq=type:adres&rows=1&fl=woonplaatsnaam,provincienaam,centroide_ll`,
       { signal: AbortSignal.timeout(4000) }
     );
 
@@ -63,9 +66,13 @@ export async function resolveAddress(
     const doc = data?.response?.docs?.[0];
     if (!doc) return null;
 
+    const coords = doc.centroide_ll ? parseWKTPoint(doc.centroide_ll) : null;
+
     return {
       plaatsnaam: doc.woonplaatsnaam || '',
       provincie: doc.provincienaam || '',
+      lat: coords?.lat,
+      lng: coords?.lng,
     };
   } catch {
     return null;
@@ -73,15 +80,42 @@ export async function resolveAddress(
 }
 
 /**
- * Enrich a lead object with plaatsnaam and provincie if they are missing
- * but postcode + huisnummer are available.
+ * Resolve coordinates for a city name (for customer target setup).
  */
+export async function resolveCity(
+  plaatsnaam: string
+): Promise<{ lat: number; lng: number; naam: string } | null> {
+  if (!plaatsnaam || plaatsnaam.trim().length < 2) return null;
+
+  try {
+    const q = encodeURIComponent(plaatsnaam.trim());
+    const res = await fetch(
+      `${PDOK_URL}?q=${q}&fq=type:woonplaats&rows=1&fl=woonplaatsnaam,centroide_ll`,
+      { signal: AbortSignal.timeout(4000) }
+    );
+
+    if (!res.ok) return null;
+
+    const data = await res.json();
+    const doc = data?.response?.docs?.[0];
+    if (!doc?.centroide_ll) return null;
+
+    const coords = parseWKTPoint(doc.centroide_ll);
+    if (!coords) return null;
+
+    return { lat: coords.lat, lng: coords.lng, naam: doc.woonplaatsnaam || plaatsnaam };
+  } catch {
+    return null;
+  }
+}
+
 export async function enrichLeadAddress<
-  T extends { postcode?: string; huisnummer?: string; plaatsnaam?: string; provincie?: string }
+  T extends { postcode?: string; huisnummer?: string; plaatsnaam?: string; provincie?: string; lat?: number; lng?: number }
 >(lead: T): Promise<T> {
   const needsPlace = !isValidPlace(lead.plaatsnaam);
   const needsProv = !isValidPlace(lead.provincie);
-  if ((!needsPlace && !needsProv) || !lead.postcode || !lead.huisnummer) {
+  const needsCoords = !lead.lat || !lead.lng;
+  if ((!needsPlace && !needsProv && !needsCoords) || !lead.postcode || !lead.huisnummer) {
     return lead;
   }
 
@@ -92,14 +126,13 @@ export async function enrichLeadAddress<
     ...lead,
     plaatsnaam: needsPlace && result.plaatsnaam ? result.plaatsnaam : lead.plaatsnaam,
     provincie: needsProv && result.provincie ? result.provincie : lead.provincie,
+    lat: needsCoords && result.lat ? result.lat : lead.lat,
+    lng: needsCoords && result.lng ? result.lng : lead.lng,
   };
 }
 
-/**
- * Enrich an array of leads in parallel (max 10 concurrent).
- */
 export async function enrichLeadsAddress<
-  T extends { postcode?: string; huisnummer?: string; plaatsnaam?: string; provincie?: string }
+  T extends { postcode?: string; huisnummer?: string; plaatsnaam?: string; provincie?: string; lat?: number; lng?: number }
 >(leads: T[]): Promise<T[]> {
   const CONCURRENCY = 10;
   const results: T[] = [...leads];

@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
 
   const { data: leads, error } = await supabase
     .from('leads')
-    .select('id, postcode, huisnummer, plaatsnaam, provincie')
+    .select('id, postcode, huisnummer, plaatsnaam, provincie, lat, lng')
     .not('postcode', 'is', null)
     .not('postcode', 'eq', '')
     .not('huisnummer', 'is', null)
@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
   }
 
   const candidates = (leads || []).filter(
-    l => !isValidPlace(l.plaatsnaam) || !isValidPlace(l.provincie)
+    l => !isValidPlace(l.plaatsnaam) || !isValidPlace(l.provincie) || !l.lat || !l.lng
   );
 
   if (candidates.length === 0) {
@@ -52,9 +52,13 @@ export async function POST(request: NextRequest) {
         const result = await resolveAddress(lead.postcode, lead.huisnummer);
         if (!result) return null;
 
-        const updates: Record<string, string> = {};
+        const updates: Record<string, string | number> = {};
         if (!isValidPlace(lead.plaatsnaam) && result.plaatsnaam) updates.plaatsnaam = result.plaatsnaam;
         if (!isValidPlace(lead.provincie) && result.provincie) updates.provincie = result.provincie;
+        if ((!lead.lat || !lead.lng) && result.lat && result.lng) {
+          updates.lat = result.lat;
+          updates.lng = result.lng;
+        }
 
         if (Object.keys(updates).length === 0) return null;
         return { id: lead.id, updates };
