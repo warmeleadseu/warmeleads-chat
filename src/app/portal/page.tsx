@@ -207,8 +207,8 @@ export default function PortalPage() {
     ? Math.round((stats.sold / stats.totalLeads) * 100)
     : 0;
 
-  const fetchStats = useCallback(async () => {
-    setStatsLoading(true);
+  const fetchStats = useCallback(async (silent = false) => {
+    if (!silent) setStatsLoading(true);
     try {
       const res = await portalFetch('/api/portal/stats');
       if (res.ok) {
@@ -216,7 +216,7 @@ export default function PortalPage() {
         setStats(data);
       }
     } finally {
-      setStatsLoading(false);
+      if (!silent) setStatsLoading(false);
     }
   }, []);
 
@@ -257,31 +257,51 @@ export default function PortalPage() {
   };
 
   const handleStatusUpdate = async (lead: Lead, newStatus: string) => {
-    const res = await portalFetch('/api/portal/leads', {
-      method: 'PUT',
-      body: JSON.stringify({ id: lead.id, status: newStatus }),
-    });
-    if (res.ok) {
-      showToast('Status bijgewerkt');
-      fetchLeads();
-      fetchStats();
+    const oldStatus = lead.status;
+
+    setLeads(prev => prev.map(l => l.id === lead.id ? { ...l, status: newStatus } : l));
+    if (selectedLead?.id === lead.id) {
+      setSelectedLead({ ...lead, status: newStatus });
+    }
+    showToast('Status bijgewerkt');
+
+    try {
+      const res = await portalFetch('/api/portal/leads', {
+        method: 'PUT',
+        body: JSON.stringify({ id: lead.id, status: newStatus }),
+      });
+      if (!res.ok) throw new Error();
+      fetchStats(true);
+    } catch {
+      setLeads(prev => prev.map(l => l.id === lead.id ? { ...l, status: oldStatus } : l));
       if (selectedLead?.id === lead.id) {
-        setSelectedLead({ ...lead, status: newStatus });
+        setSelectedLead({ ...lead, status: oldStatus });
       }
+      showToast('Fout bij bijwerken status');
     }
   };
 
   const handleNotesUpdate = async (lead: Lead, newNotes: string) => {
-    const res = await portalFetch('/api/portal/leads', {
-      method: 'PUT',
-      body: JSON.stringify({ id: lead.id, notities: newNotes }),
-    });
-    if (res.ok) {
-      showToast('Notities opgeslagen');
-      fetchLeads();
+    const oldNotes = lead.notities;
+
+    setLeads(prev => prev.map(l => l.id === lead.id ? { ...l, notities: newNotes } : l));
+    if (selectedLead?.id === lead.id) {
+      setSelectedLead({ ...lead, notities: newNotes });
+    }
+    showToast('Notities opgeslagen');
+
+    try {
+      const res = await portalFetch('/api/portal/leads', {
+        method: 'PUT',
+        body: JSON.stringify({ id: lead.id, notities: newNotes }),
+      });
+      if (!res.ok) throw new Error();
+    } catch {
+      setLeads(prev => prev.map(l => l.id === lead.id ? { ...l, notities: oldNotes } : l));
       if (selectedLead?.id === lead.id) {
-        setSelectedLead({ ...lead, notities: newNotes });
+        setSelectedLead({ ...lead, notities: oldNotes });
       }
+      showToast('Fout bij opslaan notities');
     }
   };
 
