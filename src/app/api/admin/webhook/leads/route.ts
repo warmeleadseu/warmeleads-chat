@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
+import { enrichLeadAddress } from '@/lib/pdok';
 
 const COMMON_KEYS = new Set([
   'branch', 'customer_id', 'naam_klant', 'name', 'email', 'telefoonnummer', 'phone',
@@ -46,7 +47,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const lead: Record<string, unknown> = {
+    const lead = await enrichLeadAddress({
       branch: branchSlug,
       customer_id: keyRecord.customer_id,
       naam_klant: body.naam_klant || body.name || '',
@@ -61,7 +62,7 @@ export async function POST(request: NextRequest) {
       bron: 'zapier',
       notities: body.notities || '',
       custom_fields: Object.keys(customFields).length > 0 ? customFields : {},
-    };
+    });
 
     if (!lead.naam_klant) {
       return NextResponse.json({ error: 'naam_klant is verplicht' }, { status: 400 });

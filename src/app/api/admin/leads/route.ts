@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
+import { enrichLeadAddress, enrichLeadsAddress } from '@/lib/pdok';
 
 export async function GET(request: NextRequest) {
   const admin = await verifyAdmin(request);
@@ -64,7 +65,8 @@ export async function POST(request: NextRequest) {
     const supabase = createServerClient();
 
     if (Array.isArray(body.leads)) {
-      const { data, error } = await supabase.from('leads').insert(body.leads).select();
+      const enriched = await enrichLeadsAddress(body.leads);
+      const { data, error } = await supabase.from('leads').insert(enriched).select();
       if (error) {
         console.error('Bulk insert error:', error);
         return NextResponse.json({ error: 'Import mislukt', details: error.message }, { status: 500 });
@@ -72,7 +74,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, count: data?.length || 0 });
     }
 
-    const { data, error } = await supabase.from('leads').insert(body).select().single();
+    const enriched = await enrichLeadAddress(body);
+    const { data, error } = await supabase.from('leads').insert(enriched).select().single();
     if (error) {
       console.error('Insert error:', error);
       return NextResponse.json({ error: 'Lead aanmaken mislukt', details: error.message }, { status: 500 });

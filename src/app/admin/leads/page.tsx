@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   MagnifyingGlassIcon,
@@ -437,11 +437,39 @@ function LeadFormPanel({
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [addressLoading, setAddressLoading] = useState(false);
+  const addressTimer = useRef<NodeJS.Timeout | null>(null);
 
   const branchConfig = branches.find(b => b.slug === formBranch);
   const branchFields = branchConfig?.branch_fields || [];
 
   const set = (key: string, val: string) => setForm(f => ({ ...f, [key]: val }));
+
+  const lookupAddress = useCallback((postcode: string, huisnummer: string) => {
+    if (addressTimer.current) clearTimeout(addressTimer.current);
+    const clean = postcode.replace(/\s+/g, '').toUpperCase();
+    if (!/^\d{4}[A-Z]{2}$/.test(clean) || !huisnummer) return;
+    setAddressLoading(true);
+    addressTimer.current = setTimeout(async () => {
+      try {
+        const res = await adminFetch(`/api/admin/address?postcode=${encodeURIComponent(clean)}&huisnummer=${encodeURIComponent(huisnummer)}`);
+        if (res.ok) {
+          const d = await res.json();
+          if (d.plaatsnaam) setForm(f => ({ ...f, plaatsnaam: f.plaatsnaam || d.plaatsnaam, provincie: f.provincie || d.provincie }));
+        }
+      } finally { setAddressLoading(false); }
+    }, 400);
+  }, []);
+
+  const handlePostcodeChange = (val: string) => {
+    set('postcode', val);
+    lookupAddress(val, form.huisnummer);
+  };
+
+  const handleHuisnummerChange = (val: string) => {
+    set('huisnummer', val);
+    lookupAddress(form.postcode, val);
+  };
 
   const save = async () => {
     if (!form.naam_klant) { setError('Naam is verplicht'); return; }
@@ -509,13 +537,34 @@ function LeadFormPanel({
                 <label className="mb-1 block text-xs font-medium text-slate-500">Naam klant *</label>
                 <input value={form.naam_klant || ''} onChange={e => set('naam_klant', e.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
               </div>
-              {['email', 'telefoonnummer', 'postcode', 'huisnummer', 'plaatsnaam'].map(k => (
-                <div key={k}>
-                  <label className="mb-1 block text-xs font-medium text-slate-500">{COMMON_LABELS[k] || k}</label>
-                  <input value={form[k] || ''} onChange={e => set(k, e.target.value)} type={k === 'email' ? 'email' : k === 'telefoonnummer' ? 'tel' : 'text'}
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
-                </div>
-              ))}
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-500">E-mail</label>
+                <input value={form.email || ''} onChange={e => set('email', e.target.value)} type="email"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-500">Telefoon</label>
+                <input value={form.telefoonnummer || ''} onChange={e => set('telefoonnummer', e.target.value)} type="tel"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-500">Postcode</label>
+                <input value={form.postcode || ''} onChange={e => handlePostcodeChange(e.target.value)} placeholder="1234AB"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-500">Huisnr.</label>
+                <input value={form.huisnummer || ''} onChange={e => handleHuisnummerChange(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
+              </div>
+              <div>
+                <label className="mb-1 flex items-center gap-1.5 text-xs font-medium text-slate-500">
+                  Plaats
+                  {addressLoading && <span className="inline-block h-3 w-3 animate-spin rounded-full border-[2px] border-slate-200 border-t-brand-purple" />}
+                </label>
+                <input value={form.plaatsnaam || ''} onChange={e => set('plaatsnaam', e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
+              </div>
               <div>
                 <label className="mb-1 block text-xs font-medium text-slate-500">Provincie</label>
                 <select value={form.provincie || ''} onChange={e => set('provincie', e.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900">
