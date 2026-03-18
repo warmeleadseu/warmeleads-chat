@@ -30,6 +30,7 @@ export async function GET(request: NextRequest) {
   const enriched = (customers || []).map(c => ({
     ...c,
     lead_count: counts[c.id] || 0,
+    has_password: !!c.password_hash,
     password_hash: undefined,
   }));
 

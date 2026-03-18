@@ -10,12 +10,19 @@ import {
   BuildingOfficeIcon,
   EyeIcon,
   UserGroupIcon,
+  ClipboardDocumentIcon,
+  CheckIcon,
+  ArrowTopRightOnSquareIcon,
+  KeyIcon,
+  ShieldCheckIcon,
+  ShieldExclamationIcon,
+  ArrowPathIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
 
 interface Customer {
   id: string; name: string; contact_person: string; email: string; phone: string;
-  branches: string[]; is_active: boolean; portal_active: boolean; notes: string; created_at: string;
+  branches: string[]; is_active: boolean; portal_active: boolean; has_password?: boolean; notes: string; created_at: string;
   lead_count?: number;
 }
 
@@ -26,6 +33,13 @@ export default function CustomersPage() {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<Customer | null>(null);
   const [showNew, setShowNew] = useState(false);
+  const [copied, setCopied] = useState<string | null>(null);
+  const [resettingPw, setResettingPw] = useState<string | null>(null);
+  const [newPw, setNewPw] = useState('');
+  const [pwSaving, setPwSaving] = useState(false);
+  const [togglingPortal, setTogglingPortal] = useState<string | null>(null);
+
+  const portalUrl = typeof window !== 'undefined' ? `${window.location.origin}/portal` : 'https://www.warmeleads.eu/portal';
 
   const fetch_ = useCallback(async () => {
     setLoading(true);
@@ -39,6 +53,36 @@ export default function CustomersPage() {
   const handleDelete = async (id: string, name: string) => {
     if (!confirm(`${name} verwijderen? Leads van deze klant worden niet verwijderd.`)) return;
     await adminFetch('/api/admin/customers', { method: 'DELETE', body: JSON.stringify({ id }) });
+    fetch_();
+  };
+
+  const copyCredentials = (c: Customer) => {
+    const text = `Portaal login voor ${c.name}:\nURL: ${portalUrl}\nE-mail: ${c.email}\n\n(Wachtwoord is eerder door jullie gedeeld)`;
+    navigator.clipboard.writeText(text);
+    setCopied(c.id);
+    setTimeout(() => setCopied(null), 2000);
+  };
+
+  const resetPassword = async (customerId: string) => {
+    if (!newPw || newPw.length < 6) return;
+    setPwSaving(true);
+    await adminFetch('/api/admin/customers', {
+      method: 'PUT',
+      body: JSON.stringify({ id: customerId, password: newPw }),
+    });
+    setPwSaving(false);
+    setResettingPw(null);
+    setNewPw('');
+    fetch_();
+  };
+
+  const togglePortal = async (c: Customer) => {
+    setTogglingPortal(c.id);
+    await adminFetch('/api/admin/customers', {
+      method: 'PUT',
+      body: JSON.stringify({ id: c.id, portal_active: !c.portal_active }),
+    });
+    setTogglingPortal(null);
     fetch_();
   };
 
@@ -62,50 +106,179 @@ export default function CustomersPage() {
           <p className="text-sm text-slate-500">Nog geen klanten. Voeg je eerste klant toe.</p>
         </div>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {customers.map(c => (
-            <div key={c.id} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:shadow-md">
-              <div className="mb-3 flex items-start justify-between">
-                <div>
-                  <h3 className="font-semibold text-slate-900">{c.name}</h3>
-                  {c.contact_person && <p className="text-xs text-slate-500">{c.contact_person}</p>}
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {customers.map(c => {
+            const portalReady = c.portal_active && c.has_password && c.email;
+            return (
+              <div key={c.id} className="rounded-xl border border-slate-200 bg-white shadow-sm transition hover:shadow-md">
+                <div className="p-5">
+                  {/* Header */}
+                  <div className="mb-3 flex items-start justify-between">
+                    <div>
+                      <h3 className="font-semibold text-slate-900">{c.name}</h3>
+                      {c.contact_person && <p className="text-xs text-slate-500">{c.contact_person}</p>}
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${c.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                        {c.is_active ? 'Actief' : 'Inactief'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Contact */}
+                  {c.email && <p className="mb-0.5 text-xs text-slate-500">{c.email}</p>}
+                  {c.phone && <p className="mb-2 text-xs text-slate-500">{c.phone}</p>}
+
+                  {/* Branches + leads */}
+                  <div className="mb-4 flex flex-wrap items-center gap-1.5">
+                    {c.branches?.map(b => (
+                      <span key={b} className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${b === 'thuisbatterij' ? 'bg-emerald-50 text-emerald-600' : 'bg-sky-50 text-sky-600'}`}>
+                        {b}
+                      </span>
+                    ))}
+                    {typeof c.lead_count === 'number' && (
+                      <span className="flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">
+                        <UserGroupIcon className="h-3 w-3" /> {c.lead_count} leads
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Portal section */}
+                  <div className="rounded-lg border border-slate-100 bg-slate-50/70 p-3">
+                    <div className="mb-2 flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        {portalReady ? (
+                          <ShieldCheckIcon className="h-4 w-4 text-emerald-500" />
+                        ) : (
+                          <ShieldExclamationIcon className="h-4 w-4 text-amber-500" />
+                        )}
+                        <span className="text-xs font-semibold text-slate-700">Klantportaal</span>
+                      </div>
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                        portalReady ? 'bg-emerald-100 text-emerald-700' : c.portal_active ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'
+                      }`}>
+                        {portalReady ? 'Gereed' : c.portal_active ? 'Incompleet' : 'Uit'}
+                      </span>
+                    </div>
+
+                    {/* Login info */}
+                    <div className="mb-2.5 space-y-1 text-[11px]">
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-400">URL</span>
+                        <span className="font-mono text-slate-600">{portalUrl.replace('https://', '')}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-400">E-mail</span>
+                        <span className="font-medium text-slate-600">{c.email || <span className="italic text-amber-500">niet ingesteld</span>}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-400">Wachtwoord</span>
+                        <span className="text-slate-600">{c.has_password ? '••••••••' : <span className="italic text-amber-500">niet ingesteld</span>}</span>
+                      </div>
+                    </div>
+
+                    {/* Password reset inline */}
+                    <AnimatePresence>
+                      {resettingPw === c.id && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          className="mb-2.5 overflow-hidden"
+                        >
+                          <div className="flex gap-1.5">
+                            <input
+                              type="text"
+                              value={newPw}
+                              onChange={e => setNewPw(e.target.value)}
+                              placeholder="Nieuw wachtwoord (min. 6 tekens)"
+                              className="flex-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-900 outline-none focus:border-brand-purple/50"
+                              autoFocus
+                            />
+                            <button
+                              onClick={() => resetPassword(c.id)}
+                              disabled={pwSaving || newPw.length < 6}
+                              className="rounded-md bg-brand-purple px-2.5 py-1.5 text-[11px] font-medium text-white disabled:opacity-50"
+                            >
+                              {pwSaving ? '...' : 'Opslaan'}
+                            </button>
+                            <button
+                              onClick={() => { setResettingPw(null); setNewPw(''); }}
+                              className="rounded-md px-1.5 py-1.5 text-slate-400 hover:text-slate-600"
+                            >
+                              <XMarkIcon className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+
+                    {/* Portal actions */}
+                    <div className="flex flex-wrap gap-1">
+                      <button
+                        onClick={() => copyCredentials(c)}
+                        disabled={!c.email}
+                        className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-medium text-slate-600 transition hover:bg-slate-50 disabled:opacity-40"
+                      >
+                        {copied === c.id ? <CheckIcon className="h-3 w-3 text-emerald-500" /> : <ClipboardDocumentIcon className="h-3 w-3" />}
+                        {copied === c.id ? 'Gekopieerd!' : 'Kopieer login'}
+                      </button>
+                      <button
+                        onClick={() => { setResettingPw(resettingPw === c.id ? null : c.id); setNewPw(''); }}
+                        className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-medium text-slate-600 transition hover:bg-slate-50"
+                      >
+                        <KeyIcon className="h-3 w-3" />
+                        {c.has_password ? 'Reset wachtwoord' : 'Stel wachtwoord in'}
+                      </button>
+                      <button
+                        onClick={() => togglePortal(c)}
+                        disabled={togglingPortal === c.id}
+                        className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] font-medium transition ${
+                          c.portal_active
+                            ? 'border-red-200 bg-white text-red-500 hover:bg-red-50'
+                            : 'border-emerald-200 bg-white text-emerald-600 hover:bg-emerald-50'
+                        } disabled:opacity-50`}
+                      >
+                        {togglingPortal === c.id ? (
+                          <ArrowPathIcon className="h-3 w-3 animate-spin" />
+                        ) : c.portal_active ? (
+                          <ShieldExclamationIcon className="h-3 w-3" />
+                        ) : (
+                          <ShieldCheckIcon className="h-3 w-3" />
+                        )}
+                        {c.portal_active ? 'Portaal uit' : 'Portaal aan'}
+                      </button>
+                      {portalReady && (
+                        <a
+                          href="/portal"
+                          target="_blank"
+                          className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-medium text-brand-purple transition hover:bg-brand-purple/5"
+                        >
+                          <ArrowTopRightOnSquareIcon className="h-3 w-3" />
+                          Open portaal
+                        </a>
+                      )}
+                    </div>
+                  </div>
                 </div>
-                <div className="flex items-center gap-1.5">
-                  {c.portal_active && (
-                    <span className="rounded-full bg-brand-purple/10 px-2 py-0.5 text-[10px] font-medium text-brand-purple">Portaal</span>
-                  )}
-                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${c.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
-                    {c.is_active ? 'Actief' : 'Inactief'}
-                  </span>
+
+                {/* Bottom actions */}
+                <div className="flex items-center border-t border-slate-100">
+                  <button onClick={() => setEditing(c)} className="flex flex-1 items-center justify-center gap-1.5 py-3 text-xs font-medium text-slate-500 transition hover:bg-slate-50 hover:text-brand-purple">
+                    <PencilSquareIcon className="h-3.5 w-3.5" /> Bewerken
+                  </button>
+                  <div className="h-8 w-px bg-slate-100" />
+                  <a href={`/admin/leads?customer_id=${c.id}`} className="flex flex-1 items-center justify-center gap-1.5 py-3 text-xs font-medium text-slate-500 transition hover:bg-slate-50 hover:text-brand-purple">
+                    <EyeIcon className="h-3.5 w-3.5" /> Bekijk leads
+                  </a>
+                  <div className="h-8 w-px bg-slate-100" />
+                  <button onClick={() => handleDelete(c.id, c.name)} className="flex items-center justify-center px-4 py-3 text-xs text-slate-400 transition hover:bg-red-50 hover:text-red-500">
+                    <TrashIcon className="h-3.5 w-3.5" />
+                  </button>
                 </div>
               </div>
-              {c.email && <p className="mb-0.5 text-xs text-slate-500">{c.email}</p>}
-              {c.phone && <p className="mb-2 text-xs text-slate-500">{c.phone}</p>}
-              <div className="mb-3 flex flex-wrap items-center gap-1.5">
-                {c.branches && c.branches.length > 0 && c.branches.map(b => (
-                  <span key={b} className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${b === 'thuisbatterij' ? 'bg-emerald-50 text-emerald-600' : 'bg-sky-50 text-sky-600'}`}>
-                    {b}
-                  </span>
-                ))}
-                {typeof c.lead_count === 'number' && (
-                  <span className="flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">
-                    <UserGroupIcon className="h-3 w-3" /> {c.lead_count} leads
-                  </span>
-                )}
-              </div>
-              <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-3">
-                <button onClick={() => setEditing(c)} className="flex items-center gap-1 text-xs text-slate-500 hover:text-brand-purple">
-                  <PencilSquareIcon className="h-3.5 w-3.5" /> Bewerken
-                </button>
-                <a href={`/admin/leads?customer_id=${c.id}`} className="flex items-center gap-1 text-xs text-slate-500 hover:text-brand-purple">
-                  <EyeIcon className="h-3.5 w-3.5" /> Bekijk leads
-                </a>
-                <button onClick={() => handleDelete(c.id, c.name)} className="flex items-center gap-1 text-xs text-slate-500 hover:text-red-500">
-                  <TrashIcon className="h-3.5 w-3.5" /> Verwijderen
-                </button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
