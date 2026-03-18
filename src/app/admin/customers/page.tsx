@@ -22,7 +22,7 @@ import { adminFetch } from '@/lib/adminAuth';
 
 interface Customer {
   id: string; name: string; contact_person: string; email: string; phone: string;
-  branches: string[]; is_active: boolean; portal_active: boolean; has_password?: boolean; notes: string; created_at: string;
+  branches: string[]; is_active: boolean; portal_active: boolean; has_password?: boolean; portal_password?: string | null; notes: string; created_at: string;
   lead_count?: number;
 }
 
@@ -38,6 +38,7 @@ export default function CustomersPage() {
   const [newPw, setNewPw] = useState('');
   const [pwSaving, setPwSaving] = useState(false);
   const [togglingPortal, setTogglingPortal] = useState<string | null>(null);
+  const [showPw, setShowPw] = useState<string | null>(null);
 
   const portalUrl = typeof window !== 'undefined' ? `${window.location.origin}/portal` : 'https://www.warmeleads.eu/portal';
 
@@ -173,7 +174,17 @@ export default function CustomersPage() {
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-slate-400">Wachtwoord</span>
-                        <span className="text-slate-600">{c.has_password ? '••••••••' : <span className="italic text-amber-500">niet ingesteld</span>}</span>
+                        {c.has_password ? (
+                          <button
+                            onClick={() => setShowPw(showPw === c.id ? null : c.id)}
+                            className="inline-flex items-center gap-1 text-slate-600 hover:text-brand-purple"
+                          >
+                            <span className="font-medium">{showPw === c.id && c.portal_password ? c.portal_password : '••••••••'}</span>
+                            <EyeIcon className="h-3 w-3 shrink-0 text-slate-400" />
+                          </button>
+                        ) : (
+                          <span className="italic text-amber-500">niet ingesteld</span>
+                        )}
                       </div>
                     </div>
 

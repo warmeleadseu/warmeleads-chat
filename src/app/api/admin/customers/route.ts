@@ -34,6 +34,7 @@ export async function GET(request: NextRequest) {
     password_hash: undefined,
   }));
 
+
   return NextResponse.json({ customers: enriched });
 }
 
@@ -51,6 +52,7 @@ export async function POST(request: NextRequest) {
 
     if (password) {
       rest.password_hash = await bcrypt.hash(password, 12);
+      rest.portal_password = password;
     }
 
     const supabase = createServerClient();
@@ -75,6 +77,7 @@ export async function PUT(request: NextRequest) {
 
     if (password) {
       updates.password_hash = await bcrypt.hash(password, 12);
+      updates.portal_password = password;
     }
 
     const supabase = createServerClient();
