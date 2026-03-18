@@ -97,22 +97,6 @@ export default function KoppelingenPage() {
     setTimeout(() => setCopied(null), 2000);
   };
 
-  const testWebhook = async (keyId: string) => {
-    setTesting(keyId);
-    setTestResult(null);
-    try {
-      const res = await adminFetch('/api/admin/webhook/test', {
-        method: 'POST',
-        body: JSON.stringify({ key_id: keyId }),
-      });
-      const data = await res.json();
-      setTestResult({ id: keyId, success: data.success, message: data.success ? data.message : data.error });
-    } catch {
-      setTestResult({ id: keyId, success: false, message: 'Test mislukt — probeer het opnieuw' });
-    }
-    setTesting(null);
-  };
-
   const webhookUrl = typeof window !== 'undefined' ? `${window.location.origin}/api/admin/webhook/leads` : '';
 
   const getTimeSince = (date: string | null) => {
@@ -124,6 +108,30 @@ export default function KoppelingenPage() {
     if (hours < 24) return `${hours}u geleden`;
     const days = Math.floor(hours / 24);
     return `${days}d geleden`;
+  };
+
+  const testWebhookFromPanel = async (keyId: string) => {
+    setTesting(keyId);
+    setTestResult(null);
+    try {
+      const res = await adminFetch('/api/admin/webhook/test', {
+        method: 'POST',
+        body: JSON.stringify({ key_id: keyId }),
+      });
+      const data = await res.json();
+      const result = { id: keyId, success: data.success, message: data.success ? data.message : data.error };
+      setTestResult(result);
+      if (data.success) {
+        fetchData();
+        setTimeout(() => {
+          setActiveInstructions(null);
+          setTimeout(() => setTestResult(null), 500);
+        }, 2500);
+      }
+    } catch {
+      setTestResult({ id: keyId, success: false, message: 'Test mislukt — probeer het opnieuw' });
+    }
+    setTesting(null);
   };
 
   const onCreated = (keyId: string) => {
@@ -179,7 +187,14 @@ export default function KoppelingenPage() {
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {keys.map(k => {
+            const hasLeads = k.request_count > 0;
             const isRecent = k.last_used_at && (Date.now() - new Date(k.last_used_at).getTime()) < 7 * 24 * 60 * 60 * 1000;
+            const statusLabel = hasLeads ? 'Actief' : 'Nieuw';
+            const statusColor = hasLeads
+              ? 'bg-emerald-50 text-emerald-600 border-emerald-200'
+              : 'bg-amber-50 text-amber-600 border-amber-200';
+            const dotColor = isRecent ? 'bg-emerald-400' : hasLeads ? 'bg-emerald-400' : 'bg-amber-400';
+
             return (
               <div key={k.id} className="group rounded-xl border border-slate-200 bg-white shadow-sm transition hover:shadow-md">
                 <div className="p-5">
@@ -187,7 +202,7 @@ export default function KoppelingenPage() {
                   <div className="mb-3 flex items-start justify-between">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <span className={`h-2 w-2 rounded-full ${isRecent ? 'bg-emerald-400' : k.last_used_at ? 'bg-amber-400' : 'bg-slate-300'}`} />
+                        <span className={`h-2 w-2 shrink-0 rounded-full ${dotColor}`} />
                         <h3 className="truncate text-sm font-semibold text-slate-900">{k.label}</h3>
                       </div>
                       <p className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-500">
@@ -195,9 +210,14 @@ export default function KoppelingenPage() {
                         {k.customers?.name || 'Geen klant'}
                       </p>
                     </div>
-                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${k.branch === 'thuisbatterij' ? 'bg-emerald-50 text-emerald-600' : 'bg-sky-50 text-sky-600'}`}>
-                      {k.branch}
-                    </span>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${statusColor}`}>
+                        {statusLabel}
+                      </span>
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${k.branch === 'thuisbatterij' ? 'bg-emerald-50 text-emerald-600' : 'bg-sky-50 text-sky-600'}`}>
+                        {k.branch}
+                      </span>
+                    </div>
                   </div>
 
                   {/* Stats */}
@@ -211,9 +231,9 @@ export default function KoppelingenPage() {
                     )}
                   </div>
 
-                  {/* Test result */}
+                  {/* Test result (shown on card only when instructions panel is closed) */}
                   <AnimatePresence>
-                    {testResult?.id === k.id && (
+                    {testResult?.id === k.id && activeInstructions !== k.id && (
                       <motion.div
                         initial={{ height: 0, opacity: 0 }}
                         animate={{ height: 'auto', opacity: 1 }}
@@ -243,11 +263,11 @@ export default function KoppelingenPage() {
                     className="flex flex-1 items-center justify-center gap-1.5 py-3 text-xs font-medium text-brand-purple transition hover:bg-brand-purple/5"
                   >
                     <DocumentDuplicateIcon className="h-3.5 w-3.5" />
-                    Zapier instructies
+                    {hasLeads ? 'Zapier instructies' : 'Instellen'}
                   </button>
                   <div className="h-8 w-px bg-slate-100" />
                   <button
-                    onClick={() => testWebhook(k.id)}
+                    onClick={() => testWebhookFromPanel(k.id)}
                     disabled={testing === k.id}
                     className="flex flex-1 items-center justify-center gap-1.5 py-3 text-xs font-medium text-emerald-600 transition hover:bg-emerald-50 disabled:opacity-50"
                   >
@@ -276,6 +296,9 @@ export default function KoppelingenPage() {
                       copied={copied}
                       onCopy={copy}
                       onClose={() => setActiveInstructions(null)}
+                      onTest={() => testWebhookFromPanel(k.id)}
+                      testing={testing === k.id}
+                      testResult={testResult?.id === k.id ? testResult : null}
                     />
                   )}
                 </AnimatePresence>
@@ -317,12 +340,18 @@ function InstructionsPanel({
   copied,
   onCopy,
   onClose,
+  onTest,
+  testing,
+  testResult,
 }: {
   webhookKey: WebhookKey;
   webhookUrl: string;
   copied: string | null;
   onCopy: (text: string, id: string) => void;
   onClose: () => void;
+  onTest: () => void;
+  testing: boolean;
+  testResult: { id: string; success: boolean; message: string } | null;
 }) {
   const fields = webhookKey.branch === 'thuisbatterij' ? THUISBATTERIJ_FIELDS : AIRCO_FIELDS;
   const headerValue = `X-API-Key: ${webhookKey.key}`;
@@ -462,6 +491,76 @@ function InstructionsPanel({
               * = verplicht. Overige velden zijn optioneel — stuur alleen wat je hebt.
             </p>
           </div>
+        </div>
+
+        {/* Step 5: Test */}
+        <div className="mt-5 rounded-xl border-2 border-dashed border-emerald-200 bg-emerald-50/50 p-4">
+          <div className="mb-2 flex items-center gap-2">
+            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-[10px] font-bold text-white">5</span>
+            <p className="text-xs font-semibold text-slate-800">Test de verbinding</p>
+          </div>
+          <p className="mb-3 ml-7 text-[10px] text-slate-500">
+            Klaar met instellen? Test hier of alles werkt. Er wordt een test-lead aangemaakt die je kunt verwijderen.
+          </p>
+
+          <AnimatePresence mode="wait">
+            {testResult?.success ? (
+              <motion.div
+                key="success"
+                initial={{ opacity: 0, y: 5 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                className="ml-7"
+              >
+                <div className="flex items-center gap-2.5 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
+                  <CheckCircleIcon className="h-5 w-5 shrink-0 text-emerald-500" />
+                  <div>
+                    <p className="text-sm font-semibold text-emerald-700">Verbinding werkt!</p>
+                    <p className="text-[11px] text-emerald-600">{testResult.message} — dit venster sluit automatisch.</p>
+                  </div>
+                </div>
+              </motion.div>
+            ) : testResult && !testResult.success ? (
+              <motion.div
+                key="error"
+                initial={{ opacity: 0, y: 5 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                className="ml-7 space-y-2"
+              >
+                <div className="flex items-center gap-2.5 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+                  <ExclamationTriangleIcon className="h-5 w-5 shrink-0 text-red-400" />
+                  <div>
+                    <p className="text-sm font-semibold text-red-700">Test mislukt</p>
+                    <p className="text-[11px] text-red-600">{testResult.message}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={onTest}
+                  disabled={testing}
+                  className="ml-0 inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                >
+                  <ArrowPathIcon className={`h-3.5 w-3.5 ${testing ? 'animate-spin' : ''}`} />
+                  Opnieuw testen
+                </button>
+              </motion.div>
+            ) : (
+              <motion.div key="button" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="ml-7">
+                <button
+                  onClick={onTest}
+                  disabled={testing}
+                  className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-600 disabled:opacity-50"
+                >
+                  {testing ? (
+                    <ArrowPathIcon className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <BoltIcon className="h-4 w-4" />
+                  )}
+                  {testing ? 'Testen...' : 'Test verbinding'}
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
     </motion.div>
