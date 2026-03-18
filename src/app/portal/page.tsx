@@ -195,7 +195,7 @@ export default function PortalPage() {
   const [showFilters, setShowFilters] = useState(false);
 
   const [toast, setToast] = useState<string | null>(null);
-  const toastTimer = useRef<NodeJS.Timeout>();
+  const toastTimer = useRef<NodeJS.Timeout | null>(null);
   const showToast = useCallback((msg: string) => {
     setToast(msg);
     if (toastTimer.current) clearTimeout(toastTimer.current);
