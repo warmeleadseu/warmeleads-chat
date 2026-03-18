@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 
+const COMMON_KEYS = new Set([
+  'branch', 'customer_id', 'naam_klant', 'name', 'email', 'telefoonnummer', 'phone',
+  'postcode', 'huisnummer', 'plaatsnaam', 'city', 'provincie', 'wervingsdatum',
+  'status', 'bron', 'notities',
+]);
+
 export async function POST(request: NextRequest) {
   try {
     const apiKey = request.headers.get('X-API-Key');
@@ -22,9 +28,26 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
+    const branchSlug = body.branch || keyRecord.branch;
 
-    const lead = {
-      branch: body.branch || keyRecord.branch,
+    const { data: branchFields } = await supabase
+      .from('branch_fields')
+      .select('key')
+      .eq('branch_id', (
+        await supabase.from('branches').select('id').eq('slug', branchSlug).single()
+      ).data?.id || '');
+
+    const fieldKeys = new Set((branchFields || []).map((f: { key: string }) => f.key));
+
+    const customFields: Record<string, string> = {};
+    for (const [k, v] of Object.entries(body)) {
+      if (!COMMON_KEYS.has(k) && fieldKeys.has(k) && v) {
+        customFields[k] = String(v);
+      }
+    }
+
+    const lead: Record<string, unknown> = {
+      branch: branchSlug,
       customer_id: keyRecord.customer_id,
       naam_klant: body.naam_klant || body.name || '',
       email: body.email || '',
@@ -37,19 +60,7 @@ export async function POST(request: NextRequest) {
       status: 'nieuw',
       bron: 'zapier',
       notities: body.notities || '',
-      // Thuisbatterij fields
-      zonnepanelen: body.zonnepanelen || null,
-      dynamisch_contract: body.dynamisch_contract || null,
-      stroomverbruik: body.stroomverbruik || null,
-      budget: body.budget || null,
-      reden_thuisbatterij: body.reden_thuisbatterij || null,
-      // Airco fields
-      type_airco: body.type_airco || null,
-      koelen_verwarmen: body.koelen_verwarmen || null,
-      hoeveel_ruimtes: body.hoeveel_ruimtes || null,
-      zakelijk: body.zakelijk || null,
-      koop_of_huur: body.koop_of_huur || null,
-      boorwerkzaamheden_toegestaan: body.boorwerkzaamheden_toegestaan || null,
+      custom_fields: Object.keys(customFields).length > 0 ? customFields : {},
     };
 
     if (!lead.naam_klant) {

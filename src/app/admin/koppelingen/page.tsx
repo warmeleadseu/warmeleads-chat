@@ -29,42 +29,14 @@ interface WebhookKey {
   customers?: { id: string; name: string } | null;
   is_active: boolean; last_used_at: string | null; request_count: number; created_at: string;
 }
-
-const THUISBATTERIJ_FIELDS = [
-  { key: 'naam_klant', label: 'Naam klant', required: true },
-  { key: 'email', label: 'E-mailadres', required: false },
-  { key: 'telefoonnummer', label: 'Telefoonnummer', required: false },
-  { key: 'postcode', label: 'Postcode', required: false },
-  { key: 'huisnummer', label: 'Huisnummer', required: false },
-  { key: 'plaatsnaam', label: 'Plaatsnaam', required: false },
-  { key: 'provincie', label: 'Provincie', required: false },
-  { key: 'zonnepanelen', label: 'Zonnepanelen', required: false },
-  { key: 'dynamisch_contract', label: 'Dynamisch contract', required: false },
-  { key: 'stroomverbruik', label: 'Stroomverbruik', required: false },
-  { key: 'budget', label: 'Budget', required: false },
-  { key: 'reden_thuisbatterij', label: 'Reden thuisbatterij', required: false },
-];
-
-const AIRCO_FIELDS = [
-  { key: 'naam_klant', label: 'Naam klant', required: true },
-  { key: 'email', label: 'E-mailadres', required: false },
-  { key: 'telefoonnummer', label: 'Telefoonnummer', required: false },
-  { key: 'postcode', label: 'Postcode', required: false },
-  { key: 'huisnummer', label: 'Huisnummer', required: false },
-  { key: 'plaatsnaam', label: 'Plaatsnaam', required: false },
-  { key: 'provincie', label: 'Provincie', required: false },
-  { key: 'type_airco', label: 'Type airco', required: false },
-  { key: 'koelen_verwarmen', label: 'Koelen/verwarmen', required: false },
-  { key: 'hoeveel_ruimtes', label: 'Hoeveel ruimtes', required: false },
-  { key: 'zakelijk', label: 'Zakelijk', required: false },
-  { key: 'koop_of_huur', label: 'Koop of huur', required: false },
-  { key: 'boorwerkzaamheden_toegestaan', label: 'Boorwerkzaamheden toegestaan', required: false },
-];
+interface BranchFieldConfig { id: string; key: string; label: string; field_type: string; options: string[]; is_required: boolean; sort_order: number; }
+interface BranchConfig { id: string; slug: string; name: string; color: string; is_active: boolean; branch_fields: BranchFieldConfig[]; }
 
 export default function KoppelingenPage() {
   const { user } = useAdmin();
   const [keys, setKeys] = useState<WebhookKey[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [branchesList, setBranchesList] = useState<BranchConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [showWizard, setShowWizard] = useState(false);
   const [activeInstructions, setActiveInstructions] = useState<string | null>(null);
@@ -74,12 +46,14 @@ export default function KoppelingenPage() {
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const [keysRes, custRes] = await Promise.all([
+    const [keysRes, custRes, branchRes] = await Promise.all([
       adminFetch('/api/admin/webhook/keys'),
       adminFetch('/api/admin/customers'),
+      adminFetch('/api/admin/branches'),
     ]);
     if (keysRes.ok) { const d = await keysRes.json(); setKeys(d.keys || []); }
     if (custRes.ok) { const d = await custRes.json(); setCustomers(d.customers || []); }
+    if (branchRes.ok) { const d = await branchRes.json(); setBranchesList(d.branches || []); }
     setLoading(false);
   }, []);
 
@@ -319,6 +293,7 @@ export default function KoppelingenPage() {
               onTest={() => testWebhookFromPanel(k.id)}
               testing={testing === k.id}
               testResult={testResult?.id === k.id ? testResult : null}
+              branchesList={branchesList}
             />
           );
         })()}
@@ -339,6 +314,7 @@ export default function KoppelingenPage() {
         {showWizard && (
           <CreateWizard
             customers={customers}
+            branchesList={branchesList}
             onClose={() => setShowWizard(false)}
             onCreated={onCreated}
           />
@@ -359,6 +335,7 @@ function InstructionsPanel({
   onTest,
   testing,
   testResult,
+  branchesList,
 }: {
   webhookKey: WebhookKey;
   webhookUrl: string;
@@ -368,8 +345,20 @@ function InstructionsPanel({
   onTest: () => void;
   testing: boolean;
   testResult: { id: string; success: boolean; message: string } | null;
+  branchesList: BranchConfig[];
 }) {
-  const fields = webhookKey.branch === 'thuisbatterij' ? THUISBATTERIJ_FIELDS : AIRCO_FIELDS;
+  const branchConfig = branchesList.find(b => b.slug === webhookKey.branch);
+  const branchFields = branchConfig?.branch_fields || [];
+  const fields = [
+    { key: 'naam_klant', label: 'Naam klant', required: true },
+    { key: 'email', label: 'E-mailadres', required: false },
+    { key: 'telefoonnummer', label: 'Telefoonnummer', required: false },
+    { key: 'postcode', label: 'Postcode', required: false },
+    { key: 'huisnummer', label: 'Huisnummer', required: false },
+    { key: 'plaatsnaam', label: 'Plaatsnaam', required: false },
+    { key: 'provincie', label: 'Provincie', required: false },
+    ...branchFields.map(f => ({ key: f.key, label: f.label, required: f.is_required })),
+  ];
 
   const copyAll = () => {
     const lines = [
@@ -642,10 +631,12 @@ function CopyField({
 
 function CreateWizard({
   customers,
+  branchesList,
   onClose,
   onCreated,
 }: {
   customers: Customer[];
+  branchesList: BranchConfig[];
   onClose: () => void;
   onCreated: (keyId: string) => void;
 }) {
@@ -739,11 +730,14 @@ function CreateWizard({
                       <div>
                         <p className="text-sm font-medium text-slate-800">{c.name}</p>
                         <div className="mt-0.5 flex gap-1">
-                          {c.branches.map(b => (
-                            <span key={b} className={`rounded-full px-1.5 py-0.5 text-[9px] font-medium ${b === 'thuisbatterij' ? 'bg-emerald-50 text-emerald-600' : 'bg-sky-50 text-sky-600'}`}>
-                              {b}
-                            </span>
-                          ))}
+                          {c.branches.map(b => {
+                            const bc = branchesList.find(x => x.slug === b);
+                            return (
+                              <span key={b} className={`rounded-full px-1.5 py-0.5 text-[9px] font-medium ${b === 'thuisbatterij' ? 'bg-emerald-50 text-emerald-600' : 'bg-sky-50 text-sky-600'}`}>
+                                {bc?.name || b}
+                              </span>
+                            );
+                          })}
                         </div>
                       </div>
                       <ChevronRightIcon className="h-4 w-4 text-slate-400" />
@@ -760,29 +754,32 @@ function CreateWizard({
               <h3 className="mb-1 text-sm font-semibold text-slate-800">Welke branche?</h3>
               <p className="mb-4 text-xs text-slate-500">Leads worden automatisch als deze branche opgeslagen.</p>
               <div className="space-y-2">
-                {selectedCustomer.branches.map(b => (
-                  <button
-                    key={b}
-                    onClick={() => {
-                      setBranch(b);
-                      setLabel(`${selectedCustomer.name} — ${b === 'thuisbatterij' ? 'Thuisbatterij' : 'Airco'}`);
-                      setStep(3);
-                    }}
-                    className={`flex w-full items-center justify-between rounded-xl border px-4 py-3.5 text-left transition ${
-                      branch === b
-                        ? 'border-brand-purple/30 bg-brand-purple/5'
-                        : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className={`flex h-9 w-9 items-center justify-center rounded-lg ${b === 'thuisbatterij' ? 'bg-emerald-50' : 'bg-sky-50'}`}>
-                        <BoltIcon className={`h-4 w-4 ${b === 'thuisbatterij' ? 'text-emerald-600' : 'text-sky-600'}`} />
+                {selectedCustomer.branches.map(bSlug => {
+                  const bc = branchesList.find(x => x.slug === bSlug);
+                  return (
+                    <button
+                      key={bSlug}
+                      onClick={() => {
+                        setBranch(bSlug);
+                        setLabel(`${selectedCustomer.name} — ${bc?.name || bSlug}`);
+                        setStep(3);
+                      }}
+                      className={`flex w-full items-center justify-between rounded-xl border px-4 py-3.5 text-left transition ${
+                        branch === bSlug
+                          ? 'border-brand-purple/30 bg-brand-purple/5'
+                          : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={`flex h-9 w-9 items-center justify-center rounded-lg ${bSlug === 'thuisbatterij' ? 'bg-emerald-50' : 'bg-sky-50'}`}>
+                          <BoltIcon className={`h-4 w-4 ${bSlug === 'thuisbatterij' ? 'text-emerald-600' : 'text-sky-600'}`} />
+                        </div>
+                        <span className="text-sm font-medium text-slate-800 capitalize">{bc?.name || bSlug}</span>
                       </div>
-                      <span className="text-sm font-medium text-slate-800 capitalize">{b}</span>
-                    </div>
-                    <ChevronRightIcon className="h-4 w-4 text-slate-400" />
-                  </button>
-                ))}
+                      <ChevronRightIcon className="h-4 w-4 text-slate-400" />
+                    </button>
+                  );
+                })}
               </div>
               <button onClick={() => setStep(1)} className="mt-4 text-xs text-slate-500 hover:text-slate-700">
                 ← Terug

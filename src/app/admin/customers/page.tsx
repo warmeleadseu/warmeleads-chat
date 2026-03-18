@@ -26,10 +26,11 @@ interface Customer {
   lead_count?: number;
 }
 
-const BRANCHES = ['thuisbatterij', 'airco'];
+interface BranchOption { slug: string; name: string; color: string; is_active: boolean; }
 
 export default function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [branchOptions, setBranchOptions] = useState<BranchOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<Customer | null>(null);
   const [showNew, setShowNew] = useState(false);
@@ -50,6 +51,12 @@ export default function CustomersPage() {
   }, []);
 
   useEffect(() => { fetch_(); }, [fetch_]);
+
+  const fetchBranches = useCallback(async () => {
+    const res = await adminFetch('/api/admin/branches');
+    if (res.ok) { const d = await res.json(); setBranchOptions((d.branches || []).map((b: any) => ({ slug: b.slug, name: b.name, color: b.color, is_active: b.is_active }))); }
+  }, []);
+  useEffect(() => { fetchBranches(); }, [fetchBranches]);
 
   const handleDelete = async (id: string, name: string) => {
     if (!confirm(`${name} verwijderen? Leads van deze klant worden niet verwijderd.`)) return;
@@ -147,11 +154,20 @@ export default function CustomersPage() {
 
                   {/* Branches + leads */}
                   <div className="mb-4 flex flex-wrap items-center gap-1.5">
-                    {c.branches?.map(b => (
-                      <span key={b} className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${b === 'thuisbatterij' ? 'bg-emerald-50 text-emerald-600' : 'bg-sky-50 text-sky-600'}`}>
-                        {b}
-                      </span>
-                    ))}
+                    {c.branches?.map(bSlug => {
+                      const bo = branchOptions.find(x => x.slug === bSlug);
+                      const colorMap: Record<string, string> = {
+                        emerald: 'bg-emerald-50 text-emerald-600', sky: 'bg-sky-50 text-sky-600', amber: 'bg-amber-50 text-amber-600',
+                        purple: 'bg-purple-50 text-purple-600', rose: 'bg-rose-50 text-rose-600', cyan: 'bg-cyan-50 text-cyan-600',
+                        lime: 'bg-lime-50 text-lime-600', indigo: 'bg-indigo-50 text-indigo-600', teal: 'bg-teal-50 text-teal-600',
+                        slate: 'bg-slate-50 text-slate-600',
+                      };
+                      return (
+                        <span key={bSlug} className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${colorMap[bo?.color || 'slate'] || colorMap.slate}`}>
+                          {bo?.name || bSlug}
+                        </span>
+                      );
+                    })}
                     {typeof c.lead_count === 'number' && (
                       <span className="flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
                         <UserGroupIcon className="h-3 w-3" /> {c.lead_count} leads
@@ -316,6 +332,7 @@ export default function CustomersPage() {
         {(editing || showNew) && (
           <CustomerForm
             customer={editing}
+            branchOptions={branchOptions}
             onClose={() => { setEditing(null); setShowNew(false); }}
             onSaved={() => { setEditing(null); setShowNew(false); fetch_(); }}
           />
@@ -325,7 +342,7 @@ export default function CustomersPage() {
   );
 }
 
-function CustomerForm({ customer, onClose, onSaved }: { customer: Customer | null; onClose: () => void; onSaved: () => void }) {
+function CustomerForm({ customer, branchOptions, onClose, onSaved }: { customer: Customer | null; branchOptions: BranchOption[]; onClose: () => void; onSaved: () => void }) {
   const isEdit = !!customer;
   const [form, setForm] = useState({
     name: customer?.name || '',
@@ -411,14 +428,14 @@ function CustomerForm({ customer, onClose, onSaved }: { customer: Customer | nul
           </div>
           <div>
             <label className="mb-1.5 block text-xs font-medium text-slate-500">Branches</label>
-            <div className="flex gap-2">
-              {BRANCHES.map(b => (
-                <button key={b} onClick={() => toggleBranch(b)} type="button"
+            <div className="flex flex-wrap gap-2">
+              {branchOptions.filter(bo => bo.is_active).map(bo => (
+                <button key={bo.slug} onClick={() => toggleBranch(bo.slug)} type="button"
                   className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition ${
-                    form.branches.includes(b) ? 'border-brand-purple bg-brand-purple/10 text-brand-purple' : 'border-slate-200 text-slate-500 hover:border-slate-300'
+                    form.branches.includes(bo.slug) ? 'border-brand-purple bg-brand-purple/10 text-brand-purple' : 'border-slate-200 text-slate-500 hover:border-slate-300'
                   }`}
                 >
-                  {b}
+                  {bo.name}
                 </button>
               ))}
             </div>

@@ -56,9 +56,20 @@ const STATUS_COLORS: Record<string, string> = {
   afgewezen: 'bg-slate-100 text-slate-500',
 };
 
-const BRANCH_LABELS: Record<string, string> = {
-  thuisbatterij: 'Thuisbatterij',
-  airco: 'Airco',
+interface BranchField { key: string; label: string; field_type: string; options: string[]; is_required: boolean; sort_order: number; }
+interface BranchConfig { slug: string; name: string; color: string; branch_fields: BranchField[]; }
+
+const BRANCH_COLOR_MAP: Record<string, { light: string; text: string }> = {
+  emerald: { light: 'bg-emerald-50', text: 'text-emerald-600' },
+  sky: { light: 'bg-sky-50', text: 'text-sky-600' },
+  amber: { light: 'bg-amber-50', text: 'text-amber-600' },
+  purple: { light: 'bg-purple-50', text: 'text-purple-600' },
+  rose: { light: 'bg-rose-50', text: 'text-rose-600' },
+  cyan: { light: 'bg-cyan-50', text: 'text-cyan-600' },
+  lime: { light: 'bg-lime-50', text: 'text-lime-600' },
+  indigo: { light: 'bg-indigo-50', text: 'text-indigo-600' },
+  teal: { light: 'bg-teal-50', text: 'text-teal-600' },
+  slate: { light: 'bg-slate-50', text: 'text-slate-600' },
 };
 
 interface Lead {
@@ -76,17 +87,8 @@ interface Lead {
   wervingsdatum: string;
   created_at: string;
   bron: string;
-  zonnepanelen?: string;
-  dynamisch_contract?: string;
-  stroomverbruik?: string;
-  budget?: string;
-  reden_thuisbatterij?: string;
-  type_airco?: string;
-  koelen_verwarmen?: string;
-  hoeveel_ruimtes?: string;
-  zakelijk?: string;
-  koop_of_huur?: string;
-  boorwerkzaamheden_toegestaan?: string;
+  custom_fields?: Record<string, string>;
+  [key: string]: unknown;
 }
 
 interface Stats {
@@ -182,6 +184,7 @@ export default function PortalPage() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [branchConfigs, setBranchConfigs] = useState<BranchConfig[]>([]);
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -243,8 +246,26 @@ export default function PortalPage() {
     setLoading(false);
   }, [page, sort, order, statusFilter, branchFilter, search, dateFrom, dateTo]);
 
+  const fetchBranches = useCallback(async () => {
+    const res = await portalFetch('/api/portal/branches');
+    if (res.ok) { const d = await res.json(); setBranchConfigs(d.branches || []); }
+  }, []);
+
   useEffect(() => { fetchStats(); }, [fetchStats]);
   useEffect(() => { fetchLeads(); }, [fetchLeads]);
+  useEffect(() => { fetchBranches(); }, [fetchBranches]);
+
+  const branchMap = useMemo(() => {
+    const m: Record<string, BranchConfig> = {};
+    branchConfigs.forEach(b => { m[b.slug] = b; });
+    return m;
+  }, [branchConfigs]);
+
+  const getBranch = useCallback((slug: string) => {
+    const b = branchMap[slug];
+    const c = BRANCH_COLOR_MAP[b?.color || 'slate'] || BRANCH_COLOR_MAP.slate;
+    return { name: b?.name || slug, color: b?.color || 'slate', light: c.light, text: c.text, fields: b?.branch_fields || [] };
+  }, [branchMap]);
 
   const toggleSort = (col: string) => {
     if (sort === col) {
@@ -509,7 +530,7 @@ export default function PortalPage() {
                   >
                     <option value="all">Alle branches</option>
                     {customer.branches.map(b => (
-                      <option key={b} value={b}>{BRANCH_LABELS[b] || b}</option>
+                      <option key={b} value={b}>{getBranch(b).name}</option>
                     ))}
                   </select>
                 </div>
@@ -607,9 +628,9 @@ export default function PortalPage() {
                       </td>
                       <td className="px-4 py-3 text-slate-600">{lead.plaatsnaam || '—'}</td>
                       <td className="px-4 py-3">
-                        <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${lead.branch === 'thuisbatterij' ? 'bg-emerald-50 text-emerald-600' : 'bg-sky-50 text-sky-600'}`}>
-                          {BRANCH_LABELS[lead.branch] || lead.branch}
-                        </span>
+                        {(() => { const b = getBranch(lead.branch); return (
+                          <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${b.light} ${b.text}`}>{b.name}</span>
+                        ); })()}
                       </td>
                       <td className="px-4 py-3">
                         <select
@@ -698,9 +719,9 @@ export default function PortalPage() {
                   </select>
                 </div>
                 <div className="mb-3 flex items-center gap-2 text-xs text-slate-500">
-                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${lead.branch === 'thuisbatterij' ? 'bg-emerald-50 text-emerald-600' : 'bg-sky-50 text-sky-600'}`}>
-                    {BRANCH_LABELS[lead.branch] || lead.branch}
-                  </span>
+                  {(() => { const b = getBranch(lead.branch); return (
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${b.light} ${b.text}`}>{b.name}</span>
+                  ); })()}
                   <span className="flex items-center gap-1">
                     <CalendarDaysIcon className="h-3 w-3" />
                     {formatDate(lead.wervingsdatum)}
@@ -773,6 +794,8 @@ export default function PortalPage() {
         {selectedLead && (
           <LeadDetailPanel
             lead={selectedLead}
+            branchConfig={branchMap[selectedLead.branch]}
+            getBranch={getBranch}
             onClose={() => setSelectedLead(null)}
             onStatusChange={(s) => handleStatusUpdate(selectedLead, s)}
             onNotesChange={(n) => handleNotesUpdate(selectedLead, n)}
@@ -786,12 +809,16 @@ export default function PortalPage() {
 
 function LeadDetailPanel({
   lead,
+  branchConfig,
+  getBranch,
   onClose,
   onStatusChange,
   onNotesChange,
   showToast,
 }: {
   lead: Lead;
+  branchConfig?: BranchConfig;
+  getBranch: (slug: string) => { name: string; light: string; text: string; fields: BranchField[] };
   onClose: () => void;
   onStatusChange: (s: string) => void;
   onNotesChange: (n: string) => void;
@@ -821,24 +848,11 @@ function LeadDetailPanel({
     showToast('Contactgegevens gekopieerd');
   };
 
-  const branchFields = lead.branch === 'thuisbatterij'
-    ? [
-        { label: 'Zonnepanelen', value: lead.zonnepanelen },
-        { label: 'Dynamisch contract', value: lead.dynamisch_contract },
-        { label: 'Stroomverbruik', value: lead.stroomverbruik },
-        { label: 'Budget', value: lead.budget },
-        { label: 'Reden thuisbatterij', value: lead.reden_thuisbatterij },
-      ]
-    : lead.branch === 'airco'
-    ? [
-        { label: 'Type airco', value: lead.type_airco },
-        { label: 'Koelen/verwarmen', value: lead.koelen_verwarmen },
-        { label: 'Hoeveel ruimtes', value: lead.hoeveel_ruimtes },
-        { label: 'Zakelijk', value: lead.zakelijk },
-        { label: 'Koop of huur', value: lead.koop_of_huur },
-        { label: 'Boorwerkzaamheden', value: lead.boorwerkzaamheden_toegestaan },
-      ]
-    : [];
+  const bInfo = getBranch(lead.branch);
+  const branchFields = (branchConfig?.branch_fields || []).map(f => {
+    const val = lead.custom_fields?.[f.key] || (lead as Record<string, unknown>)[f.key] as string || '';
+    return { label: f.label, value: val };
+  });
 
   return (
     <>
@@ -875,7 +889,7 @@ function LeadDetailPanel({
             <div>
               <h2 className="text-lg font-bold text-slate-900">{lead.naam_klant || 'Lead details'}</h2>
               <p className="text-xs text-slate-500">
-                {BRANCH_LABELS[lead.branch] || lead.branch} &middot; {formatDateLong(lead.wervingsdatum)}
+                {bInfo.name} &middot; {formatDateLong(lead.wervingsdatum)}
               </p>
             </div>
             <button onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100">
@@ -947,7 +961,7 @@ function LeadDetailPanel({
             {branchFields.length > 0 && (
               <div>
                 <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
-                  {BRANCH_LABELS[lead.branch]} details
+                  {bInfo.name} details
                 </h3>
                 <div className="space-y-1.5 rounded-xl border border-slate-100 bg-slate-50 p-4">
                   {branchFields.map(f => f.value ? (

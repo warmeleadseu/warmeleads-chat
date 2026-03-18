@@ -24,6 +24,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Key niet gevonden' }, { status: 404 });
     }
 
+    const { data: branchFields } = await supabase
+      .from('branch_fields')
+      .select('key, label, field_type')
+      .eq('branch_id', (
+        await supabase.from('branches').select('id').eq('slug', keyRecord.branch).single()
+      ).data?.id || '')
+      .order('sort_order', { ascending: true });
+
     const testData: Record<string, string> = {
       naam_klant: 'Test Lead (automatisch)',
       email: 'test@warmeleads.eu',
@@ -34,19 +42,14 @@ export async function POST(request: NextRequest) {
       provincie: 'Noord-Holland',
     };
 
-    if (keyRecord.branch === 'thuisbatterij') {
-      testData.zonnepanelen = 'Ja, 10 panelen';
-      testData.dynamisch_contract = 'Nee';
-      testData.stroomverbruik = '3500 kWh';
-      testData.budget = '5000-7500';
-      testData.reden_thuisbatterij = 'Testlead';
-    } else if (keyRecord.branch === 'airco') {
-      testData.type_airco = 'Split unit';
-      testData.koelen_verwarmen = 'Beide';
-      testData.hoeveel_ruimtes = '2';
-      testData.zakelijk = 'Nee';
-      testData.koop_of_huur = 'Koop';
-      testData.boorwerkzaamheden_toegestaan = 'Ja';
+    for (const field of (branchFields || [])) {
+      if (field.field_type === 'boolean') {
+        testData[field.key] = 'Ja';
+      } else if (field.field_type === 'number') {
+        testData[field.key] = '5';
+      } else {
+        testData[field.key] = `Test ${field.label}`;
+      }
     }
 
     const origin = request.headers.get('origin') || request.nextUrl.origin;

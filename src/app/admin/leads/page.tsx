@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   MagnifyingGlassIcon,
-  FunnelIcon,
   ArrowDownTrayIcon,
   PlusIcon,
   PencilSquareIcon,
@@ -13,17 +12,18 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   ChevronUpDownIcon,
-  CheckIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
 
 interface Customer { id: string; name: string; }
+interface BranchField { id: string; key: string; label: string; field_type: string; options: string[]; is_required: boolean; sort_order: number; }
+interface BranchConfig { id: string; slug: string; name: string; color: string; is_active: boolean; branch_fields: BranchField[]; }
 interface Lead {
   id: string; branch: string; customer_id: string | null; customers?: { id: string; name: string } | null;
   naam_klant: string; email: string; telefoonnummer: string; postcode: string; huisnummer: string;
   plaatsnaam: string; provincie: string; wervingsdatum: string; status: string; notities: string; bron: string;
-  zonnepanelen?: string; dynamisch_contract?: string; stroomverbruik?: string; budget?: string; reden_thuisbatterij?: string;
-  type_airco?: string; koelen_verwarmen?: string; hoeveel_ruimtes?: string; zakelijk?: string; koop_of_huur?: string; boorwerkzaamheden_toegestaan?: string;
+  custom_fields?: Record<string, string>;
+  [key: string]: unknown;
   created_at: string; updated_at: string;
 }
 
@@ -37,27 +37,38 @@ const STATUS_COLORS: Record<string, string> = {
 };
 const PROVINCES = ['Drenthe','Flevoland','Friesland','Gelderland','Groningen','Limburg','Noord-Brabant','Noord-Holland','Overijssel','Utrecht','Zeeland','Zuid-Holland'];
 
-const COMMON_FIELDS = ['naam_klant','email','telefoonnummer','postcode','huisnummer','plaatsnaam','provincie','wervingsdatum','status','notities','bron'] as const;
-const THUISBATTERIJ_FIELDS = ['zonnepanelen','dynamisch_contract','stroomverbruik','budget','reden_thuisbatterij'] as const;
-const AIRCO_FIELDS = ['type_airco','koelen_verwarmen','hoeveel_ruimtes','zakelijk','koop_of_huur','boorwerkzaamheden_toegestaan'] as const;
-
-const FIELD_LABELS: Record<string, string> = {
+const COMMON_LABELS: Record<string, string> = {
   naam_klant: 'Naam', email: 'E-mail', telefoonnummer: 'Telefoon', postcode: 'Postcode',
   huisnummer: 'Huisnr.', plaatsnaam: 'Plaats', provincie: 'Provincie', wervingsdatum: 'Datum',
-  status: 'Status', notities: 'Notities', bron: 'Bron', zonnepanelen: 'Zonnepanelen',
-  dynamisch_contract: 'Dyn. contract', stroomverbruik: 'Stroomverbruik', budget: 'Budget',
-  reden_thuisbatterij: 'Reden', type_airco: 'Type airco', koelen_verwarmen: 'Koelen/Verwarmen',
-  hoeveel_ruimtes: 'Ruimtes', zakelijk: 'Zakelijk', koop_of_huur: 'Koop/Huur',
-  boorwerkzaamheden_toegestaan: 'Boorwerk',
+  status: 'Status', notities: 'Notities', bron: 'Bron', branch: 'Branche',
 };
+
+const COLOR_MAP: Record<string, { light: string; text: string }> = {
+  emerald: { light: 'bg-emerald-50', text: 'text-emerald-600' },
+  sky: { light: 'bg-sky-50', text: 'text-sky-600' },
+  amber: { light: 'bg-amber-50', text: 'text-amber-600' },
+  purple: { light: 'bg-purple-50', text: 'text-purple-600' },
+  rose: { light: 'bg-rose-50', text: 'text-rose-600' },
+  cyan: { light: 'bg-cyan-50', text: 'text-cyan-600' },
+  lime: { light: 'bg-lime-50', text: 'text-lime-600' },
+  indigo: { light: 'bg-indigo-50', text: 'text-indigo-600' },
+  teal: { light: 'bg-teal-50', text: 'text-teal-600' },
+  slate: { light: 'bg-slate-50', text: 'text-slate-600' },
+};
+
+function getLeadFieldValue(lead: Lead, key: string): string {
+  if (lead.custom_fields && key in lead.custom_fields) return lead.custom_fields[key] || '';
+  if (key in lead) return String(lead[key] ?? '');
+  return '';
+}
 
 export default function LeadsCRMPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [branches, setBranches] = useState<BranchConfig[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  // Filters
   const [branch, setBranch] = useState('all');
   const [customerId, setCustomerId] = useState('all');
   const [status, setStatus] = useState('all');
@@ -71,17 +82,18 @@ export default function LeadsCRMPage() {
   const [sortBy, setSortBy] = useState('created_at');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
-  // Selection
   const [selected, setSelected] = useState<Set<string>>(new Set());
-
-  // Modals
   const [editLead, setEditLead] = useState<Lead | null>(null);
   const [showNew, setShowNew] = useState(false);
   const [bulkStatus, setBulkStatus] = useState('');
 
-  const fetchCustomers = useCallback(async () => {
-    const res = await adminFetch('/api/admin/customers');
-    if (res.ok) { const d = await res.json(); setCustomers(d.customers || []); }
+  const fetchMeta = useCallback(async () => {
+    const [custRes, branchRes] = await Promise.all([
+      adminFetch('/api/admin/customers'),
+      adminFetch('/api/admin/branches'),
+    ]);
+    if (custRes.ok) { const d = await custRes.json(); setCustomers(d.customers || []); }
+    if (branchRes.ok) { const d = await branchRes.json(); setBranches(d.branches || []); }
   }, []);
 
   const fetchLeads = useCallback(async () => {
@@ -99,96 +111,96 @@ export default function LeadsCRMPage() {
     p.set('per_page', String(perPage));
     p.set('sort_by', sortBy);
     p.set('sort_dir', sortDir);
-
     const res = await adminFetch(`/api/admin/leads?${p}`);
-    if (res.ok) {
-      const d = await res.json();
-      setLeads(d.leads || []);
-      setTotal(d.total || 0);
-    }
+    if (res.ok) { const d = await res.json(); setLeads(d.leads || []); setTotal(d.total || 0); }
     setLoading(false);
   }, [branch, customerId, status, province, source, dateFrom, dateTo, search, page, perPage, sortBy, sortDir]);
 
-  useEffect(() => { fetchCustomers(); }, [fetchCustomers]);
+  useEffect(() => { fetchMeta(); }, [fetchMeta]);
   useEffect(() => { fetchLeads(); }, [fetchLeads]);
   useEffect(() => { setPage(1); }, [branch, customerId, status, province, source, dateFrom, dateTo, search, perPage]);
+
+  const branchMap = useMemo(() => {
+    const m: Record<string, BranchConfig> = {};
+    branches.forEach(b => { m[b.slug] = b; });
+    return m;
+  }, [branches]);
+
+  const fieldLabels = useMemo(() => {
+    const labels = { ...COMMON_LABELS };
+    branches.forEach(b => b.branch_fields.forEach(f => { labels[f.key] = f.label; }));
+    return labels;
+  }, [branches]);
+
+  const currentBranchFields = useMemo(() => {
+    if (branch === 'all') return [];
+    return branchMap[branch]?.branch_fields || [];
+  }, [branch, branchMap]);
+
+  const visibleCols = useMemo(() => {
+    const base: string[] = ['naam_klant', 'email', 'telefoonnummer', 'postcode', 'plaatsnaam', 'status', 'wervingsdatum'];
+    const extra = currentBranchFields.slice(0, 3).map(f => f.key);
+    return [...base, ...extra];
+  }, [currentBranchFields]);
 
   const toggleSort = (col: string) => {
     if (sortBy === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
     else { setSortBy(col); setSortDir('asc'); }
   };
-
-  const toggleSelect = (id: string) => {
-    setSelected(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
-  };
-  const toggleAll = () => {
-    if (selected.size === leads.length) setSelected(new Set());
-    else setSelected(new Set(leads.map(l => l.id)));
-  };
+  const toggleSelect = (id: string) => setSelected(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
+  const toggleAll = () => { if (selected.size === leads.length) setSelected(new Set()); else setSelected(new Set(leads.map(l => l.id))); };
 
   const handleBulkStatus = async () => {
     if (!bulkStatus || selected.size === 0) return;
-    await Promise.all(
-      Array.from(selected).map(id =>
-        adminFetch('/api/admin/leads', { method: 'PUT', body: JSON.stringify({ id, status: bulkStatus }) })
-      )
-    );
-    setSelected(new Set());
-    setBulkStatus('');
-    fetchLeads();
+    await Promise.all(Array.from(selected).map(id => adminFetch('/api/admin/leads', { method: 'PUT', body: JSON.stringify({ id, status: bulkStatus }) })));
+    setSelected(new Set()); setBulkStatus(''); fetchLeads();
   };
-
   const handleBulkDelete = async () => {
     if (selected.size === 0 || !confirm(`${selected.size} lead(s) verwijderen?`)) return;
     await adminFetch('/api/admin/leads', { method: 'DELETE', body: JSON.stringify({ ids: Array.from(selected) }) });
-    setSelected(new Set());
-    fetchLeads();
+    setSelected(new Set()); fetchLeads();
   };
 
   const handleExport = () => {
-    const branchFields = branch === 'thuisbatterij' ? [...THUISBATTERIJ_FIELDS] : branch === 'airco' ? [...AIRCO_FIELDS] : [];
-    const cols = ['branch', ...COMMON_FIELDS, ...branchFields, 'customer_name'];
-    const header = cols.map(c => c === 'customer_name' ? 'Klant' : FIELD_LABELS[c] || c).join(',');
+    const bFields = currentBranchFields.map(f => f.key);
+    const commonKeys = ['branch', 'naam_klant', 'email', 'telefoonnummer', 'postcode', 'huisnummer', 'plaatsnaam', 'provincie', 'wervingsdatum', 'status', 'notities', 'bron'];
+    const cols = [...commonKeys, ...bFields, 'customer_name'];
+    const header = cols.map(c => c === 'customer_name' ? 'Klant' : fieldLabels[c] || c).join(',');
     const rows = leads.map(l =>
       cols.map(c => {
         if (c === 'customer_name') return `"${(l.customers?.name || '').replace(/"/g, '""')}"`;
-        const v = (l as any)[c] ?? '';
+        const v = getLeadFieldValue(l, c);
         return `"${String(v).replace(/"/g, '""')}"`;
       }).join(',')
     );
     const csv = [header, ...rows].join('\n');
     const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
+    const a = document.createElement('a'); a.href = url;
     a.download = `leads-export-${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    a.click(); URL.revokeObjectURL(url);
   };
 
   const handleQuickStatus = async (id: string, newStatus: string) => {
     await adminFetch('/api/admin/leads', { method: 'PUT', body: JSON.stringify({ id, status: newStatus }) });
     setLeads(prev => prev.map(l => l.id === id ? { ...l, status: newStatus } : l));
   };
-
   const handleDeleteSingle = async (id: string, name: string) => {
     if (!confirm(`Lead "${name}" verwijderen?`)) return;
     await adminFetch('/api/admin/leads', { method: 'DELETE', body: JSON.stringify({ ids: [id] }) });
     fetchLeads();
   };
 
-  const visibleCols = useMemo(() => {
-    const base: string[] = ['naam_klant', 'email', 'telefoonnummer', 'postcode', 'plaatsnaam', 'status', 'wervingsdatum'];
-    if (branch === 'thuisbatterij') base.push('zonnepanelen', 'budget', 'reden_thuisbatterij');
-    else if (branch === 'airco') base.push('type_airco', 'koelen_verwarmen', 'hoeveel_ruimtes');
-    return base;
-  }, [branch]);
+  const getBranchBadge = (slug: string) => {
+    const b = branchMap[slug];
+    const c = COLOR_MAP[b?.color || 'slate'] || COLOR_MAP.slate;
+    return { name: b?.name || slug, light: c.light, text: c.text };
+  };
 
   const totalPages = Math.ceil(total / perPage);
 
   return (
     <div>
-      {/* Header */}
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">Leads CRM</h1>
@@ -204,12 +216,10 @@ export default function LeadsCRMPage() {
         </div>
       </div>
 
-      {/* Filters - top row */}
       <div className="mb-2 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
         <select value={branch} onChange={e => setBranch(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700">
           <option value="all">Alle branches</option>
-          <option value="thuisbatterij">Thuisbatterij</option>
-          <option value="airco">Airco</option>
+          {branches.filter(b => b.is_active).map(b => <option key={b.slug} value={b.slug}>{b.name}</option>)}
         </select>
         <select value={customerId} onChange={e => setCustomerId(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700">
           <option value="all">Alle klanten</option>
@@ -230,25 +240,17 @@ export default function LeadsCRMPage() {
           <option value="zapier">Zapier</option>
         </select>
       </div>
-      {/* Filters - date row */}
       <div className="mb-4 grid grid-cols-2 gap-2 sm:max-w-xs">
-        <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700" placeholder="Van" />
-        <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700" placeholder="Tot" />
+        <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700" />
+        <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700" />
       </div>
 
-      {/* Search */}
       <div className="relative mb-4">
         <MagnifyingGlassIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-        <input
-          type="text"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Zoek op naam, email, telefoon of postcode..."
-          className="w-full rounded-lg border border-slate-200 bg-white py-2.5 pl-9 pr-4 text-sm text-slate-700 outline-none focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/30"
-        />
+        <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Zoek op naam, email, telefoon of postcode..."
+          className="w-full rounded-lg border border-slate-200 bg-white py-2.5 pl-9 pr-4 text-sm text-slate-700 outline-none focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/30" />
       </div>
 
-      {/* Bulk actions */}
       <AnimatePresence>
         {selected.size > 0 && (
           <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
@@ -258,9 +260,7 @@ export default function LeadsCRMPage() {
                 <option value="">Status wijzigen...</option>
                 {STATUSES.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
               </select>
-              {bulkStatus && (
-                <button onClick={handleBulkStatus} className="rounded-lg bg-brand-purple px-3 py-1.5 text-sm font-medium text-white">Toepassen</button>
-              )}
+              {bulkStatus && <button onClick={handleBulkStatus} className="rounded-lg bg-brand-purple px-3 py-1.5 text-sm font-medium text-white">Toepassen</button>}
               <button onClick={handleBulkDelete} className="rounded-lg bg-red-500 px-3 py-1.5 text-sm font-medium text-white">Verwijderen</button>
               <button onClick={() => setSelected(new Set())} className="ml-auto text-sm text-slate-500 hover:text-slate-700">Deselecteren</button>
             </div>
@@ -274,9 +274,7 @@ export default function LeadsCRMPage() {
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50/80">
-                <th className="w-10 px-3 py-3">
-                  <input type="checkbox" checked={selected.size === leads.length && leads.length > 0} onChange={toggleAll} className="h-4 w-4 rounded border-slate-300" />
-                </th>
+                <th className="w-10 px-3 py-3"><input type="checkbox" checked={selected.size === leads.length && leads.length > 0} onChange={toggleAll} className="h-4 w-4 rounded border-slate-300" /></th>
                 {branch === 'all' && (
                   <th className="cursor-pointer px-3 py-3 text-xs font-semibold text-slate-500 hover:text-slate-700" onClick={() => toggleSort('branch')}>
                     <span className="inline-flex items-center gap-1">Branche <ChevronUpDownIcon className="h-3 w-3" /></span>
@@ -286,7 +284,7 @@ export default function LeadsCRMPage() {
                 {visibleCols.map(col => (
                   <th key={col} className="cursor-pointer whitespace-nowrap px-3 py-3 text-xs font-semibold text-slate-500 hover:text-slate-700" onClick={() => toggleSort(col)}>
                     <span className="inline-flex items-center gap-1">
-                      {FIELD_LABELS[col] || col}
+                      {fieldLabels[col] || col}
                       {sortBy === col && <span className="text-brand-purple">{sortDir === 'asc' ? '↑' : '↓'}</span>}
                     </span>
                   </th>
@@ -299,46 +297,38 @@ export default function LeadsCRMPage() {
                 <tr><td colSpan={99} className="px-3 py-12 text-center text-sm text-slate-400">Laden...</td></tr>
               ) : leads.length === 0 ? (
                 <tr><td colSpan={99} className="px-3 py-12 text-center text-sm text-slate-400">Geen leads gevonden</td></tr>
-              ) : leads.map(lead => (
-                <tr key={lead.id} className="border-b border-slate-50 transition hover:bg-slate-50/50">
-                  <td className="px-3 py-2.5">
-                    <input type="checkbox" checked={selected.has(lead.id)} onChange={() => toggleSelect(lead.id)} className="h-4 w-4 rounded border-slate-300" />
-                  </td>
-                  {branch === 'all' && (
+              ) : leads.map(lead => {
+                const badge = getBranchBadge(lead.branch);
+                return (
+                  <tr key={lead.id} className="border-b border-slate-50 transition hover:bg-slate-50/50">
+                    <td className="px-3 py-2.5"><input type="checkbox" checked={selected.has(lead.id)} onChange={() => toggleSelect(lead.id)} className="h-4 w-4 rounded border-slate-300" /></td>
+                    {branch === 'all' && (
+                      <td className="px-3 py-2.5">
+                        <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ${badge.light} ${badge.text}`}>{badge.name}</span>
+                      </td>
+                    )}
+                    <td className="px-3 py-2.5 text-xs text-slate-500">{lead.customers?.name || '—'}</td>
+                    {visibleCols.map(col => (
+                      <td key={col} className="whitespace-nowrap px-3 py-2.5 text-sm text-slate-700">
+                        {col === 'status' ? (
+                          <select value={lead.status} onChange={e => handleQuickStatus(lead.id, e.target.value)}
+                            className={`rounded-full border-0 px-2.5 py-0.5 text-[11px] font-medium ${STATUS_COLORS[lead.status] || 'bg-slate-100 text-slate-600'}`}>
+                            {STATUSES.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+                          </select>
+                        ) : (
+                          <span className="block max-w-[160px] truncate">{getLeadFieldValue(lead, col) || '—'}</span>
+                        )}
+                      </td>
+                    ))}
                     <td className="px-3 py-2.5">
-                      <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ${lead.branch === 'thuisbatterij' ? 'bg-emerald-100 text-emerald-700' : 'bg-sky-100 text-sky-700'}`}>
-                        {lead.branch === 'thuisbatterij' ? 'Batterij' : 'Airco'}
-                      </span>
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => setEditLead(lead)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"><PencilSquareIcon className="h-4 w-4" /></button>
+                        <button onClick={() => handleDeleteSingle(lead.id, lead.naam_klant)} className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500"><TrashIcon className="h-4 w-4" /></button>
+                      </div>
                     </td>
-                  )}
-                  <td className="px-3 py-2.5 text-xs text-slate-500">{lead.customers?.name || '—'}</td>
-                  {visibleCols.map(col => (
-                    <td key={col} className="whitespace-nowrap px-3 py-2.5 text-sm text-slate-700">
-                      {col === 'status' ? (
-                        <select
-                          value={lead.status}
-                          onChange={e => handleQuickStatus(lead.id, e.target.value)}
-                          className={`rounded-full border-0 px-2.5 py-0.5 text-[11px] font-medium ${STATUS_COLORS[lead.status] || 'bg-slate-100 text-slate-600'}`}
-                        >
-                          {STATUSES.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
-                        </select>
-                      ) : (
-                        <span className="max-w-[160px] truncate block">{(lead as any)[col] || '—'}</span>
-                      )}
-                    </td>
-                  ))}
-                  <td className="px-3 py-2.5">
-                    <div className="flex items-center gap-1">
-                      <button onClick={() => setEditLead(lead)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600" title="Bewerken">
-                        <PencilSquareIcon className="h-4 w-4" />
-                      </button>
-                      <button onClick={() => handleDeleteSingle(lead.id, lead.naam_klant)} className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500" title="Verwijderen">
-                        <TrashIcon className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -347,49 +337,42 @@ export default function LeadsCRMPage() {
       {/* Mobile Cards */}
       <div className="space-y-2 md:hidden">
         {loading ? (
-          <div className="flex justify-center py-12">
-            <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-slate-200 border-t-brand-purple" />
-          </div>
+          <div className="flex justify-center py-12"><div className="h-8 w-8 animate-spin rounded-full border-[3px] border-slate-200 border-t-brand-purple" /></div>
         ) : leads.length === 0 ? (
-          <div className="rounded-xl border border-slate-200 bg-white py-12 text-center shadow-sm">
-            <p className="text-sm text-slate-400">Geen leads gevonden</p>
-          </div>
-        ) : leads.map(lead => (
-          <div key={lead.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="mb-2 flex items-start justify-between">
-              <div className="min-w-0 flex-1">
-                <p className="font-semibold text-slate-900">{lead.naam_klant || '—'}</p>
-                <p className="text-xs text-slate-500">{lead.customers?.name || '—'}</p>
+          <div className="rounded-xl border border-slate-200 bg-white py-12 text-center shadow-sm"><p className="text-sm text-slate-400">Geen leads gevonden</p></div>
+        ) : leads.map(lead => {
+          const badge = getBranchBadge(lead.branch);
+          return (
+            <div key={lead.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="mb-2 flex items-start justify-between">
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold text-slate-900">{lead.naam_klant || '—'}</p>
+                  <p className="text-xs text-slate-500">{lead.customers?.name || '—'}</p>
+                </div>
+                <select value={lead.status} onChange={e => handleQuickStatus(lead.id, e.target.value)}
+                  className={`ml-2 shrink-0 rounded-full border-0 px-2 py-0.5 text-[11px] font-medium ${STATUS_COLORS[lead.status] || 'bg-slate-100 text-slate-600'}`}>
+                  {STATUSES.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+                </select>
               </div>
-              <select
-                value={lead.status}
-                onChange={e => handleQuickStatus(lead.id, e.target.value)}
-                className={`ml-2 shrink-0 rounded-full border-0 px-2 py-0.5 text-[11px] font-medium ${STATUS_COLORS[lead.status] || 'bg-slate-100 text-slate-600'}`}
-              >
-                {STATUSES.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
-              </select>
+              <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${badge.light} ${badge.text}`}>{badge.name}</span>
+                {lead.plaatsnaam && <span>{lead.plaatsnaam}</span>}
+                {lead.telefoonnummer && <span>{lead.telefoonnummer}</span>}
+                {lead.wervingsdatum && <span>{lead.wervingsdatum}</span>}
+              </div>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setEditLead(lead)} className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-slate-200 py-2 text-xs font-medium text-slate-600 transition hover:bg-slate-50">
+                  <PencilSquareIcon className="h-3.5 w-3.5" /> Bewerken
+                </button>
+                <button onClick={() => handleDeleteSingle(lead.id, lead.naam_klant)} className="inline-flex items-center justify-center rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-400 transition hover:bg-red-50 hover:text-red-500">
+                  <TrashIcon className="h-3.5 w-3.5" />
+                </button>
+              </div>
             </div>
-            <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-              <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${lead.branch === 'thuisbatterij' ? 'bg-emerald-50 text-emerald-600' : 'bg-sky-50 text-sky-600'}`}>
-                {lead.branch === 'thuisbatterij' ? 'Batterij' : 'Airco'}
-              </span>
-              {lead.plaatsnaam && <span>{lead.plaatsnaam}</span>}
-              {lead.telefoonnummer && <span>{lead.telefoonnummer}</span>}
-              {lead.wervingsdatum && <span>{lead.wervingsdatum}</span>}
-            </div>
-            <div className="flex items-center gap-2">
-              <button onClick={() => setEditLead(lead)} className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-slate-200 py-2 text-xs font-medium text-slate-600 transition hover:bg-slate-50">
-                <PencilSquareIcon className="h-3.5 w-3.5" /> Bewerken
-              </button>
-              <button onClick={() => handleDeleteSingle(lead.id, lead.naam_klant)} className="inline-flex items-center justify-center rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-400 transition hover:bg-red-50 hover:text-red-500">
-                <TrashIcon className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
-      {/* Pagination */}
       {totalPages > 1 && (
         <div className="mt-3 flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm md:mt-0 md:rounded-t-none md:border-t-0 md:shadow-none">
           <div className="flex items-center gap-2 text-sm text-slate-500">
@@ -399,23 +382,19 @@ export default function LeadsCRMPage() {
             <span className="text-xs">Pagina {page}/{totalPages}</span>
           </div>
           <div className="flex gap-1">
-            <button disabled={page <= 1} onClick={() => setPage(p => p - 1)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-50 disabled:opacity-30">
-              <ChevronLeftIcon className="h-4 w-4" />
-            </button>
-            <button disabled={page >= totalPages} onClick={() => setPage(p => p + 1)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-50 disabled:opacity-30">
-              <ChevronRightIcon className="h-4 w-4" />
-            </button>
+            <button disabled={page <= 1} onClick={() => setPage(p => p - 1)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-50 disabled:opacity-30"><ChevronLeftIcon className="h-4 w-4" /></button>
+            <button disabled={page >= totalPages} onClick={() => setPage(p => p + 1)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-50 disabled:opacity-30"><ChevronRightIcon className="h-4 w-4" /></button>
           </div>
         </div>
       )}
 
-      {/* Edit / New Lead Panel */}
       <AnimatePresence>
         {(editLead || showNew) && (
           <LeadFormPanel
             lead={editLead}
             customers={customers}
-            defaultBranch={branch !== 'all' ? branch : 'thuisbatterij'}
+            branches={branches}
+            defaultBranch={branch !== 'all' ? branch : branches[0]?.slug || 'thuisbatterij'}
             onClose={() => { setEditLead(null); setShowNew(false); }}
             onSaved={() => { setEditLead(null); setShowNew(false); fetchLeads(); }}
           />
@@ -426,43 +405,64 @@ export default function LeadsCRMPage() {
 }
 
 function LeadFormPanel({
-  lead, customers, defaultBranch, onClose, onSaved,
+  lead, customers, branches, defaultBranch, onClose, onSaved,
 }: {
-  lead: Lead | null; customers: Customer[]; defaultBranch: string; onClose: () => void; onSaved: () => void;
+  lead: Lead | null; customers: Customer[]; branches: BranchConfig[]; defaultBranch: string; onClose: () => void; onSaved: () => void;
 }) {
   const isEdit = !!lead;
-  const [form, setForm] = useState(() => {
-    if (lead) return { ...lead, customer_id: lead.customer_id || '' };
+  const [formBranch, setFormBranch] = useState(lead?.branch || defaultBranch);
+  const [form, setForm] = useState<Record<string, string>>(() => {
+    if (lead) {
+      const base: Record<string, string> = {
+        customer_id: lead.customer_id || '',
+        naam_klant: lead.naam_klant || '', email: lead.email || '', telefoonnummer: lead.telefoonnummer || '',
+        postcode: lead.postcode || '', huisnummer: lead.huisnummer || '', plaatsnaam: lead.plaatsnaam || '',
+        provincie: lead.provincie || '', wervingsdatum: lead.wervingsdatum || '', status: lead.status || 'nieuw',
+        notities: lead.notities || '', bron: lead.bron || 'handmatig',
+      };
+      if (lead.custom_fields) Object.assign(base, lead.custom_fields);
+      const branchConfig = branches.find(b => b.slug === lead.branch);
+      if (branchConfig) {
+        branchConfig.branch_fields.forEach(f => {
+          if (!(f.key in base)) base[f.key] = (lead as Record<string, unknown>)[f.key] as string || '';
+        });
+      }
+      return base;
+    }
     return {
-      branch: defaultBranch, customer_id: '', naam_klant: '', email: '', telefoonnummer: '', postcode: '',
-      huisnummer: '', plaatsnaam: '', provincie: '', wervingsdatum: new Date().toISOString().split('T')[0],
+      customer_id: '', naam_klant: '', email: '', telefoonnummer: '', postcode: '', huisnummer: '',
+      plaatsnaam: '', provincie: '', wervingsdatum: new Date().toISOString().split('T')[0],
       status: 'nieuw', notities: '', bron: 'handmatig',
-      zonnepanelen: '', dynamisch_contract: '', stroomverbruik: '', budget: '', reden_thuisbatterij: '',
-      type_airco: '', koelen_verwarmen: '', hoeveel_ruimtes: '', zakelijk: '', koop_of_huur: '', boorwerkzaamheden_toegestaan: '',
     };
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
+  const branchConfig = branches.find(b => b.slug === formBranch);
+  const branchFields = branchConfig?.branch_fields || [];
+
   const set = (key: string, val: string) => setForm(f => ({ ...f, [key]: val }));
 
   const save = async () => {
     if (!form.naam_klant) { setError('Naam is verplicht'); return; }
-    setSaving(true);
-    setError('');
+    setSaving(true); setError('');
     try {
-      const body = isEdit ? { id: lead!.id, ...form } : form;
-      const res = await adminFetch('/api/admin/leads', {
-        method: isEdit ? 'PUT' : 'POST',
-        body: JSON.stringify(body),
-      });
+      const commonKeys = ['customer_id', 'naam_klant', 'email', 'telefoonnummer', 'postcode', 'huisnummer', 'plaatsnaam', 'provincie', 'wervingsdatum', 'status', 'notities', 'bron'];
+      const payload: Record<string, unknown> = { branch: formBranch };
+      commonKeys.forEach(k => { payload[k] = form[k] || ''; });
+      if (!payload.customer_id) payload.customer_id = null;
+
+      const cf: Record<string, string> = {};
+      branchFields.forEach(f => { if (form[f.key]) cf[f.key] = form[f.key]; });
+      payload.custom_fields = cf;
+
+      if (isEdit) payload.id = lead!.id;
+      const res = await adminFetch('/api/admin/leads', { method: isEdit ? 'PUT' : 'POST', body: JSON.stringify(payload) });
       if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Opslaan mislukt'); }
       onSaved();
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setSaving(false);
-    }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Er ging iets mis');
+    } finally { setSaving(false); }
   };
 
   const handleDelete = async () => {
@@ -471,51 +471,26 @@ function LeadFormPanel({
     onSaved();
   };
 
-  const branchFields = form.branch === 'thuisbatterij' ? THUISBATTERIJ_FIELDS : form.branch === 'airco' ? AIRCO_FIELDS : [];
-
-  const Field = ({ label, field, type = 'text' }: { label: string; field: string; type?: string }) => (
-    <div>
-      <label className="mb-1 block text-xs font-medium text-slate-500">{label}</label>
-      {type === 'textarea' ? (
-        <textarea value={(form as any)[field] || ''} onChange={e => set(field, e.target.value)} rows={3}
-          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
-      ) : (
-        <input type={type} value={(form as any)[field] || ''} onChange={e => set(field, e.target.value)}
-          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
-      )}
-    </div>
-  );
-
   return (
     <>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm" onClick={onClose} />
-      <motion.div
-        initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
-        transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-        className="fixed inset-y-0 right-0 z-[60] w-full max-w-lg overflow-y-auto bg-white shadow-2xl"
-      >
+      <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+        className="fixed inset-y-0 right-0 z-[60] w-full max-w-lg overflow-y-auto bg-white shadow-2xl">
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-100 bg-white px-5 py-4">
           <h2 className="text-lg font-bold text-slate-900">{isEdit ? 'Lead bewerken' : 'Nieuwe lead'}</h2>
           <div className="flex items-center gap-2">
-            {isEdit && (
-              <button onClick={handleDelete} className="rounded-lg p-2 text-red-400 hover:bg-red-50 hover:text-red-600">
-                <TrashIcon className="h-4.5 w-4.5" />
-              </button>
-            )}
+            {isEdit && <button onClick={handleDelete} className="rounded-lg p-2 text-red-400 hover:bg-red-50 hover:text-red-600"><TrashIcon className="h-5 w-5" /></button>}
             <button onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"><XMarkIcon className="h-5 w-5" /></button>
           </div>
         </div>
-
         <div className="space-y-5 p-5">
-          {error && <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-2.5 text-sm text-red-600">{error}</div>}
-
+          {error && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-600">{error}</div>}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-500">Branche</label>
-              <select value={form.branch} onChange={e => set('branch', e.target.value)} disabled={isEdit}
+              <select value={formBranch} onChange={e => setFormBranch(e.target.value)} disabled={isEdit}
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 disabled:bg-slate-50">
-                <option value="thuisbatterij">Thuisbatterij</option>
-                <option value="airco">Airco</option>
+                {branches.filter(b => b.is_active).map(b => <option key={b.slug} value={b.slug}>{b.name}</option>)}
               </select>
             </div>
             <div>
@@ -527,54 +502,78 @@ function LeadFormPanel({
               </select>
             </div>
           </div>
-
           <div className="border-t border-slate-100 pt-4">
             <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">Contactgegevens</p>
             <div className="grid grid-cols-2 gap-3">
-              <div className="col-span-2"><Field label="Naam klant *" field="naam_klant" /></div>
-              <Field label="E-mail" field="email" type="email" />
-              <Field label="Telefoon" field="telefoonnummer" type="tel" />
-              <Field label="Postcode" field="postcode" />
-              <Field label="Huisnummer" field="huisnummer" />
-              <Field label="Plaatsnaam" field="plaatsnaam" />
+              <div className="col-span-2">
+                <label className="mb-1 block text-xs font-medium text-slate-500">Naam klant *</label>
+                <input value={form.naam_klant || ''} onChange={e => set('naam_klant', e.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
+              </div>
+              {['email', 'telefoonnummer', 'postcode', 'huisnummer', 'plaatsnaam'].map(k => (
+                <div key={k}>
+                  <label className="mb-1 block text-xs font-medium text-slate-500">{COMMON_LABELS[k] || k}</label>
+                  <input value={form[k] || ''} onChange={e => set(k, e.target.value)} type={k === 'email' ? 'email' : k === 'telefoonnummer' ? 'tel' : 'text'}
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
+                </div>
+              ))}
               <div>
                 <label className="mb-1 block text-xs font-medium text-slate-500">Provincie</label>
-                <select value={form.provincie} onChange={e => set('provincie', e.target.value)}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900">
+                <select value={form.provincie || ''} onChange={e => set('provincie', e.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900">
                   <option value="">— Selecteer —</option>
                   {PROVINCES.map(p => <option key={p} value={p}>{p}</option>)}
                 </select>
               </div>
             </div>
           </div>
-
           <div className="border-t border-slate-100 pt-4">
             <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">Status & metadata</p>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="mb-1 block text-xs font-medium text-slate-500">Status</label>
-                <select value={form.status} onChange={e => set('status', e.target.value)}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900">
+                <select value={form.status || 'nieuw'} onChange={e => set('status', e.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900">
                   {STATUSES.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
                 </select>
               </div>
-              <Field label="Wervingsdatum" field="wervingsdatum" type="date" />
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-500">Datum</label>
+                <input type="date" value={form.wervingsdatum || ''} onChange={e => set('wervingsdatum', e.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
+              </div>
             </div>
-            <div className="mt-3"><Field label="Notities" field="notities" type="textarea" /></div>
+            <div className="mt-3">
+              <label className="mb-1 block text-xs font-medium text-slate-500">Notities</label>
+              <textarea value={form.notities || ''} onChange={e => set('notities', e.target.value)} rows={3} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
+            </div>
           </div>
-
           {branchFields.length > 0 && (
             <div className="border-t border-slate-100 pt-4">
-              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
-                {form.branch === 'thuisbatterij' ? 'Thuisbatterij details' : 'Airco details'}
-              </p>
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">{branchConfig?.name} details</p>
               <div className="grid grid-cols-2 gap-3">
-                {branchFields.map(f => <Field key={f} label={FIELD_LABELS[f] || f} field={f} />)}
+                {branchFields.map(f => (
+                  <div key={f.key}>
+                    <label className="mb-1 block text-xs font-medium text-slate-500">{f.label}{f.is_required ? ' *' : ''}</label>
+                    {f.field_type === 'textarea' ? (
+                      <textarea value={form[f.key] || ''} onChange={e => set(f.key, e.target.value)} rows={2} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
+                    ) : f.field_type === 'select' ? (
+                      <select value={form[f.key] || ''} onChange={e => set(f.key, e.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900">
+                        <option value="">— Selecteer —</option>
+                        {f.options.map(o => <option key={o} value={o}>{o}</option>)}
+                      </select>
+                    ) : f.field_type === 'boolean' ? (
+                      <select value={form[f.key] || ''} onChange={e => set(f.key, e.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900">
+                        <option value="">— Selecteer —</option>
+                        <option value="Ja">Ja</option>
+                        <option value="Nee">Nee</option>
+                      </select>
+                    ) : (
+                      <input type={f.field_type === 'number' ? 'number' : 'text'} value={form[f.key] || ''} onChange={e => set(f.key, e.target.value)}
+                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
+                    )}
+                  </div>
+                ))}
               </div>
             </div>
           )}
         </div>
-
         <div className="sticky bottom-0 border-t border-slate-100 bg-white px-5 py-4">
           <div className="flex gap-3">
             <button onClick={onClose} className="flex-1 rounded-lg border border-slate-200 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50">Annuleren</button>

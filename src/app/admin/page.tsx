@@ -22,6 +22,21 @@ interface Stats {
   recentLeads: any[];
 }
 
+interface BranchMeta { slug: string; name: string; color: string; }
+
+const BRANCH_COLOR_MAP: Record<string, { dot: string; light: string; text: string }> = {
+  emerald: { dot: 'bg-emerald-500', light: 'bg-emerald-100', text: 'text-emerald-700' },
+  sky: { dot: 'bg-sky-500', light: 'bg-sky-100', text: 'text-sky-700' },
+  amber: { dot: 'bg-amber-500', light: 'bg-amber-100', text: 'text-amber-700' },
+  purple: { dot: 'bg-purple-500', light: 'bg-purple-100', text: 'text-purple-700' },
+  rose: { dot: 'bg-rose-500', light: 'bg-rose-100', text: 'text-rose-700' },
+  cyan: { dot: 'bg-cyan-500', light: 'bg-cyan-100', text: 'text-cyan-700' },
+  lime: { dot: 'bg-lime-500', light: 'bg-lime-100', text: 'text-lime-700' },
+  indigo: { dot: 'bg-indigo-500', light: 'bg-indigo-100', text: 'text-indigo-700' },
+  teal: { dot: 'bg-teal-500', light: 'bg-teal-100', text: 'text-teal-700' },
+  slate: { dot: 'bg-slate-500', light: 'bg-slate-100', text: 'text-slate-700' },
+};
+
 const STATUS_COLORS: Record<string, string> = {
   nieuw: 'bg-blue-500',
   gecontacteerd: 'bg-amber-500',
@@ -77,14 +92,27 @@ function DashboardSkeleton() {
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
+  const [branchMeta, setBranchMeta] = useState<Record<string, BranchMeta>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    adminFetch('/api/admin/stats')
-      .then(r => r.json())
-      .then(d => { setStats(d); setLoading(false); })
-      .catch(() => setLoading(false));
+    Promise.all([
+      adminFetch('/api/admin/stats').then(r => r.json()),
+      adminFetch('/api/admin/branches').then(r => r.json()),
+    ]).then(([statsData, branchData]) => {
+      setStats(statsData);
+      const m: Record<string, BranchMeta> = {};
+      (branchData.branches || []).forEach((b: BranchMeta) => { m[b.slug] = b; });
+      setBranchMeta(m);
+      setLoading(false);
+    }).catch(() => setLoading(false));
   }, []);
+
+  const getBranch = (slug: string) => {
+    const b = branchMeta[slug];
+    const c = BRANCH_COLOR_MAP[b?.color || 'slate'] || BRANCH_COLOR_MAP.slate;
+    return { name: b?.name || slug, ...c };
+  };
 
   if (loading) return <DashboardSkeleton />;
   if (!stats) return <p className="py-20 text-center text-slate-400">Kon statistieken niet laden.</p>;
@@ -137,15 +165,18 @@ export default function AdminDashboard() {
         <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="mb-4 text-sm font-semibold text-slate-900">Leads per branche</h2>
           <div className="space-y-4">
-            {Object.entries(stats.byBranch).map(([branch, count]) => (
-              <div key={branch} className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <span className={`inline-block h-3 w-3 rounded-full ${branch === 'thuisbatterij' ? 'bg-emerald-500' : 'bg-sky-500'}`} />
-                  <span className="text-sm capitalize text-slate-600">{branch}</span>
+            {Object.entries(stats.byBranch).map(([slug, count]) => {
+              const b = getBranch(slug);
+              return (
+                <div key={slug} className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className={`inline-block h-3 w-3 rounded-full ${b.dot}`} />
+                    <span className="text-sm text-slate-600">{b.name}</span>
+                  </div>
+                  <span className="text-sm font-semibold text-slate-900">{count}</span>
                 </div>
-                <span className="text-sm font-semibold text-slate-900">{count}</span>
-              </div>
-            ))}
+              );
+            })}
             {Object.keys(stats.byBranch).length === 0 && <p className="text-sm text-slate-400">Nog geen data</p>}
           </div>
 
@@ -188,9 +219,9 @@ export default function AdminDashboard() {
                 <tr key={lead.id} className="border-b border-slate-50 last:border-0">
                   <td className="px-5 py-2.5 font-medium text-slate-800">{lead.naam_klant}</td>
                   <td className="px-3 py-2.5">
-                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${lead.branch === 'thuisbatterij' ? 'bg-emerald-100 text-emerald-700' : 'bg-sky-100 text-sky-700'}`}>
-                      {lead.branch === 'thuisbatterij' ? 'Batterij' : 'Airco'}
-                    </span>
+                    {(() => { const b = getBranch(lead.branch); return (
+                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${b.light} ${b.text}`}>{b.name}</span>
+                    ); })()}
                   </td>
                   <td className="px-3 py-2.5 text-slate-500">{lead.customers?.name || '—'}</td>
                   <td className="px-3 py-2.5 capitalize text-slate-500">{lead.status}</td>
@@ -220,9 +251,9 @@ export default function AdminDashboard() {
                 </span>
               </div>
               <div className="mt-1.5 flex items-center gap-3 text-xs text-slate-400">
-                <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${lead.branch === 'thuisbatterij' ? 'bg-emerald-50 text-emerald-600' : 'bg-sky-50 text-sky-600'}`}>
-                  {lead.branch === 'thuisbatterij' ? 'Batterij' : 'Airco'}
-                </span>
+                {(() => { const b = getBranch(lead.branch); return (
+                  <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${b.light} ${b.text}`}>{b.name}</span>
+                ); })()}
                 {lead.wervingsdatum && <span>{lead.wervingsdatum}</span>}
               </div>
             </div>

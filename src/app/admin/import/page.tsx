@@ -16,7 +16,24 @@ interface Customer { id: string; name: string; }
 
 interface CrmField { key: string; label: string; required?: boolean; }
 
-const COMMON_FIELDS: CrmField[] = [
+interface BranchConfig {
+  id: string;
+  slug: string;
+  name: string;
+  color: string;
+  is_active: boolean;
+  branch_fields: {
+    id: string;
+    key: string;
+    label: string;
+    field_type: string;
+    options: string[];
+    is_required: boolean;
+    sort_order: number;
+  }[];
+}
+
+const COMMON_CRM_FIELDS: CrmField[] = [
   { key: 'naam_klant', label: 'Naam klant', required: true },
   { key: 'email', label: 'E-mail' },
   { key: 'telefoonnummer', label: 'Telefoon' },
@@ -27,29 +44,15 @@ const COMMON_FIELDS: CrmField[] = [
   { key: 'wervingsdatum', label: 'Wervingsdatum' },
   { key: 'notities', label: 'Notities' },
 ];
-const THUISBATTERIJ_FIELDS: CrmField[] = [
-  { key: 'zonnepanelen', label: 'Zonnepanelen' },
-  { key: 'dynamisch_contract', label: 'Dynamisch contract' },
-  { key: 'stroomverbruik', label: 'Stroomverbruik' },
-  { key: 'budget', label: 'Budget' },
-  { key: 'reden_thuisbatterij', label: 'Reden thuisbatterij' },
-];
-const AIRCO_FIELDS: CrmField[] = [
-  { key: 'type_airco', label: 'Type airco' },
-  { key: 'koelen_verwarmen', label: 'Koelen/Verwarmen' },
-  { key: 'hoeveel_ruimtes', label: 'Hoeveel ruimtes' },
-  { key: 'zakelijk', label: 'Zakelijk' },
-  { key: 'koop_of_huur', label: 'Koop of huur' },
-  { key: 'boorwerkzaamheden_toegestaan', label: 'Boorwerk toegestaan' },
-];
 
 type Step = 'upload' | 'mapping' | 'preview' | 'result';
 
 export default function ImportPage() {
   const [step, setStep] = useState<Step>('upload');
-  const [branch, setBranch] = useState('thuisbatterij');
+  const [branch, setBranch] = useState('');
   const [customerId, setCustomerId] = useState('');
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [branches, setBranches] = useState<BranchConfig[]>([]);
   const [fileName, setFileName] = useState('');
   const [excelHeaders, setExcelHeaders] = useState<string[]>([]);
   const [excelData, setExcelData] = useState<Record<string, any>[]>([]);
@@ -59,10 +62,22 @@ export default function ImportPage() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    adminFetch('/api/admin/customers').then(r => r.json()).then(d => setCustomers(d.customers || []));
+    Promise.all([
+      adminFetch('/api/admin/customers').then(r => r.json()),
+      adminFetch('/api/admin/branches').then(r => r.json()),
+    ]).then(([custRes, branchRes]) => {
+      setCustomers(custRes.customers || []);
+      setBranches(branchRes.branches || []);
+    });
   }, []);
 
-  const crmFields = [...COMMON_FIELDS, ...(branch === 'thuisbatterij' ? THUISBATTERIJ_FIELDS : AIRCO_FIELDS)];
+  useEffect(() => {
+    if (branches.length > 0 && !branch) setBranch(branches[0].slug);
+  }, [branches, branch]);
+
+  const branchConfig = branches.find(b => b.slug === branch);
+  const branchCrmFields: CrmField[] = (branchConfig?.branch_fields || []).map(f => ({ key: f.key, label: f.label, required: f.is_required }));
+  const crmFields = [...COMMON_CRM_FIELDS, ...branchCrmFields];
 
   const autoMap = (headers: string[]) => {
     const m: Record<string, string> = {};
@@ -137,11 +152,18 @@ export default function ImportPage() {
 
   const mappedData = excelData.map(row => {
     const lead: Record<string, any> = { branch, customer_id: customerId || null, bron: 'excel_import', status: 'nieuw' };
+    const customFields: Record<string, string> = {};
+    const commonKeys = new Set(COMMON_CRM_FIELDS.map(f => f.key));
     for (const [excelCol, crmField] of Object.entries(mapping)) {
       if (row[excelCol] !== undefined && row[excelCol] !== '') {
-        lead[crmField] = String(row[excelCol]);
+        if (commonKeys.has(crmField)) {
+          lead[crmField] = String(row[excelCol]);
+        } else {
+          customFields[crmField] = String(row[excelCol]);
+        }
       }
     }
+    if (Object.keys(customFields).length > 0) lead.custom_fields = customFields;
     return lead;
   });
 
@@ -209,8 +231,7 @@ export default function ImportPage() {
             <div>
               <label className="mb-1.5 block text-sm font-medium text-slate-700">Branche</label>
               <select value={branch} onChange={e => setBranch(e.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm">
-                <option value="thuisbatterij">Thuisbatterij</option>
-                <option value="airco">Airco</option>
+                {branches.filter(b => b.is_active).map(b => <option key={b.slug} value={b.slug}>{b.name}</option>)}
               </select>
             </div>
             <div>
