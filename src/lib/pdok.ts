@@ -23,17 +23,35 @@ function isValidPlace(val: string | undefined): boolean {
  * using the free PDOK Locatieserver (Kadaster / BAG).
  * Returns null if the address cannot be resolved.
  */
+function extractPostcode(raw: string): string | null {
+  const stripped = raw.replace(/\s+/g, '').toUpperCase();
+  if (/^\d{4}[A-Z]{2}$/.test(stripped)) return stripped;
+  const match = stripped.match(/(\d{4}[A-Z]{2})/);
+  if (match) return match[1];
+  const digitsOnly = raw.replace(/\s+/g, '').match(/^(\d{4})[^A-Za-z0-9]?([A-Za-z]{2})/);
+  if (digitsOnly) return (digitsOnly[1] + digitsOnly[2]).toUpperCase();
+  return null;
+}
+
+function extractHuisnummer(raw: string): string {
+  const match = raw.trim().match(/^(\d+)/);
+  return match ? match[1] : raw.trim();
+}
+
 export async function resolveAddress(
   postcode: string,
   huisnummer: string
 ): Promise<PDOKResult | null> {
   if (!postcode || !huisnummer) return null;
 
-  const clean = postcode.replace(/\s+/g, '').toUpperCase();
-  if (!/^\d{4}[A-Z]{2}$/.test(clean)) return null;
+  const clean = extractPostcode(postcode);
+  if (!clean) return null;
+
+  const hnr = extractHuisnummer(huisnummer);
+  if (!hnr) return null;
 
   try {
-    const q = encodeURIComponent(`${clean} ${huisnummer}`);
+    const q = encodeURIComponent(`${clean} ${hnr}`);
     const res = await fetch(
       `${PDOK_URL}?q=${q}&fq=type:adres&rows=1&fl=woonplaatsnaam,provincienaam`,
       { signal: AbortSignal.timeout(4000) }
