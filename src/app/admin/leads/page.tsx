@@ -204,33 +204,36 @@ export default function LeadsCRMPage() {
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-7">
-        <select value={branch} onChange={e => setBranch(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+      {/* Filters - top row */}
+      <div className="mb-2 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+        <select value={branch} onChange={e => setBranch(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700">
           <option value="all">Alle branches</option>
           <option value="thuisbatterij">Thuisbatterij</option>
           <option value="airco">Airco</option>
         </select>
-        <select value={customerId} onChange={e => setCustomerId(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+        <select value={customerId} onChange={e => setCustomerId(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700">
           <option value="all">Alle klanten</option>
           {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
-        <select value={status} onChange={e => setStatus(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+        <select value={status} onChange={e => setStatus(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700">
           <option value="all">Alle statussen</option>
           {STATUSES.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
         </select>
-        <select value={province} onChange={e => setProvince(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+        <select value={province} onChange={e => setProvince(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700">
           <option value="all">Alle provincies</option>
           {PROVINCES.map(p => <option key={p} value={p}>{p}</option>)}
         </select>
-        <select value={source} onChange={e => setSource(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+        <select value={source} onChange={e => setSource(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700">
           <option value="all">Alle bronnen</option>
           <option value="handmatig">Handmatig</option>
           <option value="excel_import">Excel import</option>
           <option value="zapier">Zapier</option>
         </select>
-        <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700" placeholder="Van" />
-        <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700" placeholder="Tot" />
+      </div>
+      {/* Filters - date row */}
+      <div className="mb-4 grid grid-cols-2 gap-2 sm:max-w-xs">
+        <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700" placeholder="Van" />
+        <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700" placeholder="Tot" />
       </div>
 
       {/* Search */}
@@ -249,30 +252,30 @@ export default function LeadsCRMPage() {
       <AnimatePresence>
         {selected.size > 0 && (
           <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
-            <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-brand-purple/20 bg-brand-purple/5 px-4 py-2.5">
+            <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-brand-purple/20 bg-brand-purple/5 px-4 py-3">
               <span className="text-sm font-medium text-brand-purple">{selected.size} geselecteerd</span>
-              <select value={bulkStatus} onChange={e => setBulkStatus(e.target.value)} className="rounded border border-slate-200 bg-white px-2 py-1 text-xs">
+              <select value={bulkStatus} onChange={e => setBulkStatus(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm">
                 <option value="">Status wijzigen...</option>
                 {STATUSES.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
               </select>
               {bulkStatus && (
-                <button onClick={handleBulkStatus} className="rounded bg-brand-purple px-2.5 py-1 text-xs font-medium text-white">Toepassen</button>
+                <button onClick={handleBulkStatus} className="rounded-lg bg-brand-purple px-3 py-1.5 text-sm font-medium text-white">Toepassen</button>
               )}
-              <button onClick={handleBulkDelete} className="rounded bg-red-500 px-2.5 py-1 text-xs font-medium text-white">Verwijderen</button>
-              <button onClick={() => setSelected(new Set())} className="ml-auto text-xs text-slate-500 hover:text-slate-700">Deselecteren</button>
+              <button onClick={handleBulkDelete} className="rounded-lg bg-red-500 px-3 py-1.5 text-sm font-medium text-white">Verwijderen</button>
+              <button onClick={() => setSelected(new Set())} className="ml-auto text-sm text-slate-500 hover:text-slate-700">Deselecteren</button>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Table */}
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      {/* Desktop Table */}
+      <div className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm md:block">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50/80">
                 <th className="w-10 px-3 py-3">
-                  <input type="checkbox" checked={selected.size === leads.length && leads.length > 0} onChange={toggleAll} className="h-3.5 w-3.5 rounded border-slate-300" />
+                  <input type="checkbox" checked={selected.size === leads.length && leads.length > 0} onChange={toggleAll} className="h-4 w-4 rounded border-slate-300" />
                 </th>
                 {branch === 'all' && (
                   <th className="cursor-pointer px-3 py-3 text-xs font-semibold text-slate-500 hover:text-slate-700" onClick={() => toggleSort('branch')}>
@@ -288,7 +291,7 @@ export default function LeadsCRMPage() {
                     </span>
                   </th>
                 ))}
-                <th className="w-16 px-3 py-3" />
+                <th className="w-20 px-3 py-3" />
               </tr>
             </thead>
             <tbody>
@@ -299,7 +302,7 @@ export default function LeadsCRMPage() {
               ) : leads.map(lead => (
                 <tr key={lead.id} className="border-b border-slate-50 transition hover:bg-slate-50/50">
                   <td className="px-3 py-2.5">
-                    <input type="checkbox" checked={selected.has(lead.id)} onChange={() => toggleSelect(lead.id)} className="h-3.5 w-3.5 rounded border-slate-300" />
+                    <input type="checkbox" checked={selected.has(lead.id)} onChange={() => toggleSelect(lead.id)} className="h-4 w-4 rounded border-slate-300" />
                   </td>
                   {branch === 'all' && (
                     <td className="px-3 py-2.5">
@@ -325,11 +328,11 @@ export default function LeadsCRMPage() {
                     </td>
                   ))}
                   <td className="px-3 py-2.5">
-                    <div className="flex items-center gap-0.5">
-                      <button onClick={() => setEditLead(lead)} className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600" title="Bewerken">
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => setEditLead(lead)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600" title="Bewerken">
                         <PencilSquareIcon className="h-4 w-4" />
                       </button>
-                      <button onClick={() => handleDeleteSingle(lead.id, lead.naam_klant)} className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-500" title="Verwijderen">
+                      <button onClick={() => handleDeleteSingle(lead.id, lead.naam_klant)} className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500" title="Verwijderen">
                         <TrashIcon className="h-4 w-4" />
                       </button>
                     </div>
@@ -339,27 +342,72 @@ export default function LeadsCRMPage() {
             </tbody>
           </table>
         </div>
+      </div>
 
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3">
-            <div className="flex items-center gap-2 text-xs text-slate-500">
-              <select value={perPage} onChange={e => setPerPage(Number(e.target.value))} className="rounded border border-slate-200 bg-white px-2 py-1 text-xs">
-                {[25, 50, 100].map(n => <option key={n} value={n}>{n} per pagina</option>)}
+      {/* Mobile Cards */}
+      <div className="space-y-2 md:hidden">
+        {loading ? (
+          <div className="flex justify-center py-12">
+            <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-slate-200 border-t-brand-purple" />
+          </div>
+        ) : leads.length === 0 ? (
+          <div className="rounded-xl border border-slate-200 bg-white py-12 text-center shadow-sm">
+            <p className="text-sm text-slate-400">Geen leads gevonden</p>
+          </div>
+        ) : leads.map(lead => (
+          <div key={lead.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="mb-2 flex items-start justify-between">
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold text-slate-900">{lead.naam_klant || '—'}</p>
+                <p className="text-xs text-slate-500">{lead.customers?.name || '—'}</p>
+              </div>
+              <select
+                value={lead.status}
+                onChange={e => handleQuickStatus(lead.id, e.target.value)}
+                className={`ml-2 shrink-0 rounded-full border-0 px-2 py-0.5 text-[11px] font-medium ${STATUS_COLORS[lead.status] || 'bg-slate-100 text-slate-600'}`}
+              >
+                {STATUSES.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
               </select>
-              <span>Pagina {page} van {totalPages}</span>
             </div>
-            <div className="flex gap-1">
-              <button disabled={page <= 1} onClick={() => setPage(p => p - 1)} className="rounded p-1.5 text-slate-400 hover:bg-slate-100 disabled:opacity-30">
-                <ChevronLeftIcon className="h-4 w-4" />
+            <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+              <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${lead.branch === 'thuisbatterij' ? 'bg-emerald-50 text-emerald-600' : 'bg-sky-50 text-sky-600'}`}>
+                {lead.branch === 'thuisbatterij' ? 'Batterij' : 'Airco'}
+              </span>
+              {lead.plaatsnaam && <span>{lead.plaatsnaam}</span>}
+              {lead.telefoonnummer && <span>{lead.telefoonnummer}</span>}
+              {lead.wervingsdatum && <span>{lead.wervingsdatum}</span>}
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setEditLead(lead)} className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-slate-200 py-2 text-xs font-medium text-slate-600 transition hover:bg-slate-50">
+                <PencilSquareIcon className="h-3.5 w-3.5" /> Bewerken
               </button>
-              <button disabled={page >= totalPages} onClick={() => setPage(p => p + 1)} className="rounded p-1.5 text-slate-400 hover:bg-slate-100 disabled:opacity-30">
-                <ChevronRightIcon className="h-4 w-4" />
+              <button onClick={() => handleDeleteSingle(lead.id, lead.naam_klant)} className="inline-flex items-center justify-center rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-400 transition hover:bg-red-50 hover:text-red-500">
+                <TrashIcon className="h-3.5 w-3.5" />
               </button>
             </div>
           </div>
-        )}
+        ))}
       </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="mt-3 flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm md:mt-0 md:rounded-t-none md:border-t-0 md:shadow-none">
+          <div className="flex items-center gap-2 text-sm text-slate-500">
+            <select value={perPage} onChange={e => setPerPage(Number(e.target.value))} className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm">
+              {[25, 50, 100].map(n => <option key={n} value={n}>{n}/p</option>)}
+            </select>
+            <span className="text-xs">Pagina {page}/{totalPages}</span>
+          </div>
+          <div className="flex gap-1">
+            <button disabled={page <= 1} onClick={() => setPage(p => p - 1)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-50 disabled:opacity-30">
+              <ChevronLeftIcon className="h-4 w-4" />
+            </button>
+            <button disabled={page >= totalPages} onClick={() => setPage(p => p + 1)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-50 disabled:opacity-30">
+              <ChevronRightIcon className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Edit / New Lead Panel */}
       <AnimatePresence>

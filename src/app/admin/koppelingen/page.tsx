@@ -169,8 +169,19 @@ export default function KoppelingenPage() {
 
       {/* Koppelingen grid */}
       {loading ? (
-        <div className="flex justify-center py-16">
-          <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-slate-200 border-t-brand-purple" />
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="mb-3 flex items-start justify-between">
+                <div>
+                  <div className="h-4 w-36 animate-pulse rounded bg-slate-100" />
+                  <div className="mt-2 h-3 w-24 animate-pulse rounded bg-slate-50" />
+                </div>
+                <div className="h-5 w-14 animate-pulse rounded-full bg-slate-100" />
+              </div>
+              <div className="mt-4 h-3 w-28 animate-pulse rounded bg-slate-50" />
+            </div>
+          ))}
         </div>
       ) : keys.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-300 bg-white py-16 text-center">
@@ -260,30 +271,30 @@ export default function KoppelingenPage() {
                 <div className="flex items-center border-t border-slate-100">
                   <button
                     onClick={() => setActiveInstructions(activeInstructions === k.id ? null : k.id)}
-                    className="flex flex-1 items-center justify-center gap-1.5 py-3 text-xs font-medium text-brand-purple transition hover:bg-brand-purple/5"
+                    className="flex flex-1 items-center justify-center gap-1.5 py-3.5 text-sm font-medium text-brand-purple transition hover:bg-brand-purple/5"
                   >
-                    <DocumentDuplicateIcon className="h-3.5 w-3.5" />
-                    {hasLeads ? 'Zapier instructies' : 'Instellen'}
+                    <DocumentDuplicateIcon className="h-4 w-4" />
+                    {hasLeads ? 'Instructies' : 'Instellen'}
                   </button>
                   <div className="h-8 w-px bg-slate-100" />
                   <button
                     onClick={() => testWebhookFromPanel(k.id)}
                     disabled={testing === k.id}
-                    className="flex flex-1 items-center justify-center gap-1.5 py-3 text-xs font-medium text-emerald-600 transition hover:bg-emerald-50 disabled:opacity-50"
+                    className="flex flex-1 items-center justify-center gap-1.5 py-3.5 text-sm font-medium text-emerald-600 transition hover:bg-emerald-50 disabled:opacity-50"
                   >
                     {testing === k.id ? (
-                      <ArrowPathIcon className="h-3.5 w-3.5 animate-spin" />
+                      <ArrowPathIcon className="h-4 w-4 animate-spin" />
                     ) : (
-                      <BoltIcon className="h-3.5 w-3.5" />
+                      <BoltIcon className="h-4 w-4" />
                     )}
                     Test
                   </button>
                   <div className="h-8 w-px bg-slate-100" />
                   <button
                     onClick={() => deleteKey(k.id, k.label)}
-                    className="flex items-center justify-center px-4 py-3 text-xs text-slate-400 transition hover:bg-red-50 hover:text-red-500"
+                    className="flex items-center justify-center px-5 py-3.5 text-slate-400 transition hover:bg-red-50 hover:text-red-500"
                   >
-                    <TrashIcon className="h-3.5 w-3.5" />
+                    <TrashIcon className="h-4 w-4" />
                   </button>
                 </div>
 

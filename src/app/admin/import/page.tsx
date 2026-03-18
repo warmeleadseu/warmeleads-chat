@@ -186,15 +186,20 @@ export default function ImportPage() {
       <p className="mb-6 text-sm text-slate-500">Upload een Excel of CSV bestand en koppel de kolommen aan het CRM.</p>
 
       {/* Steps indicator */}
-      <div className="mb-8 flex items-center gap-2 text-xs font-medium">
-        {(['upload', 'mapping', 'preview', 'result'] as Step[]).map((s, i) => (
-          <div key={s} className="flex items-center gap-2">
-            {i > 0 && <div className="h-px w-6 bg-slate-200" />}
-            <span className={`rounded-full px-3 py-1 ${step === s ? 'bg-brand-purple text-white' : 'bg-slate-100 text-slate-400'}`}>
-              {i + 1}. {s === 'upload' ? 'Upload' : s === 'mapping' ? 'Koppelen' : s === 'preview' ? 'Controleer' : 'Resultaat'}
-            </span>
-          </div>
-        ))}
+      <div className="mb-8 flex items-center gap-1.5 overflow-x-auto pb-1 text-xs font-medium sm:gap-2">
+        {(['upload', 'mapping', 'preview', 'result'] as Step[]).map((s, i) => {
+          const stepIdx = ['upload', 'mapping', 'preview', 'result'].indexOf(step);
+          const done = i < stepIdx;
+          return (
+            <div key={s} className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+              {i > 0 && <div className={`h-px w-4 sm:w-6 ${done || i === stepIdx ? 'bg-brand-purple/40' : 'bg-slate-200'}`} />}
+              <span className={`rounded-full px-3 py-1.5 ${step === s ? 'bg-brand-purple text-white' : done ? 'bg-brand-purple/10 text-brand-purple' : 'bg-slate-100 text-slate-400'}`}>
+                <span className="sm:hidden">{i + 1}</span>
+                <span className="hidden sm:inline">{i + 1}. {s === 'upload' ? 'Upload' : s === 'mapping' ? 'Koppelen' : s === 'preview' ? 'Controleer' : 'Resultaat'}</span>
+              </span>
+            </div>
+          );
+        })}
       </div>
 
       {/* Step 1: Upload */}
@@ -241,13 +246,13 @@ export default function ImportPage() {
 
           <div className="space-y-2">
             {excelHeaders.map(header => (
-              <div key={header} className="flex items-center gap-3 rounded-lg border border-slate-100 bg-slate-50/50 px-4 py-2.5">
+              <div key={header} className="flex flex-col gap-2 rounded-lg border border-slate-100 bg-slate-50/50 px-4 py-3 sm:flex-row sm:items-center sm:gap-3 sm:py-2.5">
                 <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-700">{header}</span>
-                <ArrowRightIcon className="h-4 w-4 shrink-0 text-slate-300" />
+                <ArrowRightIcon className="hidden h-4 w-4 shrink-0 text-slate-300 sm:block" />
                 <select
                   value={mapping[header] || ''}
                   onChange={e => setMap(header, e.target.value)}
-                  className={`w-48 shrink-0 rounded-lg border px-3 py-1.5 text-sm ${mapping[header] ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-white text-slate-500'}`}
+                  className={`w-full rounded-lg border px-3 py-2.5 text-sm sm:w-48 sm:shrink-0 sm:py-1.5 ${mapping[header] ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-white text-slate-500'}`}
                 >
                   <option value="">— Overslaan —</option>
                   {crmFields.map(f => (

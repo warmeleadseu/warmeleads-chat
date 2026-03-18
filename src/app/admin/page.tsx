@@ -7,6 +7,8 @@ import {
   UserGroupIcon,
   ArrowTrendingUpIcon,
   ClockIcon,
+  ChevronRightIcon,
+  MapPinIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
 
@@ -28,6 +30,51 @@ const STATUS_COLORS: Record<string, string> = {
   afgewezen: 'bg-red-400',
 };
 
+const STATUS_BADGE: Record<string, string> = {
+  nieuw: 'bg-blue-100 text-blue-700',
+  gecontacteerd: 'bg-amber-100 text-amber-700',
+  offerte: 'bg-purple-100 text-purple-700',
+  verkocht: 'bg-emerald-100 text-emerald-700',
+  afgewezen: 'bg-red-100 text-red-700',
+};
+
+function DashboardSkeleton() {
+  return (
+    <div>
+      <div className="mb-6 h-7 w-32 animate-pulse rounded bg-slate-100" />
+      <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {[...Array(4)].map((_, i) => (
+          <div key={i} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="mb-3 h-9 w-9 animate-pulse rounded-lg bg-slate-100" />
+            <div className="h-7 w-16 animate-pulse rounded bg-slate-100" />
+            <div className="mt-1.5 h-3 w-20 animate-pulse rounded bg-slate-50" />
+          </div>
+        ))}
+      </div>
+      <div className="grid gap-6 lg:grid-cols-2">
+        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-4 h-4 w-28 animate-pulse rounded bg-slate-100" />
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="mb-3">
+              <div className="mb-1 h-3 w-24 animate-pulse rounded bg-slate-50" />
+              <div className="h-2 w-full animate-pulse rounded-full bg-slate-100" />
+            </div>
+          ))}
+        </div>
+        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-4 h-4 w-28 animate-pulse rounded bg-slate-100" />
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="mb-3 flex justify-between">
+              <div className="h-3 w-20 animate-pulse rounded bg-slate-50" />
+              <div className="h-3 w-8 animate-pulse rounded bg-slate-100" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminDashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -39,14 +86,7 @@ export default function AdminDashboard() {
       .catch(() => setLoading(false));
   }, []);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-slate-200 border-t-brand-purple" />
-      </div>
-    );
-  }
-
+  if (loading) return <DashboardSkeleton />;
   if (!stats) return <p className="py-20 text-center text-slate-400">Kon statistieken niet laden.</p>;
 
   const maxStatus = Math.max(...Object.values(stats.byStatus), 1);
@@ -67,7 +107,7 @@ export default function AdminDashboard() {
             <div className={`mb-3 inline-flex h-9 w-9 items-center justify-center rounded-lg ${kpi.color}`}>
               <kpi.icon className="h-[18px] w-[18px]" />
             </div>
-            <p className="text-2xl font-bold text-slate-900">{kpi.value.toLocaleString()}</p>
+            <p className="text-xl font-bold text-slate-900 sm:text-2xl">{kpi.value.toLocaleString()}</p>
             <p className="text-xs text-slate-500">{kpi.label}</p>
           </div>
         ))}
@@ -85,7 +125,7 @@ export default function AdminDashboard() {
                   <span className="font-medium text-slate-900">{count}</span>
                 </div>
                 <div className="h-2 overflow-hidden rounded-full bg-slate-100">
-                  <div className={`h-full rounded-full ${STATUS_COLORS[status] || 'bg-slate-400'}`} style={{ width: `${(count / maxStatus) * 100}%` }} />
+                  <div className={`h-full rounded-full transition-all duration-500 ${STATUS_COLORS[status] || 'bg-slate-400'}`} style={{ width: `${(count / maxStatus) * 100}%` }} />
                 </div>
               </div>
             ))}
@@ -93,7 +133,7 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* Branch breakdown */}
+        {/* Branch + Customer breakdown */}
         <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="mb-4 text-sm font-semibold text-slate-900">Leads per branche</h2>
           <div className="space-y-4">
@@ -114,7 +154,7 @@ export default function AdminDashboard() {
             {Object.entries(stats.byCustomer).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([name, count]) => (
               <div key={name} className="flex items-center justify-between">
                 <span className="truncate text-sm text-slate-600">{name}</span>
-                <span className="text-sm font-medium text-slate-900">{count}</span>
+                <span className="ml-2 shrink-0 text-sm font-medium text-slate-900">{count}</span>
               </div>
             ))}
             {Object.keys(stats.byCustomer).length === 0 && <p className="text-sm text-slate-400">Nog geen data</p>}
@@ -126,9 +166,13 @@ export default function AdminDashboard() {
       <div className="mt-6 rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
           <h2 className="text-sm font-semibold text-slate-900">Laatste leads</h2>
-          <Link href="/admin/leads" className="text-xs font-medium text-brand-purple hover:underline">Alles bekijken</Link>
+          <Link href="/admin/leads" className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-brand-purple transition hover:bg-brand-purple/5">
+            Alles bekijken <ChevronRightIcon className="h-3 w-3" />
+          </Link>
         </div>
-        <div className="overflow-x-auto">
+
+        {/* Desktop table */}
+        <div className="hidden overflow-x-auto md:block">
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-slate-50 text-xs text-slate-500">
@@ -158,6 +202,31 @@ export default function AdminDashboard() {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile cards */}
+        <div className="divide-y divide-slate-50 md:hidden">
+          {stats.recentLeads.length === 0 ? (
+            <p className="px-5 py-8 text-center text-sm text-slate-400">Nog geen leads</p>
+          ) : stats.recentLeads.map((lead: any) => (
+            <div key={lead.id} className="px-4 py-3">
+              <div className="flex items-start justify-between">
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-slate-800">{lead.naam_klant}</p>
+                  <p className="mt-0.5 text-xs text-slate-500">{lead.customers?.name || '—'}</p>
+                </div>
+                <span className={`ml-2 shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium capitalize ${STATUS_BADGE[lead.status] || 'bg-slate-100 text-slate-600'}`}>
+                  {lead.status}
+                </span>
+              </div>
+              <div className="mt-1.5 flex items-center gap-3 text-xs text-slate-400">
+                <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${lead.branch === 'thuisbatterij' ? 'bg-emerald-50 text-emerald-600' : 'bg-sky-50 text-sky-600'}`}>
+                  {lead.branch === 'thuisbatterij' ? 'Batterij' : 'Airco'}
+                </span>
+                {lead.wervingsdatum && <span>{lead.wervingsdatum}</span>}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>

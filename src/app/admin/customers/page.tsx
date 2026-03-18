@@ -100,7 +100,24 @@ export default function CustomersPage() {
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-16"><div className="h-8 w-8 animate-spin rounded-full border-[3px] border-slate-200 border-t-brand-purple" /></div>
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="mb-3 flex items-start justify-between">
+                <div>
+                  <div className="h-5 w-32 animate-pulse rounded bg-slate-100" />
+                  <div className="mt-1.5 h-3 w-20 animate-pulse rounded bg-slate-50" />
+                </div>
+                <div className="h-5 w-14 animate-pulse rounded-full bg-slate-100" />
+              </div>
+              <div className="mb-4 space-y-1">
+                <div className="h-3 w-40 animate-pulse rounded bg-slate-50" />
+                <div className="h-3 w-28 animate-pulse rounded bg-slate-50" />
+              </div>
+              <div className="h-36 w-full animate-pulse rounded-lg bg-slate-100" />
+            </div>
+          ))}
+        </div>
       ) : customers.length === 0 ? (
         <div className="rounded-xl border border-slate-200 bg-white py-16 text-center shadow-sm">
           <BuildingOfficeIcon className="mx-auto mb-3 h-10 w-10 text-slate-300" />
@@ -115,15 +132,13 @@ export default function CustomersPage() {
                 <div className="p-5">
                   {/* Header */}
                   <div className="mb-3 flex items-start justify-between">
-                    <div>
+                    <div className="min-w-0 flex-1">
                       <h3 className="font-semibold text-slate-900">{c.name}</h3>
                       {c.contact_person && <p className="text-xs text-slate-500">{c.contact_person}</p>}
                     </div>
-                    <div className="flex items-center gap-1.5">
-                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${c.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
-                        {c.is_active ? 'Actief' : 'Inactief'}
-                      </span>
-                    </div>
+                    <span className={`ml-2 shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${c.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                      {c.is_active ? 'Actief' : 'Inactief'}
+                    </span>
                   </div>
 
                   {/* Contact */}
@@ -133,20 +148,20 @@ export default function CustomersPage() {
                   {/* Branches + leads */}
                   <div className="mb-4 flex flex-wrap items-center gap-1.5">
                     {c.branches?.map(b => (
-                      <span key={b} className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${b === 'thuisbatterij' ? 'bg-emerald-50 text-emerald-600' : 'bg-sky-50 text-sky-600'}`}>
+                      <span key={b} className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${b === 'thuisbatterij' ? 'bg-emerald-50 text-emerald-600' : 'bg-sky-50 text-sky-600'}`}>
                         {b}
                       </span>
                     ))}
                     {typeof c.lead_count === 'number' && (
-                      <span className="flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">
+                      <span className="flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
                         <UserGroupIcon className="h-3 w-3" /> {c.lead_count} leads
                       </span>
                     )}
                   </div>
 
                   {/* Portal section */}
-                  <div className="rounded-lg border border-slate-100 bg-slate-50/70 p-3">
-                    <div className="mb-2 flex items-center justify-between">
+                  <div className="rounded-lg border border-slate-100 bg-slate-50/70 p-3.5">
+                    <div className="mb-2.5 flex items-center justify-between">
                       <div className="flex items-center gap-1.5">
                         {portalReady ? (
                           <ShieldCheckIcon className="h-4 w-4 text-emerald-500" />
@@ -155,7 +170,7 @@ export default function CustomersPage() {
                         )}
                         <span className="text-xs font-semibold text-slate-700">Klantportaal</span>
                       </div>
-                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
                         portalReady ? 'bg-emerald-100 text-emerald-700' : c.portal_active ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'
                       }`}>
                         {portalReady ? 'Gereed' : c.portal_active ? 'Incompleet' : 'Uit'}
@@ -163,28 +178,28 @@ export default function CustomersPage() {
                     </div>
 
                     {/* Login info */}
-                    <div className="mb-2.5 space-y-1 text-[11px]">
-                      <div className="flex items-center justify-between">
+                    <div className="mb-3 space-y-1.5 text-xs">
+                      <div className="flex items-center justify-between gap-2">
                         <span className="text-slate-400">URL</span>
-                        <span className="font-mono text-slate-600">{portalUrl.replace('https://', '')}</span>
+                        <span className="truncate font-mono text-slate-600">{portalUrl.replace('https://', '')}</span>
                       </div>
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between gap-2">
                         <span className="text-slate-400">E-mail</span>
-                        <span className="font-medium text-slate-600">{c.email || <span className="italic text-amber-500">niet ingesteld</span>}</span>
+                        <span className="truncate font-medium text-slate-600">{c.email || <span className="italic text-amber-500">niet ingesteld</span>}</span>
                       </div>
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between gap-2">
                         <span className="text-slate-400">Wachtwoord</span>
                         {c.has_password ? (
                           c.portal_password ? (
                             <button
                               onClick={() => setShowPw(showPw === c.id ? null : c.id)}
-                              className="inline-flex items-center gap-1 text-slate-600 hover:text-brand-purple"
+                              className="inline-flex items-center gap-1 rounded px-1 py-0.5 text-slate-600 transition hover:bg-white hover:text-brand-purple"
                             >
                               <span className="font-medium">{showPw === c.id ? c.portal_password : '••••••••'}</span>
-                              <EyeIcon className="h-3 w-3 shrink-0 text-slate-400" />
+                              <EyeIcon className="h-3.5 w-3.5 shrink-0 text-slate-400" />
                             </button>
                           ) : (
-                            <span className="text-[10px] text-slate-400">reset om te zien</span>
+                            <span className="text-[11px] text-slate-400">reset om te zien</span>
                           )
                         ) : (
                           <span className="italic text-amber-500">niet ingesteld</span>
@@ -199,29 +214,29 @@ export default function CustomersPage() {
                           initial={{ height: 0, opacity: 0 }}
                           animate={{ height: 'auto', opacity: 1 }}
                           exit={{ height: 0, opacity: 0 }}
-                          className="mb-2.5 overflow-hidden"
+                          className="mb-3 overflow-hidden"
                         >
                           <div className="flex gap-1.5">
                             <input
                               type="text"
                               value={newPw}
                               onChange={e => setNewPw(e.target.value)}
-                              placeholder="Nieuw wachtwoord (min. 6 tekens)"
-                              className="flex-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-900 outline-none focus:border-brand-purple/50"
+                              placeholder="Nieuw wachtwoord (min. 6)"
+                              className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50"
                               autoFocus
                             />
                             <button
                               onClick={() => resetPassword(c.id)}
                               disabled={pwSaving || newPw.length < 6}
-                              className="rounded-md bg-brand-purple px-2.5 py-1.5 text-[11px] font-medium text-white disabled:opacity-50"
+                              className="rounded-lg bg-brand-purple px-3 py-2 text-xs font-medium text-white disabled:opacity-50"
                             >
                               {pwSaving ? '...' : 'Opslaan'}
                             </button>
                             <button
                               onClick={() => { setResettingPw(null); setNewPw(''); }}
-                              className="rounded-md px-1.5 py-1.5 text-slate-400 hover:text-slate-600"
+                              className="rounded-lg px-2 py-2 text-slate-400 hover:text-slate-600"
                             >
-                              <XMarkIcon className="h-3.5 w-3.5" />
+                              <XMarkIcon className="h-4 w-4" />
                             </button>
                           </div>
                         </motion.div>
@@ -229,48 +244,48 @@ export default function CustomersPage() {
                     </AnimatePresence>
 
                     {/* Portal actions */}
-                    <div className="flex flex-wrap gap-1">
+                    <div className="flex flex-wrap gap-1.5">
                       <button
                         onClick={() => copyCredentials(c)}
                         disabled={!c.email}
-                        className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-medium text-slate-600 transition hover:bg-slate-50 disabled:opacity-40"
+                        className="inline-flex min-h-[32px] items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50 disabled:opacity-40"
                       >
-                        {copied === c.id ? <CheckIcon className="h-3 w-3 text-emerald-500" /> : <ClipboardDocumentIcon className="h-3 w-3" />}
-                        {copied === c.id ? 'Gekopieerd!' : 'Kopieer login'}
+                        {copied === c.id ? <CheckIcon className="h-3.5 w-3.5 text-emerald-500" /> : <ClipboardDocumentIcon className="h-3.5 w-3.5" />}
+                        {copied === c.id ? 'Gekopieerd!' : 'Kopieer'}
                       </button>
                       <button
                         onClick={() => { setResettingPw(resettingPw === c.id ? null : c.id); setNewPw(''); }}
-                        className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-medium text-slate-600 transition hover:bg-slate-50"
+                        className="inline-flex min-h-[32px] items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50"
                       >
-                        <KeyIcon className="h-3 w-3" />
-                        {c.has_password ? 'Reset wachtwoord' : 'Stel wachtwoord in'}
+                        <KeyIcon className="h-3.5 w-3.5" />
+                        {c.has_password ? 'Reset ww' : 'Stel ww in'}
                       </button>
                       <button
                         onClick={() => togglePortal(c)}
                         disabled={togglingPortal === c.id}
-                        className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] font-medium transition ${
+                        className={`inline-flex min-h-[32px] items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${
                           c.portal_active
                             ? 'border-red-200 bg-white text-red-500 hover:bg-red-50'
                             : 'border-emerald-200 bg-white text-emerald-600 hover:bg-emerald-50'
                         } disabled:opacity-50`}
                       >
                         {togglingPortal === c.id ? (
-                          <ArrowPathIcon className="h-3 w-3 animate-spin" />
+                          <ArrowPathIcon className="h-3.5 w-3.5 animate-spin" />
                         ) : c.portal_active ? (
-                          <ShieldExclamationIcon className="h-3 w-3" />
+                          <ShieldExclamationIcon className="h-3.5 w-3.5" />
                         ) : (
-                          <ShieldCheckIcon className="h-3 w-3" />
+                          <ShieldCheckIcon className="h-3.5 w-3.5" />
                         )}
-                        {c.portal_active ? 'Portaal uit' : 'Portaal aan'}
+                        {c.portal_active ? 'Uit' : 'Aan'}
                       </button>
                       {portalReady && (
                         <a
                           href="/portal"
                           target="_blank"
-                          className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-medium text-brand-purple transition hover:bg-brand-purple/5"
+                          className="inline-flex min-h-[32px] items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-brand-purple transition hover:bg-brand-purple/5"
                         >
-                          <ArrowTopRightOnSquareIcon className="h-3 w-3" />
-                          Open portaal
+                          <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5" />
+                          Open
                         </a>
                       )}
                     </div>
@@ -279,16 +294,16 @@ export default function CustomersPage() {
 
                 {/* Bottom actions */}
                 <div className="flex items-center border-t border-slate-100">
-                  <button onClick={() => setEditing(c)} className="flex flex-1 items-center justify-center gap-1.5 py-3 text-xs font-medium text-slate-500 transition hover:bg-slate-50 hover:text-brand-purple">
-                    <PencilSquareIcon className="h-3.5 w-3.5" /> Bewerken
+                  <button onClick={() => setEditing(c)} className="flex flex-1 items-center justify-center gap-1.5 py-3.5 text-sm font-medium text-slate-500 transition hover:bg-slate-50 hover:text-brand-purple">
+                    <PencilSquareIcon className="h-4 w-4" /> Bewerken
                   </button>
                   <div className="h-8 w-px bg-slate-100" />
-                  <a href={`/admin/leads?customer_id=${c.id}`} className="flex flex-1 items-center justify-center gap-1.5 py-3 text-xs font-medium text-slate-500 transition hover:bg-slate-50 hover:text-brand-purple">
-                    <EyeIcon className="h-3.5 w-3.5" /> Bekijk leads
+                  <a href={`/admin/leads?customer_id=${c.id}`} className="flex flex-1 items-center justify-center gap-1.5 py-3.5 text-sm font-medium text-slate-500 transition hover:bg-slate-50 hover:text-brand-purple">
+                    <EyeIcon className="h-4 w-4" /> Leads
                   </a>
                   <div className="h-8 w-px bg-slate-100" />
-                  <button onClick={() => handleDelete(c.id, c.name)} className="flex items-center justify-center px-4 py-3 text-xs text-slate-400 transition hover:bg-red-50 hover:text-red-500">
-                    <TrashIcon className="h-3.5 w-3.5" />
+                  <button onClick={() => handleDelete(c.id, c.name)} className="flex items-center justify-center px-5 py-3.5 text-slate-400 transition hover:bg-red-50 hover:text-red-500">
+                    <TrashIcon className="h-4 w-4" />
                   </button>
                 </div>
               </div>
