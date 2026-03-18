@@ -175,13 +175,17 @@ export default function CustomersPage() {
                       <div className="flex items-center justify-between">
                         <span className="text-slate-400">Wachtwoord</span>
                         {c.has_password ? (
-                          <button
-                            onClick={() => setShowPw(showPw === c.id ? null : c.id)}
-                            className="inline-flex items-center gap-1 text-slate-600 hover:text-brand-purple"
-                          >
-                            <span className="font-medium">{showPw === c.id && c.portal_password ? c.portal_password : '••••••••'}</span>
-                            <EyeIcon className="h-3 w-3 shrink-0 text-slate-400" />
-                          </button>
+                          c.portal_password ? (
+                            <button
+                              onClick={() => setShowPw(showPw === c.id ? null : c.id)}
+                              className="inline-flex items-center gap-1 text-slate-600 hover:text-brand-purple"
+                            >
+                              <span className="font-medium">{showPw === c.id ? c.portal_password : '••••••••'}</span>
+                              <EyeIcon className="h-3 w-3 shrink-0 text-slate-400" />
+                            </button>
+                          ) : (
+                            <span className="text-[10px] text-slate-400">reset om te zien</span>
+                          )
                         ) : (
                           <span className="italic text-amber-500">niet ingesteld</span>
                         )}
