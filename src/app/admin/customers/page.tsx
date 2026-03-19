@@ -28,7 +28,6 @@ interface Customer {
   id: string; name: string; contact_person: string; email: string; phone: string;
   branches: string[]; is_active: boolean; portal_active: boolean; has_password?: boolean; portal_password?: string | null; notes: string; created_at: string;
   lead_count?: number;
-  company_name?: string;
 }
 
 interface BranchOption { slug: string; name: string; color: string; is_active: boolean; }
@@ -807,20 +806,30 @@ function BatchesPanel({ customer, branchOptions, onClose }: { customer: Customer
   const addBatch = async () => {
     if (!form.branch || !form.batch_size) return;
     setSaving(true);
-    await adminFetch('/api/admin/batches', {
-      method: 'POST',
-      body: JSON.stringify({
-        customer_id: customer.id,
-        branch: form.branch,
-        batch_size: form.batch_size,
-        price_per_lead: form.price_per_lead ? parseFloat(form.price_per_lead) : null,
-        notes: form.notes || null,
-      }),
-    });
+    try {
+      const res = await adminFetch('/api/admin/batches', {
+        method: 'POST',
+        body: JSON.stringify({
+          customer_id: customer.id,
+          branch: form.branch,
+          batch_size: form.batch_size,
+          price_per_lead: form.price_per_lead ? parseFloat(form.price_per_lead) : null,
+          notes: form.notes || null,
+        }),
+      });
+      if (!res.ok) {
+        const d = await res.json();
+        alert(d.error || 'Batch aanmaken mislukt');
+        setSaving(false);
+        return;
+      }
+      setShowAdd(false);
+      setForm({ branch: '', batch_size: 100, price_per_lead: '', notes: '' });
+      fetchBatches();
+    } catch {
+      alert('Er ging iets mis');
+    }
     setSaving(false);
-    setShowAdd(false);
-    setForm({ branch: '', batch_size: 100, price_per_lead: '', notes: '' });
-    fetchBatches();
   };
 
   const toggleBatchStatus = async (b: Batch) => {

@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
 
   let query = supabase
     .from('customer_batches')
-    .select('*, customers(company_name)')
+    .select('*, customers(name)')
     .order('created_at', { ascending: false });
 
   if (customerId) {

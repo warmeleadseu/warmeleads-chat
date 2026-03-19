@@ -59,14 +59,14 @@ export async function GET(request: NextRequest) {
     const leadIds = leads.map((l: { id: string }) => l.id);
     const { data: assignments } = await supabase
       .from('lead_assignments')
-      .select('lead_id, customer_id, customers(company_name), distance_km')
+      .select('lead_id, customer_id, customers(name), distance_km')
       .in('lead_id', leadIds);
 
     const assignMap: Record<string, { count: number; customers: string[] }> = {};
     (assignments || []).forEach((a: any) => {
       if (!assignMap[a.lead_id]) assignMap[a.lead_id] = { count: 0, customers: [] };
       assignMap[a.lead_id].count++;
-      if (a.customers?.company_name) assignMap[a.lead_id].customers.push(a.customers.company_name);
+      if (a.customers?.name) assignMap[a.lead_id].customers.push(a.customers.name);
     });
 
     leads.forEach((l: any) => {

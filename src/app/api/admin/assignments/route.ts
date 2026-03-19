@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
 
   let query = supabase
     .from('lead_assignments')
-    .select('*, customers(company_name), leads(naam, email, branch, postcode, plaatsnaam)')
+    .select('*, customers(name), leads(naam_klant, email, branch, postcode, plaatsnaam)')
     .order('assigned_at', { ascending: false });
 
   if (leadId) query = query.eq('lead_id', leadId);

@@ -24,8 +24,8 @@ interface Assignment {
   batch_id: string | null;
   distance_km: number | null;
   assigned_at: string;
-  customers: { company_name: string } | null;
-  leads: { naam: string; email: string; branch: string; postcode: string; plaatsnaam: string } | null;
+  customers: { name: string } | null;
+  leads: { naam_klant: string; email: string; branch: string; postcode: string; plaatsnaam: string } | null;
 }
 
 interface Batch {
@@ -40,7 +40,7 @@ interface Batch {
   notes: string | null;
   created_at: string;
   completed_at: string | null;
-  customers: { company_name: string } | null;
+  customers: { name: string } | null;
 }
 
 interface BranchOption { slug: string; name: string; color: string; }
@@ -224,7 +224,7 @@ export default function VerdelingPage() {
                   <div key={b.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                     <div className="mb-2 flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <span className="font-semibold text-slate-800">{b.customers?.company_name || 'Onbekend'}</span>
+                        <span className="font-semibold text-slate-800">{b.customers?.name || 'Onbekend'}</span>
                         <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${c.light} ${c.text}`}>
                           {br?.name || b.branch}
                         </span>
@@ -277,10 +277,10 @@ export default function VerdelingPage() {
                       return (
                         <tr key={a.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50">
                           <td className="px-4 py-3">
-                            <div className="font-medium text-slate-800">{a.leads?.naam || '—'}</div>
+                            <div className="font-medium text-slate-800">{a.leads?.naam_klant || '—'}</div>
                             <div className="text-xs text-slate-400">{a.leads?.plaatsnaam || a.leads?.postcode || ''}</div>
                           </td>
-                          <td className="px-4 py-3 text-slate-600">{a.customers?.company_name || '—'}</td>
+                          <td className="px-4 py-3 text-slate-600">{a.customers?.name || '—'}</td>
                           <td className="px-4 py-3">
                             {br && (
                               <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${c.light} ${c.text}`}>
@@ -340,7 +340,7 @@ export default function VerdelingPage() {
                       const statusLabels: Record<string, string> = { active: 'Actief', paused: 'Gepauzeerd', completed: 'Voltooid' };
                       return (
                         <tr key={b.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50">
-                          <td className="px-4 py-3 font-medium text-slate-800">{b.customers?.company_name || '—'}</td>
+                          <td className="px-4 py-3 font-medium text-slate-800">{b.customers?.name || '—'}</td>
                           <td className="px-4 py-3">
                             <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${c.light} ${c.text}`}>
                               {br?.name || b.branch}
