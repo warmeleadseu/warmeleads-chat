@@ -391,6 +391,31 @@ export default function CustomersPage() {
   );
 }
 
+function PasswordField({ value, onChange, label, placeholder }: { value: string; onChange: (v: string) => void; label: string; placeholder: string }) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <div>
+      <label className="mb-1 block text-xs font-medium text-slate-500">{label}</label>
+      <div className="relative">
+        <input
+          type={visible ? 'text' : 'password'}
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          placeholder={placeholder}
+          className="w-full rounded-lg border border-slate-200 px-3 py-2 pr-10 text-sm text-slate-900 outline-none focus:border-brand-purple/50"
+        />
+        <button
+          type="button"
+          onClick={() => setVisible(v => !v)}
+          className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-slate-400 transition hover:text-slate-600"
+        >
+          <EyeIcon className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function CustomerForm({ customer, branchOptions, onClose, onSaved }: { customer: Customer | null; branchOptions: BranchOption[]; onClose: () => void; onSaved: () => void }) {
   const isEdit = !!customer;
   const [form, setForm] = useState({
@@ -489,18 +514,12 @@ function CustomerForm({ customer, branchOptions, onClose, onSaved }: { customer:
               ))}
             </div>
           </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500">
-              Portaalwachtwoord {isEdit ? '(laat leeg om niet te wijzigen)' : '*'}
-            </label>
-            <input
-              type="password"
-              value={form.password}
-              onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
-              placeholder={isEdit ? '••••••••' : 'Wachtwoord voor klantportaal'}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50"
-            />
-          </div>
+          <PasswordField
+            value={form.password}
+            onChange={val => setForm(f => ({ ...f, password: val }))}
+            label={`Portaalwachtwoord ${isEdit ? '(laat leeg om niet te wijzigen)' : '*'}`}
+            placeholder={isEdit ? '••••••••' : 'Wachtwoord voor klantportaal'}
+          />
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
               <input type="checkbox" id="active" checked={form.is_active} onChange={e => setForm(f => ({ ...f, is_active: e.target.checked }))} className="rounded border-slate-300" />
