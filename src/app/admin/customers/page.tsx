@@ -58,13 +58,18 @@ export default function CustomersPage() {
   const [showPw, setShowPw] = useState<string | null>(null);
   const [targetsFor, setTargetsFor] = useState<Customer | null>(null);
   const [batchesFor, setBatchesFor] = useState<Customer | null>(null);
+  const [allBatches, setAllBatches] = useState<Batch[]>([]);
 
   const portalUrl = typeof window !== 'undefined' ? `${window.location.origin}/portal` : 'https://www.warmeleads.eu/portal';
 
   const fetch_ = useCallback(async () => {
     setLoading(true);
-    const res = await adminFetch('/api/admin/customers');
-    if (res.ok) { const d = await res.json(); setCustomers(d.customers || []); }
+    const [custRes, batchRes] = await Promise.all([
+      adminFetch('/api/admin/customers'),
+      adminFetch('/api/admin/batches'),
+    ]);
+    if (custRes.ok) { const d = await custRes.json(); setCustomers(d.customers || []); }
+    if (batchRes.ok) { const d = await batchRes.json(); setAllBatches(d || []); }
     setLoading(false);
   }, []);
 
@@ -325,6 +330,40 @@ export default function CustomersPage() {
                     </div>
                   </div>
                 </div>
+
+                {/* Inline batch progress */}
+                {(() => {
+                  const custBatches = allBatches.filter(b => b.customer_id === c.id && b.status === 'active');
+                  if (custBatches.length === 0) return null;
+                  const colorMap: Record<string, string> = {
+                    emerald: 'bg-emerald-500', sky: 'bg-sky-500', amber: 'bg-amber-500', purple: 'bg-purple-500',
+                    rose: 'bg-rose-500', cyan: 'bg-cyan-500', lime: 'bg-lime-500', indigo: 'bg-indigo-500',
+                    teal: 'bg-teal-500', slate: 'bg-slate-500',
+                  };
+                  return (
+                    <div className="border-t border-slate-100 px-5 py-3">
+                      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Actieve batches</p>
+                      <div className="space-y-2">
+                        {custBatches.map(b => {
+                          const pct = b.batch_size > 0 ? Math.min(100, Math.round((b.leads_delivered / b.batch_size) * 100)) : 0;
+                          const bo = branchOptions.find(x => x.slug === b.branch);
+                          const barColor = colorMap[bo?.color || 'slate'] || 'bg-slate-500';
+                          return (
+                            <div key={b.id}>
+                              <div className="mb-0.5 flex items-center justify-between">
+                                <span className="text-xs font-medium text-slate-600">{bo?.name || b.branch}</span>
+                                <span className="text-[11px] font-semibold text-slate-500">{b.leads_delivered}/{b.batch_size} <span className="text-slate-400">({pct}%)</span></span>
+                              </div>
+                              <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
+                                <div className={`h-full rounded-full transition-all duration-500 ${pct >= 100 ? 'bg-blue-500' : barColor}`} style={{ width: `${pct}%` }} />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* Middle actions - Targets & Batches */}
                 <div className="flex items-center border-t border-slate-100">

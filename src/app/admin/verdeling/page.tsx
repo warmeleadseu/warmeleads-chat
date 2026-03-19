@@ -14,6 +14,9 @@ import {
   CurrencyEuroIcon,
   ClockIcon,
   InboxIcon,
+  CalendarDaysIcon,
+  ArrowTrendingUpIcon,
+  ArrowTrendingDownIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
 
@@ -68,6 +71,7 @@ export default function VerdelingPage() {
   const [enriching, setEnriching] = useState(false);
   const [enrichResult, setEnrichResult] = useState<{ enriched: number; total: number } | null>(null);
   const [tab, setTab] = useState<'overzicht' | 'assignments' | 'batches'>('overzicht');
+  const [timePeriod, setTimePeriod] = useState<string>('week');
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -113,6 +117,41 @@ export default function VerdelingPage() {
   const totalDelivered = activeBatches.reduce((s, b) => s + b.leads_delivered, 0);
   const overallPct = totalToDeliver > 0 ? Math.round((totalDelivered / totalToDeliver) * 100) : 0;
   const totalAssignments = assignments.length;
+
+  const PERIOD_LABELS: Record<string, string> = {
+    day: 'Vandaag', week: 'Week', month: 'Maand', quarter: 'Kwartaal', year: 'Jaar',
+  };
+
+  const getFilteredAssignments = useCallback(() => {
+    const now = new Date();
+    let start: Date;
+    switch (timePeriod) {
+      case 'day': start = new Date(now.getFullYear(), now.getMonth(), now.getDate()); break;
+      case 'week': {
+        start = new Date(now);
+        start.setDate(start.getDate() - start.getDay() + (start.getDay() === 0 ? -6 : 1));
+        start.setHours(0, 0, 0, 0);
+        break;
+      }
+      case 'month': start = new Date(now.getFullYear(), now.getMonth(), 1); break;
+      case 'quarter': start = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1); break;
+      case 'year': start = new Date(now.getFullYear(), 0, 1); break;
+      default: start = new Date(0);
+    }
+    return assignments.filter(a => new Date(a.assigned_at) >= start);
+  }, [assignments, timePeriod]);
+
+  const filteredAssignments = getFilteredAssignments();
+
+  const customerBreakdown = (() => {
+    const map: Record<string, { name: string; count: number }> = {};
+    for (const a of filteredAssignments) {
+      const name = a.customers?.name || 'Onbekend';
+      if (!map[name]) map[name] = { name, count: 0 };
+      map[name].count++;
+    }
+    return Object.values(map).sort((a, b) => b.count - a.count);
+  })();
 
   const recentAssignments = assignments.slice(0, 50);
 
@@ -206,46 +245,110 @@ export default function VerdelingPage() {
       </div>
 
       {tab === 'overzicht' && (
-        <div className="space-y-4">
-          <h3 className="text-sm font-semibold text-slate-700">Actieve batches voortgang</h3>
-          {activeBatches.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-slate-200 py-10 text-center">
-              <InboxIcon className="mx-auto mb-2 h-8 w-8 text-slate-300" />
-              <p className="text-sm text-slate-500">Geen actieve batches</p>
-              <p className="text-xs text-slate-400">Maak batches aan bij klanten om de verdeling te starten</p>
+        <div className="space-y-6">
+          {/* Period filter + stats */}
+          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-2">
+                <CalendarDaysIcon className="h-4 w-4 text-indigo-500" />
+                <h3 className="text-sm font-semibold text-slate-700">Periode statistieken</h3>
+              </div>
+              <div className="flex rounded-lg border border-slate-200 bg-slate-50 p-0.5">
+                {Object.entries(PERIOD_LABELS).map(([key, label]) => (
+                  <button
+                    key={key}
+                    onClick={() => setTimePeriod(key)}
+                    className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
+                      timePeriod === key
+                        ? 'bg-white text-brand-purple shadow-sm'
+                        : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
-          ) : (
-            <div className="space-y-3">
-              {activeBatches.map(b => {
-                const pct = Math.min(100, Math.round((b.leads_delivered / b.batch_size) * 100));
-                const br = getBranch(b.branch);
-                const c = COLOR_MAP[br?.color || 'slate'] || COLOR_MAP.slate;
-                return (
-                  <div key={b.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                    <div className="mb-2 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-slate-800">{b.customers?.name || 'Onbekend'}</span>
-                        <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${c.light} ${c.text}`}>
-                          {br?.name || b.branch}
-                        </span>
+
+            <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <div className="rounded-lg bg-slate-50 p-3">
+                <p className="text-2xl font-bold text-slate-900">{filteredAssignments.length}</p>
+                <p className="text-xs text-slate-500">Uitgedeeld</p>
+              </div>
+              <div className="rounded-lg bg-slate-50 p-3">
+                <p className="text-2xl font-bold text-slate-900">{customerBreakdown.length}</p>
+                <p className="text-xs text-slate-500">Klanten bediend</p>
+              </div>
+              <div className="col-span-2 rounded-lg bg-slate-50 p-3 sm:col-span-1">
+                <p className="text-2xl font-bold text-slate-900">
+                  {filteredAssignments.filter(a => a.distance_km != null).length > 0
+                    ? `${(filteredAssignments.filter(a => a.distance_km != null).reduce((s, a) => s + (a.distance_km || 0), 0) / filteredAssignments.filter(a => a.distance_km != null).length).toFixed(1)} km`
+                    : '—'}
+                </p>
+                <p className="text-xs text-slate-500">Gem. afstand</p>
+              </div>
+            </div>
+
+            {customerBreakdown.length > 0 && (
+              <div>
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Per klant</p>
+                <div className="space-y-1.5">
+                  {customerBreakdown.slice(0, 8).map(c => (
+                    <div key={c.name} className="flex items-center justify-between">
+                      <span className="truncate text-xs text-slate-600">{c.name}</span>
+                      <span className="ml-2 shrink-0 text-xs font-semibold text-slate-800">{c.count}</span>
+                    </div>
+                  ))}
+                  {customerBreakdown.length > 8 && (
+                    <p className="text-xs text-slate-400">+{customerBreakdown.length - 8} meer</p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Active batches */}
+          <div>
+            <h3 className="mb-3 text-sm font-semibold text-slate-700">Actieve batches voortgang</h3>
+            {activeBatches.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-slate-200 py-10 text-center">
+                <InboxIcon className="mx-auto mb-2 h-8 w-8 text-slate-300" />
+                <p className="text-sm text-slate-500">Geen actieve batches</p>
+                <p className="text-xs text-slate-400">Maak batches aan bij klanten om de verdeling te starten</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {activeBatches.map(b => {
+                  const pct = Math.min(100, Math.round((b.leads_delivered / b.batch_size) * 100));
+                  const br = getBranch(b.branch);
+                  const c = COLOR_MAP[br?.color || 'slate'] || COLOR_MAP.slate;
+                  return (
+                    <div key={b.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                      <div className="mb-2 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-slate-800">{b.customers?.name || 'Onbekend'}</span>
+                          <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${c.light} ${c.text}`}>
+                            {br?.name || b.branch}
+                          </span>
+                        </div>
+                        <span className="text-sm font-bold text-slate-700">{b.leads_delivered}/{b.batch_size}</span>
                       </div>
-                      <span className="text-sm font-bold text-slate-700">{b.leads_delivered}/{b.batch_size}</span>
+                      <div className="mb-1.5 h-2.5 overflow-hidden rounded-full bg-slate-100">
+                        <div
+                          className={`h-full rounded-full transition-all duration-500 ${pct >= 100 ? 'bg-blue-500' : pct >= 75 ? 'bg-emerald-500' : pct >= 50 ? 'bg-amber-500' : 'bg-brand-purple'}`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between text-xs text-slate-500">
+                        <span>{pct}% compleet</span>
+                        <span>Nog {b.batch_size - b.leads_delivered} te leveren</span>
+                      </div>
                     </div>
-                    <div className="mb-1.5 h-2.5 overflow-hidden rounded-full bg-slate-100">
-                      <div
-                        className={`h-full rounded-full transition-all duration-500 ${pct >= 100 ? 'bg-blue-500' : pct >= 75 ? 'bg-emerald-500' : pct >= 50 ? 'bg-amber-500' : 'bg-brand-purple'}`}
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between text-xs text-slate-500">
-                      <span>{pct}% compleet</span>
-                      <span>Nog {b.batch_size - b.leads_delivered} te leveren</span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
