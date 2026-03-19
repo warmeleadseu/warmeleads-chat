@@ -36,7 +36,9 @@ const STATUS_COLORS: Record<string, string> = {
   verkocht: 'bg-emerald-100 text-emerald-700',
   afgewezen: 'bg-red-100 text-red-700',
 };
-const PROVINCES = ['Drenthe','Flevoland','Friesland','Gelderland','Groningen','Limburg','Noord-Brabant','Noord-Holland','Overijssel','Utrecht','Zeeland','Zuid-Holland'];
+const PROVINCES_NL = ['Drenthe','Flevoland','Friesland','Gelderland','Groningen','Limburg','Noord-Brabant','Noord-Holland','Overijssel','Utrecht','Zeeland','Zuid-Holland'];
+const PROVINCES_BE = ['Antwerpen','Brussels','Henegouwen','Luik','Luxemburg','Namen','Oost-Vlaanderen','Vlaams-Brabant','Waals-Brabant','West-Vlaanderen'];
+const PROVINCES = [...PROVINCES_NL, ...PROVINCES_BE].sort();
 
 const COMMON_LABELS: Record<string, string> = {
   naam_klant: 'Naam', email: 'E-mail', telefoonnummer: 'Telefoon', postcode: 'Postcode',
@@ -276,7 +278,8 @@ export default function LeadsCRMPage() {
         </select>
         <select value={province} onChange={e => setProvince(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700">
           <option value="all">Alle provincies</option>
-          {PROVINCES.map(p => <option key={p} value={p}>{p}</option>)}
+          <optgroup label="Nederland">{PROVINCES_NL.map(p => <option key={p} value={p}>{p}</option>)}</optgroup>
+          <optgroup label="België">{PROVINCES_BE.map(p => <option key={p} value={p}>{p}</option>)}</optgroup>
         </select>
         <select value={source} onChange={e => setSource(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700">
           <option value="all">Alle bronnen</option>
@@ -505,7 +508,9 @@ function LeadFormPanel({
   const lookupAddress = useCallback((postcode: string, huisnummer: string) => {
     if (addressTimer.current) clearTimeout(addressTimer.current);
     const clean = postcode.replace(/\s+/g, '').toUpperCase();
-    if (!/^\d{4}[A-Z]{2}$/.test(clean) || !huisnummer) return;
+    const isNL = /^\d{4}[A-Z]{2}$/.test(clean);
+    const isBE = /^\d{4}$/.test(clean) && parseInt(clean) >= 1000;
+    if ((!isNL && !isBE) || !huisnummer) return;
     setAddressLoading(true);
     addressTimer.current = setTimeout(async () => {
       try {
@@ -626,7 +631,8 @@ function LeadFormPanel({
                 <label className="mb-1 block text-xs font-medium text-slate-500">Provincie</label>
                 <select value={form.provincie || ''} onChange={e => set('provincie', e.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900">
                   <option value="">— Selecteer —</option>
-                  {PROVINCES.map(p => <option key={p} value={p}>{p}</option>)}
+                  <optgroup label="Nederland">{PROVINCES_NL.map(p => <option key={p} value={p}>{p}</option>)}</optgroup>
+                  <optgroup label="België">{PROVINCES_BE.map(p => <option key={p} value={p}>{p}</option>)}</optgroup>
                 </select>
               </div>
             </div>

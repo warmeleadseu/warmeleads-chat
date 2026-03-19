@@ -8,12 +8,13 @@ export async function GET(request: NextRequest) {
 
   const postcode = request.nextUrl.searchParams.get('postcode') || '';
   const huisnummer = request.nextUrl.searchParams.get('huisnummer') || '';
+  const country = request.nextUrl.searchParams.get('country') as 'NL' | 'BE' | null;
 
   if (!postcode || !huisnummer) {
     return NextResponse.json({ plaatsnaam: '', provincie: '' });
   }
 
-  const result = await resolveAddress(postcode, huisnummer);
+  const result = await resolveAddress(postcode, huisnummer, country);
 
   return NextResponse.json(result || { plaatsnaam: '', provincie: '' });
 }

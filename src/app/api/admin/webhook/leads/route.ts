@@ -6,7 +6,7 @@ import { distributeLead } from '@/lib/distribution';
 const COMMON_KEYS = new Set([
   'branch', 'customer_id', 'naam_klant', 'name', 'email', 'telefoonnummer', 'phone',
   'postcode', 'huisnummer', 'plaatsnaam', 'city', 'provincie', 'wervingsdatum',
-  'status', 'bron', 'notities',
+  'status', 'bron', 'notities', 'land',
 ]);
 
 export async function POST(request: NextRequest) {
@@ -58,6 +58,7 @@ export async function POST(request: NextRequest) {
       huisnummer: body.huisnummer || '',
       plaatsnaam: body.plaatsnaam || body.city || '',
       provincie: body.provincie || '',
+      land: body.land || '',
       wervingsdatum: body.wervingsdatum || new Date().toISOString().split('T')[0],
       status: 'nieuw',
       bron: 'zapier',

@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
 
   const { data: leads, error } = await supabase
     .from('leads')
-    .select('id, postcode, huisnummer, plaatsnaam, provincie, lat, lng')
+    .select('id, postcode, huisnummer, plaatsnaam, provincie, lat, lng, land')
     .not('postcode', 'is', null)
     .not('postcode', 'eq', '')
     .not('huisnummer', 'is', null)
@@ -42,14 +42,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ enriched: 0, total: 0 });
   }
 
-  const CONCURRENCY = 10;
+  const CONCURRENCY = 5;
   let enriched = 0;
 
   for (let i = 0; i < candidates.length; i += CONCURRENCY) {
     const batch = candidates.slice(i, i + CONCURRENCY);
     const results = await Promise.all(
       batch.map(async (lead) => {
-        const result = await resolveAddress(lead.postcode, lead.huisnummer);
+        const result = await resolveAddress(lead.postcode, lead.huisnummer, lead.land as 'NL' | 'BE' | null);
         if (!result) return null;
 
         const updates: Record<string, string | number> = {};
@@ -59,6 +59,7 @@ export async function POST(request: NextRequest) {
           updates.lat = result.lat;
           updates.lng = result.lng;
         }
+        if (result.land && !lead.land) updates.land = result.land;
 
         if (Object.keys(updates).length === 0) return null;
         return { id: lead.id, updates };

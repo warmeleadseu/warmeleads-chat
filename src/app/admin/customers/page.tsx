@@ -534,6 +534,11 @@ function CustomerForm({ customer, branchOptions, onClose, onSaved }: { customer:
 /* ============================================================
    TARGETS PANEL
    ============================================================ */
+const COUNTRY_PRESETS = [
+  { key: 'heel-nederland', label: 'Heel Nederland', lat: 52.1326, lng: 5.2913, radius: 200 },
+  { key: 'heel-belgie', label: 'Heel België', lat: 50.5039, lng: 4.4699, radius: 170 },
+];
+
 function TargetsPanel({ customer, onClose }: { customer: Customer; onClose: () => void }) {
   const [targets, setTargets] = useState<Target[]>([]);
   const [loading, setLoading] = useState(true);
@@ -591,6 +596,16 @@ function TargetsPanel({ customer, onClose }: { customer: Customer; onClose: () =
     fetchTargets();
   };
 
+  const addPreset = async (preset: typeof COUNTRY_PRESETS[0]) => {
+    setSaving(true);
+    await adminFetch('/api/admin/targets', {
+      method: 'POST',
+      body: JSON.stringify({ customer_id: customer.id, label: preset.label, lat: preset.lat, lng: preset.lng, radius_km: preset.radius }),
+    });
+    setSaving(false);
+    fetchTargets();
+  };
+
   const removeTarget = async (id: string) => {
     if (!confirm('Dit targetgebied verwijderen?')) return;
     await adminFetch(`/api/admin/targets?id=${id}`, { method: 'DELETE' });
@@ -622,6 +637,34 @@ function TargetsPanel({ customer, onClose }: { customer: Customer; onClose: () =
         </div>
 
         <div className="flex-1 overflow-y-auto p-5">
+          {/* Presets */}
+          {!showAdd && (
+            <div className="mb-4">
+              <p className="mb-2 text-xs font-medium text-slate-500">Snel toevoegen</p>
+              <div className="flex flex-wrap gap-2">
+                {COUNTRY_PRESETS.map(p => {
+                  const alreadyAdded = targets.some(t => t.label === p.label);
+                  return (
+                    <button
+                      key={p.key}
+                      onClick={() => addPreset(p)}
+                      disabled={saving || alreadyAdded}
+                      className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition ${
+                        alreadyAdded
+                          ? 'border-slate-100 bg-slate-50 text-slate-400 cursor-not-allowed'
+                          : 'border-slate-200 bg-white text-slate-600 hover:border-brand-purple hover:text-brand-purple'
+                      }`}
+                    >
+                      <MapPinIcon className="h-3.5 w-3.5" />
+                      {p.label}
+                      {alreadyAdded && <CheckIcon className="h-3 w-3 text-emerald-500" />}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Add form */}
           {showAdd ? (
             <div className="mb-5 rounded-xl border border-brand-purple/20 bg-brand-purple/5 p-4">
