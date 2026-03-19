@@ -1000,7 +1000,6 @@ function LeadDetailPanel({
             {/* Meta info */}
             <div className="border-t border-slate-100 pt-4">
               <div className="space-y-1 text-xs text-slate-400">
-                {lead.bron && <p>Bron: {lead.bron}</p>}
                 <p>Aangemaakt: {formatDateLong(lead.created_at)}</p>
               </div>
             </div>
