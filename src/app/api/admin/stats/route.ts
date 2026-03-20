@@ -36,6 +36,20 @@ function getPrevPeriodStart(period: string): Date {
   }
 }
 
+async function fetchAll<T>(supabase: ReturnType<typeof createServerClient>, table: string, columns: string): Promise<T[]> {
+  const PAGE = 1000;
+  const rows: T[] = [];
+  let from = 0;
+  while (true) {
+    const { data } = await supabase.from(table).select(columns).range(from, from + PAGE - 1);
+    if (!data || data.length === 0) break;
+    rows.push(...(data as T[]));
+    if (data.length < PAGE) break;
+    from += PAGE;
+  }
+  return rows;
+}
+
 export async function GET(request: NextRequest) {
   const admin = await verifyAdmin(request);
   if (!admin) return unauthorized();
@@ -46,14 +60,14 @@ export async function GET(request: NextRequest) {
   const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
   const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
-  const [totalRes, weekRes, monthRes, allLeadsRes, recentRes, assignmentsRes] =
+  const [totalRes, weekRes, monthRes, allLeads, recentRes, allAssignments] =
     await Promise.all([
       supabase.from('leads').select('id', { count: 'exact', head: true }),
       supabase.from('leads').select('id', { count: 'exact', head: true }).gte('created_at', weekAgo),
       supabase.from('leads').select('id', { count: 'exact', head: true }).gte('created_at', monthAgo),
-      supabase.from('leads').select('id, status, branch'),
+      fetchAll<{ id: string; status: string; branch: string }>(supabase, 'leads', 'id, status, branch'),
       supabase.from('leads').select('*, customers(id, name)').order('created_at', { ascending: false }).limit(10),
-      supabase.from('lead_assignments').select('lead_id, customers(name)'),
+      fetchAll<{ lead_id: string; customers: { name: string } | null }>(supabase, 'lead_assignments', 'lead_id, customers(name)'),
     ]);
 
   const byStatus: Record<string, number> = {};
@@ -62,24 +76,18 @@ export async function GET(request: NextRequest) {
 
   const assignedLeadIds = new Set<string>();
 
-  if (assignmentsRes.data) {
-    for (const a of assignmentsRes.data) {
-      const custName = (a as Record<string, unknown>).customers
-        ? ((a as Record<string, unknown>).customers as { name: string })?.name || 'Onbekend'
-        : 'Onbekend';
-      byCustomer[custName] = (byCustomer[custName] || 0) + 1;
-      assignedLeadIds.add(a.lead_id);
-    }
+  for (const a of allAssignments) {
+    const custName = a.customers?.name || 'Onbekend';
+    byCustomer[custName] = (byCustomer[custName] || 0) + 1;
+    assignedLeadIds.add(a.lead_id);
   }
 
-  if (allLeadsRes.data) {
-    for (const lead of allLeadsRes.data) {
-      if (lead.status) byStatus[lead.status] = (byStatus[lead.status] || 0) + 1;
-      if (lead.branch) byBranch[lead.branch] = (byBranch[lead.branch] || 0) + 1;
-    }
-    const unassigned = allLeadsRes.data.filter(l => !assignedLeadIds.has(l.id)).length;
-    if (unassigned > 0) byCustomer['Niet toegewezen'] = unassigned;
+  for (const lead of allLeads) {
+    if (lead.status) byStatus[lead.status] = (byStatus[lead.status] || 0) + 1;
+    if (lead.branch) byBranch[lead.branch] = (byBranch[lead.branch] || 0) + 1;
   }
+  const unassigned = allLeads.filter(l => !assignedLeadIds.has(l.id)).length;
+  if (unassigned > 0) byCustomer['Niet toegewezen'] = unassigned;
 
   const periods = ['day', 'week', 'month', 'quarter', 'year'] as const;
   const periodStats: Record<string, { leads: number; prevLeads: number; assigned: number; prevAssigned: number }> = {};
