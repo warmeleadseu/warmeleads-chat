@@ -51,10 +51,10 @@ export async function GET(request: NextRequest) {
     recentLeadsRes,
     assignmentsRes,
   ] = await Promise.all([
-    supabase.from('leads').select('id', { count: 'exact', head: true }),
+    supabase.from('leads').select('id', { count: 'exact', head: true }).neq('bron', 'excel_import'),
     supabase.from('customers').select('id, name, is_active'),
     supabase.from('customer_batches').select('*, customers(name)').order('created_at', { ascending: false }),
-    supabase.from('leads').select('id, naam_klant, branch, plaatsnaam, provincie, created_at').order('created_at', { ascending: false }).limit(12),
+    supabase.from('leads').select('id, naam_klant, branch, plaatsnaam, provincie, created_at').neq('bron', 'excel_import').order('created_at', { ascending: false }).limit(12),
     supabase.from('lead_assignments').select('id, lead_id, customer_id, batch_id, assigned_at, customers(name)').order('assigned_at', { ascending: false }).limit(500),
   ]);
 
@@ -77,8 +77,8 @@ export async function GET(request: NextRequest) {
     const prev = prevPeriodStart(p).toISOString();
 
     const [leadsNow, leadsPrev, assignNow, assignPrev] = await Promise.all([
-      supabase.from('leads').select('id', { count: 'exact', head: true }).gte('created_at', start),
-      supabase.from('leads').select('id', { count: 'exact', head: true }).gte('created_at', prev).lt('created_at', start),
+      supabase.from('leads').select('id', { count: 'exact', head: true }).neq('bron', 'excel_import').gte('created_at', start),
+      supabase.from('leads').select('id', { count: 'exact', head: true }).neq('bron', 'excel_import').gte('created_at', prev).lt('created_at', start),
       supabase.from('lead_assignments').select('id', { count: 'exact', head: true }).gte('assigned_at', start),
       supabase.from('lead_assignments').select('id', { count: 'exact', head: true }).gte('assigned_at', prev).lt('assigned_at', start),
     ]);
