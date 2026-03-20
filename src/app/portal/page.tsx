@@ -457,66 +457,98 @@ export default function PortalPage() {
       </div>
 
       {/* Batch Progress */}
-      {!batchesLoading && batches.active.length > 0 && (
+      {batchesLoading ? (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {[0, 1].map((i) => (
+            <div key={i} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="mb-3 flex items-center justify-between">
+                <div className="h-5 w-24 animate-pulse rounded-full bg-slate-100" />
+                <div className="h-4 w-8 animate-pulse rounded bg-slate-100" />
+              </div>
+              <div className="mb-2 h-2.5 animate-pulse rounded-full bg-slate-100" />
+              <div className="h-3 w-32 animate-pulse rounded bg-slate-50" />
+            </div>
+          ))}
+        </div>
+      ) : (batches.active.length > 0 || batches.completed.length > 0) && (
         <div className="space-y-3">
-          <h2 className="text-sm font-semibold text-slate-700">Actieve batches</h2>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {batches.active.map((b: any) => {
-              const pct = b.batch_size > 0 ? Math.round((b.leads_delivered / b.batch_size) * 100) : 0;
-              return (
-                <div key={b.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <div className="mb-2 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="rounded-full bg-brand-purple/10 px-2.5 py-0.5 text-[11px] font-semibold text-brand-purple">
-                        {b.branch_name || b.branch}
-                      </span>
-                      {b.leads_per_week > 0 && (
-                        <span className="text-[10px] text-slate-400">max {b.leads_per_week}/week</span>
+          {batches.active.length > 0 && (
+            <>
+              <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                </span>
+                Actieve batches
+              </h2>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {batches.active.map((b: Record<string, any>) => {
+                  const pct = b.batch_size > 0 ? Math.round((b.leads_delivered / b.batch_size) * 100) : 0;
+                  return (
+                    <div key={b.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:shadow-md">
+                      <div className="mb-2.5 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="rounded-full bg-brand-purple/10 px-2.5 py-0.5 text-[11px] font-semibold text-brand-purple">
+                            {b.branch_name || b.branch}
+                          </span>
+                          {b.leads_per_week > 0 && (
+                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">max {b.leads_per_week}/week</span>
+                          )}
+                        </div>
+                        <span className="text-sm font-bold text-slate-900">{pct}%</span>
+                      </div>
+                      <div className="mb-2.5 h-2.5 overflow-hidden rounded-full bg-slate-100">
+                        <div
+                          className="h-full rounded-full bg-gradient-to-r from-brand-purple to-brand-pink transition-all duration-700"
+                          style={{ width: `${Math.min(pct, 100)}%` }}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between text-xs text-slate-500">
+                        <span className="font-medium">{b.leads_delivered} / {b.batch_size} leads</span>
+                        {b.estimated_completion && (
+                          <span className="text-slate-400">
+                            Klaar ~{new Date(b.estimated_completion).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}
+                          </span>
+                        )}
+                      </div>
+                      {(b.leads_per_day > 0 || b.this_week_count > 0) && (
+                        <div className="mt-2 flex gap-3 border-t border-slate-50 pt-2 text-[11px] text-slate-400">
+                          {b.leads_per_day > 0 && <span>~{b.leads_per_day.toFixed(1)} leads/dag</span>}
+                          {b.this_week_count > 0 && (
+                            <span className="font-medium text-brand-purple">Deze week: {b.this_week_count}</span>
+                          )}
+                        </div>
                       )}
                     </div>
-                    <span className="text-xs font-bold text-slate-900">{pct}%</span>
-                  </div>
-                  <div className="mb-2 h-2.5 overflow-hidden rounded-full bg-slate-100">
-                    <div
-                      className="h-full rounded-full bg-gradient-to-r from-brand-purple to-brand-pink transition-all duration-700"
-                      style={{ width: `${Math.min(pct, 100)}%` }}
-                    />
-                  </div>
-                  <div className="flex items-center justify-between text-xs text-slate-500">
-                    <span>{b.leads_delivered} / {b.batch_size} leads</span>
-                    {b.estimated_completion && (
-                      <span className="text-slate-400">
-                        ~{new Date(b.estimated_completion).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}
-                      </span>
-                    )}
-                  </div>
-                  <div className="mt-2 flex gap-3 text-[11px] text-slate-400">
-                    {b.leads_per_day > 0 && <span>~{b.leads_per_day.toFixed(1)} leads/dag</span>}
-                    {b.this_week_count > 0 && <span>Deze week: {b.this_week_count}</span>}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
           {batches.completed.length > 0 && (
-            <details className="group">
-              <summary className="cursor-pointer text-xs font-medium text-slate-400 transition hover:text-slate-600">
-                {batches.completed.length} voltooide {batches.completed.length === 1 ? 'batch' : 'batches'} bekijken
+            <details className="group rounded-xl border border-slate-200 bg-white shadow-sm">
+              <summary className="flex cursor-pointer items-center justify-between px-4 py-3 text-xs font-medium text-slate-500 transition hover:text-slate-700">
+                <span>{batches.completed.length} voltooide {batches.completed.length === 1 ? 'batch' : 'batches'}</span>
+                <svg className="h-4 w-4 transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
               </summary>
-              <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                {batches.completed.map((b: any) => (
-                  <div key={b.id} className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+              <div className="grid gap-2 border-t border-slate-100 p-3 sm:grid-cols-2">
+                {batches.completed.map((b: Record<string, any>) => (
+                  <div key={b.id} className="rounded-lg border border-slate-100 bg-slate-50/50 p-3">
                     <div className="flex items-center justify-between">
-                      <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-600">
+                      <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-semibold text-emerald-600">
                         {b.branch_name || b.branch} ✓
                       </span>
                       <span className="text-[10px] text-slate-400">
                         {b.duration_days ? `${b.duration_days} dagen` : ''}
                       </span>
                     </div>
-                    <p className="mt-1 text-xs text-slate-500">
+                    <p className="mt-1.5 text-xs text-slate-500">
                       {b.leads_delivered} / {b.batch_size} leads
-                      {b.completed_at && ` — ${new Date(b.completed_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' })}`}
+                      {b.completed_at && (
+                        <span className="text-slate-400"> — {new Date(b.completed_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                      )}
                     </p>
                   </div>
                 ))}

@@ -269,11 +269,11 @@ function AccountTab({
       {/* Wachtwoord wijzigen */}
       <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <h3 className="mb-4 text-sm font-semibold text-slate-900">Wachtwoord wijzigen</h3>
-        <form onSubmit={handlePasswordChange} className="space-y-3">
+        <form onSubmit={handlePasswordChange} className="space-y-3 sm:max-w-md">
           {[
-            { label: 'Huidig wachtwoord', value: currentPw, set: setCurrentPw, show: showCurrent, toggle: setShowCurrent },
-            { label: 'Nieuw wachtwoord', value: newPw, set: setNewPw, show: showNew, toggle: setShowNew },
-            { label: 'Bevestig wachtwoord', value: confirmPw, set: setConfirmPw, show: showConfirm, toggle: setShowConfirm },
+            { label: 'Huidig wachtwoord', value: currentPw, set: setCurrentPw, show: showCurrent, toggle: setShowCurrent, placeholder: 'Voer uw huidige wachtwoord in' },
+            { label: 'Nieuw wachtwoord', value: newPw, set: setNewPw, show: showNew, toggle: setShowNew, placeholder: 'Min. 8 tekens' },
+            { label: 'Bevestig wachtwoord', value: confirmPw, set: setConfirmPw, show: showConfirm, toggle: setShowConfirm, placeholder: 'Herhaal nieuw wachtwoord' },
           ].map((field) => (
             <div key={field.label}>
               <label className="mb-1 block text-xs font-medium text-slate-500">{field.label}</label>
@@ -282,13 +282,14 @@ function AccountTab({
                   type={field.show ? 'text' : 'password'}
                   value={field.value}
                   onChange={(e) => field.set(e.target.value)}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2.5 pr-10 text-sm text-slate-700 outline-none transition focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/20"
+                  placeholder={field.placeholder}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2.5 pr-10 text-sm text-slate-700 placeholder-slate-300 outline-none transition focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/20"
                   required
                 />
                 <button
                   type="button"
                   onClick={() => field.toggle(!field.show)}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600"
                 >
                   {field.show ? <EyeSlashIcon className="h-4 w-4" /> : <EyeIcon className="h-4 w-4" />}
                 </button>
@@ -298,7 +299,7 @@ function AccountTab({
           <button
             type="submit"
             disabled={pwLoading || !currentPw || !newPw || !confirmPw}
-            className="rounded-lg bg-button-gradient px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:shadow-md disabled:opacity-50"
+            className="mt-1 rounded-lg bg-button-gradient px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:shadow-md disabled:opacity-50"
           >
             {pwLoading ? 'Bezig...' : 'Wachtwoord wijzigen'}
           </button>
@@ -406,15 +407,29 @@ function InsightsTab({
   if (loading) return <InsightsSkeleton />;
   if (!data) return null;
 
+  const hasData = data.conversionFunnel.nieuw + data.conversionFunnel.gecontacteerd + data.conversionFunnel.offerte + data.conversionFunnel.verkocht + data.conversionFunnel.afgewezen > 0;
+  if (!hasData) {
+    return (
+      <div className="rounded-xl border border-slate-200 bg-white py-16 text-center shadow-sm">
+        <ChartBarIcon className="mx-auto mb-3 h-12 w-12 text-slate-300" />
+        <p className="font-medium text-slate-600">Nog geen prestaties</p>
+        <p className="mx-auto mt-1 max-w-xs text-sm text-slate-400">
+          Zodra u leads ontvangt en bewerkt, verschijnen hier uw statistieken en inzichten.
+        </p>
+      </div>
+    );
+  }
+
   const f = data.conversionFunnel;
   const funnelSteps = [
     { key: 'nieuw', label: 'Nieuw', count: f.nieuw, color: 'bg-blue-500' },
     { key: 'gecontacteerd', label: 'Gecontacteerd', count: f.gecontacteerd, color: 'bg-amber-500' },
     { key: 'offerte', label: 'Offerte', count: f.offerte, color: 'bg-purple-500' },
     { key: 'verkocht', label: 'Verkocht', count: f.verkocht, color: 'bg-emerald-500' },
+    { key: 'afgewezen', label: 'Afgewezen', count: f.afgewezen, color: 'bg-red-400' },
   ];
   const funnelMax = Math.max(...funnelSteps.map((s) => s.count), 1);
-  const funnelTotal = f.nieuw + f.gecontacteerd + f.offerte + f.verkocht || 1;
+  const funnelTotal = f.nieuw + f.gecontacteerd + f.offerte + f.verkocht + f.afgewezen || 1;
 
   const ql = qualityLabel(data.quality.averageScore / 10);
   const weekChange = pctChange(data.periodComparison.thisWeek, data.periodComparison.lastWeek);
@@ -427,7 +442,14 @@ function InsightsTab({
     <div className="space-y-6">
       {/* Conversie Funnel */}
       <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h3 className="mb-4 text-sm font-semibold text-slate-900">Conversie Funnel</h3>
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-slate-900">Conversie Funnel</h3>
+          {f.conversionRate > 0 && (
+            <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-600">
+              {f.conversionRate}% conversie
+            </span>
+          )}
+        </div>
         <div className="space-y-3">
           {funnelSteps.map((step) => {
             const widthPct = Math.max((step.count / funnelMax) * 100, 4);
@@ -506,9 +528,10 @@ function InsightsTab({
               )}
             </>
           ) : (
-            <div className="flex items-center gap-2">
-              <ClockIcon className="h-5 w-5 text-slate-300" />
+            <div className="flex flex-col items-center justify-center py-4 text-center">
+              <ClockIcon className="mb-2 h-8 w-8 text-slate-200" />
               <span className="text-sm text-slate-400">Nog geen data</span>
+              <span className="mt-0.5 text-xs text-slate-300">Wordt zichtbaar na statuswijzigingen</span>
             </div>
           )}
         </div>
@@ -524,16 +547,20 @@ function InsightsTab({
             <p className="mb-2 text-xs font-medium text-slate-500">{item.label}</p>
             <div className="flex items-center gap-3">
               <span className="text-2xl font-bold text-slate-900">{item.current}</span>
-              <div className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${
-                item.up ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-500'
-              }`}>
-                {item.up ? (
-                  <ArrowTrendingUpIcon className="h-3.5 w-3.5" />
-                ) : (
-                  <ArrowTrendingDownIcon className="h-3.5 w-3.5" />
-                )}
-                {item.pct}%
-              </div>
+              {(item.current > 0 || item.previous > 0) ? (
+                <div className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${
+                  item.up ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-500'
+                }`}>
+                  {item.up ? (
+                    <ArrowTrendingUpIcon className="h-3.5 w-3.5" />
+                  ) : (
+                    <ArrowTrendingDownIcon className="h-3.5 w-3.5" />
+                  )}
+                  {item.pct}%
+                </div>
+              ) : (
+                <span className="text-xs text-slate-300">—</span>
+              )}
             </div>
             <p className="mt-1 text-xs text-slate-400">
               Vorige periode: {item.previous} leads
@@ -616,15 +643,15 @@ function AreasTab({
 
   if (data.length === 0) {
     return (
-      <div className="rounded-xl border border-slate-200 bg-white py-16 text-center shadow-sm">
+      <div className="rounded-xl border border-slate-200 bg-white px-6 py-16 text-center shadow-sm">
         <MapPinIcon className="mx-auto mb-3 h-12 w-12 text-slate-300" />
         <p className="font-medium text-slate-600">Geen targetgebieden</p>
-        <p className="mt-1 text-sm text-slate-400">
+        <p className="mx-auto mt-1 max-w-xs text-sm text-slate-400">
           Er zijn nog geen targetgebieden ingesteld. Neem contact op met WarmeLeads.
         </p>
         <a
           href="mailto:info@warmeleads.eu"
-          className="mt-4 inline-flex items-center gap-2 rounded-lg bg-button-gradient px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:shadow-md"
+          className="mt-5 inline-flex items-center gap-2 rounded-lg bg-button-gradient px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:shadow-md"
         >
           <EnvelopeIcon className="h-4 w-4" />
           Contact opnemen
@@ -644,38 +671,47 @@ function AreasTab({
             animate={{ opacity: 1, y: 0 }}
             className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
           >
-            <div className="mb-2 flex items-start justify-between">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div className="flex items-start gap-3">
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-purple/10">
                   <MapPinIcon className="h-5 w-5 text-brand-purple" />
                 </div>
                 <div>
-                  <p className="font-medium text-slate-900">{area.label || `Gebied ${area.id.slice(0, 6)}`}</p>
+                  <p className="font-medium text-slate-900">
+                    {area.label || (area.radius_km >= 500 ? 'Heel Nederland / België' : `Gebied ${area.id.slice(0, 6)}`)}
+                  </p>
+                  {area.radius_km < 500 && area.lat && area.lng && (
+                    <p className="mt-0.5 text-xs text-slate-400">
+                      {area.lat.toFixed(2)}°N, {area.lng.toFixed(2)}°E
+                    </p>
+                  )}
                 </div>
               </div>
-              <div className="flex items-center gap-3 text-xs text-slate-500">
+              <div className="flex items-center gap-2 text-xs">
                 <span className="rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">
-                  {area.radius_km} km
+                  {area.radius_km >= 500 ? 'Landelijk' : `${area.radius_km} km`}
                 </span>
                 <span className="rounded-full bg-brand-purple/10 px-2.5 py-1 font-medium text-brand-purple">
                   {area.leads_count} leads
                 </span>
               </div>
             </div>
-            <div className="mt-3">
-              <div className="mb-1 flex items-center justify-between text-[11px] text-slate-400">
-                <span>Bereik</span>
-                <span>{area.radius_km} km</span>
+            {area.radius_km < 500 && (
+              <div className="mt-3">
+                <div className="mb-1 flex items-center justify-between text-[11px] text-slate-400">
+                  <span>Bereik</span>
+                  <span>{area.radius_km} km</span>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${radiusPct}%` }}
+                    transition={{ duration: 0.5, ease: 'easeOut' }}
+                    className="h-full rounded-full bg-gradient-to-r from-brand-purple to-brand-pink"
+                  />
+                </div>
               </div>
-              <div className="h-2 overflow-hidden rounded-full bg-slate-100">
-                <motion.div
-                  initial={{ width: 0 }}
-                  animate={{ width: `${radiusPct}%` }}
-                  transition={{ duration: 0.5, ease: 'easeOut' }}
-                  className="h-full rounded-full bg-gradient-to-r from-brand-purple to-brand-pink"
-                />
-              </div>
-            </div>
+            )}
           </motion.div>
         );
       })}
@@ -776,22 +812,22 @@ export default function AccountPage() {
 
       {/* Header */}
       <div>
-        <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">Account</h1>
+        <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">Account & Insights</h1>
         <p className="mt-0.5 text-sm text-slate-500">
-          Beheer uw account, bekijk prestaties en gebieden
+          Beheer uw account, bekijk prestaties en targetgebieden
         </p>
       </div>
 
       {/* Tab Navigation */}
-      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+      <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0" style={{ scrollbarWidth: 'none' }}>
         {TABS.map((tab) => (
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
-            className={`inline-flex shrink-0 items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition ${
+            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2.5 text-[13px] font-medium transition sm:gap-2 sm:text-sm ${
               activeTab === tab.key
-                ? 'bg-brand-purple text-white shadow-sm'
-                : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+                ? 'bg-brand-purple text-white shadow-sm shadow-brand-purple/20'
+                : 'bg-white text-slate-600 shadow-sm ring-1 ring-slate-200/60 hover:bg-slate-50'
             }`}
           >
             <tab.icon className="h-4 w-4" />
