@@ -46,28 +46,39 @@ export async function GET(request: NextRequest) {
   const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
   const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
-  const [totalRes, weekRes, monthRes, allLeadsRes, recentRes] =
+  const [totalRes, weekRes, monthRes, allLeadsRes, recentRes, assignmentsRes] =
     await Promise.all([
       supabase.from('leads').select('id', { count: 'exact', head: true }),
       supabase.from('leads').select('id', { count: 'exact', head: true }).gte('created_at', weekAgo),
       supabase.from('leads').select('id', { count: 'exact', head: true }).gte('created_at', monthAgo),
-      supabase.from('leads').select('status, branch, customer_id, customers(name)'),
+      supabase.from('leads').select('id, status, branch'),
       supabase.from('leads').select('*, customers(id, name)').order('created_at', { ascending: false }).limit(10),
+      supabase.from('lead_assignments').select('lead_id, customers(name)'),
     ]);
 
   const byStatus: Record<string, number> = {};
   const byBranch: Record<string, number> = {};
   const byCustomer: Record<string, number> = {};
 
+  const assignedLeadIds = new Set<string>();
+
+  if (assignmentsRes.data) {
+    for (const a of assignmentsRes.data) {
+      const custName = (a as Record<string, unknown>).customers
+        ? ((a as Record<string, unknown>).customers as { name: string })?.name || 'Onbekend'
+        : 'Onbekend';
+      byCustomer[custName] = (byCustomer[custName] || 0) + 1;
+      assignedLeadIds.add(a.lead_id);
+    }
+  }
+
   if (allLeadsRes.data) {
     for (const lead of allLeadsRes.data) {
       if (lead.status) byStatus[lead.status] = (byStatus[lead.status] || 0) + 1;
       if (lead.branch) byBranch[lead.branch] = (byBranch[lead.branch] || 0) + 1;
-      const custName = (lead as Record<string, unknown>).customers
-        ? ((lead as Record<string, unknown>).customers as { name: string })?.name || 'Onbekend'
-        : 'Onbekend';
-      byCustomer[custName] = (byCustomer[custName] || 0) + 1;
     }
+    const unassigned = allLeadsRes.data.filter(l => !assignedLeadIds.has(l.id)).length;
+    if (unassigned > 0) byCustomer['Niet toegewezen'] = unassigned;
   }
 
   const periods = ['day', 'week', 'month', 'quarter', 'year'] as const;
