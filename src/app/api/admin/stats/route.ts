@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
   const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
   const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
-  const [totalRes, weekRes, monthRes, allLeads, recentRes, allAssignments] =
+  const [totalRes, weekRes, monthRes, allLeads, recentRes, allAssignments, customersRes] =
     await Promise.all([
       supabase.from('leads').select('id', { count: 'exact', head: true }),
       supabase.from('leads').select('id', { count: 'exact', head: true }).gte('created_at', weekAgo),
@@ -68,6 +68,7 @@ export async function GET(request: NextRequest) {
       fetchAll<{ id: string; status: string; branch: string }>(supabase, 'leads', 'id, status, branch'),
       supabase.from('leads').select('*, customers(id, name)').order('created_at', { ascending: false }).limit(10),
       fetchAll<{ lead_id: string; customers: { name: string } | null }>(supabase, 'lead_assignments', 'lead_id, customers(name)'),
+      supabase.from('customers').select('id', { count: 'exact', head: true }),
     ]);
 
   const byStatus: Record<string, number> = {};
@@ -115,6 +116,7 @@ export async function GET(request: NextRequest) {
     total: totalRes.count || 0,
     thisWeek: weekRes.count || 0,
     thisMonth: monthRes.count || 0,
+    customerCount: customersRes.count || 0,
     byStatus,
     byBranch,
     byCustomer,

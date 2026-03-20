@@ -22,6 +22,7 @@ interface Stats {
   total: number;
   thisWeek: number;
   thisMonth: number;
+  customerCount: number;
   byStatus: Record<string, number>;
   byBranch: Record<string, number>;
   byCustomer: Record<string, number>;
@@ -151,7 +152,7 @@ export default function AdminDashboard() {
           { label: 'Totaal leads', value: stats.total, icon: ChartBarSquareIcon, color: 'text-brand-purple bg-brand-purple/10' },
           { label: 'Deze week', value: stats.thisWeek, icon: ArrowTrendingUpIcon, color: 'text-emerald-600 bg-emerald-50' },
           { label: 'Deze maand', value: stats.thisMonth, icon: ClockIcon, color: 'text-amber-600 bg-amber-50' },
-          { label: 'Klanten', value: Object.keys(stats.byCustomer).length, icon: UserGroupIcon, color: 'text-sky-600 bg-sky-50' },
+          { label: 'Klanten', value: stats.customerCount, icon: UserGroupIcon, color: 'text-sky-600 bg-sky-50' },
         ].map(kpi => (
           <div key={kpi.label} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className={`mb-3 inline-flex h-9 w-9 items-center justify-center rounded-lg ${kpi.color}`}>
