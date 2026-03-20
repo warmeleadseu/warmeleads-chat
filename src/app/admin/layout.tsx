@@ -17,6 +17,7 @@ import {
   ChartBarSquareIcon,
   Squares2X2Icon,
   ArrowsRightLeftIcon,
+  TvIcon,
 } from '@heroicons/react/24/outline';
 import { AdminContext, type AdminUser } from './adminContext';
 
@@ -28,6 +29,7 @@ const NAV = [
   { label: 'Klanten', href: '/admin/customers', icon: BuildingOfficeIcon },
   { label: 'Branches', href: '/admin/branches', icon: Squares2X2Icon },
   { label: 'Koppelingen', href: '/admin/koppelingen', icon: Cog6ToothIcon },
+  { label: 'Live', href: '/admin/live', icon: TvIcon },
 ];
 
 function LoginScreen({ onLogin }: { onLogin: (u: AdminUser, t: string) => void }) {
@@ -135,6 +137,12 @@ function Sidebar({ user, onLogout }: { user: AdminUser; onLogout: () => void }) 
               >
                 <item.icon className={`h-[18px] w-[18px] ${active ? 'text-brand-purple' : 'text-white/40'}`} />
                 {item.label}
+                {item.href === '/admin/live' && (
+                  <span className="relative ml-auto flex h-2 w-2">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
+                  </span>
+                )}
               </Link>
             );
           })}
@@ -216,6 +224,12 @@ function MobileHeader({ user, onLogout }: { user: AdminUser; onLogout: () => voi
                     >
                       <item.icon className={`h-5 w-5 ${active ? 'text-brand-purple' : 'text-white/40'}`} />
                       {item.label}
+                      {item.href === '/admin/live' && (
+                        <span className="relative ml-auto flex h-2 w-2">
+                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
+                          <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
+                        </span>
+                      )}
                     </Link>
                   );
                 })}
