@@ -44,19 +44,45 @@ export async function GET(request: NextRequest) {
 
   const supabase = createServerClient();
 
+  const todayStart = periodStart('day').toISOString();
+
   const [
     totalLeadsRes,
     customersRes,
     batchesRes,
     recentLeadsRes,
     assignmentsRes,
+    provincesRes,
+    branchRes,
+    phoneTodayRes,
+    phoneInvalidTodayRes,
   ] = await Promise.all([
     supabase.from('leads').select('id', { count: 'exact', head: true }).neq('bron', 'excel_import'),
     supabase.from('customers').select('id, name, is_active'),
     supabase.from('customer_batches').select('*, customers(name)').order('created_at', { ascending: false }),
     supabase.from('leads').select('id, naam_klant, branch, plaatsnaam, provincie, created_at').neq('bron', 'excel_import').order('created_at', { ascending: false }).limit(12),
     supabase.from('lead_assignments').select('id, lead_id, customer_id, batch_id, assigned_at, customers(name)').order('assigned_at', { ascending: false }).limit(500),
+    supabase.from('leads').select('provincie').neq('bron', 'excel_import').not('provincie', 'is', null).not('provincie', 'eq', ''),
+    supabase.from('leads').select('branch').neq('bron', 'excel_import').not('branch', 'is', null).not('branch', 'eq', ''),
+    supabase.from('leads').select('id', { count: 'exact', head: true }).neq('bron', 'excel_import').gte('created_at', todayStart),
+    supabase.from('leads').select('id', { count: 'exact', head: true }).neq('bron', 'excel_import').gte('created_at', todayStart).eq('phone_valid', false),
   ]);
+
+  const provinceBreakdown: Record<string, number> = {};
+  for (const r of (provincesRes.data || [])) {
+    const p = r.provincie as string;
+    provinceBreakdown[p] = (provinceBreakdown[p] || 0) + 1;
+  }
+
+  const branchBreakdown: Record<string, number> = {};
+  for (const r of (branchRes.data || [])) {
+    const b = r.branch as string;
+    branchBreakdown[b] = (branchBreakdown[b] || 0) + 1;
+  }
+
+  const phoneTodayTotal = phoneTodayRes.count || 0;
+  const phoneInvalidToday = phoneInvalidTodayRes.count || 0;
+  const phoneValidPct = phoneTodayTotal > 0 ? Math.round(((phoneTodayTotal - phoneInvalidToday) / phoneTodayTotal) * 100) : 100;
 
   const batches = batchesRes.data || [];
   const activeBatches = batches.filter(b => b.status === 'active');
@@ -117,6 +143,9 @@ export async function GET(request: NextRequest) {
       createdAt: l.created_at,
     })),
     periodStats,
+    provinceBreakdown,
+    branchBreakdown,
+    phoneQuality: { total: phoneTodayTotal, invalid: phoneInvalidToday, validPct: phoneValidPct },
     timestamp: new Date().toISOString(),
   });
 }
