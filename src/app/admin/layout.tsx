@@ -235,6 +235,7 @@ function MobileHeader({ user, onLogout }: { user: AdminUser; onLogout: () => voi
 }
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
   const [user, setUser] = useState<AdminUser | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -272,6 +273,16 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   }
 
   if (!user) return <LoginScreen onLogin={handleLogin} />;
+
+  const isLive = pathname === '/admin/live';
+
+  if (isLive) {
+    return (
+      <AdminContext.Provider value={{ user, logout: handleLogout }}>
+        {children}
+      </AdminContext.Provider>
+    );
+  }
 
   return (
     <AdminContext.Provider value={{ user, logout: handleLogout }}>

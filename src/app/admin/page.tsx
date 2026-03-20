@@ -144,7 +144,16 @@ export default function AdminDashboard() {
 
   return (
     <div>
-      <h1 className="mb-6 text-xl font-bold text-slate-900 sm:text-2xl">Dashboard</h1>
+      <div className="mb-6 flex items-center justify-between">
+        <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">Dashboard</h1>
+        <Link href="/admin/live" className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-600 shadow-sm transition hover:border-brand-purple/30 hover:text-brand-purple">
+          <span className="relative flex h-2 w-2">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
+          </span>
+          Live dashboard
+        </Link>
+      </div>
 
       {/* KPI Cards */}
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
