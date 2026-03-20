@@ -23,10 +23,8 @@ export function FloatingWhatsAppButton() {
     };
   }, []);
 
-  // Don't render if modal is open
-  if (isModalOpen) {
-    return null;
-  }
+  if (isModalOpen) return null;
+  if (pathname.startsWith('/admin') || pathname.startsWith('/portal')) return null;
   
   const whatsappNumber = '31613927338'; // +31 61 392 7338
   const defaultMessage = 'Hoi! Ik heb interesse in WarmeLeads en zou graag meer informatie ontvangen.';
