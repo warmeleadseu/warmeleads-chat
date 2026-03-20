@@ -33,7 +33,7 @@ interface BranchMeta { slug: string; name: string; color: string; }
 
 interface BatchInfo {
   id: string; customer_id: string; branch: string;
-  batch_size: number; leads_delivered: number; status: string;
+  batch_size: number; leads_delivered: number; leads_per_week: number | null; status: string;
   customers?: { name: string };
 }
 

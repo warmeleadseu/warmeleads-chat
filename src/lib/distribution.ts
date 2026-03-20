@@ -45,12 +45,34 @@ export async function distributeLead(lead: LeadForDistribution): Promise<Distrib
 
   const { data: activeBatches } = await supabase
     .from('customer_batches')
-    .select('id, customer_id, branch, batch_size, leads_delivered, customers!inner(id, is_active, portal_active)')
+    .select('id, customer_id, branch, batch_size, leads_delivered, leads_per_week, customers!inner(id, is_active, portal_active)')
     .eq('branch', lead.branch)
     .eq('status', 'active')
     .eq('customers.is_active', true);
 
   if (!activeBatches || activeBatches.length === 0) return result;
+
+  // Check weekly limits: count assignments per batch this week
+  const batchesWithWeeklyLimit = activeBatches.filter(b => b.leads_per_week && b.leads_per_week > 0);
+  const weeklyCountByBatch: Record<string, number> = {};
+
+  if (batchesWithWeeklyLimit.length > 0) {
+    const now = new Date();
+    const weekStart = new Date(now);
+    weekStart.setDate(weekStart.getDate() - weekStart.getDay() + (weekStart.getDay() === 0 ? -6 : 1));
+    weekStart.setHours(0, 0, 0, 0);
+
+    const batchIds = batchesWithWeeklyLimit.map(b => b.id);
+    const { data: weekAssignments } = await supabase
+      .from('lead_assignments')
+      .select('batch_id')
+      .in('batch_id', batchIds)
+      .gte('assigned_at', weekStart.toISOString());
+
+    for (const a of weekAssignments || []) {
+      if (a.batch_id) weeklyCountByBatch[a.batch_id] = (weeklyCountByBatch[a.batch_id] || 0) + 1;
+    }
+  }
 
   const customerIds = [...new Set(activeBatches.map(b => b.customer_id))];
 
@@ -81,6 +103,12 @@ export async function distributeLead(lead: LeadForDistribution): Promise<Distrib
   for (const batch of activeBatches) {
     if (batch.leads_delivered >= batch.batch_size) continue;
     if (assignedIds.has(batch.customer_id)) continue;
+
+    // Skip if weekly limit reached
+    if (batch.leads_per_week && batch.leads_per_week > 0) {
+      const thisWeekCount = weeklyCountByBatch[batch.id] || 0;
+      if (thisWeekCount >= batch.leads_per_week) continue;
+    }
 
     const custTargets = targetsByCustomer[batch.customer_id];
     if (!custTargets) continue;

@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
   const supabase = createServerClient();
   const body = await request.json();
 
-  const { customer_id, branch, batch_size, price_per_lead, notes } = body;
+  const { customer_id, branch, batch_size, price_per_lead, leads_per_week, notes } = body;
   if (!customer_id || !branch || !batch_size) {
     return NextResponse.json({ error: 'Vereiste velden ontbreken' }, { status: 400 });
   }
@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
 
   const { data, error } = await supabase
     .from('customer_batches')
-    .insert({ customer_id, branch, batch_size, price_per_lead, total_price, notes })
+    .insert({ customer_id, branch, batch_size, price_per_lead, total_price, leads_per_week: leads_per_week || null, notes })
     .select()
     .single();
 

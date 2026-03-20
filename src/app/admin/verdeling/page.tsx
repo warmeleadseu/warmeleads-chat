@@ -40,6 +40,7 @@ interface Batch {
   branch: string;
   batch_size: number;
   leads_delivered: number;
+  leads_per_week: number | null;
   status: string;
   price_per_lead: number | null;
   total_price: number | null;
