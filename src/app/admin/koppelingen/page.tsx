@@ -19,11 +19,9 @@ import {
   ArrowPathIcon,
   DocumentDuplicateIcon,
   InformationCircleIcon,
-  BuildingOfficeIcon,
   SparklesIcon,
 } from '@heroicons/react/24/outline';
 
-interface Customer { id: string; name: string; branches: string[]; }
 interface WebhookKey {
   id: string; key: string; label: string; branch: string; customer_id: string;
   customers?: { id: string; name: string } | null;
@@ -32,10 +30,22 @@ interface WebhookKey {
 interface BranchFieldConfig { id: string; key: string; label: string; field_type: string; options: string[]; is_required: boolean; sort_order: number; }
 interface BranchConfig { id: string; slug: string; name: string; color: string; is_active: boolean; branch_fields: BranchFieldConfig[]; }
 
+const BRANCH_COLOR_MAP: Record<string, { light: string; text: string }> = {
+  emerald: { light: 'bg-emerald-50', text: 'text-emerald-600' },
+  sky: { light: 'bg-sky-50', text: 'text-sky-600' },
+  amber: { light: 'bg-amber-50', text: 'text-amber-600' },
+  purple: { light: 'bg-purple-50', text: 'text-purple-600' },
+  rose: { light: 'bg-rose-50', text: 'text-rose-600' },
+  cyan: { light: 'bg-cyan-50', text: 'text-cyan-600' },
+  lime: { light: 'bg-lime-50', text: 'text-lime-600' },
+  indigo: { light: 'bg-indigo-50', text: 'text-indigo-600' },
+  teal: { light: 'bg-teal-50', text: 'text-teal-600' },
+  slate: { light: 'bg-slate-50', text: 'text-slate-600' },
+};
+
 export default function KoppelingenPage() {
   const { user } = useAdmin();
   const [keys, setKeys] = useState<WebhookKey[]>([]);
-  const [customers, setCustomers] = useState<Customer[]>([]);
   const [branchesList, setBranchesList] = useState<BranchConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [showWizard, setShowWizard] = useState(false);
@@ -46,13 +56,11 @@ export default function KoppelingenPage() {
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const [keysRes, custRes, branchRes] = await Promise.all([
+    const [keysRes, branchRes] = await Promise.all([
       adminFetch('/api/admin/webhook/keys'),
-      adminFetch('/api/admin/customers'),
       adminFetch('/api/admin/branches'),
     ]);
     if (keysRes.ok) { const d = await keysRes.json(); setKeys(d.keys || []); }
-    if (custRes.ok) { const d = await custRes.json(); setCustomers(d.customers || []); }
     if (branchRes.ok) { const d = await branchRes.json(); setBranchesList(d.branches || []); }
     setLoading(false);
   }, []);
@@ -135,8 +143,8 @@ export default function KoppelingenPage() {
         <div className="text-sm text-blue-800">
           <p className="font-medium">Hoe werkt het?</p>
           <p className="mt-0.5 text-blue-600">
-            Maak per klant en campagne een koppeling aan. Je krijgt dan een stap-voor-stap handleiding
-            om je Zapier zap in te stellen. Leads komen dan automatisch in het CRM en klantportaal terecht.
+            Maak per branche/campagne een koppeling aan. Leads worden automatisch verdeeld naar klanten
+            met een actieve batch via het distributiesysteem. Je krijgt een stap-voor-stap handleiding om je Zapier zap in te stellen.
           </p>
         </div>
       </div>
@@ -190,18 +198,20 @@ export default function KoppelingenPage() {
                         <span className={`h-2 w-2 shrink-0 rounded-full ${dotColor}`} />
                         <h3 className="truncate text-sm font-semibold text-slate-900">{k.label}</h3>
                       </div>
-                      <p className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-500">
-                        <BuildingOfficeIcon className="h-3 w-3" />
-                        {k.customers?.name || 'Geen klant'}
-                      </p>
                     </div>
                     <div className="flex shrink-0 items-center gap-1.5">
                       <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${statusColor}`}>
                         {statusLabel}
                       </span>
-                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${k.branch === 'thuisbatterij' ? 'bg-emerald-50 text-emerald-600' : 'bg-sky-50 text-sky-600'}`}>
-                        {k.branch}
-                      </span>
+                      {(() => {
+                        const bc = branchesList.find(b => b.slug === k.branch);
+                        const c = BRANCH_COLOR_MAP[bc?.color || 'slate'] || BRANCH_COLOR_MAP.slate;
+                        return (
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${c.light} ${c.text}`}>
+                            {bc?.name || k.branch}
+                          </span>
+                        );
+                      })()}
                     </div>
                   </div>
 
@@ -313,7 +323,6 @@ export default function KoppelingenPage() {
       <AnimatePresence>
         {showWizard && (
           <CreateWizard
-            customers={customers}
             branchesList={branchesList}
             onClose={() => setShowWizard(false)}
             onCreated={onCreated}
@@ -361,11 +370,11 @@ function InstructionsPanel({
   ];
 
   const copyAll = () => {
+    const branchName = branchesList.find(b => b.slug === webhookKey.branch)?.name || webhookKey.branch;
     const lines = [
       '=== ZAPIER KOPPELING ===',
       `Koppeling: ${webhookKey.label}`,
-      `Klant: ${webhookKey.customers?.name || '—'}`,
-      `Branche: ${webhookKey.branch}`,
+      `Branche: ${branchName}`,
       '',
       '--- STAP 2: Webhook URL ---',
       webhookUrl,
@@ -405,10 +414,15 @@ function InstructionsPanel({
               <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-slate-500">
                 <span className="font-medium text-slate-700">{webhookKey.label}</span>
                 <span className="text-slate-300">&middot;</span>
-                <span>{webhookKey.customers?.name || '—'}</span>
-                <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${webhookKey.branch === 'thuisbatterij' ? 'bg-emerald-50 text-emerald-600' : 'bg-sky-50 text-sky-600'}`}>
-                  {webhookKey.branch}
-                </span>
+                {(() => {
+                  const bc = branchesList.find(b => b.slug === webhookKey.branch);
+                  const c = BRANCH_COLOR_MAP[bc?.color || 'slate'] || BRANCH_COLOR_MAP.slate;
+                  return (
+                    <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${c.light} ${c.text}`}>
+                      {bc?.name || webhookKey.branch}
+                    </span>
+                  );
+                })()}
               </div>
             </div>
             <div className="ml-3 flex shrink-0 items-center gap-2">
@@ -630,33 +644,31 @@ function CopyField({
 /* ───────── Create Wizard ───────── */
 
 function CreateWizard({
-  customers,
   branchesList,
   onClose,
   onCreated,
 }: {
-  customers: Customer[];
   branchesList: BranchConfig[];
   onClose: () => void;
   onCreated: (keyId: string) => void;
 }) {
   const [step, setStep] = useState(1);
-  const [customerId, setCustomerId] = useState('');
   const [branch, setBranch] = useState('');
   const [label, setLabel] = useState('');
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState('');
 
-  const selectedCustomer = customers.find(c => c.id === customerId);
+  const activeBranches = branchesList.filter(b => b.is_active);
+  const selectedBranch = branchesList.find(b => b.slug === branch);
 
   const create = async () => {
-    if (!label || !customerId || !branch) return;
+    if (!label || !branch) return;
     setCreating(true);
     setError('');
     try {
       const res = await adminFetch('/api/admin/webhook/keys', {
         method: 'POST',
-        body: JSON.stringify({ label, branch, customer_id: customerId }),
+        body: JSON.stringify({ label, branch }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Aanmaken mislukt');
@@ -682,20 +694,18 @@ function CreateWizard({
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
         className="fixed inset-x-4 top-[10vh] z-[60] mx-auto max-w-lg rounded-2xl bg-white shadow-2xl sm:inset-x-auto"
       >
-        {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
           <div>
             <h2 className="text-lg font-bold text-slate-900">Nieuwe koppeling</h2>
-            <p className="text-xs text-slate-500">Stap {step} van 3</p>
+            <p className="text-xs text-slate-500">Stap {step} van 2</p>
           </div>
           <button onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100">
             <XMarkIcon className="h-5 w-5" />
           </button>
         </div>
 
-        {/* Progress */}
         <div className="flex gap-1 px-6 pt-4">
-          {[1, 2, 3].map(s => (
+          {[1, 2].map(s => (
             <div key={s} className={`h-1 flex-1 rounded-full transition ${s <= step ? 'bg-brand-purple' : 'bg-slate-200'}`} />
           ))}
         </div>
@@ -705,90 +715,49 @@ function CreateWizard({
             <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-600">{error}</div>
           )}
 
-          {/* Step 1: Choose customer */}
           {step === 1 && (
             <div>
-              <h3 className="mb-1 text-sm font-semibold text-slate-800">Voor welke klant is deze koppeling?</h3>
-              <p className="mb-4 text-xs text-slate-500">Leads die binnenkomen via deze koppeling worden automatisch aan deze klant toegewezen.</p>
-              {customers.length === 0 ? (
+              <h3 className="mb-1 text-sm font-semibold text-slate-800">Voor welke branche is deze koppeling?</h3>
+              <p className="mb-4 text-xs text-slate-500">Leads die binnenkomen worden als deze branche opgeslagen en automatisch verdeeld naar klanten met een actieve batch.</p>
+              {activeBranches.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-slate-300 py-8 text-center">
-                  <BuildingOfficeIcon className="mx-auto mb-2 h-8 w-8 text-slate-300" />
-                  <p className="text-sm text-slate-500">Maak eerst een klant aan via &quot;Klanten&quot;.</p>
+                  <BoltIcon className="mx-auto mb-2 h-8 w-8 text-slate-300" />
+                  <p className="text-sm text-slate-500">Maak eerst een branche aan via &quot;Branches&quot;.</p>
                 </div>
               ) : (
-                <div className="space-y-1.5">
-                  {customers.filter(c => c.branches && c.branches.length > 0).map(c => (
-                    <button
-                      key={c.id}
-                      onClick={() => { setCustomerId(c.id); setStep(2); }}
-                      className={`flex w-full items-center justify-between rounded-xl border px-4 py-3 text-left transition ${
-                        customerId === c.id
-                          ? 'border-brand-purple/30 bg-brand-purple/5'
-                          : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-                      }`}
-                    >
-                      <div>
-                        <p className="text-sm font-medium text-slate-800">{c.name}</p>
-                        <div className="mt-0.5 flex gap-1">
-                          {c.branches.map(b => {
-                            const bc = branchesList.find(x => x.slug === b);
-                            return (
-                              <span key={b} className={`rounded-full px-1.5 py-0.5 text-[9px] font-medium ${b === 'thuisbatterij' ? 'bg-emerald-50 text-emerald-600' : 'bg-sky-50 text-sky-600'}`}>
-                                {bc?.name || b}
-                              </span>
-                            );
-                          })}
+                <div className="space-y-2">
+                  {activeBranches.map(b => {
+                    const bc = BRANCH_COLOR_MAP[b.color] || BRANCH_COLOR_MAP.slate;
+                    return (
+                      <button
+                        key={b.slug}
+                        onClick={() => {
+                          setBranch(b.slug);
+                          setLabel(`${b.name}`);
+                          setStep(2);
+                        }}
+                        className={`flex w-full items-center justify-between rounded-xl border px-4 py-3.5 text-left transition ${
+                          branch === b.slug
+                            ? 'border-brand-purple/30 bg-brand-purple/5'
+                            : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`flex h-9 w-9 items-center justify-center rounded-lg ${bc.light}`}>
+                            <BoltIcon className={`h-4 w-4 ${bc.text}`} />
+                          </div>
+                          <span className="text-sm font-medium text-slate-800">{b.name}</span>
                         </div>
-                      </div>
-                      <ChevronRightIcon className="h-4 w-4 text-slate-400" />
-                    </button>
-                  ))}
+                        <ChevronRightIcon className="h-4 w-4 text-slate-400" />
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </div>
           )}
 
-          {/* Step 2: Choose branch */}
-          {step === 2 && selectedCustomer && (
-            <div>
-              <h3 className="mb-1 text-sm font-semibold text-slate-800">Welke branche?</h3>
-              <p className="mb-4 text-xs text-slate-500">Leads worden automatisch als deze branche opgeslagen.</p>
-              <div className="space-y-2">
-                {selectedCustomer.branches.map(bSlug => {
-                  const bc = branchesList.find(x => x.slug === bSlug);
-                  return (
-                    <button
-                      key={bSlug}
-                      onClick={() => {
-                        setBranch(bSlug);
-                        setLabel(`${selectedCustomer.name} — ${bc?.name || bSlug}`);
-                        setStep(3);
-                      }}
-                      className={`flex w-full items-center justify-between rounded-xl border px-4 py-3.5 text-left transition ${
-                        branch === bSlug
-                          ? 'border-brand-purple/30 bg-brand-purple/5'
-                          : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className={`flex h-9 w-9 items-center justify-center rounded-lg ${bSlug === 'thuisbatterij' ? 'bg-emerald-50' : 'bg-sky-50'}`}>
-                          <BoltIcon className={`h-4 w-4 ${bSlug === 'thuisbatterij' ? 'text-emerald-600' : 'text-sky-600'}`} />
-                        </div>
-                        <span className="text-sm font-medium text-slate-800 capitalize">{bc?.name || bSlug}</span>
-                      </div>
-                      <ChevronRightIcon className="h-4 w-4 text-slate-400" />
-                    </button>
-                  );
-                })}
-              </div>
-              <button onClick={() => setStep(1)} className="mt-4 text-xs text-slate-500 hover:text-slate-700">
-                ← Terug
-              </button>
-            </div>
-          )}
-
-          {/* Step 3: Name + confirm */}
-          {step === 3 && (
+          {step === 2 && (
             <div>
               <h3 className="mb-1 text-sm font-semibold text-slate-800">Geef de koppeling een naam</h3>
               <p className="mb-4 text-xs text-slate-500">Bijvoorbeeld de campagne of het kanaal (bijv. &quot;Facebook - Thuisbatterij NL&quot;).</p>
@@ -801,23 +770,22 @@ function CreateWizard({
                 autoFocus
               />
 
-              {/* Summary */}
               <div className="mb-4 rounded-xl border border-slate-100 bg-slate-50 p-4">
                 <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Samenvatting</p>
                 <div className="space-y-1 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Klant</span>
-                    <span className="font-medium text-slate-800">{selectedCustomer?.name}</span>
+                    <span className="text-slate-500">Branche</span>
+                    <span className="font-medium text-slate-800">{selectedBranch?.name || branch}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Branche</span>
-                    <span className="font-medium capitalize text-slate-800">{branch}</span>
+                    <span className="text-slate-500">Distributie</span>
+                    <span className="text-xs text-slate-600">Automatisch naar klanten met actieve batch</span>
                   </div>
                 </div>
               </div>
 
               <div className="flex gap-2">
-                <button onClick={() => setStep(2)} className="flex-1 rounded-lg border border-slate-200 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50">
+                <button onClick={() => setStep(1)} className="flex-1 rounded-lg border border-slate-200 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50">
                   Terug
                 </button>
                 <button

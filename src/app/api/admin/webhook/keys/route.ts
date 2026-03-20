@@ -25,16 +25,19 @@ export async function POST(request: NextRequest) {
 
   try {
     const { label, branch, customer_id } = await request.json();
-    if (!label || !branch || !customer_id) {
-      return NextResponse.json({ error: 'Label, branche en klant zijn verplicht' }, { status: 400 });
+    if (!label || !branch) {
+      return NextResponse.json({ error: 'Label en branche zijn verplicht' }, { status: 400 });
     }
 
     const key = `wl_${crypto.randomBytes(24).toString('hex')}`;
 
     const supabase = createServerClient();
+    const insert: Record<string, unknown> = { key, label, branch };
+    if (customer_id) insert.customer_id = customer_id;
+
     const { data, error } = await supabase
       .from('webhook_keys')
-      .insert({ key, label, branch, customer_id })
+      .insert(insert)
       .select('*, customers(id, name)')
       .single();
 
