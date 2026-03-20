@@ -453,76 +453,143 @@ export default function VerdelingPage() {
         </div>
       )}
 
-      {tab === 'batches' && (
-        <div>
-          <h3 className="mb-3 text-sm font-semibold text-slate-700">Alle batches</h3>
-          {batches.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-slate-200 py-10 text-center">
-              <InboxIcon className="mx-auto mb-2 h-8 w-8 text-slate-300" />
-              <p className="text-sm text-slate-500">Nog geen batches</p>
-            </div>
-          ) : (
-            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-100 bg-slate-50/50">
-                      <th className="px-4 py-3 text-left text-xs font-medium text-slate-500">Klant</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-slate-500">Branche</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-slate-500">Voortgang</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-slate-500">Status</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-slate-500">Prijs</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-slate-500">Aangemaakt</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {batches.map(b => {
-                      const pct = Math.min(100, Math.round((b.leads_delivered / b.batch_size) * 100));
-                      const br = getBranch(b.branch);
-                      const c = COLOR_MAP[br?.color || 'slate'] || COLOR_MAP.slate;
-                      const statusColors: Record<string, string> = {
-                        active: 'bg-emerald-100 text-emerald-700',
-                        paused: 'bg-amber-100 text-amber-700',
-                        completed: 'bg-blue-100 text-blue-700',
-                      };
-                      const statusLabels: Record<string, string> = { active: 'Actief', paused: 'Gepauzeerd', completed: 'Voltooid' };
-                      return (
-                        <tr key={b.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50">
-                          <td className="px-4 py-3 font-medium text-slate-800">{b.customers?.name || '—'}</td>
-                          <td className="px-4 py-3">
-                            <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${c.light} ${c.text}`}>
-                              {br?.name || b.branch}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-2">
-                              <div className="h-2 w-20 overflow-hidden rounded-full bg-slate-100">
-                                <div className={`h-full rounded-full ${pct >= 100 ? 'bg-blue-500' : 'bg-brand-purple'}`} style={{ width: `${pct}%` }} />
-                              </div>
-                              <span className="text-xs text-slate-500">{b.leads_delivered}/{b.batch_size}</span>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${statusColors[b.status] || 'bg-slate-100 text-slate-500'}`}>
-                              {statusLabels[b.status] || b.status}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-slate-500">
-                            {b.price_per_lead ? `€${Number(b.price_per_lead).toFixed(2)}` : '—'}
-                          </td>
-                          <td className="px-4 py-3 text-xs text-slate-400">
-                            {new Date(b.created_at).toLocaleDateString('nl-NL')}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+      {tab === 'batches' && (() => {
+        const active = batches.filter(b => b.status === 'active');
+        const paused = batches.filter(b => b.status === 'paused');
+        const completed = batches.filter(b => b.status === 'completed');
+        const statusColors: Record<string, string> = { active: 'bg-emerald-100 text-emerald-700', paused: 'bg-amber-100 text-amber-700', completed: 'bg-blue-100 text-blue-700' };
+        const statusLabels: Record<string, string> = { active: 'Actief', paused: 'Gepauzeerd', completed: 'Voltooid' };
+
+        const completedRevenue = completed.reduce((s, b) => s + Number(b.total_price || 0), 0);
+        const completedLeads = completed.reduce((s, b) => s + b.leads_delivered, 0);
+
+        return (
+          <div className="space-y-6">
+            {/* Completed batches summary */}
+            {completed.length > 0 && (
+              <div className="rounded-xl border border-blue-100 bg-blue-50/30 p-5">
+                <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-800">
+                  <CheckCircleIcon className="h-4 w-4 text-blue-500" />
+                  Afgeronde batches — samenvatting
+                </h3>
+                <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <div className="rounded-lg bg-white p-3 shadow-sm">
+                    <p className="text-xl font-bold text-slate-900">{completed.length}</p>
+                    <p className="text-[11px] text-slate-500">Batches voltooid</p>
+                  </div>
+                  <div className="rounded-lg bg-white p-3 shadow-sm">
+                    <p className="text-xl font-bold text-slate-900">{completedLeads}</p>
+                    <p className="text-[11px] text-slate-500">Leads geleverd</p>
+                  </div>
+                  <div className="rounded-lg bg-white p-3 shadow-sm">
+                    <p className="text-xl font-bold text-emerald-600">€{completedRevenue.toLocaleString('nl-NL', { minimumFractionDigits: 0 })}</p>
+                    <p className="text-[11px] text-slate-500">Totale omzet</p>
+                  </div>
+                  <div className="rounded-lg bg-white p-3 shadow-sm">
+                    <p className="text-xl font-bold text-slate-900">
+                      {completedLeads > 0 ? `€${(completedRevenue / completedLeads).toFixed(2)}` : '—'}
+                    </p>
+                    <p className="text-[11px] text-slate-500">Gem. prijs/lead</p>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  {completed.map(b => {
+                    const br = getBranch(b.branch);
+                    const c = COLOR_MAP[br?.color || 'slate'] || COLOR_MAP.slate;
+                    const created = new Date(b.created_at);
+                    const completedAt = b.completed_at ? new Date(b.completed_at) : null;
+                    const durationDays = completedAt ? Math.max(1, Math.round((completedAt.getTime() - created.getTime()) / (1000 * 60 * 60 * 24))) : null;
+                    return (
+                      <div key={b.id} className="rounded-lg bg-white p-4 shadow-sm">
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-slate-800">{b.customers?.name || '—'}</span>
+                            <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${c.light} ${c.text}`}>{br?.name || b.branch}</span>
+                            <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-700">Voltooid</span>
+                          </div>
+                          <span className="text-xs font-semibold text-slate-700">{b.leads_delivered}/{b.batch_size}</span>
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
+                          {b.price_per_lead && <span>€{Number(b.price_per_lead).toFixed(2)}/lead</span>}
+                          {b.total_price && <span className="font-medium text-emerald-600">Totaal: €{Number(b.total_price).toFixed(2)}</span>}
+                          {b.leads_per_week && <span>{b.leads_per_week}/week</span>}
+                          <span>Gestart: {created.toLocaleDateString('nl-NL')}</span>
+                          {completedAt && <span>Voltooid: {completedAt.toLocaleDateString('nl-NL')}</span>}
+                          {durationDays && <span>Duur: {durationDays} {durationDays === 1 ? 'dag' : 'dagen'}</span>}
+                          {b.notes && <span className="italic">{b.notes}</span>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          )}
-        </div>
-      )}
+            )}
+
+            {/* Active + paused batches table */}
+            {(active.length > 0 || paused.length > 0) && (
+              <div>
+                <h3 className="mb-3 text-sm font-semibold text-slate-700">Actieve &amp; gepauzeerde batches</h3>
+                <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-slate-100 bg-slate-50/50">
+                          <th className="px-4 py-3 text-left text-xs font-medium text-slate-500">Klant</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-slate-500">Branche</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-slate-500">Voortgang</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-slate-500">Status</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-slate-500">Per week</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-slate-500">Prijs</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-slate-500">Aangemaakt</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {[...active, ...paused].map(b => {
+                          const pct = Math.min(100, Math.round((b.leads_delivered / b.batch_size) * 100));
+                          const br = getBranch(b.branch);
+                          const c = COLOR_MAP[br?.color || 'slate'] || COLOR_MAP.slate;
+                          return (
+                            <tr key={b.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50">
+                              <td className="px-4 py-3 font-medium text-slate-800">{b.customers?.name || '—'}</td>
+                              <td className="px-4 py-3">
+                                <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${c.light} ${c.text}`}>{br?.name || b.branch}</span>
+                              </td>
+                              <td className="px-4 py-3">
+                                <div className="flex items-center gap-2">
+                                  <div className="h-2 w-20 overflow-hidden rounded-full bg-slate-100">
+                                    <div className={`h-full rounded-full ${pct >= 100 ? 'bg-blue-500' : 'bg-brand-purple'}`} style={{ width: `${pct}%` }} />
+                                  </div>
+                                  <span className="text-xs text-slate-500">{b.leads_delivered}/{b.batch_size}</span>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3">
+                                <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${statusColors[b.status] || 'bg-slate-100 text-slate-500'}`}>
+                                  {statusLabels[b.status] || b.status}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-xs text-slate-500">{b.leads_per_week || '∞'}</td>
+                              <td className="px-4 py-3 text-slate-500">{b.price_per_lead ? `€${Number(b.price_per_lead).toFixed(2)}` : '—'}</td>
+                              <td className="px-4 py-3 text-xs text-slate-400">{new Date(b.created_at).toLocaleDateString('nl-NL')}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {batches.length === 0 && (
+              <div className="rounded-xl border border-dashed border-slate-200 py-10 text-center">
+                <InboxIcon className="mx-auto mb-2 h-8 w-8 text-slate-300" />
+                <p className="text-sm text-slate-500">Nog geen batches</p>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {tab === 'leadstatus' && (
         <div>
