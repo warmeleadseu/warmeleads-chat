@@ -42,34 +42,104 @@ interface LiveData {
   timestamp: string;
 }
 
-// ─── Province SVG paths (simplified NL + BE) ─────────────────────────
+// ─── Province SVG paths (geographic NL + BE) ─────────────────────────
+// Coordinates derived from real province boundaries, scaled to viewBox 0 0 200 400
 const NL_PROVINCES: Record<string, { d: string; cx: number; cy: number }> = {
-  'Groningen':       { d: 'M145,10 L180,10 L185,35 L170,50 L145,45 Z', cx: 163, cy: 28 },
-  'Friesland':       { d: 'M100,10 L145,10 L145,45 L130,50 L95,40 Z', cx: 120, cy: 28 },
-  'Drenthe':         { d: 'M145,45 L170,50 L175,80 L140,85 L130,65 Z', cx: 152, cy: 65 },
-  'Overijssel':      { d: 'M130,65 L140,85 L175,80 L180,110 L145,115 L120,95 Z', cx: 150, cy: 92 },
-  'Flevoland':       { d: 'M95,70 L115,65 L120,95 L105,100 L90,85 Z', cx: 105, cy: 82 },
-  'Gelderland':      { d: 'M120,95 L145,115 L180,110 L175,145 L130,150 L100,130 Z', cx: 140, cy: 125 },
-  'Utrecht':         { d: 'M85,95 L100,95 L100,130 L85,125 Z', cx: 92, cy: 112 },
-  'Noord-Holland':   { d: 'M55,15 L95,15 L95,70 L75,80 L55,70 Z', cx: 75, cy: 45 },
-  'Zuid-Holland':     { d: 'M50,80 L85,80 L85,125 L70,140 L45,130 Z', cx: 67, cy: 108 },
-  'Zeeland':         { d: 'M25,140 L55,130 L70,140 L60,165 L25,165 Z', cx: 48, cy: 150 },
-  'Noord-Brabant':   { d: 'M70,140 L130,150 L140,175 L75,180 L60,165 Z', cx: 102, cy: 162 },
-  'Limburg':         { d: 'M140,150 L175,145 L180,195 L155,210 L140,195 Z', cx: 160, cy: 178 },
+  'Groningen': {
+    d: 'M128,10 L135,7 L148,5 L160,4 L172,6 L180,12 L183,22 L184,34 L183,44 L178,50 L170,53 L158,55 L148,54 L138,52 L132,48 L130,38 L128,24 Z',
+    cx: 156, cy: 30,
+  },
+  'Friesland': {
+    d: 'M62,10 L72,6 L85,4 L100,4 L115,5 L128,10 L128,24 L130,38 L132,48 L122,53 L112,57 L100,58 L88,54 L78,48 L72,40 L66,30 L62,20 Z',
+    cx: 97, cy: 30,
+  },
+  'Drenthe': {
+    d: 'M132,48 L138,52 L148,54 L158,55 L170,53 L178,50 L183,44 L185,56 L186,70 L186,82 L184,90 L175,93 L162,94 L148,92 L138,88 L130,80 L128,68 L130,56 Z',
+    cx: 158, cy: 72,
+  },
+  'Overijssel': {
+    d: 'M88,54 L100,58 L112,57 L122,53 L130,56 L128,68 L130,80 L138,88 L148,92 L162,94 L175,93 L184,90 L186,100 L187,112 L186,118 L176,122 L162,124 L146,122 L130,116 L118,110 L106,102 L96,92 L90,80 L88,66 Z',
+    cx: 142, cy: 100,
+  },
+  'Flevoland': {
+    d: 'M66,30 L72,40 L78,48 L86,56 L92,66 L96,76 L94,84 L88,80 L82,74 L76,66 L70,56 L66,44 Z',
+    cx: 81, cy: 58,
+  },
+  'Gelderland': {
+    d: 'M90,92 L96,100 L106,108 L118,114 L130,120 L146,124 L162,126 L176,124 L186,120 L188,132 L186,146 L182,156 L174,164 L162,168 L146,170 L130,168 L116,162 L104,154 L92,144 L84,132 L80,120 L82,108 L86,100 Z',
+    cx: 136, cy: 140,
+  },
+  'Utrecht': {
+    d: 'M66,82 L70,74 L76,70 L82,74 L88,80 L94,84 L92,92 L86,100 L82,108 L80,116 L76,120 L70,118 L64,110 L60,98 L62,88 Z',
+    cx: 77, cy: 98,
+  },
+  'Noord-Holland': {
+    d: 'M44,18 L50,12 L56,8 L62,10 L62,20 L66,30 L66,44 L70,56 L76,66 L76,70 L70,74 L66,82 L62,88 L60,94 L56,96 L50,94 L44,90 L40,82 L36,72 L34,60 L34,48 L36,36 L40,26 Z',
+    cx: 52, cy: 55,
+  },
+  'Zuid-Holland': {
+    d: 'M30,100 L38,94 L44,90 L50,94 L56,96 L60,98 L64,110 L70,118 L74,128 L72,138 L66,148 L56,154 L46,156 L36,152 L28,144 L24,134 L24,120 L26,108 Z',
+    cx: 48, cy: 125,
+  },
+  'Zeeland': {
+    d: 'M6,152 L14,146 L22,140 L28,144 L36,152 L44,156 L48,162 L46,170 L40,178 L32,182 L22,180 L14,176 L8,168 L4,160 Z',
+    cx: 27, cy: 163,
+  },
+  'Noord-Brabant': {
+    d: 'M46,170 L48,162 L44,156 L56,154 L66,148 L72,138 L74,128 L80,120 L80,128 L84,138 L92,148 L104,158 L116,164 L130,170 L146,172 L162,170 L158,180 L148,188 L132,194 L114,196 L96,194 L78,190 L62,184 L52,178 Z',
+    cx: 108, cy: 175,
+  },
+  'Limburg': {
+    d: 'M158,168 L162,170 L174,166 L182,158 L186,150 L190,162 L190,176 L188,190 L184,202 L178,212 L170,218 L162,216 L156,208 L150,196 L148,184 L150,176 Z',
+    cx: 172, cy: 192,
+  },
 };
 
 const BE_PROVINCES: Record<string, { d: string; cx: number; cy: number }> = {
-  'Antwerpen':        { d: 'M60,225 L95,220 L105,245 L75,250 Z', cx: 83, cy: 235 },
-  'Limburg':          { d: 'M105,220 L140,215 L145,245 L105,245 Z', cx: 123, cy: 232 },
-  'Vlaams-Brabant':   { d: 'M65,250 L105,245 L105,275 L70,275 Z', cx: 86, cy: 262 },
-  'Waals-Brabant':    { d: 'M70,275 L105,275 L105,295 L75,295 Z', cx: 88, cy: 285 },
-  'Brussel':          { d: 'M82,265 L92,265 L92,275 L82,275 Z', cx: 87, cy: 270 },
-  'Oost-Vlaanderen':  { d: 'M25,230 L60,225 L65,260 L30,265 Z', cx: 45, cy: 245 },
-  'West-Vlaanderen':  { d: 'M5,225 L25,220 L30,260 L10,265 Z', cx: 18, cy: 242 },
-  'Henegouwen':       { d: 'M10,265 L70,275 L75,310 L15,315 Z', cx: 42, cy: 290 },
-  'Namen':            { d: 'M75,295 L120,290 L125,325 L80,330 Z', cx: 100, cy: 310 },
-  'Luik':             { d: 'M120,250 L160,245 L165,300 L120,290 Z', cx: 140, cy: 272 },
-  'Luxemburg':        { d: 'M120,300 L165,300 L170,345 L125,340 Z', cx: 145, cy: 322 },
+  'West-Vlaanderen': {
+    d: 'M4,248 L10,240 L18,234 L28,232 L38,234 L44,238 L46,246 L44,256 L40,264 L34,270 L26,274 L16,272 L10,266 L6,258 Z',
+    cx: 26, cy: 253,
+  },
+  'Oost-Vlaanderen': {
+    d: 'M38,234 L48,230 L58,228 L68,230 L74,236 L74,246 L72,256 L68,264 L60,270 L50,274 L40,272 L34,270 L40,264 L44,256 L46,246 L44,238 Z',
+    cx: 56, cy: 252,
+  },
+  'Antwerpen': {
+    d: 'M68,228 L80,224 L92,222 L104,222 L114,226 L118,234 L116,248 L112,258 L104,266 L94,270 L84,268 L76,262 L72,254 L74,244 L74,236 Z',
+    cx: 95, cy: 246,
+  },
+  'Limburg': {
+    d: 'M114,224 L126,220 L138,220 L148,224 L154,232 L154,244 L150,258 L144,268 L136,276 L126,278 L118,274 L114,264 L112,254 L116,244 L118,234 Z',
+    cx: 135, cy: 250,
+  },
+  'Vlaams-Brabant': {
+    d: 'M68,264 L76,262 L84,268 L94,270 L104,266 L112,258 L114,264 L118,274 L116,284 L110,292 L98,298 L86,298 L76,294 L68,286 L64,276 Z',
+    cx: 92, cy: 280,
+  },
+  'Brabant wallon': {
+    d: 'M76,294 L86,298 L98,298 L108,296 L114,302 L110,316 L102,324 L92,326 L82,322 L76,314 L74,304 Z',
+    cx: 94, cy: 310,
+  },
+  'Brussel': {
+    d: 'M86,280 L94,280 L96,286 L92,292 L86,292 L84,286 Z',
+    cx: 90, cy: 286,
+  },
+  'Henegouwen': {
+    d: 'M10,278 L20,272 L30,270 L40,272 L50,274 L60,274 L64,278 L68,288 L74,302 L74,316 L70,328 L62,338 L50,344 L38,342 L26,336 L16,326 L10,314 L8,300 L8,288 Z',
+    cx: 42, cy: 308,
+  },
+  'Namen': {
+    d: 'M74,314 L76,322 L82,328 L92,330 L102,328 L110,320 L114,306 L120,310 L128,322 L126,340 L118,352 L106,358 L94,356 L84,350 L76,338 L72,328 Z',
+    cx: 100, cy: 335,
+  },
+  'Luik': {
+    d: 'M118,274 L126,278 L136,276 L144,268 L150,258 L158,262 L166,274 L170,290 L168,308 L162,324 L152,336 L140,342 L130,338 L124,328 L120,314 L118,298 L120,286 Z',
+    cx: 146, cy: 305,
+  },
+  'Luxemburg': {
+    d: 'M106,358 L118,352 L126,342 L140,344 L152,340 L162,328 L170,340 L174,358 L170,376 L160,390 L146,396 L132,394 L120,386 L112,374 L106,362 Z',
+    cx: 142, cy: 370,
+  },
 };
 
 // ─── Confetti ────────────────────────────────────────────────────────
@@ -228,37 +298,39 @@ function ProvinceMap({ data }: { data: Record<string, number> }) {
   }
 
   return (
-    <div className="relative">
-      <svg viewBox="-5 0 200 355" className="h-full w-full">
+    <div className="relative h-full">
+      <svg viewBox="0 0 200 410" className="h-full w-full" preserveAspectRatio="xMidYMid meet">
         {Object.entries(NL_PROVINCES).map(([name, p]) => (
           <g key={name} onMouseEnter={() => setHovered(name)} onMouseLeave={() => setHovered(null)}>
             <path
               d={p.d}
               fill={`rgba(139, 92, 246, ${opacity(name)})`}
-              stroke="rgba(255,255,255,0.1)"
-              strokeWidth="0.8"
+              stroke="rgba(255,255,255,0.12)"
+              strokeWidth="0.6"
+              strokeLinejoin="round"
               className="transition-all duration-300 hover:brightness-150"
             />
             {(data[name] || 0) > 0 && (
-              <circle cx={p.cx} cy={p.cy} r={Math.max(2, Math.min(6, (data[name] / maxCount) * 6))}
-                fill="#a855f7" opacity="0.7" className="animate-pulse" />
+              <circle cx={p.cx} cy={p.cy} r={Math.max(2, Math.min(5, (data[name] / maxCount) * 5))}
+                fill="#a855f7" opacity="0.8" className="animate-pulse" />
             )}
           </g>
         ))}
-        <line x1="0" y1="212" x2="190" y2="212" stroke="rgba(255,255,255,0.08)" strokeWidth="0.5" strokeDasharray="3,3" />
-        <text x="95" y="208" textAnchor="middle" fill="rgba(255,255,255,0.15)" fontSize="5" fontWeight="bold">BELGIË</text>
+        <line x1="0" y1="226" x2="195" y2="226" stroke="rgba(255,255,255,0.06)" strokeWidth="0.4" strokeDasharray="3,2" />
+        <text x="97" y="222" textAnchor="middle" fill="rgba(255,255,255,0.12)" fontSize="5" fontWeight="bold">BELGIË</text>
         {Object.entries(BE_PROVINCES).map(([name, p]) => (
           <g key={name} onMouseEnter={() => setHovered(name)} onMouseLeave={() => setHovered(null)}>
             <path
               d={p.d}
               fill={`rgba(236, 72, 153, ${opacity(name)})`}
               stroke="rgba(255,255,255,0.08)"
-              strokeWidth="0.8"
+              strokeWidth="0.6"
+              strokeLinejoin="round"
               className="transition-all duration-300 hover:brightness-150"
             />
             {(data[name] || 0) > 0 && (
-              <circle cx={p.cx} cy={p.cy} r={Math.max(2, Math.min(6, (data[name] / maxCount) * 6))}
-                fill="#ec4899" opacity="0.7" className="animate-pulse" />
+              <circle cx={p.cx} cy={p.cy} r={Math.max(2, Math.min(5, (data[name] / maxCount) * 5))}
+                fill="#ec4899" opacity="0.8" className="animate-pulse" />
             )}
           </g>
         ))}
