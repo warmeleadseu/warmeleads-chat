@@ -73,6 +73,8 @@ export default function LeadsCRMPage() {
   const [branches, setBranches] = useState<BranchConfig[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [validatingPhones, setValidatingPhones] = useState(false);
+  const [phoneValidationResult, setPhoneValidationResult] = useState<{ validated: number; invalid: number } | null>(null);
 
   const [branch, setBranch] = useState('all');
   const [customerId, setCustomerId] = useState('all');
@@ -166,6 +168,21 @@ export default function LeadsCRMPage() {
     if (selected.size === 0 || !confirm(`${selected.size} lead(s) verwijderen?`)) return;
     await adminFetch('/api/admin/leads', { method: 'DELETE', body: JSON.stringify({ ids: Array.from(selected) }) });
     setSelected(new Set()); fetchLeads();
+  };
+
+  const handleValidatePhones = async () => {
+    setValidatingPhones(true);
+    setPhoneValidationResult(null);
+    try {
+      const res = await adminFetch('/api/admin/leads/validate-phones', { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        setPhoneValidationResult({ validated: data.validated, invalid: data.invalid });
+        fetchLeads();
+        setTimeout(() => setPhoneValidationResult(null), 5000);
+      }
+    } catch { /* ignore */ }
+    setValidatingPhones(false);
   };
 
   const handleExport = () => {
@@ -296,6 +313,19 @@ export default function LeadsCRMPage() {
           <option value="false">Verdacht nummer</option>
           <option value="true">Geldig nummer</option>
         </select>
+        <button
+          onClick={handleValidatePhones}
+          disabled={validatingPhones}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm font-medium text-amber-700 transition hover:bg-amber-100 disabled:opacity-50"
+        >
+          <ExclamationTriangleIcon className={`h-4 w-4 ${validatingPhones ? 'animate-pulse' : ''}`} />
+          {validatingPhones ? 'Controleren...' : 'Nummers controleren'}
+        </button>
+        {phoneValidationResult && (
+          <span className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">
+            {phoneValidationResult.validated} gecontroleerd, {phoneValidationResult.invalid} verdacht
+          </span>
+        )}
       </div>
       <div className="mb-4 grid grid-cols-2 gap-2 sm:max-w-xs">
         <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700" />

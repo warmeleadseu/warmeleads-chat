@@ -16,15 +16,16 @@ export async function POST(request: NextRequest) {
   while (true) {
     const { data } = await supabase
       .from('leads')
-      .select('id, telefoonnummer')
-      .is('phone_valid', null)
+      .select('id, telefoonnummer, phone_valid')
       .range(from, from + PAGE - 1);
 
     if (!data || data.length === 0) break;
 
     for (const lead of data) {
       const valid = isPhoneValid(lead.telefoonnummer);
-      await supabase.from('leads').update({ phone_valid: valid }).eq('id', lead.id);
+      if (lead.phone_valid !== valid) {
+        await supabase.from('leads').update({ phone_valid: valid }).eq('id', lead.id);
+      }
       validated++;
       if (!valid) invalid++;
     }
