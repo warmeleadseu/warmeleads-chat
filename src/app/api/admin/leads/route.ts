@@ -4,6 +4,7 @@ import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { enrichLeadAddress, enrichLeadsAddress } from '@/lib/pdok';
 import { distributeLead, distributeLeads } from '@/lib/distribution';
 import { isPhoneValid } from '@/lib/phoneValidation';
+import { checkLeadProfanity } from '@/lib/profanityFilter';
 
 export async function GET(request: NextRequest) {
   const admin = await verifyAdmin(request);
@@ -92,8 +93,16 @@ export async function POST(request: NextRequest) {
 
     if (Array.isArray(body.leads)) {
       const enriched = await enrichLeadsAddress(body.leads);
-      enriched.forEach((l: any) => { l.phone_valid = isPhoneValid(l.telefoonnummer); });
-      const { data, error } = await supabase.from('leads').insert(enriched).select();
+      let profanitySkipped = 0;
+      const clean = enriched.filter((l: any) => {
+        l.phone_valid = isPhoneValid(l.telefoonnummer);
+        if (checkLeadProfanity(l).blocked) { profanitySkipped++; return false; }
+        return true;
+      });
+      if (clean.length === 0) {
+        return NextResponse.json({ success: true, count: 0, profanitySkipped });
+      }
+      const { data, error } = await supabase.from('leads').insert(clean).select();
       if (error) {
         console.error('Bulk insert error:', error);
         return NextResponse.json({ error: 'Import mislukt', details: error.message }, { status: 500 });
@@ -102,11 +111,17 @@ export async function POST(request: NextRequest) {
       if (withCoords.length > 0) {
         try { await distributeLeads(withCoords); } catch { /* non-blocking */ }
       }
-      return NextResponse.json({ success: true, count: data?.length || 0 });
+      return NextResponse.json({ success: true, count: data?.length || 0, profanitySkipped });
     }
 
     const enriched = await enrichLeadAddress(body);
     enriched.phone_valid = isPhoneValid(enriched.telefoonnummer);
+
+    const profanity = checkLeadProfanity(enriched as Record<string, unknown>);
+    if (profanity.blocked) {
+      return NextResponse.json({ error: `Lead bevat ongepaste taal in veld "${profanity.field}"` }, { status: 422 });
+    }
+
     const { data, error } = await supabase.from('leads').insert(enriched).select().single();
     if (error) {
       console.error('Insert error:', error);

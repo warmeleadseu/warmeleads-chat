@@ -3,6 +3,7 @@ import { createServerClient } from '@/lib/supabase';
 import { enrichLeadAddress } from '@/lib/pdok';
 import { distributeLead } from '@/lib/distribution';
 import { isPhoneValid } from '@/lib/phoneValidation';
+import { checkLeadProfanity } from '@/lib/profanityFilter';
 
 const COMMON_KEYS = new Set([
   'branch', 'customer_id', 'naam_klant', 'name', 'email', 'telefoonnummer', 'phone',
@@ -70,6 +71,11 @@ export async function POST(request: NextRequest) {
 
     if (!lead.naam_klant) {
       return NextResponse.json({ error: 'naam_klant is verplicht' }, { status: 400 });
+    }
+
+    const profanity = checkLeadProfanity(lead as Record<string, unknown>);
+    if (profanity.blocked) {
+      return NextResponse.json({ success: false, error: 'Lead geweigerd: ongepaste inhoud' }, { status: 422 });
     }
 
     const { data, error } = await supabase.from('leads').insert(lead).select().single();

@@ -3,6 +3,7 @@ import { createServerClient } from '@/lib/supabase';
 import { resolveAddress, isValidPlace } from '@/lib/pdok';
 import { distributeUnassignedLeads } from '@/lib/distribution';
 import { isPhoneValid } from '@/lib/phoneValidation';
+import { checkLeadProfanity } from '@/lib/profanityFilter';
 
 const MAX_LEAD_AGE_DAYS = 3;
 
@@ -85,13 +86,32 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // Phase 3: Distribute (uses 3-day limit internally)
+  // Phase 3: Delete profanity leads (recent, not yet distributed)
+  let profanityDeleted = 0;
+  const { data: recentLeads } = await supabase
+    .from('leads')
+    .select('id, naam_klant, email, notities, custom_fields')
+    .gte('created_at', cutoff.toISOString())
+    .limit(2000);
+
+  if (recentLeads) {
+    for (const lead of recentLeads) {
+      if (checkLeadProfanity(lead as Record<string, unknown>).blocked) {
+        await supabase.from('lead_assignments').delete().eq('lead_id', lead.id);
+        await supabase.from('leads').delete().eq('id', lead.id);
+        profanityDeleted++;
+      }
+    }
+  }
+
+  // Phase 4: Distribute (uses 3-day limit internally)
   const distResult = await distributeUnassignedLeads();
 
   return NextResponse.json({
     ok: true,
     enriched,
     phonesValidated,
+    profanityDeleted,
     distributed: distResult.distributed,
     assignments: distResult.assignments,
     timestamp: new Date().toISOString(),
