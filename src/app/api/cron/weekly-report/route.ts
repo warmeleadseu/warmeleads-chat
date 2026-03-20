@@ -84,10 +84,9 @@ export async function GET(request: NextRequest) {
   // --- Send weekly report to all active admins ---
 
   const { data: admins } = await supabase
-    .from('users')
+    .from('admin_users')
     .select('email')
-    .eq('is_active', true)
-    .eq('role', 'admin');
+    .eq('is_active', true);
 
   let weeklyEmailsSent = 0;
   for (const admin of admins || []) {
