@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { resolveAddress, isValidPlace } from '@/lib/pdok';
 import { distributeUnassignedLeads } from '@/lib/distribution';
+import { isPhoneValid } from '@/lib/phoneValidation';
 
 const MAX_LEAD_AGE_DAYS = 3;
 
@@ -67,12 +68,30 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // Phase 2: Distribute (uses 3-day limit internally)
+  // Phase 2: Validate phone numbers for leads without phone_valid set
+  let phonesValidated = 0;
+  const { data: unvalidated } = await supabase
+    .from('leads')
+    .select('id, telefoonnummer')
+    .is('phone_valid', null)
+    .gte('created_at', cutoff.toISOString())
+    .limit(500);
+
+  if (unvalidated && unvalidated.length > 0) {
+    for (const lead of unvalidated) {
+      const valid = isPhoneValid(lead.telefoonnummer);
+      await supabase.from('leads').update({ phone_valid: valid }).eq('id', lead.id);
+      phonesValidated++;
+    }
+  }
+
+  // Phase 3: Distribute (uses 3-day limit internally)
   const distResult = await distributeUnassignedLeads();
 
   return NextResponse.json({
     ok: true,
     enriched,
+    phonesValidated,
     distributed: distResult.distributed,
     assignments: distResult.assignments,
     timestamp: new Date().toISOString(),

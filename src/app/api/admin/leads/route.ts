@@ -3,6 +3,7 @@ import { createServerClient } from '@/lib/supabase';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { enrichLeadAddress, enrichLeadsAddress } from '@/lib/pdok';
 import { distributeLead, distributeLeads } from '@/lib/distribution';
+import { isPhoneValid } from '@/lib/phoneValidation';
 
 export async function GET(request: NextRequest) {
   const admin = await verifyAdmin(request);
@@ -17,6 +18,7 @@ export async function GET(request: NextRequest) {
   const dateFrom = url.get('date_from');
   const dateTo = url.get('date_to');
   const search = url.get('search');
+  const phoneValid = url.get('phone_valid');
   const page = parseInt(url.get('page') || '1');
   const perPage = Math.min(parseInt(url.get('per_page') || '25'), 200);
   const sortBy = url.get('sort_by') || 'created_at';
@@ -32,6 +34,8 @@ export async function GET(request: NextRequest) {
   if (status && status !== 'all') query = query.eq('status', status);
   if (province && province !== 'all') query = query.eq('provincie', province);
   if (source && source !== 'all') query = query.eq('bron', source);
+  if (phoneValid === 'false') query = query.eq('phone_valid', false);
+  if (phoneValid === 'true') query = query.eq('phone_valid', true);
   if (dateFrom) query = query.gte('wervingsdatum', dateFrom);
   if (dateTo) query = query.lte('wervingsdatum', dateTo);
   if (search) {
@@ -88,6 +92,7 @@ export async function POST(request: NextRequest) {
 
     if (Array.isArray(body.leads)) {
       const enriched = await enrichLeadsAddress(body.leads);
+      enriched.forEach((l: any) => { l.phone_valid = isPhoneValid(l.telefoonnummer); });
       const { data, error } = await supabase.from('leads').insert(enriched).select();
       if (error) {
         console.error('Bulk insert error:', error);
@@ -101,6 +106,7 @@ export async function POST(request: NextRequest) {
     }
 
     const enriched = await enrichLeadAddress(body);
+    enriched.phone_valid = isPhoneValid(enriched.telefoonnummer);
     const { data, error } = await supabase.from('leads').insert(enriched).select().single();
     if (error) {
       console.error('Insert error:', error);
@@ -122,6 +128,10 @@ export async function PUT(request: NextRequest) {
   try {
     const { id, ...updates } = await request.json();
     if (!id) return NextResponse.json({ error: 'ID is verplicht' }, { status: 400 });
+
+    if (updates.telefoonnummer !== undefined) {
+      updates.phone_valid = isPhoneValid(updates.telefoonnummer);
+    }
 
     const supabase = createServerClient();
     const { data, error } = await supabase.from('leads').update(updates).eq('id', id).select().single();

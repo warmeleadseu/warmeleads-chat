@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { enrichLeadAddress } from '@/lib/pdok';
 import { distributeLead } from '@/lib/distribution';
+import { isPhoneValid } from '@/lib/phoneValidation';
 
 const COMMON_KEYS = new Set([
   'branch', 'customer_id', 'naam_klant', 'name', 'email', 'telefoonnummer', 'phone',
@@ -54,6 +55,7 @@ export async function POST(request: NextRequest) {
       naam_klant: body.naam_klant || body.name || '',
       email: body.email || '',
       telefoonnummer: phone,
+      phone_valid: isPhoneValid(phone),
       postcode: body.postcode || '',
       huisnummer: body.huisnummer || '',
       plaatsnaam: body.plaatsnaam || body.city || '',

@@ -13,6 +13,7 @@ import {
   ChevronRightIcon,
   ChevronUpDownIcon,
   MapPinIcon,
+  ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
 
@@ -23,6 +24,7 @@ interface Lead {
   id: string; branch: string; customer_id: string | null; customers?: { id: string; name: string } | null;
   naam_klant: string; email: string; telefoonnummer: string; postcode: string; huisnummer: string;
   plaatsnaam: string; provincie: string; wervingsdatum: string; status: string; notities: string; bron: string;
+  phone_valid?: boolean;
   custom_fields?: Record<string, string>;
   [key: string]: unknown;
   created_at: string; updated_at: string;
@@ -77,6 +79,7 @@ export default function LeadsCRMPage() {
   const [status, setStatus] = useState('all');
   const [province, setProvince] = useState('all');
   const [source, setSource] = useState('all');
+  const [phoneFilter, setPhoneFilter] = useState('all');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [search, setSearch] = useState('');
@@ -107,6 +110,7 @@ export default function LeadsCRMPage() {
     if (status !== 'all') p.set('status', status);
     if (province !== 'all') p.set('province', province);
     if (source !== 'all') p.set('source', source);
+    if (phoneFilter !== 'all') p.set('phone_valid', phoneFilter);
     if (dateFrom) p.set('date_from', dateFrom);
     if (dateTo) p.set('date_to', dateTo);
     if (search) p.set('search', search);
@@ -117,11 +121,11 @@ export default function LeadsCRMPage() {
     const res = await adminFetch(`/api/admin/leads?${p}`);
     if (res.ok) { const d = await res.json(); setLeads(d.leads || []); setTotal(d.total || 0); }
     setLoading(false);
-  }, [branch, customerId, status, province, source, dateFrom, dateTo, search, page, perPage, sortBy, sortDir]);
+  }, [branch, customerId, status, province, source, phoneFilter, dateFrom, dateTo, search, page, perPage, sortBy, sortDir]);
 
   useEffect(() => { fetchMeta(); }, [fetchMeta]);
   useEffect(() => { fetchLeads(); }, [fetchLeads]);
-  useEffect(() => { setPage(1); }, [branch, customerId, status, province, source, dateFrom, dateTo, search, perPage]);
+  useEffect(() => { setPage(1); }, [branch, customerId, status, province, source, phoneFilter, dateFrom, dateTo, search, perPage]);
 
   const branchMap = useMemo(() => {
     const m: Record<string, BranchConfig> = {};
@@ -287,6 +291,11 @@ export default function LeadsCRMPage() {
           <option value="excel_import">Excel import</option>
           <option value="zapier">Zapier</option>
         </select>
+        <select value={phoneFilter} onChange={e => setPhoneFilter(e.target.value)} className={`rounded-lg border px-3 py-2.5 text-sm ${phoneFilter === 'false' ? 'border-amber-300 bg-amber-50 text-amber-700' : 'border-slate-200 bg-white text-slate-700'}`}>
+          <option value="all">Alle telefoon</option>
+          <option value="false">Verdacht nummer</option>
+          <option value="true">Geldig nummer</option>
+        </select>
       </div>
       <div className="mb-4 grid grid-cols-2 gap-2 sm:max-w-xs">
         <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700" />
@@ -370,6 +379,15 @@ export default function LeadsCRMPage() {
                             className={`rounded-full border-0 px-2.5 py-0.5 text-[11px] font-medium ${STATUS_COLORS[lead.status] || 'bg-slate-100 text-slate-600'}`}>
                             {STATUSES.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
                           </select>
+                        ) : col === 'telefoonnummer' ? (
+                          <span className="flex items-center gap-1">
+                            <span className="block max-w-[140px] truncate">{lead.telefoonnummer || '—'}</span>
+                            {lead.phone_valid === false && (
+                              <span title="Mogelijk nep telefoonnummer" className="shrink-0">
+                                <ExclamationTriangleIcon className="h-3.5 w-3.5 text-amber-500" />
+                              </span>
+                            )}
+                          </span>
                         ) : (
                           <span className="block max-w-[160px] truncate">{getLeadFieldValue(lead, col) || '—'}</span>
                         )}
@@ -417,7 +435,12 @@ export default function LeadsCRMPage() {
               <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
                 <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${badge.light} ${badge.text}`}>{badge.name}</span>
                 {lead.plaatsnaam && <span>{lead.plaatsnaam}</span>}
-                {lead.telefoonnummer && <span>{lead.telefoonnummer}</span>}
+                {lead.telefoonnummer && (
+                  <span className="flex items-center gap-0.5">
+                    {lead.telefoonnummer}
+                    {lead.phone_valid === false && <ExclamationTriangleIcon className="h-3 w-3 text-amber-500" />}
+                  </span>
+                )}
                 {lead.wervingsdatum && <span>{lead.wervingsdatum}</span>}
               </div>
               <div className="flex items-center gap-2">
