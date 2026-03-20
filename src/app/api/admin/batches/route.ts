@@ -63,8 +63,18 @@ export async function PUT(request: NextRequest) {
 
   if (!id) return NextResponse.json({ error: 'ID ontbreekt' }, { status: 400 });
 
-  if (updates.price_per_lead && updates.batch_size) {
-    updates.total_price = updates.price_per_lead * updates.batch_size;
+  // Recalculate total_price when batch_size or price_per_lead changes
+  if (updates.batch_size || updates.price_per_lead) {
+    if (!updates.price_per_lead || !updates.batch_size) {
+      const { data: existing } = await supabase.from('customer_batches').select('price_per_lead, batch_size').eq('id', id).single();
+      if (existing) {
+        const ppl = updates.price_per_lead ?? existing.price_per_lead;
+        const bs = updates.batch_size ?? existing.batch_size;
+        if (ppl) updates.total_price = ppl * bs;
+      }
+    } else {
+      updates.total_price = updates.price_per_lead * updates.batch_size;
+    }
   }
 
   const { data, error } = await supabase
@@ -75,6 +85,11 @@ export async function PUT(request: NextRequest) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // When a batch is (re)activated, trigger distribution
+  if (updates.status === 'active') {
+    try { distributeUnassignedLeads(); } catch { /* non-blocking */ }
+  }
 
   return NextResponse.json(data);
 }

@@ -106,6 +106,10 @@ export default function VerdelingPage() {
   const [debugSummary, setDebugSummary] = useState<DebugSummary | null>(null);
   const [debugLoading, setDebugLoading] = useState(false);
   const [expandedLead, setExpandedLead] = useState<string | null>(null);
+  const [compensatingBatch, setCompensatingBatch] = useState<string | null>(null);
+  const [compensationAmount, setCompensationAmount] = useState('');
+  const [compensationNote, setCompensationNote] = useState('');
+  const [compensating, setCompensating] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -156,6 +160,34 @@ export default function VerdelingPage() {
   };
 
   const getBranch = (slug: string) => branches.find(b => b.slug === slug);
+
+  const handleCompensation = async (batchId: string) => {
+    const amount = parseInt(compensationAmount);
+    if (!amount || amount <= 0) return;
+    setCompensating(true);
+    const batch = batches.find(b => b.id === batchId);
+    if (!batch) { setCompensating(false); return; }
+
+    const res = await adminFetch('/api/admin/batches', {
+      method: 'PUT',
+      body: JSON.stringify({
+        id: batchId,
+        batch_size: batch.batch_size + amount,
+        status: 'active',
+        completed_at: null,
+        notes: [batch.notes, `Compensatie: +${amount} leads${compensationNote ? ` (${compensationNote})` : ''}`].filter(Boolean).join(' | '),
+      }),
+    });
+    if (res.ok) {
+      setCompensatingBatch(null);
+      setCompensationAmount('');
+      setCompensationNote('');
+      fetchData();
+    } else {
+      alert('Compensatie instellen mislukt');
+    }
+    setCompensating(false);
+  };
 
   const activeBatches = batches.filter(b => b.status === 'active');
   const totalToDeliver = activeBatches.reduce((s, b) => s + b.batch_size, 0);
@@ -508,8 +540,59 @@ export default function VerdelingPage() {
                             <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${c.light} ${c.text}`}>{br?.name || b.branch}</span>
                             <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-700">Voltooid</span>
                           </div>
-                          <span className="text-xs font-semibold text-slate-700">{b.leads_delivered}/{b.batch_size}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-semibold text-slate-700">{b.leads_delivered}/{b.batch_size}</span>
+                            {compensatingBatch !== b.id && (
+                              <button
+                                onClick={() => { setCompensatingBatch(b.id); setCompensationAmount(''); setCompensationNote(''); }}
+                                className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-700 transition hover:bg-amber-100"
+                              >
+                                Compensatie
+                              </button>
+                            )}
+                          </div>
                         </div>
+
+                        {compensatingBatch === b.id && (
+                          <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50/50 p-3">
+                            <p className="mb-2 text-xs font-semibold text-amber-800">Compensatie leads toevoegen</p>
+                            <p className="mb-3 text-[11px] text-amber-700">Batch wordt opnieuw geactiveerd en ontvangt het opgegeven aantal extra leads via de normale distributie.</p>
+                            <div className="mb-2 grid grid-cols-2 gap-2">
+                              <div>
+                                <label className="mb-0.5 block text-[11px] font-medium text-slate-500">Aantal extra leads *</label>
+                                <input
+                                  type="number" min={1} value={compensationAmount}
+                                  onChange={e => setCompensationAmount(e.target.value)}
+                                  placeholder="Bijv. 5"
+                                  className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-900 outline-none focus:border-brand-purple/50"
+                                />
+                              </div>
+                              <div>
+                                <label className="mb-0.5 block text-[11px] font-medium text-slate-500">Reden (optioneel)</label>
+                                <input
+                                  value={compensationNote}
+                                  onChange={e => setCompensationNote(e.target.value)}
+                                  placeholder="Bijv. slechte leads"
+                                  className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-900 outline-none focus:border-brand-purple/50"
+                                />
+                              </div>
+                            </div>
+                            <div className="flex gap-2">
+                              <button onClick={() => setCompensatingBatch(null)}
+                                className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-500 hover:bg-slate-50">
+                                Annuleren
+                              </button>
+                              <button
+                                onClick={() => handleCompensation(b.id)}
+                                disabled={!compensationAmount || parseInt(compensationAmount) <= 0 || compensating}
+                                className="rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-amber-600 disabled:opacity-50"
+                              >
+                                {compensating ? 'Bezig...' : `+${compensationAmount || '0'} leads toekennen`}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
                         <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
                           {b.price_per_lead && <span>€{Number(b.price_per_lead).toFixed(2)}/lead</span>}
                           {b.total_price && <span className="font-medium text-emerald-600">Totaal: €{Number(b.total_price).toFixed(2)}</span>}
