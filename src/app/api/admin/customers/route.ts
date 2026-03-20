@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import bcrypt from 'bcryptjs';
+import { logAudit } from '@/lib/audit';
 
 export async function GET(request: NextRequest) {
   const admin = await verifyAdmin(request);
@@ -61,6 +62,7 @@ export async function POST(request: NextRequest) {
     if (error) {
       return NextResponse.json({ error: 'Klant aanmaken mislukt', details: error.message }, { status: 500 });
     }
+    logAudit({ adminId: admin.id, adminName: admin.name, action: 'create_customer', entityType: 'customer', entityId: data.id, details: { name: data.name } });
     return NextResponse.json({ success: true, customer: { ...data, password_hash: undefined } });
   } catch {
     return NextResponse.json({ error: 'Ongeldige data' }, { status: 400 });

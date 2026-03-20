@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { createServerClient } from '@/lib/supabase';
+import { logAudit } from '@/lib/audit';
 
 export async function POST(request: NextRequest) {
   try {
@@ -34,6 +35,15 @@ export async function POST(request: NextRequest) {
       .from('admin_users')
       .update({ last_login: new Date().toISOString() })
       .eq('id', user.id);
+
+    await logAudit({
+      adminId: user.id,
+      adminName: user.name,
+      action: 'login',
+      entityType: 'admin_user',
+      entityId: user.id,
+      ipAddress: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || null,
+    });
 
     return NextResponse.json({
       success: true,

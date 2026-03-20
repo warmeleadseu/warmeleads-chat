@@ -4,6 +4,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { StructuredData } from "@/components/StructuredData";
 import { GoogleAnalytics } from "@/components/GoogleAnalytics";
 import { FloatingWhatsAppButton } from "@/components/FloatingWhatsAppButton";
+import { CookieConsent } from '@/components/CookieConsent';
 import "./globals.css";
 
 const inter = Inter({ 
@@ -97,6 +98,9 @@ export default function RootLayout({
   return (
     <html lang="nl" className={`${inter.variable} ${jetbrainsMono.variable}`}>
       <head>
+        <link rel="dns-prefetch" href="//fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.googleapis.com" crossOrigin="anonymous" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link rel="icon" href="/favicon.ico" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         <link rel="manifest" href="/manifest.json" />
@@ -118,6 +122,7 @@ export default function RootLayout({
           </div>
         </ErrorBoundary>
         <FloatingWhatsAppButton />
+        <CookieConsent />
       </body>
     </html>
   );

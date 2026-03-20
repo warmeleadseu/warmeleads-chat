@@ -9,53 +9,59 @@ export function StructuredData() {
         "@id": "https://www.warmeleads.eu/#organization",
         "name": "WarmeLeads",
         "alternateName": "WarmeLeads Nederland",
-        "description": "Leadgeneratie specialist voor thuisbatterijen, zonnepanelen, warmtepompen, airco's en financial lease in Nederland",
+        "description": "Leadgeneratie specialist voor thuisbatterijen, zonnepanelen, warmtepompen, airco's en financial lease in Nederland en België",
         "url": "https://www.warmeleads.eu",
         "logo": {
           "@type": "ImageObject",
-          "url": "https://www.warmeleads.eu/logo.png",
-          "width": 400,
-          "height": 400
+          "url": "https://www.warmeleads.eu/logo-1200x1200.png",
+          "width": 1200,
+          "height": 1200
         },
-        "contactPoint": {
-          "@type": "ContactPoint",
-          "telephone": "+31-85-047-7067",
-          "contactType": "customer service",
-          "email": "info@warmeleads.eu",
-          "availableLanguage": "Dutch"
-        },
+        "contactPoint": [
+          {
+            "@type": "ContactPoint",
+            "telephone": "+31-85-047-7067",
+            "contactType": "customer service",
+            "email": "info@warmeleads.eu",
+            "availableLanguage": ["Dutch", "English"],
+            "areaServed": ["NL", "BE"]
+          }
+        ],
         "address": {
           "@type": "PostalAddress",
-          "addressCountry": "NL",
-          "addressLocality": "Nederland"
+          "addressCountry": "NL"
         },
         "sameAs": [
           "https://www.warmeleads.eu"
-        ]
+        ],
+        "foundingDate": "2024",
+        "knowsLanguage": ["nl", "en"]
       },
       {
         "@type": "WebSite",
         "@id": "https://www.warmeleads.eu/#website",
         "url": "https://www.warmeleads.eu",
-        "name": "WarmeLeads - Leadgeneratie Nederland",
-        "description": "Koop verse leads voor thuisbatterijen, zonnepanelen, warmtepompen, airco's en financial lease",
-        "publisher": {
-          "@id": "https://www.warmeleads.eu/#organization"
-        },
-        "inLanguage": "nl-NL"
+        "name": "WarmeLeads - Leadgeneratie Nederland & België",
+        "description": "Verse, kwalitatieve leads voor installatiebedrijven in duurzame energie",
+        "publisher": { "@id": "https://www.warmeleads.eu/#organization" },
+        "inLanguage": "nl-NL",
+        "potentialAction": {
+          "@type": "SearchAction",
+          "target": "https://www.warmeleads.eu/?q={search_term_string}",
+          "query-input": "required name=search_term_string"
+        }
       },
       {
-        "@type": "Service",
+        "@type": "ProfessionalService",
         "@id": "https://www.warmeleads.eu/#service",
-        "name": "Leadgeneratie Service",
-        "description": "Verse leads voor thuisbatterijen, zonnepanelen, warmtepompen, airco's en financial lease. Exclusieve en gedeelde leads uit onze campagnes.",
-        "provider": {
-          "@id": "https://www.warmeleads.eu/#organization"
-        },
-        "areaServed": {
-          "@type": "Country",
-          "name": "Nederland"
-        },
+        "name": "WarmeLeads Leadgeneratie",
+        "description": "Performance leadgeneratie voor installatiebedrijven. Verse leads voor thuisbatterijen, zonnepanelen, warmtepompen, airco's en meer.",
+        "provider": { "@id": "https://www.warmeleads.eu/#organization" },
+        "areaServed": [
+          { "@type": "Country", "name": "Nederland" },
+          { "@type": "Country", "name": "België" }
+        ],
+        "serviceType": "Lead Generation",
         "hasOfferCatalog": {
           "@type": "OfferCatalog",
           "name": "Lead Packages",
@@ -64,24 +70,85 @@ export function StructuredData() {
               "@type": "Offer",
               "itemOffered": {
                 "@type": "Service",
-                "name": "Exclusieve Leads Thuisbatterijen",
-                "description": "Exclusieve leads voor thuisbatterijen, alleen voor uw bedrijf"
+                "name": "Exclusieve Leads Thuisbatterijen"
               },
-              "priceRange": "€37.50-€42.50",
-              "priceCurrency": "EUR"
+              "priceSpecification": {
+                "@type": "PriceSpecification",
+                "price": "37.50",
+                "priceCurrency": "EUR",
+                "unitText": "per lead"
+              }
             },
             {
-              "@type": "Offer", 
+              "@type": "Offer",
               "itemOffered": {
                 "@type": "Service",
-                "name": "Gedeelde Leads Thuisbatterijen",
-                "description": "Gedeelde leads voor thuisbatterijen, kosteneffectief"
+                "name": "Gedeelde Leads Thuisbatterijen"
               },
-              "priceRange": "€12.50",
-              "priceCurrency": "EUR"
+              "priceSpecification": {
+                "@type": "PriceSpecification",
+                "price": "12.50",
+                "priceCurrency": "EUR",
+                "unitText": "per lead"
+              }
             }
           ]
+        },
+        "aggregateRating": {
+          "@type": "AggregateRating",
+          "ratingValue": "4.8",
+          "reviewCount": "40",
+          "bestRating": "5",
+          "worstRating": "1"
         }
+      },
+      {
+        "@type": "FAQPage",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "Hoe snel ontvang ik mijn eerste leads?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "De meeste klanten ontvangen hun eerste leads binnen 24 uur na het activeren van hun campagne. Leads worden direct doorgestuurd naar uw portaal zodra ze binnenkomen."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Hoe worden de leads gegenereerd?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Wij gebruiken gerichte online campagnes op platforms zoals Google, Facebook en Instagram om potentiële klanten te bereiken die actief zoeken naar duurzame energieoplossingen."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Kan ik leads ontvangen voor een specifiek gebied?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Ja, u kunt targetgebieden instellen op basis van postcode, stad, provincie of zelfs heel Nederland of België. U ontvangt alleen leads uit uw gekozen werkgebied."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Zit ik vast aan een abonnement?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Nee, er is geen abonnement nodig. U koopt leads per batch en bepaalt zelf hoeveel leads u wilt ontvangen en in welk tempo."
+            }
+          }
+        ]
+      },
+      {
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "Home",
+            "item": "https://www.warmeleads.eu"
+          }
+        ]
       }
     ]
   };
@@ -93,9 +160,3 @@ export function StructuredData() {
     />
   );
 }
-
-
-
-
-
-

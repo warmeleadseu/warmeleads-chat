@@ -1,140 +1,120 @@
-// Enhanced Service Worker for WarmeLeads PWA - Stability Optimized
+const CACHE_NAME = 'warmeleads-v3.0';
+const STATIC_CACHE = 'warmeleads-static-v3.0';
 
-const CACHE_NAME = 'warmeleads-v2.0';
-const STATIC_CACHE = 'warmeleads-static-v2.0';
-
-// Critical resources to cache for offline functionality
 const CRITICAL_RESOURCES = [
   '/',
+  '/portal',
   '/favicon.ico',
   '/manifest.json',
+  '/logo-wit.png',
+  '/warmeleads-logo-2026.png',
 ];
 
-// Install event - cache critical resources
 self.addEventListener('install', (event) => {
-  console.log('🔧 Service Worker installing...');
-  
   event.waitUntil(
     caches.open(STATIC_CACHE)
-      .then((cache) => {
-        console.log('📦 Caching critical resources');
-        return cache.addAll(CRITICAL_RESOURCES);
-      })
-      .catch((error) => {
-        console.error('❌ Failed to cache resources:', error);
-      })
+      .then((cache) => cache.addAll(CRITICAL_RESOURCES))
+      .catch((err) => console.error('SW cache failed:', err))
   );
-  
-  // Force activation of new service worker
   self.skipWaiting();
 });
 
-// Activate event - clean up old caches
 self.addEventListener('activate', (event) => {
-  console.log('✅ Service Worker activating...');
-  
   event.waitUntil(
     caches.keys()
-      .then((cacheNames) => {
-        return Promise.all(
-          cacheNames.map((cacheName) => {
-            if (cacheName !== CACHE_NAME && cacheName !== STATIC_CACHE) {
-              console.log('🗑️ Deleting old cache:', cacheName);
-              return caches.delete(cacheName);
-            }
-          })
-        );
-      })
-      .then(() => {
-        // Take control of all open tabs immediately
-        return self.clients.claim();
-      })
+      .then((names) => Promise.all(
+        names.map((name) => {
+          if (name !== CACHE_NAME && name !== STATIC_CACHE) {
+            return caches.delete(name);
+          }
+        })
+      ))
+      .then(() => self.clients.claim())
   );
 });
 
-// Fetch event - network first with cache fallback for stability
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
-  
-  // Skip non-GET requests
-  if (request.method !== 'GET') {
-    return;
-  }
-  
-  // Skip external requests
-  if (url.origin !== self.location.origin) {
-    return;
-  }
-  
-  // Network first strategy for HTML pages (ensures fresh content)
+
+  if (request.method !== 'GET') return;
+  if (url.origin !== self.location.origin) return;
+  if (url.pathname.startsWith('/api/')) return;
+
   if (request.headers.get('accept')?.includes('text/html')) {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          // If successful, cache the response
           if (response.ok) {
-            const responseClone = response.clone();
-            caches.open(CACHE_NAME)
-              .then((cache) => {
-                cache.put(request, responseClone);
-              });
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((c) => c.put(request, clone));
           }
           return response;
         })
-        .catch(() => {
-          // If network fails, try cache
-          console.log('🔄 Network failed, trying cache for:', request.url);
-          return caches.match(request)
-            .then((cachedResponse) => {
-              if (cachedResponse) {
-                return cachedResponse;
-              }
-              // Return offline page if available
-              return caches.match('/');
-            });
-        })
+        .catch(() =>
+          caches.match(request).then((cached) => cached || caches.match('/'))
+        )
     );
     return;
   }
-  
-  // Cache first strategy for static assets
-  if (request.url.includes('/_next/static/') || 
-      request.url.includes('/favicon.ico') ||
-      request.url.includes('/manifest.json')) {
+
+  if (
+    request.url.includes('/_next/static/') ||
+    request.url.includes('/favicon') ||
+    request.url.includes('/manifest.json') ||
+    request.url.match(/\.(png|jpg|jpeg|svg|webp|avif|ico|woff2?)$/)
+  ) {
     event.respondWith(
-      caches.match(request)
-        .then((cachedResponse) => {
-          if (cachedResponse) {
-            return cachedResponse;
+      caches.match(request).then((cached) => {
+        if (cached) return cached;
+        return fetch(request).then((response) => {
+          if (response.ok) {
+            const clone = response.clone();
+            caches.open(STATIC_CACHE).then((c) => c.put(request, clone));
           }
-          
-          return fetch(request)
-            .then((response) => {
-              if (response.ok) {
-                const responseClone = response.clone();
-                caches.open(STATIC_CACHE)
-                  .then((cache) => {
-                    cache.put(request, responseClone);
-                  });
-              }
-              return response;
-            });
-        })
+          return response;
+        });
+      })
     );
     return;
   }
 });
 
-// Handle service worker errors
-self.addEventListener('error', (event) => {
-  console.error('🚨 Service Worker error:', event.error);
+self.addEventListener('push', (event) => {
+  const data = event.data?.json() || {};
+  const title = data.title || 'WarmeLeads';
+  const options = {
+    body: data.body || 'U heeft een nieuwe notificatie',
+    icon: '/icons/icon-144x144.svg',
+    badge: '/favicon.png',
+    tag: data.tag || 'default',
+    data: { url: data.url || '/portal' },
+    vibrate: [100, 50, 100],
+    actions: data.actions || [],
+  };
+
+  event.waitUntil(self.registration.showNotification(title, options));
 });
 
-// Handle unhandled promise rejections
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = event.notification.data?.url || '/portal';
+
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+      .then((clients) => {
+        const existing = clients.find((c) => c.url.includes(url));
+        if (existing) return existing.focus();
+        return self.clients.openWindow(url);
+      })
+  );
+});
+
+self.addEventListener('error', (event) => {
+  console.error('SW error:', event.error);
+});
+
 self.addEventListener('unhandledrejection', (event) => {
-  console.error('🚨 Service Worker unhandled rejection:', event.reason);
+  console.error('SW unhandled rejection:', event.reason);
   event.preventDefault();
 });
-
-console.log('🎉 WarmeLeads Service Worker loaded successfully!');

@@ -1,0 +1,428 @@
+'use client';
+
+import { useState, useEffect, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  PlusIcon,
+  PencilSquareIcon,
+  XMarkIcon,
+  EyeIcon,
+  EyeSlashIcon,
+  ShieldCheckIcon,
+  UserGroupIcon,
+  ExclamationTriangleIcon,
+} from '@heroicons/react/24/outline';
+import { adminFetch } from '@/lib/adminAuth';
+import { useAdmin } from '../adminContext';
+
+interface AdminUser {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  is_active: boolean;
+  last_login: string | null;
+  created_at: string;
+}
+
+export default function UsersPage() {
+  const { user: currentUser } = useAdmin();
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState<AdminUser | null>(null);
+  const [showNew, setShowNew] = useState(false);
+  const [confirmDeactivate, setConfirmDeactivate] = useState<AdminUser | null>(null);
+
+  const isSuperAdmin = currentUser.role === 'superadmin';
+
+  const fetchUsers = useCallback(async () => {
+    setLoading(true);
+    const res = await adminFetch('/api/admin/users');
+    if (res.ok) {
+      const d = await res.json();
+      setUsers(d.users || []);
+    }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { fetchUsers(); }, [fetchUsers]);
+
+  const toggleActive = async (u: AdminUser) => {
+    if (u.is_active) {
+      setConfirmDeactivate(u);
+      return;
+    }
+    await adminFetch('/api/admin/users', {
+      method: 'PUT',
+      body: JSON.stringify({ id: u.id, is_active: true }),
+    });
+    fetchUsers();
+  };
+
+  const handleDeactivate = async () => {
+    if (!confirmDeactivate) return;
+    await adminFetch('/api/admin/users', {
+      method: 'DELETE',
+      body: JSON.stringify({ id: confirmDeactivate.id }),
+    });
+    setConfirmDeactivate(null);
+    fetchUsers();
+  };
+
+  if (!isSuperAdmin) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24">
+        <ExclamationTriangleIcon className="mb-4 h-12 w-12 text-amber-400" />
+        <h2 className="text-lg font-bold text-slate-800">Geen toegang</h2>
+        <p className="mt-1 text-sm text-slate-500">U heeft geen toegang tot deze pagina</p>
+      </div>
+    );
+  }
+
+  const roleBadge = (role: string) => {
+    if (role === 'superadmin') return 'bg-purple-100 text-purple-700';
+    return 'bg-blue-100 text-blue-700';
+  };
+
+  const statusBadge = (active: boolean) => {
+    if (active) return 'bg-emerald-100 text-emerald-700';
+    return 'bg-red-100 text-red-600';
+  };
+
+  const formatDate = (d: string | null) => {
+    if (!d) return '—';
+    return new Date(d).toLocaleDateString('nl-NL', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  };
+
+  return (
+    <div>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">Gebruikersbeheer</h1>
+          <p className="mt-0.5 text-sm text-slate-500">Beheer admin-gebruikers en rechten</p>
+        </div>
+        <button
+          onClick={() => setShowNew(true)}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-button-gradient px-3.5 py-2 text-sm font-bold text-white shadow-sm"
+        >
+          <PlusIcon className="h-4 w-4" /> Nieuwe gebruiker
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="divide-y divide-slate-100">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="flex items-center gap-4 px-5 py-4">
+                <div className="h-9 w-9 animate-pulse rounded-full bg-slate-100" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-4 w-32 animate-pulse rounded bg-slate-100" />
+                  <div className="h-3 w-48 animate-pulse rounded bg-slate-50" />
+                </div>
+                <div className="h-5 w-16 animate-pulse rounded-full bg-slate-100" />
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : users.length === 0 ? (
+        <div className="rounded-xl border border-slate-200 bg-white py-16 text-center shadow-sm">
+          <UserGroupIcon className="mx-auto mb-3 h-10 w-10 text-slate-300" />
+          <p className="text-sm text-slate-500">Nog geen gebruikers. Voeg je eerste admin toe.</p>
+        </div>
+      ) : (
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-slate-100 bg-slate-50/60">
+                  <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Naam</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">E-mail</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Rol</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Status</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Laatste login</th>
+                  <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Acties</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {users.map(u => (
+                  <tr key={u.id} className={`transition hover:bg-slate-50/50 ${!u.is_active ? 'opacity-60' : ''}`}>
+                    <td className="whitespace-nowrap px-5 py-3.5">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-purple/20 to-brand-purple/10">
+                          <span className="text-sm font-bold text-brand-purple">
+                            {u.name.charAt(0).toUpperCase()}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="font-semibold text-slate-900">{u.name}</span>
+                          {u.id === currentUser.id && (
+                            <span className="ml-1.5 text-[10px] font-medium text-slate-400">(jij)</span>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="whitespace-nowrap px-5 py-3.5 text-sm text-slate-600">{u.email}</td>
+                    <td className="whitespace-nowrap px-5 py-3.5">
+                      <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${roleBadge(u.role)}`}>
+                        {u.role === 'superadmin' && <ShieldCheckIcon className="h-3 w-3" />}
+                        {u.role}
+                      </span>
+                    </td>
+                    <td className="whitespace-nowrap px-5 py-3.5">
+                      <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${statusBadge(u.is_active)}`}>
+                        {u.is_active ? 'Actief' : 'Inactief'}
+                      </span>
+                    </td>
+                    <td className="whitespace-nowrap px-5 py-3.5 text-sm text-slate-500">
+                      {formatDate(u.last_login)}
+                    </td>
+                    <td className="whitespace-nowrap px-5 py-3.5 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => setEditing(u)}
+                          className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-brand-purple"
+                          title="Bewerken"
+                        >
+                          <PencilSquareIcon className="h-4 w-4" />
+                        </button>
+                        {u.id !== currentUser.id && (
+                          <button
+                            onClick={() => toggleActive(u)}
+                            className={`rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition ${
+                              u.is_active
+                                ? 'text-red-500 hover:bg-red-50'
+                                : 'text-emerald-600 hover:bg-emerald-50'
+                            }`}
+                          >
+                            {u.is_active ? 'Deactiveer' : 'Activeer'}
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Create / Edit Modal */}
+      <AnimatePresence>
+        {(editing || showNew) && (
+          <UserFormModal
+            user={editing}
+            onClose={() => { setEditing(null); setShowNew(false); }}
+            onSaved={() => { setEditing(null); setShowNew(false); fetchUsers(); }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Deactivation Confirmation */}
+      <AnimatePresence>
+        {confirmDeactivate && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm"
+              onClick={() => setConfirmDeactivate(null)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+            >
+              <div className="w-full max-w-sm rounded-xl bg-white p-6 shadow-2xl">
+                <div className="mb-4 flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-100">
+                    <ExclamationTriangleIcon className="h-5 w-5 text-red-600" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-slate-900">Gebruiker deactiveren</h3>
+                    <p className="text-sm text-slate-500">
+                      Weet u zeker dat u <strong>{confirmDeactivate.name}</strong> wilt deactiveren?
+                    </p>
+                  </div>
+                </div>
+                <p className="mb-5 text-xs text-slate-500">
+                  De gebruiker kan dan niet meer inloggen. U kunt dit later ongedaan maken.
+                </p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setConfirmDeactivate(null)}
+                    className="flex-1 rounded-lg border border-slate-200 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
+                  >
+                    Annuleren
+                  </button>
+                  <button
+                    onClick={handleDeactivate}
+                    className="flex-1 rounded-lg bg-red-600 py-2.5 text-sm font-bold text-white hover:bg-red-700"
+                  >
+                    Deactiveer
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function UserFormModal({ user, onClose, onSaved }: { user: AdminUser | null; onClose: () => void; onSaved: () => void }) {
+  const isEdit = !!user;
+  const [form, setForm] = useState({
+    name: user?.name || '',
+    email: user?.email || '',
+    role: user?.role || 'admin',
+    password: '',
+  });
+  const [showPassword, setShowPassword] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const save = async () => {
+    if (!form.name || !form.email) { setError('Naam en e-mail zijn verplicht'); return; }
+    if (!isEdit && !form.password) { setError('Wachtwoord is verplicht voor nieuwe gebruikers'); return; }
+    if (form.password && form.password.length < 8) { setError('Wachtwoord moet minimaal 8 tekens zijn'); return; }
+
+    setSaving(true);
+    setError('');
+
+    try {
+      const payload: Record<string, unknown> = {
+        name: form.name,
+        email: form.email,
+        role: form.role,
+      };
+      if (form.password) payload.password = form.password;
+      if (isEdit) payload.id = user!.id;
+
+      const res = await adminFetch('/api/admin/users', {
+        method: isEdit ? 'PUT' : 'POST',
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const d = await res.json();
+        throw new Error(d.error || 'Er ging iets mis');
+      }
+      onSaved();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Er ging iets mis');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm"
+        onClick={onClose}
+      />
+      <motion.div
+        initial={{ x: '100%' }}
+        animate={{ x: 0 }}
+        exit={{ x: '100%' }}
+        transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+        className="fixed inset-y-0 right-0 z-[60] w-full max-w-md overflow-y-auto bg-white shadow-2xl"
+      >
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-100 bg-white px-5 py-4">
+          <h2 className="text-lg font-bold text-slate-900">
+            {isEdit ? 'Gebruiker bewerken' : 'Nieuwe gebruiker'}
+          </h2>
+          <button onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100">
+            <XMarkIcon className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="space-y-4 p-5">
+          {error && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-600">
+              {error}
+            </div>
+          )}
+
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-500">Naam *</label>
+            <input
+              value={form.name}
+              onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-500">E-mail *</label>
+            <input
+              type="email"
+              value={form.email}
+              onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-500">
+              Wachtwoord {isEdit ? '(laat leeg om niet te wijzigen)' : '*'}
+            </label>
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={form.password}
+                onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
+                placeholder={isEdit ? '••••••••' : 'Min. 8 tekens'}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 pr-10 text-sm text-slate-900 outline-none focus:border-brand-purple/50"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(v => !v)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-slate-400 transition hover:text-slate-600"
+              >
+                {showPassword ? <EyeSlashIcon className="h-4 w-4" /> : <EyeIcon className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-500">Rol *</label>
+            <select
+              value={form.role}
+              onChange={e => setForm(f => ({ ...f, role: e.target.value }))}
+              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50"
+            >
+              <option value="admin">Admin</option>
+              <option value="superadmin">Superadmin</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="sticky bottom-0 border-t border-slate-100 bg-white px-5 py-4">
+          <div className="flex gap-3">
+            <button
+              onClick={onClose}
+              className="flex-1 rounded-lg border border-slate-200 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
+            >
+              Annuleren
+            </button>
+            <button
+              onClick={save}
+              disabled={saving}
+              className="flex-1 rounded-lg bg-button-gradient py-2.5 text-sm font-bold text-white disabled:opacity-60"
+            >
+              {saving ? 'Opslaan...' : isEdit ? 'Bijwerken' : 'Aanmaken'}
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    </>
+  );
+}

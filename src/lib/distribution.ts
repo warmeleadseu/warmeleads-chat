@@ -1,4 +1,5 @@
 import { createServerClient } from './supabase';
+import { sendLeadNotification } from './email';
 
 const MAX_ASSIGNMENTS = 3;
 const MAX_LEAD_AGE_DAYS = 3;
@@ -178,6 +179,14 @@ export async function distributeLead(lead: LeadForDistribution): Promise<Distrib
       batch_id: m.batch_id,
       distance_km: m.distance_km,
     });
+
+    try {
+      const { data: custData } = await supabase.from('customers').select('id, name, email, contact_person, email_notifications').eq('id', m.customer_id).single();
+      if (custData?.email && custData.email_notifications) {
+        const { data: leadData } = await supabase.from('leads').select('*').eq('id', lead.id).single();
+        if (leadData) sendLeadNotification(custData, leadData);
+      }
+    } catch { /* email failure should not block distribution */ }
   }
 
   return result;

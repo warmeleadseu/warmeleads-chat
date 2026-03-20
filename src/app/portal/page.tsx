@@ -23,6 +23,14 @@ import {
   InboxIcon,
   ClipboardDocumentIcon,
   ChartBarIcon,
+  Cog6ToothIcon,
+  BellIcon,
+  BellSlashIcon,
+  StarIcon,
+  HandThumbUpIcon,
+  HandThumbDownIcon,
+  DocumentArrowDownIcon,
+  TableCellsIcon,
 } from '@heroicons/react/24/outline';
 
 function WhatsAppIcon({ className }: { className?: string }) {
@@ -96,6 +104,8 @@ interface Stats {
   newThisWeek: number;
   contacted: number;
   sold: number;
+  statusBreakdown?: Record<string, number>;
+  branchBreakdown?: Record<string, number>;
 }
 
 function StatsSkeleton() {
@@ -196,6 +206,9 @@ export default function PortalPage() {
 
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [showFilters, setShowFilters] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [emailNotifications, setEmailNotifications] = useState(false);
+  const [notificationFrequency, setNotificationFrequency] = useState('instant');
 
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<NodeJS.Timeout | null>(null);
@@ -251,9 +264,35 @@ export default function PortalPage() {
     if (res.ok) { const d = await res.json(); setBranchConfigs(d.branches || []); }
   }, []);
 
+  const fetchNotifPrefs = useCallback(async () => {
+    try {
+      const res = await portalFetch('/api/portal/notifications');
+      if (res.ok) {
+        const d = await res.json();
+        setEmailNotifications(d.email_notifications ?? false);
+        setNotificationFrequency(d.notification_frequency ?? 'instant');
+      }
+    } catch { /* ignore */ }
+  }, []);
+
+  const saveNotifPrefs = useCallback(async (enabled: boolean, freq: string) => {
+    setEmailNotifications(enabled);
+    setNotificationFrequency(freq);
+    try {
+      await portalFetch('/api/portal/notifications', {
+        method: 'PUT',
+        body: JSON.stringify({ email_notifications: enabled, notification_frequency: freq }),
+      });
+      showToast(enabled ? 'E-mailnotificaties ingeschakeld' : 'E-mailnotificaties uitgeschakeld');
+    } catch {
+      showToast('Fout bij opslaan voorkeuren');
+    }
+  }, [showToast]);
+
   useEffect(() => { fetchStats(); }, [fetchStats]);
   useEffect(() => { fetchLeads(); }, [fetchLeads]);
   useEffect(() => { fetchBranches(); }, [fetchBranches]);
+  useEffect(() => { fetchNotifPrefs(); }, [fetchNotifPrefs]);
 
   const branchMap = useMemo(() => {
     const m: Record<string, BranchConfig> = {};
@@ -326,22 +365,29 @@ export default function PortalPage() {
     }
   };
 
-  const exportCSV = useCallback(() => {
-    if (leads.length === 0) return;
-    const headers = ['Naam', 'E-mail', 'Telefoon', 'Postcode', 'Plaats', 'Provincie', 'Status', 'Branche', 'Datum'];
-    const rows = leads.map(l => [
-      l.naam_klant, l.email, l.telefoonnummer, l.postcode, l.plaatsnaam, l.provincie, l.status, l.branch,
-      l.wervingsdatum ? new Date(l.wervingsdatum).toLocaleDateString('nl-NL') : '',
-    ]);
-    const csv = [headers.join(';'), ...rows.map(r => r.map(c => `"${(c || '').replace(/"/g, '""')}"`).join(';'))].join('\n');
-    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `leads-${customer.name.replace(/\s+/g, '-').toLowerCase()}-${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }, [leads, customer.name]);
+  const exportData = useCallback(async (format: 'csv' | 'xlsx') => {
+    showToast(`${format.toUpperCase()} wordt gedownload...`);
+    try {
+      const params = new URLSearchParams();
+      params.set('format', format);
+      if (statusFilter !== 'all') params.set('status', statusFilter);
+      if (branchFilter !== 'all') params.set('branch', branchFilter);
+      if (dateFrom) params.set('from', dateFrom);
+      if (dateTo) params.set('to', dateTo);
+      const res = await portalFetch(`/api/portal/export?${params}`);
+      if (!res.ok) throw new Error();
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const ext = format === 'xlsx' ? 'xlsx' : 'csv';
+      a.download = `leads-${customer.name.replace(/\s+/g, '-').toLowerCase()}-${new Date().toISOString().slice(0, 10)}.${ext}`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      showToast('Export mislukt');
+    }
+  }, [statusFilter, branchFilter, dateFrom, dateTo, customer.name, showToast]);
 
   const activeFilters = useMemo(() => {
     let count = 0;
@@ -460,6 +506,11 @@ export default function PortalPage() {
         </div>
       )}
 
+      {/* Mini Charts */}
+      {!statsLoading && stats.totalLeads > 0 && (
+        <MiniCharts stats={stats} getBranch={getBranch} />
+      )}
+
       {/* Toolbar */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-1 items-center gap-2">
@@ -490,14 +541,31 @@ export default function PortalPage() {
             )}
           </button>
         </div>
-        <button
-          onClick={exportCSV}
-          disabled={leads.length === 0}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50 disabled:opacity-40"
-        >
-          <ArrowDownTrayIcon className="h-4 w-4" />
-          Exporteer CSV
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => exportData('csv')}
+            disabled={total === 0}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50 disabled:opacity-40"
+          >
+            <ArrowDownTrayIcon className="h-4 w-4" />
+            <span className="hidden sm:inline">CSV</span>
+          </button>
+          <button
+            onClick={() => exportData('xlsx')}
+            disabled={total === 0}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50 disabled:opacity-40"
+          >
+            <TableCellsIcon className="h-4 w-4" />
+            <span className="hidden sm:inline">Excel</span>
+          </button>
+          <button
+            onClick={() => setShowSettings(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50"
+            title="Instellingen"
+          >
+            <Cog6ToothIcon className="h-4 w-4" />
+          </button>
+        </div>
       </div>
 
       {/* Filters panel */}
@@ -803,6 +871,18 @@ export default function PortalPage() {
           />
         )}
       </AnimatePresence>
+
+      {/* Settings slide-over */}
+      <AnimatePresence>
+        {showSettings && (
+          <SettingsPanel
+            emailNotifications={emailNotifications}
+            notificationFrequency={notificationFrequency}
+            onSave={saveNotifPrefs}
+            onClose={() => setShowSettings(false)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -977,6 +1057,9 @@ function LeadDetailPanel({
               </div>
             )}
 
+            {/* Feedback */}
+            <LeadFeedback leadId={lead.id} showToast={showToast} />
+
             {/* Notes */}
             <div>
               <label className="mb-1.5 block text-xs font-medium text-slate-500">Notities</label>
@@ -1003,6 +1086,319 @@ function LeadDetailPanel({
                 <p>Aangemaakt: {formatDateLong(lead.created_at)}</p>
               </div>
             </div>
+          </div>
+        </div>
+      </motion.div>
+    </>
+  );
+}
+
+/* ─── Mini Charts ─────────────────────────────────────────── */
+function MiniCharts({ stats, getBranch }: { stats: Stats & { statusBreakdown?: Record<string, number>; branchBreakdown?: Record<string, number> }; getBranch: (slug: string) => { name: string; light: string; text: string } }) {
+  const statusData = stats.statusBreakdown || {};
+  const branchData = stats.branchBreakdown || {};
+
+  const statusColors: Record<string, string> = {
+    nieuw: '#3B82F6',
+    gecontacteerd: '#F59E0B',
+    offerte: '#8B5CF6',
+    verkocht: '#10B981',
+    afgewezen: '#94A3B8',
+  };
+
+  const statusLabels: Record<string, string> = {
+    nieuw: 'Nieuw',
+    gecontacteerd: 'Gecontacteerd',
+    offerte: 'Offerte',
+    verkocht: 'Verkocht',
+    afgewezen: 'Afgewezen',
+  };
+
+  const statusEntries = Object.entries(statusData).filter(([, v]) => v > 0);
+  const total = statusEntries.reduce((s, [, v]) => s + v, 0) || 1;
+
+  const branchEntries = Object.entries(branchData).filter(([, v]) => v > 0);
+  const branchTotal = branchEntries.reduce((s, [, v]) => s + v, 0) || 1;
+
+  if (statusEntries.length === 0 && branchEntries.length === 0) return null;
+
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      {statusEntries.length > 0 && (
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">Status verdeling</h3>
+          <div className="flex h-3 overflow-hidden rounded-full bg-slate-100">
+            {statusEntries.map(([key, count]) => (
+              <div
+                key={key}
+                style={{ width: `${(count / total) * 100}%`, backgroundColor: statusColors[key] || '#94A3B8' }}
+                className="transition-all duration-500"
+                title={`${statusLabels[key] || key}: ${count}`}
+              />
+            ))}
+          </div>
+          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1">
+            {statusEntries.map(([key, count]) => (
+              <div key={key} className="flex items-center gap-1.5 text-xs">
+                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: statusColors[key] || '#94A3B8' }} />
+                <span className="text-slate-500">{statusLabels[key] || key}</span>
+                <span className="font-semibold text-slate-700">{count}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {branchEntries.length > 0 && (
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">Branches</h3>
+          <div className="space-y-2">
+            {branchEntries.map(([key, count]) => {
+              const b = getBranch(key);
+              const pct = Math.round((count / branchTotal) * 100);
+              return (
+                <div key={key}>
+                  <div className="mb-1 flex items-center justify-between text-xs">
+                    <span className="text-slate-600">{b.name}</span>
+                    <span className="font-semibold text-slate-700">{count} ({pct}%)</span>
+                  </div>
+                  <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                    <div className="h-full rounded-full bg-gradient-to-r from-brand-purple to-brand-pink transition-all duration-500" style={{ width: `${pct}%` }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── Lead Feedback ───────────────────────────────────────── */
+const FEEDBACK_OPTIONS = [
+  { value: 'goed_contact', label: 'Goed contact gehad', icon: HandThumbUpIcon, color: 'emerald' },
+  { value: 'onbereikbaar', label: 'Onbereikbaar', icon: PhoneIcon, color: 'amber' },
+  { value: 'niet_geinteresseerd', label: 'Niet geïnteresseerd', icon: HandThumbDownIcon, color: 'slate' },
+  { value: 'fout_nummer', label: 'Fout nummer', icon: XMarkIcon, color: 'red' },
+  { value: 'verkocht', label: 'Verkocht!', icon: StarIcon, color: 'purple' },
+] as const;
+
+function LeadFeedback({ leadId, showToast }: { leadId: string; showToast: (m: string) => void }) {
+  const [rating, setRating] = useState<string | null>(null);
+  const [comment, setComment] = useState('');
+  const [saved, setSaved] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    setSaved(false);
+    setComment('');
+    setRating(null);
+    portalFetch(`/api/portal/feedback?lead_id=${leadId}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (d?.feedback) {
+          setRating(d.feedback.rating);
+          setComment(d.feedback.comment || '');
+          setSaved(true);
+        }
+      })
+      .finally(() => setLoading(false));
+  }, [leadId]);
+
+  const submit = async (value: string) => {
+    setRating(value);
+    setSaved(true);
+    try {
+      const res = await portalFetch('/api/portal/feedback', {
+        method: 'POST',
+        body: JSON.stringify({ lead_id: leadId, rating: value, comment }),
+      });
+      if (res.ok) showToast('Feedback opgeslagen');
+      else throw new Error();
+    } catch {
+      showToast('Fout bij opslaan feedback');
+      setSaved(false);
+    }
+  };
+
+  const saveComment = async () => {
+    if (!rating) return;
+    try {
+      await portalFetch('/api/portal/feedback', {
+        method: 'POST',
+        body: JSON.stringify({ lead_id: leadId, rating, comment }),
+      });
+      showToast('Opmerking opgeslagen');
+    } catch {
+      showToast('Fout bij opslaan');
+    }
+  };
+
+  if (loading) return <div className="h-16 animate-pulse rounded-xl bg-slate-50" />;
+
+  const colorMap: Record<string, { bg: string; text: string; border: string; activeBg: string }> = {
+    emerald: { bg: 'bg-emerald-50', text: 'text-emerald-600', border: 'border-emerald-200', activeBg: 'bg-emerald-100' },
+    amber: { bg: 'bg-amber-50', text: 'text-amber-600', border: 'border-amber-200', activeBg: 'bg-amber-100' },
+    slate: { bg: 'bg-slate-50', text: 'text-slate-600', border: 'border-slate-200', activeBg: 'bg-slate-100' },
+    red: { bg: 'bg-red-50', text: 'text-red-600', border: 'border-red-200', activeBg: 'bg-red-100' },
+    purple: { bg: 'bg-purple-50', text: 'text-purple-600', border: 'border-purple-200', activeBg: 'bg-purple-100' },
+  };
+
+  return (
+    <div>
+      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Feedback</h3>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        {FEEDBACK_OPTIONS.map(opt => {
+          const c = colorMap[opt.color];
+          const active = rating === opt.value;
+          return (
+            <button
+              key={opt.value}
+              onClick={() => submit(opt.value)}
+              className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium transition ${
+                active ? `${c.activeBg} ${c.border} ${c.text}` : `${c.bg} border-transparent ${c.text} opacity-60 hover:opacity-100`
+              }`}
+            >
+              <opt.icon className="h-3.5 w-3.5" />
+              {opt.label}
+            </button>
+          );
+        })}
+      </div>
+      {saved && (
+        <div className="mt-2">
+          <input
+            type="text"
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            onBlur={saveComment}
+            placeholder="Optionele opmerking..."
+            className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs text-slate-700 outline-none focus:border-brand-purple/50"
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── Settings Panel ──────────────────────────────────────── */
+function SettingsPanel({
+  emailNotifications,
+  notificationFrequency,
+  onSave,
+  onClose,
+}: {
+  emailNotifications: boolean;
+  notificationFrequency: string;
+  onSave: (enabled: boolean, freq: string) => void;
+  onClose: () => void;
+}) {
+  const [enabled, setEnabled] = useState(emailNotifications);
+  const [freq, setFreq] = useState(notificationFrequency);
+
+  useEffect(() => {
+    setEnabled(emailNotifications);
+    setFreq(notificationFrequency);
+  }, [emailNotifications, notificationFrequency]);
+
+  const handleToggle = () => {
+    const newEnabled = !enabled;
+    setEnabled(newEnabled);
+    onSave(newEnabled, freq);
+  };
+
+  const handleFreqChange = (newFreq: string) => {
+    setFreq(newFreq);
+    onSave(enabled, newFreq);
+  };
+
+  return (
+    <>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm"
+        onClick={onClose}
+      />
+      <motion.div
+        initial={{ x: '100%' }}
+        animate={{ x: 0 }}
+        exit={{ x: '100%' }}
+        transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+        className="fixed inset-y-0 right-0 z-[60] flex w-full max-w-sm flex-col bg-white shadow-2xl"
+      >
+        <div className="h-[3px] bg-warmeleads-gradient" />
+        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+          <h2 className="text-lg font-bold text-slate-900">Instellingen</h2>
+          <button onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100">
+            <XMarkIcon className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-5 space-y-6">
+          <div>
+            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">E-mailnotificaties</h3>
+            <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  {enabled ? (
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-purple/10">
+                      <BellIcon className="h-5 w-5 text-brand-purple" />
+                    </div>
+                  ) : (
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100">
+                      <BellSlashIcon className="h-5 w-5 text-slate-400" />
+                    </div>
+                  )}
+                  <div>
+                    <p className="text-sm font-medium text-slate-900">Nieuwe leads per e-mail</p>
+                    <p className="text-xs text-slate-500">Ontvang een melding bij nieuwe leads</p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleToggle}
+                  className={`relative h-6 w-11 rounded-full transition-colors ${enabled ? 'bg-brand-purple' : 'bg-slate-200'}`}
+                >
+                  <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${enabled ? 'translate-x-[22px]' : 'translate-x-0.5'}`} />
+                </button>
+              </div>
+              {enabled && (
+                <div>
+                  <p className="mb-2 text-xs text-slate-500">Frequentie</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { value: 'instant', label: 'Direct' },
+                      { value: 'daily', label: 'Dagelijks' },
+                      { value: 'weekly', label: 'Wekelijks' },
+                    ].map(opt => (
+                      <button
+                        key={opt.value}
+                        onClick={() => handleFreqChange(opt.value)}
+                        className={`rounded-lg px-3 py-2 text-xs font-medium transition ${
+                          freq === opt.value
+                            ? 'bg-brand-purple/10 text-brand-purple border border-brand-purple/30'
+                            : 'bg-slate-50 text-slate-600 border border-transparent hover:bg-slate-100'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-[11px] text-slate-400">
+                    {freq === 'instant' && 'U ontvangt direct een e-mail bij elke nieuwe lead.'}
+                    {freq === 'daily' && 'U ontvangt elke ochtend een overzicht van nieuwe leads.'}
+                    {freq === 'weekly' && 'U ontvangt elke maandag een overzicht van de afgelopen week.'}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+            <p className="text-xs text-slate-400">
+              Wilt u wijzigingen aanbrengen aan uw account? Neem contact op via{' '}
+              <a href="mailto:info@warmeleads.eu" className="text-brand-purple hover:underline">info@warmeleads.eu</a>
+            </p>
           </div>
         </div>
       </motion.div>

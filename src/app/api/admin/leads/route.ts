@@ -5,6 +5,8 @@ import { enrichLeadAddress, enrichLeadsAddress } from '@/lib/pdok';
 import { distributeLead, distributeLeads } from '@/lib/distribution';
 import { isPhoneValid } from '@/lib/phoneValidation';
 import { checkLeadProfanity } from '@/lib/profanityFilter';
+import { calculateQualityScore } from '@/lib/leadQuality';
+import { logAudit } from '@/lib/audit';
 
 export async function GET(request: NextRequest) {
   const admin = await verifyAdmin(request);
@@ -97,6 +99,7 @@ export async function POST(request: NextRequest) {
       const clean = enriched.filter((l: any) => {
         l.phone_valid = isPhoneValid(l.telefoonnummer);
         if (checkLeadProfanity(l).blocked) { profanitySkipped++; return false; }
+        l.quality_score = calculateQualityScore(l);
         return true;
       });
       if (clean.length === 0) {
@@ -111,6 +114,7 @@ export async function POST(request: NextRequest) {
       if (withCoords.length > 0) {
         try { await distributeLeads(withCoords); } catch { /* non-blocking */ }
       }
+      logAudit({ adminId: admin.id, adminName: admin.name, action: 'import_leads', entityType: 'lead', details: { count: data?.length || 0, profanitySkipped } });
       return NextResponse.json({ success: true, count: data?.length || 0, profanitySkipped });
     }
 
@@ -122,7 +126,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: `Lead bevat ongepaste taal in veld "${profanity.field}"` }, { status: 422 });
     }
 
-    const { data, error } = await supabase.from('leads').insert(enriched).select().single();
+    const quality_score = calculateQualityScore(enriched);
+
+    const { data, error } = await supabase.from('leads').insert({ ...enriched, quality_score }).select().single();
     if (error) {
       console.error('Insert error:', error);
       return NextResponse.json({ error: 'Lead aanmaken mislukt', details: error.message }, { status: 500 });
@@ -130,6 +136,7 @@ export async function POST(request: NextRequest) {
     if (data.lat && data.lng) {
       try { await distributeLead({ id: data.id, branch: data.branch, lat: data.lat, lng: data.lng }); } catch { /* non-blocking */ }
     }
+    logAudit({ adminId: admin.id, adminName: admin.name, action: 'create_lead', entityType: 'lead', entityId: data.id, details: { naam: data.naam_klant, branch: data.branch } });
     return NextResponse.json({ success: true, lead: data });
   } catch (err) {
     return NextResponse.json({ error: 'Ongeldige data' }, { status: 400 });

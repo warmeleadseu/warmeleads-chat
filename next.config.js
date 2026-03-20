@@ -1,18 +1,21 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Expose Supabase env vars to client-side code
   env: {
     NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
     NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
   },
-  // Stability optimizations
   experimental: {
-    // Reduce memory usage
-    optimizePackageImports: ['framer-motion', '@heroicons/react'],
+    optimizePackageImports: ['framer-motion', '@heroicons/react', 'lucide-react', 'date-fns'],
   },
-  
-  // Optimize compilation
+  images: {
+    formats: ['image/avif', 'image/webp'],
+    minimumCacheTTL: 60 * 60 * 24 * 30,
+    deviceSizes: [640, 750, 828, 1080, 1200, 1920],
+    imageSizes: [16, 32, 48, 64, 96, 128, 256],
+  },
   swcMinify: true,
+  compress: true,
+  poweredByHeader: false,
   
   // Better error handling
   onDemandEntries: {
@@ -100,10 +103,19 @@ const nextConfig = {
       {
         source: '/sitemap.xml',
         headers: [
-          {
-            key: 'Cache-Control',
-            value: 'public, max-age=86400',
-          },
+          { key: 'Cache-Control', value: 'public, max-age=86400' },
+        ],
+      },
+      {
+        source: '/:path*.(jpg|jpeg|png|gif|webp|avif|svg|ico)',
+        headers: [
+          { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
+        ],
+      },
+      {
+        source: '/_next/static/:path*',
+        headers: [
+          { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
         ],
       },
     ];

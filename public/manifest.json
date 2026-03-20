@@ -1,11 +1,11 @@
 {
-  "name": "WarmeLeads - Verse Leads Binnen 15 Minuten",
+  "name": "WarmeLeads - Leadportaal",
   "short_name": "WarmeLeads",
-  "description": "Krijg exclusieve of gedeelde leads voor thuisbatterijen, zonnepanelen, warmtepompen, airco's en financial lease. Verse leads binnen 15 minuten gegarandeerd!",
-  "start_url": "/",
+  "description": "Beheer en ontvang uw leads in real-time. Klantportaal voor installatiebedrijven.",
+  "start_url": "/portal",
   "display": "standalone",
-  "background_color": "#3B2F75",
-  "theme_color": "#E74C8C",
+  "background_color": "#1A1A2E",
+  "theme_color": "#3B2F75",
   "orientation": "portrait-primary",
   "scope": "/",
   "lang": "nl",
@@ -16,26 +16,27 @@
       "sizes": "144x144",
       "type": "image/svg+xml",
       "purpose": "maskable any"
+    },
+    {
+      "src": "/favicon.png",
+      "sizes": "32x32",
+      "type": "image/png"
     }
   ],
-
   "shortcuts": [
     {
-      "name": "Start Chat",
-      "short_name": "Chat",
-      "description": "Begin direct een gesprek met Lisa",
-      "url": "/?utm_source=pwa_shortcut"
+      "name": "Mijn Leads",
+      "short_name": "Leads",
+      "description": "Bekijk uw leads",
+      "url": "/portal?utm_source=pwa_shortcut"
     },
     {
       "name": "Admin Dashboard",
       "short_name": "Admin",
-      "description": "Beheer uw leads en analytics",
+      "description": "Beheer leads en klanten",
       "url": "/admin?utm_source=pwa_shortcut"
     }
   ],
   "related_applications": [],
-  "prefer_related_applications": false,
-  "edge_side_panel": {
-    "preferred_width": 400
-  }
+  "prefer_related_applications": false
 }

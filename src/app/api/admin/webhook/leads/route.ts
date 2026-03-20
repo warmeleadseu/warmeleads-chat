@@ -4,6 +4,8 @@ import { enrichLeadAddress } from '@/lib/pdok';
 import { distributeLead } from '@/lib/distribution';
 import { isPhoneValid } from '@/lib/phoneValidation';
 import { checkLeadProfanity } from '@/lib/profanityFilter';
+import { checkRateLimit } from '@/lib/rateLimit';
+import { calculateQualityScore } from '@/lib/leadQuality';
 
 const COMMON_KEYS = new Set([
   'branch', 'customer_id', 'naam_klant', 'name', 'email', 'telefoonnummer', 'phone',
@@ -29,6 +31,11 @@ export async function POST(request: NextRequest) {
 
     if (keyError || !keyRecord) {
       return NextResponse.json({ error: 'Ongeldige of inactieve API key' }, { status: 401 });
+    }
+
+    const rl = await checkRateLimit(`webhook:${apiKey}`, 100, 60 * 1000);
+    if (!rl.allowed) {
+      return NextResponse.json({ error: 'Rate limit overschreden' }, { status: 429 });
     }
 
     const body = await request.json();
@@ -78,7 +85,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Lead geweigerd: ongepaste inhoud' }, { status: 422 });
     }
 
-    const { data, error } = await supabase.from('leads').insert(lead).select().single();
+    const quality_score = calculateQualityScore(lead);
+
+    const { data, error } = await supabase.from('leads').insert({ ...lead, quality_score }).select().single();
 
     if (error) {
       console.error('Webhook lead insert error:', error);
