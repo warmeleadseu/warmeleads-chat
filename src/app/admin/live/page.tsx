@@ -289,8 +289,8 @@ function BranchDonut({ data }: { data: Record<string, number> }) {
   let cumAngle = -90;
 
   return (
-    <div className="flex items-center gap-4">
-      <svg viewBox="0 0 100 100" className="h-28 w-28 shrink-0">
+    <div className="flex items-center gap-3">
+      <svg viewBox="0 0 100 100" className="h-20 w-20 shrink-0 lg:h-24 lg:w-24">
         {entries.map(([branch, count]) => {
           const bc = BRANCH_COLORS[branch] || DEFAULT_BRANCH;
           const pct = count / total;
@@ -469,9 +469,9 @@ export default function LiveDashboard() {
         )}
       </AnimatePresence>
 
-      <div className="relative z-10 flex min-h-screen flex-col p-4 sm:p-6 lg:p-8">
+      <div className="relative z-10 flex h-screen flex-col overflow-hidden p-4 sm:p-6 lg:p-5">
         {/* Top bar */}
-        <div className="mb-6 flex items-center justify-between">
+        <div className="mb-3 flex shrink-0 items-center justify-between lg:mb-2">
           <Link href="/admin" className="group flex items-center gap-3">
             <Image src="/logo-wit.png" alt="WarmeLeads" width={140} height={42} className="h-8 w-auto opacity-80 transition group-hover:opacity-100" />
             <span className="rounded-full bg-white/[0.06] px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-white/30">Live</span>
@@ -546,7 +546,7 @@ export default function LiveDashboard() {
         </div>
 
         {/* Hero KPIs */}
-        <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="mb-3 grid shrink-0 grid-cols-2 gap-2 lg:mb-2 lg:grid-cols-4">
           {[
             { label: 'Leads vandaag', value: ps.day?.leads || 0, sub: `${ps.day?.assigned || 0} uitgedeeld`, color: 'from-brand-purple to-brand-pink' },
             { label: 'Leads deze week', value: ps.week?.leads || 0, sub: `${ps.week?.assigned || 0} uitgedeeld`, color: 'from-emerald-500 to-emerald-600', trend: ps.week },
@@ -558,12 +558,12 @@ export default function LiveDashboard() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.08 }}
-              className="group relative overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.03] p-5 backdrop-blur-sm"
+              className="group relative overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.03] p-3 backdrop-blur-sm lg:p-4"
             >
               <div className={`absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r ${kpi.color}`} />
-              <p className="mb-1 text-xs font-medium text-white/40">{kpi.label}</p>
+              <p className="mb-0.5 text-[10px] font-medium text-white/40 lg:text-xs">{kpi.label}</p>
               <div className="flex items-baseline gap-2">
-                <AnimatedNumber value={kpi.value} prefix={kpi.prefix} className="text-3xl font-black tracking-tight text-white lg:text-4xl" />
+                <AnimatedNumber value={kpi.value} prefix={kpi.prefix} className="text-2xl font-black tracking-tight text-white lg:text-3xl" />
                 {kpi.trend && <TrendArrow current={kpi.trend.leads} previous={kpi.trend.prevLeads} />}
               </div>
               <p className="mt-1 text-[11px] text-white/25">{kpi.sub}</p>
@@ -572,10 +572,10 @@ export default function LiveDashboard() {
         </div>
 
         {/* Middle section: Batches + Live Feed + Map */}
-        <div className="mb-6 grid flex-1 gap-4 lg:grid-cols-7">
+        <div className="mb-3 grid min-h-0 flex-1 gap-3 lg:mb-2 lg:grid-cols-7">
           {/* Active batches - 3 cols */}
-          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5 backdrop-blur-sm lg:col-span-3">
-            <div className="mb-4 flex items-center justify-between">
+          <div className="flex flex-col overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 backdrop-blur-sm lg:col-span-3">
+            <div className="mb-2 flex shrink-0 items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
                 <h2 className="text-sm font-bold text-white/70">Actieve batches</h2>
@@ -587,11 +587,11 @@ export default function LiveDashboard() {
             </div>
 
             {data.activeBatches.length === 0 ? (
-              <div className="flex items-center justify-center py-12">
+              <div className="flex flex-1 items-center justify-center py-6">
                 <p className="text-sm text-white/20">Geen actieve batches</p>
               </div>
             ) : (
-              <div className="space-y-3">
+              <div className="min-h-0 flex-1 space-y-2 overflow-y-auto">
                 {data.activeBatches.map((b, i) => {
                   const pct = b.batchSize > 0 ? Math.min(100, Math.round((b.delivered / b.batchSize) * 100)) : 0;
                   const bc = BRANCH_COLORS[b.branch] || DEFAULT_BRANCH;
@@ -602,7 +602,7 @@ export default function LiveDashboard() {
                       initial={{ opacity: 0, x: -20 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: i * 0.05 }}
-                      className={`rounded-xl border p-4 transition-all ${
+                      className={`rounded-xl border p-3 transition-all ${
                         isCelebrating
                           ? 'border-emerald-500/40 bg-emerald-500/[0.08] shadow-lg shadow-emerald-500/20'
                           : 'border-white/[0.04] bg-white/[0.02]'
@@ -638,8 +638,8 @@ export default function LiveDashboard() {
                   );
                 })}
 
-                <div className="mt-2 rounded-xl border border-white/[0.04] bg-white/[0.02] p-3">
-                  <div className="mb-1.5 flex items-center justify-between text-xs">
+                <div className="mt-1 shrink-0 rounded-xl border border-white/[0.04] bg-white/[0.02] p-2">
+                  <div className="mb-1 flex items-center justify-between text-xs">
                     <span className="font-medium text-white/40">Totaal voortgang</span>
                     <span className="font-bold tabular-nums text-white/60">{batchDelivered} / {batchTotal} ({overallPct}%)</span>
                   </div>
@@ -657,8 +657,8 @@ export default function LiveDashboard() {
           </div>
 
           {/* Live feed - 2 cols */}
-          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5 backdrop-blur-sm lg:col-span-2">
-            <div className="mb-4 flex items-center gap-2">
+          <div className="flex flex-col overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 backdrop-blur-sm lg:col-span-2">
+            <div className="mb-2 flex shrink-0 items-center gap-2">
               <div className="relative">
                 <div className="h-2 w-2 rounded-full bg-red-500" />
                 <div className="absolute inset-0 h-2 w-2 animate-ping rounded-full bg-red-500/50" />
@@ -666,7 +666,7 @@ export default function LiveDashboard() {
               <h2 className="text-sm font-bold text-white/70">Live feed</h2>
             </div>
 
-            <div className="space-y-2">
+            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto">
               <AnimatePresence initial={false}>
                 {data.recentLeads.map((lead) => {
                   const isNew = newLeadIds.has(lead.id);
@@ -718,10 +718,10 @@ export default function LiveDashboard() {
           </div>
 
           {/* Right sidebar: Map + Branch donut - 2 cols */}
-          <div className="flex flex-col gap-4 lg:col-span-2">
+          <div className="flex flex-col gap-3 overflow-hidden lg:col-span-2">
             {/* Province heatmap */}
-            <div className="flex-1 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 backdrop-blur-sm">
-              <div className="mb-2 flex items-center gap-2">
+            <div className="min-h-0 flex-1 overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.02] p-3 backdrop-blur-sm">
+              <div className="mb-1 flex items-center gap-2">
                 <svg className="h-4 w-4 text-white/40" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd"/></svg>
                 <h2 className="text-sm font-bold text-white/70">Leads per provincie</h2>
               </div>
@@ -729,8 +729,8 @@ export default function LiveDashboard() {
             </div>
 
             {/* Branch breakdown */}
-            <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 backdrop-blur-sm">
-              <div className="mb-3 flex items-center gap-2">
+            <div className="shrink-0 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-3 backdrop-blur-sm">
+              <div className="mb-2 flex items-center gap-2">
                 <svg className="h-4 w-4 text-white/40" viewBox="0 0 20 20" fill="currentColor"><path d="M2 10a8 8 0 018-8v8h8a8 8 0 11-16 0z"/><path d="M12 2.252A8.014 8.014 0 0117.748 8H12V2.252z"/></svg>
                 <h2 className="text-sm font-bold text-white/70">Branches</h2>
               </div>
@@ -754,7 +754,7 @@ export default function LiveDashboard() {
         </div>
 
         {/* Period comparison */}
-        <div className="grid grid-cols-3 gap-3 lg:grid-cols-6">
+        <div className="grid shrink-0 grid-cols-3 gap-2 lg:grid-cols-6">
           {Object.entries(PERIOD_LABELS).map(([key, label], i) => {
             const stat = ps[key];
             if (!stat) return null;
@@ -764,11 +764,11 @@ export default function LiveDashboard() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.3 + i * 0.06 }}
-                className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 backdrop-blur-sm"
+                className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 backdrop-blur-sm"
               >
-                <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-white/25">{label}</p>
+                <p className="mb-1 text-[9px] font-bold uppercase tracking-widest text-white/25 lg:text-[10px]">{label}</p>
                 <div className="flex items-baseline gap-1.5">
-                  <AnimatedNumber value={stat.leads} className="text-xl font-black tabular-nums text-white/90" />
+                  <AnimatedNumber value={stat.leads} className="text-lg font-black tabular-nums text-white/90 lg:text-xl" />
                   <TrendArrow current={stat.leads} previous={stat.prevLeads} />
                 </div>
                 <div className="mt-1 flex items-center gap-1.5 text-[10px] text-white/25">
