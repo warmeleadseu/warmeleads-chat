@@ -1,6 +1,7 @@
 import { createServerClient } from './supabase';
 
 const MAX_ASSIGNMENTS = 3;
+const MAX_LEAD_AGE_DAYS = 3;
 
 function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371;
@@ -27,7 +28,6 @@ interface DistributionResult {
 
 /**
  * Distribute a single lead to matching customers based on geo-targets and active batches.
- * Returns the assignments made (0 to MAX_ASSIGNMENTS).
  */
 export async function distributeLead(lead: LeadForDistribution): Promise<DistributionResult> {
   const result: DistributionResult = { lead_id: lead.id, assignments: [] };
@@ -156,7 +156,7 @@ export async function distributeLead(lead: LeadForDistribution): Promise<Distrib
 }
 
 /**
- * Distribute multiple leads (e.g. after import or for redistribution).
+ * Distribute multiple leads.
  */
 export async function distributeLeads(leads: LeadForDistribution[]): Promise<{ distributed: number; assignments: number }> {
   let distributed = 0;
@@ -174,16 +174,21 @@ export async function distributeLeads(leads: LeadForDistribution[]): Promise<{ d
 }
 
 /**
- * Find and distribute all unassigned leads that have coordinates.
+ * Find and distribute leads ≤ MAX_LEAD_AGE_DAYS old that have coordinates
+ * but are not yet fully assigned (< MAX_ASSIGNMENTS).
  */
 export async function distributeUnassignedLeads(): Promise<{ distributed: number; assignments: number }> {
   const supabase = createServerClient();
+
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - MAX_LEAD_AGE_DAYS);
 
   const { data: leads } = await supabase
     .from('leads')
     .select('id, branch, lat, lng')
     .not('lat', 'is', null)
     .not('lng', 'is', null)
+    .gte('created_at', cutoff.toISOString())
     .order('created_at', { ascending: false });
 
   if (!leads || leads.length === 0) return { distributed: 0, assignments: 0 };

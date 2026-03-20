@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
+import { distributeUnassignedLeads } from '@/lib/distribution';
 
 export async function GET(request: NextRequest) {
   const admin = await verifyAdmin(request);
@@ -40,6 +41,9 @@ export async function POST(request: NextRequest) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Auto-distribute recent leads to this new target (non-blocking)
+  try { distributeUnassignedLeads(); } catch { /* non-blocking */ }
 
   return NextResponse.json(data, { status: 201 });
 }

@@ -157,11 +157,18 @@ export async function GET(request: NextRequest) {
       }
 
       if (closestTarget && closestTarget.distance <= closestTarget.radius) {
+        const leadAssignCount = leadAssignments.length;
+        let reason: string;
+        if (leadAssignCount >= 3) {
+          reason = `Binnen bereik (${closestTarget.distance}km) maar lead heeft al max 3 toewijzingen`;
+        } else {
+          reason = `Binnen bereik (${closestTarget.distance}km) — wacht op verdeling (klik "Verdeel leads" of wacht op cron)`;
+        }
         potentialMatches.push({
           customer_id: custId,
           customer_name: cust.name,
           assigned: false,
-          reason_not_assigned: `Binnen bereik (${closestTarget.distance}km) maar max ${3} toewijzingen bereikt of niet verdeeld`,
+          reason_not_assigned: reason,
           distance_km: closestTarget.distance,
           target_label: closestTarget.label,
         });

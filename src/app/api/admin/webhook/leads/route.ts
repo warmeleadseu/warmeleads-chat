@@ -48,12 +48,13 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const phone = body.telefoonnummer || body.phone || '';
     const lead = await enrichLeadAddress({
       branch: branchSlug,
       customer_id: keyRecord.customer_id,
       naam_klant: body.naam_klant || body.name || '',
       email: body.email || '',
-      telefoonnummer: body.telefoonnummer || body.phone || '',
+      telefoonnummer: phone,
       postcode: body.postcode || '',
       huisnummer: body.huisnummer || '',
       plaatsnaam: body.plaatsnaam || body.city || '',
