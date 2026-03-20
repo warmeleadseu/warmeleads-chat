@@ -18,13 +18,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Klanten ophalen mislukt' }, { status: 500 });
   }
 
-  const { data: leadCounts } = await supabase
-    .from('leads')
+  const { data: assignCounts } = await supabase
+    .from('lead_assignments')
     .select('customer_id');
 
   const counts: Record<string, number> = {};
-  (leadCounts || []).forEach((l: { customer_id: string }) => {
-    if (l.customer_id) counts[l.customer_id] = (counts[l.customer_id] || 0) + 1;
+  (assignCounts || []).forEach((a: { customer_id: string }) => {
+    if (a.customer_id) counts[a.customer_id] = (counts[a.customer_id] || 0) + 1;
   });
 
   const enriched = (customers || []).map(c => ({
