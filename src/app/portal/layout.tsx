@@ -3,10 +3,13 @@
 import { useState, useEffect, useCallback, ReactNode } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
   ArrowRightOnRectangleIcon,
   ArrowLeftIcon,
+  InboxStackIcon,
+  UserCircleIcon,
 } from '@heroicons/react/24/outline';
 import { PortalContext, type PortalCustomer } from './portalContext';
 
@@ -107,31 +110,59 @@ function LoginScreen({ onLogin }: { onLogin: (c: PortalCustomer, t: string) => v
   );
 }
 
+const PORTAL_NAV = [
+  { label: 'Leads', href: '/portal', icon: InboxStackIcon },
+  { label: 'Account & Insights', href: '/portal/account', icon: UserCircleIcon },
+];
+
 function PortalHeader({ customer, onLogout }: { customer: PortalCustomer; onLogout: () => void }) {
+  const pathname = usePathname();
+
   return (
-    <header className="sticky top-0 z-40 border-b border-slate-200 bg-white">
+    <header className="sticky top-0 z-40 bg-white shadow-sm">
       <div className="h-[3px] bg-warmeleads-gradient" />
-      <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center gap-3">
-          <Image src="/warmeleads-logo-2026.png" alt="WarmeLeads" width={120} height={36} className="h-6 w-auto" />
-          <div className="h-5 w-px bg-slate-200" />
-          <span className="max-w-[120px] truncate text-sm font-medium text-slate-600 sm:max-w-none">{customer.name}</span>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="hidden items-center gap-2 sm:flex">
-            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-purple/10 text-xs font-bold text-brand-purple">
-              {customer.contact_person?.charAt(0)?.toUpperCase() || customer.name.charAt(0).toUpperCase()}
-            </div>
-            <span className="text-sm text-slate-600">{customer.contact_person || customer.name}</span>
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="flex h-14 items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Image src="/warmeleads-logo-2026.png" alt="WarmeLeads" width={120} height={36} className="h-6 w-auto" />
+            <div className="hidden h-5 w-px bg-slate-200 sm:block" />
+            <span className="hidden max-w-[160px] truncate text-sm font-medium text-slate-600 sm:inline">{customer.name}</span>
           </div>
-          <button
-            onClick={onLogout}
-            className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs text-slate-500 transition hover:bg-slate-100 hover:text-red-500"
-          >
-            <ArrowRightOnRectangleIcon className="h-4 w-4" />
-            <span className="hidden sm:inline">Uitloggen</span>
-          </button>
+          <div className="flex items-center gap-3">
+            <div className="hidden items-center gap-2 sm:flex">
+              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-purple/10 text-xs font-bold text-brand-purple">
+                {customer.contact_person?.charAt(0)?.toUpperCase() || customer.name.charAt(0).toUpperCase()}
+              </div>
+              <span className="text-sm text-slate-600">{customer.contact_person || customer.name}</span>
+            </div>
+            <button
+              onClick={onLogout}
+              className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs text-slate-500 transition hover:bg-slate-100 hover:text-red-500"
+            >
+              <ArrowRightOnRectangleIcon className="h-4 w-4" />
+              <span className="hidden sm:inline">Uitloggen</span>
+            </button>
+          </div>
         </div>
+        <nav className="-mb-px flex gap-1 overflow-x-auto">
+          {PORTAL_NAV.map((item) => {
+            const active = item.href === '/portal' ? pathname === '/portal' : pathname.startsWith(item.href);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`inline-flex items-center gap-2 whitespace-nowrap border-b-2 px-3 py-2.5 text-sm font-medium transition ${
+                  active
+                    ? 'border-brand-purple text-brand-purple'
+                    : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700'
+                }`}
+              >
+                <item.icon className="h-4 w-4" />
+                {item.label}
+              </Link>
+            );
+          })}
+        </nav>
       </div>
     </header>
   );
