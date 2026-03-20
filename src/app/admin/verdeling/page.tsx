@@ -189,6 +189,14 @@ export default function VerdelingPage() {
     setCompensating(false);
   };
 
+  const parseCompensation = (notes: string | null): { total: number; entries: { amount: number; reason: string }[] } | null => {
+    if (!notes) return null;
+    const matches = [...notes.matchAll(/Compensatie: \+(\d+) leads(?:\s*\(([^)]*)\))?/g)];
+    if (matches.length === 0) return null;
+    const entries = matches.map(m => ({ amount: parseInt(m[1]), reason: m[2] || '' }));
+    return { total: entries.reduce((s, e) => s + e.amount, 0), entries };
+  };
+
   const activeBatches = batches.filter(b => b.status === 'active');
   const totalToDeliver = activeBatches.reduce((s, b) => s + b.batch_size, 0);
   const totalDelivered = activeBatches.reduce((s, b) => s + b.leads_delivered, 0);
@@ -632,18 +640,47 @@ export default function VerdelingPage() {
                           const pct = Math.min(100, Math.round((b.leads_delivered / b.batch_size) * 100));
                           const br = getBranch(b.branch);
                           const c = COLOR_MAP[br?.color || 'slate'] || COLOR_MAP.slate;
+                          const comp = parseCompensation(b.notes);
+                          const originalSize = comp ? b.batch_size - comp.total : b.batch_size;
+                          const compensationDelivered = comp ? Math.max(0, b.leads_delivered - originalSize) : 0;
+                          const compensationRemaining = comp ? comp.total - compensationDelivered : 0;
                           return (
                             <tr key={b.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50">
-                              <td className="px-4 py-3 font-medium text-slate-800">{b.customers?.name || '—'}</td>
+                              <td className="px-4 py-3">
+                                <div className="font-medium text-slate-800">{b.customers?.name || '—'}</div>
+                                {comp && (
+                                  <div className="mt-1 flex items-center gap-1.5">
+                                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                                      <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" /></svg>
+                                      Compensatie +{comp.total}
+                                    </span>
+                                    {comp.entries[comp.entries.length - 1]?.reason && (
+                                      <span className="text-[10px] text-amber-600">{comp.entries[comp.entries.length - 1].reason}</span>
+                                    )}
+                                  </div>
+                                )}
+                              </td>
                               <td className="px-4 py-3">
                                 <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${c.light} ${c.text}`}>{br?.name || b.branch}</span>
                               </td>
                               <td className="px-4 py-3">
                                 <div className="flex items-center gap-2">
-                                  <div className="h-2 w-20 overflow-hidden rounded-full bg-slate-100">
-                                    <div className={`h-full rounded-full ${pct >= 100 ? 'bg-blue-500' : 'bg-brand-purple'}`} style={{ width: `${pct}%` }} />
-                                  </div>
-                                  <span className="text-xs text-slate-500">{b.leads_delivered}/{b.batch_size}</span>
+                                  {comp ? (
+                                    <div className="h-2 w-20 overflow-hidden rounded-full bg-slate-100">
+                                      <div className="flex h-full">
+                                        <div className="h-full bg-brand-purple" style={{ width: `${Math.min(100, Math.round((Math.min(b.leads_delivered, originalSize) / b.batch_size) * 100))}%` }} />
+                                        <div className="h-full bg-amber-400" style={{ width: `${Math.min(100, Math.round((compensationDelivered / b.batch_size) * 100))}%` }} />
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="h-2 w-20 overflow-hidden rounded-full bg-slate-100">
+                                      <div className={`h-full rounded-full ${pct >= 100 ? 'bg-blue-500' : 'bg-brand-purple'}`} style={{ width: `${pct}%` }} />
+                                    </div>
+                                  )}
+                                  <span className="text-xs text-slate-500">
+                                    {b.leads_delivered}/{b.batch_size}
+                                    {comp && <span className="ml-1 text-amber-600">({compensationRemaining > 0 ? `nog ${compensationRemaining} comp.` : 'comp. klaar'})</span>}
+                                  </span>
                                 </div>
                               </td>
                               <td className="px-4 py-3">
