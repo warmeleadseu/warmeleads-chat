@@ -17,6 +17,9 @@ import {
   CalendarDaysIcon,
   ArrowTrendingUpIcon,
   ArrowTrendingDownIcon,
+  EyeIcon,
+  ExclamationCircleIcon,
+  ChevronDownIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
 
@@ -48,6 +51,32 @@ interface Batch {
 
 interface BranchOption { slug: string; name: string; color: string; }
 
+interface DebugLead {
+  id: string;
+  naam_klant: string;
+  email: string;
+  branch: string;
+  postcode: string;
+  plaatsnaam: string;
+  has_coords: boolean;
+  lat: number | null;
+  lng: number | null;
+  land: string;
+  created_at: string;
+  assignment_count: number;
+  assignments: { id: string; customer_name: string; customer_id: string; distance_km: number | null; assigned_at: string }[];
+  potential_matches: { customer_id: string; customer_name: string; assigned: boolean; reason_not_assigned?: string; distance_km?: number; target_label?: string }[];
+}
+
+interface DebugSummary {
+  total_leads: number;
+  leads_with_coords: number;
+  leads_without_coords: number;
+  total_assignments: number;
+  active_batches: number;
+  completed_batches: number;
+}
+
 const COLOR_MAP: Record<string, { light: string; text: string }> = {
   emerald: { light: 'bg-emerald-50', text: 'text-emerald-600' },
   sky: { light: 'bg-sky-50', text: 'text-sky-600' },
@@ -70,8 +99,12 @@ export default function VerdelingPage() {
   const [distResult, setDistResult] = useState<{ distributed: number; assignments: number } | null>(null);
   const [enriching, setEnriching] = useState(false);
   const [enrichResult, setEnrichResult] = useState<{ enriched: number; total: number } | null>(null);
-  const [tab, setTab] = useState<'overzicht' | 'assignments' | 'batches'>('overzicht');
+  const [tab, setTab] = useState<'overzicht' | 'assignments' | 'batches' | 'leadstatus'>('overzicht');
   const [timePeriod, setTimePeriod] = useState<string>('week');
+  const [debugLeads, setDebugLeads] = useState<DebugLead[]>([]);
+  const [debugSummary, setDebugSummary] = useState<DebugSummary | null>(null);
+  const [debugLoading, setDebugLoading] = useState(false);
+  const [expandedLead, setExpandedLead] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -87,6 +120,17 @@ export default function VerdelingPage() {
       setBranches((bd.branches || []).map((b: any) => ({ slug: b.slug, name: b.name, color: b.color })));
     }
     setLoading(false);
+  }, []);
+
+  const fetchDebug = useCallback(async () => {
+    setDebugLoading(true);
+    const res = await adminFetch('/api/admin/distribution-debug');
+    if (res.ok) {
+      const d = await res.json();
+      setDebugLeads(d.leads || []);
+      setDebugSummary(d.summary || null);
+    }
+    setDebugLoading(false);
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
@@ -236,10 +280,10 @@ export default function VerdelingPage() {
 
       {/* Tabs */}
       <div className="mb-4 flex gap-1 rounded-xl bg-slate-100 p-1">
-        {(['overzicht', 'assignments', 'batches'] as const).map(t => (
-          <button key={t} onClick={() => setTab(t)}
-            className={`flex-1 rounded-lg py-2 text-sm font-medium transition ${tab === t ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-            {t === 'overzicht' ? 'Overzicht' : t === 'assignments' ? 'Toewijzingen' : 'Alle batches'}
+        {(['overzicht', 'leadstatus', 'assignments', 'batches'] as const).map(t => (
+          <button key={t} onClick={() => { setTab(t); if (t === 'leadstatus' && debugLeads.length === 0) fetchDebug(); }}
+            className={`flex-1 rounded-lg py-2 text-xs font-medium transition sm:text-sm ${tab === t ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+            {t === 'overzicht' ? 'Overzicht' : t === 'leadstatus' ? 'Lead status' : t === 'assignments' ? 'Toewijzingen' : 'Alle batches'}
           </button>
         ))}
       </div>
@@ -475,6 +519,185 @@ export default function VerdelingPage() {
                 </table>
               </div>
             </div>
+          )}
+        </div>
+      )}
+
+      {tab === 'leadstatus' && (
+        <div>
+          {debugLoading ? (
+            <div className="space-y-3">
+              {[1, 2, 3, 4, 5].map(i => <div key={i} className="h-20 animate-pulse rounded-xl bg-slate-100" />)}
+            </div>
+          ) : (
+            <>
+              {/* Summary banner */}
+              {debugSummary && (
+                <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+                    <p className="text-lg font-bold text-slate-900">{debugSummary.total_leads}</p>
+                    <p className="text-[11px] text-slate-500">Totaal leads</p>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+                    <p className="text-lg font-bold text-emerald-600">{debugSummary.leads_with_coords}</p>
+                    <p className="text-[11px] text-slate-500">Met coördinaten</p>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+                    <p className="text-lg font-bold text-red-500">{debugSummary.leads_without_coords}</p>
+                    <p className="text-[11px] text-slate-500">Zonder coördinaten</p>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+                    <p className="text-lg font-bold text-brand-purple">{debugSummary.total_assignments}</p>
+                    <p className="text-[11px] text-slate-500">Totaal toewijzingen</p>
+                  </div>
+                </div>
+              )}
+
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-slate-700">Per lead: toewijzingen &amp; diagnose</h3>
+                <button
+                  onClick={fetchDebug}
+                  disabled={debugLoading}
+                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-500 transition hover:bg-slate-50"
+                >
+                  <ArrowPathIcon className={`h-3.5 w-3.5 ${debugLoading ? 'animate-spin' : ''}`} />
+                  Vernieuwen
+                </button>
+              </div>
+
+              {debugLeads.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-slate-200 py-10 text-center">
+                  <InboxIcon className="mx-auto mb-2 h-8 w-8 text-slate-300" />
+                  <p className="text-sm text-slate-500">Geen leads gevonden</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {debugLeads.map(lead => {
+                    const isExpanded = expandedLead === lead.id;
+                    const br = getBranch(lead.branch);
+                    const c = COLOR_MAP[br?.color || 'slate'] || COLOR_MAP.slate;
+                    const unassigned = lead.potential_matches.filter(m => !m.assigned);
+                    const hasIssue = !lead.has_coords || unassigned.some(m => m.reason_not_assigned);
+
+                    return (
+                      <div key={lead.id} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                        <button
+                          onClick={() => setExpandedLead(isExpanded ? null : lead.id)}
+                          className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-slate-50/50"
+                        >
+                          {/* Status indicator */}
+                          <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
+                            !lead.has_coords ? 'bg-red-100' :
+                            lead.assignment_count === 0 ? 'bg-amber-100' :
+                            'bg-emerald-100'
+                          }`}>
+                            {!lead.has_coords ? (
+                              <ExclamationCircleIcon className="h-4 w-4 text-red-500" />
+                            ) : lead.assignment_count === 0 ? (
+                              <ExclamationTriangleIcon className="h-4 w-4 text-amber-500" />
+                            ) : (
+                              <CheckCircleIcon className="h-4 w-4 text-emerald-500" />
+                            )}
+                          </div>
+
+                          {/* Lead info */}
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="truncate text-sm font-medium text-slate-800">{lead.naam_klant || lead.email}</span>
+                              <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${c.light} ${c.text}`}>
+                                {br?.name || lead.branch}
+                              </span>
+                            </div>
+                            <div className="mt-0.5 flex items-center gap-3 text-xs text-slate-400">
+                              <span>{lead.plaatsnaam || lead.postcode || 'Geen locatie'}</span>
+                              {!lead.has_coords && <span className="font-medium text-red-400">Geen coördinaten</span>}
+                            </div>
+                          </div>
+
+                          {/* Assignment count */}
+                          <div className="flex shrink-0 items-center gap-2">
+                            <div className="flex gap-0.5">
+                              {[0, 1, 2].map(i => (
+                                <div
+                                  key={i}
+                                  className={`h-2 w-2 rounded-full ${
+                                    i < lead.assignment_count ? 'bg-brand-purple' : 'bg-slate-200'
+                                  }`}
+                                />
+                              ))}
+                            </div>
+                            <span className="text-xs font-medium text-slate-500">{lead.assignment_count}/3</span>
+                            <ChevronDownIcon className={`h-4 w-4 text-slate-400 transition ${isExpanded ? 'rotate-180' : ''}`} />
+                          </div>
+                        </button>
+
+                        {/* Expanded detail */}
+                        {isExpanded && (
+                          <div className="border-t border-slate-100 bg-slate-50/50 px-4 py-3">
+                            {/* Assigned customers */}
+                            {lead.assignments.length > 0 && (
+                              <div className="mb-3">
+                                <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Toegewezen aan</p>
+                                <div className="space-y-1.5">
+                                  {lead.assignments.map(a => (
+                                    <div key={a.id} className="flex items-center justify-between rounded-lg bg-emerald-50 px-3 py-2">
+                                      <div className="flex items-center gap-2">
+                                        <CheckCircleIcon className="h-4 w-4 text-emerald-500" />
+                                        <span className="text-sm font-medium text-emerald-800">{a.customer_name}</span>
+                                      </div>
+                                      <div className="flex items-center gap-3 text-xs text-emerald-600">
+                                        {a.distance_km != null && <span>{a.distance_km} km</span>}
+                                        <span>{new Date(a.assigned_at).toLocaleDateString('nl-NL')}</span>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Potential matches / reasons for not assigned */}
+                            {unassigned.length > 0 && (
+                              <div>
+                                <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Niet toegewezen — reden</p>
+                                <div className="space-y-1.5">
+                                  {unassigned.map(m => (
+                                    <div key={m.customer_id} className="flex items-start justify-between rounded-lg bg-white px-3 py-2 ring-1 ring-slate-100">
+                                      <div className="flex items-start gap-2">
+                                        <ExclamationCircleIcon className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+                                        <div>
+                                          <span className="text-sm font-medium text-slate-700">{m.customer_name}</span>
+                                          <p className="mt-0.5 text-xs text-slate-500">{m.reason_not_assigned}</p>
+                                        </div>
+                                      </div>
+                                      {m.distance_km != null && (
+                                        <span className="ml-2 shrink-0 text-xs text-slate-400">{m.distance_km} km</span>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {lead.assignments.length === 0 && unassigned.length === 0 && (
+                              <p className="text-sm text-slate-400">Geen klanten met actieve batches voor deze branche</p>
+                            )}
+
+                            {/* Lead details */}
+                            <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-slate-100 pt-2 text-xs text-slate-400">
+                              <span>Postcode: {lead.postcode || '—'}</span>
+                              <span>Plaats: {lead.plaatsnaam || '—'}</span>
+                              <span>Land: {lead.land || '—'}</span>
+                              <span>Coords: {lead.has_coords ? `${lead.lat}, ${lead.lng}` : 'Geen'}</span>
+                              <span>Aangemaakt: {new Date(lead.created_at).toLocaleDateString('nl-NL')}</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

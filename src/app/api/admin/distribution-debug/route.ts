@@ -1,0 +1,214 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { createServerClient } from '@/lib/supabase';
+import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
+
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+export async function GET(request: NextRequest) {
+  const admin = await verifyAdmin(request);
+  if (!admin) return unauthorized();
+
+  const supabase = createServerClient();
+
+  const [leadsRes, assignRes, batchRes, targetRes, custRes] = await Promise.all([
+    supabase.from('leads').select('id, naam_klant, email, branch, postcode, plaatsnaam, lat, lng, land, created_at').order('created_at', { ascending: false }),
+    supabase.from('lead_assignments').select('id, lead_id, customer_id, batch_id, distance_km, assigned_at, customers(name)'),
+    supabase.from('customer_batches').select('id, customer_id, branch, batch_size, leads_delivered, status, customers(name)'),
+    supabase.from('customer_targets').select('id, customer_id, label, lat, lng, radius_km, is_active'),
+    supabase.from('customers').select('id, name, is_active, portal_active'),
+  ]);
+
+  const leads = leadsRes.data || [];
+  const assignments = assignRes.data || [];
+  const batches = batchRes.data || [];
+  const targets = targetRes.data || [];
+  const customers = custRes.data || [];
+
+  const assignmentsByLead: Record<string, typeof assignments> = {};
+  for (const a of assignments) {
+    if (!assignmentsByLead[a.lead_id]) assignmentsByLead[a.lead_id] = [];
+    assignmentsByLead[a.lead_id].push(a);
+  }
+
+  const activeBatchesByBranch: Record<string, typeof batches> = {};
+  for (const b of batches) {
+    if (b.status !== 'active') continue;
+    if (!activeBatchesByBranch[b.branch]) activeBatchesByBranch[b.branch] = [];
+    activeBatchesByBranch[b.branch].push(b);
+  }
+
+  const targetsByCustomer: Record<string, typeof targets> = {};
+  for (const t of targets) {
+    if (!targetsByCustomer[t.customer_id]) targetsByCustomer[t.customer_id] = [];
+    targetsByCustomer[t.customer_id].push(t);
+  }
+
+  const customerMap: Record<string, (typeof customers)[0]> = {};
+  for (const c of customers) customerMap[c.id] = c;
+
+  const leadDetails = leads.map(lead => {
+    const leadAssignments = assignmentsByLead[lead.id] || [];
+    const assignedCustomerIds = new Set(leadAssignments.map(a => a.customer_id));
+    const hasCoords = lead.lat != null && lead.lng != null;
+
+    const potentialMatches: {
+      customer_id: string;
+      customer_name: string;
+      assigned: boolean;
+      reason_not_assigned?: string;
+      distance_km?: number;
+      target_label?: string;
+    }[] = [];
+
+    const branchBatches = activeBatchesByBranch[lead.branch] || [];
+    const allBranchBatches = batches.filter(b => b.branch === lead.branch);
+
+    const relevantCustomerIds = new Set([
+      ...branchBatches.map(b => b.customer_id),
+      ...allBranchBatches.map(b => b.customer_id),
+    ]);
+
+    for (const custId of relevantCustomerIds) {
+      const cust = customerMap[custId];
+      if (!cust) continue;
+
+      const isAssigned = assignedCustomerIds.has(custId);
+      if (isAssigned) {
+        const a = leadAssignments.find(x => x.customer_id === custId);
+        potentialMatches.push({
+          customer_id: custId,
+          customer_name: cust.name,
+          assigned: true,
+          distance_km: a?.distance_km ?? undefined,
+        });
+        continue;
+      }
+
+      if (!hasCoords) {
+        potentialMatches.push({
+          customer_id: custId,
+          customer_name: cust.name,
+          assigned: false,
+          reason_not_assigned: 'Lead heeft geen coördinaten (lat/lng)',
+        });
+        continue;
+      }
+
+      if (!cust.is_active) {
+        potentialMatches.push({
+          customer_id: custId,
+          customer_name: cust.name,
+          assigned: false,
+          reason_not_assigned: 'Klant is inactief',
+        });
+        continue;
+      }
+
+      const custBatch = branchBatches.find(b => b.customer_id === custId);
+      if (!custBatch) {
+        const completedBatch = allBranchBatches.find(b => b.customer_id === custId && b.status === 'completed');
+        potentialMatches.push({
+          customer_id: custId,
+          customer_name: cust.name,
+          assigned: false,
+          reason_not_assigned: completedBatch
+            ? `Batch is vol (${completedBatch.leads_delivered}/${completedBatch.batch_size})`
+            : 'Geen actieve batch voor deze branche',
+        });
+        continue;
+      }
+
+      if (custBatch.leads_delivered >= custBatch.batch_size) {
+        potentialMatches.push({
+          customer_id: custId,
+          customer_name: cust.name,
+          assigned: false,
+          reason_not_assigned: `Batch zit vol (${custBatch.leads_delivered}/${custBatch.batch_size})`,
+        });
+        continue;
+      }
+
+      const custTargets = (targetsByCustomer[custId] || []).filter(t => t.is_active);
+      if (custTargets.length === 0) {
+        potentialMatches.push({
+          customer_id: custId,
+          customer_name: cust.name,
+          assigned: false,
+          reason_not_assigned: 'Geen actieve targetgebieden',
+        });
+        continue;
+      }
+
+      let closestTarget: { label: string; distance: number; radius: number } | null = null;
+      for (const t of custTargets) {
+        const dist = haversineKm(lead.lat!, lead.lng!, t.lat, t.lng);
+        if (!closestTarget || dist < closestTarget.distance) {
+          closestTarget = { label: t.label, distance: Math.round(dist * 10) / 10, radius: t.radius_km };
+        }
+      }
+
+      if (closestTarget && closestTarget.distance <= closestTarget.radius) {
+        potentialMatches.push({
+          customer_id: custId,
+          customer_name: cust.name,
+          assigned: false,
+          reason_not_assigned: `Binnen bereik (${closestTarget.distance}km) maar max ${3} toewijzingen bereikt of niet verdeeld`,
+          distance_km: closestTarget.distance,
+          target_label: closestTarget.label,
+        });
+      } else if (closestTarget) {
+        potentialMatches.push({
+          customer_id: custId,
+          customer_name: cust.name,
+          assigned: false,
+          reason_not_assigned: `Buiten bereik: ${closestTarget.distance}km (max ${closestTarget.radius}km voor "${closestTarget.label}")`,
+          distance_km: closestTarget.distance,
+          target_label: closestTarget.label,
+        });
+      }
+    }
+
+    return {
+      id: lead.id,
+      naam_klant: lead.naam_klant,
+      email: lead.email,
+      branch: lead.branch,
+      postcode: lead.postcode,
+      plaatsnaam: lead.plaatsnaam,
+      has_coords: hasCoords,
+      lat: lead.lat,
+      lng: lead.lng,
+      land: lead.land,
+      created_at: lead.created_at,
+      assignment_count: leadAssignments.length,
+      assignments: leadAssignments.map(a => ({
+        id: a.id,
+        customer_name: (a.customers as any)?.name || 'Onbekend',
+        customer_id: a.customer_id,
+        distance_km: a.distance_km,
+        assigned_at: a.assigned_at,
+      })),
+      potential_matches: potentialMatches,
+    };
+  });
+
+  const summary = {
+    total_leads: leads.length,
+    leads_with_coords: leads.filter(l => l.lat != null && l.lng != null).length,
+    leads_without_coords: leads.filter(l => l.lat == null || l.lng == null).length,
+    total_assignments: assignments.length,
+    active_batches: batches.filter(b => b.status === 'active').length,
+    completed_batches: batches.filter(b => b.status === 'completed').length,
+  };
+
+  return NextResponse.json({ summary, leads: leadDetails });
+}
