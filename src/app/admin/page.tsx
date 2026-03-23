@@ -107,11 +107,19 @@ function DashboardSkeleton() {
 interface CostData {
   weekSpend: number;
   monthSpend: number;
-  weekAvgCpl: number | null;
-  monthAvgCpl: number | null;
+  monthBrutoCpl: number | null;
+  effectieveCpl: number | null;
+  avgAssignments: number;
+  totalRevenue: number;
+  totalCost: number;
+  totalProfit: number;
+  roi: number;
   leadsWithCost: number;
-  branchCosts: Record<string, { spend: number; count: number; avgCpl: number }>;
-  customerMargins: { name: string; revenue: number; cost: number; margin: number; leads: number }[];
+  uniqueAssignedLeads: number;
+  totalAssignments: number;
+  branchCosts: Record<string, { spend: number; count: number; avgCpl: number; effectieveCpl: number; assignments: number }>;
+  customerMargins: { name: string; revenue: number; cost: number; margin: number; leads: number; marginPct: number }[];
+  batchFinancials: { id: string; customer: string; branch: string; batchSize: number; delivered: number; pricePerLead: number; status: string; revenue: number; cost: number; profit: number; marginPct: number; leadsWithCost: number }[];
   lastSyncAt: string | null;
   dailyTrend: { date: string; spend: number; leads: number }[];
 }
@@ -245,8 +253,9 @@ export default function AdminDashboard() {
 
       {/* Cost & Margin overview */}
       {costData && (costData.monthSpend > 0 || costData.leadsWithCost > 0) && (
-        <div className="mb-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="mb-4 flex items-center justify-between">
+        <div className="mb-6 space-y-4">
+          {/* Header */}
+          <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <div className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50">
                 <CurrencyEuroIcon className="h-4 w-4 text-emerald-500" />
@@ -260,44 +269,67 @@ export default function AdminDashboard() {
             )}
           </div>
 
-          {/* KPI row */}
-          <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <div className="rounded-lg bg-slate-50 p-3">
-              <p className="text-lg font-bold text-slate-900">&euro;{costData.weekSpend.toFixed(0)}</p>
-              <p className="text-[11px] text-slate-500">Ad spend week</p>
+          {/* KPI Cards — 6 cards in 2 rows on mobile, 3+3 or 6 on desktop */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <p className="text-xl font-bold text-slate-900">&euro;{costData.monthSpend.toFixed(0)}</p>
+              <p className="mt-0.5 text-[11px] text-slate-500">Ad spend maand</p>
+              <p className="text-[10px] text-slate-400">Week: &euro;{costData.weekSpend.toFixed(0)}</p>
             </div>
-            <div className="rounded-lg bg-slate-50 p-3">
-              <p className="text-lg font-bold text-slate-900">&euro;{costData.monthSpend.toFixed(0)}</p>
-              <p className="text-[11px] text-slate-500">Ad spend maand</p>
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <p className="text-xl font-bold text-slate-900">&euro;{costData.monthBrutoCpl?.toFixed(2) ?? '—'}</p>
+              <p className="mt-0.5 text-[11px] text-slate-500">Bruto CPL</p>
+              <p className="text-[10px] text-slate-400">{costData.leadsWithCost} leads met kosten</p>
             </div>
-            <div className="rounded-lg bg-slate-50 p-3">
-              <p className="text-lg font-bold text-slate-900">&euro;{costData.weekAvgCpl?.toFixed(2) ?? '—'}</p>
-              <p className="text-[11px] text-slate-500">Gem. CPL week</p>
+            <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-4 shadow-sm">
+              <p className="text-xl font-bold text-emerald-700">&euro;{costData.effectieveCpl?.toFixed(2) ?? '—'}</p>
+              <p className="mt-0.5 text-[11px] text-emerald-600 font-medium">Effectieve CPL</p>
+              <p className="text-[10px] text-emerald-500">{costData.avgAssignments}x uitgedeeld</p>
             </div>
-            <div className="rounded-lg bg-slate-50 p-3">
-              <p className="text-lg font-bold text-slate-900">&euro;{costData.monthAvgCpl?.toFixed(2) ?? '—'}</p>
-              <p className="text-[11px] text-slate-500">Gem. CPL maand</p>
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <p className="text-xl font-bold text-slate-900">&euro;{costData.totalRevenue.toFixed(0)}</p>
+              <p className="mt-0.5 text-[11px] text-slate-500">Omzet (maand)</p>
+              <p className="text-[10px] text-slate-400">{costData.totalAssignments} toewijzingen</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <p className={`text-xl font-bold ${costData.totalProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                {costData.totalProfit >= 0 ? '+' : ''}&euro;{costData.totalProfit.toFixed(0)}
+              </p>
+              <p className="mt-0.5 text-[11px] text-slate-500">Winst (maand)</p>
+              <p className="text-[10px] text-slate-400">Kosten: &euro;{costData.totalCost.toFixed(0)}</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <p className={`text-xl font-bold ${costData.roi >= 0 ? 'text-brand-purple' : 'text-red-600'}`}>
+                {costData.roi}%
+              </p>
+              <p className="mt-0.5 text-[11px] text-slate-500">ROI</p>
+              <p className="text-[10px] text-slate-400">(omzet − kosten) / kosten</p>
             </div>
           </div>
 
-          {/* Branch CPL + Customer margins in 2 cols */}
+          {/* Branch CPL + Customer margins */}
           <div className="grid gap-4 lg:grid-cols-2">
-            {/* CPL per branche */}
             {Object.keys(costData.branchCosts).length > 0 && (
-              <div>
-                <h3 className="mb-2 text-xs font-semibold text-slate-600">CPL per branche (maand)</h3>
+              <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                <h3 className="mb-3 text-xs font-semibold text-slate-600">CPL per branche (maand)</h3>
                 <div className="space-y-2">
                   {Object.entries(costData.branchCosts).sort((a, b) => b[1].spend - a[1].spend).map(([slug, data]) => {
                     const b = getBranch(slug);
                     return (
-                      <div key={slug} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
-                        <div className="flex items-center gap-2">
-                          <span className={`inline-block h-2.5 w-2.5 rounded-full ${b.dot}`} />
-                          <span className="text-xs font-medium text-slate-700">{b.name}</span>
-                        </div>
-                        <div className="flex items-center gap-3 text-xs">
-                          <span className="text-slate-500">{data.count} leads</span>
-                          <span className="font-semibold text-slate-800">&euro;{data.avgCpl.toFixed(2)}</span>
+                      <div key={slug} className="rounded-lg bg-slate-50 px-3 py-2.5">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className={`inline-block h-2.5 w-2.5 rounded-full ${b.dot}`} />
+                            <span className="text-xs font-medium text-slate-700">{b.name}</span>
+                            <span className="text-[10px] text-slate-400">{data.count} leads</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] text-slate-400">bruto</span>
+                            <span className="text-xs font-semibold text-slate-700">&euro;{data.avgCpl.toFixed(2)}</span>
+                            <span className="text-slate-300">→</span>
+                            <span className="text-[10px] text-emerald-500">eff.</span>
+                            <span className="text-xs font-bold text-emerald-600">&euro;{data.effectieveCpl.toFixed(2)}</span>
+                          </div>
                         </div>
                       </div>
                     );
@@ -306,28 +338,30 @@ export default function AdminDashboard() {
               </div>
             )}
 
-            {/* Customer margins */}
             {costData.customerMargins.length > 0 && (
-              <div>
-                <h3 className="mb-2 text-xs font-semibold text-slate-600">Marge per klant (maand)</h3>
+              <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                <h3 className="mb-3 text-xs font-semibold text-slate-600">Marge per klant (maand)</h3>
                 <div className="space-y-2">
-                  {costData.customerMargins.slice(0, 6).map((cm, i) => (
-                    <div key={i} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
-                      <div className="min-w-0 flex-1">
-                        <span className="truncate text-xs font-medium text-slate-700">{cm.name}</span>
-                        <div className="flex gap-3 text-[10px] text-slate-400">
-                          <span>{cm.leads} leads</span>
-                          <span>Omzet &euro;{cm.revenue.toFixed(0)}</span>
-                          <span>Kosten &euro;{cm.cost.toFixed(0)}</span>
+                  {costData.customerMargins.slice(0, 8).map((cm, i) => (
+                    <div key={i} className="rounded-lg bg-slate-50 px-3 py-2.5">
+                      <div className="flex items-center justify-between">
+                        <div className="min-w-0 flex-1">
+                          <span className="text-xs font-medium text-slate-700">{cm.name}</span>
+                          <div className="flex gap-2 text-[10px] text-slate-400">
+                            <span>{cm.leads} leads</span>
+                            <span>&euro;{cm.revenue.toFixed(0)} omzet</span>
+                            <span>&euro;{cm.cost.toFixed(0)} kosten</span>
+                          </div>
+                        </div>
+                        <div className="ml-2 flex shrink-0 items-center gap-1.5">
+                          <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${cm.margin >= 0 ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}`}>
+                            {cm.margin >= 0 ? '+' : ''}&euro;{cm.margin.toFixed(0)}
+                          </span>
+                          <span className={`text-[10px] font-medium ${cm.marginPct >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                            {cm.marginPct}%
+                          </span>
                         </div>
                       </div>
-                      <span className={`ml-2 shrink-0 rounded-full px-2 py-0.5 text-xs font-bold ${
-                        cm.margin >= 0
-                          ? 'bg-emerald-50 text-emerald-600'
-                          : 'bg-red-50 text-red-600'
-                      }`}>
-                        {cm.margin >= 0 ? '+' : ''}&euro;{cm.margin.toFixed(0)}
-                      </span>
                     </div>
                   ))}
                 </div>
@@ -335,9 +369,99 @@ export default function AdminDashboard() {
             )}
           </div>
 
+          {/* Batch-level financials */}
+          {costData.batchFinancials.length > 0 && (
+            <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+              <div className="border-b border-slate-100 px-5 py-4">
+                <div className="flex items-center gap-2">
+                  <BanknotesIcon className="h-4 w-4 text-amber-500" />
+                  <h3 className="text-sm font-semibold text-slate-900">Winst per batch</h3>
+                </div>
+              </div>
+
+              {/* Desktop table */}
+              <div className="hidden overflow-x-auto md:block">
+                <table className="w-full text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-50 text-[11px] font-semibold text-slate-500">
+                      <th className="px-5 py-2.5">Klant</th>
+                      <th className="px-3 py-2.5">Branche</th>
+                      <th className="px-3 py-2.5 text-right">Geleverd</th>
+                      <th className="px-3 py-2.5 text-right">€/lead</th>
+                      <th className="px-3 py-2.5 text-right">Omzet</th>
+                      <th className="px-3 py-2.5 text-right">Kosten</th>
+                      <th className="px-3 py-2.5 text-right">Winst</th>
+                      <th className="px-3 py-2.5 text-right">Marge</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {costData.batchFinancials.map(bf => {
+                      const br = getBranch(bf.branch);
+                      return (
+                        <tr key={bf.id} className="border-b border-slate-50 last:border-0">
+                          <td className="px-5 py-2.5">
+                            <span className="text-xs font-medium text-slate-700">{bf.customer}</span>
+                            {bf.status === 'completed' && (
+                              <span className="ml-1.5 rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] font-medium text-slate-400">afgerond</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${br.light} ${br.text}`}>{br.name}</span>
+                          </td>
+                          <td className="px-3 py-2.5 text-right text-xs text-slate-600">{bf.delivered}/{bf.batchSize}</td>
+                          <td className="px-3 py-2.5 text-right text-xs text-slate-600">&euro;{bf.pricePerLead.toFixed(2)}</td>
+                          <td className="px-3 py-2.5 text-right text-xs font-medium text-slate-700">&euro;{bf.revenue.toFixed(0)}</td>
+                          <td className="px-3 py-2.5 text-right text-xs text-slate-500">&euro;{bf.cost.toFixed(0)}</td>
+                          <td className={`px-3 py-2.5 text-right text-xs font-bold ${bf.profit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                            {bf.profit >= 0 ? '+' : ''}&euro;{bf.profit.toFixed(0)}
+                          </td>
+                          <td className="px-3 py-2.5 text-right">
+                            <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${bf.marginPct >= 50 ? 'bg-emerald-50 text-emerald-600' : bf.marginPct >= 0 ? 'bg-amber-50 text-amber-600' : 'bg-red-50 text-red-600'}`}>
+                              {bf.marginPct}%
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile cards */}
+              <div className="divide-y divide-slate-50 md:hidden">
+                {costData.batchFinancials.map(bf => {
+                  const br = getBranch(bf.branch);
+                  return (
+                    <div key={bf.id} className="px-4 py-3">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <p className="text-xs font-medium text-slate-700">{bf.customer}</p>
+                          <div className="mt-0.5 flex items-center gap-1.5">
+                            <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-medium ${br.light} ${br.text}`}>{br.name}</span>
+                            <span className="text-[10px] text-slate-400">{bf.delivered}/{bf.batchSize} · &euro;{bf.pricePerLead.toFixed(2)}/lead</span>
+                          </div>
+                        </div>
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${bf.marginPct >= 50 ? 'bg-emerald-50 text-emerald-600' : bf.marginPct >= 0 ? 'bg-amber-50 text-amber-600' : 'bg-red-50 text-red-600'}`}>
+                          {bf.marginPct}%
+                        </span>
+                      </div>
+                      <div className="mt-1.5 flex items-center gap-3 text-[10px]">
+                        <span className="text-slate-400">Omzet &euro;{bf.revenue.toFixed(0)}</span>
+                        <span className="text-slate-400">Kosten &euro;{bf.cost.toFixed(0)}</span>
+                        <span className={`font-bold ${bf.profit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                          {bf.profit >= 0 ? '+' : ''}&euro;{bf.profit.toFixed(0)}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Daily trend mini chart */}
           {costData.dailyTrend.length > 0 && (
-            <div className="mt-4 border-t border-slate-100 pt-4">
+            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
               <h3 className="mb-2 text-xs font-semibold text-slate-600">Dagelijkse ad spend (14 dagen)</h3>
               <div className="flex items-end gap-1" style={{ height: 60 }}>
                 {(() => {

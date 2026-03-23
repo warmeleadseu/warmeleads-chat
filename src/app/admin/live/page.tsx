@@ -26,6 +26,7 @@ const DEFAULT_BRANCH = { bar: 'from-purple-400 to-purple-500', glow: 'shadow-pur
 interface PeriodStat { leads: number; prevLeads: number; assigned: number; prevAssigned: number; }
 interface BatchInfo { id: string; customer: string; branch: string; batchSize: number; delivered: number; pricePerLead: number | null; leadsPerWeek: number | null; notes: string | null; }
 interface RecentLead { id: string; name: string; branch: string; city: string; province: string; createdAt: string; }
+interface CostMetrics { monthAdSpend: number; brutoCpl: number; effectieveCpl: number; avgAssignments: number; totalProfit: number; }
 interface LiveData {
   totalLeads: number;
   activeCustomers: number;
@@ -39,6 +40,7 @@ interface LiveData {
   provinceBreakdown: Record<string, number>;
   branchBreakdown: Record<string, number>;
   phoneQuality: { total: number; invalid: number; validPct: number };
+  costMetrics?: CostMetrics;
   timestamp: string;
 }
 
@@ -619,11 +621,12 @@ export default function LiveDashboard() {
         </div>
 
         {/* Hero KPIs */}
-        <div className="mb-3 grid shrink-0 grid-cols-2 gap-2 lg:mb-2 lg:grid-cols-4">
+        <div className="mb-3 grid shrink-0 grid-cols-2 gap-2 lg:mb-2 lg:grid-cols-5">
           {[
             { label: 'Leads vandaag', value: ps.day?.leads || 0, sub: `${ps.day?.assigned || 0} uitgedeeld`, color: 'from-brand-purple to-brand-pink' },
             { label: 'Leads deze week', value: ps.week?.leads || 0, sub: `${ps.week?.assigned || 0} uitgedeeld`, color: 'from-emerald-500 to-emerald-600', trend: ps.week },
-            { label: 'Omzet', value: Math.round(data.totalRevenue), sub: `€${data.completedRevenue.toLocaleString('nl-NL')} afgerond`, color: 'from-amber-500 to-orange-500', prefix: '€' },
+            { label: 'Omzet', value: Math.round(data.totalRevenue), sub: `winst: €${(data.costMetrics?.totalProfit || 0).toLocaleString('nl-NL', { maximumFractionDigits: 0 })}`, color: 'from-amber-500 to-orange-500', prefix: '€' },
+            { label: 'Eff. CPL', value: data.costMetrics?.effectieveCpl || 0, sub: `${data.costMetrics?.avgAssignments || 0}x uitgedeeld · bruto €${(data.costMetrics?.brutoCpl || 0).toFixed(2)}`, color: 'from-teal-400 to-emerald-500', prefix: '€', decimals: 2 },
             { label: 'Totaal leads', value: data.totalLeads, sub: `${data.activeCustomers} klanten actief`, color: 'from-sky-500 to-blue-600' },
           ].map((kpi, i) => (
             <motion.div
@@ -636,7 +639,11 @@ export default function LiveDashboard() {
               <div className={`absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r ${kpi.color}`} />
               <p className="mb-0.5 text-[10px] font-medium text-white/40 lg:text-xs">{kpi.label}</p>
               <div className="flex items-baseline gap-2">
-                <AnimatedNumber value={kpi.value} prefix={kpi.prefix} className="text-2xl font-black tracking-tight text-white lg:text-3xl" />
+                {(kpi as any).decimals ? (
+                  <span className="text-2xl font-black tracking-tight text-white lg:text-3xl">{kpi.prefix}{kpi.value.toFixed((kpi as any).decimals)}</span>
+                ) : (
+                  <AnimatedNumber value={kpi.value} prefix={kpi.prefix} className="text-2xl font-black tracking-tight text-white lg:text-3xl" />
+                )}
                 {kpi.trend && <TrendArrow current={kpi.trend.leads} previous={kpi.trend.prevLeads} />}
               </div>
               <p className="mt-1 text-[11px] text-white/25">{kpi.sub}</p>
@@ -825,6 +832,42 @@ export default function LiveDashboard() {
             </div>
           </div>
         </div>
+
+        {/* Financial strip */}
+        {data.costMetrics && (data.costMetrics.monthAdSpend > 0 || data.costMetrics.effectieveCpl > 0) && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="shrink-0 rounded-2xl border border-emerald-500/10 bg-emerald-500/[0.04] p-3 backdrop-blur-sm"
+          >
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+              <div className="px-2">
+                <p className="text-[9px] font-bold uppercase tracking-widest text-emerald-400/50">Ad spend</p>
+                <p className="mt-0.5 text-lg font-black tabular-nums text-white/80">&euro;{data.costMetrics.monthAdSpend.toLocaleString('nl-NL', { maximumFractionDigits: 0 })}</p>
+              </div>
+              <div className="px-2">
+                <p className="text-[9px] font-bold uppercase tracking-widest text-emerald-400/50">Bruto CPL</p>
+                <p className="mt-0.5 text-lg font-black tabular-nums text-white/80">&euro;{data.costMetrics.brutoCpl.toFixed(2)}</p>
+              </div>
+              <div className="px-2">
+                <p className="text-[9px] font-bold uppercase tracking-widest text-emerald-400/50">Eff. CPL</p>
+                <p className="mt-0.5 text-lg font-black tabular-nums text-emerald-400">&euro;{data.costMetrics.effectieveCpl.toFixed(2)}</p>
+                <p className="text-[9px] text-white/25">{data.costMetrics.avgAssignments}x uitgedeeld</p>
+              </div>
+              <div className="px-2">
+                <p className="text-[9px] font-bold uppercase tracking-widest text-emerald-400/50">Omzet</p>
+                <p className="mt-0.5 text-lg font-black tabular-nums text-white/80">&euro;{data.totalRevenue.toLocaleString('nl-NL', { maximumFractionDigits: 0 })}</p>
+              </div>
+              <div className="px-2">
+                <p className="text-[9px] font-bold uppercase tracking-widest text-emerald-400/50">Winst</p>
+                <p className={`mt-0.5 text-lg font-black tabular-nums ${data.costMetrics.totalProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                  {data.costMetrics.totalProfit >= 0 ? '+' : ''}&euro;{data.costMetrics.totalProfit.toLocaleString('nl-NL', { maximumFractionDigits: 0 })}
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        )}
 
         {/* Period comparison */}
         <div className="grid shrink-0 grid-cols-3 gap-2 lg:grid-cols-6">
