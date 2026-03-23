@@ -39,7 +39,8 @@ export async function POST(request: NextRequest) {
 
   const total_price = price_per_lead ? price_per_lead * batch_size : null;
   const sanitizedFilters = Array.isArray(lead_filters) ? lead_filters.filter(
-    (f: { field?: string; operator?: string; value?: string }) => f.field && f.operator && f.value !== undefined && f.value !== ''
+    (f: { field?: string; operator?: string; value?: string; values?: string[] }) =>
+      f.field && f.operator && ((f.values && f.values.length > 0) || (f.value !== undefined && f.value !== ''))
   ) : [];
 
   const { data, error } = await supabase
@@ -65,6 +66,13 @@ export async function PUT(request: NextRequest) {
   const { id, ...updates } = body;
 
   if (!id) return NextResponse.json({ error: 'ID ontbreekt' }, { status: 400 });
+
+  if (updates.lead_filters && Array.isArray(updates.lead_filters)) {
+    updates.lead_filters = updates.lead_filters.filter(
+      (f: { field?: string; operator?: string; values?: string[]; value?: string }) =>
+        f.field && f.operator && ((f.values && f.values.length > 0) || (f.value !== undefined && f.value !== ''))
+    );
+  }
 
   // Recalculate total_price when batch_size or price_per_lead changes
   if (updates.batch_size || updates.price_per_lead) {

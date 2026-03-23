@@ -32,8 +32,9 @@ interface LeadForDistribution {
 
 interface LeadFilter {
   field: string;
-  operator: 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'contains' | 'not_contains';
+  operator: string;
   value: string;
+  values?: string[];
 }
 
 function getLeadFieldValue(lead: LeadForDistribution, fieldKey: string): string | null {
@@ -54,19 +55,26 @@ function matchesFilter(lead: LeadForDistribution, filter: LeadFilter): boolean {
   const raw = getLeadFieldValue(lead, filter.field);
   if (raw === null) return false;
 
+  // Multi-select: lead value must be one of the selected values (case-insensitive)
+  if (filter.operator === 'in' && filter.values && filter.values.length > 0) {
+    const lower = raw.toLowerCase();
+    return filter.values.some(v => v.toLowerCase() === lower);
+  }
+
+  // Legacy single-value operators
   const numA = parseFloat(raw.replace(/[^0-9.,\-]/g, '').replace(',', '.'));
-  const numB = parseFloat(filter.value.replace(/[^0-9.,\-]/g, '').replace(',', '.'));
+  const numB = parseFloat((filter.value || '').replace(/[^0-9.,\-]/g, '').replace(',', '.'));
   const bothNumeric = !isNaN(numA) && !isNaN(numB);
 
   switch (filter.operator) {
-    case 'eq': return raw.toLowerCase() === filter.value.toLowerCase();
-    case 'neq': return raw.toLowerCase() !== filter.value.toLowerCase();
-    case 'gt': return bothNumeric ? numA > numB : raw > filter.value;
-    case 'gte': return bothNumeric ? numA >= numB : raw >= filter.value;
-    case 'lt': return bothNumeric ? numA < numB : raw < filter.value;
-    case 'lte': return bothNumeric ? numA <= numB : raw <= filter.value;
-    case 'contains': return raw.toLowerCase().includes(filter.value.toLowerCase());
-    case 'not_contains': return !raw.toLowerCase().includes(filter.value.toLowerCase());
+    case 'eq': return raw.toLowerCase() === (filter.value || '').toLowerCase();
+    case 'neq': return raw.toLowerCase() !== (filter.value || '').toLowerCase();
+    case 'gt': return bothNumeric ? numA > numB : raw > (filter.value || '');
+    case 'gte': return bothNumeric ? numA >= numB : raw >= (filter.value || '');
+    case 'lt': return bothNumeric ? numA < numB : raw < (filter.value || '');
+    case 'lte': return bothNumeric ? numA <= numB : raw <= (filter.value || '');
+    case 'contains': return raw.toLowerCase().includes((filter.value || '').toLowerCase());
+    case 'not_contains': return !raw.toLowerCase().includes((filter.value || '').toLowerCase());
     default: return true;
   }
 }

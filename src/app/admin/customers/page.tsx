@@ -43,6 +43,7 @@ interface LeadFilter {
   field: string;
   operator: string;
   value: string;
+  values?: string[];
 }
 
 interface Batch {
@@ -839,27 +840,17 @@ function TargetsPanel({ customer, onClose }: { customer: Customer; onClose: () =
 }
 
 /* ============================================================
-   BATCHES PANEL
+   BATCHES PANEL — LEAD FILTER BUILDER (multi-select per field)
    ============================================================ */
-const FILTER_OPERATORS: { value: string; label: string; types: string[] }[] = [
-  { value: 'eq', label: 'Is gelijk aan', types: ['text', 'select', 'number', 'boolean'] },
-  { value: 'neq', label: 'Is niet gelijk aan', types: ['text', 'select', 'number', 'boolean'] },
-  { value: 'gte', label: '≥ Groter of gelijk', types: ['number', 'text'] },
-  { value: 'lte', label: '≤ Kleiner of gelijk', types: ['number', 'text'] },
-  { value: 'gt', label: '> Groter dan', types: ['number'] },
-  { value: 'lt', label: '< Kleiner dan', types: ['number'] },
-  { value: 'contains', label: 'Bevat', types: ['text', 'textarea'] },
-  { value: 'not_contains', label: 'Bevat niet', types: ['text', 'textarea'] },
-];
 
 const STANDARD_FILTER_FIELDS: BranchField[] = [
   { id: '_quality_score', key: 'quality_score', label: 'Kwaliteitsscore (0-100)', field_type: 'number', options: [] },
   { id: '_phone_valid', key: 'phone_valid', label: 'Geldig telefoonnummer', field_type: 'select', options: ['true', 'false'] },
 ];
 
-function FilterValueSelect({ branchSlug, fieldKey, value, onChange }: {
-  branchSlug: string; fieldKey: string; value: string;
-  onChange: (v: string) => void;
+function FilterFieldValues({ branchSlug, fieldKey, selected, onChange }: {
+  branchSlug: string; fieldKey: string; selected: string[];
+  onChange: (v: string[]) => void;
 }) {
   const [options, setOptions] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -873,30 +864,36 @@ function FilterValueSelect({ branchSlug, fieldKey, value, onChange }: {
       .finally(() => setLoading(false));
   }, [branchSlug, fieldKey]);
 
+  const toggle = (val: string) => {
+    if (selected.includes(val)) onChange(selected.filter(v => v !== val));
+    else onChange([...selected, val]);
+  };
+
   if (loading) {
     return (
-      <div className="flex h-[30px] items-center rounded border border-slate-200 bg-white px-2">
-        <div className="h-3 w-16 animate-pulse rounded bg-slate-100" />
+      <div className="mt-2 space-y-1.5">
+        {[0, 1, 2].map(i => <div key={i} className="h-6 w-full animate-pulse rounded bg-slate-100" />)}
       </div>
     );
   }
 
-  if (options.length > 0) {
-    return (
-      <select value={value} onChange={e => onChange(e.target.value)}
-        className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-brand-purple/50">
-        <option value="">Kies waarde...</option>
-        {options.map(opt => (
-          <option key={opt} value={opt}>{opt}</option>
-        ))}
-      </select>
-    );
+  if (options.length === 0) {
+    return <p className="mt-2 text-[11px] text-slate-400">Geen waarden gevonden voor dit veld.</p>;
   }
 
   return (
-    <input value={value} onChange={e => onChange(e.target.value)}
-      placeholder="Voer waarde in..."
-      className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-brand-purple/50" />
+    <div className="mt-2 max-h-48 space-y-0.5 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1.5">
+      {options.map(opt => {
+        const checked = selected.includes(opt);
+        return (
+          <label key={opt} className={`flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-1.5 text-xs transition ${checked ? 'bg-brand-purple/10 text-brand-purple font-medium' : 'text-slate-600 hover:bg-slate-50'}`}>
+            <input type="checkbox" checked={checked} onChange={() => toggle(opt)}
+              className="h-3.5 w-3.5 rounded border-slate-300 text-brand-purple accent-brand-purple" />
+            <span className="truncate">{opt}</span>
+          </label>
+        );
+      })}
+    </div>
   );
 }
 
@@ -911,19 +908,22 @@ function FilterBuilder({ filters, onChange, branchSlug }: { filters: LeadFilter[
       .then(d => setFields([...(d.fields || []), ...STANDARD_FILTER_FIELDS]));
   }, [branchSlug]);
 
-  const addFilter = () => onChange([...filters, { field: '', operator: 'eq', value: '' }]);
+  const addFilter = () => onChange([...filters, { field: '', operator: 'in', value: '', values: [] }]);
   const removeFilter = (i: number) => onChange(filters.filter((_, idx) => idx !== i));
-  const updateFilter = (i: number, key: keyof LeadFilter, val: string) => {
+
+  const setFilterField = (i: number, field: string) => {
     const next = [...filters];
-    next[i] = { ...next[i], [key]: val };
-    if (key === 'field') {
-      next[i].operator = 'eq';
-      next[i].value = '';
-    }
+    next[i] = { field, operator: 'in', value: '', values: [] };
     onChange(next);
   };
 
-  const getFieldDef = (key: string) => fields.find(f => f.key === key);
+  const setFilterValues = (i: number, values: string[]) => {
+    const next = [...filters];
+    next[i] = { ...next[i], operator: 'in', values, value: values.join('||') };
+    onChange(next);
+  };
+
+  const totalSelected = filters.reduce((sum, f) => sum + (f.values?.length || 0), 0);
 
   if (fields.length === 0 && branchSlug) return null;
 
@@ -935,7 +935,8 @@ function FilterBuilder({ filters, onChange, branchSlug }: { filters: LeadFilter[
         className="mb-2 inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 transition hover:text-brand-purple"
       >
         <AdjustmentsHorizontalIcon className="h-3.5 w-3.5" />
-        Lead vereisten {filters.length > 0 && <span className="rounded-full bg-brand-purple/10 px-1.5 py-0.5 text-[10px] font-bold text-brand-purple">{filters.length}</span>}
+        Lead vereisten
+        {totalSelected > 0 && <span className="rounded-full bg-brand-purple/10 px-1.5 py-0.5 text-[10px] font-bold text-brand-purple">{totalSelected}</span>}
         <ChevronDownIcon className={`h-3 w-3 transition ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
@@ -944,62 +945,57 @@ function FilterBuilder({ filters, onChange, branchSlug }: { filters: LeadFilter[
             <p className="text-[11px] text-slate-400">Geen filters — alle leads die in het targetgebied vallen worden toegewezen.</p>
           )}
           {filters.map((f, i) => {
-            const fieldDef = getFieldDef(f.field);
-            const fieldType = fieldDef?.field_type || 'text';
-            const availableOps = FILTER_OPERATORS.filter(op => op.types.includes(fieldType));
-
+            const fieldDef = fields.find(fd => fd.key === f.field);
             return (
-              <div key={i} className="flex flex-wrap items-end gap-2 rounded-lg bg-slate-50 p-2 sm:flex-nowrap">
-                <div className="w-full sm:w-auto sm:flex-1">
-                  <label className="mb-0.5 block text-[10px] font-medium text-slate-400">Veld</label>
-                  <select value={f.field} onChange={e => updateFilter(i, 'field', e.target.value)}
-                    className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-brand-purple/50">
-                    <option value="">Kies veld...</option>
-                    <optgroup label="Branche velden">
-                      {fields.filter(fd => !fd.id.startsWith('_')).map(fd => (
-                        <option key={fd.key} value={fd.key}>{fd.label}</option>
-                      ))}
-                    </optgroup>
-                    <optgroup label="Standaard velden">
-                      {STANDARD_FILTER_FIELDS.map(fd => (
-                        <option key={fd.key} value={fd.key}>{fd.label}</option>
-                      ))}
-                    </optgroup>
-                  </select>
+              <div key={i} className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex-1">
+                    <label className="mb-0.5 block text-[10px] font-medium text-slate-400">Veld</label>
+                    <select value={f.field} onChange={e => setFilterField(i, e.target.value)}
+                      className="w-full rounded border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 outline-none focus:border-brand-purple/50">
+                      <option value="">Kies veld...</option>
+                      <optgroup label="Branche velden">
+                        {fields.filter(fd => !fd.id.startsWith('_')).map(fd => (
+                          <option key={fd.key} value={fd.key}>{fd.label}</option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="Standaard velden">
+                        {STANDARD_FILTER_FIELDS.map(fd => (
+                          <option key={fd.key} value={fd.key}>{fd.label}</option>
+                        ))}
+                      </optgroup>
+                    </select>
+                  </div>
+                  <button onClick={() => removeFilter(i)}
+                    className="mt-4 shrink-0 rounded p-1.5 text-slate-400 transition hover:bg-red-50 hover:text-red-500">
+                    <TrashIcon className="h-3.5 w-3.5" />
+                  </button>
                 </div>
-                <div className="w-full sm:w-auto sm:min-w-[130px]">
-                  <label className="mb-0.5 block text-[10px] font-medium text-slate-400">Conditie</label>
-                  <select value={f.operator} onChange={e => updateFilter(i, 'operator', e.target.value)}
-                    className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-brand-purple/50">
-                    {availableOps.map(op => (
-                      <option key={op.value} value={op.value}>{op.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="w-full sm:w-auto sm:flex-1">
-                  <label className="mb-0.5 block text-[10px] font-medium text-slate-400">Waarde</label>
-                  {f.field ? (
-                    <FilterValueSelect
+
+                {f.field && (
+                  <>
+                    <p className="mt-2 text-[10px] font-medium text-slate-400">
+                      Selecteer toegestane waarden voor "{fieldDef?.label || f.field}"
+                    </p>
+                    <FilterFieldValues
                       branchSlug={branchSlug}
                       fieldKey={f.field}
-                      value={f.value}
-                      onChange={v => updateFilter(i, 'value', v)}
+                      selected={f.values || []}
+                      onChange={vals => setFilterValues(i, vals)}
                     />
-                  ) : (
-                    <input disabled placeholder="Kies eerst een veld..."
-                      className="w-full rounded border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs text-slate-400 outline-none" />
-                  )}
-                </div>
-                <button onClick={() => removeFilter(i)}
-                  className="shrink-0 rounded p-1.5 text-slate-400 transition hover:bg-red-50 hover:text-red-500">
-                  <TrashIcon className="h-3.5 w-3.5" />
-                </button>
+                    {(f.values?.length || 0) > 0 && (
+                      <p className="mt-1.5 text-[10px] text-brand-purple">
+                        {f.values!.length} {f.values!.length === 1 ? 'waarde' : 'waarden'} geselecteerd
+                      </p>
+                    )}
+                  </>
+                )}
               </div>
             );
           })}
           <button onClick={addFilter}
             className="inline-flex items-center gap-1 rounded-lg border border-dashed border-slate-300 px-2.5 py-1.5 text-[11px] font-medium text-slate-500 transition hover:border-brand-purple/40 hover:text-brand-purple">
-            <PlusIcon className="h-3 w-3" /> Filter toevoegen
+            <PlusIcon className="h-3 w-3" /> Veld filter toevoegen
           </button>
         </div>
       )}
@@ -1035,7 +1031,7 @@ function BatchesPanel({ customer, branchOptions, onClose }: { customer: Customer
           price_per_lead: form.price_per_lead ? parseFloat(form.price_per_lead) : null,
           leads_per_week: form.leads_per_week ? parseInt(form.leads_per_week) : null,
           notes: form.notes || null,
-          lead_filters: form.lead_filters.filter(f => f.field && f.value !== ''),
+          lead_filters: form.lead_filters.filter(f => f.field && (f.values?.length || 0) > 0),
         }),
       });
       if (!res.ok) {
@@ -1235,13 +1231,13 @@ function BatchesPanel({ customer, branchOptions, onClose }: { customer: Customer
 
                     {/* Lead Filters */}
                     {b.lead_filters && b.lead_filters.length > 0 && (
-                      <div className="mt-2 flex flex-wrap gap-1.5">
-                        <AdjustmentsHorizontalIcon className="h-3.5 w-3.5 text-amber-500" />
+                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                        <AdjustmentsHorizontalIcon className="h-3.5 w-3.5 shrink-0 text-amber-500" />
                         {b.lead_filters.map((f, i) => {
-                          const opLabel: Record<string, string> = { eq: '=', neq: '≠', gte: '≥', lte: '≤', gt: '>', lt: '<', contains: '∋', not_contains: '∌' };
+                          const count = f.values?.length || (f.value ? 1 : 0);
                           return (
                             <span key={i} className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
-                              {f.field} {opLabel[f.operator] || f.operator} {f.value}
+                              {f.field}: {count} {count === 1 ? 'waarde' : 'waarden'}
                             </span>
                           );
                         })}
