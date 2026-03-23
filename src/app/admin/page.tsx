@@ -262,7 +262,7 @@ export default function AdminDashboard() {
       )}
 
       {/* Cost & Margin overview */}
-      {costData && (costData.monthSpend > 0 || costData.leadsWithCost > 0) && (
+      {costData && (
         <div className="mb-6 space-y-4">
           {/* Header */}
           <div className="flex items-center justify-between">
@@ -279,7 +279,23 @@ export default function AdminDashboard() {
             )}
           </div>
 
+          {costData.monthSpend === 0 && costData.leadsWithCost === 0 && (
+            <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 p-6 text-center">
+              <CurrencyEuroIcon className="mx-auto h-8 w-8 text-slate-300" />
+              <p className="mt-2 text-sm font-medium text-slate-600">Nog geen kostendata beschikbaar</p>
+              <p className="mt-1 text-xs text-slate-400">
+                {!costData.lastSyncAt
+                  ? 'De Meta-sync draait automatisch. Controleer of je Meta Access Token en Ad Account ID correct zijn ingesteld via Koppelingen.'
+                  : 'Er zijn nog geen leads met kostendata gevonden. Zorg dat nieuwe leads via Zapier de velden ad_id, adset_id en campaign_id meekrijgen.'}
+              </p>
+              <a href="/admin/koppelingen" className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-brand-purple px-4 py-2 text-xs font-medium text-white transition hover:bg-brand-purple/90">
+                Koppelingen bekijken
+              </a>
+            </div>
+          )}
+
           {/* KPI Cards — 6 cards in 2 rows on mobile, 3+3 or 6 on desktop */}
+          {(costData.monthSpend > 0 || costData.leadsWithCost > 0) && <>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
             <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
               <p className="text-xl font-bold text-slate-900">&euro;{costData.monthSpend.toFixed(0)}</p>
@@ -495,6 +511,7 @@ export default function AdminDashboard() {
               </div>
             </div>
           )}
+          </>}
         </div>
       )}
 
