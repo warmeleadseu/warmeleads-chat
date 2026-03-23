@@ -140,7 +140,7 @@ export default function AdminDashboard() {
       adminFetch('/api/admin/batches').then(r => r.ok ? r.json() : []),
       adminFetch('/api/admin/assignments').then(r => r.ok ? r.json() : []),
       adminFetch('/api/admin/costs').then(r => r.ok ? r.json() : null).catch(() => null),
-    ]).then(([statsData, branchData, batchData, assignData, costsData]) => {
+    ]).then(async ([statsData, branchData, batchData, assignData, costsData]) => {
       setStats(statsData);
       const m: Record<string, BranchMeta> = {};
       (branchData.branches || []).forEach((b: BranchMeta) => { m[b.slug] = b; });
@@ -149,6 +149,16 @@ export default function AdminDashboard() {
       setAssignmentCount((assignData || []).length);
       if (costsData) setCostData(costsData);
       setLoading(false);
+
+      if (costsData && !costsData.lastSyncAt) {
+        try {
+          const syncRes = await adminFetch('/api/admin/meta-sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ days: 90 }) });
+          if (syncRes.ok) {
+            const freshCosts = await adminFetch('/api/admin/costs').then(r => r.ok ? r.json() : null);
+            if (freshCosts) setCostData(freshCosts);
+          }
+        } catch { /* silent — manual sync via Koppelingen still available */ }
+      }
     }).catch(() => setLoading(false));
   }, []);
 
