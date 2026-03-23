@@ -857,6 +857,49 @@ const STANDARD_FILTER_FIELDS: BranchField[] = [
   { id: '_phone_valid', key: 'phone_valid', label: 'Geldig telefoonnummer', field_type: 'select', options: ['true', 'false'] },
 ];
 
+function FilterValueSelect({ branchSlug, fieldKey, value, onChange }: {
+  branchSlug: string; fieldKey: string; value: string;
+  onChange: (v: string) => void;
+}) {
+  const [options, setOptions] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!branchSlug || !fieldKey) { setOptions([]); return; }
+    setLoading(true);
+    adminFetch(`/api/admin/leads/field-values?branch=${branchSlug}&field=${fieldKey}`)
+      .then(r => r.ok ? r.json() : { values: [] })
+      .then(d => setOptions(d.values || []))
+      .finally(() => setLoading(false));
+  }, [branchSlug, fieldKey]);
+
+  if (loading) {
+    return (
+      <div className="flex h-[30px] items-center rounded border border-slate-200 bg-white px-2">
+        <div className="h-3 w-16 animate-pulse rounded bg-slate-100" />
+      </div>
+    );
+  }
+
+  if (options.length > 0) {
+    return (
+      <select value={value} onChange={e => onChange(e.target.value)}
+        className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-brand-purple/50">
+        <option value="">Kies waarde...</option>
+        {options.map(opt => (
+          <option key={opt} value={opt}>{opt}</option>
+        ))}
+      </select>
+    );
+  }
+
+  return (
+    <input value={value} onChange={e => onChange(e.target.value)}
+      placeholder="Voer waarde in..."
+      className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-brand-purple/50" />
+  );
+}
+
 function FilterBuilder({ filters, onChange, branchSlug }: { filters: LeadFilter[]; onChange: (f: LeadFilter[]) => void; branchSlug: string }) {
   const [fields, setFields] = useState<BranchField[]>([]);
   const [open, setOpen] = useState(filters.length > 0);
@@ -904,7 +947,6 @@ function FilterBuilder({ filters, onChange, branchSlug }: { filters: LeadFilter[
             const fieldDef = getFieldDef(f.field);
             const fieldType = fieldDef?.field_type || 'text';
             const availableOps = FILTER_OPERATORS.filter(op => op.types.includes(fieldType));
-            const hasOptions = fieldDef?.options && fieldDef.options.length > 0;
 
             return (
               <div key={i} className="flex flex-wrap items-end gap-2 rounded-lg bg-slate-50 p-2 sm:flex-nowrap">
@@ -936,19 +978,16 @@ function FilterBuilder({ filters, onChange, branchSlug }: { filters: LeadFilter[
                 </div>
                 <div className="w-full sm:w-auto sm:flex-1">
                   <label className="mb-0.5 block text-[10px] font-medium text-slate-400">Waarde</label>
-                  {hasOptions ? (
-                    <select value={f.value} onChange={e => updateFilter(i, 'value', e.target.value)}
-                      className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-brand-purple/50">
-                      <option value="">Kies...</option>
-                      {fieldDef!.options.map(opt => (
-                        <option key={opt} value={opt}>{opt}</option>
-                      ))}
-                    </select>
+                  {f.field ? (
+                    <FilterValueSelect
+                      branchSlug={branchSlug}
+                      fieldKey={f.field}
+                      value={f.value}
+                      onChange={v => updateFilter(i, 'value', v)}
+                    />
                   ) : (
-                    <input value={f.value} onChange={e => updateFilter(i, 'value', e.target.value)}
-                      placeholder={fieldType === 'number' ? 'bv. 5000' : 'bv. Ja'}
-                      type={fieldType === 'number' ? 'number' : 'text'}
-                      className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-brand-purple/50" />
+                    <input disabled placeholder="Kies eerst een veld..."
+                      className="w-full rounded border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs text-slate-400 outline-none" />
                   )}
                 </div>
                 <button onClick={() => removeFilter(i)}
