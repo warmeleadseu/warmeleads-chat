@@ -20,6 +20,60 @@ interface LeadForDistribution {
   branch: string;
   lat: number;
   lng: number;
+  custom_fields?: Record<string, string>;
+  quality_score?: number | null;
+  phone_valid?: boolean | null;
+  budget?: string | null;
+  zonnepanelen?: string | null;
+  dynamisch_contract?: string | null;
+  stroomverbruik?: string | null;
+  [key: string]: unknown;
+}
+
+interface LeadFilter {
+  field: string;
+  operator: 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'contains' | 'not_contains';
+  value: string;
+}
+
+function getLeadFieldValue(lead: LeadForDistribution, fieldKey: string): string | null {
+  if (fieldKey === 'quality_score') return lead.quality_score != null ? String(lead.quality_score) : null;
+  if (fieldKey === 'phone_valid') return lead.phone_valid != null ? String(lead.phone_valid) : null;
+
+  const directVal = lead[fieldKey];
+  if (directVal != null && directVal !== '') return String(directVal);
+
+  if (lead.custom_fields && lead.custom_fields[fieldKey] != null && lead.custom_fields[fieldKey] !== '') {
+    return String(lead.custom_fields[fieldKey]);
+  }
+
+  return null;
+}
+
+function matchesFilter(lead: LeadForDistribution, filter: LeadFilter): boolean {
+  const raw = getLeadFieldValue(lead, filter.field);
+  if (raw === null) return false;
+
+  const numA = parseFloat(raw.replace(/[^0-9.,\-]/g, '').replace(',', '.'));
+  const numB = parseFloat(filter.value.replace(/[^0-9.,\-]/g, '').replace(',', '.'));
+  const bothNumeric = !isNaN(numA) && !isNaN(numB);
+
+  switch (filter.operator) {
+    case 'eq': return raw.toLowerCase() === filter.value.toLowerCase();
+    case 'neq': return raw.toLowerCase() !== filter.value.toLowerCase();
+    case 'gt': return bothNumeric ? numA > numB : raw > filter.value;
+    case 'gte': return bothNumeric ? numA >= numB : raw >= filter.value;
+    case 'lt': return bothNumeric ? numA < numB : raw < filter.value;
+    case 'lte': return bothNumeric ? numA <= numB : raw <= filter.value;
+    case 'contains': return raw.toLowerCase().includes(filter.value.toLowerCase());
+    case 'not_contains': return !raw.toLowerCase().includes(filter.value.toLowerCase());
+    default: return true;
+  }
+}
+
+function matchesAllFilters(lead: LeadForDistribution, filters: LeadFilter[]): boolean {
+  if (!filters || filters.length === 0) return true;
+  return filters.every(f => matchesFilter(lead, f));
 }
 
 interface DistributionResult {
@@ -36,6 +90,13 @@ export async function distributeLead(lead: LeadForDistribution): Promise<Distrib
 
   const supabase = createServerClient();
 
+  // Load full lead data for filter matching (if not already enriched)
+  let fullLead = lead;
+  if (!lead.custom_fields) {
+    const { data: leadRow } = await supabase.from('leads').select('*').eq('id', lead.id).single();
+    if (leadRow) fullLead = { ...leadRow, lat: lead.lat, lng: lead.lng };
+  }
+
   const { data: existingAssignments } = await supabase
     .from('lead_assignments')
     .select('customer_id')
@@ -46,7 +107,7 @@ export async function distributeLead(lead: LeadForDistribution): Promise<Distrib
 
   const { data: activeBatches } = await supabase
     .from('customer_batches')
-    .select('id, customer_id, branch, batch_size, leads_delivered, leads_per_week, customers!inner(id, is_active, portal_active)')
+    .select('id, customer_id, branch, batch_size, leads_delivered, leads_per_week, lead_filters, customers!inner(id, is_active, portal_active)')
     .eq('branch', lead.branch)
     .eq('status', 'active')
     .eq('customers.is_active', true);
@@ -126,6 +187,9 @@ export async function distributeLead(lead: LeadForDistribution): Promise<Distrib
     }
 
     if (bestMatch) {
+      const filters: LeadFilter[] = Array.isArray(batch.lead_filters) ? batch.lead_filters : [];
+      if (!matchesAllFilters(fullLead, filters)) continue;
+
       const existing = matches.find(m => m.customer_id === batch.customer_id);
       if (!existing) {
         matches.push({
@@ -222,7 +286,7 @@ export async function distributeUnassignedLeads(): Promise<{ distributed: number
 
   const { data: leads } = await supabase
     .from('leads')
-    .select('id, branch, lat, lng')
+    .select('*')
     .not('lat', 'is', null)
     .not('lng', 'is', null)
     .gte('created_at', cutoff.toISOString())

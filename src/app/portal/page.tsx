@@ -519,6 +519,18 @@ export default function PortalPage() {
                           )}
                         </div>
                       )}
+                      {b.lead_filters && Array.isArray(b.lead_filters) && b.lead_filters.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-1 border-t border-slate-50 pt-2">
+                          {b.lead_filters.map((f: Record<string, string>, i: number) => {
+                            const opSymbol: Record<string, string> = { eq: '=', neq: '≠', gte: '≥', lte: '≤', gt: '>', lt: '<', contains: '∋', not_contains: '∌' };
+                            return (
+                              <span key={i} className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                                {f.field} {opSymbol[f.operator] || f.operator} {f.value}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   );
                 })}

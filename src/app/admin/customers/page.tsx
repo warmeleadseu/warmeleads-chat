@@ -21,6 +21,8 @@ import {
   CurrencyEuroIcon,
   ChartBarIcon,
   MagnifyingGlassIcon,
+  AdjustmentsHorizontalIcon,
+  ChevronDownIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
 
@@ -37,12 +39,23 @@ interface Target {
   radius_km: number; is_active: boolean; created_at: string;
 }
 
+interface LeadFilter {
+  field: string;
+  operator: string;
+  value: string;
+}
+
 interface Batch {
   id: string; customer_id: string; branch: string; batch_size: number;
   price_per_lead: number | null; total_price: number | null;
   leads_per_week: number | null;
   leads_delivered: number; status: string; notes: string | null;
+  lead_filters: LeadFilter[];
   created_at: string; completed_at: string | null;
+}
+
+interface BranchField {
+  id: string; key: string; label: string; field_type: string; options: string[];
 }
 
 export default function CustomersPage() {
@@ -828,11 +841,138 @@ function TargetsPanel({ customer, onClose }: { customer: Customer; onClose: () =
 /* ============================================================
    BATCHES PANEL
    ============================================================ */
+const FILTER_OPERATORS: { value: string; label: string; types: string[] }[] = [
+  { value: 'eq', label: 'Is gelijk aan', types: ['text', 'select', 'number', 'boolean'] },
+  { value: 'neq', label: 'Is niet gelijk aan', types: ['text', 'select', 'number', 'boolean'] },
+  { value: 'gte', label: '≥ Groter of gelijk', types: ['number', 'text'] },
+  { value: 'lte', label: '≤ Kleiner of gelijk', types: ['number', 'text'] },
+  { value: 'gt', label: '> Groter dan', types: ['number'] },
+  { value: 'lt', label: '< Kleiner dan', types: ['number'] },
+  { value: 'contains', label: 'Bevat', types: ['text', 'textarea'] },
+  { value: 'not_contains', label: 'Bevat niet', types: ['text', 'textarea'] },
+];
+
+const STANDARD_FILTER_FIELDS: BranchField[] = [
+  { id: '_quality_score', key: 'quality_score', label: 'Kwaliteitsscore (0-100)', field_type: 'number', options: [] },
+  { id: '_phone_valid', key: 'phone_valid', label: 'Geldig telefoonnummer', field_type: 'select', options: ['true', 'false'] },
+];
+
+function FilterBuilder({ filters, onChange, branchSlug }: { filters: LeadFilter[]; onChange: (f: LeadFilter[]) => void; branchSlug: string }) {
+  const [fields, setFields] = useState<BranchField[]>([]);
+  const [open, setOpen] = useState(filters.length > 0);
+
+  useEffect(() => {
+    if (!branchSlug) { setFields([]); return; }
+    adminFetch(`/api/admin/branches/fields?branch_slug=${branchSlug}`)
+      .then(r => r.ok ? r.json() : { fields: [] })
+      .then(d => setFields([...(d.fields || []), ...STANDARD_FILTER_FIELDS]));
+  }, [branchSlug]);
+
+  const addFilter = () => onChange([...filters, { field: '', operator: 'eq', value: '' }]);
+  const removeFilter = (i: number) => onChange(filters.filter((_, idx) => idx !== i));
+  const updateFilter = (i: number, key: keyof LeadFilter, val: string) => {
+    const next = [...filters];
+    next[i] = { ...next[i], [key]: val };
+    if (key === 'field') {
+      next[i].operator = 'eq';
+      next[i].value = '';
+    }
+    onChange(next);
+  };
+
+  const getFieldDef = (key: string) => fields.find(f => f.key === key);
+
+  if (fields.length === 0 && branchSlug) return null;
+
+  return (
+    <div className="mb-3">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="mb-2 inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 transition hover:text-brand-purple"
+      >
+        <AdjustmentsHorizontalIcon className="h-3.5 w-3.5" />
+        Lead vereisten {filters.length > 0 && <span className="rounded-full bg-brand-purple/10 px-1.5 py-0.5 text-[10px] font-bold text-brand-purple">{filters.length}</span>}
+        <ChevronDownIcon className={`h-3 w-3 transition ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-3">
+          {filters.length === 0 && (
+            <p className="text-[11px] text-slate-400">Geen filters — alle leads die in het targetgebied vallen worden toegewezen.</p>
+          )}
+          {filters.map((f, i) => {
+            const fieldDef = getFieldDef(f.field);
+            const fieldType = fieldDef?.field_type || 'text';
+            const availableOps = FILTER_OPERATORS.filter(op => op.types.includes(fieldType));
+            const hasOptions = fieldDef?.options && fieldDef.options.length > 0;
+
+            return (
+              <div key={i} className="flex flex-wrap items-end gap-2 rounded-lg bg-slate-50 p-2 sm:flex-nowrap">
+                <div className="w-full sm:w-auto sm:flex-1">
+                  <label className="mb-0.5 block text-[10px] font-medium text-slate-400">Veld</label>
+                  <select value={f.field} onChange={e => updateFilter(i, 'field', e.target.value)}
+                    className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-brand-purple/50">
+                    <option value="">Kies veld...</option>
+                    <optgroup label="Branche velden">
+                      {fields.filter(fd => !fd.id.startsWith('_')).map(fd => (
+                        <option key={fd.key} value={fd.key}>{fd.label}</option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="Standaard velden">
+                      {STANDARD_FILTER_FIELDS.map(fd => (
+                        <option key={fd.key} value={fd.key}>{fd.label}</option>
+                      ))}
+                    </optgroup>
+                  </select>
+                </div>
+                <div className="w-full sm:w-auto sm:min-w-[130px]">
+                  <label className="mb-0.5 block text-[10px] font-medium text-slate-400">Conditie</label>
+                  <select value={f.operator} onChange={e => updateFilter(i, 'operator', e.target.value)}
+                    className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-brand-purple/50">
+                    {availableOps.map(op => (
+                      <option key={op.value} value={op.value}>{op.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="w-full sm:w-auto sm:flex-1">
+                  <label className="mb-0.5 block text-[10px] font-medium text-slate-400">Waarde</label>
+                  {hasOptions ? (
+                    <select value={f.value} onChange={e => updateFilter(i, 'value', e.target.value)}
+                      className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-brand-purple/50">
+                      <option value="">Kies...</option>
+                      {fieldDef!.options.map(opt => (
+                        <option key={opt} value={opt}>{opt}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input value={f.value} onChange={e => updateFilter(i, 'value', e.target.value)}
+                      placeholder={fieldType === 'number' ? 'bv. 5000' : 'bv. Ja'}
+                      type={fieldType === 'number' ? 'number' : 'text'}
+                      className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-brand-purple/50" />
+                  )}
+                </div>
+                <button onClick={() => removeFilter(i)}
+                  className="shrink-0 rounded p-1.5 text-slate-400 transition hover:bg-red-50 hover:text-red-500">
+                  <TrashIcon className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            );
+          })}
+          <button onClick={addFilter}
+            className="inline-flex items-center gap-1 rounded-lg border border-dashed border-slate-300 px-2.5 py-1.5 text-[11px] font-medium text-slate-500 transition hover:border-brand-purple/40 hover:text-brand-purple">
+            <PlusIcon className="h-3 w-3" /> Filter toevoegen
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function BatchesPanel({ customer, branchOptions, onClose }: { customer: Customer; branchOptions: BranchOption[]; onClose: () => void }) {
   const [batches, setBatches] = useState<Batch[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState({ branch: '', batch_size: 100, price_per_lead: '', leads_per_week: '', notes: '' });
+  const [form, setForm] = useState<{ branch: string; batch_size: number; price_per_lead: string; leads_per_week: string; notes: string; lead_filters: LeadFilter[] }>({ branch: '', batch_size: 100, price_per_lead: '', leads_per_week: '', notes: '', lead_filters: [] });
   const [saving, setSaving] = useState(false);
 
   const fetchBatches = useCallback(async () => {
@@ -856,6 +996,7 @@ function BatchesPanel({ customer, branchOptions, onClose }: { customer: Customer
           price_per_lead: form.price_per_lead ? parseFloat(form.price_per_lead) : null,
           leads_per_week: form.leads_per_week ? parseInt(form.leads_per_week) : null,
           notes: form.notes || null,
+          lead_filters: form.lead_filters.filter(f => f.field && f.value !== ''),
         }),
       });
       if (!res.ok) {
@@ -865,7 +1006,7 @@ function BatchesPanel({ customer, branchOptions, onClose }: { customer: Customer
         return;
       }
       setShowAdd(false);
-      setForm({ branch: '', batch_size: 100, price_per_lead: '', leads_per_week: '', notes: '' });
+      setForm({ branch: '', batch_size: 100, price_per_lead: '', leads_per_week: '', notes: '', lead_filters: [] });
       fetchBatches();
     } catch {
       alert('Er ging iets mis');
@@ -960,6 +1101,13 @@ function BatchesPanel({ customer, branchOptions, onClose }: { customer: Customer
                 <input value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
                   className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
               </div>
+              {form.branch && (
+                <FilterBuilder
+                  filters={form.lead_filters}
+                  onChange={filters => setForm(f => ({ ...f, lead_filters: filters }))}
+                  branchSlug={form.branch}
+                />
+              )}
               <div className="flex gap-2">
                 <button onClick={() => setShowAdd(false)}
                   className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-500 hover:bg-slate-50">Annuleren</button>
@@ -1045,6 +1193,21 @@ function BatchesPanel({ customer, branchOptions, onClose }: { customer: Customer
                       <span>{new Date(b.created_at).toLocaleDateString('nl-NL')}</span>
                       {b.notes && <span className="italic">{b.notes}</span>}
                     </div>
+
+                    {/* Lead Filters */}
+                    {b.lead_filters && b.lead_filters.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        <AdjustmentsHorizontalIcon className="h-3.5 w-3.5 text-amber-500" />
+                        {b.lead_filters.map((f, i) => {
+                          const opLabel: Record<string, string> = { eq: '=', neq: '≠', gte: '≥', lte: '≤', gt: '>', lt: '<', contains: '∋', not_contains: '∌' };
+                          return (
+                            <span key={i} className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                              {f.field} {opLabel[f.operator] || f.operator} {f.value}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 );
               })}
