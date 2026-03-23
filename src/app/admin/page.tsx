@@ -13,6 +13,8 @@ import {
   ArrowsRightLeftIcon,
   CalendarDaysIcon,
   InboxIcon,
+  CurrencyEuroIcon,
+  BanknotesIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
 
@@ -102,11 +104,24 @@ function DashboardSkeleton() {
   );
 }
 
+interface CostData {
+  weekSpend: number;
+  monthSpend: number;
+  weekAvgCpl: number | null;
+  monthAvgCpl: number | null;
+  leadsWithCost: number;
+  branchCosts: Record<string, { spend: number; count: number; avgCpl: number }>;
+  customerMargins: { name: string; revenue: number; cost: number; margin: number; leads: number }[];
+  lastSyncAt: string | null;
+  dailyTrend: { date: string; spend: number; leads: number }[];
+}
+
 export default function AdminDashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [branchMeta, setBranchMeta] = useState<Record<string, BranchMeta>>({});
   const [batches, setBatches] = useState<BatchInfo[]>([]);
   const [assignmentCount, setAssignmentCount] = useState(0);
+  const [costData, setCostData] = useState<CostData | null>(null);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState<string>('week');
 
@@ -116,13 +131,15 @@ export default function AdminDashboard() {
       adminFetch('/api/admin/branches').then(r => r.json()),
       adminFetch('/api/admin/batches').then(r => r.ok ? r.json() : []),
       adminFetch('/api/admin/assignments').then(r => r.ok ? r.json() : []),
-    ]).then(([statsData, branchData, batchData, assignData]) => {
+      adminFetch('/api/admin/costs').then(r => r.ok ? r.json() : null).catch(() => null),
+    ]).then(([statsData, branchData, batchData, assignData, costsData]) => {
       setStats(statsData);
       const m: Record<string, BranchMeta> = {};
       (branchData.branches || []).forEach((b: BranchMeta) => { m[b.slug] = b; });
       setBranchMeta(m);
       setBatches(batchData || []);
       setAssignmentCount((assignData || []).length);
+      if (costsData) setCostData(costsData);
       setLoading(false);
     }).catch(() => setLoading(false));
   }, []);
@@ -220,6 +237,127 @@ export default function AdminDashboard() {
                   {ps.leads > 0 ? Math.round((ps.assigned / ps.leads) * 100) : 0}%
                 </p>
                 <p className="mt-1 text-xs text-slate-500">Conversieratio</p>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Cost & Margin overview */}
+      {costData && (costData.monthSpend > 0 || costData.leadsWithCost > 0) && (
+        <div className="mb-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-4 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50">
+                <CurrencyEuroIcon className="h-4 w-4 text-emerald-500" />
+              </div>
+              <h2 className="text-sm font-semibold text-slate-900">Kosten & Marge</h2>
+            </div>
+            {costData.lastSyncAt && (
+              <span className="text-[10px] text-slate-400">
+                Laatst gesynct: {new Date(costData.lastSyncAt).toLocaleString('nl-NL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+              </span>
+            )}
+          </div>
+
+          {/* KPI row */}
+          <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="rounded-lg bg-slate-50 p-3">
+              <p className="text-lg font-bold text-slate-900">&euro;{costData.weekSpend.toFixed(0)}</p>
+              <p className="text-[11px] text-slate-500">Ad spend week</p>
+            </div>
+            <div className="rounded-lg bg-slate-50 p-3">
+              <p className="text-lg font-bold text-slate-900">&euro;{costData.monthSpend.toFixed(0)}</p>
+              <p className="text-[11px] text-slate-500">Ad spend maand</p>
+            </div>
+            <div className="rounded-lg bg-slate-50 p-3">
+              <p className="text-lg font-bold text-slate-900">&euro;{costData.weekAvgCpl?.toFixed(2) ?? '—'}</p>
+              <p className="text-[11px] text-slate-500">Gem. CPL week</p>
+            </div>
+            <div className="rounded-lg bg-slate-50 p-3">
+              <p className="text-lg font-bold text-slate-900">&euro;{costData.monthAvgCpl?.toFixed(2) ?? '—'}</p>
+              <p className="text-[11px] text-slate-500">Gem. CPL maand</p>
+            </div>
+          </div>
+
+          {/* Branch CPL + Customer margins in 2 cols */}
+          <div className="grid gap-4 lg:grid-cols-2">
+            {/* CPL per branche */}
+            {Object.keys(costData.branchCosts).length > 0 && (
+              <div>
+                <h3 className="mb-2 text-xs font-semibold text-slate-600">CPL per branche (maand)</h3>
+                <div className="space-y-2">
+                  {Object.entries(costData.branchCosts).sort((a, b) => b[1].spend - a[1].spend).map(([slug, data]) => {
+                    const b = getBranch(slug);
+                    return (
+                      <div key={slug} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
+                        <div className="flex items-center gap-2">
+                          <span className={`inline-block h-2.5 w-2.5 rounded-full ${b.dot}`} />
+                          <span className="text-xs font-medium text-slate-700">{b.name}</span>
+                        </div>
+                        <div className="flex items-center gap-3 text-xs">
+                          <span className="text-slate-500">{data.count} leads</span>
+                          <span className="font-semibold text-slate-800">&euro;{data.avgCpl.toFixed(2)}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Customer margins */}
+            {costData.customerMargins.length > 0 && (
+              <div>
+                <h3 className="mb-2 text-xs font-semibold text-slate-600">Marge per klant (maand)</h3>
+                <div className="space-y-2">
+                  {costData.customerMargins.slice(0, 6).map((cm, i) => (
+                    <div key={i} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
+                      <div className="min-w-0 flex-1">
+                        <span className="truncate text-xs font-medium text-slate-700">{cm.name}</span>
+                        <div className="flex gap-3 text-[10px] text-slate-400">
+                          <span>{cm.leads} leads</span>
+                          <span>Omzet &euro;{cm.revenue.toFixed(0)}</span>
+                          <span>Kosten &euro;{cm.cost.toFixed(0)}</span>
+                        </div>
+                      </div>
+                      <span className={`ml-2 shrink-0 rounded-full px-2 py-0.5 text-xs font-bold ${
+                        cm.margin >= 0
+                          ? 'bg-emerald-50 text-emerald-600'
+                          : 'bg-red-50 text-red-600'
+                      }`}>
+                        {cm.margin >= 0 ? '+' : ''}&euro;{cm.margin.toFixed(0)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Daily trend mini chart */}
+          {costData.dailyTrend.length > 0 && (
+            <div className="mt-4 border-t border-slate-100 pt-4">
+              <h3 className="mb-2 text-xs font-semibold text-slate-600">Dagelijkse ad spend (14 dagen)</h3>
+              <div className="flex items-end gap-1" style={{ height: 60 }}>
+                {(() => {
+                  const maxSpend = Math.max(...costData.dailyTrend.map(d => d.spend), 1);
+                  return costData.dailyTrend.map((d, i) => (
+                    <div key={i} className="group relative flex-1" title={`${d.date}: €${d.spend.toFixed(2)} — ${d.leads} leads`}>
+                      <div
+                        className="w-full rounded-t bg-brand-purple/60 transition group-hover:bg-brand-purple"
+                        style={{ height: `${Math.max(2, (d.spend / maxSpend) * 60)}px` }}
+                      />
+                      <div className="pointer-events-none absolute -top-8 left-1/2 hidden -translate-x-1/2 whitespace-nowrap rounded bg-slate-800 px-1.5 py-0.5 text-[9px] text-white group-hover:block">
+                        &euro;{d.spend.toFixed(0)} · {d.leads}l
+                      </div>
+                    </div>
+                  ));
+                })()}
+              </div>
+              <div className="mt-1 flex justify-between text-[9px] text-slate-400">
+                <span>{costData.dailyTrend[0]?.date.slice(5)}</span>
+                <span>{costData.dailyTrend[costData.dailyTrend.length - 1]?.date.slice(5)}</span>
               </div>
             </div>
           )}

@@ -20,6 +20,9 @@ import {
   DocumentDuplicateIcon,
   InformationCircleIcon,
   SparklesIcon,
+  CurrencyEuroIcon,
+  EyeIcon,
+  EyeSlashIcon,
 } from '@heroicons/react/24/outline';
 
 interface WebhookKey {
@@ -309,6 +312,9 @@ export default function KoppelingenPage() {
         })()}
       </AnimatePresence>
 
+      {/* Meta Ads koppeling */}
+      <MetaAdsSection />
+
       {/* Admin account */}
       <div className="mt-10 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="mb-3 text-sm font-semibold text-slate-900">Admin account</h2>
@@ -329,6 +335,232 @@ export default function KoppelingenPage() {
           />
         )}
       </AnimatePresence>
+    </div>
+  );
+}
+
+/* ───────── Meta Ads Connection ───────── */
+
+function MetaAdsSection() {
+  const [token, setToken] = useState('');
+  const [adAccountId, setAdAccountId] = useState('');
+  const [status, setStatus] = useState<{ configured: boolean; tokenValid?: boolean; tokenName?: string; tokenError?: string; adAccountId?: string } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<{ ok: boolean; adRowsSynced?: number; leadsUpdated?: number; errors?: string[] } | null>(null);
+  const [showToken, setShowToken] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const fetchStatus = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await adminFetch('/api/admin/meta-sync');
+      if (res.ok) setStatus(await res.json());
+    } catch { /* ignore */ }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { fetchStatus(); }, [fetchStatus]);
+
+  const saveCredentials = async () => {
+    if (!token && !adAccountId) return;
+    setSaving(true);
+    setSaved(false);
+    try {
+      const promises: Promise<Response>[] = [];
+      if (token) {
+        promises.push(adminFetch('/api/admin/settings', {
+          method: 'PUT', body: JSON.stringify({ key: 'meta_access_token', value: token }),
+        }));
+      }
+      if (adAccountId) {
+        promises.push(adminFetch('/api/admin/settings', {
+          method: 'PUT', body: JSON.stringify({ key: 'meta_ad_account_id', value: adAccountId }),
+        }));
+      }
+      await Promise.all(promises);
+      setToken('');
+      setAdAccountId('');
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+      fetchStatus();
+    } catch { /* ignore */ }
+    setSaving(false);
+  };
+
+  const runSync = async () => {
+    setSyncing(true);
+    setSyncResult(null);
+    try {
+      const res = await adminFetch('/api/admin/meta-sync', {
+        method: 'POST',
+        body: JSON.stringify({ days: 7 }),
+      });
+      const data = await res.json();
+      setSyncResult(data);
+      fetchStatus();
+    } catch {
+      setSyncResult({ ok: false, errors: ['Sync mislukt — probeer het opnieuw'] });
+    }
+    setSyncing(false);
+  };
+
+  return (
+    <div className="mt-10 rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="border-b border-slate-100 px-5 py-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50">
+            <CurrencyEuroIcon className="h-5 w-5 text-blue-600" />
+          </div>
+          <div>
+            <h2 className="text-sm font-bold text-slate-900">Meta Ads — Leadkosten</h2>
+            <p className="text-xs text-slate-500">Koppel je Meta ad account om automatisch CPL per lead te berekenen</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="p-5">
+        {/* Status */}
+        {loading ? (
+          <div className="space-y-3">
+            <div className="h-4 w-48 animate-pulse rounded bg-slate-100" />
+            <div className="h-10 w-full animate-pulse rounded-lg bg-slate-50" />
+          </div>
+        ) : (
+          <>
+            {/* Connection status */}
+            {status?.configured ? (
+              <div className={`mb-4 flex items-start gap-3 rounded-lg border p-3 ${
+                status.tokenValid
+                  ? 'border-emerald-200 bg-emerald-50'
+                  : 'border-red-200 bg-red-50'
+              }`}>
+                {status.tokenValid ? (
+                  <CheckCircleIcon className="mt-0.5 h-5 w-5 shrink-0 text-emerald-500" />
+                ) : (
+                  <ExclamationTriangleIcon className="mt-0.5 h-5 w-5 shrink-0 text-red-400" />
+                )}
+                <div className="text-sm">
+                  {status.tokenValid ? (
+                    <>
+                      <p className="font-medium text-emerald-700">Verbonden met Meta</p>
+                      <p className="text-xs text-emerald-600">
+                        Account: {status.tokenName || '—'} &middot; Ad Account: {status.adAccountId}
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="font-medium text-red-700">Token ongeldig of verlopen</p>
+                      <p className="text-xs text-red-600">{status.tokenError}</p>
+                    </>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="mb-4 flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                <InformationCircleIcon className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
+                <div className="text-sm">
+                  <p className="font-medium text-amber-700">Nog niet geconfigureerd</p>
+                  <p className="text-xs text-amber-600">
+                    Vul je Meta access token en ad account ID in om leadkosten automatisch te synchen.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Credentials form */}
+            <div className="space-y-3">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-500">Meta Access Token (System User)</label>
+                <div className="relative">
+                  <input
+                    type={showToken ? 'text' : 'password'}
+                    value={token}
+                    onChange={e => setToken(e.target.value)}
+                    placeholder={status?.configured ? '••••••••••••••••••••' : 'Plak je token hier...'}
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 pr-10 text-sm text-slate-900 outline-none transition focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/20"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowToken(!showToken)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-slate-400 hover:text-slate-600"
+                  >
+                    {showToken ? <EyeSlashIcon className="h-4 w-4" /> : <EyeIcon className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-500">Ad Account ID</label>
+                <input
+                  value={adAccountId}
+                  onChange={e => setAdAccountId(e.target.value)}
+                  placeholder={status?.configured ? (status.adAccountId || 'act_123456789') : 'act_123456789'}
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/20"
+                />
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={saveCredentials}
+                  disabled={saving || (!token && !adAccountId)}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-button-gradient px-4 py-2 text-sm font-bold text-white shadow-sm disabled:opacity-50"
+                >
+                  {saving ? <ArrowPathIcon className="h-4 w-4 animate-spin" /> : null}
+                  {saved ? 'Opgeslagen!' : 'Opslaan'}
+                </button>
+
+                {status?.configured && status?.tokenValid && (
+                  <button
+                    onClick={runSync}
+                    disabled={syncing}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    <ArrowPathIcon className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
+                    {syncing ? 'Syncing...' : 'Nu synchroniseren (7 dagen)'}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Sync result */}
+            <AnimatePresence>
+              {syncResult && (
+                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+                  <div className={`mt-3 rounded-lg border p-3 text-sm ${syncResult.ok ? 'border-emerald-200 bg-emerald-50' : 'border-red-200 bg-red-50'}`}>
+                    {syncResult.ok ? (
+                      <div>
+                        <p className="font-medium text-emerald-700">Sync voltooid</p>
+                        <p className="text-xs text-emerald-600">
+                          {syncResult.adRowsSynced} advertentierijen gesynct &middot; {syncResult.leadsUpdated} leads bijgewerkt met kosten
+                        </p>
+                      </div>
+                    ) : (
+                      <div>
+                        <p className="font-medium text-red-700">Sync mislukt</p>
+                        {syncResult.errors?.map((e, i) => (
+                          <p key={i} className="text-xs text-red-600">{e}</p>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Info */}
+            <div className="mt-4 rounded-lg bg-slate-50 p-3">
+              <p className="text-xs font-medium text-slate-500">Hoe werkt het?</p>
+              <ul className="mt-1 space-y-0.5 text-xs text-slate-400">
+                <li>1. Elke nacht om 04:00 UTC worden de Meta Ads kosten van de afgelopen 7 dagen opgehaald</li>
+                <li>2. Per advertentie per dag wordt de CPL berekend (spend / leads)</li>
+                <li>3. Leads met een meta_ad_id krijgen automatisch hun leadkosten toegewezen</li>
+                <li>4. Stuur vanuit je Zapier zap het veld <code className="rounded bg-white px-1 py-0.5 font-mono text-brand-purple">ad_id</code> mee bij elke lead</li>
+              </ul>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -367,6 +599,9 @@ function InstructionsPanel({
     { key: 'plaatsnaam', label: 'Plaatsnaam', required: false },
     { key: 'provincie', label: 'Provincie', required: false },
     ...branchFields.map(f => ({ key: f.key, label: f.label, required: f.is_required })),
+    { key: 'ad_id', label: 'Meta Ad ID (voor leadkosten)', required: false },
+    { key: 'adset_id', label: 'Meta Adset ID', required: false },
+    { key: 'campaign_id', label: 'Meta Campaign ID', required: false },
   ];
 
   const copyAll = () => {

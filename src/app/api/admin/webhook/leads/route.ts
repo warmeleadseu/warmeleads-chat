@@ -11,6 +11,8 @@ const COMMON_KEYS = new Set([
   'branch', 'customer_id', 'naam_klant', 'name', 'email', 'telefoonnummer', 'phone',
   'postcode', 'huisnummer', 'plaatsnaam', 'city', 'provincie', 'wervingsdatum',
   'status', 'bron', 'notities', 'land',
+  'meta_campaign_id', 'meta_adset_id', 'meta_ad_id',
+  'campaign_id', 'adset_id', 'ad_id',
 ]);
 
 export async function POST(request: NextRequest) {
@@ -58,6 +60,10 @@ export async function POST(request: NextRequest) {
     }
 
     const phone = body.telefoonnummer || body.phone || '';
+    const metaCampaignId = body.meta_campaign_id || body.campaign_id || null;
+    const metaAdsetId = body.meta_adset_id || body.adset_id || null;
+    const metaAdId = body.meta_ad_id || body.ad_id || null;
+
     const lead = await enrichLeadAddress({
       branch: branchSlug,
       naam_klant: body.naam_klant || body.name || '',
@@ -74,6 +80,9 @@ export async function POST(request: NextRequest) {
       bron: 'zapier',
       notities: body.notities || '',
       custom_fields: Object.keys(customFields).length > 0 ? customFields : {},
+      ...(metaCampaignId && { meta_campaign_id: metaCampaignId }),
+      ...(metaAdsetId && { meta_adset_id: metaAdsetId }),
+      ...(metaAdId && { meta_ad_id: metaAdId }),
     });
 
     if (!lead.naam_klant) {

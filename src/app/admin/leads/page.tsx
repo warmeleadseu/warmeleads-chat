@@ -45,7 +45,7 @@ const PROVINCES = [...PROVINCES_NL, ...PROVINCES_BE].sort();
 const COMMON_LABELS: Record<string, string> = {
   naam_klant: 'Naam', email: 'E-mail', telefoonnummer: 'Telefoon', postcode: 'Postcode',
   huisnummer: 'Huisnr.', plaatsnaam: 'Plaats', provincie: 'Provincie', wervingsdatum: 'Datum',
-  status: 'Status', notities: 'Notities', bron: 'Bron', branch: 'Branche',
+  status: 'Status', notities: 'Notities', bron: 'Bron', branch: 'Branche', lead_cost: 'CPL',
 };
 
 const COLOR_MAP: Record<string, { light: string; text: string }> = {
@@ -417,6 +417,10 @@ export default function LeadsCRMPage() {
                                 <ExclamationTriangleIcon className="h-3.5 w-3.5 text-amber-500" />
                               </span>
                             )}
+                          </span>
+                        ) : col === 'lead_cost' ? (
+                          <span className={`text-xs font-medium ${lead.lead_cost ? 'text-slate-700' : 'text-slate-300'}`}>
+                            {lead.lead_cost ? `€${Number(lead.lead_cost).toFixed(2)}` : '—'}
                           </span>
                         ) : (
                           <span className="block max-w-[160px] truncate">{getLeadFieldValue(lead, col) || '—'}</span>
