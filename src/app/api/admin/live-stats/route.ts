@@ -95,31 +95,49 @@ export async function GET(request: NextRequest) {
     return s;
   }, 0);
 
-  // Cost metrics: effective CPL + total ad cost (only for ads linked to our leads)
-  const monthAgo = new Date(new Date().getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-  const [monthLeadCostsRes, monthAssignmentsRes, relevantAdsRes] = await Promise.all([
-    supabase.from('leads').select('id, lead_cost').not('lead_cost', 'is', null).gte('wervingsdatum', monthAgo),
-    supabase.from('lead_assignments').select('lead_id').gte('assigned_at', monthAgo),
-    supabase.from('leads').select('meta_ad_id').not('meta_ad_id', 'is', null),
+  // Cost metrics: effective CPL + total ad cost (only from batch start dates)
+  const [monthLeadCostsRes, allAssignmentsRes, relevantAdsRes, batchStartRes] = await Promise.all([
+    supabase.from('leads').select('id, lead_cost').not('lead_cost', 'is', null),
+    supabase.from('lead_assignments').select('lead_id'),
+    supabase.from('leads').select('meta_ad_id, branch').not('meta_ad_id', 'is', null),
+    supabase.from('customer_batches').select('branch, created_at').in('status', ['active', 'completed']),
   ]);
+
+  const branchStart = new Map<string, string>();
+  for (const b of batchStartRes.data || []) {
+    const d = b.created_at ? b.created_at.split('T')[0] : new Date().toISOString().split('T')[0];
+    const existing = branchStart.get(b.branch);
+    if (!existing || d < existing) branchStart.set(b.branch, d);
+  }
+  const globalStart = branchStart.size > 0 ? [...branchStart.values()].sort()[0] : new Date().toISOString().split('T')[0];
+
+  const adBranch = new Map<string, string>();
+  for (const l of relevantAdsRes.data || []) {
+    if (l.meta_ad_id && l.branch) adBranch.set(l.meta_ad_id, l.branch);
+  }
+  const relevantAdIds = [...adBranch.keys()];
 
   const leadCosts = (monthLeadCostsRes.data || []).map(l => parseFloat(l.lead_cost) || 0);
   const totalAdCost = leadCosts.reduce((a, b) => a + b, 0);
   const brutoCpl = leadCosts.length > 0 ? totalAdCost / leadCosts.length : 0;
 
-  const relevantAdIds = [...new Set((relevantAdsRes.data || []).map(l => l.meta_ad_id).filter(Boolean))];
   let monthAdSpend = 0;
   if (relevantAdIds.length > 0) {
-    const { data: spendRows } = await supabase.from('meta_ad_spend').select('spend').in('ad_id', relevantAdIds).gte('date', monthAgo);
-    monthAdSpend = (spendRows || []).reduce((s, r) => s + (parseFloat(r.spend) || 0), 0);
+    const { data: spendRows } = await supabase.from('meta_ad_spend').select('ad_id, date, spend').in('ad_id', relevantAdIds).gte('date', globalStart);
+    for (const r of spendRows || []) {
+      const branch = adBranch.get(r.ad_id);
+      const startDate = branch ? branchStart.get(branch) : globalStart;
+      if (startDate && r.date < startDate) continue;
+      monthAdSpend += parseFloat(r.spend) || 0;
+    }
   }
 
   const assignByLead = new Map<string, number>();
-  for (const a of monthAssignmentsRes.data || []) {
+  for (const a of allAssignmentsRes.data || []) {
     assignByLead.set(a.lead_id, (assignByLead.get(a.lead_id) || 0) + 1);
   }
   const avgAssignments = assignByLead.size > 0
-    ? Math.round(((monthAssignmentsRes.data || []).length / assignByLead.size) * 100) / 100
+    ? Math.round(((allAssignmentsRes.data || []).length / assignByLead.size) * 100) / 100
     : 0;
   const effectieveCpl = brutoCpl > 0 && avgAssignments > 0
     ? Math.round((brutoCpl / avgAssignments) * 100) / 100
