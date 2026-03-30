@@ -25,6 +25,10 @@ interface Lead {
   naam_klant: string; email: string; telefoonnummer: string; postcode: string; huisnummer: string;
   plaatsnaam: string; provincie: string; wervingsdatum: string; status: string; notities: string; bron: string;
   phone_valid?: boolean;
+  lead_cost?: number | string | null;
+  meta_campaign_id?: string | null;
+  meta_adset_id?: string | null;
+  meta_ad_id?: string | null;
   custom_fields?: Record<string, string>;
   [key: string]: unknown;
   created_at: string; updated_at: string;
@@ -739,6 +743,37 @@ function LeadFormPanel({
                     )}
                   </div>
                 ))}
+              </div>
+            </div>
+          )}
+          {isEdit && (lead?.meta_campaign_id || lead?.meta_ad_id || lead?.lead_cost) && (
+            <div className="border-t border-slate-100 pt-4">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">Meta Ads</p>
+              <div className="grid grid-cols-2 gap-3">
+                {lead?.meta_campaign_id && (
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-500">Campaign ID</label>
+                    <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs font-mono text-slate-600 select-all">{lead.meta_campaign_id}</p>
+                  </div>
+                )}
+                {lead?.meta_adset_id && (
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-500">Adset ID</label>
+                    <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs font-mono text-slate-600 select-all">{lead.meta_adset_id as string}</p>
+                  </div>
+                )}
+                {lead?.meta_ad_id && (
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-500">Ad ID</label>
+                    <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs font-mono text-slate-600 select-all">{lead.meta_ad_id as string}</p>
+                  </div>
+                )}
+                {lead?.lead_cost && (
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-500">Lead kosten (CPL)</label>
+                    <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs font-semibold text-emerald-600">&euro;{Number(lead.lead_cost).toFixed(2)}</p>
+                  </div>
+                )}
               </div>
             </div>
           )}
