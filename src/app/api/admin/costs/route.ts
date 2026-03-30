@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
   const now = new Date();
   const today = now.toISOString().split('T')[0];
 
-  // ── 0. Batch start dates per branch (earliest created_at) ──
+  // ── 0. Batch start dates per branch ──
   const { data: allBatches } = await supabase
     .from('customer_batches')
     .select('id, customer_id, branch, batch_size, leads_delivered, price_per_lead, total_price, status, leads_per_week, created_at, customers(name)')
@@ -21,36 +21,27 @@ export async function GET(request: NextRequest) {
   for (const b of allBatches || []) {
     const batchDate = b.created_at ? b.created_at.split('T')[0] : today;
     const existing = branchStartDate.get(b.branch);
-    if (!existing || batchDate < existing) {
-      branchStartDate.set(b.branch, batchDate);
-    }
+    if (!existing || batchDate < existing) branchStartDate.set(b.branch, batchDate);
   }
-  const globalStartDate = branchStartDate.size > 0
-    ? [...branchStartDate.values()].sort()[0]
-    : today;
+  const globalStartDate = branchStartDate.size > 0 ? [...branchStartDate.values()].sort()[0] : today;
 
-  // ── 1. Find relevant campaigns and their branches (from leads in our system) ──
-  const { data: relevantLeadCampaigns } = await supabase
+  // ── 1. All our leads with campaign info ──
+  const { data: allLeads } = await supabase
     .from('leads')
-    .select('meta_campaign_id, branch')
-    .not('meta_campaign_id', 'is', null);
+    .select('id, branch, meta_campaign_id, wervingsdatum, lead_cost');
 
+  const leadsWithCampaign = (allLeads || []).filter(l => l.meta_campaign_id);
   const campaignBranchMap = new Map<string, string>();
-  for (const l of relevantLeadCampaigns || []) {
-    if (l.meta_campaign_id && l.branch && !campaignBranchMap.has(l.meta_campaign_id)) {
+  for (const l of leadsWithCampaign) {
+    if (!campaignBranchMap.has(l.meta_campaign_id)) {
       campaignBranchMap.set(l.meta_campaign_id, l.branch);
     }
   }
   const campaignIdSet = [...campaignBranchMap.keys()];
+  const totalOurLeads = leadsWithCampaign.length;
 
-  // ── 2. Campaign spend from Meta (only from batch start date per branch) ──
-  let weekSpend = 0;
-  let monthSpend = 0;
-  let totalSpendSinceBatches = 0;
-  const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-
+  // ── 2. Total campaign spend from Meta (from batch start dates) ──
   interface SpendRow { campaign_id: string; date: string; spend: string; leads_count: number }
-
   const allSpendRows: SpendRow[] = [];
   if (campaignIdSet.length > 0) {
     const chunkSize = 200;
@@ -65,25 +56,23 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  let totalAdSpend = 0;
+  let weekSpend = 0;
+  const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
   for (const row of allSpendRows) {
     const branch = campaignBranchMap.get(row.campaign_id);
     const startDate = branch ? branchStartDate.get(branch) : globalStartDate;
     if (startDate && row.date < startDate) continue;
-
     const spend = parseFloat(row.spend) || 0;
-    totalSpendSinceBatches += spend;
+    totalAdSpend += spend;
     if (row.date >= weekAgo) weekSpend += spend;
-    monthSpend += spend;
   }
 
-  // ── 3. Bruto CPL from lead_cost ──
-  const { data: leadsWithCostData } = await supabase
-    .from('leads')
-    .select('id, lead_cost, branch')
-    .not('lead_cost', 'is', null);
-
-  const allCosts = (leadsWithCostData || []).map(l => parseFloat(l.lead_cost) || 0);
-  const monthBrutoCpl = allCosts.length > 0 ? allCosts.reduce((a, b) => a + b, 0) / allCosts.length : null;
+  // ── 3. Bruto CPL = total ad spend / our lead count ──
+  const brutoCpl = totalOurLeads > 0
+    ? Math.round((totalAdSpend / totalOurLeads) * 100) / 100
+    : null;
 
   // ── 4. All assignments for multiplier + revenue calc ──
   const { data: allAssignments } = await supabase
@@ -102,72 +91,61 @@ export async function GET(request: NextRequest) {
     : 0;
 
   // ── 5. Effectieve CPL = bruto CPL / gem. toewijzingen ──
-  const effectieveCpl = monthBrutoCpl && avgAssignments > 0
-    ? Math.round((monthBrutoCpl / avgAssignments) * 100) / 100
+  const effectieveCpl = brutoCpl && avgAssignments > 0
+    ? Math.round((brutoCpl / avgAssignments) * 100) / 100
     : null;
 
-  // ── 6. Branch-level costs with effectieve CPL ──
-  const branchTotals: Record<string, { spend: number; count: number; avgCpl: number; effectieveCpl: number; assignments: number }> = {};
+  // ── 6. Cost per lead for profit calculations = ad spend / our leads ──
+  // Each lead's share of cost = totalAdSpend / totalOurLeads
+  const costPerLead = totalOurLeads > 0 ? totalAdSpend / totalOurLeads : 0;
+
+  // ── 7. Branch-level costs ──
+  const branchLeads = new Map<string, number>();
+  const branchSpend = new Map<string, number>();
   const branchLeadIds = new Map<string, Set<string>>();
 
-  for (const lead of leadsWithCostData || []) {
-    const cost = parseFloat(lead.lead_cost) || 0;
-    if (!branchTotals[lead.branch]) {
-      branchTotals[lead.branch] = { spend: 0, count: 0, avgCpl: 0, effectieveCpl: 0, assignments: 0 };
-      branchLeadIds.set(lead.branch, new Set());
-    }
-    branchTotals[lead.branch].spend += cost;
-    branchTotals[lead.branch].count++;
-    branchLeadIds.get(lead.branch)!.add(lead.id);
+  for (const l of leadsWithCampaign) {
+    branchLeads.set(l.branch, (branchLeads.get(l.branch) || 0) + 1);
+    if (!branchLeadIds.has(l.branch)) branchLeadIds.set(l.branch, new Set());
+    branchLeadIds.get(l.branch)!.add(l.id);
   }
 
-  for (const [branch, ids] of branchLeadIds) {
+  for (const row of allSpendRows) {
+    const branch = campaignBranchMap.get(row.campaign_id);
+    if (!branch) continue;
+    const startDate = branchStartDate.get(branch);
+    if (startDate && row.date < startDate) continue;
+    branchSpend.set(branch, (branchSpend.get(branch) || 0) + (parseFloat(row.spend) || 0));
+  }
+
+  const branchCosts: Record<string, { spend: number; count: number; avgCpl: number; effectieveCpl: number; assignments: number }> = {};
+  for (const [branch, count] of branchLeads) {
+    const spend = branchSpend.get(branch) || 0;
+    const avgCpl = count > 0 ? Math.round((spend / count) * 100) / 100 : 0;
     let branchAssignments = 0;
-    for (const id of ids) {
-      branchAssignments += assignmentsByLead.get(id) || 0;
-    }
-    const bt = branchTotals[branch];
-    bt.assignments = branchAssignments;
-    bt.avgCpl = bt.count > 0 ? Math.round((bt.spend / bt.count) * 100) / 100 : 0;
-    const branchAvgAssign = ids.size > 0 ? branchAssignments / ids.size : 1;
-    bt.effectieveCpl = bt.avgCpl > 0 && branchAvgAssign > 0
-      ? Math.round((bt.avgCpl / branchAvgAssign) * 100) / 100
-      : bt.avgCpl;
+    const ids = branchLeadIds.get(branch);
+    if (ids) for (const id of ids) branchAssignments += assignmentsByLead.get(id) || 0;
+    const branchAvgAssign = ids && ids.size > 0 ? branchAssignments / ids.size : 1;
+    branchCosts[branch] = {
+      spend: Math.round(spend * 100) / 100,
+      count,
+      avgCpl,
+      effectieveCpl: avgCpl > 0 && branchAvgAssign > 0 ? Math.round((avgCpl / branchAvgAssign) * 100) / 100 : avgCpl,
+      assignments: branchAssignments,
+    };
   }
 
-  // ── 7. Lead cost lookup for assigned leads ──
-  const allLeadIds = [...new Set((allAssignments || []).map(a => a.lead_id))];
+  // ── 8. Lead cost lookup for batch/customer financials ──
   const leadCostMap: Record<string, number> = {};
-  if (allLeadIds.length > 0) {
-    const chunkSize = 200;
-    for (let i = 0; i < allLeadIds.length; i += chunkSize) {
-      const chunk = allLeadIds.slice(i, i + chunkSize);
-      const { data: leads } = await supabase
-        .from('leads')
-        .select('id, lead_cost')
-        .in('id', chunk)
-        .not('lead_cost', 'is', null);
-      for (const l of leads || []) {
-        leadCostMap[l.id] = parseFloat(l.lead_cost) || 0;
-      }
-    }
+  for (const l of allLeads || []) {
+    if (l.meta_campaign_id) leadCostMap[l.id] = costPerLead;
   }
 
-  // ── 8. Batch-level financials ──
+  // ── 9. Batch-level financials ──
   interface BatchFinancial {
-    id: string;
-    customer: string;
-    branch: string;
-    batchSize: number;
-    delivered: number;
-    pricePerLead: number;
-    status: string;
-    revenue: number;
-    cost: number;
-    profit: number;
-    marginPct: number;
-    leadsWithCost: number;
-    startDate: string;
+    id: string; customer: string; branch: string; batchSize: number; delivered: number;
+    pricePerLead: number; status: string; revenue: number; cost: number; profit: number;
+    marginPct: number; leadsWithCost: number; startDate: string;
   }
 
   const batchFinancials: BatchFinancial[] = [];
@@ -199,23 +177,14 @@ export async function GET(request: NextRequest) {
     const marginPct = revenue > 0 ? Math.round((profit / revenue) * 100) : 0;
 
     batchFinancials.push({
-      id: b.id,
-      customer: custName,
-      branch: b.branch,
-      batchSize: b.batch_size,
-      delivered: b.leads_delivered || 0,
-      pricePerLead: b.price_per_lead,
-      status: b.status,
-      revenue: Math.round(revenue * 100) / 100,
-      cost: Math.round(cost * 100) / 100,
-      profit: Math.round(profit * 100) / 100,
-      marginPct,
-      leadsWithCost,
-      startDate,
+      id: b.id, customer: custName, branch: b.branch, batchSize: b.batch_size,
+      delivered: b.leads_delivered || 0, pricePerLead: b.price_per_lead, status: b.status,
+      revenue: Math.round(revenue * 100) / 100, cost: Math.round(cost * 100) / 100,
+      profit: Math.round(profit * 100) / 100, marginPct, leadsWithCost, startDate,
     });
   }
 
-  // ── 9. Customer margins ──
+  // ── 10. Customer margins ──
   const customerMargins: Record<string, { name: string; revenue: number; cost: number; margin: number; leads: number; marginPct: number }> = {};
   const batchPriceMap = new Map<string, number>();
   const batchCustomerMap = new Map<string, { customerId: string; name: string }>();
@@ -240,8 +209,8 @@ export async function GET(request: NextRequest) {
     if (!cm) continue;
     cm.revenue += price;
     cm.leads++;
-    const leadCost = leadCostMap[a.lead_id];
-    if (leadCost !== undefined) cm.cost += leadCost;
+    const lc = leadCostMap[a.lead_id];
+    if (lc !== undefined) cm.cost += lc;
   }
 
   for (const cm of Object.values(customerMargins)) {
@@ -249,13 +218,12 @@ export async function GET(request: NextRequest) {
     cm.marginPct = cm.revenue > 0 ? Math.round(((cm.revenue - cm.cost) / cm.revenue) * 100) : 0;
   }
 
-  // ── 10. Totals ──
+  // ── 11. Totals ──
   const totalRevenue = Object.values(customerMargins).reduce((s, cm) => s + cm.revenue, 0);
-  const totalCost = allCosts.reduce((a, b) => a + b, 0);
-  const totalProfit = totalRevenue - totalCost;
-  const roi = totalCost > 0 ? Math.round(((totalRevenue - totalCost) / totalCost) * 100) : 0;
+  const totalProfit = totalRevenue - totalAdSpend;
+  const roi = totalAdSpend > 0 ? Math.round(((totalRevenue - totalAdSpend) / totalAdSpend) * 100) : 0;
 
-  // ── 11. Last sync + daily trend (from batch start dates) ──
+  // ── 12. Last sync + daily trend ──
   const { data: lastSync } = await supabase
     .from('meta_ad_spend')
     .select('synced_at')
@@ -270,7 +238,6 @@ export async function GET(request: NextRequest) {
     const branch = campaignBranchMap.get(row.campaign_id);
     const startDate = branch ? branchStartDate.get(branch) : globalStartDate;
     if (startDate && row.date < startDate) continue;
-
     if (!dailyTrend[row.date]) dailyTrend[row.date] = { spend: 0, leads: 0 };
     dailyTrend[row.date].spend += parseFloat(row.spend) || 0;
     dailyTrend[row.date].leads += row.leads_count || 0;
@@ -278,20 +245,20 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({
     weekSpend: Math.round(weekSpend * 100) / 100,
-    monthSpend: Math.round(monthSpend * 100) / 100,
-    totalSpend: Math.round(totalSpendSinceBatches * 100) / 100,
-    monthBrutoCpl: monthBrutoCpl ? Math.round(monthBrutoCpl * 100) / 100 : null,
+    monthSpend: Math.round(totalAdSpend * 100) / 100,
+    totalSpend: Math.round(totalAdSpend * 100) / 100,
+    monthBrutoCpl: brutoCpl,
     effectieveCpl,
     avgAssignments,
     totalRevenue: Math.round(totalRevenue * 100) / 100,
-    totalCost: Math.round(totalCost * 100) / 100,
+    totalCost: Math.round(totalAdSpend * 100) / 100,
     totalProfit: Math.round(totalProfit * 100) / 100,
     roi,
-    leadsWithCost: allCosts.length,
+    leadsWithCost: totalOurLeads,
     uniqueAssignedLeads,
     totalAssignments,
     globalStartDate,
-    branchCosts: branchTotals,
+    branchCosts,
     customerMargins: Object.values(customerMargins).sort((a, b) => b.margin - a.margin),
     batchFinancials: batchFinancials.sort((a, b) => b.profit - a.profit),
     lastSyncAt: lastSync?.synced_at || null,

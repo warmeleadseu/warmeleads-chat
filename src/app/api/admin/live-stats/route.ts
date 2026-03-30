@@ -95,9 +95,8 @@ export async function GET(request: NextRequest) {
     return s;
   }, 0);
 
-  // Cost metrics: effective CPL + total ad cost (only from batch start dates)
-  const [monthLeadCostsRes, allAssignmentsRes, relevantAdsRes, batchStartRes] = await Promise.all([
-    supabase.from('leads').select('id, lead_cost').not('lead_cost', 'is', null),
+  // Cost metrics: ad spend / our leads = bruto CPL, then effectieve CPL
+  const [allAssignmentsRes, relevantAdsRes, batchStartRes] = await Promise.all([
     supabase.from('lead_assignments').select('lead_id'),
     supabase.from('leads').select('meta_campaign_id, branch').not('meta_campaign_id', 'is', null),
     supabase.from('customer_batches').select('branch, created_at').in('status', ['active', 'completed']),
@@ -116,10 +115,7 @@ export async function GET(request: NextRequest) {
     if (l.meta_campaign_id && l.branch) campaignBranch.set(l.meta_campaign_id, l.branch);
   }
   const relevantCampaignIds = [...campaignBranch.keys()];
-
-  const leadCosts = (monthLeadCostsRes.data || []).map(l => parseFloat(l.lead_cost) || 0);
-  const totalAdCost = leadCosts.reduce((a, b) => a + b, 0);
-  const brutoCpl = leadCosts.length > 0 ? totalAdCost / leadCosts.length : 0;
+  const totalOurLeads = (relevantAdsRes.data || []).length;
 
   let monthAdSpend = 0;
   if (relevantCampaignIds.length > 0) {
@@ -132,6 +128,8 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  const brutoCpl = totalOurLeads > 0 ? monthAdSpend / totalOurLeads : 0;
+
   const assignByLead = new Map<string, number>();
   for (const a of allAssignmentsRes.data || []) {
     assignByLead.set(a.lead_id, (assignByLead.get(a.lead_id) || 0) + 1);
@@ -142,7 +140,7 @@ export async function GET(request: NextRequest) {
   const effectieveCpl = brutoCpl > 0 && avgAssignments > 0
     ? Math.round((brutoCpl / avgAssignments) * 100) / 100
     : 0;
-  const totalProfit = (totalRevenue + activeRevenue) - totalAdCost;
+  const totalProfit = (totalRevenue + activeRevenue) - monthAdSpend;
 
   const periods = ['day', '3days', 'week', 'month', 'quarter', 'year'] as const;
   const periodStats: Record<string, { leads: number; prevLeads: number; assigned: number; prevAssigned: number }> = {};
