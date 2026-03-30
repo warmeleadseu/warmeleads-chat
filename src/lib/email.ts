@@ -251,6 +251,85 @@ export async function sendDailyLeadDigest(
   );
 }
 
+interface FeedbackItem {
+  leadName: string;
+  customerName: string;
+  branch: string;
+  rating: string;
+  comment: string | null;
+  createdAt: string;
+}
+
+const RATING_LABELS: Record<string, { label: string; color: string }> = {
+  goed_contact: { label: 'Goed contact gehad', color: '#10B981' },
+  onbereikbaar: { label: 'Onbereikbaar', color: '#F59E0B' },
+  niet_geinteresseerd: { label: 'Niet geïnteresseerd', color: '#64748B' },
+  fout_nummer: { label: 'Fout nummer', color: '#EF4444' },
+  verkocht: { label: 'Verkocht!', color: '#8B5CF6' },
+};
+
+export async function sendFeedbackDigest(
+  adminEmail: string,
+  feedbackItems: FeedbackItem[],
+): Promise<boolean> {
+  if (feedbackItems.length === 0) return true;
+
+  const feedbackRows = feedbackItems
+    .map(f => {
+      const r = RATING_LABELS[f.rating] || { label: f.rating, color: '#94A3B8' };
+      return `<tr>
+        <td style="padding:8px 12px;color:#E2E8F0;font-size:14px;border-bottom:1px solid rgba(255,255,255,.05)">${f.leadName}</td>
+        <td style="padding:8px 12px;color:#CBD5E1;font-size:14px;border-bottom:1px solid rgba(255,255,255,.05)">${f.customerName}</td>
+        <td style="padding:8px 12px;color:#CBD5E1;font-size:14px;border-bottom:1px solid rgba(255,255,255,.05)">${f.branch || '—'}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid rgba(255,255,255,.05)">
+          <span style="display:inline-block;background:${r.color}20;color:${r.color};padding:3px 10px;border-radius:6px;font-size:13px;font-weight:600">${r.label}</span>
+        </td>
+        ${f.comment ? `<td style="padding:8px 12px;color:#94A3B8;font-size:13px;font-style:italic;border-bottom:1px solid rgba(255,255,255,.05)">${f.comment}</td>` : `<td style="padding:8px 12px;border-bottom:1px solid rgba(255,255,255,.05)">—</td>`}
+      </tr>`;
+    })
+    .join('');
+
+  const ratingCounts: Record<string, number> = {};
+  for (const f of feedbackItems) {
+    ratingCounts[f.rating] = (ratingCounts[f.rating] || 0) + 1;
+  }
+  const summaryBadges = Object.entries(ratingCounts)
+    .map(([key, count]) => {
+      const r = RATING_LABELS[key] || { label: key, color: '#94A3B8' };
+      return `<span style="display:inline-block;background:${r.color}20;color:${r.color};padding:4px 12px;border-radius:6px;font-size:13px;font-weight:600;margin:2px 4px 2px 0">${r.label}: ${count}</span>`;
+    })
+    .join('');
+
+  const content = `
+    <p>Er ${feedbackItems.length === 1 ? 'is' : 'zijn'} ${badge(String(feedbackItems.length))} nieuwe feedback${feedbackItems.length === 1 ? '' : 's'} binnengekomen van klanten:</p>
+    <div style="margin:12px 0">${summaryBadges}</div>
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:16px 0;border-radius:8px;overflow:hidden;background:rgba(255,255,255,.03)">
+      <tr style="background:rgba(249,115,22,.1)">
+        <th style="padding:8px 12px;text-align:left;color:#F97316;font-size:13px;font-weight:600">Lead</th>
+        <th style="padding:8px 12px;text-align:left;color:#F97316;font-size:13px;font-weight:600">Klant</th>
+        <th style="padding:8px 12px;text-align:left;color:#F97316;font-size:13px;font-weight:600">Branche</th>
+        <th style="padding:8px 12px;text-align:left;color:#F97316;font-size:13px;font-weight:600">Feedback</th>
+        <th style="padding:8px 12px;text-align:left;color:#F97316;font-size:13px;font-weight:600">Opmerking</th>
+      </tr>
+      ${feedbackRows}
+    </table>
+    <p style="margin-top:20px">
+      <a href="https://warmeleads.eu/admin" style="display:inline-block;background:#F97316;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">Naar dashboard &rarr;</a>
+    </p>`;
+
+  const today = new Date().toLocaleDateString('nl-NL', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  });
+
+  return sendEmail(
+    adminEmail,
+    `Feedback overzicht – ${today} (${feedbackItems.length} nieuwe)`,
+    layout('Dagelijks Feedback Overzicht', content),
+  );
+}
+
 function getISOWeek(date: Date): number {
   const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
   d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
