@@ -99,7 +99,7 @@ export async function GET(request: NextRequest) {
   const [monthLeadCostsRes, allAssignmentsRes, relevantAdsRes, batchStartRes] = await Promise.all([
     supabase.from('leads').select('id, lead_cost').not('lead_cost', 'is', null),
     supabase.from('lead_assignments').select('lead_id'),
-    supabase.from('leads').select('meta_ad_id, branch').not('meta_ad_id', 'is', null),
+    supabase.from('leads').select('meta_campaign_id, branch').not('meta_campaign_id', 'is', null),
     supabase.from('customer_batches').select('branch, created_at').in('status', ['active', 'completed']),
   ]);
 
@@ -111,21 +111,21 @@ export async function GET(request: NextRequest) {
   }
   const globalStart = branchStart.size > 0 ? [...branchStart.values()].sort()[0] : new Date().toISOString().split('T')[0];
 
-  const adBranch = new Map<string, string>();
+  const campaignBranch = new Map<string, string>();
   for (const l of relevantAdsRes.data || []) {
-    if (l.meta_ad_id && l.branch) adBranch.set(l.meta_ad_id, l.branch);
+    if (l.meta_campaign_id && l.branch) campaignBranch.set(l.meta_campaign_id, l.branch);
   }
-  const relevantAdIds = [...adBranch.keys()];
+  const relevantCampaignIds = [...campaignBranch.keys()];
 
   const leadCosts = (monthLeadCostsRes.data || []).map(l => parseFloat(l.lead_cost) || 0);
   const totalAdCost = leadCosts.reduce((a, b) => a + b, 0);
   const brutoCpl = leadCosts.length > 0 ? totalAdCost / leadCosts.length : 0;
 
   let monthAdSpend = 0;
-  if (relevantAdIds.length > 0) {
-    const { data: spendRows } = await supabase.from('meta_ad_spend').select('ad_id, date, spend').in('ad_id', relevantAdIds).gte('date', globalStart);
+  if (relevantCampaignIds.length > 0) {
+    const { data: spendRows } = await supabase.from('meta_ad_spend').select('campaign_id, date, spend').in('campaign_id', relevantCampaignIds).gte('date', globalStart);
     for (const r of spendRows || []) {
-      const branch = adBranch.get(r.ad_id);
+      const branch = campaignBranch.get(r.campaign_id);
       const startDate = branch ? branchStart.get(branch) : globalStart;
       if (startDate && r.date < startDate) continue;
       monthAdSpend += parseFloat(r.spend) || 0;

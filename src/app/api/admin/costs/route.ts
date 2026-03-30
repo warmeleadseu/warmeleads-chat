@@ -29,44 +29,44 @@ export async function GET(request: NextRequest) {
     ? [...branchStartDate.values()].sort()[0]
     : today;
 
-  // ── 1. Find relevant ads and their branches (from leads in our system) ──
-  const { data: relevantLeadAds } = await supabase
+  // ── 1. Find relevant campaigns and their branches (from leads in our system) ──
+  const { data: relevantLeadCampaigns } = await supabase
     .from('leads')
-    .select('meta_ad_id, branch')
-    .not('meta_ad_id', 'is', null);
+    .select('meta_campaign_id, branch')
+    .not('meta_campaign_id', 'is', null);
 
-  const adBranchMap = new Map<string, string>();
-  for (const l of relevantLeadAds || []) {
-    if (l.meta_ad_id && l.branch && !adBranchMap.has(l.meta_ad_id)) {
-      adBranchMap.set(l.meta_ad_id, l.branch);
+  const campaignBranchMap = new Map<string, string>();
+  for (const l of relevantLeadCampaigns || []) {
+    if (l.meta_campaign_id && l.branch && !campaignBranchMap.has(l.meta_campaign_id)) {
+      campaignBranchMap.set(l.meta_campaign_id, l.branch);
     }
   }
-  const adIdSet = [...adBranchMap.keys()];
+  const campaignIdSet = [...campaignBranchMap.keys()];
 
-  // ── 2. Ad spend from Meta (only from batch start date per branch) ──
+  // ── 2. Campaign spend from Meta (only from batch start date per branch) ──
   let weekSpend = 0;
   let monthSpend = 0;
   let totalSpendSinceBatches = 0;
   const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-  interface SpendRow { ad_id: string; date: string; spend: string; leads_count: number }
+  interface SpendRow { campaign_id: string; date: string; spend: string; leads_count: number }
 
   const allSpendRows: SpendRow[] = [];
-  if (adIdSet.length > 0) {
+  if (campaignIdSet.length > 0) {
     const chunkSize = 200;
-    for (let i = 0; i < adIdSet.length; i += chunkSize) {
-      const chunk = adIdSet.slice(i, i + chunkSize);
+    for (let i = 0; i < campaignIdSet.length; i += chunkSize) {
+      const chunk = campaignIdSet.slice(i, i + chunkSize);
       const { data } = await supabase
         .from('meta_ad_spend')
-        .select('ad_id, date, spend, leads_count')
-        .in('ad_id', chunk)
+        .select('campaign_id, date, spend, leads_count')
+        .in('campaign_id', chunk)
         .gte('date', globalStartDate);
       if (data) allSpendRows.push(...(data as SpendRow[]));
     }
   }
 
   for (const row of allSpendRows) {
-    const branch = adBranchMap.get(row.ad_id);
+    const branch = campaignBranchMap.get(row.campaign_id);
     const startDate = branch ? branchStartDate.get(branch) : globalStartDate;
     if (startDate && row.date < startDate) continue;
 
@@ -267,7 +267,7 @@ export async function GET(request: NextRequest) {
   const dailyTrend: Record<string, { spend: number; leads: number }> = {};
   for (const row of allSpendRows) {
     if (row.date < twoWeeksAgo) continue;
-    const branch = adBranchMap.get(row.ad_id);
+    const branch = campaignBranchMap.get(row.campaign_id);
     const startDate = branch ? branchStartDate.get(branch) : globalStartDate;
     if (startDate && row.date < startDate) continue;
 

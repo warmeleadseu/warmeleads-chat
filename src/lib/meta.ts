@@ -140,32 +140,43 @@ export async function syncMetaAdSpend(dateFrom: string, dateTo: string): Promise
     }
   }
 
-  // Phase 2: Calculate CPL and update lead_cost on individual leads
+  // Phase 2: Calculate CPL per lead based on CAMPAIGN-level spend
   let leadsUpdated = 0;
 
+  // Aggregate spend per campaign per day
   const { data: spendRows } = await supabase
     .from('meta_ad_spend')
-    .select('ad_id, date, cpl')
+    .select('campaign_id, date, spend, leads_count')
     .gte('date', dateFrom)
-    .lte('date', dateTo)
-    .not('cpl', 'is', null);
+    .lte('date', dateTo);
 
   if (spendRows && spendRows.length > 0) {
-    const cplMap = new Map<string, number>();
+    const campaignDaySpend = new Map<string, { spend: number; leads: number }>();
     for (const sr of spendRows) {
-      cplMap.set(`${sr.ad_id}__${sr.date}`, sr.cpl);
+      const key = `${sr.campaign_id}__${sr.date}`;
+      const existing = campaignDaySpend.get(key) || { spend: 0, leads: 0 };
+      existing.spend += parseFloat(sr.spend) || 0;
+      existing.leads += sr.leads_count || 0;
+      campaignDaySpend.set(key, existing);
+    }
+
+    const campaignCplMap = new Map<string, number>();
+    for (const [key, totals] of campaignDaySpend) {
+      if (totals.leads > 0) {
+        campaignCplMap.set(key, Math.round((totals.spend / totals.leads) * 100) / 100);
+      }
     }
 
     const { data: leads } = await supabase
       .from('leads')
-      .select('id, meta_ad_id, wervingsdatum')
-      .not('meta_ad_id', 'is', null)
+      .select('id, meta_campaign_id, wervingsdatum')
+      .not('meta_campaign_id', 'is', null)
       .gte('wervingsdatum', dateFrom)
       .lte('wervingsdatum', dateTo);
 
     for (const lead of leads || []) {
-      const key = `${lead.meta_ad_id}__${lead.wervingsdatum}`;
-      const cpl = cplMap.get(key);
+      const key = `${lead.meta_campaign_id}__${lead.wervingsdatum}`;
+      const cpl = campaignCplMap.get(key);
       if (cpl !== undefined) {
         const { error } = await supabase
           .from('leads')
@@ -175,40 +186,40 @@ export async function syncMetaAdSpend(dateFrom: string, dateTo: string): Promise
       }
     }
 
-    // Fallback: leads with ad_id but no exact date match — use ad-level average CPL
+    // Fallback: leads with campaign_id but no exact date match — use campaign-level average CPL
     const { data: uncostedLeads } = await supabase
       .from('leads')
-      .select('id, meta_ad_id')
-      .not('meta_ad_id', 'is', null)
+      .select('id, meta_campaign_id')
+      .not('meta_campaign_id', 'is', null)
       .is('lead_cost', null)
       .gte('wervingsdatum', dateFrom)
       .lte('wervingsdatum', dateTo);
 
     if (uncostedLeads && uncostedLeads.length > 0) {
-      const adIds = [...new Set(uncostedLeads.map(l => l.meta_ad_id))];
-      const { data: avgSpend } = await supabase
+      const campaignIds = [...new Set(uncostedLeads.map(l => l.meta_campaign_id))];
+      const { data: allCampaignSpend } = await supabase
         .from('meta_ad_spend')
-        .select('ad_id, spend, leads_count')
-        .in('ad_id', adIds);
+        .select('campaign_id, spend, leads_count')
+        .in('campaign_id', campaignIds);
 
-      const adAvgCpl = new Map<string, number>();
-      if (avgSpend) {
-        const adTotals = new Map<string, { spend: number; leads: number }>();
-        for (const s of avgSpend) {
-          const existing = adTotals.get(s.ad_id) || { spend: 0, leads: 0 };
+      const campaignAvgCpl = new Map<string, number>();
+      if (allCampaignSpend) {
+        const campaignTotals = new Map<string, { spend: number; leads: number }>();
+        for (const s of allCampaignSpend) {
+          const existing = campaignTotals.get(s.campaign_id) || { spend: 0, leads: 0 };
           existing.spend += parseFloat(s.spend) || 0;
           existing.leads += s.leads_count || 0;
-          adTotals.set(s.ad_id, existing);
+          campaignTotals.set(s.campaign_id, existing);
         }
-        for (const [adId, totals] of adTotals) {
+        for (const [cid, totals] of campaignTotals) {
           if (totals.leads > 0) {
-            adAvgCpl.set(adId, Math.round((totals.spend / totals.leads) * 100) / 100);
+            campaignAvgCpl.set(cid, Math.round((totals.spend / totals.leads) * 100) / 100);
           }
         }
       }
 
       for (const lead of uncostedLeads) {
-        const avgCpl = adAvgCpl.get(lead.meta_ad_id);
+        const avgCpl = campaignAvgCpl.get(lead.meta_campaign_id);
         if (avgCpl !== undefined) {
           const { error } = await supabase
             .from('leads')
