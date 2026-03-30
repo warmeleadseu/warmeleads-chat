@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyCustomer, portalUnauthorized } from '@/lib/portalAuth';
 import { createServerClient } from '@/lib/supabase';
 
-async function getCustomerLeadIds(supabase: ReturnType<typeof createServerClient>, customerId: string): Promise<string[]> {
+async function getCustomerLeadData(supabase: ReturnType<typeof createServerClient>, customerId: string): Promise<{ ids: string[]; assignedAtMap: Record<string, string> }> {
   const { data: directLeads } = await supabase
     .from('leads')
     .select('id')
@@ -10,13 +10,17 @@ async function getCustomerLeadIds(supabase: ReturnType<typeof createServerClient
 
   const { data: assignedLeads } = await supabase
     .from('lead_assignments')
-    .select('lead_id')
+    .select('lead_id, assigned_at')
     .eq('customer_id', customerId);
 
   const ids = new Set<string>();
+  const assignedAtMap: Record<string, string> = {};
   (directLeads || []).forEach(l => ids.add(l.id));
-  (assignedLeads || []).forEach(a => ids.add(a.lead_id));
-  return Array.from(ids);
+  (assignedLeads || []).forEach(a => {
+    ids.add(a.lead_id);
+    assignedAtMap[a.lead_id] = a.assigned_at;
+  });
+  return { ids: Array.from(ids), assignedAtMap };
 }
 
 export async function GET(request: NextRequest) {
@@ -36,7 +40,7 @@ export async function GET(request: NextRequest) {
   const limit = parseInt(url.searchParams.get('limit') || '25');
   const branch = url.searchParams.get('branch');
 
-  const leadIds = await getCustomerLeadIds(supabase, customer.id);
+  const { ids: leadIds, assignedAtMap } = await getCustomerLeadData(supabase, customer.id);
   if (leadIds.length === 0) {
     return NextResponse.json({ leads: [], total: 0, page, totalPages: 0 });
   }
@@ -66,8 +70,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Kon leads niet ophalen' }, { status: 500 });
   }
 
+  const enrichedLeads = (data || []).map(lead => ({
+    ...lead,
+    received_at: assignedAtMap[lead.id] || lead.created_at,
+  }));
+
   return NextResponse.json({
-    leads: data || [],
+    leads: enrichedLeads,
     total: count || 0,
     page,
     totalPages: Math.ceil((count || 0) / limit),
@@ -87,7 +96,7 @@ export async function PUT(request: NextRequest) {
 
     const supabase = createServerClient();
 
-    const leadIds = await getCustomerLeadIds(supabase, customer.id);
+    const { ids: leadIds } = await getCustomerLeadData(supabase, customer.id);
     if (!leadIds.includes(id)) {
       return NextResponse.json({ error: 'Lead niet gevonden' }, { status: 404 });
     }

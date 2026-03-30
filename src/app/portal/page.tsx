@@ -93,6 +93,7 @@ interface Lead {
   status: string;
   notities: string;
   wervingsdatum: string;
+  received_at?: string;
   created_at: string;
   bron: string;
   custom_fields?: Record<string, string>;
@@ -843,7 +844,7 @@ export default function PortalPage() {
                           ))}
                         </select>
                       </td>
-                      <td className="px-4 py-3 text-slate-500">{formatDate(lead.wervingsdatum)}</td>
+                      <td className="px-4 py-3 text-slate-500">{formatDate(lead.received_at || lead.wervingsdatum)}</td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1.5">
                           {lead.telefoonnummer && (
@@ -923,7 +924,7 @@ export default function PortalPage() {
                   ); })()}
                   <span className="flex items-center gap-1">
                     <CalendarDaysIcon className="h-3 w-3" />
-                    {formatDate(lead.wervingsdatum)}
+                    {formatDate(lead.received_at || lead.wervingsdatum)}
                   </span>
                 </div>
                 <div className="flex gap-2">
@@ -1100,7 +1101,7 @@ function LeadDetailPanel({
             <div>
               <h2 className="text-lg font-bold text-slate-900">{lead.naam_klant || 'Lead details'}</h2>
               <p className="text-xs text-slate-500">
-                {bInfo.name} &middot; {formatDateLong(lead.wervingsdatum)}
+                {bInfo.name} &middot; {formatDateLong(lead.received_at || lead.wervingsdatum)}
               </p>
             </div>
             <button onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100">

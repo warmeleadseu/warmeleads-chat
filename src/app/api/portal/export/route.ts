@@ -17,10 +17,10 @@ const COLUMN_HEADERS = [
   'Notities',
 ];
 
-async function getCustomerLeadIds(
+async function getCustomerLeadData(
   supabase: ReturnType<typeof createServerClient>,
   customerId: string,
-): Promise<string[]> {
+): Promise<{ ids: string[]; assignedAtMap: Record<string, string> }> {
   const { data: directLeads } = await supabase
     .from('leads')
     .select('id')
@@ -28,13 +28,17 @@ async function getCustomerLeadIds(
 
   const { data: assignedLeads } = await supabase
     .from('lead_assignments')
-    .select('lead_id')
+    .select('lead_id, assigned_at')
     .eq('customer_id', customerId);
 
   const ids = new Set<string>();
+  const assignedAtMap: Record<string, string> = {};
   (directLeads || []).forEach(l => ids.add(l.id));
-  (assignedLeads || []).forEach(a => ids.add(a.lead_id));
-  return Array.from(ids);
+  (assignedLeads || []).forEach(a => {
+    ids.add(a.lead_id);
+    assignedAtMap[a.lead_id] = a.assigned_at;
+  });
+  return { ids: Array.from(ids), assignedAtMap };
 }
 
 function formatDate(value: string | null): string {
@@ -46,7 +50,7 @@ function formatDate(value: string | null): string {
   }
 }
 
-function leadsToRows(leads: Record<string, unknown>[]) {
+function leadsToRows(leads: Record<string, unknown>[], assignedAtMap: Record<string, string>) {
   return leads.map(l => [
     l.naam_klant || '',
     l.email || '',
@@ -57,7 +61,7 @@ function leadsToRows(leads: Record<string, unknown>[]) {
     l.provincie || '',
     l.status || '',
     l.branch || '',
-    formatDate(l.wervingsdatum as string | null),
+    formatDate(assignedAtMap[l.id as string] || l.wervingsdatum as string | null),
     l.notities || '',
   ]);
 }
@@ -75,11 +79,11 @@ export async function GET(request: NextRequest) {
   const from = url.searchParams.get('from');
   const to = url.searchParams.get('to');
 
-  const leadIds = await getCustomerLeadIds(supabase, customer.id);
+  const { ids: leadIds, assignedAtMap } = await getCustomerLeadData(supabase, customer.id);
   if (leadIds.length === 0) {
     return format === 'xlsx'
-      ? buildXlsx([])
-      : buildCsv([]);
+      ? buildXlsx([], {})
+      : buildCsv([], {});
   }
 
   let query = supabase
@@ -101,12 +105,12 @@ export async function GET(request: NextRequest) {
 
   const leads = (data || []) as Record<string, unknown>[];
 
-  return format === 'xlsx' ? buildXlsx(leads) : buildCsv(leads);
+  return format === 'xlsx' ? buildXlsx(leads, assignedAtMap) : buildCsv(leads, assignedAtMap);
 }
 
-function buildCsv(leads: Record<string, unknown>[]): NextResponse {
+function buildCsv(leads: Record<string, unknown>[], assignedAtMap: Record<string, string>): NextResponse {
   const BOM = '\uFEFF';
-  const rows = leadsToRows(leads);
+  const rows = leadsToRows(leads, assignedAtMap);
   const lines = [
     COLUMN_HEADERS.join(';'),
     ...rows.map(row =>
@@ -130,8 +134,8 @@ function buildCsv(leads: Record<string, unknown>[]): NextResponse {
   });
 }
 
-function buildXlsx(leads: Record<string, unknown>[]): NextResponse {
-  const rows = leadsToRows(leads);
+function buildXlsx(leads: Record<string, unknown>[], assignedAtMap: Record<string, string>): NextResponse {
+  const rows = leadsToRows(leads, assignedAtMap);
   const sheetData = [COLUMN_HEADERS, ...rows];
 
   const wb = XLSX.utils.book_new();
