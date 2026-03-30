@@ -12,13 +12,27 @@ export async function GET(request: NextRequest) {
   const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
   const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-  // ── 1. Ad spend from Meta ──
-  const [weekSpendRes, monthSpendRes] = await Promise.all([
-    supabase.from('meta_ad_spend').select('spend').gte('date', weekAgo),
-    supabase.from('meta_ad_spend').select('spend').gte('date', monthAgo),
-  ]);
-  const weekSpend = (weekSpendRes.data || []).reduce((s, r) => s + (parseFloat(r.spend) || 0), 0);
-  const monthSpend = (monthSpendRes.data || []).reduce((s, r) => s + (parseFloat(r.spend) || 0), 0);
+  // ── 1. Ad spend from Meta (only for ads that generated leads in our system) ──
+  const { data: relevantAdIds } = await supabase
+    .from('leads')
+    .select('meta_ad_id')
+    .not('meta_ad_id', 'is', null);
+  const adIdSet = [...new Set((relevantAdIds || []).map(l => l.meta_ad_id).filter(Boolean))];
+
+  let weekSpend = 0;
+  let monthSpend = 0;
+  if (adIdSet.length > 0) {
+    const chunkSize = 200;
+    for (let i = 0; i < adIdSet.length; i += chunkSize) {
+      const chunk = adIdSet.slice(i, i + chunkSize);
+      const [weekRes, monthRes] = await Promise.all([
+        supabase.from('meta_ad_spend').select('spend').in('ad_id', chunk).gte('date', weekAgo),
+        supabase.from('meta_ad_spend').select('spend').in('ad_id', chunk).gte('date', monthAgo),
+      ]);
+      weekSpend += (weekRes.data || []).reduce((s, r) => s + (parseFloat(r.spend) || 0), 0);
+      monthSpend += (monthRes.data || []).reduce((s, r) => s + (parseFloat(r.spend) || 0), 0);
+    }
+  }
 
   // ── 2. Bruto CPL from lead_cost ──
   const { data: monthLeadCosts } = await supabase
@@ -214,17 +228,23 @@ export async function GET(request: NextRequest) {
     .single();
 
   const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-  const { data: dailySpend } = await supabase
-    .from('meta_ad_spend')
-    .select('date, spend, leads_count')
-    .gte('date', twoWeeksAgo)
-    .order('date');
-
   const dailyTrend: Record<string, { spend: number; leads: number }> = {};
-  for (const row of dailySpend || []) {
-    if (!dailyTrend[row.date]) dailyTrend[row.date] = { spend: 0, leads: 0 };
-    dailyTrend[row.date].spend += parseFloat(row.spend) || 0;
-    dailyTrend[row.date].leads += row.leads_count || 0;
+  if (adIdSet.length > 0) {
+    const chunkSize = 200;
+    for (let i = 0; i < adIdSet.length; i += chunkSize) {
+      const chunk = adIdSet.slice(i, i + chunkSize);
+      const { data: dailySpend } = await supabase
+        .from('meta_ad_spend')
+        .select('date, spend, leads_count')
+        .in('ad_id', chunk)
+        .gte('date', twoWeeksAgo)
+        .order('date');
+      for (const row of dailySpend || []) {
+        if (!dailyTrend[row.date]) dailyTrend[row.date] = { spend: 0, leads: 0 };
+        dailyTrend[row.date].spend += parseFloat(row.spend) || 0;
+        dailyTrend[row.date].leads += row.leads_count || 0;
+      }
+    }
   }
 
   return NextResponse.json({
