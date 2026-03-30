@@ -2,7 +2,9 @@ import { createServerClient } from './supabase';
 import { sendLeadNotification } from './email';
 
 const MAX_ASSIGNMENTS = 3;
+const TARGET_AVG_ASSIGNMENTS = 2;
 const MAX_LEAD_AGE_DAYS = 3;
+const COOLDOWN_HOURS = 12;
 
 function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371;
@@ -55,13 +57,11 @@ function matchesFilter(lead: LeadForDistribution, filter: LeadFilter): boolean {
   const raw = getLeadFieldValue(lead, filter.field);
   if (raw === null) return false;
 
-  // Multi-select: lead value must be one of the selected values (case-insensitive)
   if (filter.operator === 'in' && filter.values && filter.values.length > 0) {
     const lower = raw.toLowerCase();
     return filter.values.some(v => v.toLowerCase() === lower);
   }
 
-  // Legacy single-value operators
   const numA = parseFloat(raw.replace(/[^0-9.,\-]/g, '').replace(',', '.'));
   const numB = parseFloat((filter.value || '').replace(/[^0-9.,\-]/g, '').replace(',', '.'));
   const bothNumeric = !isNaN(numA) && !isNaN(numB);
@@ -90,7 +90,8 @@ interface DistributionResult {
 }
 
 /**
- * Distribute a single lead to matching customers based on geo-targets and active batches.
+ * Distribute a single lead to ONE matching customer (max 1 per run).
+ * Respects 12h cooldown: if this lead was assigned to anyone in the last 12 hours, skip.
  */
 export async function distributeLead(lead: LeadForDistribution): Promise<DistributionResult> {
   const result: DistributionResult = { lead_id: lead.id, assignments: [] };
@@ -98,7 +99,6 @@ export async function distributeLead(lead: LeadForDistribution): Promise<Distrib
 
   const supabase = createServerClient();
 
-  // Load full lead data for filter matching (if not already enriched)
   let fullLead = lead;
   if (!lead.custom_fields) {
     const { data: leadRow } = await supabase.from('leads').select('*').eq('id', lead.id).single();
@@ -107,11 +107,20 @@ export async function distributeLead(lead: LeadForDistribution): Promise<Distrib
 
   const { data: existingAssignments } = await supabase
     .from('lead_assignments')
-    .select('customer_id')
+    .select('customer_id, assigned_at')
     .eq('lead_id', lead.id);
 
   const assignedIds = new Set((existingAssignments || []).map(a => a.customer_id));
   if (assignedIds.size >= MAX_ASSIGNMENTS) return result;
+
+  // 12-hour cooldown: skip if assigned to anyone in the last COOLDOWN_HOURS
+  if (existingAssignments && existingAssignments.length > 0) {
+    const cooldownCutoff = new Date(Date.now() - COOLDOWN_HOURS * 60 * 60 * 1000);
+    const recentAssignment = existingAssignments.find(a =>
+      new Date(a.assigned_at) > cooldownCutoff
+    );
+    if (recentAssignment) return result;
+  }
 
   const { data: activeBatches } = await supabase
     .from('customer_batches')
@@ -122,7 +131,6 @@ export async function distributeLead(lead: LeadForDistribution): Promise<Distrib
 
   if (!activeBatches || activeBatches.length === 0) return result;
 
-  // Check weekly limits: count assignments per batch this week
   const batchesWithWeeklyLimit = activeBatches.filter(b => b.leads_per_week && b.leads_per_week > 0);
   const weeklyCountByBatch: Record<string, number> = {};
 
@@ -174,7 +182,6 @@ export async function distributeLead(lead: LeadForDistribution): Promise<Distrib
     if (batch.leads_delivered >= batch.batch_size) continue;
     if (assignedIds.has(batch.customer_id)) continue;
 
-    // Skip if weekly limit reached
     if (batch.leads_per_week && batch.leads_per_week > 0) {
       const thisWeekCount = weeklyCountByBatch[batch.id] || 0;
       if (thisWeekCount >= batch.leads_per_week) continue;
@@ -217,8 +224,8 @@ export async function distributeLead(lead: LeadForDistribution): Promise<Distrib
     return a.distance_km - b.distance_km;
   });
 
-  const slotsAvailable = MAX_ASSIGNMENTS - assignedIds.size;
-  const toAssign = matches.slice(0, slotsAvailable);
+  // Max 1 assignment per lead per run
+  const toAssign = matches.slice(0, 1);
 
   for (const m of toAssign) {
     const { error } = await supabase
@@ -265,7 +272,7 @@ export async function distributeLead(lead: LeadForDistribution): Promise<Distrib
 }
 
 /**
- * Distribute multiple leads.
+ * Distribute multiple leads (max 1 assignment per lead per run).
  */
 export async function distributeLeads(leads: LeadForDistribution[]): Promise<{ distributed: number; assignments: number }> {
   let distributed = 0;
@@ -283,10 +290,15 @@ export async function distributeLeads(leads: LeadForDistribution[]): Promise<{ d
 }
 
 /**
- * Find and distribute leads ≤ MAX_LEAD_AGE_DAYS old that have coordinates
- * but are not yet fully assigned (< MAX_ASSIGNMENTS).
+ * Smart distribution with average-tracking:
+ * 1. First pass: assign leads that have 0 assignments (new leads get priority)
+ * 2. Second pass: if average assignments per lead < TARGET_AVG, re-assign eligible leads
+ *    that already have 1+ assignment but are past their 12h cooldown
+ *
+ * This ensures new leads always get served first, and re-assignments happen
+ * only when needed to maintain the target average of ~2 assignments per lead.
  */
-export async function distributeUnassignedLeads(): Promise<{ distributed: number; assignments: number }> {
+export async function distributeUnassignedLeads(): Promise<{ distributed: number; assignments: number; avgAssignments: number }> {
   const supabase = createServerClient();
 
   const cutoff = new Date();
@@ -300,20 +312,94 @@ export async function distributeUnassignedLeads(): Promise<{ distributed: number
     .gte('created_at', cutoff.toISOString())
     .order('created_at', { ascending: false });
 
-  if (!leads || leads.length === 0) return { distributed: 0, assignments: 0 };
+  if (!leads || leads.length === 0) return { distributed: 0, assignments: 0, avgAssignments: 0 };
 
   const { data: existingAssignments } = await supabase
     .from('lead_assignments')
-    .select('lead_id');
+    .select('lead_id, assigned_at');
 
-  const assignedLeadCounts: Record<string, number> = {};
+  const assignmentCounts: Record<string, number> = {};
+  const lastAssignedAt: Record<string, Date> = {};
   (existingAssignments || []).forEach(a => {
-    assignedLeadCounts[a.lead_id] = (assignedLeadCounts[a.lead_id] || 0) + 1;
+    assignmentCounts[a.lead_id] = (assignmentCounts[a.lead_id] || 0) + 1;
+    const d = new Date(a.assigned_at);
+    if (!lastAssignedAt[a.lead_id] || d > lastAssignedAt[a.lead_id]) {
+      lastAssignedAt[a.lead_id] = d;
+    }
   });
 
-  const candidates = leads.filter(l =>
-    (assignedLeadCounts[l.id] || 0) < MAX_ASSIGNMENTS
-  );
+  const cooldownCutoff = new Date(Date.now() - COOLDOWN_HOURS * 60 * 60 * 1000);
 
-  return distributeLeads(candidates as LeadForDistribution[]);
+  // Pass 1: leads with 0 assignments (new leads — always distribute)
+  const newLeads = leads.filter(l => (assignmentCounts[l.id] || 0) === 0);
+
+  let totalDistributed = 0;
+  let totalAssignments = 0;
+
+  if (newLeads.length > 0) {
+    const r = await distributeLeads(newLeads as LeadForDistribution[]);
+    totalDistributed += r.distributed;
+    totalAssignments += r.assignments;
+  }
+
+  // Recalculate average after pass 1
+  const totalExistingAssignments = Object.values(assignmentCounts).reduce((s, c) => s + c, 0) + totalAssignments;
+  const totalLeadsWithAssignments = new Set([
+    ...Object.keys(assignmentCounts),
+    ...newLeads.filter(l => assignmentCounts[l.id] !== undefined || totalAssignments > 0).map(l => l.id),
+  ]);
+
+  // Count unique leads that have at least 1 assignment
+  let leadsWithAssignments = 0;
+  let sumAssignments = 0;
+  const updatedCounts = { ...assignmentCounts };
+  // Account for assignments just made in pass 1
+  for (const l of newLeads) {
+    if (!updatedCounts[l.id]) updatedCounts[l.id] = 0;
+  }
+
+  for (const [, count] of Object.entries(updatedCounts)) {
+    if (count > 0) {
+      leadsWithAssignments++;
+      sumAssignments += count;
+    }
+  }
+  sumAssignments += totalAssignments;
+  leadsWithAssignments += newLeads.filter(l => !assignmentCounts[l.id] && totalAssignments > 0).length;
+
+  const currentAvg = leadsWithAssignments > 0 ? sumAssignments / leadsWithAssignments : 0;
+
+  // Pass 2: re-assign leads to boost average toward TARGET_AVG
+  // Only if current average is below target
+  if (currentAvg < TARGET_AVG_ASSIGNMENTS) {
+    const reAssignCandidates = leads.filter(l => {
+      const count = assignmentCounts[l.id] || 0;
+      if (count === 0 || count >= MAX_ASSIGNMENTS) return false;
+      const last = lastAssignedAt[l.id];
+      if (last && last > cooldownCutoff) return false;
+      return true;
+    });
+
+    // Sort: leads with fewer assignments first (prioritize getting everyone to 2)
+    reAssignCandidates.sort((a, b) => (assignmentCounts[a.id] || 0) - (assignmentCounts[b.id] || 0));
+
+    if (reAssignCandidates.length > 0) {
+      const r = await distributeLeads(reAssignCandidates as LeadForDistribution[]);
+      totalDistributed += r.distributed;
+      totalAssignments += r.assignments;
+    }
+  }
+
+  // Final average calculation
+  const finalTotalAssignments = (existingAssignments || []).length + totalAssignments;
+  const finalUniqueLeads = new Set([
+    ...Object.keys(assignmentCounts),
+    ...leads.filter(l => !assignmentCounts[l.id]).map(l => l.id),
+  ].filter(id => (assignmentCounts[id] || 0) > 0 || totalAssignments > 0));
+
+  const avgAssignments = finalUniqueLeads.size > 0
+    ? Math.round((finalTotalAssignments / finalUniqueLeads.size) * 100) / 100
+    : 0;
+
+  return { distributed: totalDistributed, assignments: totalAssignments, avgAssignments };
 }

@@ -114,6 +114,7 @@ export async function GET(request: NextRequest) {
     profanityDeleted,
     distributed: distResult.distributed,
     assignments: distResult.assignments,
+    avgAssignments: distResult.avgAssignments,
     timestamp: new Date().toISOString(),
   });
 }
