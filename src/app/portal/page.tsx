@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { usePortal } from './portalContext';
 import { portalFetch } from '@/lib/portalAuth';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -989,32 +990,38 @@ export default function PortalPage() {
         </>
       )}
 
-      {/* Lead detail slide-over */}
-      <AnimatePresence>
-        {selectedLead && (
-          <LeadDetailPanel
-            lead={selectedLead}
-            branchConfig={branchMap[selectedLead.branch]}
-            getBranch={getBranch}
-            onClose={() => setSelectedLead(null)}
-            onStatusChange={(s) => handleStatusUpdate(selectedLead, s)}
-            onNotesChange={(n) => handleNotesUpdate(selectedLead, n)}
-            showToast={showToast}
-          />
-        )}
-      </AnimatePresence>
+      {/* Lead detail slide-over — portalled to body for correct fixed positioning */}
+      {typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {selectedLead && (
+            <LeadDetailPanel
+              lead={selectedLead}
+              branchConfig={branchMap[selectedLead.branch]}
+              getBranch={getBranch}
+              onClose={() => setSelectedLead(null)}
+              onStatusChange={(s) => handleStatusUpdate(selectedLead, s)}
+              onNotesChange={(n) => handleNotesUpdate(selectedLead, n)}
+              showToast={showToast}
+            />
+          )}
+        </AnimatePresence>,
+        document.body,
+      )}
 
-      {/* Settings slide-over */}
-      <AnimatePresence>
-        {showSettings && (
-          <SettingsPanel
-            emailNotifications={emailNotifications}
-            notificationFrequency={notificationFrequency}
-            onSave={saveNotifPrefs}
-            onClose={() => setShowSettings(false)}
-          />
-        )}
-      </AnimatePresence>
+      {/* Settings slide-over — portalled to body */}
+      {typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {showSettings && (
+            <SettingsPanel
+              emailNotifications={emailNotifications}
+              notificationFrequency={notificationFrequency}
+              onSave={saveNotifPrefs}
+              onClose={() => setShowSettings(false)}
+            />
+          )}
+        </AnimatePresence>,
+        document.body,
+      )}
     </div>
   );
 }

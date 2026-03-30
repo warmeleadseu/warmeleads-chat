@@ -97,7 +97,6 @@ export async function POST(request: NextRequest) {
           customer_id: customer.id,
           rating,
           comment: comment || null,
-          updated_at: new Date().toISOString(),
         },
         { onConflict: 'lead_id,customer_id' },
       )
