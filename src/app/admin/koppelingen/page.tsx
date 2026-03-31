@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAdmin } from '../adminContext';
 import { adminFetch } from '@/lib/adminAuth';
@@ -1075,6 +1075,8 @@ function CreateWizard({
 interface MetaForm { id: string; name: string; status: string }
 interface BackfillResult { ok: boolean; fetched: number; imported: number; skipped: number; errors: number; error?: string; permissionError?: boolean; errorDetails?: string[] }
 interface BackfillRun { id: string; count: number; branch: string; form_id: string; form_name: string; date_from: string | null; date_to: string | null; imported_at: string }
+interface PreviewField { meta_name: string; sample_value: string; suggested: string }
+interface CrmFieldOption { key: string; label: string }
 
 function BackfillPanel({
   webhookKey,
@@ -1093,8 +1095,22 @@ function BackfillPanel({
   const [selectedForm, setSelectedForm] = useState('');
   const [dateFrom, setDateFrom] = useState(() => { const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().split('T')[0]; });
   const [dateTo, setDateTo] = useState(() => new Date().toISOString().split('T')[0]);
+
+  // Step 2: mapping
+  type Step = 'select' | 'mapping' | 'importing' | 'done';
+  const [step, setStep] = useState<Step>('select');
+  const [previewFields, setPreviewFields] = useState<PreviewField[]>([]);
+  const [standardCrmFields, setStandardCrmFields] = useState<CrmFieldOption[]>([]);
+  const [customCrmFields, setCustomCrmFields] = useState<CrmFieldOption[]>([]);
+  const [fieldMapping, setFieldMapping] = useState<Record<string, string>>({});
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState('');
+
+  // Step 3: import
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<BackfillResult | null>(null);
+
+  // History
   const [history, setHistory] = useState<BackfillRun[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [undoing, setUndoing] = useState<string | null>(null);
@@ -1113,10 +1129,7 @@ function BackfillPanel({
     setFormsError('');
     adminFetch(`/api/admin/meta-forms?branch=${encodeURIComponent(webhookKey.branch)}`)
       .then(r => r.json())
-      .then(d => {
-        if (d.error) setFormsError(d.error);
-        else setForms(d.forms || []);
-      })
+      .then(d => { if (d.error) setFormsError(d.error); else setForms(d.forms || []); })
       .catch(() => setFormsError('Kon formulieren niet ophalen'))
       .finally(() => setLoadingForms(false));
     fetchHistory();
@@ -1124,267 +1137,347 @@ function BackfillPanel({
 
   const branchName = branchesList.find(b => b.slug === webhookKey.branch)?.name || webhookKey.branch;
 
-  const run = async () => {
+  const loadPreview = async () => {
     if (!selectedForm) return;
+    setPreviewLoading(true);
+    setPreviewError('');
+    try {
+      const res = await adminFetch('/api/admin/backfill', {
+        method: 'POST',
+        body: JSON.stringify({ form_id: selectedForm, branch: webhookKey.branch, date_from: dateFrom, date_to: dateTo, preview: true }),
+      });
+      const data = await res.json();
+      if (data.error) { setPreviewError(data.error); setPreviewLoading(false); return; }
+      setPreviewFields(data.fields || []);
+      setStandardCrmFields(data.standard_crm_fields || []);
+      setCustomCrmFields(data.custom_crm_fields || []);
+      const initialMapping: Record<string, string> = {};
+      for (const f of data.fields || []) {
+        initialMapping[f.meta_name] = f.suggested || '';
+      }
+      setFieldMapping(initialMapping);
+      setStep('mapping');
+    } catch { setPreviewError('Kon preview niet laden'); }
+    setPreviewLoading(false);
+  };
+
+  const runImport = async () => {
     setRunning(true);
     setResult(null);
+    setStep('importing');
     try {
       const res = await adminFetch('/api/admin/backfill', {
         method: 'POST',
         body: JSON.stringify({
-          form_id: selectedForm,
-          branch: webhookKey.branch,
-          date_from: dateFrom,
-          date_to: dateTo,
-          webhook_key_id: webhookKey.id,
+          form_id: selectedForm, branch: webhookKey.branch,
+          date_from: dateFrom, date_to: dateTo,
+          webhook_key_id: webhookKey.id, field_mapping: fieldMapping,
         }),
       });
       const data = await res.json();
       setResult(data);
-      if (data.ok && data.imported > 0) {
-        fetchHistory();
-        setTimeout(onDone, 3000);
-      }
+      setStep('done');
+      if (data.ok && data.imported > 0) { fetchHistory(); setTimeout(onDone, 3000); }
     } catch {
       setResult({ ok: false, fetched: 0, imported: 0, skipped: 0, errors: 1, error: 'Verzoek mislukt' });
+      setStep('done');
     }
     setRunning(false);
   };
 
+  const allCrmOptions = useMemo(() => {
+    const opts = [...standardCrmFields];
+    if (customCrmFields.length > 0) {
+      opts.push({ key: '_divider', label: '── Branche velden ──' });
+      opts.push(...customCrmFields);
+    }
+    return opts;
+  }, [standardCrmFields, customCrmFields]);
+
+  const canGoBack = step === 'mapping' || step === 'done';
+
   return (
     <>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm" onClick={onClose} />
       <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm"
-        onClick={onClose}
-      />
-      <motion.div
-        initial={{ x: '100%' }}
-        animate={{ x: 0 }}
-        exit={{ x: '100%' }}
+        initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
         transition={{ type: 'spring', damping: 28, stiffness: 300 }}
         className="fixed inset-y-0 right-0 z-[60] flex w-full max-w-md flex-col bg-white shadow-2xl"
       >
         <div className="shrink-0 border-b border-slate-100">
           <div className="h-[3px] bg-warmeleads-gradient" />
           <div className="flex items-center justify-between px-5 py-4">
-            <div>
-              <h2 className="text-lg font-bold text-slate-900">Historische leads ophalen</h2>
-              <p className="mt-0.5 text-xs text-slate-500">{webhookKey.label} &middot; {branchName}</p>
+            <div className="flex items-center gap-3">
+              {canGoBack && (
+                <button onClick={() => { setStep('select'); setResult(null); }} className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
+                </button>
+              )}
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">
+                  {step === 'mapping' ? 'Veld mapping' : step === 'importing' ? 'Importeren...' : 'Historische leads ophalen'}
+                </h2>
+                <p className="mt-0.5 text-xs text-slate-500">{webhookKey.label} &middot; {branchName}</p>
+              </div>
             </div>
             <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
               <XMarkIcon className="h-5 w-5" />
             </button>
           </div>
+          {/* Step indicator */}
+          <div className="flex border-t border-slate-50 px-5 py-2">
+            {['Selecteer', 'Mapping', 'Importeren'].map((label, i) => {
+              const active = (step === 'select' && i === 0) || (step === 'mapping' && i === 1) || ((step === 'importing' || step === 'done') && i === 2);
+              const done = (i === 0 && step !== 'select') || (i === 1 && (step === 'importing' || step === 'done'));
+              return (
+                <div key={label} className="flex flex-1 items-center gap-1.5">
+                  <div className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${done ? 'bg-emerald-500 text-white' : active ? 'bg-brand-purple text-white' : 'bg-slate-100 text-slate-400'}`}>
+                    {done ? '✓' : i + 1}
+                  </div>
+                  <span className={`text-[11px] font-medium ${active || done ? 'text-slate-700' : 'text-slate-400'}`}>{label}</span>
+                  {i < 2 && <div className={`mx-1 h-px flex-1 ${done ? 'bg-emerald-300' : 'bg-slate-100'}`} />}
+                </div>
+              );
+            })}
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-5 space-y-5">
-          <div className="rounded-lg border border-blue-100 bg-blue-50/50 p-3">
-            <p className="text-xs text-blue-700">
-              Haal leads op die eerder zijn gegenereerd via een Facebook/Instagram lead formulier.
-              Leads die al in het CRM staan worden automatisch overgeslagen (deduplicatie op e-mail + branche).
-            </p>
-          </div>
 
-          {/* Form selector */}
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-slate-700">Facebook Lead Formulier</label>
-            {loadingForms ? (
-              <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-400">
-                <ArrowPathIcon className="h-4 w-4 animate-spin" /> Formulieren ophalen uit Meta...
+          {/* ═══ STEP 1: Select form + dates ═══ */}
+          {step === 'select' && (
+            <>
+              <div className="rounded-lg border border-blue-100 bg-blue-50/50 p-3">
+                <p className="text-xs text-blue-700">
+                  Selecteer een formulier en periode. Daarna kun je de veldmapping controleren voordat de leads worden geïmporteerd.
+                </p>
               </div>
-            ) : formsError ? (
-              <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-600">{formsError}</div>
-            ) : forms.length === 0 ? (
-              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-700">
-                Geen lead formulieren gevonden in je Meta ad account. Zorg dat er actieve Lead Ads draaien.
-              </div>
-            ) : (
-              <select
-                value={selectedForm}
-                onChange={e => setSelectedForm(e.target.value)}
-                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-brand-purple focus:ring-1 focus:ring-brand-purple/30"
-              >
-                <option value="">Selecteer een formulier...</option>
-                {forms.map(f => (
-                  <option key={f.id} value={f.id}>{f.name} ({f.id})</option>
-                ))}
-              </select>
-            )}
-          </div>
 
-          {/* Date range */}
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-slate-700">Periode</label>
-            <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="mb-1 block text-[11px] font-medium text-slate-500">Van</label>
-                <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} max={dateTo}
-                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-brand-purple focus:ring-1 focus:ring-brand-purple/30" />
-              </div>
-              <div>
-                <label className="mb-1 block text-[11px] font-medium text-slate-500">Tot en met</label>
-                <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} min={dateFrom} max={new Date().toISOString().split('T')[0]}
-                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-brand-purple focus:ring-1 focus:ring-brand-purple/30" />
-              </div>
-            </div>
-            <div className="mt-2 flex gap-1.5">
-              {[
-                { label: 'Gisteren', fn: () => { const d = new Date(); d.setDate(d.getDate() - 1); const s = d.toISOString().split('T')[0]; setDateFrom(s); setDateTo(s); } },
-                { label: '7 dagen', fn: () => { const d = new Date(); d.setDate(d.getDate() - 7); setDateFrom(d.toISOString().split('T')[0]); setDateTo(new Date().toISOString().split('T')[0]); } },
-                { label: '14 dagen', fn: () => { const d = new Date(); d.setDate(d.getDate() - 14); setDateFrom(d.toISOString().split('T')[0]); setDateTo(new Date().toISOString().split('T')[0]); } },
-                { label: '30 dagen', fn: () => { const d = new Date(); d.setDate(d.getDate() - 30); setDateFrom(d.toISOString().split('T')[0]); setDateTo(new Date().toISOString().split('T')[0]); } },
-              ].map(q => (
-                <button key={q.label} onClick={q.fn}
-                  className="rounded-md border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-500 transition hover:border-brand-purple hover:bg-brand-purple/5 hover:text-brand-purple">
-                  {q.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Run button */}
-          <button
-            onClick={run}
-            disabled={!selectedForm || running || !dateFrom || !dateTo || dateFrom > dateTo}
-            className="flex w-full items-center justify-center gap-2 rounded-lg bg-button-gradient px-4 py-3 text-sm font-bold text-white shadow-sm disabled:opacity-50"
-          >
-            {running ? (
-              <>
-                <ArrowPathIcon className="h-4 w-4 animate-spin" />
-                Leads ophalen...
-              </>
-            ) : (
-              <>
-                <ClockIcon className="h-4 w-4" />
-                Historische leads ophalen
-              </>
-            )}
-          </button>
-
-          {/* Result */}
-          <AnimatePresence>
-            {result && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-              >
-                {result.error ? (
-                  <div className="rounded-lg border border-red-200 bg-red-50 p-4">
-                    <p className="text-sm font-medium text-red-700">{result.error}</p>
-                    {result.permissionError && (
-                      <div className="mt-2 text-xs text-red-600">
-                        <p className="font-medium">Hoe op te lossen:</p>
-                        <ol className="ml-4 mt-1 list-decimal space-y-1">
-                          <li>Ga naar Meta Business Manager &rarr; Business Settings</li>
-                          <li>Klik op System Users &rarr; selecteer je System User</li>
-                          <li>Klik op &quot;Add Assets&quot; &rarr; selecteer je Page</li>
-                          <li>Zorg dat &quot;Leads Retrieval&quot; (leads_retrieve) is aangevinkt</li>
-                          <li>Genereer een nieuw token met deze permissie</li>
-                        </ol>
-                      </div>
-                    )}
+                <label className="mb-1.5 block text-sm font-medium text-slate-700">Facebook Lead Formulier</label>
+                {loadingForms ? (
+                  <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-400">
+                    <ArrowPathIcon className="h-4 w-4 animate-spin" /> Formulieren ophalen uit Meta...
+                  </div>
+                ) : formsError ? (
+                  <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-600">{formsError}</div>
+                ) : forms.length === 0 ? (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-700">
+                    Geen lead formulieren gevonden. Zorg dat er actieve Lead Ads draaien.
                   </div>
                 ) : (
-                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
-                    <div className="flex items-center gap-2 text-sm font-medium text-emerald-700">
-                      <CheckCircleIcon className="h-5 w-5" />
-                      Backfill voltooid
-                    </div>
-                    <div className="mt-3 grid grid-cols-3 gap-3">
-                      <div className="rounded-lg bg-white p-2.5 text-center shadow-sm">
-                        <p className="text-lg font-bold text-slate-900">{result.fetched}</p>
-                        <p className="text-[11px] text-slate-500">Opgehaald</p>
-                      </div>
-                      <div className="rounded-lg bg-white p-2.5 text-center shadow-sm">
-                        <p className="text-lg font-bold text-emerald-600">{result.imported}</p>
-                        <p className="text-[11px] text-slate-500">Geïmporteerd</p>
-                      </div>
-                      <div className="rounded-lg bg-white p-2.5 text-center shadow-sm">
-                        <p className="text-lg font-bold text-amber-600">{result.skipped}</p>
-                        <p className="text-[11px] text-slate-500">Overgeslagen</p>
-                      </div>
-                    </div>
-                    {result.errors > 0 && (
-                      <div className="mt-2">
-                        <p className="text-xs font-medium text-red-600">{result.errors} lead(s) kon(den) niet worden verwerkt</p>
-                        {result.errorDetails && result.errorDetails.length > 0 && (
-                          <ul className="mt-1.5 space-y-1">
-                            {result.errorDetails.map((e, i) => (
-                              <li key={i} className="rounded bg-red-50 px-2 py-1 text-[11px] text-red-600">{e}</li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
-                    )}
-                  </div>
+                  <select value={selectedForm} onChange={e => setSelectedForm(e.target.value)}
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-brand-purple focus:ring-1 focus:ring-brand-purple/30">
+                    <option value="">Selecteer een formulier...</option>
+                    {forms.map(f => <option key={f.id} value={f.id}>{f.name} ({f.id})</option>)}
+                  </select>
                 )}
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* ── Backfill history ────────────────────────────────── */}
-          {!loadingHistory && history.length > 0 && (
-            <div>
-              <label className="mb-2 block text-sm font-medium text-slate-700">Eerdere imports</label>
-              <div className="space-y-2">
-                {history.map(run => {
-                  const date = new Date(run.imported_at);
-                  const dateStr = date.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-                  const periodStr = run.date_from
-                    ? run.date_from === run.date_to
-                      ? new Date(run.date_from).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })
-                      : `${new Date(run.date_from).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })} – ${new Date(run.date_to!).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}`
-                    : '';
-
-                  return (
-                    <div key={run.id} className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2.5">
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-slate-800">{run.count} lead{run.count !== 1 ? 's' : ''} geïmporteerd</p>
-                        <p className="mt-0.5 truncate text-[11px] text-slate-500">
-                          {dateStr}{periodStr ? ` · Periode: ${periodStr}` : ''}
-                        </p>
-                      </div>
-                      <button
-                        onClick={async () => {
-                          if (!confirm(`Weet je zeker dat je deze ${run.count} leads wilt verwijderen? Dit kan niet ongedaan worden gemaakt.`)) return;
-                          setUndoing(run.id);
-                          try {
-                            const res = await adminFetch('/api/admin/backfill', {
-                              method: 'DELETE',
-                              body: JSON.stringify({ run_id: run.id }),
-                            });
-                            const d = await res.json();
-                            if (d.ok) {
-                              setHistory(h => h.filter(r => r.id !== run.id));
-                              onDone();
-                            }
-                          } catch { /* ignore */ }
-                          setUndoing(null);
-                        }}
-                        disabled={undoing === run.id}
-                        className="ml-3 shrink-0 rounded-lg border border-red-200 bg-white px-2.5 py-1.5 text-xs font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-50"
-                      >
-                        {undoing === run.id ? (
-                          <ArrowPathIcon className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <span className="flex items-center gap-1"><TrashIcon className="h-3.5 w-3.5" /> Ongedaan maken</span>
-                        )}
-                      </button>
-                    </div>
-                  );
-                })}
               </div>
-            </div>
+
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-slate-700">Periode</label>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="mb-1 block text-[11px] font-medium text-slate-500">Van</label>
+                    <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} max={dateTo}
+                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-brand-purple focus:ring-1 focus:ring-brand-purple/30" />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-[11px] font-medium text-slate-500">Tot en met</label>
+                    <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} min={dateFrom} max={new Date().toISOString().split('T')[0]}
+                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-brand-purple focus:ring-1 focus:ring-brand-purple/30" />
+                  </div>
+                </div>
+                <div className="mt-2 flex gap-1.5">
+                  {[
+                    { label: 'Gisteren', fn: () => { const d = new Date(); d.setDate(d.getDate() - 1); const s = d.toISOString().split('T')[0]; setDateFrom(s); setDateTo(s); } },
+                    { label: '7 dagen', fn: () => { const d = new Date(); d.setDate(d.getDate() - 7); setDateFrom(d.toISOString().split('T')[0]); setDateTo(new Date().toISOString().split('T')[0]); } },
+                    { label: '14 dagen', fn: () => { const d = new Date(); d.setDate(d.getDate() - 14); setDateFrom(d.toISOString().split('T')[0]); setDateTo(new Date().toISOString().split('T')[0]); } },
+                    { label: '30 dagen', fn: () => { const d = new Date(); d.setDate(d.getDate() - 30); setDateFrom(d.toISOString().split('T')[0]); setDateTo(new Date().toISOString().split('T')[0]); } },
+                  ].map(q => (
+                    <button key={q.label} onClick={q.fn}
+                      className="rounded-md border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-500 transition hover:border-brand-purple hover:bg-brand-purple/5 hover:text-brand-purple">
+                      {q.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {previewError && (
+                <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{previewError}</div>
+              )}
+
+              <button onClick={loadPreview}
+                disabled={!selectedForm || previewLoading || !dateFrom || !dateTo || dateFrom > dateTo}
+                className="flex w-full items-center justify-center gap-2 rounded-lg bg-button-gradient px-4 py-3 text-sm font-bold text-white shadow-sm disabled:opacity-50">
+                {previewLoading ? (
+                  <><ArrowPathIcon className="h-4 w-4 animate-spin" /> Preview laden...</>
+                ) : (
+                  <><ClockIcon className="h-4 w-4" /> Volgende: veld mapping</>
+                )}
+              </button>
+
+              {/* History */}
+              {!loadingHistory && history.length > 0 && (
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">Eerdere imports</label>
+                  <div className="space-y-2">
+                    {history.map(run => {
+                      const date = new Date(run.imported_at);
+                      const dateStr = date.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                      const periodStr = run.date_from
+                        ? run.date_from === run.date_to
+                          ? new Date(run.date_from).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })
+                          : `${new Date(run.date_from).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })} – ${new Date(run.date_to!).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}`
+                        : '';
+                      return (
+                        <div key={run.id} className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2.5">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-slate-800">{run.count} lead{run.count !== 1 ? 's' : ''} geïmporteerd</p>
+                            <p className="mt-0.5 truncate text-[11px] text-slate-500">{dateStr}{periodStr ? ` · ${periodStr}` : ''}</p>
+                          </div>
+                          <button
+                            onClick={async () => {
+                              if (!confirm(`Weet je zeker dat je deze ${run.count} leads wilt verwijderen?`)) return;
+                              setUndoing(run.id);
+                              try {
+                                const res = await adminFetch('/api/admin/backfill', { method: 'DELETE', body: JSON.stringify({ run_id: run.id }) });
+                                const d = await res.json();
+                                if (d.ok) { setHistory(h => h.filter(r => r.id !== run.id)); onDone(); }
+                              } catch { /* ok */ }
+                              setUndoing(null);
+                            }}
+                            disabled={undoing === run.id}
+                            className="ml-3 shrink-0 rounded-lg border border-red-200 bg-white px-2.5 py-1.5 text-xs font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-50">
+                            {undoing === run.id
+                              ? <ArrowPathIcon className="h-3.5 w-3.5 animate-spin" />
+                              : <span className="flex items-center gap-1"><TrashIcon className="h-3.5 w-3.5" /> Verwijderen</span>}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+              {loadingHistory && <div className="flex items-center gap-2 text-xs text-slate-400"><ArrowPathIcon className="h-3.5 w-3.5 animate-spin" /> Importhistorie laden...</div>}
+            </>
           )}
-          {loadingHistory && (
-            <div className="flex items-center gap-2 text-xs text-slate-400">
-              <ArrowPathIcon className="h-3.5 w-3.5 animate-spin" /> Importhistorie laden...
-            </div>
+
+          {/* ═══ STEP 2: Field mapping ═══ */}
+          {step === 'mapping' && (
+            <>
+              <div className="rounded-lg border border-amber-100 bg-amber-50/50 p-3">
+                <p className="text-xs text-amber-700">
+                  Controleer hieronder hoe elk Meta-veld wordt gemapt naar een CRM-veld. Pas aan waar nodig en klik op &quot;Importeren&quot;.
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                {previewFields.map(f => (
+                  <div key={f.meta_name} className="rounded-lg border border-slate-200 bg-white p-3">
+                    <div className="mb-2 flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-slate-700">{f.meta_name}</p>
+                        <p className="mt-0.5 truncate text-[11px] text-slate-400">Voorbeeld: <span className="text-slate-600">{f.sample_value || '(leeg)'}</span></p>
+                      </div>
+                      <span className="shrink-0 text-slate-300">→</span>
+                    </div>
+                    <select
+                      value={fieldMapping[f.meta_name] || ''}
+                      onChange={e => setFieldMapping(m => ({ ...m, [f.meta_name]: e.target.value }))}
+                      className={`w-full rounded-lg border px-2.5 py-2 text-sm outline-none focus:ring-1 focus:ring-brand-purple/30 ${
+                        fieldMapping[f.meta_name] === '_skip' ? 'border-slate-200 bg-slate-50 text-slate-400'
+                          : fieldMapping[f.meta_name] ? 'border-emerald-200 bg-emerald-50/30 text-emerald-700'
+                          : 'border-red-200 bg-red-50/30 text-red-600'
+                      }`}
+                    >
+                      <option value="">— Niet gekoppeld —</option>
+                      {allCrmOptions.map(opt =>
+                        opt.key === '_divider'
+                          ? <option key={opt.key} disabled className="text-slate-400">{opt.label}</option>
+                          : <option key={opt.key} value={opt.key}>{opt.label}</option>
+                      )}
+                    </select>
+                  </div>
+                ))}
+              </div>
+
+              <button onClick={runImport} disabled={running}
+                className="flex w-full items-center justify-center gap-2 rounded-lg bg-button-gradient px-4 py-3 text-sm font-bold text-white shadow-sm disabled:opacity-50">
+                <CheckCircleIcon className="h-4 w-4" /> Mapping bevestigen &amp; importeren
+              </button>
+            </>
           )}
+
+          {/* ═══ STEP 3: Importing / Done ═══ */}
+          {(step === 'importing' || step === 'done') && (
+            <>
+              {running && (
+                <div className="flex flex-col items-center gap-3 py-8">
+                  <ArrowPathIcon className="h-8 w-8 animate-spin text-brand-purple" />
+                  <p className="text-sm font-medium text-slate-600">Leads worden geïmporteerd en verrijkt...</p>
+                  <p className="text-[11px] text-slate-400">Dit kan even duren bij veel leads</p>
+                </div>
+              )}
+
+              {result && (
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+                  {result.error ? (
+                    <div className="rounded-lg border border-red-200 bg-red-50 p-4">
+                      <p className="text-sm font-medium text-red-700">{result.error}</p>
+                      {result.permissionError && (
+                        <div className="mt-2 text-xs text-red-600">
+                          <p className="font-medium">Hoe op te lossen:</p>
+                          <ol className="ml-4 mt-1 list-decimal space-y-1">
+                            <li>Ga naar Meta Business Manager → Business Settings</li>
+                            <li>Klik op System Users → selecteer je System User</li>
+                            <li>Klik op &quot;Add Assets&quot; → selecteer je Page</li>
+                            <li>Zorg dat &quot;Leads Retrieval&quot; (leads_retrieve) is aangevinkt</li>
+                            <li>Genereer een nieuw token met deze permissie</li>
+                          </ol>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+                      <div className="flex items-center gap-2 text-sm font-medium text-emerald-700">
+                        <CheckCircleIcon className="h-5 w-5" /> Import voltooid
+                      </div>
+                      <div className="mt-3 grid grid-cols-3 gap-3">
+                        <div className="rounded-lg bg-white p-2.5 text-center shadow-sm">
+                          <p className="text-lg font-bold text-slate-900">{result.fetched}</p>
+                          <p className="text-[11px] text-slate-500">Opgehaald</p>
+                        </div>
+                        <div className="rounded-lg bg-white p-2.5 text-center shadow-sm">
+                          <p className="text-lg font-bold text-emerald-600">{result.imported}</p>
+                          <p className="text-[11px] text-slate-500">Geïmporteerd</p>
+                        </div>
+                        <div className="rounded-lg bg-white p-2.5 text-center shadow-sm">
+                          <p className="text-lg font-bold text-amber-600">{result.skipped}</p>
+                          <p className="text-[11px] text-slate-500">Overgeslagen</p>
+                        </div>
+                      </div>
+                      {result.errors > 0 && (
+                        <div className="mt-2">
+                          <p className="text-xs font-medium text-red-600">{result.errors} lead(s) niet verwerkt</p>
+                          {result.errorDetails?.map((e, i) => (
+                            <p key={i} className="mt-1 rounded bg-red-50 px-2 py-1 text-[11px] text-red-600">{e}</p>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <button onClick={() => { setStep('select'); setResult(null); }}
+                    className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-slate-50">
+                    Nog een import doen
+                  </button>
+                </motion.div>
+              )}
+            </>
+          )}
+
         </div>
       </motion.div>
     </>
