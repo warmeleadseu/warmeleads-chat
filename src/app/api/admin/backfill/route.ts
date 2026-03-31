@@ -65,6 +65,9 @@ interface MetaLead {
   id: string;
   created_time: string;
   field_data: { name: string; values: string[] }[];
+  ad_id?: string;
+  adset_id?: string;
+  campaign_id?: string;
 }
 
 function mapFieldName(raw: string): string | null {
@@ -200,7 +203,7 @@ export async function POST(request: NextRequest) {
 
   try {
     let url: string | null =
-      `${META_GRAPH_URL}/${form_id}/leads?fields=id,created_time,field_data` +
+      `${META_GRAPH_URL}/${form_id}/leads?fields=id,created_time,field_data,ad_id,adset_id,campaign_id` +
       `&filtering=[{"field":"time_created","operator":"GREATER_THAN","value":${since}},{"field":"time_created","operator":"LESS_THAN","value":${until}}]` +
       `&limit=500&access_token=${credentials.accessToken}`;
 
@@ -281,6 +284,10 @@ export async function POST(request: NextRequest) {
 
     try {
       // 3) Enrich address via PDOK (same as webhook)
+      const metaCampaignId = ml.campaign_id || null;
+      const metaAdsetId = ml.adset_id || null;
+      const metaAdId = ml.ad_id || null;
+
       const leadData = {
         branch,
         naam_klant: parsed.naam_klant || '',
@@ -297,6 +304,9 @@ export async function POST(request: NextRequest) {
         bron: 'zapier' as const,
         notities: '',
         custom_fields: Object.keys(customFields).length > 0 ? customFields : {},
+        ...(metaCampaignId && { meta_campaign_id: metaCampaignId }),
+        ...(metaAdsetId && { meta_adset_id: metaAdsetId }),
+        ...(metaAdId && { meta_ad_id: metaAdId }),
       };
 
       let lead;
