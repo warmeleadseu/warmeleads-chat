@@ -20,24 +20,29 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const adsUrl = `${META_GRAPH_URL}/act_${credentials.adAccountId}/ads?fields=name,creative{lead_gen_form_id}&effective_status=["ACTIVE","PAUSED"]&limit=200&access_token=${credentials.accessToken}`;
-    const adsRes = await fetch(adsUrl);
-    const adsData = await adsRes.json();
-
-    if (adsData.error) {
-      return NextResponse.json({ error: adsData.error.message }, { status: 400 });
-    }
-
+    // Step 1: Get all ad creatives with lead_gen_form_id
     const formIds = new Set<string>();
-    for (const ad of adsData.data || []) {
-      const fid = ad.creative?.lead_gen_form_id;
-      if (fid) formIds.add(fid);
+    let creativesUrl: string | null = `${META_GRAPH_URL}/act_${credentials.adAccountId}/adcreatives?fields=id,name,lead_gen_form_id&limit=200&access_token=${credentials.accessToken}`;
+
+    while (creativesUrl) {
+      const res: Response = await fetch(creativesUrl);
+      const data = await res.json();
+
+      if (data.error) {
+        return NextResponse.json({ error: data.error.message }, { status: 400 });
+      }
+
+      for (const creative of data.data || []) {
+        if (creative.lead_gen_form_id) formIds.add(creative.lead_gen_form_id);
+      }
+      creativesUrl = data.paging?.next || null;
     }
 
     if (formIds.size === 0) {
-      return NextResponse.json({ forms: [], message: 'Geen lead formulieren gevonden in actieve ads' });
+      return NextResponse.json({ forms: [], message: 'Geen lead formulieren gevonden in dit ad account' });
     }
 
+    // Step 2: Get form details
     const forms: LeadGenForm[] = [];
     for (const fid of formIds) {
       try {
