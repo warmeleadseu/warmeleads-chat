@@ -4,25 +4,62 @@ import { getMetaCredentials } from '@/lib/meta';
 import { createServerClient } from '@/lib/supabase';
 import { enrichLeadAddress } from '@/lib/pdok';
 import { isPhoneValid } from '@/lib/phoneValidation';
+import { checkLeadProfanity } from '@/lib/profanityFilter';
 import { calculateQualityScore } from '@/lib/leadQuality';
 import { distributeLead } from '@/lib/distribution';
 
 const META_GRAPH_URL = 'https://graph.facebook.com/v21.0';
 
-const FIELD_MAP: Record<string, string> = {
+/* ─── Field mapping: exact name → our field ────────────────────────────── */
+const EXACT_MAP: Record<string, string> = {
   email: 'email',
   full_name: 'naam_klant',
   first_name: '_first',
   last_name: '_last',
   phone_number: 'telefoonnummer',
   phone: 'telefoonnummer',
+  telefoon: 'telefoonnummer',
+  telefoonnummer: 'telefoonnummer',
+  mobiel: 'telefoonnummer',
   street_address: '_street',
+  straat: '_street',
+  adres: '_street',
+  address: '_street',
   city: 'plaatsnaam',
+  stad: 'plaatsnaam',
+  plaats: 'plaatsnaam',
+  woonplaats: 'plaatsnaam',
+  plaatsnaam: 'plaatsnaam',
   zip_code: 'postcode',
   post_code: 'postcode',
+  postcode: 'postcode',
+  zip: 'postcode',
+  huisnummer: 'huisnummer',
+  house_number: 'huisnummer',
   state: 'provincie',
+  provincie: 'provincie',
   country: 'land',
+  land: 'land',
+  naam: 'naam_klant',
+  name: 'naam_klant',
+  achternaam: '_last',
+  voornaam: '_first',
 };
+
+/* ─── Keyword fallback: field name CONTAINS keyword → our field ────────── */
+const KEYWORD_MAP: [RegExp, string][] = [
+  [/e-?mail/i, 'email'],
+  [/(?:voor|achter)?naam|name/i, 'naam_klant'],
+  [/tele|phone|mobiel|gsm|bel/i, 'telefoonnummer'],
+  [/post\s?code|zip/i, 'postcode'],
+  [/huis\s?n|house/i, 'huisnummer'],
+  [/straat|street|adres|address/i, '_street'],
+  [/stad|city|woon\s?plaats|plaats/i, 'plaatsnaam'],
+  [/provin|state/i, 'provincie'],
+  [/land|country/i, 'land'],
+];
+
+const NL_POSTCODE_RE = /\d{4}\s?[A-Za-z]{2}/;
 
 interface MetaLead {
   id: string;
@@ -30,43 +67,94 @@ interface MetaLead {
   field_data: { name: string; values: string[] }[];
 }
 
+function mapFieldName(raw: string): string | null {
+  const lower = raw.toLowerCase().trim();
+  if (EXACT_MAP[lower]) return EXACT_MAP[lower];
+  for (const [re, target] of KEYWORD_MAP) {
+    if (re.test(lower)) return target;
+  }
+  return null;
+}
+
+function cleanPostcode(raw: string): string {
+  if (!raw) return '';
+  const stripped = raw.replace(/\s+/g, '').toUpperCase();
+  if (/^\d{4}[A-Z]{2}$/.test(stripped)) return stripped;
+  const match = raw.match(/(\d{4})\s?([A-Za-z]{2})/);
+  if (match) return (match[1] + match[2]).toUpperCase();
+  const digitsOnly = stripped.match(/^(\d{4})/);
+  if (digitsOnly) return digitsOnly[1];
+  return raw.trim();
+}
+
 function parseMetaLead(ml: MetaLead, branch: string): Record<string, string> {
   const result: Record<string, string> = { branch };
   const extras: Record<string, string> = {};
+  const unmapped: { name: string; value: string }[] = [];
 
   for (const field of ml.field_data) {
     const val = field.values?.[0] || '';
     if (!val) continue;
 
-    const mapped = FIELD_MAP[field.name.toLowerCase()];
-    if (mapped === '_first') {
+    const target = mapFieldName(field.name);
+
+    if (target === '_first') {
       extras._first = val;
-    } else if (mapped === '_last') {
+    } else if (target === '_last') {
       extras._last = val;
-    } else if (mapped === '_street') {
+    } else if (target === '_street') {
       extras._street = val;
-    } else if (mapped) {
-      result[mapped] = val;
+    } else if (target === 'naam_klant') {
+      if (!result.naam_klant) result.naam_klant = val;
+    } else if (target) {
+      if (!result[target]) result[target] = val;
     } else {
+      unmapped.push({ name: field.name.toLowerCase(), value: val });
       result[field.name.toLowerCase()] = val;
     }
   }
 
+  // Combine first + last name
   if (!result.naam_klant && (extras._first || extras._last)) {
     result.naam_klant = [extras._first, extras._last].filter(Boolean).join(' ');
   }
 
-  if (extras._street && !result.postcode) {
-    const pcMatch = extras._street.match(/(\d{4}\s?[A-Za-z]{2})/);
-    if (pcMatch) result.postcode = pcMatch[1].replace(/\s/g, '').toUpperCase();
-    const hnMatch = extras._street.match(/\b(\d{1,5})\b/);
-    if (hnMatch && !result.huisnummer) result.huisnummer = hnMatch[1];
+  // Extract postcode + huisnummer from street address
+  if (extras._street) {
+    if (!result.postcode) {
+      const pcMatch = extras._street.match(NL_POSTCODE_RE);
+      if (pcMatch) result.postcode = pcMatch[0].replace(/\s/g, '').toUpperCase();
+    }
+    if (!result.huisnummer) {
+      const hnMatch = extras._street.match(/\b(\d{1,5})\s*[A-Za-z]?\b/);
+      if (hnMatch) result.huisnummer = hnMatch[1];
+    }
   }
 
-  result.wervingsdatum = ml.created_time ? ml.created_time.split('T')[0] : new Date().toISOString().split('T')[0];
+  // Last resort: scan ALL unmapped values for a Dutch postcode pattern
+  if (!result.postcode) {
+    for (const { value } of unmapped) {
+      const pcMatch = value.match(NL_POSTCODE_RE);
+      if (pcMatch) {
+        result.postcode = pcMatch[0].replace(/\s/g, '').toUpperCase();
+        break;
+      }
+    }
+  }
+
+  // Clean postcode format
+  if (result.postcode) {
+    result.postcode = cleanPostcode(result.postcode);
+  }
+
+  result.wervingsdatum = ml.created_time
+    ? ml.created_time.split('T')[0]
+    : new Date().toISOString().split('T')[0];
 
   return result;
 }
+
+/* ─── Main handler ─────────────────────────────────────────────────────── */
 
 export async function POST(request: NextRequest) {
   const admin = await verifyAdmin(request);
@@ -92,7 +180,6 @@ export async function POST(request: NextRequest) {
 
   const supabase = createServerClient();
 
-  // Save form_id mapping for this webhook key
   if (webhook_key_id) {
     await supabase.from('app_settings').upsert(
       { key: `webhook_form:${webhook_key_id}`, value: form_id },
@@ -100,8 +187,8 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Fetch leads from Meta form
-  const sinceDate = dateFrom ? new Date(dateFrom) : new Date(Date.now() - (days || 1) * 24 * 60 * 60 * 1000);
+  // ── Fetch leads from Meta ───────────────────────────────────────────
+  const sinceDate = dateFrom ? new Date(dateFrom) : new Date(Date.now() - (days || 1) * 86_400_000);
   sinceDate.setHours(0, 0, 0, 0);
   const since = Math.floor(sinceDate.getTime() / 1000);
 
@@ -112,7 +199,10 @@ export async function POST(request: NextRequest) {
   let allMetaLeads: MetaLead[] = [];
 
   try {
-    let url: string | null = `${META_GRAPH_URL}/${form_id}/leads?fields=id,created_time,field_data&filtering=[{"field":"time_created","operator":"GREATER_THAN","value":${since}},{"field":"time_created","operator":"LESS_THAN","value":${until}}]&limit=500&access_token=${credentials.accessToken}`;
+    let url: string | null =
+      `${META_GRAPH_URL}/${form_id}/leads?fields=id,created_time,field_data` +
+      `&filtering=[{"field":"time_created","operator":"GREATER_THAN","value":${since}},{"field":"time_created","operator":"LESS_THAN","value":${until}}]` +
+      `&limit=500&access_token=${credentials.accessToken}`;
 
     while (url) {
       const response: Response = await fetch(url);
@@ -141,7 +231,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, fetched: 0, imported: 0, skipped: 0, message: 'Geen leads gevonden in deze periode' });
   }
 
-  // Get branch fields for custom_fields
+  // ── Prepare branch fields ───────────────────────────────────────────
   const { data: branchRow } = await supabase.from('branches').select('id').eq('slug', branch).single();
   const { data: branchFields } = await supabase
     .from('branch_fields')
@@ -154,28 +244,34 @@ export async function POST(request: NextRequest) {
     'huisnummer', 'plaatsnaam', 'provincie', 'wervingsdatum', 'land',
   ]);
 
+  // ── Pre-fetch existing emails for fast dedup ────────────────────────
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 86_400_000).toISOString();
+  const { data: existingLeads } = await supabase
+    .from('leads')
+    .select('email')
+    .eq('branch', branch)
+    .gte('created_at', thirtyDaysAgo);
+  const existingEmails = new Set(
+    (existingLeads || []).map(l => l.email?.toLowerCase()).filter(Boolean),
+  );
+
+  // ── Process each lead (same pipeline as webhook) ────────────────────
   let imported = 0;
   let skipped = 0;
   let errors = 0;
+  let profanityBlocked = 0;
   const errorSamples: string[] = [];
 
   for (const ml of allMetaLeads) {
     const parsed = parseMetaLead(ml, branch);
 
-    // Deduplication: check email + branch within 30 days
-    if (parsed.email) {
-      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-      const { data: existing } = await supabase
-        .from('leads')
-        .select('id')
-        .eq('email', parsed.email)
-        .eq('branch', branch)
-        .gte('created_at', thirtyDaysAgo)
-        .limit(1);
-      if (existing && existing.length > 0) { skipped++; continue; }
+    // 1) Deduplication
+    if (parsed.email && existingEmails.has(parsed.email.toLowerCase())) {
+      skipped++;
+      continue;
     }
 
-    // Split into common fields + custom fields
+    // 2) Build custom_fields (same as webhook)
     const customFields: Record<string, string> = {};
     for (const [k, v] of Object.entries(parsed)) {
       if (!COMMON_KEYS.has(k) && fieldKeys.has(k) && v) customFields[k] = v;
@@ -184,59 +280,65 @@ export async function POST(request: NextRequest) {
     const phone = parsed.telefoonnummer || '';
 
     try {
+      // 3) Enrich address via PDOK (same as webhook)
+      const leadData = {
+        branch,
+        naam_klant: parsed.naam_klant || '',
+        email: parsed.email || '',
+        telefoonnummer: phone,
+        phone_valid: isPhoneValid(phone),
+        postcode: parsed.postcode || '',
+        huisnummer: parsed.huisnummer || '',
+        plaatsnaam: parsed.plaatsnaam || '',
+        provincie: parsed.provincie || '',
+        land: parsed.land || '',
+        wervingsdatum: parsed.wervingsdatum || new Date().toISOString().split('T')[0],
+        status: 'nieuw' as const,
+        bron: 'zapier' as const,
+        notities: '',
+        custom_fields: Object.keys(customFields).length > 0 ? customFields : {},
+      };
+
       let lead;
       try {
-        lead = await enrichLeadAddress({
-          branch,
-          naam_klant: parsed.naam_klant || '',
-          email: parsed.email || '',
-          telefoonnummer: phone,
-          phone_valid: isPhoneValid(phone),
-          postcode: parsed.postcode || '',
-          huisnummer: parsed.huisnummer || '',
-          plaatsnaam: parsed.plaatsnaam || '',
-          provincie: parsed.provincie || '',
-          land: parsed.land || '',
-          wervingsdatum: parsed.wervingsdatum || new Date().toISOString().split('T')[0],
-          status: 'nieuw',
-          bron: 'zapier',
-          notities: '',
-          custom_fields: Object.keys(customFields).length > 0 ? customFields : {},
-        });
+        lead = await enrichLeadAddress(leadData);
       } catch {
-        lead = {
-          branch,
-          naam_klant: parsed.naam_klant || '',
-          email: parsed.email || '',
-          telefoonnummer: phone,
-          phone_valid: isPhoneValid(phone),
-          postcode: parsed.postcode || '',
-          huisnummer: parsed.huisnummer || '',
-          plaatsnaam: parsed.plaatsnaam || '',
-          provincie: parsed.provincie || '',
-          land: parsed.land || '',
-          wervingsdatum: parsed.wervingsdatum || new Date().toISOString().split('T')[0],
-          status: 'nieuw',
-          bron: 'zapier',
-          notities: '',
-          custom_fields: Object.keys(customFields).length > 0 ? customFields : {},
-        };
+        lead = leadData;
       }
 
+      // 4) Skip if no name (same as webhook)
+      if (!lead.naam_klant) {
+        skipped++;
+        continue;
+      }
+
+      // 5) Profanity check (same as webhook)
+      const profanity = checkLeadProfanity(lead as Record<string, unknown>);
+      if (profanity.blocked) {
+        profanityBlocked++;
+        skipped++;
+        continue;
+      }
+
+      // 6) Quality score (same as webhook)
       const quality_score = calculateQualityScore(lead);
+
+      // 7) Insert
       const { data, error } = await supabase.from('leads').insert({ ...lead, quality_score }).select().single();
 
       if (error) {
         errors++;
         if (errorSamples.length < 3) {
-          errorSamples.push(`DB: ${error.message} (lead: ${parsed.email || parsed.naam_klant || 'onbekend'})`);
+          errorSamples.push(`DB: ${error.message} (${parsed.email || parsed.naam_klant || 'onbekend'})`);
         }
-        console.error('Backfill insert error:', error.message, 'lead:', parsed.email);
+        console.error('Backfill insert error:', error.message, parsed.email);
         continue;
       }
 
       imported++;
+      existingEmails.add((parsed.email || '').toLowerCase());
 
+      // 8) Auto-distribute (same as webhook)
       if (data.lat && data.lng) {
         try {
           await distributeLead({ id: data.id, branch: data.branch, lat: data.lat, lng: data.lng });
@@ -245,9 +347,9 @@ export async function POST(request: NextRequest) {
     } catch (err) {
       errors++;
       if (errorSamples.length < 3) {
-        errorSamples.push(`${err instanceof Error ? err.message : 'Onbekende fout'} (lead: ${parsed.email || parsed.naam_klant || 'onbekend'})`);
+        errorSamples.push(`${err instanceof Error ? err.message : 'Onbekende fout'} (${parsed.email || parsed.naam_klant || 'onbekend'})`);
       }
-      console.error('Backfill processing error:', err, 'lead:', parsed.email);
+      console.error('Backfill error:', err, parsed.email);
     }
   }
 
@@ -257,6 +359,7 @@ export async function POST(request: NextRequest) {
     imported,
     skipped,
     errors,
+    ...(profanityBlocked > 0 && { profanityBlocked }),
     ...(errorSamples.length > 0 && { errorDetails: errorSamples }),
   });
 }
