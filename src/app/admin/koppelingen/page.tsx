@@ -1074,6 +1074,7 @@ function CreateWizard({
 /* ─── Backfill Panel ─────────────────────────────────────────── */
 interface MetaForm { id: string; name: string; status: string }
 interface BackfillResult { ok: boolean; fetched: number; imported: number; skipped: number; errors: number; error?: string; permissionError?: boolean; errorDetails?: string[] }
+interface BackfillRun { id: string; count: number; branch: string; form_id: string; form_name: string; date_from: string | null; date_to: string | null; imported_at: string }
 
 function BackfillPanel({
   webhookKey,
@@ -1094,6 +1095,18 @@ function BackfillPanel({
   const [dateTo, setDateTo] = useState(() => new Date().toISOString().split('T')[0]);
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<BackfillResult | null>(null);
+  const [history, setHistory] = useState<BackfillRun[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(true);
+  const [undoing, setUndoing] = useState<string | null>(null);
+
+  const fetchHistory = useCallback(() => {
+    setLoadingHistory(true);
+    adminFetch(`/api/admin/backfill?webhook_key_id=${encodeURIComponent(webhookKey.id)}&branch=${encodeURIComponent(webhookKey.branch)}`)
+      .then(r => r.json())
+      .then(d => setHistory(d.runs || []))
+      .catch(() => {})
+      .finally(() => setLoadingHistory(false));
+  }, [webhookKey.id, webhookKey.branch]);
 
   useEffect(() => {
     setLoadingForms(true);
@@ -1106,7 +1119,8 @@ function BackfillPanel({
       })
       .catch(() => setFormsError('Kon formulieren niet ophalen'))
       .finally(() => setLoadingForms(false));
-  }, []);
+    fetchHistory();
+  }, [fetchHistory]);
 
   const branchName = branchesList.find(b => b.slug === webhookKey.branch)?.name || webhookKey.branch;
 
@@ -1127,7 +1141,10 @@ function BackfillPanel({
       });
       const data = await res.json();
       setResult(data);
-      if (data.ok && data.imported > 0) setTimeout(onDone, 3000);
+      if (data.ok && data.imported > 0) {
+        fetchHistory();
+        setTimeout(onDone, 3000);
+      }
     } catch {
       setResult({ ok: false, fetched: 0, imported: 0, skipped: 0, errors: 1, error: 'Verzoek mislukt' });
     }
@@ -1308,6 +1325,66 @@ function BackfillPanel({
               </motion.div>
             )}
           </AnimatePresence>
+
+          {/* ── Backfill history ────────────────────────────────── */}
+          {!loadingHistory && history.length > 0 && (
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-700">Eerdere imports</label>
+              <div className="space-y-2">
+                {history.map(run => {
+                  const date = new Date(run.imported_at);
+                  const dateStr = date.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                  const periodStr = run.date_from
+                    ? run.date_from === run.date_to
+                      ? new Date(run.date_from).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })
+                      : `${new Date(run.date_from).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })} – ${new Date(run.date_to!).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}`
+                    : '';
+
+                  return (
+                    <div key={run.id} className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2.5">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-slate-800">{run.count} lead{run.count !== 1 ? 's' : ''} geïmporteerd</p>
+                        <p className="mt-0.5 truncate text-[11px] text-slate-500">
+                          {dateStr}{periodStr ? ` · Periode: ${periodStr}` : ''}
+                        </p>
+                      </div>
+                      <button
+                        onClick={async () => {
+                          if (!confirm(`Weet je zeker dat je deze ${run.count} leads wilt verwijderen? Dit kan niet ongedaan worden gemaakt.`)) return;
+                          setUndoing(run.id);
+                          try {
+                            const res = await adminFetch('/api/admin/backfill', {
+                              method: 'DELETE',
+                              body: JSON.stringify({ run_id: run.id }),
+                            });
+                            const d = await res.json();
+                            if (d.ok) {
+                              setHistory(h => h.filter(r => r.id !== run.id));
+                              onDone();
+                            }
+                          } catch { /* ignore */ }
+                          setUndoing(null);
+                        }}
+                        disabled={undoing === run.id}
+                        className="ml-3 shrink-0 rounded-lg border border-red-200 bg-white px-2.5 py-1.5 text-xs font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-50"
+                      >
+                        {undoing === run.id ? (
+                          <ArrowPathIcon className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <span className="flex items-center gap-1"><TrashIcon className="h-3.5 w-3.5" /> Ongedaan maken</span>
+                        )}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          {loadingHistory && (
+            <div className="flex items-center gap-2 text-xs text-slate-400">
+              <ArrowPathIcon className="h-3.5 w-3.5 animate-spin" /> Importhistorie laden...
+            </div>
+          )}
         </div>
       </motion.div>
     </>

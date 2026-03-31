@@ -263,6 +263,7 @@ export async function POST(request: NextRequest) {
   let skipped = 0;
   let errors = 0;
   let profanityBlocked = 0;
+  const importedIds: string[] = [];
   const errorSamples: string[] = [];
 
   for (const ml of allMetaLeads) {
@@ -346,6 +347,7 @@ export async function POST(request: NextRequest) {
       }
 
       imported++;
+      importedIds.push(data.id);
       existingEmails.add((parsed.email || '').toLowerCase());
 
       // 8) Auto-distribute (same as webhook)
@@ -363,6 +365,26 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // Save backfill run for history/undo
+  if (importedIds.length > 0) {
+    const runId = `backfill:${webhook_key_id || branch}:${Date.now()}`;
+    const formName = (await supabase.from('app_settings').select('value').eq('key', `backfill_form_name:${form_id}`).single())?.data?.value || form_id;
+    await supabase.from('app_settings').upsert({
+      key: runId,
+      value: JSON.stringify({
+        lead_ids: importedIds,
+        webhook_key_id: webhook_key_id || null,
+        branch,
+        form_id,
+        form_name: formName,
+        date_from: dateFrom || null,
+        date_to: dateTo || null,
+        imported_at: new Date().toISOString(),
+        count: importedIds.length,
+      }),
+    }, { onConflict: 'key' });
+  }
+
   return NextResponse.json({
     ok: true,
     fetched: allMetaLeads.length,
@@ -372,4 +394,84 @@ export async function POST(request: NextRequest) {
     ...(profanityBlocked > 0 && { profanityBlocked }),
     ...(errorSamples.length > 0 && { errorDetails: errorSamples }),
   });
+}
+
+/* ─── GET: Backfill history for a webhook key ──────────────────────────── */
+
+export async function GET(request: NextRequest) {
+  const admin = await verifyAdmin(request);
+  if (!admin) return unauthorized();
+
+  const webhookKeyId = request.nextUrl.searchParams.get('webhook_key_id') || '';
+  const branch = request.nextUrl.searchParams.get('branch') || '';
+  if (!webhookKeyId && !branch) {
+    return NextResponse.json({ runs: [] });
+  }
+
+  const supabase = createServerClient();
+  const prefix = `backfill:${webhookKeyId || branch}:`;
+
+  const { data } = await supabase
+    .from('app_settings')
+    .select('key, value')
+    .like('key', `${prefix}%`)
+    .order('key', { ascending: false });
+
+  const runs = (data || []).map(row => {
+    try {
+      const parsed = JSON.parse(row.value);
+      return { id: row.key, ...parsed };
+    } catch { return null; }
+  }).filter(Boolean);
+
+  return NextResponse.json({ runs });
+}
+
+/* ─── DELETE: Undo a backfill run ──────────────────────────────────────── */
+
+export async function DELETE(request: NextRequest) {
+  const admin = await verifyAdmin(request);
+  if (!admin) return unauthorized();
+
+  const { run_id } = await request.json();
+  if (!run_id) {
+    return NextResponse.json({ error: 'run_id is verplicht' }, { status: 400 });
+  }
+
+  const supabase = createServerClient();
+
+  const { data: row } = await supabase
+    .from('app_settings')
+    .select('value')
+    .eq('key', run_id)
+    .single();
+
+  if (!row) {
+    return NextResponse.json({ error: 'Backfill run niet gevonden' }, { status: 404 });
+  }
+
+  let leadIds: string[] = [];
+  try {
+    const parsed = JSON.parse(row.value);
+    leadIds = parsed.lead_ids || [];
+  } catch {
+    return NextResponse.json({ error: 'Ongeldige run data' }, { status: 400 });
+  }
+
+  if (leadIds.length > 0) {
+    // Delete assignments first (foreign key)
+    await supabase.from('lead_assignments').delete().in('lead_id', leadIds);
+    await supabase.from('lead_feedback').delete().in('lead_id', leadIds);
+    // Delete the leads
+    const { error } = await supabase.from('leads').delete().in('id', leadIds);
+    if (error) {
+      console.error('Backfill undo delete error:', error);
+      return NextResponse.json({ error: `Kon leads niet verwijderen: ${error.message}` }, { status: 500 });
+    }
+  }
+
+  // Remove the backfill run record
+  await supabase.from('app_settings').delete().eq('key', run_id);
+
+  return NextResponse.json({ ok: true, deleted: leadIds.length });
 }
