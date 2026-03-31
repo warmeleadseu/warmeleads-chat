@@ -20,6 +20,7 @@ import {
   TvIcon,
   ClipboardDocumentListIcon,
   UsersIcon,
+  RectangleStackIcon,
 } from '@heroicons/react/24/outline';
 import { AdminContext, type AdminUser } from './adminContext';
 
@@ -29,6 +30,7 @@ const NAV = [
   { label: 'Verdeling', href: '/admin/verdeling', icon: ArrowsRightLeftIcon },
   { label: 'Importeren', href: '/admin/import', icon: DocumentArrowUpIcon },
   { label: 'Klanten', href: '/admin/customers', icon: BuildingOfficeIcon },
+  { label: 'Batches', href: '/admin/batches', icon: RectangleStackIcon },
   { label: 'Branches', href: '/admin/branches', icon: Squares2X2Icon },
   { label: 'Koppelingen', href: '/admin/koppelingen', icon: Cog6ToothIcon },
   { label: 'Live', href: '/admin/live', icon: TvIcon },
