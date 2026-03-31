@@ -578,10 +578,11 @@ function MetaAdsSection() {
             <div className="mt-4 rounded-lg bg-slate-50 p-3">
               <p className="text-xs font-medium text-slate-500">Hoe werkt het?</p>
               <ul className="mt-1 space-y-0.5 text-xs text-slate-400">
-                <li>1. Elke nacht om 04:00 UTC worden de Meta Ads kosten van de afgelopen 7 dagen opgehaald</li>
-                <li>2. Per advertentie per dag wordt de CPL berekend (spend / leads)</li>
-                <li>3. Leads met een meta_ad_id krijgen automatisch hun leadkosten toegewezen</li>
-                <li>4. Stuur vanuit je Zapier zap het veld <code className="rounded bg-white px-1 py-0.5 font-mono text-brand-purple">ad_id</code> mee bij elke lead</li>
+                <li>1. De campagne-kosten worden 4x per dag opgehaald uit Meta (09:00, 12:00, 15:00, 16:00)</li>
+                <li>2. Bruto CPL = totale campagne-spend / aantal leads in ons CRM</li>
+                <li>3. Effectieve CPL = bruto CPL / gem. aantal toewijzingen per lead</li>
+                <li>4. Stuur vanuit Zapier de velden <code className="rounded bg-white px-1 py-0.5 font-mono text-brand-purple">campaign_id</code>, <code className="rounded bg-white px-1 py-0.5 font-mono text-brand-purple">adset_id</code> en <code className="rounded bg-white px-1 py-0.5 font-mono text-brand-purple">ad_id</code> mee</li>
+                <li>5. Kosten tellen pas mee vanaf de activatiedatum van de eerste batch per branche</li>
               </ul>
             </div>
           </>
