@@ -89,6 +89,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'naam_klant is verplicht' }, { status: 400 });
     }
 
+    // Deduplication: skip if same email+branch already exists (within 30 days)
+    if (lead.email) {
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+      const { data: existing } = await supabase
+        .from('leads')
+        .select('id')
+        .eq('email', lead.email)
+        .eq('branch', lead.branch)
+        .gte('created_at', thirtyDaysAgo)
+        .limit(1);
+      if (existing && existing.length > 0) {
+        return NextResponse.json({ success: true, lead_id: existing[0].id, deduplicated: true });
+      }
+    }
+
     const profanity = checkLeadProfanity(lead as Record<string, unknown>);
     if (profanity.blocked) {
       return NextResponse.json({ success: false, error: 'Lead geweigerd: ongepaste inhoud' }, { status: 422 });

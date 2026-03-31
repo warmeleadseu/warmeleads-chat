@@ -23,6 +23,7 @@ import {
   CurrencyEuroIcon,
   EyeIcon,
   EyeSlashIcon,
+  ClockIcon,
 } from '@heroicons/react/24/outline';
 
 interface WebhookKey {
@@ -56,6 +57,7 @@ export default function KoppelingenPage() {
   const [copied, setCopied] = useState<string | null>(null);
   const [testing, setTesting] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<{ id: string; success: boolean; message: string } | null>(null);
+  const [activeBackfill, setActiveBackfill] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -265,6 +267,14 @@ export default function KoppelingenPage() {
                   </button>
                   <div className="h-8 w-px bg-slate-100" />
                   <button
+                    onClick={() => setActiveBackfill(activeBackfill === k.id ? null : k.id)}
+                    className="flex flex-1 items-center justify-center gap-1.5 py-3.5 text-sm font-medium text-amber-600 transition hover:bg-amber-50"
+                  >
+                    <ClockIcon className="h-4 w-4" />
+                    Historisch
+                  </button>
+                  <div className="h-8 w-px bg-slate-100" />
+                  <button
                     onClick={() => testWebhookFromPanel(k.id)}
                     disabled={testing === k.id}
                     className="flex flex-1 items-center justify-center gap-1.5 py-3.5 text-sm font-medium text-emerald-600 transition hover:bg-emerald-50 disabled:opacity-50"
@@ -307,6 +317,22 @@ export default function KoppelingenPage() {
               testing={testing === k.id}
               testResult={testResult?.id === k.id ? testResult : null}
               branchesList={branchesList}
+            />
+          );
+        })()}
+      </AnimatePresence>
+
+      {/* Backfill panel */}
+      <AnimatePresence>
+        {activeBackfill && (() => {
+          const k = keys.find(x => x.id === activeBackfill);
+          if (!k) return null;
+          return (
+            <BackfillPanel
+              webhookKey={k}
+              branchesList={branchesList}
+              onClose={() => setActiveBackfill(null)}
+              onDone={() => { setActiveBackfill(null); fetchData(); }}
             />
           );
         })()}
@@ -1038,6 +1064,228 @@ function CreateWizard({
               </div>
             </div>
           )}
+        </div>
+      </motion.div>
+    </>
+  );
+}
+
+/* ─── Backfill Panel ─────────────────────────────────────────── */
+interface MetaForm { id: string; name: string; status: string }
+interface BackfillResult { ok: boolean; fetched: number; imported: number; skipped: number; errors: number; error?: string; permissionError?: boolean }
+
+function BackfillPanel({
+  webhookKey,
+  branchesList,
+  onClose,
+  onDone,
+}: {
+  webhookKey: WebhookKey;
+  branchesList: BranchConfig[];
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [forms, setForms] = useState<MetaForm[]>([]);
+  const [loadingForms, setLoadingForms] = useState(true);
+  const [formsError, setFormsError] = useState('');
+  const [selectedForm, setSelectedForm] = useState('');
+  const [days, setDays] = useState(1);
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState<BackfillResult | null>(null);
+
+  useEffect(() => {
+    setLoadingForms(true);
+    setFormsError('');
+    adminFetch('/api/admin/meta-forms')
+      .then(r => r.json())
+      .then(d => {
+        if (d.error) setFormsError(d.error);
+        else setForms(d.forms || []);
+      })
+      .catch(() => setFormsError('Kon formulieren niet ophalen'))
+      .finally(() => setLoadingForms(false));
+  }, []);
+
+  const branchName = branchesList.find(b => b.slug === webhookKey.branch)?.name || webhookKey.branch;
+
+  const run = async () => {
+    if (!selectedForm) return;
+    setRunning(true);
+    setResult(null);
+    try {
+      const res = await adminFetch('/api/admin/backfill', {
+        method: 'POST',
+        body: JSON.stringify({
+          form_id: selectedForm,
+          branch: webhookKey.branch,
+          days,
+          webhook_key_id: webhookKey.id,
+        }),
+      });
+      const data = await res.json();
+      setResult(data);
+      if (data.ok && data.imported > 0) setTimeout(onDone, 3000);
+    } catch {
+      setResult({ ok: false, fetched: 0, imported: 0, skipped: 0, errors: 1, error: 'Verzoek mislukt' });
+    }
+    setRunning(false);
+  };
+
+  return (
+    <>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm"
+        onClick={onClose}
+      />
+      <motion.div
+        initial={{ x: '100%' }}
+        animate={{ x: 0 }}
+        exit={{ x: '100%' }}
+        transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+        className="fixed inset-y-0 right-0 z-[60] flex w-full max-w-md flex-col bg-white shadow-2xl"
+      >
+        <div className="shrink-0 border-b border-slate-100">
+          <div className="h-[3px] bg-warmeleads-gradient" />
+          <div className="flex items-center justify-between px-5 py-4">
+            <div>
+              <h2 className="text-lg font-bold text-slate-900">Historische leads ophalen</h2>
+              <p className="mt-0.5 text-xs text-slate-500">{webhookKey.label} &middot; {branchName}</p>
+            </div>
+            <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
+              <XMarkIcon className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-5 space-y-5">
+          <div className="rounded-lg border border-blue-100 bg-blue-50/50 p-3">
+            <p className="text-xs text-blue-700">
+              Haal leads op die eerder zijn gegenereerd via een Facebook/Instagram lead formulier.
+              Leads die al in het CRM staan worden automatisch overgeslagen (deduplicatie op e-mail + branche).
+            </p>
+          </div>
+
+          {/* Form selector */}
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-slate-700">Facebook Lead Formulier</label>
+            {loadingForms ? (
+              <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-400">
+                <ArrowPathIcon className="h-4 w-4 animate-spin" /> Formulieren ophalen uit Meta...
+              </div>
+            ) : formsError ? (
+              <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-600">{formsError}</div>
+            ) : forms.length === 0 ? (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-700">
+                Geen lead formulieren gevonden in je Meta ad account. Zorg dat er actieve Lead Ads draaien.
+              </div>
+            ) : (
+              <select
+                value={selectedForm}
+                onChange={e => setSelectedForm(e.target.value)}
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-brand-purple focus:ring-1 focus:ring-brand-purple/30"
+              >
+                <option value="">Selecteer een formulier...</option>
+                {forms.map(f => (
+                  <option key={f.id} value={f.id}>{f.name} ({f.id})</option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          {/* Days selector */}
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-slate-700">Periode</label>
+            <div className="grid grid-cols-5 gap-1.5">
+              {[1, 3, 7, 14, 30].map(d => (
+                <button
+                  key={d}
+                  onClick={() => setDays(d)}
+                  className={`rounded-lg border px-2 py-2 text-sm font-medium transition ${
+                    days === d
+                      ? 'border-brand-purple bg-brand-purple/10 text-brand-purple'
+                      : 'border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50'
+                  }`}
+                >
+                  {d === 1 ? 'Gisteren' : `${d} dagen`}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Run button */}
+          <button
+            onClick={run}
+            disabled={!selectedForm || running}
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-button-gradient px-4 py-3 text-sm font-bold text-white shadow-sm disabled:opacity-50"
+          >
+            {running ? (
+              <>
+                <ArrowPathIcon className="h-4 w-4 animate-spin" />
+                Leads ophalen...
+              </>
+            ) : (
+              <>
+                <ClockIcon className="h-4 w-4" />
+                Historische leads ophalen
+              </>
+            )}
+          </button>
+
+          {/* Result */}
+          <AnimatePresence>
+            {result && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+              >
+                {result.error ? (
+                  <div className="rounded-lg border border-red-200 bg-red-50 p-4">
+                    <p className="text-sm font-medium text-red-700">{result.error}</p>
+                    {result.permissionError && (
+                      <div className="mt-2 text-xs text-red-600">
+                        <p className="font-medium">Hoe op te lossen:</p>
+                        <ol className="ml-4 mt-1 list-decimal space-y-1">
+                          <li>Ga naar Meta Business Manager &rarr; Business Settings</li>
+                          <li>Klik op System Users &rarr; selecteer je System User</li>
+                          <li>Klik op &quot;Add Assets&quot; &rarr; selecteer je Page</li>
+                          <li>Zorg dat &quot;Leads Retrieval&quot; (leads_retrieve) is aangevinkt</li>
+                          <li>Genereer een nieuw token met deze permissie</li>
+                        </ol>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+                    <div className="flex items-center gap-2 text-sm font-medium text-emerald-700">
+                      <CheckCircleIcon className="h-5 w-5" />
+                      Backfill voltooid
+                    </div>
+                    <div className="mt-3 grid grid-cols-3 gap-3">
+                      <div className="rounded-lg bg-white p-2.5 text-center shadow-sm">
+                        <p className="text-lg font-bold text-slate-900">{result.fetched}</p>
+                        <p className="text-[11px] text-slate-500">Opgehaald</p>
+                      </div>
+                      <div className="rounded-lg bg-white p-2.5 text-center shadow-sm">
+                        <p className="text-lg font-bold text-emerald-600">{result.imported}</p>
+                        <p className="text-[11px] text-slate-500">Geïmporteerd</p>
+                      </div>
+                      <div className="rounded-lg bg-white p-2.5 text-center shadow-sm">
+                        <p className="text-lg font-bold text-amber-600">{result.skipped}</p>
+                        <p className="text-[11px] text-slate-500">Overgeslagen</p>
+                      </div>
+                    </div>
+                    {result.errors > 0 && (
+                      <p className="mt-2 text-xs text-red-600">{result.errors} lead(s) kon(den) niet worden verwerkt</p>
+                    )}
+                  </div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </motion.div>
     </>
