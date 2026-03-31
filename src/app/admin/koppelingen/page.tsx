@@ -1098,7 +1098,7 @@ function BackfillPanel({
   useEffect(() => {
     setLoadingForms(true);
     setFormsError('');
-    adminFetch('/api/admin/meta-forms')
+    adminFetch(`/api/admin/meta-forms?branch=${encodeURIComponent(webhookKey.branch)}`)
       .then(r => r.json())
       .then(d => {
         if (d.error) setFormsError(d.error);
