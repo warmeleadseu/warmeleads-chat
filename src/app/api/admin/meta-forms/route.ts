@@ -20,42 +20,50 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Step 1: Get all ad creatives with lead_gen_form_id
     const formIds = new Set<string>();
-    let creativesUrl: string | null = `${META_GRAPH_URL}/act_${credentials.adAccountId}/adcreatives?fields=id,name,lead_gen_form_id&limit=200&access_token=${credentials.accessToken}`;
+    const statuses = ['ACTIVE', 'PAUSED'].map(s => `"${s}"`).join(',');
+    const MAX_PAGES = 5;
 
-    while (creativesUrl) {
-      const res: Response = await fetch(creativesUrl);
+    let adsUrl: string | null =
+      `${META_GRAPH_URL}/act_${credentials.adAccountId}/ads` +
+      `?fields=creative{lead_gen_form_id}` +
+      `&effective_status=[${statuses}]` +
+      `&limit=200&access_token=${credentials.accessToken}`;
+
+    let pages = 0;
+    while (adsUrl && pages < MAX_PAGES) {
+      pages++;
+      const res: Response = await fetch(adsUrl);
       const data = await res.json();
 
       if (data.error) {
         return NextResponse.json({ error: data.error.message }, { status: 400 });
       }
 
-      for (const creative of data.data || []) {
-        if (creative.lead_gen_form_id) formIds.add(creative.lead_gen_form_id);
+      for (const ad of data.data || []) {
+        const fid = ad.creative?.lead_gen_form_id;
+        if (fid) formIds.add(fid);
       }
-      creativesUrl = data.paging?.next || null;
+      adsUrl = data.paging?.next || null;
     }
 
     if (formIds.size === 0) {
-      return NextResponse.json({ forms: [], message: 'Geen lead formulieren gevonden in dit ad account' });
+      return NextResponse.json({ forms: [], message: 'Geen lead formulieren gevonden bij actieve ads in dit ad account' });
     }
 
-    // Step 2: Get form details
     const forms: LeadGenForm[] = [];
-    for (const fid of formIds) {
+    const formFetches = [...formIds].map(async (fid) => {
       try {
-        const formRes = await fetch(`${META_GRAPH_URL}/${fid}?fields=id,name,status&access_token=${credentials.accessToken}`);
-        const formData = await formRes.json();
-        if (!formData.error) {
-          forms.push({ id: formData.id, name: formData.name || `Form ${fid}`, status: formData.status || 'ACTIVE' });
+        const r = await fetch(`${META_GRAPH_URL}/${fid}?fields=id,name,status&access_token=${credentials.accessToken}`);
+        const d = await r.json();
+        if (!d.error) {
+          return { id: d.id, name: d.name || `Form ${fid}`, status: d.status || 'ACTIVE' } as LeadGenForm;
         }
-      } catch {
-        forms.push({ id: fid, name: `Form ${fid}`, status: 'unknown' });
-      }
-    }
+      } catch { /* ignore individual form errors */ }
+      return { id: fid, name: `Form ${fid}`, status: 'unknown' } as LeadGenForm;
+    });
 
+    forms.push(...await Promise.all(formFetches));
     forms.sort((a, b) => a.name.localeCompare(b.name));
 
     return NextResponse.json({ forms });
