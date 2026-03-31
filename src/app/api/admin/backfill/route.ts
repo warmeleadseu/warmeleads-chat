@@ -72,10 +72,17 @@ export async function POST(request: NextRequest) {
   const admin = await verifyAdmin(request);
   if (!admin) return unauthorized();
 
-  const { form_id, branch, days, webhook_key_id } = await request.json();
+  const body = await request.json();
+  const { form_id, branch, webhook_key_id } = body;
+  const dateFrom = body.date_from as string | undefined;
+  const dateTo = body.date_to as string | undefined;
+  const days = body.days as number | undefined;
 
-  if (!form_id || !branch || !days) {
-    return NextResponse.json({ error: 'form_id, branch en days zijn verplicht' }, { status: 400 });
+  if (!form_id || !branch) {
+    return NextResponse.json({ error: 'form_id en branch zijn verplicht' }, { status: 400 });
+  }
+  if (!dateFrom && !days) {
+    return NextResponse.json({ error: 'date_from of days is verplicht' }, { status: 400 });
   }
 
   const credentials = await getMetaCredentials();
@@ -94,11 +101,18 @@ export async function POST(request: NextRequest) {
   }
 
   // Fetch leads from Meta form
-  const since = Math.floor((Date.now() - days * 24 * 60 * 60 * 1000) / 1000);
+  const sinceDate = dateFrom ? new Date(dateFrom) : new Date(Date.now() - (days || 1) * 24 * 60 * 60 * 1000);
+  sinceDate.setHours(0, 0, 0, 0);
+  const since = Math.floor(sinceDate.getTime() / 1000);
+
+  const untilDate = dateTo ? new Date(dateTo) : new Date();
+  untilDate.setHours(23, 59, 59, 999);
+  const until = Math.floor(untilDate.getTime() / 1000);
+
   let allMetaLeads: MetaLead[] = [];
 
   try {
-    let url: string | null = `${META_GRAPH_URL}/${form_id}/leads?fields=id,created_time,field_data&filtering=[{"field":"time_created","operator":"GREATER_THAN","value":${since}}]&limit=500&access_token=${credentials.accessToken}`;
+    let url: string | null = `${META_GRAPH_URL}/${form_id}/leads?fields=id,created_time,field_data&filtering=[{"field":"time_created","operator":"GREATER_THAN","value":${since}},{"field":"time_created","operator":"LESS_THAN","value":${until}}]&limit=500&access_token=${credentials.accessToken}`;
 
     while (url) {
       const response: Response = await fetch(url);

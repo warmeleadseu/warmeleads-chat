@@ -1090,7 +1090,8 @@ function BackfillPanel({
   const [loadingForms, setLoadingForms] = useState(true);
   const [formsError, setFormsError] = useState('');
   const [selectedForm, setSelectedForm] = useState('');
-  const [days, setDays] = useState(1);
+  const [dateFrom, setDateFrom] = useState(() => { const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().split('T')[0]; });
+  const [dateTo, setDateTo] = useState(() => new Date().toISOString().split('T')[0]);
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<BackfillResult | null>(null);
 
@@ -1119,7 +1120,8 @@ function BackfillPanel({
         body: JSON.stringify({
           form_id: selectedForm,
           branch: webhookKey.branch,
-          days,
+          date_from: dateFrom,
+          date_to: dateTo,
           webhook_key_id: webhookKey.id,
         }),
       });
@@ -1196,21 +1198,31 @@ function BackfillPanel({
             )}
           </div>
 
-          {/* Days selector */}
+          {/* Date range */}
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Periode</label>
-            <div className="grid grid-cols-5 gap-1.5">
-              {[1, 3, 7, 14, 30].map(d => (
-                <button
-                  key={d}
-                  onClick={() => setDays(d)}
-                  className={`rounded-lg border px-2 py-2 text-sm font-medium transition ${
-                    days === d
-                      ? 'border-brand-purple bg-brand-purple/10 text-brand-purple'
-                      : 'border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50'
-                  }`}
-                >
-                  {d === 1 ? 'Gisteren' : `${d} dagen`}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1 block text-[11px] font-medium text-slate-500">Van</label>
+                <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} max={dateTo}
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-brand-purple focus:ring-1 focus:ring-brand-purple/30" />
+              </div>
+              <div>
+                <label className="mb-1 block text-[11px] font-medium text-slate-500">Tot en met</label>
+                <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} min={dateFrom} max={new Date().toISOString().split('T')[0]}
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-brand-purple focus:ring-1 focus:ring-brand-purple/30" />
+              </div>
+            </div>
+            <div className="mt-2 flex gap-1.5">
+              {[
+                { label: 'Gisteren', fn: () => { const d = new Date(); d.setDate(d.getDate() - 1); const s = d.toISOString().split('T')[0]; setDateFrom(s); setDateTo(s); } },
+                { label: '7 dagen', fn: () => { const d = new Date(); d.setDate(d.getDate() - 7); setDateFrom(d.toISOString().split('T')[0]); setDateTo(new Date().toISOString().split('T')[0]); } },
+                { label: '14 dagen', fn: () => { const d = new Date(); d.setDate(d.getDate() - 14); setDateFrom(d.toISOString().split('T')[0]); setDateTo(new Date().toISOString().split('T')[0]); } },
+                { label: '30 dagen', fn: () => { const d = new Date(); d.setDate(d.getDate() - 30); setDateFrom(d.toISOString().split('T')[0]); setDateTo(new Date().toISOString().split('T')[0]); } },
+              ].map(q => (
+                <button key={q.label} onClick={q.fn}
+                  className="rounded-md border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-500 transition hover:border-brand-purple hover:bg-brand-purple/5 hover:text-brand-purple">
+                  {q.label}
                 </button>
               ))}
             </div>
@@ -1219,7 +1231,7 @@ function BackfillPanel({
           {/* Run button */}
           <button
             onClick={run}
-            disabled={!selectedForm || running}
+            disabled={!selectedForm || running || !dateFrom || !dateTo || dateFrom > dateTo}
             className="flex w-full items-center justify-center gap-2 rounded-lg bg-button-gradient px-4 py-3 text-sm font-bold text-white shadow-sm disabled:opacity-50"
           >
             {running ? (
