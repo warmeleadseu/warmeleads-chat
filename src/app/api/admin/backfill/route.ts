@@ -157,6 +157,7 @@ export async function POST(request: NextRequest) {
   let imported = 0;
   let skipped = 0;
   let errors = 0;
+  const errorSamples: string[] = [];
 
   for (const ml of allMetaLeads) {
     const parsed = parseMetaLead(ml, branch);
@@ -183,28 +184,56 @@ export async function POST(request: NextRequest) {
     const phone = parsed.telefoonnummer || '';
 
     try {
-      const lead = await enrichLeadAddress({
-        branch,
-        naam_klant: parsed.naam_klant || '',
-        email: parsed.email || '',
-        telefoonnummer: phone,
-        phone_valid: isPhoneValid(phone),
-        postcode: parsed.postcode || '',
-        huisnummer: parsed.huisnummer || '',
-        plaatsnaam: parsed.plaatsnaam || '',
-        provincie: parsed.provincie || '',
-        land: parsed.land || '',
-        wervingsdatum: parsed.wervingsdatum || new Date().toISOString().split('T')[0],
-        status: 'nieuw',
-        bron: 'meta_backfill',
-        notities: '',
-        custom_fields: Object.keys(customFields).length > 0 ? customFields : {},
-      });
+      let lead;
+      try {
+        lead = await enrichLeadAddress({
+          branch,
+          naam_klant: parsed.naam_klant || '',
+          email: parsed.email || '',
+          telefoonnummer: phone,
+          phone_valid: isPhoneValid(phone),
+          postcode: parsed.postcode || '',
+          huisnummer: parsed.huisnummer || '',
+          plaatsnaam: parsed.plaatsnaam || '',
+          provincie: parsed.provincie || '',
+          land: parsed.land || '',
+          wervingsdatum: parsed.wervingsdatum || new Date().toISOString().split('T')[0],
+          status: 'nieuw',
+          bron: 'meta_backfill',
+          notities: '',
+          custom_fields: Object.keys(customFields).length > 0 ? customFields : {},
+        });
+      } catch {
+        lead = {
+          branch,
+          naam_klant: parsed.naam_klant || '',
+          email: parsed.email || '',
+          telefoonnummer: phone,
+          phone_valid: isPhoneValid(phone),
+          postcode: parsed.postcode || '',
+          huisnummer: parsed.huisnummer || '',
+          plaatsnaam: parsed.plaatsnaam || '',
+          provincie: parsed.provincie || '',
+          land: parsed.land || '',
+          wervingsdatum: parsed.wervingsdatum || new Date().toISOString().split('T')[0],
+          status: 'nieuw',
+          bron: 'meta_backfill',
+          notities: '',
+          custom_fields: Object.keys(customFields).length > 0 ? customFields : {},
+        };
+      }
 
       const quality_score = calculateQualityScore(lead);
       const { data, error } = await supabase.from('leads').insert({ ...lead, quality_score }).select().single();
 
-      if (error) { errors++; continue; }
+      if (error) {
+        errors++;
+        if (errorSamples.length < 3) {
+          errorSamples.push(`DB: ${error.message} (lead: ${parsed.email || parsed.naam_klant || 'onbekend'})`);
+        }
+        console.error('Backfill insert error:', error.message, 'lead:', parsed.email);
+        continue;
+      }
 
       imported++;
 
@@ -213,8 +242,12 @@ export async function POST(request: NextRequest) {
           await distributeLead({ id: data.id, branch: data.branch, lat: data.lat, lng: data.lng });
         } catch { /* distribution failure should not block backfill */ }
       }
-    } catch {
+    } catch (err) {
       errors++;
+      if (errorSamples.length < 3) {
+        errorSamples.push(`${err instanceof Error ? err.message : 'Onbekende fout'} (lead: ${parsed.email || parsed.naam_klant || 'onbekend'})`);
+      }
+      console.error('Backfill processing error:', err, 'lead:', parsed.email);
     }
   }
 
@@ -224,5 +257,6 @@ export async function POST(request: NextRequest) {
     imported,
     skipped,
     errors,
+    ...(errorSamples.length > 0 && { errorDetails: errorSamples }),
   });
 }

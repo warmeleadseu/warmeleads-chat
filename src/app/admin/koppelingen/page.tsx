@@ -1073,7 +1073,7 @@ function CreateWizard({
 
 /* ─── Backfill Panel ─────────────────────────────────────────── */
 interface MetaForm { id: string; name: string; status: string }
-interface BackfillResult { ok: boolean; fetched: number; imported: number; skipped: number; errors: number; error?: string; permissionError?: boolean }
+interface BackfillResult { ok: boolean; fetched: number; imported: number; skipped: number; errors: number; error?: string; permissionError?: boolean; errorDetails?: string[] }
 
 function BackfillPanel({
   webhookKey,
@@ -1292,7 +1292,16 @@ function BackfillPanel({
                       </div>
                     </div>
                     {result.errors > 0 && (
-                      <p className="mt-2 text-xs text-red-600">{result.errors} lead(s) kon(den) niet worden verwerkt</p>
+                      <div className="mt-2">
+                        <p className="text-xs font-medium text-red-600">{result.errors} lead(s) kon(den) niet worden verwerkt</p>
+                        {result.errorDetails && result.errorDetails.length > 0 && (
+                          <ul className="mt-1.5 space-y-1">
+                            {result.errorDetails.map((e, i) => (
+                              <li key={i} className="rounded bg-red-50 px-2 py-1 text-[11px] text-red-600">{e}</li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
                     )}
                   </div>
                 )}
