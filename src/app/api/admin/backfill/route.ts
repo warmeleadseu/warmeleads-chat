@@ -199,7 +199,7 @@ export async function POST(request: NextRequest) {
           land: parsed.land || '',
           wervingsdatum: parsed.wervingsdatum || new Date().toISOString().split('T')[0],
           status: 'nieuw',
-          bron: 'meta_backfill',
+          bron: 'zapier',
           notities: '',
           custom_fields: Object.keys(customFields).length > 0 ? customFields : {},
         });
@@ -217,7 +217,7 @@ export async function POST(request: NextRequest) {
           land: parsed.land || '',
           wervingsdatum: parsed.wervingsdatum || new Date().toISOString().split('T')[0],
           status: 'nieuw',
-          bron: 'meta_backfill',
+          bron: 'zapier',
           notities: '',
           custom_fields: Object.keys(customFields).length > 0 ? customFields : {},
         };
