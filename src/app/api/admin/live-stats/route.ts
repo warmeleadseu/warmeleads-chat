@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
     supabase.from('customer_batches').select('*, customers(name)').order('created_at', { ascending: false }),
     supabase.from('leads').select('id, naam_klant, branch, plaatsnaam, provincie, created_at').neq('bron', 'excel_import').order('created_at', { ascending: false }).limit(12),
     supabase.from('lead_assignments').select('id, lead_id, customer_id, batch_id, assigned_at, customers(name)').order('assigned_at', { ascending: false }).limit(500),
-    supabase.from('leads').select('provincie').neq('bron', 'excel_import').not('provincie', 'is', null).not('provincie', 'eq', ''),
+    supabase.from('leads').select('provincie, postcode').neq('bron', 'excel_import').not('provincie', 'is', null).not('provincie', 'eq', ''),
     supabase.from('leads').select('branch').neq('bron', 'excel_import').not('branch', 'is', null).not('branch', 'eq', ''),
     supabase.from('leads').select('id', { count: 'exact', head: true }).neq('bron', 'excel_import').gte('created_at', todayStart),
     supabase.from('leads').select('id', { count: 'exact', head: true }).neq('bron', 'excel_import').gte('created_at', todayStart).eq('phone_valid', false),
@@ -70,7 +70,12 @@ export async function GET(request: NextRequest) {
 
   const provinceBreakdown: Record<string, number> = {};
   for (const r of (provincesRes.data || [])) {
-    const p = r.provincie as string;
+    let p = r.provincie as string;
+    if (p === 'Limburg') {
+      const pc = (r.postcode as string || '').replace(/\s/g, '');
+      const isBelgian = /^\d{4}$/.test(pc);
+      if (isBelgian) p = 'Limburg (BE)';
+    }
     provinceBreakdown[p] = (provinceBreakdown[p] || 0) + 1;
   }
 

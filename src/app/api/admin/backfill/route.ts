@@ -7,6 +7,7 @@ import { isPhoneValid } from '@/lib/phoneValidation';
 import { checkLeadProfanity } from '@/lib/profanityFilter';
 import { calculateQualityScore } from '@/lib/leadQuality';
 import { distributeLead } from '@/lib/distribution';
+import { syncBatchDelivered } from '@/lib/batchSync';
 
 const META_GRAPH_URL = 'https://graph.facebook.com/v21.0';
 
@@ -444,11 +445,25 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: 'Ongeldige run data' }, { status: 400 });
   }
 
+  const affectedBatchIds = new Set<string>();
+
   if (leadIds.length > 0) {
+    const { data: assignments } = await supabase
+      .from('lead_assignments')
+      .select('batch_id')
+      .in('lead_id', leadIds);
+    for (const a of assignments || []) {
+      if (a.batch_id) affectedBatchIds.add(a.batch_id);
+    }
+
     await supabase.from('lead_assignments').delete().in('lead_id', leadIds);
     await supabase.from('lead_feedback').delete().in('lead_id', leadIds);
     const { error } = await supabase.from('leads').delete().in('id', leadIds);
     if (error) return NextResponse.json({ error: `Kon leads niet verwijderen: ${error.message}` }, { status: 500 });
+  }
+
+  for (const batchId of affectedBatchIds) {
+    await syncBatchDelivered(supabase, batchId);
   }
 
   await supabase.from('app_settings').delete().eq('key', run_id);

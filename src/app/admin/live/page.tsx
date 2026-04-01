@@ -292,10 +292,15 @@ function timeAgo(iso: string): string {
 // ─── Province Heatmap Component ──────────────────────────────────────
 function ProvinceMap({ data }: { data: Record<string, number> }) {
   const maxCount = Math.max(1, ...Object.values(data));
-  const [hovered, setHovered] = useState<string | null>(null);
+  const [hovered, setHovered] = useState<{ label: string; key: string } | null>(null);
 
-  function opacity(name: string): number {
-    const count = data[name] || 0;
+  function dataKey(name: string, country: 'NL' | 'BE'): string {
+    if (name === 'Limburg') return country === 'BE' ? 'Limburg (BE)' : 'Limburg';
+    return name;
+  }
+
+  function opacity(key: string): number {
+    const count = data[key] || 0;
     if (count === 0) return 0.08;
     return 0.15 + (count / maxCount) * 0.85;
   }
@@ -303,40 +308,46 @@ function ProvinceMap({ data }: { data: Record<string, number> }) {
   return (
     <div className="relative h-full">
       <svg viewBox="-2 -2 210 410" className="h-full w-full" preserveAspectRatio="xMidYMid meet">
-        {Object.entries(NL_PROVINCES).map(([name, p]) => (
-          <g key={name} onMouseEnter={() => setHovered(name)} onMouseLeave={() => setHovered(null)}>
+        {Object.entries(NL_PROVINCES).map(([name, p]) => {
+          const key = dataKey(name, 'NL');
+          return (
+          <g key={name} onMouseEnter={() => setHovered({ label: name, key })} onMouseLeave={() => setHovered(null)}>
             <path
               d={p.d}
-              fill={`rgba(139, 92, 246, ${opacity(name)})`}
+              fill={`rgba(139, 92, 246, ${opacity(key)})`}
               stroke="rgba(255,255,255,0.12)"
               strokeWidth="0.6"
               strokeLinejoin="round"
               className="transition-all duration-300 hover:brightness-150"
             />
-            {(data[name] || 0) > 0 && (
-              <circle cx={p.cx} cy={p.cy} r={Math.max(2, Math.min(5, (data[name] / maxCount) * 5))}
+            {(data[key] || 0) > 0 && (
+              <circle cx={p.cx} cy={p.cy} r={Math.max(2, Math.min(5, (data[key] / maxCount) * 5))}
                 fill="#a855f7" opacity="0.8" className="animate-pulse" />
             )}
           </g>
-        ))}
+          );
+        })}
         <line x1="0" y1="226" x2="195" y2="226" stroke="rgba(255,255,255,0.06)" strokeWidth="0.4" strokeDasharray="3,2" />
         <text x="97" y="222" textAnchor="middle" fill="rgba(255,255,255,0.12)" fontSize="5" fontWeight="bold">BELGIË</text>
-        {Object.entries(BE_PROVINCES).map(([name, p]) => (
-          <g key={name} onMouseEnter={() => setHovered(name)} onMouseLeave={() => setHovered(null)}>
+        {Object.entries(BE_PROVINCES).map(([name, p]) => {
+          const key = dataKey(name, 'BE');
+          return (
+          <g key={name} onMouseEnter={() => setHovered({ label: name, key })} onMouseLeave={() => setHovered(null)}>
             <path
               d={p.d}
-              fill={`rgba(236, 72, 153, ${opacity(name)})`}
+              fill={`rgba(236, 72, 153, ${opacity(key)})`}
               stroke="rgba(255,255,255,0.08)"
               strokeWidth="0.6"
               strokeLinejoin="round"
               className="transition-all duration-300 hover:brightness-150"
             />
-            {(data[name] || 0) > 0 && (
-              <circle cx={p.cx} cy={p.cy} r={Math.max(2, Math.min(5, (data[name] / maxCount) * 5))}
+            {(data[key] || 0) > 0 && (
+              <circle cx={p.cx} cy={p.cy} r={Math.max(2, Math.min(5, (data[key] / maxCount) * 5))}
                 fill="#ec4899" opacity="0.8" className="animate-pulse" />
             )}
           </g>
-        ))}
+          );
+        })}
       </svg>
       <AnimatePresence>
         {hovered && (
@@ -346,8 +357,8 @@ function ProvinceMap({ data }: { data: Record<string, number> }) {
             exit={{ opacity: 0 }}
             className="absolute left-1/2 top-0 z-20 -translate-x-1/2 rounded-lg border border-white/10 bg-[#1a1d2e] px-3 py-1.5 text-center shadow-xl"
           >
-            <p className="text-[11px] font-bold text-white/80">{hovered}</p>
-            <p className="text-[10px] tabular-nums text-white/40">{(data[hovered] || 0).toLocaleString('nl-NL')} leads</p>
+            <p className="text-[11px] font-bold text-white/80">{hovered.label}</p>
+            <p className="text-[10px] tabular-nums text-white/40">{(data[hovered.key] || 0).toLocaleString('nl-NL')} leads</p>
           </motion.div>
         )}
       </AnimatePresence>

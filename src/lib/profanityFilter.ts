@@ -5,7 +5,7 @@
  */
 
 const PROFANITY_NL = [
-  'kanker', 'kansen', 'kut', 'hoer', 'lul', 'tering', 'tyfus', 'klootzak',
+  'kanker', 'kut', 'hoer', 'lul', 'tering', 'tyfus', 'klootzak',
   'mongool', 'debiel', 'achterlijk', 'godverdomme', 'godver', 'kutwijf',
   'teringlijer', 'kankerlijer', 'kankerjoch', 'kutjoch', 'trut', 'slet',
   'mietje', 'flikker', 'homo', 'sukkel', 'eikel', 'reet', 'pik', 'neuk',

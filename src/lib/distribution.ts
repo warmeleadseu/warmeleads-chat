@@ -1,5 +1,6 @@
 import { createServerClient } from './supabase';
 import { sendLeadNotification } from './email';
+import { syncBatchDelivered } from './batchSync';
 
 const MAX_ASSIGNMENTS = 3;
 const TARGET_AVG_ASSIGNMENTS = 2;
@@ -239,19 +240,7 @@ export async function distributeLead(lead: LeadForDistribution): Promise<Distrib
 
     if (error) continue;
 
-    const { data: updatedBatch } = await supabase
-      .from('customer_batches')
-      .update({ leads_delivered: (await supabase.from('customer_batches').select('leads_delivered').eq('id', m.batch_id).single()).data?.leads_delivered + 1 || 1 })
-      .eq('id', m.batch_id)
-      .select('leads_delivered, batch_size')
-      .single();
-
-    if (updatedBatch && updatedBatch.leads_delivered >= updatedBatch.batch_size) {
-      await supabase
-        .from('customer_batches')
-        .update({ status: 'completed', completed_at: new Date().toISOString() })
-        .eq('id', m.batch_id);
-    }
+    await syncBatchDelivered(supabase, m.batch_id);
 
     result.assignments.push({
       customer_id: m.customer_id,

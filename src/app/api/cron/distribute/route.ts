@@ -4,6 +4,7 @@ import { resolveAddress, isValidPlace } from '@/lib/pdok';
 import { distributeUnassignedLeads } from '@/lib/distribution';
 import { isPhoneValid } from '@/lib/phoneValidation';
 import { checkLeadProfanity } from '@/lib/profanityFilter';
+import { syncBatchDelivered } from '@/lib/batchSync';
 
 const MAX_LEAD_AGE_DAYS = 3;
 
@@ -86,8 +87,9 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // Phase 3: Delete profanity leads (recent, not yet distributed)
+  // Phase 3: Delete profanity leads (recent) and sync affected batch counters
   let profanityDeleted = 0;
+  const affectedBatchIds = new Set<string>();
   const { data: recentLeads } = await supabase
     .from('leads')
     .select('id, naam_klant, email, notities, custom_fields')
@@ -97,11 +99,22 @@ export async function GET(request: NextRequest) {
   if (recentLeads) {
     for (const lead of recentLeads) {
       if (checkLeadProfanity(lead as Record<string, unknown>).blocked) {
+        const { data: assignments } = await supabase
+          .from('lead_assignments')
+          .select('batch_id')
+          .eq('lead_id', lead.id);
+        for (const a of assignments || []) {
+          if (a.batch_id) affectedBatchIds.add(a.batch_id);
+        }
         await supabase.from('lead_assignments').delete().eq('lead_id', lead.id);
         await supabase.from('leads').delete().eq('id', lead.id);
         profanityDeleted++;
       }
     }
+  }
+
+  for (const batchId of affectedBatchIds) {
+    await syncBatchDelivered(supabase, batchId);
   }
 
   // Phase 4: Distribute (uses 3-day limit internally)

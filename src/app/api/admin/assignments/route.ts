@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
+import { syncBatchDelivered } from '@/lib/batchSync';
 
 export async function GET(request: NextRequest) {
   const admin = await verifyAdmin(request);
@@ -44,18 +45,7 @@ export async function DELETE(request: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   if (assignment?.batch_id) {
-    const { data: batch } = await supabase
-      .from('customer_batches')
-      .select('leads_delivered')
-      .eq('id', assignment.batch_id)
-      .single();
-
-    if (batch && batch.leads_delivered > 0) {
-      await supabase
-        .from('customer_batches')
-        .update({ leads_delivered: batch.leads_delivered - 1, status: 'active', completed_at: null })
-        .eq('id', assignment.batch_id);
-    }
+    await syncBatchDelivered(supabase, assignment.batch_id);
   }
 
   return NextResponse.json({ ok: true });
