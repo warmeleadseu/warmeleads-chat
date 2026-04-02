@@ -17,6 +17,8 @@ import {
   ExclamationCircleIcon,
   CheckIcon,
   MinusCircleIcon,
+  TrashIcon,
+  ClockIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
 
@@ -47,6 +49,15 @@ interface TabResult {
   duplicates: number;
   errors: number;
   errorDetails: string[];
+}
+
+interface ImportRun {
+  run_id: string;
+  branch: string;
+  sheet_name: string;
+  imported: number;
+  date: string;
+  lead_ids: string[];
 }
 
 type Step = 'upload' | 'tabs' | 'mapping' | 'importing' | 'done';
@@ -167,11 +178,24 @@ export default function ImportPage() {
   const [pasteMode, setPasteMode] = useState(false);
   const [pasteText, setPasteText] = useState('');
   const [pasteBranch, setPasteBranch] = useState('');
+  const [history, setHistory] = useState<ImportRun[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(true);
+  const [undoing, setUndoing] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const fetchHistory = useCallback(async () => {
+    try {
+      const res = await adminFetch('/api/admin/import');
+      const d = await res.json();
+      setHistory(d.history || []);
+    } catch { /* ignore */ }
+    setLoadingHistory(false);
+  }, []);
 
   useEffect(() => {
     adminFetch('/api/admin/branches').then(r => r.json()).then(d => setBranches(d.branches || []));
-  }, []);
+    fetchHistory();
+  }, [fetchHistory]);
 
   /* ── File upload handler ──────────────────────────────────────── */
 
@@ -317,6 +341,7 @@ export default function ImportPage() {
       let tabDuplicates = 0;
       let tabErrors = 0;
       const tabErrorDetails: string[] = [];
+      const tabInsertedIds: string[] = [];
 
       for (let i = 0; i < mappedLeads.length; i += BATCH) {
         const batch = mappedLeads.slice(i, i + BATCH);
@@ -332,6 +357,7 @@ export default function ImportPage() {
             tabDuplicates += d.duplicates || 0;
             tabErrors += d.errors || 0;
             if (d.errorDetails) tabErrorDetails.push(...d.errorDetails);
+            if (d.insertedIds) tabInsertedIds.push(...d.insertedIds);
           } else {
             tabErrors += batch.length;
             tabErrorDetails.push(d.error || 'Onbekende fout');
@@ -344,7 +370,26 @@ export default function ImportPage() {
         setProgress({ current: processed, total, label: sheet.name });
       }
 
-      // Account for skipped rows that were never sent
+      // Save import run for undo
+      if (tabInsertedIds.length > 0) {
+        const runId = `spreadsheet_import:${sheet.branch}:${Date.now()}`;
+        try {
+          await adminFetch('/api/admin/settings', {
+            method: 'PUT',
+            body: JSON.stringify({
+              key: runId,
+              value: JSON.stringify({
+                lead_ids: tabInsertedIds,
+                branch: sheet.branch,
+                sheet_name: sheet.name,
+                imported: tabInsertedIds.length,
+                date: new Date().toISOString(),
+              }),
+            }),
+          });
+        } catch { /* non-critical */ }
+      }
+
       processed += tabSkipped;
       setProgress({ current: Math.min(processed, total), total, label: sheet.name });
 
@@ -361,8 +406,26 @@ export default function ImportPage() {
     }
 
     setResults(allResults);
+    fetchHistory();
     setStep('done');
-  }, [activeSheets, branches, mapRow, isValidRow]);
+  }, [activeSheets, branches, mapRow, isValidRow, fetchHistory]);
+
+  /* ── Undo import run ──────────────────────────────────────────── */
+
+  const undoRun = useCallback(async (runId: string) => {
+    if (!confirm('Weet je zeker dat je deze import ongedaan wilt maken? Alle leads van deze import worden verwijderd.')) return;
+    setUndoing(runId);
+    try {
+      const res = await adminFetch('/api/admin/import', {
+        method: 'DELETE',
+        body: JSON.stringify({ run_id: runId }),
+      });
+      if (res.ok) {
+        fetchHistory();
+      }
+    } catch { /* ignore */ }
+    setUndoing(null);
+  }, [fetchHistory]);
 
   /* ── Reset ────────────────────────────────────────────────────── */
 
@@ -483,6 +546,61 @@ export default function ImportPage() {
               >
                 Data verwerken
               </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ─── Import History (visible on upload + done) ────────────── */}
+      {(step === 'upload' || step === 'done') && (
+        <div className="mt-6 rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex items-center gap-2 border-b border-slate-100 px-6 py-4">
+            <ClockIcon className="h-5 w-5 text-slate-400" />
+            <h2 className="font-semibold text-slate-900">Eerdere imports</h2>
+            <span className="ml-auto text-xs text-slate-400">{history.length} import{history.length !== 1 ? 's' : ''}</span>
+          </div>
+
+          {loadingHistory ? (
+            <div className="px-6 py-8 text-center text-sm text-slate-400">Laden...</div>
+          ) : history.length === 0 ? (
+            <div className="px-6 py-8 text-center text-sm text-slate-400">Nog geen imports uitgevoerd.</div>
+          ) : (
+            <div className="divide-y divide-slate-50">
+              {history.map(run => {
+                const bc = branches.find(b => b.slug === run.branch);
+                const d = run.date ? new Date(run.date) : null;
+                const isUndoing = undoing === run.run_id;
+                return (
+                  <div key={run.run_id} className="flex flex-col gap-3 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-slate-800">{run.sheet_name || 'Import'}</span>
+                        {bc && (
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${COLOR_MAP[bc.color]?.bg || 'bg-slate-100'} ${COLOR_MAP[bc.color]?.text || 'text-slate-600'}`}>
+                            {bc.name}
+                          </span>
+                        )}
+                      </div>
+                      <p className="mt-0.5 text-xs text-slate-400">
+                        {d ? d.toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
+                        {' · '}{run.imported || run.lead_ids?.length || 0} leads
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => undoRun(run.run_id)}
+                      disabled={isUndoing}
+                      className="flex shrink-0 items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-600 transition hover:bg-red-100 disabled:opacity-50 sm:py-1.5"
+                    >
+                      {isUndoing ? (
+                        <ArrowPathIcon className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <TrashIcon className="h-3.5 w-3.5" />
+                      )}
+                      {isUndoing ? 'Verwijderen...' : 'Ongedaan maken'}
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>

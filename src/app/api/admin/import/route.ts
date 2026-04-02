@@ -174,17 +174,20 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Bulk insert in chunks
+    // Bulk insert in chunks, collect inserted IDs
     let dbErrors = 0;
+    const insertedIds: string[] = [];
     const CHUNK = 100;
     for (let i = 0; i < BATCH_INSERT.length; i += CHUNK) {
       const chunk = BATCH_INSERT.slice(i, i + CHUNK);
-      const { error: insertError } = await supabase.from('leads').insert(chunk);
+      const { data: inserted, error: insertError } = await supabase.from('leads').insert(chunk).select('id');
       if (insertError) {
         dbErrors += chunk.length;
         if (errorDetails.length < 5) {
           errorDetails.push(`DB insert fout: ${insertError.message}`);
         }
+      } else if (inserted) {
+        insertedIds.push(...inserted.map(r => r.id));
       }
     }
 
@@ -201,7 +204,7 @@ export async function POST(request: NextRequest) {
       details: { branch, imported, skipped, duplicates, errors },
     });
 
-    return NextResponse.json({ imported, skipped, duplicates, errors, errorDetails });
+    return NextResponse.json({ imported, skipped, duplicates, errors, errorDetails, insertedIds });
   } catch (err) {
     console.error('Import error:', err);
     return NextResponse.json(
@@ -209,4 +212,63 @@ export async function POST(request: NextRequest) {
       { status: 500 },
     );
   }
+}
+
+export async function GET(request: NextRequest) {
+  const admin = await verifyAdmin(request);
+  if (!admin) return unauthorized();
+
+  const supabase = createServerClient();
+  const { data: rows } = await supabase
+    .from('app_settings')
+    .select('key, value')
+    .like('key', 'spreadsheet_import:%')
+    .order('key', { ascending: false });
+
+  const history = (rows || []).map(r => {
+    try {
+      const val = JSON.parse(r.value);
+      return { run_id: r.key, ...val };
+    } catch { return null; }
+  }).filter(Boolean);
+
+  return NextResponse.json({ history });
+}
+
+export async function DELETE(request: NextRequest) {
+  const admin = await verifyAdmin(request);
+  if (!admin) return unauthorized();
+
+  const { run_id } = await request.json();
+  if (!run_id) return NextResponse.json({ error: 'run_id is verplicht' }, { status: 400 });
+
+  const supabase = createServerClient();
+  const { data: row } = await supabase.from('app_settings').select('value').eq('key', run_id).single();
+  if (!row) return NextResponse.json({ error: 'Import run niet gevonden' }, { status: 404 });
+
+  let leadIds: string[] = [];
+  try { leadIds = JSON.parse(row.value).lead_ids || []; } catch {
+    return NextResponse.json({ error: 'Ongeldige run data' }, { status: 400 });
+  }
+
+  if (leadIds.length > 0) {
+    const CHUNK = 200;
+    for (let i = 0; i < leadIds.length; i += CHUNK) {
+      const chunk = leadIds.slice(i, i + CHUNK);
+      await supabase.from('lead_feedback').delete().in('lead_id', chunk);
+      await supabase.from('leads').delete().in('id', chunk);
+    }
+  }
+
+  await supabase.from('app_settings').delete().eq('key', run_id);
+
+  logAudit({
+    adminId: admin.id,
+    adminName: admin.name,
+    action: 'spreadsheet_import_undo',
+    entityType: 'lead',
+    details: { run_id, deleted: leadIds.length },
+  });
+
+  return NextResponse.json({ ok: true, deleted: leadIds.length });
 }
