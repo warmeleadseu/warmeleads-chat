@@ -94,16 +94,10 @@ export async function GET(request: NextRequest) {
   const completedBatches = batches.filter(b => b.status === 'completed');
   const activeCustomers = (customersRes.data || []).filter(c => c.is_active);
 
-  const totalRevenue = completedBatches.reduce((s, b) => s + (b.total_price || 0), 0);
-  const activeRevenue = activeBatches.reduce((s, b) => {
-    if (b.price_per_lead && b.leads_delivered) return s + b.price_per_lead * b.leads_delivered;
-    return s;
-  }, 0);
-
-  // Cost metrics: ad spend / our leads = bruto CPL, then effectieve CPL
+  // Cost metrics: same logic as costs/route.ts (single source of truth)
   const [allAssignmentsRes, relevantAdsRes, batchStartRes] = await Promise.all([
-    supabase.from('lead_assignments').select('lead_id'),
-    supabase.from('leads').select('meta_campaign_id, branch').not('meta_campaign_id', 'is', null),
+    supabase.from('lead_assignments').select('lead_id, batch_id'),
+    supabase.from('leads').select('meta_campaign_id, branch').neq('bron', 'excel_import').not('meta_campaign_id', 'is', null),
     supabase.from('customer_batches').select('branch, created_at').in('status', ['active', 'completed']),
   ]);
 
@@ -145,7 +139,20 @@ export async function GET(request: NextRequest) {
   const effectieveCpl = brutoCpl > 0 && avgAssignments > 0
     ? Math.round((brutoCpl / avgAssignments) * 100) / 100
     : 0;
-  const totalProfit = (totalRevenue + activeRevenue) - monthAdSpend;
+
+  // Revenue based on actual assignments × price_per_lead (same as costs API)
+  const batchPriceMap = new Map<string, number>();
+  for (const b of batches) {
+    if (b.price_per_lead) batchPriceMap.set(b.id, b.price_per_lead);
+  }
+  let totalRevenue = 0;
+  for (const a of allAssignmentsRes.data || []) {
+    if (!a.batch_id) continue;
+    const price = batchPriceMap.get(a.batch_id);
+    if (price !== undefined) totalRevenue += price;
+  }
+
+  const totalProfit = totalRevenue - monthAdSpend;
 
   const periods = ['day', '3days', 'week', 'month', 'quarter', 'year'] as const;
   const periodStats: Record<string, { leads: number; prevLeads: number; assigned: number; prevAssigned: number }> = {};
@@ -184,8 +191,7 @@ export async function GET(request: NextRequest) {
       notes: b.notes,
     })),
     completedBatchCount: completedBatches.length,
-    totalRevenue: totalRevenue + activeRevenue,
-    completedRevenue: totalRevenue,
+    totalRevenue: Math.round(totalRevenue * 100) / 100,
     recentLeads: (recentLeadsRes.data || []).map(l => ({
       id: l.id,
       name: l.naam_klant,

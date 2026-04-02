@@ -34,7 +34,6 @@ interface LiveData {
   activeBatches: BatchInfo[];
   completedBatchCount: number;
   totalRevenue: number;
-  completedRevenue: number;
   recentLeads: RecentLead[];
   periodStats: Record<string, PeriodStat>;
   provinceBreakdown: Record<string, number>;
