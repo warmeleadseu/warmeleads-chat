@@ -134,14 +134,35 @@ function autoMap(headers: string[], branchFields: { key: string; label: string }
   const usedFields = new Set<string>();
   const usedHeaders = new Set<string>();
 
-  const extAliases = { ...ALIASES };
-  for (const f of branchFields) {
-    if (!extAliases[f.key]) {
-      extAliases[f.key] = [normalize(f.key), normalize(f.label)];
+  // Only map to fields that actually exist in the CRM for this branch
+  const allFields = [
+    ...COMMON_CRM_FIELDS,
+    ...branchFields.map(f => ({ key: f.key, label: f.label })),
+  ];
+
+  // Build aliases per valid field — inherit from ALIASES when matching
+  const fieldAliases = new Map<string, string[]>();
+  for (const f of allFields) {
+    const normKey = normalize(f.key);
+    const normLabel = normalize(f.label);
+    const aliases = new Set<string>([normKey, normLabel].filter(Boolean));
+
+    // Direct match: ALIASES has an entry with this field's key
+    if (ALIASES[f.key]) {
+      for (const a of ALIASES[f.key]) aliases.add(a);
     }
+
+    // Reverse match: check if any ALIASES entry lists this field's key or label
+    for (const alts of Object.values(ALIASES)) {
+      if (alts.includes(normKey) || alts.includes(normLabel)) {
+        for (const a of alts) aliases.add(a);
+      }
+    }
+
+    fieldAliases.set(f.key, [...aliases]);
   }
 
-  // Score each (header, field) pair; higher = better match
+  // Score each (header, field) pair
   const candidates: { header: string; field: string; score: number }[] = [];
 
   for (const header of headers) {
@@ -149,7 +170,7 @@ function autoMap(headers: string[], branchFields: { key: string; label: string }
     const norm = normalize(header);
     if (!norm) continue;
 
-    for (const [field, alts] of Object.entries(extAliases)) {
+    for (const [fieldKey, alts] of fieldAliases) {
       let bestScore = 0;
 
       for (const alias of alts) {
@@ -165,12 +186,11 @@ function autoMap(headers: string[], branchFields: { key: string; label: string }
       }
 
       if (bestScore > 0) {
-        candidates.push({ header, field, score: bestScore });
+        candidates.push({ header, field: fieldKey, score: bestScore });
       }
     }
   }
 
-  // Sort by score descending so best matches are assigned first
   candidates.sort((a, b) => b.score - a.score);
 
   for (const c of candidates) {
