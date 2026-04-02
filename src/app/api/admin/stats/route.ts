@@ -63,10 +63,10 @@ export async function GET(request: NextRequest) {
   const [totalRes, weekRes, monthRes, allLeads, recentRes, allAssignments, customersRes] =
     await Promise.all([
       supabase.from('leads').select('id', { count: 'exact', head: true }),
-      supabase.from('leads').select('id', { count: 'exact', head: true }).gte('created_at', weekAgo),
-      supabase.from('leads').select('id', { count: 'exact', head: true }).gte('created_at', monthAgo),
+      supabase.from('leads').select('id', { count: 'exact', head: true }).neq('bron', 'excel_import').gte('created_at', weekAgo),
+      supabase.from('leads').select('id', { count: 'exact', head: true }).neq('bron', 'excel_import').gte('created_at', monthAgo),
       fetchAll<{ id: string; status: string; branch: string }>(supabase, 'leads', 'id, status, branch'),
-      supabase.from('leads').select('*, customers(id, name)').order('created_at', { ascending: false }).limit(10),
+      supabase.from('leads').select('*, customers(id, name)').neq('bron', 'excel_import').order('created_at', { ascending: false }).limit(10),
       fetchAll<{ lead_id: string; customers: { name: string } | null }>(supabase, 'lead_assignments', 'lead_id, customers(name)'),
       supabase.from('customers').select('id', { count: 'exact', head: true }),
     ]);
@@ -98,8 +98,8 @@ export async function GET(request: NextRequest) {
     const prevStart = getPrevPeriodStart(p).toISOString();
 
     const [leadsNow, leadsPrev, assignNow, assignPrev] = await Promise.all([
-      supabase.from('leads').select('id', { count: 'exact', head: true }).gte('created_at', start),
-      supabase.from('leads').select('id', { count: 'exact', head: true }).gte('created_at', prevStart).lt('created_at', start),
+      supabase.from('leads').select('id', { count: 'exact', head: true }).neq('bron', 'excel_import').gte('created_at', start),
+      supabase.from('leads').select('id', { count: 'exact', head: true }).neq('bron', 'excel_import').gte('created_at', prevStart).lt('created_at', start),
       supabase.from('lead_assignments').select('id', { count: 'exact', head: true }).gte('assigned_at', start),
       supabase.from('lead_assignments').select('id', { count: 'exact', head: true }).gte('assigned_at', prevStart).lt('assigned_at', start),
     ]);

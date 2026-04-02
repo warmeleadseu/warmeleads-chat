@@ -22,10 +22,11 @@ export async function GET(request: NextRequest) {
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - MAX_LEAD_AGE_DAYS);
 
-  // Phase 1: Enrich recent leads missing coordinates
+  // Phase 1: Enrich recent leads missing coordinates (skip spreadsheet imports)
   const { data: leads } = await supabase
     .from('leads')
     .select('id, postcode, huisnummer, plaatsnaam, provincie, lat, lng, land, telefoonnummer')
+    .neq('bron', 'excel_import')
     .gte('created_at', cutoff.toISOString())
     .not('postcode', 'is', null)
     .not('postcode', 'eq', '')
@@ -70,11 +71,12 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // Phase 2: Validate phone numbers for leads without phone_valid set
+  // Phase 2: Validate phone numbers for leads without phone_valid set (skip spreadsheet imports)
   let phonesValidated = 0;
   const { data: unvalidated } = await supabase
     .from('leads')
     .select('id, telefoonnummer')
+    .neq('bron', 'excel_import')
     .is('phone_valid', null)
     .gte('created_at', cutoff.toISOString())
     .limit(500);
@@ -87,12 +89,13 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // Phase 3: Delete profanity leads (recent) and sync affected batch counters
+  // Phase 3: Delete profanity leads (recent, skip spreadsheet imports) and sync affected batch counters
   let profanityDeleted = 0;
   const affectedBatchIds = new Set<string>();
   const { data: recentLeads } = await supabase
     .from('leads')
     .select('id, naam_klant, email, notities, custom_fields')
+    .neq('bron', 'excel_import')
     .gte('created_at', cutoff.toISOString())
     .limit(2000);
 

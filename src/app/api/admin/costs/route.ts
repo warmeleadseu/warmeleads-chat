@@ -25,10 +25,11 @@ export async function GET(request: NextRequest) {
   }
   const globalStartDate = branchStartDate.size > 0 ? [...branchStartDate.values()].sort()[0] : today;
 
-  // ── 1. All our leads with campaign info ──
+  // ── 1. All our leads with campaign info (exclude spreadsheet imports) ──
   const { data: allLeads } = await supabase
     .from('leads')
-    .select('id, branch, meta_campaign_id, wervingsdatum, lead_cost');
+    .select('id, branch, meta_campaign_id, wervingsdatum, lead_cost')
+    .neq('bron', 'excel_import');
 
   const leadsWithCampaign = (allLeads || []).filter(l => l.meta_campaign_id);
   const campaignBranchMap = new Map<string, string>();

@@ -34,6 +34,7 @@ export async function GET(request: NextRequest) {
   const { count: newLeadsThisWeek } = await supabase
     .from('leads')
     .select('id', { count: 'exact', head: true })
+    .neq('bron', 'excel_import')
     .gte('created_at', mondayISO);
 
   const { count: assignedThisWeek } = await supabase
@@ -60,6 +61,7 @@ export async function GET(request: NextRequest) {
   const { data: branchData } = await supabase
     .from('leads')
     .select('branch')
+    .neq('bron', 'excel_import')
     .gte('created_at', mondayISO);
 
   const branchCounts: Record<string, number> = {};

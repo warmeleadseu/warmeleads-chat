@@ -143,10 +143,11 @@ export async function syncMetaAdSpend(dateFrom: string, dateTo: string): Promise
   // Phase 2: Calculate CPL per lead based on campaign spend / OUR lead count
   let leadsUpdated = 0;
 
-  // Get all our leads with campaign info
+  // Get all our leads with campaign info (exclude spreadsheet imports)
   const { data: ourLeads } = await supabase
     .from('leads')
     .select('id, meta_campaign_id, wervingsdatum')
+    .neq('bron', 'excel_import')
     .not('meta_campaign_id', 'is', null);
 
   // Count our leads per campaign per day

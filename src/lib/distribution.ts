@@ -296,6 +296,7 @@ export async function distributeUnassignedLeads(): Promise<{ distributed: number
   const { data: leads } = await supabase
     .from('leads')
     .select('*')
+    .neq('bron', 'excel_import')
     .not('lat', 'is', null)
     .not('lng', 'is', null)
     .gte('created_at', cutoff.toISOString())
