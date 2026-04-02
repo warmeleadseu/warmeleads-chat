@@ -7,6 +7,16 @@ import { checkLeadProfanity } from '@/lib/profanityFilter';
 import { calculateQualityScore } from '@/lib/leadQuality';
 import { logAudit } from '@/lib/audit';
 
+function normalizePhone(raw: string): string {
+  if (!raw) return '';
+  let p = raw.replace(/[\s\-().\/]/g, '');
+  if (p.startsWith('+31')) p = '0' + p.slice(3);
+  else if (p.startsWith('0031')) p = '0' + p.slice(4);
+  else if (p.startsWith('+32')) p = '0' + p.slice(3);
+  else if (p.startsWith('0032')) p = '0' + p.slice(4);
+  return p;
+}
+
 function cleanPostcode(raw: string): string {
   if (!raw) return '';
   return raw.replace(/\s+/g, '').toUpperCase().trim();
@@ -47,9 +57,11 @@ export async function POST(request: NextRequest) {
 
     const supabase = createServerClient();
 
-    // Pre-fetch existing emails for dedup
-    const emails = leads.map(l => (l.email || '').toLowerCase().trim()).filter(Boolean);
+    // Pre-fetch existing emails + phones for dedup
     const existingEmails = new Set<string>();
+    const existingPhones = new Set<string>();
+
+    const emails = leads.map(l => (l.email || '').toLowerCase().trim()).filter(Boolean);
     if (emails.length > 0) {
       const CHUNK = 200;
       for (let i = 0; i < emails.length; i += CHUNK) {
@@ -60,6 +72,22 @@ export async function POST(request: NextRequest) {
           .eq('branch', branch)
           .in('email', chunk);
         (data || []).forEach(r => { if (r.email) existingEmails.add(r.email.toLowerCase()); });
+      }
+    }
+
+    const phones = leads.map(l => normalizePhone(l.telefoonnummer || '')).filter(Boolean);
+    if (phones.length > 0) {
+      const CHUNK = 200;
+      for (let i = 0; i < phones.length; i += CHUNK) {
+        const chunk = phones.slice(i, i + CHUNK);
+        const { data } = await supabase
+          .from('leads')
+          .select('telefoonnummer')
+          .eq('branch', branch)
+          .in('telefoonnummer', chunk);
+        (data || []).forEach(r => {
+          if (r.telefoonnummer) existingPhones.add(normalizePhone(r.telefoonnummer));
+        });
       }
     }
 
@@ -78,10 +106,9 @@ export async function POST(request: NextRequest) {
       if (!naam) { skipped++; continue; }
       if (!email && !phone) { skipped++; continue; }
 
-      if (email && existingEmails.has(email.toLowerCase())) {
-        duplicates++;
-        continue;
-      }
+      const normPhone = normalizePhone(phone);
+      if (email && existingEmails.has(email.toLowerCase())) { duplicates++; continue; }
+      if (normPhone && existingPhones.has(normPhone)) { duplicates++; continue; }
 
       try {
         const postcode = cleanPostcode(lead.postcode || '');
@@ -137,6 +164,7 @@ export async function POST(request: NextRequest) {
         BATCH_INSERT.push(enriched);
 
         if (email) existingEmails.add(email.toLowerCase());
+        if (normPhone) existingPhones.add(normPhone);
         imported++;
       } catch (err) {
         errors++;
