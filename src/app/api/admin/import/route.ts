@@ -1,0 +1,184 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
+import { createServerClient } from '@/lib/supabase';
+import { enrichLeadAddress } from '@/lib/pdok';
+import { isPhoneValid } from '@/lib/phoneValidation';
+import { checkLeadProfanity } from '@/lib/profanityFilter';
+import { calculateQualityScore } from '@/lib/leadQuality';
+import { logAudit } from '@/lib/audit';
+
+function cleanPostcode(raw: string): string {
+  if (!raw) return '';
+  return raw.replace(/\s+/g, '').toUpperCase().trim();
+}
+
+function parseDateValue(raw: string): string {
+  if (!raw) return new Date().toISOString().split('T')[0];
+
+  // Excel serial date (number like 45678)
+  const num = Number(raw);
+  if (!isNaN(num) && num > 30000 && num < 60000) {
+    const epoch = new Date(Date.UTC(1899, 11, 30));
+    epoch.setUTCDate(epoch.getUTCDate() + num);
+    return epoch.toISOString().split('T')[0];
+  }
+
+  // DD-MM-YYYY or DD/MM/YYYY
+  const dmy = raw.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);
+  if (dmy) return `${dmy[3]}-${dmy[2].padStart(2, '0')}-${dmy[1].padStart(2, '0')}`;
+
+  // YYYY-MM-DD (already ISO)
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+
+  return new Date().toISOString().split('T')[0];
+}
+
+export async function POST(request: NextRequest) {
+  const admin = await verifyAdmin(request);
+  if (!admin) return unauthorized();
+
+  try {
+    const { branch, leads } = await request.json();
+
+    if (!branch || !Array.isArray(leads) || leads.length === 0) {
+      return NextResponse.json({ error: 'branch en leads zijn verplicht' }, { status: 400 });
+    }
+
+    const supabase = createServerClient();
+
+    // Pre-fetch existing emails for dedup
+    const emails = leads.map(l => (l.email || '').toLowerCase().trim()).filter(Boolean);
+    const existingEmails = new Set<string>();
+    if (emails.length > 0) {
+      const CHUNK = 200;
+      for (let i = 0; i < emails.length; i += CHUNK) {
+        const chunk = emails.slice(i, i + CHUNK);
+        const { data } = await supabase
+          .from('leads')
+          .select('email')
+          .eq('branch', branch)
+          .in('email', chunk);
+        (data || []).forEach(r => { if (r.email) existingEmails.add(r.email.toLowerCase()); });
+      }
+    }
+
+    let imported = 0;
+    let skipped = 0;
+    let duplicates = 0;
+    let errors = 0;
+    const errorDetails: string[] = [];
+    const BATCH_INSERT: Record<string, unknown>[] = [];
+
+    for (const lead of leads) {
+      const naam = (lead.naam_klant || '').trim();
+      const email = (lead.email || '').trim();
+      const phone = (lead.telefoonnummer || '').trim();
+
+      if (!naam) { skipped++; continue; }
+      if (!email && !phone) { skipped++; continue; }
+
+      if (email && existingEmails.has(email.toLowerCase())) {
+        duplicates++;
+        continue;
+      }
+
+      try {
+        const postcode = cleanPostcode(lead.postcode || '');
+        const huisnummer = (lead.huisnummer || '').trim();
+
+        const commonFields: Record<string, unknown> = {
+          branch,
+          naam_klant: naam,
+          email: email || null,
+          telefoonnummer: phone || null,
+          phone_valid: phone ? isPhoneValid(phone) : null,
+          postcode: postcode || null,
+          huisnummer: huisnummer || null,
+          plaatsnaam: (lead.plaatsnaam || '').trim() || null,
+          provincie: (lead.provincie || '').trim() || null,
+          wervingsdatum: parseDateValue(lead.wervingsdatum || ''),
+          status: 'nieuw',
+          bron: 'excel_import',
+          notities: (lead.notities || '').trim() || null,
+        };
+
+        // Custom fields
+        const customFields: Record<string, string> = {};
+        const commonKeys = new Set([
+          'naam_klant', 'email', 'telefoonnummer', 'postcode', 'huisnummer',
+          'plaatsnaam', 'provincie', 'wervingsdatum', 'status', 'bron', 'notities',
+        ]);
+        for (const [key, value] of Object.entries(lead)) {
+          if (!commonKeys.has(key) && value && String(value).trim()) {
+            customFields[key] = String(value).trim();
+          }
+        }
+        if (Object.keys(customFields).length > 0) {
+          commonFields.custom_fields = customFields;
+        }
+
+        // Enrich address
+        let enriched = commonFields;
+        if (postcode && huisnummer) {
+          try {
+            enriched = await enrichLeadAddress(commonFields as Parameters<typeof enrichLeadAddress>[0]);
+          } catch { /* use unenriched data */ }
+        }
+
+        // Profanity check
+        if (checkLeadProfanity(enriched as Record<string, unknown>).blocked) {
+          skipped++;
+          continue;
+        }
+
+        enriched.quality_score = calculateQualityScore(enriched);
+
+        BATCH_INSERT.push(enriched);
+
+        if (email) existingEmails.add(email.toLowerCase());
+        imported++;
+      } catch (err) {
+        errors++;
+        if (errorDetails.length < 5) {
+          errorDetails.push(`${err instanceof Error ? err.message : 'Onbekende fout'} (${naam})`);
+        }
+      }
+    }
+
+    // Bulk insert in chunks
+    let dbErrors = 0;
+    const CHUNK = 100;
+    for (let i = 0; i < BATCH_INSERT.length; i += CHUNK) {
+      const chunk = BATCH_INSERT.slice(i, i + CHUNK);
+      const { error: insertError } = await supabase.from('leads').insert(chunk);
+      if (insertError) {
+        dbErrors += chunk.length;
+        if (errorDetails.length < 5) {
+          errorDetails.push(`DB insert fout: ${insertError.message}`);
+        }
+      }
+    }
+
+    if (dbErrors > 0) {
+      imported = Math.max(0, imported - dbErrors);
+      errors += dbErrors;
+    }
+
+    logAudit({
+      adminId: admin.id,
+      adminName: admin.name,
+      action: 'spreadsheet_import',
+      entityType: 'lead',
+      details: { branch, imported, skipped, duplicates, errors },
+    });
+
+    return NextResponse.json({ imported, skipped, duplicates, errors, errorDetails });
+  } catch (err) {
+    console.error('Import error:', err);
+    return NextResponse.json(
+      { error: 'Import mislukt', details: err instanceof Error ? err.message : 'Onbekende fout' },
+      { status: 500 },
+    );
+  }
+}
