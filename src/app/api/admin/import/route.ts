@@ -113,9 +113,14 @@ export async function POST(request: NextRequest) {
       const phone = (lead.telefoonnummer || '').trim();
 
       if (!naam) { skipped++; continue; }
-      if (!email && !phone) { skipped++; continue; }
 
-      const normPhone = normalizePhone(phone);
+      // If phone field is filled but doesn't look like a phone number, clear it
+      const looksLikePhone = phone && /\d{6,}/.test(phone.replace(/[\s\-().+\/]/g, ''));
+      const cleanPhone = looksLikePhone ? phone : '';
+
+      if (!email && !cleanPhone) { skipped++; continue; }
+
+      const normPhone = normalizePhone(cleanPhone);
       if (email && existingEmails.has(email.toLowerCase())) { duplicates++; continue; }
       if (normPhone && existingPhones.has(normPhone)) { duplicates++; continue; }
 
@@ -126,8 +131,8 @@ export async function POST(request: NextRequest) {
         branch,
         naam_klant: naam,
         email: email || null,
-        telefoonnummer: phone || null,
-        phone_valid: phone ? isPhoneValid(phone) : null,
+        telefoonnummer: cleanPhone || null,
+        phone_valid: cleanPhone ? isPhoneValid(cleanPhone) : null,
         postcode: postcode || null,
         huisnummer: huisnummer || null,
         plaatsnaam: (lead.plaatsnaam || '').trim() || null,
