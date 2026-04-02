@@ -335,7 +335,7 @@ export default function ImportPage() {
           return v === 'valid';
         });
 
-      const BATCH = 50;
+      const BATCH = 200;
       let tabImported = 0;
       let tabSkipped = sheet.rows.length - mappedLeads.length;
       let tabDuplicates = 0;

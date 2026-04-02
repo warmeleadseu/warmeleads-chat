@@ -7,6 +7,8 @@ import { checkLeadProfanity } from '@/lib/profanityFilter';
 import { calculateQualityScore } from '@/lib/leadQuality';
 import { logAudit } from '@/lib/audit';
 
+const ENRICH_CONCURRENCY = 8;
+
 function normalizePhone(raw: string): string {
   if (!raw) return '';
   let p = raw.replace(/[\s\-().\/]/g, '');
@@ -96,7 +98,14 @@ export async function POST(request: NextRequest) {
     let duplicates = 0;
     let errors = 0;
     const errorDetails: string[] = [];
-    const BATCH_INSERT: Record<string, unknown>[] = [];
+
+    // Pass 1: Validate, dedup, build lead objects (fast, no API calls)
+    const commonKeys = new Set([
+      'naam_klant', 'email', 'telefoonnummer', 'postcode', 'huisnummer',
+      'plaatsnaam', 'provincie', 'wervingsdatum', 'status', 'bron', 'notities',
+    ]);
+
+    const prepared: Record<string, unknown>[] = [];
 
     for (const lead of leads) {
       const naam = (lead.naam_klant || '').trim();
@@ -110,67 +119,66 @@ export async function POST(request: NextRequest) {
       if (email && existingEmails.has(email.toLowerCase())) { duplicates++; continue; }
       if (normPhone && existingPhones.has(normPhone)) { duplicates++; continue; }
 
-      try {
-        const postcode = cleanPostcode(lead.postcode || '');
-        const huisnummer = (lead.huisnummer || '').trim();
+      const postcode = cleanPostcode(lead.postcode || '');
+      const huisnummer = (lead.huisnummer || '').trim();
 
-        const commonFields: Record<string, unknown> = {
-          branch,
-          naam_klant: naam,
-          email: email || null,
-          telefoonnummer: phone || null,
-          phone_valid: phone ? isPhoneValid(phone) : null,
-          postcode: postcode || null,
-          huisnummer: huisnummer || null,
-          plaatsnaam: (lead.plaatsnaam || '').trim() || null,
-          provincie: (lead.provincie || '').trim() || null,
-          wervingsdatum: parseDateValue(lead.wervingsdatum || ''),
-          status: 'nieuw',
-          bron: 'excel_import',
-          notities: (lead.notities || '').trim() || null,
-        };
+      const fields: Record<string, unknown> = {
+        branch,
+        naam_klant: naam,
+        email: email || null,
+        telefoonnummer: phone || null,
+        phone_valid: phone ? isPhoneValid(phone) : null,
+        postcode: postcode || null,
+        huisnummer: huisnummer || null,
+        plaatsnaam: (lead.plaatsnaam || '').trim() || null,
+        provincie: (lead.provincie || '').trim() || null,
+        wervingsdatum: parseDateValue(lead.wervingsdatum || ''),
+        status: 'nieuw',
+        bron: 'excel_import',
+        notities: (lead.notities || '').trim() || null,
+      };
 
-        // Custom fields
-        const customFields: Record<string, string> = {};
-        const commonKeys = new Set([
-          'naam_klant', 'email', 'telefoonnummer', 'postcode', 'huisnummer',
-          'plaatsnaam', 'provincie', 'wervingsdatum', 'status', 'bron', 'notities',
-        ]);
-        for (const [key, value] of Object.entries(lead)) {
-          if (!commonKeys.has(key) && value && String(value).trim()) {
-            customFields[key] = String(value).trim();
+      const customFields: Record<string, string> = {};
+      for (const [key, value] of Object.entries(lead)) {
+        if (!commonKeys.has(key) && value && String(value).trim()) {
+          customFields[key] = String(value).trim();
+        }
+      }
+      if (Object.keys(customFields).length > 0) {
+        fields.custom_fields = customFields;
+      }
+
+      if (checkLeadProfanity(fields as Record<string, unknown>).blocked) {
+        skipped++;
+        continue;
+      }
+
+      if (email) existingEmails.add(email.toLowerCase());
+      if (normPhone) existingPhones.add(normPhone);
+      prepared.push(fields);
+    }
+
+    // Pass 2: Enrich addresses in parallel batches (the slow part, now concurrent)
+    const BATCH_INSERT: Record<string, unknown>[] = [];
+
+    for (let i = 0; i < prepared.length; i += ENRICH_CONCURRENCY) {
+      const batch = prepared.slice(i, i + ENRICH_CONCURRENCY);
+      const enriched = await Promise.all(
+        batch.map(async (fields) => {
+          if (fields.postcode && fields.huisnummer) {
+            try {
+              return await enrichLeadAddress(fields as Parameters<typeof enrichLeadAddress>[0]);
+            } catch { return fields; }
           }
-        }
-        if (Object.keys(customFields).length > 0) {
-          commonFields.custom_fields = customFields;
-        }
+          return fields;
+        })
+      );
 
-        // Enrich address
-        let enriched = commonFields;
-        if (postcode && huisnummer) {
-          try {
-            enriched = await enrichLeadAddress(commonFields as Parameters<typeof enrichLeadAddress>[0]);
-          } catch { /* use unenriched data */ }
-        }
-
-        // Profanity check
-        if (checkLeadProfanity(enriched as Record<string, unknown>).blocked) {
-          skipped++;
-          continue;
-        }
-
-        enriched.quality_score = calculateQualityScore(enriched);
-
-        BATCH_INSERT.push(enriched);
-
-        if (email) existingEmails.add(email.toLowerCase());
-        if (normPhone) existingPhones.add(normPhone);
+      for (const e of enriched) {
+        const row = e as Record<string, unknown>;
+        row.quality_score = calculateQualityScore(row);
+        BATCH_INSERT.push(row);
         imported++;
-      } catch (err) {
-        errors++;
-        if (errorDetails.length < 5) {
-          errorDetails.push(`${err instanceof Error ? err.message : 'Onbekende fout'} (${naam})`);
-        }
       }
     }
 
