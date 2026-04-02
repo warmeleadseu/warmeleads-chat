@@ -183,14 +183,54 @@ function autoMap(headers: string[], branchFields: { key: string; label: string }
   return m;
 }
 
-function guessSheetBranch(sheetName: string, branches: BranchConfig[]): string {
-  const norm = normalize(sheetName);
+function guessSheetBranch(
+  sheetName: string,
+  headers: string[],
+  rows: Record<string, unknown>[],
+  branches: BranchConfig[],
+): string {
+  const scores = new Map<string, number>();
+  const normName = normalize(sheetName);
+
   for (const b of branches) {
-    if (norm.includes(normalize(b.slug)) || norm.includes(normalize(b.name))) {
-      return b.slug;
+    if (!b.is_active) continue;
+    let score = 0;
+    const bSlug = normalize(b.slug);
+    const bName = normalize(b.name);
+
+    // 1. Sheet name match (strong signal)
+    if (normName === bSlug || normName === bName) score += 100;
+    else if (normName.includes(bSlug) || normName.includes(bName)) score += 50;
+
+    // 2. Column headers matching branch-specific fields (strong signal)
+    const branchFieldKeys = new Set(b.branch_fields.map(f => normalize(f.key)));
+    const branchFieldLabels = new Set(b.branch_fields.map(f => normalize(f.label)));
+    for (const h of headers) {
+      const nh = normalize(h);
+      if (branchFieldKeys.has(nh)) score += 20;
+      else if (branchFieldLabels.has(nh)) score += 20;
+      else if ([...branchFieldKeys].some(k => nh.includes(k) && k.length >= 4)) score += 10;
+      else if ([...branchFieldLabels].some(l => nh.includes(l) && l.length >= 4)) score += 10;
     }
+
+    // 3. Scan sample cell values for branch keywords (moderate signal)
+    const sampleRows = rows.slice(0, 20);
+    const allValues = sampleRows.flatMap(r => Object.values(r).map(v => normalize(String(v || ''))));
+    const keywords = [bSlug, bName, ...b.branch_fields.map(f => normalize(f.key))];
+    for (const val of allValues) {
+      if (!val || val.length < 4) continue;
+      for (const kw of keywords) {
+        if (kw.length >= 4 && val.includes(kw)) { score += 2; break; }
+      }
+    }
+
+    if (score > 0) scores.set(b.slug, score);
   }
-  return '';
+
+  if (scores.size === 0) return '';
+
+  const sorted = [...scores.entries()].sort((a, b) => b[1] - a[1]);
+  return sorted[0][1] >= 10 ? sorted[0][0] : '';
 }
 
 /* ─── Main Component ──────────────────────────────────────────────────── */
@@ -240,8 +280,8 @@ export default function ImportPage() {
 
     if (parsed.length === 0) return;
 
-    // Auto-guess branches from sheet names
-    parsed.forEach(s => { s.branch = guessSheetBranch(s.name, branches); });
+    // Auto-guess branches from sheet names, headers, and data
+    parsed.forEach(s => { s.branch = guessSheetBranch(s.name, s.headers, s.rows, branches); });
 
     setSheets(parsed);
     setStep('tabs');
