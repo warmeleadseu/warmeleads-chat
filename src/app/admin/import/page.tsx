@@ -78,7 +78,7 @@ const COMMON_CRM_FIELDS = [
 
 const SKIP_PATTERNS = [
   /afstand/i, /binnen\s*gebied/i, /verwerkt/i, /geexporteerd/i, /ge[eë]xporteerd/i,
-  /nieuwsbrief/i, /newsletter/i,
+  /nieuwsbrief/i, /newsletter/i, /opmerkingen/i, /opmerking/i,
 ];
 
 const ALIASES: Record<string, string[]> = {
