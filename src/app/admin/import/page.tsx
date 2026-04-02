@@ -82,32 +82,32 @@ const SKIP_PATTERNS = [
 ];
 
 const ALIASES: Record<string, string[]> = {
-  naam_klant: ['naam', 'name', 'naamklant', 'klantnaam', 'volledigenaam', 'naambewoner', 'naamklant'],
-  email: ['email', 'emailadres', 'emal', 'mailadres', 'mail', 'emailadres'],
-  telefoonnummer: ['telefoon', 'telefoonnummer', 'tel', 'phone', 'mobiel', 'gsm', 'nummer'],
-  postcode: ['postcode', 'pc', 'zip', 'postal', 'zipcode'],
-  huisnummer: ['huisnummer', 'huisnr', 'nr'],
-  plaatsnaam: ['plaats', 'plaatsnaam', 'woonplaats', 'stad', 'city'],
+  naam_klant: ['naamklant', 'klantnaam', 'volledigenaam', 'naambewoner', 'voornaam', 'achternaam', 'naam', 'name', 'fullname'],
+  email: ['emailadres', 'emailaddress', 'mailadres', 'email', 'emal', 'mail'],
+  telefoonnummer: ['telefoonnummer', 'telefoon', 'phonenumber', 'phone', 'mobiel', 'gsmnummer', 'gsm', 'telnr', 'tel'],
+  postcode: ['postcode', 'zipcode', 'postalcode', 'postal', 'zip'],
+  huisnummer: ['huisnummer', 'huisnr', 'housenumber', 'huisnummertoevoeging'],
+  plaatsnaam: ['plaatsnaam', 'woonplaats', 'plaats', 'stad', 'city', 'gemeente'],
   provincie: ['provincie', 'province', 'regio'],
-  wervingsdatum: ['datum', 'wervingsdatum', 'date', 'aanvraagdatum', 'invuldatum', 'datuminteresseklant'],
-  notities: ['notities', 'opmerkingen', 'notes', 'opmerking'],
-  zonnepanelen: ['zonnepanelen', 'panelen', 'solar'],
-  dynamisch_contract: ['dynamischcontract', 'dynamisch', 'contract'],
-  stroomverbruik: ['stroomverbruik', 'verbruik', 'kwh', 'verbruikinkwh'],
-  budget: ['budget'],
-  reden_thuisbatterij: ['reden', 'redenthuisbatterij', 'motivatie'],
-  koopintentie: ['koopintentie', 'koopintentie'],
-  type_airco: ['typeairco', 'type', 'aircotype'],
-  koelen_verwarmen: ['koelenverwarmen', 'koelen', 'verwarmen'],
-  hoeveel_ruimtes: ['hoeveelruimtes', 'ruimtes', 'aantalruimtes', 'kamers'],
-  zakelijk: ['zakelijk', 'business', 'bedrijf'],
-  koop_of_huur: ['koopofhuur', 'koop', 'huur', 'koophuur'],
-  boorwerkzaamheden_toegestaan: ['boorwerkzaamheden', 'boorwerk', 'boren', 'boorwerkzaamhedentoegestaan'],
-  particulier_ondernemer: ['particulierofondernemer', 'particulier', 'ondernemer'],
-  schuin_plat_dak: ['schuinofplatdak', 'schuin', 'plat', 'daktype', 'dak'],
-  orientatie_dak: ['orientatiedak', 'orientatie', 'dakrichting'],
-  wanneer_installatie: ['wanneerinstallatie', 'installatie', 'wanneer', 'planning'],
-  hoeveel_panelen: ['hoeveelpanelen', 'aantalpanelen', 'panelen'],
+  wervingsdatum: ['wervingsdatum', 'aanvraagdatum', 'invuldatum', 'datuminteresseklant', 'datum', 'date', 'created'],
+  notities: ['notities', 'opmerkingen', 'opmerking', 'notes', 'toelichting', 'extra'],
+  zonnepanelen: ['zonnepanelen', 'zonnepaneel', 'solar', 'solarpanels'],
+  dynamisch_contract: ['dynamischcontract', 'dynamisch'],
+  stroomverbruik: ['stroomverbruik', 'verbruikinkwh', 'kwh', 'verbruik', 'energieverbruik'],
+  budget: ['budget', 'prijsindicatie'],
+  reden_thuisbatterij: ['redenthuisbatterij', 'reden', 'motivatie'],
+  koopintentie: ['koopintentie'],
+  type_airco: ['typeairco', 'aircotype'],
+  koelen_verwarmen: ['koelenverwarmen', 'koelenofverwarmen'],
+  hoeveel_ruimtes: ['hoeveelruimtes', 'aantalruimtes', 'ruimtes', 'kamers'],
+  zakelijk: ['zakelijkofparticulier', 'zakelijk'],
+  koop_of_huur: ['koopofhuur', 'koophuur'],
+  boorwerkzaamheden_toegestaan: ['boorwerkzaamhedentoegestaan', 'boorwerkzaamheden', 'boorwerk'],
+  particulier_ondernemer: ['particulierofondernemer'],
+  schuin_plat_dak: ['schuinofplatdak', 'daktype'],
+  orientatie_dak: ['orientatiedak', 'dakrichting', 'orientatie'],
+  wanneer_installatie: ['wanneerinstallatie', 'installatiedatum', 'planning'],
+  hoeveel_panelen: ['hoeveelpanelen', 'aantalpanelen'],
 };
 
 const COLOR_MAP: Record<string, { bg: string; text: string; border: string }> = {
@@ -131,9 +131,9 @@ function normalize(s: string): string {
 
 function autoMap(headers: string[], branchFields: { key: string; label: string }[]): Record<string, string> {
   const m: Record<string, string> = {};
-  const used = new Set<string>();
+  const usedFields = new Set<string>();
+  const usedHeaders = new Set<string>();
 
-  // Build extended aliases with branch fields
   const extAliases = { ...ALIASES };
   for (const f of branchFields) {
     if (!extAliases[f.key]) {
@@ -141,18 +141,45 @@ function autoMap(headers: string[], branchFields: { key: string; label: string }
     }
   }
 
+  // Score each (header, field) pair; higher = better match
+  const candidates: { header: string; field: string; score: number }[] = [];
+
   for (const header of headers) {
     if (SKIP_PATTERNS.some(p => p.test(header))) continue;
     const norm = normalize(header);
+    if (!norm) continue;
+
     for (const [field, alts] of Object.entries(extAliases)) {
-      if (used.has(field)) continue;
-      if (alts.some(a => norm.includes(a) || a.includes(norm))) {
-        m[header] = field;
-        used.add(field);
-        break;
+      let bestScore = 0;
+
+      for (const alias of alts) {
+        if (norm === alias) {
+          bestScore = Math.max(bestScore, 1000 + alias.length);
+        } else if (norm.startsWith(alias) || alias.startsWith(norm)) {
+          bestScore = Math.max(bestScore, 500 + alias.length);
+        } else if (norm.includes(alias) && alias.length >= 4) {
+          bestScore = Math.max(bestScore, 100 + alias.length);
+        } else if (alias.includes(norm) && norm.length >= 4) {
+          bestScore = Math.max(bestScore, 50 + norm.length);
+        }
+      }
+
+      if (bestScore > 0) {
+        candidates.push({ header, field, score: bestScore });
       }
     }
   }
+
+  // Sort by score descending so best matches are assigned first
+  candidates.sort((a, b) => b.score - a.score);
+
+  for (const c of candidates) {
+    if (usedFields.has(c.field) || usedHeaders.has(c.header)) continue;
+    m[c.header] = c.field;
+    usedFields.add(c.field);
+    usedHeaders.add(c.header);
+  }
+
   return m;
 }
 
