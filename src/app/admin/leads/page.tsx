@@ -6,7 +6,6 @@ import {
   MagnifyingGlassIcon,
   ArrowDownTrayIcon,
   PlusIcon,
-  PencilSquareIcon,
   TrashIcon,
   XMarkIcon,
   ChevronLeftIcon,
@@ -288,58 +287,62 @@ export default function LeadsCRMPage() {
         )}
       </AnimatePresence>
 
-      <div className="mb-2 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
-        <select value={branch} onChange={e => setBranch(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700">
-          <option value="all">Alle branches</option>
-          {branches.filter(b => b.is_active).map(b => <option key={b.slug} value={b.slug}>{b.name}</option>)}
-        </select>
-        <select value={customerId} onChange={e => setCustomerId(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700">
-          <option value="all">Alle klanten</option>
-          {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
-        <select value={status} onChange={e => setStatus(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700">
-          <option value="all">Alle statussen</option>
-          {STATUSES.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
-        </select>
-        <select value={province} onChange={e => setProvince(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700">
-          <option value="all">Alle provincies</option>
-          <optgroup label="Nederland">{PROVINCES_NL.map(p => <option key={p} value={p}>{p}</option>)}</optgroup>
-          <optgroup label="België">{PROVINCES_BE.map(p => <option key={p} value={p}>{p}</option>)}</optgroup>
-        </select>
-        <select value={source} onChange={e => setSource(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700">
-          <option value="all">Alle bronnen</option>
-          <option value="handmatig">Handmatig</option>
-          <option value="excel_import">Excel import</option>
-          <option value="zapier">Zapier</option>
-        </select>
-        <select value={phoneFilter} onChange={e => setPhoneFilter(e.target.value)} className={`rounded-lg border px-3 py-2.5 text-sm ${phoneFilter === 'false' ? 'border-amber-300 bg-amber-50 text-amber-700' : 'border-slate-200 bg-white text-slate-700'}`}>
-          <option value="all">Alle telefoon</option>
-          <option value="false">Verdacht nummer</option>
-          <option value="true">Geldig nummer</option>
-        </select>
-        <button
-          onClick={handleValidatePhones}
-          disabled={validatingPhones}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm font-medium text-amber-700 transition hover:bg-amber-100 disabled:opacity-50"
-        >
-          <ExclamationTriangleIcon className={`h-4 w-4 ${validatingPhones ? 'animate-pulse' : ''}`} />
-          {validatingPhones ? 'Controleren...' : 'Nummers controleren'}
-        </button>
-        {phoneValidationResult && (
-          <span className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">
-            {phoneValidationResult.validated} gecontroleerd, {phoneValidationResult.invalid} verdacht
-          </span>
-        )}
-      </div>
-      <div className="mb-4 grid grid-cols-2 gap-2 sm:max-w-xs">
-        <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700" />
-        <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700" />
-      </div>
-
-      <div className="relative mb-4">
-        <MagnifyingGlassIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-        <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Zoek op naam, email, telefoon of postcode..."
-          className="w-full rounded-lg border border-slate-200 bg-white py-2.5 pl-9 pr-4 text-sm text-slate-700 outline-none focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/30" />
+      <div className="mb-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="relative mb-3">
+          <MagnifyingGlassIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Zoek op naam, email, telefoon of postcode..."
+            className="w-full rounded-lg border border-slate-200 bg-slate-50/50 py-2.5 pl-9 pr-4 text-sm text-slate-700 outline-none focus:border-brand-purple/50 focus:bg-white focus:ring-1 focus:ring-brand-purple/30" />
+        </div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+          <select value={branch} onChange={e => setBranch(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+            <option value="all">Alle branches</option>
+            {branches.filter(b => b.is_active).map(b => <option key={b.slug} value={b.slug}>{b.name}</option>)}
+          </select>
+          <select value={customerId} onChange={e => setCustomerId(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+            <option value="all">Alle klanten</option>
+            {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+          <select value={status} onChange={e => setStatus(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+            <option value="all">Alle statussen</option>
+            {STATUSES.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+          </select>
+          <select value={province} onChange={e => setProvince(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+            <option value="all">Alle provincies</option>
+            <optgroup label="Nederland">{PROVINCES_NL.map(p => <option key={p} value={p}>{p}</option>)}</optgroup>
+            <optgroup label="België">{PROVINCES_BE.map(p => <option key={p} value={p}>{p}</option>)}</optgroup>
+          </select>
+          <select value={source} onChange={e => setSource(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+            <option value="all">Alle bronnen</option>
+            <option value="handmatig">Handmatig</option>
+            <option value="excel_import">Excel import</option>
+            <option value="zapier">Zapier</option>
+          </select>
+          <select value={phoneFilter} onChange={e => setPhoneFilter(e.target.value)} className={`rounded-lg border px-3 py-2 text-sm ${phoneFilter === 'false' ? 'border-amber-300 bg-amber-50 text-amber-700' : 'border-slate-200 bg-white text-slate-700'}`}>
+            <option value="all">Alle nummers</option>
+            <option value="false">Verdacht nummer</option>
+            <option value="true">Geldig nummer</option>
+          </select>
+        </div>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2">
+            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700" />
+            <span className="text-xs text-slate-400">t/m</span>
+            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700" />
+          </div>
+          <button
+            onClick={handleValidatePhones}
+            disabled={validatingPhones}
+            className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 transition hover:bg-amber-100 disabled:opacity-50"
+          >
+            <ExclamationTriangleIcon className={`h-3.5 w-3.5 ${validatingPhones ? 'animate-pulse' : ''}`} />
+            {validatingPhones ? 'Controleren...' : 'Nummers controleren'}
+          </button>
+          {phoneValidationResult && (
+            <span className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700">
+              {phoneValidationResult.validated} gecontroleerd, {phoneValidationResult.invalid} verdacht
+            </span>
+          )}
+        </div>
       </div>
 
       <AnimatePresence>
@@ -391,8 +394,8 @@ export default function LeadsCRMPage() {
               ) : leads.map(lead => {
                 const badge = getBranchBadge(lead.branch);
                 return (
-                  <tr key={lead.id} className="border-b border-slate-50 transition hover:bg-slate-50/50">
-                    <td className="px-3 py-2.5"><input type="checkbox" checked={selected.has(lead.id)} onChange={() => toggleSelect(lead.id)} className="h-4 w-4 rounded border-slate-300" /></td>
+                  <tr key={lead.id} onClick={() => setEditLead(lead)} className="cursor-pointer border-b border-slate-50 transition hover:bg-slate-50/50">
+                    <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}><input type="checkbox" checked={selected.has(lead.id)} onChange={() => toggleSelect(lead.id)} className="h-4 w-4 rounded border-slate-300" /></td>
                     {branch === 'all' && (
                       <td className="px-3 py-2.5">
                         <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ${badge.light} ${badge.text}`}>{badge.name}</span>
@@ -407,7 +410,7 @@ export default function LeadsCRMPage() {
                       )}
                     </td>
                     {visibleCols.map(col => (
-                      <td key={col} className="whitespace-nowrap px-3 py-2.5 text-sm text-slate-700">
+                      <td key={col} className="whitespace-nowrap px-3 py-2.5 text-sm text-slate-700" onClick={col === 'status' ? e => e.stopPropagation() : undefined}>
                         {col === 'status' ? (
                           <select value={lead.status} onChange={e => handleQuickStatus(lead.id, e.target.value)}
                             className={`rounded-full border-0 px-2.5 py-0.5 text-[11px] font-medium ${STATUS_COLORS[lead.status] || 'bg-slate-100 text-slate-600'}`}>
@@ -431,11 +434,8 @@ export default function LeadsCRMPage() {
                         )}
                       </td>
                     ))}
-                    <td className="px-3 py-2.5">
-                      <div className="flex items-center gap-1">
-                        <button onClick={() => setEditLead(lead)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"><PencilSquareIcon className="h-4 w-4" /></button>
-                        <button onClick={() => handleDeleteSingle(lead.id, lead.naam_klant)} className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500"><TrashIcon className="h-4 w-4" /></button>
-                      </div>
+                    <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
+                      <button onClick={() => handleDeleteSingle(lead.id, lead.naam_klant)} className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500"><TrashIcon className="h-4 w-4" /></button>
                     </td>
                   </tr>
                 );
@@ -454,7 +454,7 @@ export default function LeadsCRMPage() {
         ) : leads.map(lead => {
           const badge = getBranchBadge(lead.branch);
           return (
-            <div key={lead.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div key={lead.id} onClick={() => setEditLead(lead)} className="cursor-pointer rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition active:bg-slate-50">
               <div className="mb-2 flex items-start justify-between">
                 <div className="min-w-0 flex-1">
                   <p className="font-semibold text-slate-900">{lead.naam_klant || '—'}</p>
@@ -465,12 +465,14 @@ export default function LeadsCRMPage() {
                     )}
                   </p>
                 </div>
-                <select value={lead.status} onChange={e => handleQuickStatus(lead.id, e.target.value)}
-                  className={`ml-2 shrink-0 rounded-full border-0 px-2 py-0.5 text-[11px] font-medium ${STATUS_COLORS[lead.status] || 'bg-slate-100 text-slate-600'}`}>
-                  {STATUSES.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
-                </select>
+                <div onClick={e => e.stopPropagation()}>
+                  <select value={lead.status} onChange={e => handleQuickStatus(lead.id, e.target.value)}
+                    className={`ml-2 shrink-0 rounded-full border-0 px-2 py-0.5 text-[11px] font-medium ${STATUS_COLORS[lead.status] || 'bg-slate-100 text-slate-600'}`}>
+                    {STATUSES.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+                  </select>
+                </div>
               </div>
-              <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
                 <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${badge.light} ${badge.text}`}>{badge.name}</span>
                 {lead.plaatsnaam && <span>{lead.plaatsnaam}</span>}
                 {lead.telefoonnummer && (
@@ -480,14 +482,6 @@ export default function LeadsCRMPage() {
                   </span>
                 )}
                 {lead.wervingsdatum && <span>{lead.wervingsdatum}</span>}
-              </div>
-              <div className="flex items-center gap-2">
-                <button onClick={() => setEditLead(lead)} className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-slate-200 py-2 text-xs font-medium text-slate-600 transition hover:bg-slate-50">
-                  <PencilSquareIcon className="h-3.5 w-3.5" /> Bewerken
-                </button>
-                <button onClick={() => handleDeleteSingle(lead.id, lead.naam_klant)} className="inline-flex items-center justify-center rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-400 transition hover:bg-red-50 hover:text-red-500">
-                  <TrashIcon className="h-3.5 w-3.5" />
-                </button>
               </div>
             </div>
           );
