@@ -90,7 +90,7 @@ export default function LeadsCRMPage() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(25);
-  const [sortBy, setSortBy] = useState('created_at');
+  const [sortBy, setSortBy] = useState('wervingsdatum');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
