@@ -13,7 +13,6 @@ import {
   SparklesIcon,
   BoltIcon,
   ArrowTrendingUpIcon,
-  ChatBubbleLeftRightIcon,
   DevicePhoneMobileIcon,
   BellAlertIcon,
   EnvelopeIcon,
@@ -24,6 +23,7 @@ import {
 import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid';
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
+import { IPhoneMockup } from '@/components/IPhoneMockup';
 
 const fadeUp = {
   hidden: { opacity: 0, y: 30 },
@@ -45,7 +45,7 @@ export default function HomePage() {
       <main className="min-h-screen overflow-x-hidden bg-white text-slate-900">
 
       {/* ── Hero ── */}
-      <section className="relative min-h-[520px] overflow-hidden bg-brand-navy md:min-h-[600px] lg:min-h-[640px]">
+      <section className="relative overflow-hidden bg-brand-navy">
         <div className="absolute inset-0">
           <Image
             src="/images/hero-install.jpg"
@@ -59,93 +59,117 @@ export default function HomePage() {
 
         <div className="pointer-events-none absolute inset-0 bg-brand-navy/90 md:bg-transparent">
           <div className="hidden h-full w-full md:block" style={{
-            background: 'linear-gradient(105deg, #1A1A2E 0%, #1A1A2E 42%, rgba(26,26,46,0.85) 55%, rgba(26,26,46,0.5) 70%, rgba(26,26,46,0.25) 85%, rgba(26,26,46,0.15) 100%)',
+            background: 'linear-gradient(105deg, #1A1A2E 0%, #1A1A2E 45%, rgba(26,26,46,0.92) 58%, rgba(26,26,46,0.75) 72%, rgba(26,26,46,0.6) 85%, rgba(26,26,46,0.5) 100%)',
           }} />
         </div>
 
         <div className="pointer-events-none absolute inset-0">
           <div className="absolute -left-20 bottom-0 h-[400px] w-[400px] rounded-full bg-brand-purple/20 blur-[120px]" />
           <div className="absolute left-1/4 top-0 h-[300px] w-[300px] rounded-full bg-brand-pink/10 blur-[100px]" />
+          <div className="absolute -right-20 top-1/4 hidden h-[350px] w-[350px] rounded-full bg-brand-orange/10 blur-[100px] lg:block" />
         </div>
 
-        <div className="relative z-10 mx-auto max-w-7xl px-5 pb-14 pt-12 md:pb-24 md:pt-24 lg:px-8">
-          <motion.div
-            initial="hidden"
-            animate="visible"
-            variants={stagger}
-            className="max-w-2xl"
-          >
-            <motion.p
-              variants={fadeUp}
-              custom={0}
-              className="mb-4 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-white/80 backdrop-blur md:mb-5 md:px-4 md:text-[12px]"
+        <div className="relative z-10 mx-auto max-w-7xl px-5 pb-14 pt-12 md:pb-20 md:pt-20 lg:px-8 lg:pb-24 lg:pt-24">
+          <div className="grid items-center gap-10 lg:grid-cols-[1fr_auto] lg:gap-16">
+            <motion.div
+              initial="hidden"
+              animate="visible"
+              variants={stagger}
             >
-              <SparklesIcon className="h-3.5 w-3.5 text-brand-orange" />
-              Exclusieve leadgeneratie
-            </motion.p>
-
-            <motion.h1
-              variants={fadeUp}
-              custom={1}
-              className="text-[2rem] font-extrabold leading-[1.1] tracking-tight text-white sm:text-[2.5rem] md:text-[3.75rem] lg:text-[4.25rem]"
-            >
-              Meer kwalitatieve leads.{' '}
-              <span className="gradient-text">Minder verspilde salesuren.</span>
-            </motion.h1>
-
-            <motion.p
-              variants={fadeUp}
-              custom={2}
-              className="mt-4 max-w-xl text-[15px] leading-relaxed text-white/70 md:mt-6 md:text-lg"
-            >
-              WarmeLeads genereert exclusieve, verse leads voor installatiebedrijven en
-              commerciële teams. Realtime in jouw portaal, automatisch gekwalificeerd,
-              met een persoonlijke accountmanager die met je meedenkt.
-            </motion.p>
-
-            <motion.div variants={fadeUp} custom={3} className="mt-6 flex flex-col gap-3 sm:flex-row md:mt-8">
-              <Link
-                href="/meer-klanten-nodig"
-                className="group inline-flex items-center justify-center gap-2 rounded-lg bg-button-gradient px-6 py-3.5 text-sm font-bold text-white shadow-lg shadow-brand-orange/30 transition hover:shadow-brand-orange/40 hover:brightness-110"
-              >
-                Plan gratis strategiegesprek
-                <ArrowRightIcon className="h-4 w-4 transition group-hover:translate-x-0.5" />
-              </Link>
-              <Link
-                href="/hoe-het-werkt"
-                className="inline-flex items-center justify-center gap-2 rounded-lg border border-white/25 bg-white/10 px-6 py-3.5 text-sm font-semibold text-white backdrop-blur transition hover:bg-white/20"
-              >
-                Bekijk hoe het werkt
-              </Link>
-            </motion.div>
-          </motion.div>
-
-          <motion.div
-            initial="hidden"
-            animate="visible"
-            variants={stagger}
-            className="mt-10 grid grid-cols-1 gap-3 sm:grid-cols-3 md:mt-14 md:gap-4 lg:max-w-3xl"
-          >
-            {[
-              { value: '100%', label: 'Exclusieve leads', icon: ShieldCheckIcon },
-              { value: '<24u', label: 'Eerste levering', icon: ClockIcon },
-              { value: '4.8★', label: 'Klantwaardering', icon: ChartBarIcon },
-            ].map((item, i) => (
-              <motion.div
-                key={item.label}
+              <motion.p
                 variants={fadeUp}
-                custom={i + 4}
-                className="flex items-center gap-3 rounded-xl bg-white/[0.07] px-4 py-3 backdrop-blur md:gap-4 md:px-5 md:py-4"
+                custom={0}
+                className="mb-4 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-white/80 backdrop-blur md:mb-5 md:px-4 md:text-[12px]"
               >
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 md:h-10 md:w-10">
-                  <item.icon className="h-4 w-4 text-brand-orange md:h-5 md:w-5" />
-                </div>
-                <div>
-                  <p className="text-lg font-bold text-white md:text-xl">{item.value}</p>
-                  <p className="text-[11px] text-white/60 md:text-[12px]">{item.label}</p>
-                </div>
+                <SparklesIcon className="h-3.5 w-3.5 text-brand-orange" />
+                Exclusieve leadgeneratie
+              </motion.p>
+
+              <motion.h1
+                variants={fadeUp}
+                custom={1}
+                className="text-[2rem] font-extrabold leading-[1.1] tracking-tight text-white sm:text-[2.5rem] md:text-[3.25rem] lg:text-[3.75rem]"
+              >
+                Meer kwalitatieve leads.{' '}
+                <span className="gradient-text">Minder verspilde salesuren.</span>
+              </motion.h1>
+
+              <motion.p
+                variants={fadeUp}
+                custom={2}
+                className="mt-4 max-w-xl text-[15px] leading-relaxed text-white/70 md:mt-6 md:text-lg"
+              >
+                WarmeLeads genereert exclusieve, verse leads voor installatiebedrijven en
+                commerciële teams. Realtime in jouw portaal, automatisch gekwalificeerd,
+                met een persoonlijke accountmanager die met je meedenkt.
+              </motion.p>
+
+              <motion.div variants={fadeUp} custom={3} className="mt-6 flex flex-col gap-3 sm:flex-row md:mt-8">
+                <Link
+                  href="/meer-klanten-nodig"
+                  className="group inline-flex items-center justify-center gap-2 rounded-lg bg-button-gradient px-6 py-3.5 text-sm font-bold text-white shadow-lg shadow-brand-orange/30 transition hover:shadow-brand-orange/40 hover:brightness-110"
+                >
+                  Plan gratis strategiegesprek
+                  <ArrowRightIcon className="h-4 w-4 transition group-hover:translate-x-0.5" />
+                </Link>
+                <Link
+                  href="/hoe-het-werkt"
+                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-white/25 bg-white/10 px-6 py-3.5 text-sm font-semibold text-white backdrop-blur transition hover:bg-white/20"
+                >
+                  Bekijk hoe het werkt
+                </Link>
               </motion.div>
-            ))}
+
+              <motion.div
+                variants={fadeUp}
+                custom={4}
+                className="mt-8 grid grid-cols-3 gap-3 md:mt-10 md:gap-4 lg:max-w-lg"
+              >
+                {[
+                  { value: '100%', label: 'Exclusieve leads', icon: ShieldCheckIcon },
+                  { value: '<24u', label: 'Eerste levering', icon: ClockIcon },
+                  { value: '4.8★', label: 'Klantwaardering', icon: ChartBarIcon },
+                ].map((item) => (
+                  <div
+                    key={item.label}
+                    className="flex items-center gap-2.5 rounded-xl bg-white/[0.07] px-3 py-2.5 backdrop-blur md:gap-3 md:px-4 md:py-3"
+                  >
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/10 md:h-9 md:w-9">
+                      <item.icon className="h-4 w-4 text-brand-orange" />
+                    </div>
+                    <div>
+                      <p className="text-base font-bold text-white md:text-lg">{item.value}</p>
+                      <p className="text-[10px] text-white/60 md:text-[11px]">{item.label}</p>
+                    </div>
+                  </div>
+                ))}
+              </motion.div>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, x: 40, rotateY: -5 }}
+              animate={{ opacity: 1, x: 0, rotateY: 0 }}
+              transition={{ duration: 0.8, delay: 0.4, ease: [0.25, 0.4, 0.25, 1] }}
+              className="hidden lg:block"
+            >
+              <div style={{ perspective: '1200px' }}>
+                <div
+                  className="animate-phone-float"
+                  style={{ transform: 'rotateY(-8deg) rotateX(3deg)' }}
+                >
+                  <IPhoneMockup />
+                </div>
+              </div>
+            </motion.div>
+          </div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.5 }}
+            className="mt-10 flex justify-center lg:hidden"
+          >
+            <IPhoneMockup />
           </motion.div>
         </div>
       </section>
@@ -273,57 +297,13 @@ export default function HomePage() {
             </motion.div>
 
             <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              whileInView={{ opacity: 1, x: 0 }}
+              initial={{ opacity: 0, scale: 0.95 }}
+              whileInView={{ opacity: 1, scale: 1 }}
               viewport={{ once: true }}
               transition={{ duration: 0.5, delay: 0.1 }}
-              className="relative"
+              className="flex justify-center"
             >
-              <div className="relative mx-auto w-full max-w-md">
-                <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl shadow-slate-200/60">
-                  <div className="bg-brand-navy px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <div className="h-2.5 w-2.5 rounded-full bg-brand-orange" />
-                      <p className="text-[11px] font-medium text-white/70">warmeleads.eu/portal</p>
-                    </div>
-                  </div>
-                  <div className="space-y-3 p-4">
-                    <div className="rounded-lg bg-gradient-to-r from-brand-purple/10 to-brand-pink/10 p-3">
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-brand-purple">Nieuwe lead</p>
-                      <p className="mt-1 text-[13px] font-semibold text-slate-800">Jan de Vries · Zonnepanelen</p>
-                      <p className="mt-0.5 text-[11px] text-slate-500">Utrecht · 14 panelen · Budget €8.000+</p>
-                    </div>
-                    <div className="flex gap-2">
-                      <div className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-green-50 py-2 text-[11px] font-semibold text-green-700">
-                        <PhoneIcon className="h-3.5 w-3.5" /> Bellen
-                      </div>
-                      <div className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-green-50 py-2 text-[11px] font-semibold text-green-700">
-                        <ChatBubbleLeftRightIcon className="h-3.5 w-3.5" /> WhatsApp
-                      </div>
-                      <div className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-blue-50 py-2 text-[11px] font-semibold text-blue-700">
-                        <EnvelopeIcon className="h-3.5 w-3.5" /> Mail
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      {[
-                        { name: 'Petra Bakker', product: 'Thuisbatterij', loc: 'Amsterdam', time: '3 min geleden' },
-                        { name: 'Mohammed El Amrani', product: 'Warmtepomp', loc: 'Rotterdam', time: '18 min geleden' },
-                        { name: 'Lisa Jansen', product: 'Airco', loc: 'Den Haag', time: '45 min geleden' },
-                      ].map((lead) => (
-                        <div key={lead.name} className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2.5">
-                          <div>
-                            <p className="text-[12px] font-semibold text-slate-800">{lead.name}</p>
-                            <p className="text-[10px] text-slate-400">{lead.product} · {lead.loc}</p>
-                          </div>
-                          <span className="text-[10px] text-slate-400">{lead.time}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-                <div className="pointer-events-none absolute -right-6 -top-6 h-32 w-32 rounded-full bg-brand-orange/10 blur-[40px]" />
-                <div className="pointer-events-none absolute -bottom-8 -left-8 h-40 w-40 rounded-full bg-brand-purple/10 blur-[50px]" />
-              </div>
+              <IPhoneMockup />
             </motion.div>
           </div>
         </div>
