@@ -19,7 +19,7 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: "Meer Klanten Nodig? | Verse Leads voor Duurzame Energie | WarmeLeads",
-  description: "Meer klanten nodig voor uw installatiebedrijf? Krijg verse, kwaliteitsvolle leads voor thuisbatterijen, zonnepanelen, warmtepompen en airco's. Exclusieve klanten binnen 15 minuten. Geen abonnement, betaal per lead.",
+  description: "Meer klanten nodig voor uw installatiebedrijf? Krijg exclusieve, gekwalificeerde leads voor thuisbatterijen, zonnepanelen, warmtepompen en airco's. Realtime in jouw portaal. Geen abonnement, betaal per lead.",
   keywords: "meer klanten nodig, klanten werven, nieuwe klanten krijgen, klantacquisitie, klantenwerving, leads kopen, installateur leads, duurzame energie leads, thuisbatterijen leads, zonnepanelen leads, warmtepomp leads, exclusieve klanten, klanten vinden, meer opdrachten, lead generatie Nederland",
   authors: [{ name: "WarmeLeads" }],
   creator: "WarmeLeads",
@@ -45,7 +45,7 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: "Meer Klanten Nodig? | Verse Leads voor Installateurs | WarmeLeads",
-    description: "Krijg direct nieuwe klanten voor thuisbatterijen, zonnepanelen, warmtepompen en airco's. Exclusieve leads binnen 15 minuten. Geen abonnement, betaal per klant. Perfect voor installateurs en duurzame energie bedrijven.",
+    description: "Exclusieve, gekwalificeerde leads voor thuisbatterijen, zonnepanelen, warmtepompen en airco's. Realtime in jouw portaal. Geen abonnement, betaal per lead. Perfect voor installateurs en duurzame energie bedrijven.",
     url: "https://www.warmeleads.eu",
     siteName: "WarmeLeads - Leadgeneratie Nederland",
     locale: "nl_NL",
@@ -62,7 +62,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Meer Klanten Nodig? Verse Leads Binnen 15 Minuten",
+    title: "Meer Klanten Nodig? Exclusieve Leads voor Installateurs",
     description: "Nieuwe klanten voor installateurs: thuisbatterijen, zonnepanelen, warmtepompen, airco's. Exclusieve leads, geen abonnement, betaal per klant.",
     images: ["https://www.warmeleads.eu/logo-1200x1200.png"],
     creator: "@WarmeLeads",

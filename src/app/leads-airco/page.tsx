@@ -3,8 +3,8 @@ import { BranchLeadsPageContent } from "@/components/BranchLeadsPage";
 
 export const metadata: Metadata = {
   title: "Airco Leads Kopen | Exclusieve Prospects Nederland | WarmeLeads",
-  description: "Koop verse airco leads in Nederland en België. Exclusieve en gedeelde prospects voor airco installateurs. Echte geïnteresseerde klanten uit onze campagnes, realtime delivery.",
-  keywords: "airco leads, airconditioning leads, airco prospects, airco installateur leads, exclusieve airco leads, koeling leads, klimaatbeheersing leads",
+  description: "Koop verse airco leads in Nederland en België. Exclusieve prospects voor airco installateurs. Automatisch gekwalificeerd, realtime in jouw portaal.",
+  keywords: "airco leads, airconditioning leads, airco prospects, airco installateur leads, exclusieve airco leads, klimaatbeheersing leads",
   openGraph: {
     title: "Airco Leads Kopen Nederland | Verse Prospects | WarmeLeads",
     description: "Exclusieve en gedeelde airco leads voor installateurs. Nederlandse prospects uit onze campagnes, realtime delivery.",

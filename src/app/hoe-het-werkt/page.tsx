@@ -18,7 +18,6 @@ import {
   SparklesIcon,
   ExclamationTriangleIcon,
   BeakerIcon,
-  EnvelopeIcon,
   UserIcon,
   MagnifyingGlassIcon,
 } from '@heroicons/react/24/outline';

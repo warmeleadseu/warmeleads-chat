@@ -3,11 +3,11 @@ import { BranchLeadsPageContent } from "@/components/BranchLeadsPage";
 
 export const metadata: Metadata = {
   title: "Thuisbatterij Leads Kopen | Exclusieve Prospects Nederland | WarmeLeads",
-  description: "Koop verse thuisbatterij leads in Nederland. Exclusieve en gedeelde prospects voor thuisbatterij installateurs. Echte geïnteresseerde klanten uit onze campagnes, realtime delivery binnen 15 minuten.",
-  keywords: "thuisbatterij leads, thuisbatterij prospects, battery storage leads, energie opslag leads, thuisbatterij installateur leads, exclusieve thuisbatterij leads, gedeelde thuisbatterij leads",
+  description: "Koop verse thuisbatterij leads in Nederland en België. Exclusieve prospects voor thuisbatterij installateurs. Automatisch gekwalificeerd, realtime in jouw portaal.",
+  keywords: "thuisbatterij leads, thuisbatterij prospects, battery storage leads, energie opslag leads, thuisbatterij installateur leads, exclusieve thuisbatterij leads",
   openGraph: {
-    title: "Thuisbatterij Leads Kopen Nederland | Verse Prospects | WarmeLeads",
-    description: "Exclusieve en gedeelde thuisbatterij leads voor installateurs. Nederlandse prospects uit onze campagnes, realtime delivery binnen 15 minuten.",
+    title: "Thuisbatterij Leads Kopen Nederland | Exclusieve Prospects | WarmeLeads",
+    description: "Exclusieve thuisbatterij leads voor installateurs. Automatisch gekwalificeerd uit eigen campagnes, realtime in jouw portaal.",
     url: "https://www.warmeleads.eu/leads-thuisbatterijen",
   },
 };

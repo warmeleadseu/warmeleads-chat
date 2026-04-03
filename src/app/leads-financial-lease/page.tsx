@@ -3,11 +3,11 @@ import { BranchLeadsPageContent } from "@/components/BranchLeadsPage";
 
 export const metadata: Metadata = {
   title: "Financial Lease Leads Kopen | Zakelijke Klant Prospects | WarmeLeads",
-  description: "Koop verse financial lease leads in Nederland. Exclusieve en gedeelde prospects voor financial lease aanbieders. Echte zakelijke geïnteresseerden uit onze campagnes, realtime delivery binnen 15 minuten.",
-  keywords: "financial lease leads, zakelijke lease prospects, lease aanbieder leads, exclusieve financial lease leads, gedeelde lease leads, zakelijke klant leads",
+  description: "Koop verse financial lease leads in Nederland en België. Exclusieve prospects voor financial lease aanbieders. Automatisch gekwalificeerd, realtime in jouw portaal.",
+  keywords: "financial lease leads, zakelijke lease prospects, lease aanbieder leads, exclusieve financial lease leads, zakelijke klant leads",
   openGraph: {
-    title: "Financial Lease Leads Kopen Nederland | Zakelijke Prospects | WarmeLeads",
-    description: "Exclusieve en gedeelde financial lease leads. Nederlandse zakelijke prospects uit onze campagnes, realtime delivery binnen 15 minuten.",
+    title: "Financial Lease Leads Kopen Nederland | Exclusieve Prospects | WarmeLeads",
+    description: "Exclusieve financial lease leads. Automatisch gekwalificeerd uit eigen campagnes, realtime in jouw portaal.",
     url: "https://www.warmeleads.eu/leads-financial-lease",
   },
 };

@@ -80,7 +80,7 @@ export default function LeadgeneratieGidsPage() {
               <ul className="space-y-3">
                 <li className="flex items-center gap-2">
                   <CheckCircleIcon className="h-5 w-5 shrink-0 text-brand-orange" />
-                  <span className="text-slate-700">Directe resultaten binnen 15 minuten</span>
+                  <span className="text-slate-700">Directe resultaten na campagne launch</span>
                 </li>
                 <li className="flex items-center gap-2">
                   <CheckCircleIcon className="h-5 w-5 shrink-0 text-brand-orange" />

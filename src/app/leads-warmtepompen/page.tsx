@@ -3,11 +3,11 @@ import { BranchLeadsPageContent } from "@/components/BranchLeadsPage";
 
 export const metadata: Metadata = {
   title: "Warmtepomp Leads Kopen | Heat Pump Installateur Prospects | WarmeLeads",
-  description: "Koop verse warmtepomp leads in Nederland. Exclusieve en gedeelde prospects voor warmtepomp installateurs. Echte geïnteresseerde klanten uit onze campagnes, realtime delivery binnen 15 minuten.",
-  keywords: "warmtepomp leads, heat pump leads, warmtepomp prospects, warmtepomp installateur leads, exclusieve warmtepomp leads, gedeelde warmtepomp leads",
+  description: "Koop verse warmtepomp leads in Nederland en België. Exclusieve prospects voor warmtepomp installateurs. Automatisch gekwalificeerd, realtime in jouw portaal.",
+  keywords: "warmtepomp leads, heat pump leads, warmtepomp prospects, warmtepomp installateur leads, exclusieve warmtepomp leads, warmtepomp klanten",
   openGraph: {
-    title: "Warmtepomp Leads Kopen Nederland | Heat Pump Prospects | WarmeLeads",
-    description: "Exclusieve en gedeelde warmtepomp leads voor installateurs. Nederlandse prospects uit onze campagnes, realtime delivery binnen 15 minuten.",
+    title: "Warmtepomp Leads Kopen Nederland | Exclusieve Prospects | WarmeLeads",
+    description: "Exclusieve warmtepomp leads voor installateurs. Automatisch gekwalificeerd uit eigen campagnes, realtime in jouw portaal.",
     url: "https://www.warmeleads.eu/leads-warmtepompen",
   },
 };

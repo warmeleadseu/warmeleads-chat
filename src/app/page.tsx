@@ -18,9 +18,6 @@ import {
   BellAlertIcon,
   EnvelopeIcon,
   UserIcon,
-  MagnifyingGlassCircleIcon,
-  CheckCircleIcon,
-  CurrencyEuroIcon,
   MapPinIcon,
   BeakerIcon,
 } from '@heroicons/react/24/outline';

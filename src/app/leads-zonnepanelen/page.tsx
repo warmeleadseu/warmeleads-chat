@@ -3,11 +3,11 @@ import { BranchLeadsPageContent } from "@/components/BranchLeadsPage";
 
 export const metadata: Metadata = {
   title: "Zonnepanelen Leads Kopen | Solar Installateur Prospects Nederland | WarmeLeads",
-  description: "Koop verse zonnepanelen leads in Nederland. Exclusieve en gedeelde prospects voor solar installateurs. Echte geïnteresseerde klanten uit onze campagnes, realtime delivery binnen 15 minuten.",
-  keywords: "zonnepanelen leads, solar leads, zonnepaneel prospects, solar installateur leads, exclusieve zonnepanelen leads, gedeelde solar leads, photovoltaic leads",
+  description: "Koop verse zonnepanelen leads in Nederland en België. Exclusieve prospects voor solar installateurs. Automatisch gekwalificeerd, realtime in jouw portaal.",
+  keywords: "zonnepanelen leads, solar leads, zonnepaneel prospects, solar installateur leads, exclusieve zonnepanelen leads, zonnepanelen klanten",
   openGraph: {
-    title: "Zonnepanelen Leads Kopen Nederland | Solar Prospects | WarmeLeads",
-    description: "Exclusieve en gedeelde zonnepanelen leads voor installateurs. Nederlandse prospects uit onze campagnes, realtime delivery binnen 15 minuten.",
+    title: "Zonnepanelen Leads Kopen Nederland | Exclusieve Prospects | WarmeLeads",
+    description: "Exclusieve zonnepanelen leads voor solar installateurs. Automatisch gekwalificeerd uit eigen campagnes, realtime in jouw portaal.",
     url: "https://www.warmeleads.eu/leads-zonnepanelen",
   },
 };

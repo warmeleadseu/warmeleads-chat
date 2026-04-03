@@ -66,7 +66,7 @@ export function Logo({ size = 'md', showText = true, className = '' }: LogoProps
             WarmeLeads
           </h1>
           <p className="text-white/80 text-xs">
-            Verse leads binnen 15 min
+            Exclusieve leadgeneratie
           </p>
         </motion.div>
       )}

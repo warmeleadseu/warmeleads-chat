@@ -396,10 +396,13 @@ export default function MeerKlantenNodigPage() {
               </p>
 
               <form
-                action="https://formspree.io/f/info@warmeleads.eu"
+                action="https://formsubmit.co/info@warmeleads.eu"
                 method="POST"
                 className="mt-6 space-y-4"
               >
+                <input type="hidden" name="_subject" value="Nieuwe aanvraag via warmeleads.eu" />
+                <input type="hidden" name="_captcha" value="false" />
+                <input type="hidden" name="_next" value="https://www.warmeleads.eu/meer-klanten-nodig?success=true" />
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div>
                     <label htmlFor="name" className="mb-1.5 block text-[12px] font-semibold text-slate-700">Naam *</label>
