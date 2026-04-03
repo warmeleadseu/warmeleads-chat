@@ -3,7 +3,7 @@ import { createServerClient } from '@/lib/supabase';
 import { sendEmail } from '@/lib/email';
 
 /*
-  Supabase table required:
+  Tables required:
 
   CREATE TABLE IF NOT EXISTS bookings (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -18,13 +18,55 @@ import { sendEmail } from '@/lib/email';
     status text DEFAULT 'bevestigd',
     created_at timestamptz DEFAULT now()
   );
+
+  CREATE TABLE IF NOT EXISTS booking_blocked (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    date date NOT NULL,
+    time text,
+    reason text,
+    created_at timestamptz DEFAULT now()
+  );
 */
 
-const TIME_SLOTS = [
-  '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
-  '12:00', '13:00', '13:30', '14:00', '14:30', '15:00',
-  '15:30', '16:00', '16:30',
-];
+const DAY_KEYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
+
+const DEFAULT_SCHEDULE = {
+  days: {
+    monday:    { enabled: true,  start: '09:00', end: '17:00' },
+    tuesday:   { enabled: true,  start: '09:00', end: '17:00' },
+    wednesday: { enabled: true,  start: '09:00', end: '17:00' },
+    thursday:  { enabled: true,  start: '09:00', end: '17:00' },
+    friday:    { enabled: true,  start: '09:00', end: '17:00' },
+    saturday:  { enabled: false, start: '09:00', end: '17:00' },
+    sunday:    { enabled: false, start: '09:00', end: '17:00' },
+  },
+  lunch: { enabled: true, start: '12:30', end: '13:00' },
+  slotDuration: 30,
+};
+
+function generateSlots(start: string, end: string, duration: number, lunch?: { enabled: boolean; start: string; end: string }): string[] {
+  const slots: string[] = [];
+  const [sh, sm] = start.split(':').map(Number);
+  const [eh, em] = end.split(':').map(Number);
+  const startMin = sh * 60 + sm;
+  const endMin = eh * 60 + em;
+
+  let lunchStart = 0, lunchEnd = 0;
+  if (lunch?.enabled) {
+    const [lsh, lsm] = lunch.start.split(':').map(Number);
+    const [leh, lem] = lunch.end.split(':').map(Number);
+    lunchStart = lsh * 60 + lsm;
+    lunchEnd = leh * 60 + lem;
+  }
+
+  for (let m = startMin; m + duration <= endMin; m += duration) {
+    if (lunch?.enabled && m >= lunchStart && m < lunchEnd) continue;
+    const h = Math.floor(m / 60);
+    const min = m % 60;
+    slots.push(`${h.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`);
+  }
+  return slots;
+}
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -35,28 +77,54 @@ export async function GET(req: Request) {
   const d = new Date(date + 'T00:00:00');
   if (isNaN(d.getTime())) return NextResponse.json({ error: 'Invalid date' }, { status: 400 });
 
-  const day = d.getDay();
-  if (day === 0 || day === 6) return NextResponse.json({ slots: [] });
-
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   if (d < today) return NextResponse.json({ slots: [] });
 
   const supabase = createServerClient();
 
-  const { data: bookings } = await supabase
-    .from('bookings')
-    .select('time')
-    .eq('date', date)
-    .neq('status', 'geannuleerd');
+  const { data: setting } = await supabase
+    .from('app_settings')
+    .select('value')
+    .eq('key', 'booking_schedule')
+    .single();
 
-  const bookedTimes = new Set((bookings || []).map((b: { time: string }) => b.time));
+  const schedule = setting?.value
+    ? (typeof setting.value === 'string' ? JSON.parse(setting.value) : setting.value)
+    : DEFAULT_SCHEDULE;
+
+  const dayKey = DAY_KEYS[d.getDay()];
+  const dayConfig = schedule.days?.[dayKey];
+
+  if (!dayConfig?.enabled) return NextResponse.json({ slots: [] });
+
+  const allSlots = generateSlots(
+    dayConfig.start || '09:00',
+    dayConfig.end || '17:00',
+    schedule.slotDuration || 30,
+    schedule.lunch,
+  );
+
+  const [bookingsResult, blockedResult] = await Promise.all([
+    supabase.from('bookings').select('time').eq('date', date).neq('status', 'geannuleerd'),
+    supabase.from('booking_blocked').select('time').eq('date', date),
+  ]);
+
+  const bookedTimes = new Set((bookingsResult.data || []).map((b: { time: string }) => b.time));
+
+  const blockedAll = (blockedResult.data || []).some((b: { time: string | null }) => !b.time);
+  if (blockedAll) return NextResponse.json({ slots: [] });
+
+  const blockedTimes = new Set(
+    (blockedResult.data || []).filter((b: { time: string | null }) => b.time).map((b: { time: string | null }) => b.time),
+  );
 
   const now = new Date();
   const isToday = d.toDateString() === now.toDateString();
 
-  const available = TIME_SLOTS.filter(slot => {
+  const available = allSlots.filter(slot => {
     if (bookedTimes.has(slot)) return false;
+    if (blockedTimes.has(slot)) return false;
     if (isToday) {
       const [h, m] = slot.split(':').map(Number);
       const slotTime = new Date(now);
