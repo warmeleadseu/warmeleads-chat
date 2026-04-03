@@ -99,9 +99,9 @@ export default function HomePage() {
                 custom={2}
                 className="mt-4 max-w-xl text-[15px] leading-relaxed text-white/70 md:mt-6 md:text-lg"
               >
-                WarmeLeads genereert exclusieve, verse leads voor installatiebedrijven en
-                commerciële teams. Realtime in jouw portaal, automatisch gekwalificeerd,
-                met een persoonlijke accountmanager die met je meedenkt.
+WarmeLeads genereert exclusieve, verse leads voor jouw bedrijf.
+              Realtime in jouw portaal, automatisch gekwalificeerd,
+              met een persoonlijke accountmanager die met je meedenkt.
               </motion.p>
 
               <motion.div variants={fadeUp} custom={3} className="mt-6 flex flex-col gap-3 sm:flex-row md:mt-8">
