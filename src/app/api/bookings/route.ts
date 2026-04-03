@@ -70,6 +70,17 @@ function generateSlots(start: string, end: string, duration: number, lunch?: { e
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
+
+  if (searchParams.get('info') === 'true') {
+    const supabase = createServerClient();
+    const { data: setting } = await supabase.from('app_settings').select('value').eq('key', 'booking_schedule').single();
+    const schedule = setting?.value ? (typeof setting.value === 'string' ? JSON.parse(setting.value) : setting.value) : DEFAULT_SCHEDULE;
+    const enabledDays = Object.entries(schedule.days || {})
+      .filter(([, v]) => (v as { enabled: boolean }).enabled)
+      .map(([k]) => k);
+    return NextResponse.json({ enabledDays });
+  }
+
   const date = searchParams.get('date');
 
   if (!date) return NextResponse.json({ error: 'date required' }, { status: 400 });

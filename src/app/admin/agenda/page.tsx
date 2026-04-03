@@ -5,18 +5,16 @@ import { adminFetch } from '@/lib/adminAuth';
 import {
   CalendarDaysIcon,
   ClockIcon,
-  UserIcon,
   PhoneIcon,
   EnvelopeIcon,
-  BuildingOfficeIcon,
   TrashIcon,
   XCircleIcon,
   CheckCircleIcon,
-  PlusIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   ExclamationTriangleIcon,
   NoSymbolIcon,
+  ChatBubbleBottomCenterTextIcon,
 } from '@heroicons/react/24/outline';
 
 /* ── Types ── */
@@ -336,6 +334,7 @@ export default function AgendaPage() {
                             <span className="truncate text-xs font-semibold text-slate-800">{b.name}</span>
                           </div>
                           {b.company && <p className="text-[10px] text-slate-400">{b.company}</p>}
+                          {b.message && <p className="mt-0.5 text-[10px] text-amber-600">{b.message}</p>}
                         </div>
                         {b.status === 'bevestigd' && (
                           <button onClick={() => cancelBooking(b.id)} className="ml-2 shrink-0 rounded p-1 text-slate-400 transition hover:bg-red-50 hover:text-red-500" title="Annuleren">
@@ -386,9 +385,16 @@ export default function AgendaPage() {
                         <EnvelopeIcon className="h-2.5 w-2.5" /> {b.email}
                       </a>
                     </div>
-                    {b.branch && (
-                      <span className="mt-1.5 inline-block rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">{b.branch}</span>
-                    )}
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                      {b.branch && (
+                        <span className="inline-block rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">{b.branch}</span>
+                      )}
+                      {b.message && (
+                        <span title={b.message} className="inline-flex items-center gap-0.5 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-600">
+                          <ChatBubbleBottomCenterTextIcon className="h-2.5 w-2.5" /> Toelichting
+                        </span>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -455,7 +461,16 @@ export default function AgendaPage() {
                             <a href={`mailto:${b.email}`} className="text-xs text-slate-400 hover:underline">{b.email}</a>
                           </div>
                         </td>
-                        <td className="px-4 py-3">{b.branch ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">{b.branch}</span> : '-'}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-1.5">
+                            {b.branch ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">{b.branch}</span> : '-'}
+                            {b.message && (
+                              <span title={b.message} className="cursor-help rounded bg-amber-50 p-0.5 text-amber-500">
+                                <ChatBubbleBottomCenterTextIcon className="h-3 w-3" />
+                              </span>
+                            )}
+                          </div>
+                        </td>
                         <td className="px-4 py-3">
                           <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
                             b.status === 'bevestigd' ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-500'
@@ -498,6 +513,9 @@ export default function AgendaPage() {
                       <a href={`tel:${b.phone}`} className="inline-flex items-center gap-1 text-[11px] text-brand-purple"><PhoneIcon className="h-3 w-3" /> {b.phone}</a>
                       <a href={`mailto:${b.email}`} className="inline-flex items-center gap-1 text-[11px] text-slate-400"><EnvelopeIcon className="h-3 w-3" /> {b.email}</a>
                     </div>
+                    {b.message && (
+                      <p className="mt-1.5 rounded bg-amber-50 px-2 py-1 text-[11px] text-amber-700">{b.message}</p>
+                    )}
                     <div className="mt-2 flex justify-end gap-1">
                       {b.status === 'bevestigd' && (
                         <button onClick={() => cancelBooking(b.id)} className="rounded p-1.5 text-slate-400 hover:text-red-500"><XCircleIcon className="h-4 w-4" /></button>

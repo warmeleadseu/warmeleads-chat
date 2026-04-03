@@ -38,6 +38,8 @@ const STEPS = [
   { num: 4, label: 'Bevestigd', icon: CheckCircleIcon },
 ];
 
+const DAY_INDEX_TO_KEY = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+
 function daysInMonth(y: number, m: number) { return new Date(y, m + 1, 0).getDate(); }
 function firstWeekday(y: number, m: number) { const d = new Date(y, m, 1).getDay(); return d === 0 ? 6 : d - 1; }
 
@@ -50,6 +52,7 @@ export default function PlanGesprekPage() {
   const [form, setForm] = useState({ name: '', company: '', email: '', phone: '', branch: '', message: '' });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [enabledDays, setEnabledDays] = useState<string[]>(['monday', 'tuesday', 'wednesday', 'thursday', 'friday']);
 
   const now = new Date();
   const [calYear, setCalYear] = useState(now.getFullYear());
@@ -57,6 +60,13 @@ export default function PlanGesprekPage() {
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+
+  useEffect(() => {
+    fetch('/api/bookings?info=true')
+      .then(r => r.json())
+      .then(d => { if (d.enabledDays) setEnabledDays(d.enabledDays); })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!selectedDate) return;
@@ -167,14 +177,14 @@ export default function PlanGesprekPage() {
           </div>
         </div>
 
-        <div className="mx-auto max-w-2xl px-5 pb-16 md:pb-24 lg:px-8">
+        <div className="mx-auto max-w-2xl px-5 pb-28 sm:pb-16 md:pb-24 lg:px-8">
           <AnimatePresence mode="wait">
 
             {step === 1 && (
               <motion.div key="s1" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.3 }}>
                 <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-8">
                   <h2 className="mb-1 text-lg font-bold text-slate-900 md:text-xl">Kies een datum</h2>
-                  <p className="mb-6 text-sm text-slate-500">Selecteer een werkdag die jou uitkomt.</p>
+                  <p className="mb-6 text-sm text-slate-500">Selecteer een dag die jou uitkomt.</p>
 
                   <div className="mb-4 flex items-center justify-between">
                     <button onClick={prevMonth} disabled={!canGoPrev} className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:bg-slate-50 disabled:opacity-30">
@@ -197,10 +207,10 @@ export default function PlanGesprekPage() {
                     {Array.from({ length: totalDays }).map((_, i) => {
                       const day = i + 1;
                       const date = new Date(calYear, calMonth, day);
-                      const dow = date.getDay();
-                      const isWeekend = dow === 0 || dow === 6;
+                      const dayKey = DAY_INDEX_TO_KEY[date.getDay()];
+                      const isDayDisabled = !enabledDays.includes(dayKey);
                       const isPast = date < today;
-                      const disabled = isWeekend || isPast;
+                      const disabled = isDayDisabled || isPast;
                       const selected = selectedDate && date.toDateString() === selectedDate.toDateString();
                       const isToday = date.toDateString() === now.toDateString();
 

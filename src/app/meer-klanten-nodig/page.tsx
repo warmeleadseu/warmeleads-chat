@@ -409,7 +409,7 @@ export default function MeerKlantenNodigPage() {
                     { icon: CheckCircleIcon, text: '100% vrijblijvend, geen verplichtingen' },
                   ].map((item, i) => (
                     <div key={i} className="flex items-center gap-3">
-                      <item.icon className="h-4.5 w-4.5 shrink-0 text-brand-purple" />
+                      <item.icon className="h-[18px] w-[18px] shrink-0 text-brand-purple" />
                       <span className="text-[13px] text-slate-700 md:text-sm">{item.text}</span>
                     </div>
                   ))}
