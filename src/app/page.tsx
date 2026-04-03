@@ -106,7 +106,7 @@ WarmeLeads genereert exclusieve, verse leads voor jouw bedrijf.
 
               <motion.div variants={fadeUp} custom={3} className="mt-6 flex flex-col gap-3 sm:flex-row md:mt-8">
                 <Link
-                  href="/meer-klanten-nodig"
+                  href="/plan-gesprek"
                   className="group inline-flex items-center justify-center gap-2 rounded-lg bg-button-gradient px-6 py-3.5 text-sm font-bold text-white shadow-lg shadow-brand-orange/30 transition hover:shadow-brand-orange/40 hover:brightness-110"
                 >
                   Plan gratis strategiegesprek
@@ -454,7 +454,7 @@ WarmeLeads genereert exclusieve, verse leads voor jouw bedrijf.
 
               <div className="mt-6 md:mt-8">
                 <Link
-                  href="/meer-klanten-nodig"
+                  href="/plan-gesprek"
                   className="group inline-flex items-center gap-2 text-[13px] font-semibold text-brand-pink transition hover:text-brand-purple md:text-sm"
                 >
                   Maak kennis met ons team
@@ -643,7 +643,7 @@ WarmeLeads genereert exclusieve, verse leads voor jouw bedrijf.
 
               <div className="mt-auto pt-5 md:pt-6">
                 <Link
-                  href="/meer-klanten-nodig"
+                  href="/plan-gesprek"
                   className="group flex items-center gap-2 text-[13px] font-semibold text-brand-pink transition hover:text-brand-purple md:text-sm"
                 >
                   Bespreek jouw branche
@@ -759,7 +759,7 @@ WarmeLeads genereert exclusieve, verse leads voor jouw bedrijf.
             </p>
             <div className="mt-6 flex flex-col gap-3 sm:flex-row md:mt-8">
               <Link
-                href="/meer-klanten-nodig"
+                href="/plan-gesprek"
                 className="group inline-flex items-center justify-center gap-2 rounded-lg bg-button-gradient px-6 py-3.5 text-sm font-bold text-white shadow-lg shadow-brand-orange/30 transition hover:shadow-brand-orange/40 hover:brightness-110"
               >
                 Plan gratis strategiegesprek

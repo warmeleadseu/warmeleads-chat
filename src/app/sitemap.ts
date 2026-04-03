@@ -20,6 +20,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 0.95,
     },
     {
+      url: `${baseUrl}/plan-gesprek`,
+      lastModified: new Date(),
+      changeFrequency: 'daily' as const,
+      priority: 0.95,
+    },
+    {
       url: `${baseUrl}/leads-thuisbatterijen`,
       lastModified: new Date(),
       changeFrequency: 'weekly' as const,

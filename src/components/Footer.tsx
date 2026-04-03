@@ -18,6 +18,7 @@ const footerColumns = [
     title: 'Bedrijf',
     links: [
       { label: 'Hoe het werkt', href: '/hoe-het-werkt' },
+      { label: 'Plan gesprek', href: '/plan-gesprek' },
       { label: 'Meer klanten nodig', href: '/meer-klanten-nodig' },
       { label: 'Blog & inzichten', href: '/blog' },
       { label: 'Leadgeneratie gids', href: '/leadgeneratie-gids' },

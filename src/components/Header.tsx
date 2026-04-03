@@ -70,7 +70,7 @@ export function Header() {
               Klant login
             </Link>
             <Link
-              href="/meer-klanten-nodig"
+              href="/plan-gesprek"
               className="group hidden items-center gap-2 rounded-lg bg-button-gradient px-4 py-2.5 text-[13px] font-semibold text-white shadow-lg shadow-brand-orange/20 transition hover:shadow-brand-orange/30 sm:inline-flex"
             >
               Plan gesprek
@@ -173,7 +173,7 @@ export function Header() {
 
                 {/* CTA */}
                 <Link
-                  href="/meer-klanten-nodig"
+                  href="/plan-gesprek"
                   onClick={() => setMobileMenuOpen(false)}
                   className="group flex items-center justify-center gap-2 rounded-xl bg-button-gradient px-4 py-3.5 text-[14px] font-bold text-white shadow-lg shadow-brand-orange/25 transition active:scale-[0.98]"
                 >
@@ -188,7 +188,7 @@ export function Header() {
       {/* Sticky mobile CTA bar (always visible on small screens) */}
       <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-slate-200 bg-white/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-lg sm:hidden">
         <Link
-          href="/meer-klanten-nodig"
+          href="/plan-gesprek"
           className="group flex items-center justify-center gap-2 rounded-xl bg-button-gradient px-4 py-3 text-[14px] font-bold text-white shadow-lg shadow-brand-orange/25 transition active:scale-[0.98]"
         >
           Plan gratis strategiegesprek

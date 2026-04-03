@@ -514,7 +514,7 @@ export default function HoeHetWerktPage() {
             </p>
             <div className="mt-6 flex flex-col gap-3 sm:flex-row md:mt-8">
               <Link
-                href="/meer-klanten-nodig"
+                href="/plan-gesprek"
                 className="group inline-flex items-center justify-center gap-2 rounded-lg bg-button-gradient px-6 py-3.5 text-sm font-bold text-white shadow-lg shadow-brand-orange/30 transition hover:shadow-brand-orange/40 hover:brightness-110"
               >
                 Plan gratis strategiegesprek

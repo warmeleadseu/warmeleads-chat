@@ -4,7 +4,9 @@ import Link from 'next/link';
 import { motion } from 'framer-motion';
 import {
   ArrowRightIcon,
+  CalendarDaysIcon,
   CheckBadgeIcon,
+  CheckCircleIcon,
   ClockIcon,
   ShieldCheckIcon,
   CurrencyEuroIcon,
@@ -85,13 +87,13 @@ export default function MeerKlantenNodigPage() {
             </motion.p>
 
             <motion.div variants={fadeUp} custom={3} className="mt-6 flex flex-col gap-3 sm:flex-row md:mt-8">
-              <a
-                href="#contact"
+              <Link
+                href="/plan-gesprek"
                 className="group inline-flex items-center justify-center gap-2 rounded-lg bg-button-gradient px-6 py-3.5 text-sm font-bold text-white shadow-lg shadow-brand-orange/30 transition hover:shadow-brand-orange/40 hover:brightness-110"
               >
                 Plan strategiegesprek
                 <ArrowRightIcon className="h-4 w-4 transition group-hover:translate-x-0.5" />
-              </a>
+              </Link>
               <a
                 href="#waarom-wij"
                 className="inline-flex items-center justify-center gap-2 rounded-lg border border-white/25 bg-white/10 px-6 py-3.5 text-sm font-semibold text-white backdrop-blur transition hover:bg-white/20"
@@ -388,74 +390,43 @@ export default function MeerKlantenNodigPage() {
               </div>
             </div>
 
-            {/* Right: Contact form */}
-            <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-5 shadow-sm md:p-8">
+            {/* Right: Booking CTA */}
+            <div id="contact" className="rounded-2xl border border-slate-200 bg-slate-50/50 p-5 shadow-sm md:p-8">
+              <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-xl bg-brand-purple/10">
+                <CalendarDaysIcon className="h-7 w-7 text-brand-purple" />
+              </div>
               <h3 className="text-xl font-bold tracking-tight md:text-2xl">Plan een gratis strategiegesprek</h3>
-              <p className="mt-2 text-[13px] text-slate-500 md:text-sm">
-                Vul het formulier in en we nemen binnen 24 uur contact met je op.
+              <p className="mt-2 text-[13px] leading-relaxed text-slate-500 md:text-sm">
+                Kies een datum en tijdstip dat jou uitkomt. We bespreken vrijblijvend hoe
+                we jouw leadgeneratie kunnen optimaliseren.
               </p>
 
-              <form
-                action="https://formsubmit.co/info@warmeleads.eu"
-                method="POST"
-                className="mt-6 space-y-4"
-              >
-                <input type="hidden" name="_subject" value="Nieuwe aanvraag via warmeleads.eu" />
-                <input type="hidden" name="_captcha" value="false" />
-                <input type="hidden" name="_next" value="https://www.warmeleads.eu/meer-klanten-nodig?success=true" />
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <label htmlFor="name" className="mb-1.5 block text-[12px] font-semibold text-slate-700">Naam *</label>
-                    <input type="text" id="name" name="name" required className="w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-[13px] text-slate-900 outline-none transition focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/30 md:text-sm" placeholder="Jouw naam" />
-                  </div>
-                  <div>
-                    <label htmlFor="company" className="mb-1.5 block text-[12px] font-semibold text-slate-700">Bedrijfsnaam</label>
-                    <input type="text" id="company" name="company" className="w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-[13px] text-slate-900 outline-none transition focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/30 md:text-sm" placeholder="Jouw bedrijf" />
-                  </div>
+              <div className="mt-6 space-y-4">
+                <div className="space-y-3 rounded-xl bg-white p-4">
+                  {[
+                    { icon: ClockIcon, text: 'Duurt circa 20-30 minuten' },
+                    { icon: PhoneIcon, text: 'Telefonisch, online of op locatie' },
+                    { icon: CheckCircleIcon, text: '100% vrijblijvend, geen verplichtingen' },
+                  ].map((item, i) => (
+                    <div key={i} className="flex items-center gap-3">
+                      <item.icon className="h-4.5 w-4.5 shrink-0 text-brand-purple" />
+                      <span className="text-[13px] text-slate-700 md:text-sm">{item.text}</span>
+                    </div>
+                  ))}
                 </div>
 
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <label htmlFor="email" className="mb-1.5 block text-[12px] font-semibold text-slate-700">E-mail *</label>
-                    <input type="email" id="email" name="email" required className="w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-[13px] text-slate-900 outline-none transition focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/30 md:text-sm" placeholder="jouw@email.nl" />
-                  </div>
-                  <div>
-                    <label htmlFor="phone" className="mb-1.5 block text-[12px] font-semibold text-slate-700">Telefoonnummer *</label>
-                    <input type="tel" id="phone" name="phone" required className="w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-[13px] text-slate-900 outline-none transition focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/30 md:text-sm" placeholder="06 – 1234 5678" />
-                  </div>
-                </div>
-
-                <div>
-                  <label htmlFor="interest" className="mb-1.5 block text-[12px] font-semibold text-slate-700">Interesse in *</label>
-                  <select id="interest" name="interest" required className="w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-[13px] text-slate-900 outline-none transition focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/30 md:text-sm">
-                    <option value="">Selecteer een optie</option>
-                    <option value="zonnepanelen">Zonnepanelen leads</option>
-                    <option value="warmtepompen">Warmtepompen leads</option>
-                    <option value="thuisbatterijen">Thuisbatterij leads</option>
-                    <option value="airco">Airco leads</option>
-                    <option value="financial-lease">Financial Lease leads</option>
-                    <option value="maatwerk">Maatwerk / andere branche</option>
-                    <option value="meerdere">Meerdere producten</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label htmlFor="message" className="mb-1.5 block text-[12px] font-semibold text-slate-700">Bericht</label>
-                  <textarea id="message" name="message" rows={4} className="w-full resize-none rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-[13px] text-slate-900 outline-none transition focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/30 md:text-sm" placeholder="Vertel ons over je situatie, gewenst volume, regio..." />
-                </div>
-
-                <button
-                  type="submit"
-                  className="group inline-flex w-full items-center justify-center gap-2 rounded-lg bg-button-gradient px-6 py-3.5 text-sm font-bold text-white shadow-lg shadow-brand-orange/30 transition hover:shadow-brand-orange/40 hover:brightness-110"
+                <Link
+                  href="/plan-gesprek"
+                  className="group flex w-full items-center justify-center gap-2 rounded-lg bg-button-gradient px-6 py-3.5 text-sm font-bold text-white shadow-lg shadow-brand-orange/30 transition hover:shadow-brand-orange/40 hover:brightness-110"
                 >
-                  Verstuur aanvraag
+                  Kies een moment
                   <ArrowRightIcon className="h-4 w-4 transition group-hover:translate-x-0.5" />
-                </button>
+                </Link>
 
                 <p className="text-center text-[11px] text-slate-400">
-                  We nemen binnen 24 uur contact op. Geen spam, geen verplichtingen.
+                  Liever direct bellen? <a href="tel:0850477067" className="font-medium text-brand-purple hover:underline">085 047 7067</a>
                 </p>
-              </form>
+              </div>
             </div>
           </div>
         </div>
@@ -522,13 +493,13 @@ export default function MeerKlantenNodigPage() {
               en ontvang een concreet plan. Zonder verplichtingen.
             </p>
             <div className="mt-6 flex flex-col gap-3 sm:flex-row md:mt-8">
-              <a
-                href="#contact"
+              <Link
+                href="/plan-gesprek"
                 className="group inline-flex items-center justify-center gap-2 rounded-lg bg-button-gradient px-6 py-3.5 text-sm font-bold text-white shadow-lg shadow-brand-orange/30 transition hover:shadow-brand-orange/40 hover:brightness-110"
               >
                 Plan strategiegesprek
                 <ArrowRightIcon className="h-4 w-4 transition group-hover:translate-x-0.5" />
-              </a>
+              </Link>
               <Link
                 href="/hoe-het-werkt"
                 className="inline-flex items-center justify-center rounded-lg border border-white/25 bg-white/10 px-6 py-3.5 text-sm font-semibold text-white backdrop-blur transition hover:bg-white/20"
