@@ -177,12 +177,12 @@ function TableSkeleton() {
 }
 
 function formatDate(d: string) {
-  if (!d) return '—';
+  if (!d) return '-';
   return new Date(d).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 function formatDateLong(d: string) {
-  if (!d) return '—';
+  if (!d) return '-';
   return new Date(d).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
@@ -563,7 +563,7 @@ export default function PortalPage() {
                     <p className="mt-1.5 text-xs text-slate-500">
                       {b.leads_delivered} / {b.batch_size} leads
                       {b.completed_at && (
-                        <span className="text-slate-400"> — {new Date(b.completed_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                        <span className="text-slate-400"> · {new Date(b.completed_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
                       )}
                     </p>
                   </div>
@@ -821,13 +821,13 @@ export default function PortalPage() {
                     >
                       <td className="px-4 py-3">
                         <div>
-                          <p className="font-medium text-slate-900">{lead.naam_klant || '—'}</p>
+                          <p className="font-medium text-slate-900">{lead.naam_klant || '-'}</p>
                           {lead.telefoonnummer && (
                             <p className="text-xs text-slate-400">{lead.telefoonnummer}</p>
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-slate-600">{lead.plaatsnaam || '—'}</td>
+                      <td className="px-4 py-3 text-slate-600">{lead.plaatsnaam || '-'}</td>
                       <td className="px-4 py-3">
                         {(() => { const b = getBranch(lead.branch); return (
                           <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${b.light} ${b.text}`}>{b.name}</span>
@@ -899,7 +899,7 @@ export default function PortalPage() {
               >
                 <div className="mb-2 flex items-start justify-between">
                   <div>
-                    <p className="font-semibold text-slate-900">{lead.naam_klant || '—'}</p>
+                    <p className="font-semibold text-slate-900">{lead.naam_klant || '-'}</p>
                     {(lead.plaatsnaam || lead.postcode) && (
                       <p className="flex items-center gap-1 text-xs text-slate-500">
                         <MapPinIcon className="h-3 w-3" />
@@ -990,7 +990,7 @@ export default function PortalPage() {
         </>
       )}
 
-      {/* Lead detail slide-over — portalled to body for correct fixed positioning */}
+      {/* Lead detail slide-over (portalled to body for correct fixed positioning) */}
       {typeof document !== 'undefined' && createPortal(
         <AnimatePresence>
           {selectedLead && (
@@ -1008,7 +1008,7 @@ export default function PortalPage() {
         document.body,
       )}
 
-      {/* Settings slide-over — portalled to body */}
+      {/* Settings slide-over (portalled to body) */}
       {typeof document !== 'undefined' && createPortal(
         <AnimatePresence>
           {showSettings && (

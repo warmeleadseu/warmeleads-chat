@@ -182,7 +182,7 @@ export async function GET(request: NextRequest) {
     totalCustomers: (customersRes.data || []).length,
     activeBatches: activeBatches.map(b => ({
       id: b.id,
-      customer: b.customers?.name || '—',
+      customer: b.customers?.name || '-',
       branch: b.branch,
       batchSize: b.batch_size,
       delivered: b.leads_delivered,

@@ -157,7 +157,7 @@ export default function AdminDashboard() {
             const freshCosts = await adminFetch('/api/admin/costs').then(r => r.ok ? r.json() : null);
             if (freshCosts) setCostData(freshCosts);
           }
-        } catch { /* silent — manual sync via Koppelingen still available */ }
+        } catch { /* silent; manual sync via Koppelingen still available */ }
       }
     }).catch(() => setLoading(false));
   }, []);
@@ -294,7 +294,7 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          {/* KPI Cards — 6 cards in 2 rows on mobile, 3+3 or 6 on desktop */}
+          {/* KPI Cards (6 cards in 2 rows on mobile, 3+3 or 6 on desktop) */}
           {(costData.monthSpend > 0 || costData.leadsWithCost > 0) && <>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
             <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -303,12 +303,12 @@ export default function AdminDashboard() {
               <p className="text-[10px] text-slate-400">Week: &euro;{costData.weekSpend.toFixed(0)}</p>
             </div>
             <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <p className="text-xl font-bold text-slate-900">&euro;{costData.monthBrutoCpl?.toFixed(2) ?? '—'}</p>
+              <p className="text-xl font-bold text-slate-900">&euro;{costData.monthBrutoCpl?.toFixed(2) ?? '-'}</p>
               <p className="mt-0.5 text-[11px] text-slate-500">Bruto CPL</p>
               <p className="text-[10px] text-slate-400">{costData.leadsWithCost} leads met kosten</p>
             </div>
             <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-4 shadow-sm">
-              <p className="text-xl font-bold text-emerald-700">&euro;{costData.effectieveCpl?.toFixed(2) ?? '—'}</p>
+              <p className="text-xl font-bold text-emerald-700">&euro;{costData.effectieveCpl?.toFixed(2) ?? '-'}</p>
               <p className="mt-0.5 text-[11px] text-emerald-600 font-medium">Effectieve CPL</p>
               <p className="text-[10px] text-emerald-500">{costData.avgAssignments}x uitgedeeld</p>
             </div>
@@ -493,7 +493,7 @@ export default function AdminDashboard() {
                 {(() => {
                   const maxSpend = Math.max(...costData.dailyTrend.map(d => d.spend), 1);
                   return costData.dailyTrend.map((d, i) => (
-                    <div key={i} className="group relative flex-1" title={`${d.date}: €${d.spend.toFixed(2)} — ${d.leads} leads`}>
+                    <div key={i} className="group relative flex-1" title={`${d.date}: €${d.spend.toFixed(2)} · ${d.leads} leads`}>
                       <div
                         className="w-full rounded-t bg-brand-purple/60 transition group-hover:bg-brand-purple"
                         style={{ height: `${Math.max(2, (d.spend / maxSpend) * 60)}px` }}
@@ -546,7 +546,7 @@ export default function AdminDashboard() {
                     <div className="mb-1 flex items-center justify-between">
                       <div className="flex items-center gap-2 truncate">
                         <span className={`inline-block h-2 w-2 shrink-0 rounded-full ${br.dot}`} />
-                        <span className="truncate text-xs font-medium text-slate-700">{b.customers?.name || '—'}</span>
+                        <span className="truncate text-xs font-medium text-slate-700">{b.customers?.name || '-'}</span>
                         <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${br.light} ${br.text}`}>{br.name}</span>
                       </div>
                       <span className="ml-2 shrink-0 text-[11px] font-semibold text-slate-500">
@@ -692,9 +692,9 @@ export default function AdminDashboard() {
                       <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${b.light} ${b.text}`}>{b.name}</span>
                     ); })()}
                   </td>
-                  <td className="px-3 py-2.5 text-slate-500">{lead.customers?.name || '—'}</td>
+                  <td className="px-3 py-2.5 text-slate-500">{lead.customers?.name || '-'}</td>
                   <td className="px-3 py-2.5 capitalize text-slate-500">{lead.status}</td>
-                  <td className="px-3 py-2.5 text-slate-400">{lead.wervingsdatum || '—'}</td>
+                  <td className="px-3 py-2.5 text-slate-400">{lead.wervingsdatum || '-'}</td>
                 </tr>
               ))}
               {stats.recentLeads.length === 0 && (
@@ -713,7 +713,7 @@ export default function AdminDashboard() {
               <div className="flex items-start justify-between">
                 <div className="min-w-0 flex-1">
                   <p className="font-medium text-slate-800">{lead.naam_klant}</p>
-                  <p className="mt-0.5 text-xs text-slate-500">{lead.customers?.name || '—'}</p>
+                  <p className="mt-0.5 text-xs text-slate-500">{lead.customers?.name || '-'}</p>
                 </div>
                 <span className={`ml-2 shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium capitalize ${STATUS_BADGE[lead.status] || 'bg-slate-100 text-slate-600'}`}>
                   {lead.status}

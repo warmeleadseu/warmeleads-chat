@@ -116,7 +116,7 @@ export default function KoppelingenPage() {
         }, 2500);
       }
     } catch {
-      setTestResult({ id: keyId, success: false, message: 'Test mislukt — probeer het opnieuw' });
+      setTestResult({ id: keyId, success: false, message: 'Test mislukt. Probeer het opnieuw.' });
     }
     setTesting(null);
   };
@@ -427,7 +427,7 @@ function MetaAdsSection() {
       setSyncResult(data);
       fetchStatus();
     } catch {
-      setSyncResult({ ok: false, errors: ['Sync mislukt — probeer het opnieuw'] });
+      setSyncResult({ ok: false, errors: ['Sync mislukt. Probeer het opnieuw.'] });
     }
     setSyncing(false);
   };
@@ -440,7 +440,7 @@ function MetaAdsSection() {
             <CurrencyEuroIcon className="h-5 w-5 text-blue-600" />
           </div>
           <div>
-            <h2 className="text-sm font-bold text-slate-900">Meta Ads — Leadkosten</h2>
+            <h2 className="text-sm font-bold text-slate-900">Meta Ads: Leadkosten</h2>
             <p className="text-xs text-slate-500">Koppel je Meta ad account om automatisch CPL per lead te berekenen</p>
           </div>
         </div>
@@ -472,7 +472,7 @@ function MetaAdsSection() {
                     <>
                       <p className="font-medium text-emerald-700">Verbonden met Meta</p>
                       <p className="text-xs text-emerald-600">
-                        Account: {status.tokenName || '—'} &middot; Ad Account: {status.adAccountId}
+                        Account: {status.tokenName || '-'} &middot; Ad Account: {status.adAccountId}
                       </p>
                     </>
                   ) : (
@@ -773,7 +773,7 @@ function InstructionsPanel({
                 </div>
               </div>
               <p className="mt-2 text-xs text-slate-400">
-                * = verplicht veld. Overige velden zijn optioneel — stuur alleen wat je hebt.
+                * = verplicht veld. Overige velden zijn optioneel. Stuur alleen wat je hebt.
               </p>
             </StepBlock>
 
@@ -800,7 +800,7 @@ function InstructionsPanel({
                         <CheckCircleIcon className="h-5 w-5 shrink-0 text-emerald-500" />
                         <div>
                           <p className="text-sm font-semibold text-emerald-700">Verbinding werkt!</p>
-                          <p className="text-xs text-emerald-600">{testResult.message} — dit venster sluit automatisch.</p>
+                          <p className="text-xs text-emerald-600">{testResult.message}. Dit venster sluit automatisch.</p>
                         </div>
                       </div>
                     </motion.div>
@@ -1392,7 +1392,7 @@ function BackfillPanel({
                           : 'border-red-200 bg-red-50/30 text-red-600'
                       }`}
                     >
-                      <option value="">— Niet gekoppeld —</option>
+                      <option value="">- Niet gekoppeld -</option>
                       {allCrmOptions.map(opt =>
                         opt.key === '_divider'
                           ? <option key={opt.key} disabled className="text-slate-400">{opt.label}</option>

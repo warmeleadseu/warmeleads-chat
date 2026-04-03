@@ -94,7 +94,7 @@ export default function HoeHetWerktPage() {
                 accent: 'bg-brand-purple',
                 accentLight: 'bg-brand-purple/10',
                 accentText: 'text-brand-purple',
-                description: 'We starten met een persoonlijk strategiegesprek — telefonisch, online of op locatie bij jou. Samen bepalen we:',
+                description: 'We starten met een persoonlijk strategiegesprek. Telefonisch, online of op locatie bij jou. Samen bepalen we:',
                 bullets: [
                   'Jouw doelgroep, regio en postcodegebied',
                   'Gewenst lead volume en budget per lead',
@@ -149,7 +149,7 @@ export default function HoeHetWerktPage() {
                   'Notities toevoegen, status bijhouden, feedback geven',
                   'Installeerbaar als app op je telefoon (iOS & Android)',
                 ],
-                footer: 'Je ontvangt een notificatie bij elke nieuwe lead — per e-mail en als pushmelding op je telefoon.',
+                footer: 'Je ontvangt een notificatie bij elke nieuwe lead, per e-mail en als pushmelding op je telefoon.',
               },
             ].map((item, idx) => (
               <motion.div
@@ -418,7 +418,7 @@ export default function HoeHetWerktPage() {
                     <p className="text-[13px] font-semibold text-slate-900 md:text-[14px]">Wat krijg je terug?</p>
                     <p className="mt-1 text-[12px] leading-relaxed text-slate-600 md:text-[13px]">
                       Je krijgt het volledige bedrag terug in leads zodra de campagnes draaien.
-                      Het kost je uiteindelijk niets extra — alleen tijd om samen het onderzoek te doorlopen.
+                      Het kost je uiteindelijk niets extra. Alleen de tijd om samen het onderzoek te doorlopen.
                     </p>
                   </div>
                 </div>

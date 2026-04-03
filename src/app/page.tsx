@@ -191,7 +191,7 @@ export default function HomePage() {
             {[
               {
                 title: 'Exclusieve aanvragen',
-                description: 'Geen doorverkoop of bulk lijsten. Elke lead is van jou — in de afgesproken regio en niche. Op het moment dat jij een batch afneemt, starten wij de campagnes afgestemd op jouw targetgebied.',
+                description: 'Geen doorverkoop of bulk lijsten. Elke lead is van jou, in de afgesproken regio en niche. Op het moment dat jij een batch afneemt, starten wij de campagnes afgestemd op jouw targetgebied.',
                 icon: ShieldCheckIcon,
                 accent: 'bg-brand-purple',
               },
@@ -203,7 +203,7 @@ export default function HomePage() {
               },
               {
                 title: 'Schaalbaar lead volume',
-                description: 'Start gecontroleerd in één regio, bewijs rendement, en schaal uit naar meerdere gebieden. Van 10 tot 500+ leads per week — wij schalen mee.',
+                description: 'Start gecontroleerd in één regio, bewijs rendement, en schaal uit naar meerdere gebieden. Van 10 tot 500+ leads per week. Wij schalen mee.',
                 icon: ArrowTrendingUpIcon,
                 accent: 'bg-brand-orange',
               },
@@ -249,7 +249,7 @@ export default function HomePage() {
               <p className="mt-3 text-[14px] leading-relaxed text-slate-600 md:mt-4 md:text-[15px]">
                 Zodra een lead door alle quality checks komt, verschijnt deze realtime in jouw
                 persoonlijke portaal. Een moderne webapp die je ook als app op je telefoon kunt
-                installeren — zodat je altijd en overal je leads kunt opvolgen.
+                installeren, zodat je altijd en overal je leads kunt opvolgen.
               </p>
 
               <div className="mt-6 space-y-3 md:mt-8">
@@ -290,7 +290,7 @@ export default function HomePage() {
                   <div className="space-y-3 p-4">
                     <div className="rounded-lg bg-gradient-to-r from-brand-purple/10 to-brand-pink/10 p-3">
                       <p className="text-[10px] font-bold uppercase tracking-wider text-brand-purple">Nieuwe lead</p>
-                      <p className="mt-1 text-[13px] font-semibold text-slate-800">Jan de Vries — Zonnepanelen</p>
+                      <p className="mt-1 text-[13px] font-semibold text-slate-800">Jan de Vries · Zonnepanelen</p>
                       <p className="mt-0.5 text-[11px] text-slate-500">Utrecht · 14 panelen · Budget €8.000+</p>
                     </div>
                     <div className="flex gap-2">
@@ -329,7 +329,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── Process — 4 steps ── */}
+      {/* ── Process (4 steps) ── */}
       <section id="proces" className="bg-slate-950 text-white">
         <div className="mx-auto max-w-7xl px-5 py-14 md:py-20 lg:px-8">
           <div className="mb-8 max-w-2xl md:mb-12">
@@ -453,7 +453,7 @@ export default function HomePage() {
               <p className="mt-3 text-[14px] leading-relaxed text-slate-600 md:mt-4 md:text-[15px]">
                 Bij WarmeLeads geloven we in échte samenwerking. Daarom krijg je een vaste
                 accountmanager die jouw business begrijpt, meedenkt over strategie en altijd
-                bereikbaar is — telefonisch, per mail én persoonlijk op locatie.
+                bereikbaar is. Telefonisch, per mail én persoonlijk op locatie.
               </p>
 
               <div className="mt-6 space-y-3">
@@ -641,7 +641,7 @@ export default function HomePage() {
                     <p className="text-[14px] font-bold text-slate-900 md:text-[15px]">Onderzoekskosten: €750</p>
                     <p className="mt-1 text-[12px] leading-relaxed text-slate-600 md:text-[13px]">
                       Dit bedrag investeren we in marktonderzoek, campagne-testen en strategie-ontwikkeling
-                      voor jouw branche. Je krijgt dit bedrag volledig terug in leads — het kost je dus
+                      voor jouw branche. Je krijgt dit bedrag volledig terug in leads, dus het kost je
                       uiteindelijk niets extra.
                     </p>
                   </div>
@@ -700,7 +700,7 @@ export default function HomePage() {
               Wij leveren de leads. Jij sluit de deals.
             </h2>
             <p className="mx-auto mt-3 max-w-lg text-[14px] leading-relaxed text-white/70 md:text-[16px]">
-              Van installatiebedrijven tot energiepartners — wij zorgen voor een
+              Van installatiebedrijven tot energiepartners. Wij zorgen voor een
               voorspelbare instroom door heel Nederland en België.
             </p>
           </motion.div>
@@ -730,10 +730,10 @@ export default function HomePage() {
           <div className="space-y-2.5 md:space-y-3">
             {[
               { q: 'Zijn de leads exclusief of gedeeld?', a: 'Primair werken we met exclusieve leads. Elke aanvraag is enkel voor jou, in jouw regio. Zodra je een batch afneemt starten wij campagnes specifiek voor jouw targetgebied. Indien gewenst bespreken we een gedeeld model voor schaal en kostprijs.' },
-              { q: 'Hoe snel kunnen we live?', a: 'In de meeste gevallen binnen 24 tot 72 uur na intake, afhankelijk van niche en regio. We starten zodra de campagnes staan — geen wekenlange aanlooptijd.' },
+              { q: 'Hoe snel kunnen we live?', a: 'In de meeste gevallen binnen 24 tot 72 uur na intake, afhankelijk van niche en regio. We starten zodra de campagnes staan. Geen wekenlange aanlooptijd.' },
               { q: 'Hoe werkt het klantportaal?', a: 'Je krijgt toegang tot een modern portaal op warmeleads.eu/portal. Hier zie je al je leads realtime binnenkomen met alle details. Je kunt leads direct bellen, WhatsAppen of mailen. Het portaal is installeerbaar als app op je telefoon, inclusief pushnotificaties bij elke nieuwe lead.' },
               { q: 'Hoe worden leads gekwalificeerd?', a: 'Elke lead doorloopt automatisch meerdere quality checks aan onze achterkant. Contactgegevens worden geverifieerd, interesse en geschiktheid worden gecontroleerd. Alleen leads die aan al jouw specifieke eisen voldoen komen in je portaal terecht.' },
-              { q: 'Krijg ik een vast aanspreekpunt?', a: 'Ja. Elke klant krijgt een persoonlijke accountmanager die jouw business kent, meedenkt over strategie en altijd bereikbaar is. Niet alleen telefonisch — onze accountmanagers komen ook bij je langs op locatie.' },
+              { q: 'Krijg ik een vast aanspreekpunt?', a: 'Ja. Elke klant krijgt een persoonlijke accountmanager die jouw business kent, meedenkt over strategie en altijd bereikbaar is. Niet alleen telefonisch, onze accountmanagers komen ook bij je langs op locatie.' },
               { q: 'Wat als jullie nog niet in mijn branche actief zijn?', a: 'Geen probleem. Voor €750 onderzoekskosten ontdekken we de beste strategie en tarieven voor jouw branche. Dit bedrag krijg je volledig terug in leads, dus het kost je uiteindelijk niets extra.' },
               { q: 'Kunnen jullie koppelen met ons CRM?', a: 'Ja. We ondersteunen directe koppelingen via webhooks, API of handmatige exports zodat je salesflow direct doorloopt zonder extra administratie.' },
               { q: 'Wat is een realistisch startvolume?', a: 'Dat hangt af van jouw niche en postcodegebied. Tijdens het strategiegesprek krijg je een concreet startschema met verwacht volume en kostprijs.' },
@@ -775,7 +775,7 @@ export default function HomePage() {
             </h2>
             <p className="mt-3 text-[15px] leading-relaxed text-white/70 md:mt-4 md:text-lg">
               Plan een gratis strategiegesprek en ontvang een concreet plan voor
-              volume, regio en leadkwaliteit — zonder verplichtingen.
+              volume, regio en leadkwaliteit. Zonder verplichtingen.
             </p>
             <div className="mt-6 flex flex-col gap-3 sm:flex-row md:mt-8">
               <Link

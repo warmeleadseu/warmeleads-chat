@@ -320,7 +320,7 @@ export async function distributeUnassignedLeads(): Promise<{ distributed: number
 
   const cooldownCutoff = new Date(Date.now() - COOLDOWN_HOURS * 60 * 60 * 1000);
 
-  // Pass 1: leads with 0 assignments (new leads — always distribute)
+  // Pass 1: leads with 0 assignments (new leads, always distribute)
   const newLeads = leads.filter(l => (assignmentCounts[l.id] || 0) === 0);
 
   let totalDistributed = 0;

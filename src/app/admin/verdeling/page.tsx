@@ -368,7 +368,7 @@ export default function VerdelingPage() {
                 <p className="text-2xl font-bold text-slate-900">
                   {filteredAssignments.filter(a => a.distance_km != null).length > 0
                     ? `${(filteredAssignments.filter(a => a.distance_km != null).reduce((s, a) => s + (a.distance_km || 0), 0) / filteredAssignments.filter(a => a.distance_km != null).length).toFixed(1)} km`
-                    : '—'}
+                    : '-'}
                 </p>
                 <p className="text-xs text-slate-500">Gem. afstand</p>
               </div>
@@ -465,10 +465,10 @@ export default function VerdelingPage() {
                       return (
                         <tr key={a.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50">
                           <td className="px-4 py-3">
-                            <div className="font-medium text-slate-800">{a.leads?.naam_klant || '—'}</div>
+                            <div className="font-medium text-slate-800">{a.leads?.naam_klant || '-'}</div>
                             <div className="text-xs text-slate-400">{a.leads?.plaatsnaam || a.leads?.postcode || ''}</div>
                           </td>
-                          <td className="px-4 py-3 text-slate-600">{a.customers?.name || '—'}</td>
+                          <td className="px-4 py-3 text-slate-600">{a.customers?.name || '-'}</td>
                           <td className="px-4 py-3">
                             {br && (
                               <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${c.light} ${c.text}`}>
@@ -477,7 +477,7 @@ export default function VerdelingPage() {
                             )}
                           </td>
                           <td className="px-4 py-3 text-slate-500">
-                            {a.distance_km != null ? `${a.distance_km} km` : '—'}
+                            {a.distance_km != null ? `${a.distance_km} km` : '-'}
                           </td>
                           <td className="px-4 py-3 text-xs text-slate-400">
                             {new Date(a.assigned_at).toLocaleDateString('nl-NL')}
@@ -510,7 +510,7 @@ export default function VerdelingPage() {
               <div className="rounded-xl border border-blue-100 bg-blue-50/30 p-5">
                 <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-800">
                   <CheckCircleIcon className="h-4 w-4 text-blue-500" />
-                  Afgeronde batches — samenvatting
+                  Afgeronde batches: samenvatting
                 </h3>
                 <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
                   <div className="rounded-lg bg-white p-3 shadow-sm">
@@ -527,7 +527,7 @@ export default function VerdelingPage() {
                   </div>
                   <div className="rounded-lg bg-white p-3 shadow-sm">
                     <p className="text-xl font-bold text-slate-900">
-                      {completedLeads > 0 ? `€${(completedRevenue / completedLeads).toFixed(2)}` : '—'}
+                      {completedLeads > 0 ? `€${(completedRevenue / completedLeads).toFixed(2)}` : '-'}
                     </p>
                     <p className="text-[11px] text-slate-500">Gem. prijs/lead</p>
                   </div>
@@ -544,7 +544,7 @@ export default function VerdelingPage() {
                       <div key={b.id} className="rounded-lg bg-white p-4 shadow-sm">
                         <div className="flex items-start justify-between">
                           <div className="flex items-center gap-2">
-                            <span className="font-medium text-slate-800">{b.customers?.name || '—'}</span>
+                            <span className="font-medium text-slate-800">{b.customers?.name || '-'}</span>
                             <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${c.light} ${c.text}`}>{br?.name || b.branch}</span>
                             <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-700">Voltooid</span>
                           </div>
@@ -647,7 +647,7 @@ export default function VerdelingPage() {
                           return (
                             <tr key={b.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50">
                               <td className="px-4 py-3">
-                                <div className="font-medium text-slate-800">{b.customers?.name || '—'}</div>
+                                <div className="font-medium text-slate-800">{b.customers?.name || '-'}</div>
                                 {comp && (
                                   <div className="mt-1 flex items-center gap-1.5">
                                     <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
@@ -689,7 +689,7 @@ export default function VerdelingPage() {
                                 </span>
                               </td>
                               <td className="px-4 py-3 text-xs text-slate-500">{b.leads_per_week || '∞'}</td>
-                              <td className="px-4 py-3 text-slate-500">{b.price_per_lead ? `€${Number(b.price_per_lead).toFixed(2)}` : '—'}</td>
+                              <td className="px-4 py-3 text-slate-500">{b.price_per_lead ? `€${Number(b.price_per_lead).toFixed(2)}` : '-'}</td>
                               <td className="px-4 py-3 text-xs text-slate-400">{new Date(b.created_at).toLocaleDateString('nl-NL')}</td>
                             </tr>
                           );
@@ -846,7 +846,7 @@ export default function VerdelingPage() {
                             {/* Potential matches / reasons for not assigned */}
                             {unassigned.length > 0 && (
                               <div>
-                                <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Niet toegewezen — reden</p>
+                                <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Niet toegewezen: reden</p>
                                 <div className="space-y-1.5">
                                   {unassigned.map(m => (
                                     <div key={m.customer_id} className="flex items-start justify-between rounded-lg bg-white px-3 py-2 ring-1 ring-slate-100">
@@ -872,9 +872,9 @@ export default function VerdelingPage() {
 
                             {/* Lead details */}
                             <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-slate-100 pt-2 text-xs text-slate-400">
-                              <span>Postcode: {lead.postcode || '—'}</span>
-                              <span>Plaats: {lead.plaatsnaam || '—'}</span>
-                              <span>Land: {lead.land || '—'}</span>
+                              <span>Postcode: {lead.postcode || '-'}</span>
+                              <span>Plaats: {lead.plaatsnaam || '-'}</span>
+                              <span>Land: {lead.land || '-'}</span>
                               <span>Coords: {lead.has_coords ? `${lead.lat}, ${lead.lng}` : 'Geen'}</span>
                               <span>Aangemaakt: {new Date(lead.created_at).toLocaleDateString('nl-NL')}</span>
                             </div>

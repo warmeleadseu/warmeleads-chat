@@ -171,9 +171,9 @@ function PortalFooter() {
     <footer className="border-t border-slate-200 bg-white">
       <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
         <p className="text-center text-xs text-slate-400">
-          Vragen? Neem contact op met WarmeLeads —{' '}
+          Vragen? Neem contact op met WarmeLeads:{' '}
           <a href="mailto:info@warmeleads.eu" className="text-brand-purple hover:underline">info@warmeleads.eu</a>
-          {' — '}
+          {' · '}
           <a href="tel:0850477067" className="text-brand-purple hover:underline">085 047 7067</a>
         </p>
       </div>

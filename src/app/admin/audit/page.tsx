@@ -90,7 +90,7 @@ function DetailsCell({ details }: { details: Record<string, unknown> | null }) {
   const [expanded, setExpanded] = useState(false);
 
   if (!details || Object.keys(details).length === 0) {
-    return <span className="text-slate-400 italic text-sm">—</span>;
+    return <span className="text-slate-400 italic text-sm">-</span>;
   }
 
   const condensed = Object.entries(details)
@@ -352,7 +352,7 @@ export default function AuditLogPage() {
                         {formatDate(log.created_at)}
                       </td>
                       <td className="px-4 py-3 text-sm text-slate-700 whitespace-nowrap">
-                        {log.admin_name || log.admin_email || log.admin_id || '—'}
+                        {log.admin_name || log.admin_email || log.admin_id || '-'}
                       </td>
                       <td className="px-4 py-3">
                         <span className={`inline-block text-xs font-medium px-2.5 py-1 rounded-full ${actionColor(log.action)}`}>
@@ -397,7 +397,7 @@ export default function AuditLogPage() {
                   <div className="grid grid-cols-2 gap-2 text-sm">
                     <div>
                       <span className="text-xs text-slate-400">Gebruiker</span>
-                      <p className="text-slate-700 truncate">{log.admin_name || log.admin_email || log.admin_id || '—'}</p>
+                      <p className="text-slate-700 truncate">{log.admin_name || log.admin_email || log.admin_id || '-'}</p>
                     </div>
                     <div>
                       <span className="text-xs text-slate-400">Entiteit</span>
@@ -448,7 +448,7 @@ export default function AuditLogPage() {
               <p className="text-sm text-slate-500">
                 Pagina <span className="font-medium text-slate-700">{page}</span> van{' '}
                 <span className="font-medium text-slate-700">{totalPages}</span>
-                <span className="hidden sm:inline"> — {total} resultaten</span>
+                <span className="hidden sm:inline"> · {total} resultaten</span>
               </p>
               <div className="flex items-center gap-1">
                 <button

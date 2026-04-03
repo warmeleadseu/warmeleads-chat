@@ -162,7 +162,7 @@ export async function GET(request: NextRequest) {
         if (leadAssignCount >= 3) {
           reason = `Binnen bereik (${closestTarget.distance}km) maar lead heeft al max 3 toewijzingen`;
         } else {
-          reason = `Binnen bereik (${closestTarget.distance}km) — wacht op verdeling (klik "Verdeel leads" of wacht op cron)`;
+          reason = `Binnen bereik (${closestTarget.distance}km). Wacht op verdeling (klik "Verdeel leads" of wacht op cron).`;
         }
         potentialMatches.push({
           customer_id: custId,

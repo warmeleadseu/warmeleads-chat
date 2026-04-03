@@ -840,7 +840,7 @@ function TargetsPanel({ customer, onClose }: { customer: Customer; onClose: () =
 }
 
 /* ============================================================
-   BATCHES PANEL — LEAD FILTER BUILDER (multi-select per field)
+   BATCHES PANEL: LEAD FILTER BUILDER (multi-select per field)
    ============================================================ */
 
 const STANDARD_FILTER_FIELDS: BranchField[] = [
@@ -942,7 +942,7 @@ function FilterBuilder({ filters, onChange, branchSlug }: { filters: LeadFilter[
       {open && (
         <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-3">
           {filters.length === 0 && (
-            <p className="text-[11px] text-slate-400">Geen filters — alle leads die in het targetgebied vallen worden toegewezen.</p>
+            <p className="text-[11px] text-slate-400">Geen filters. Alle leads die in het targetgebied vallen worden toegewezen.</p>
           )}
           {filters.map((f, i) => {
             const fieldDef = fields.find(fd => fd.key === f.field);

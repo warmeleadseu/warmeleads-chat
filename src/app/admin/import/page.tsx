@@ -140,7 +140,7 @@ function autoMap(headers: string[], branchFields: { key: string; label: string }
     ...branchFields.map(f => ({ key: f.key, label: f.label })),
   ];
 
-  // Build aliases per valid field — inherit from ALIASES when matching
+  // Build aliases per valid field; inherit from ALIASES when matching
   const fieldAliases = new Map<string, string[]>();
   for (const f of allFields) {
     const normKey = normalize(f.key);
@@ -601,7 +601,7 @@ export default function ImportPage() {
             >
               <DocumentArrowUpIcon className="mb-3 h-12 w-12 text-slate-300" />
               <p className="text-sm font-medium text-slate-600">Sleep een bestand hierheen of klik om te selecteren</p>
-              <p className="mt-1 text-xs text-slate-400">Excel (.xlsx, .xls) of CSV — meerdere tabbladen worden automatisch herkend</p>
+              <p className="mt-1 text-xs text-slate-400">Excel (.xlsx, .xls) of CSV. Meerdere tabbladen worden automatisch herkend</p>
               <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleFileInput} className="hidden" />
             </label>
           ) : (
@@ -613,7 +613,7 @@ export default function ImportPage() {
                   onChange={e => setPasteBranch(e.target.value)}
                   className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm sm:w-64"
                 >
-                  <option value="">— Selecteer branche —</option>
+                  <option value="">- Selecteer branche -</option>
                   {branches.filter(b => b.is_active).map(b => <option key={b.slug} value={b.slug}>{b.name}</option>)}
                 </select>
               </div>
@@ -669,7 +669,7 @@ export default function ImportPage() {
                         )}
                       </div>
                       <p className="mt-0.5 text-xs text-slate-400">
-                        {d ? d.toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
+                        {d ? d.toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-'}
                         {' · '}{run.imported || run.lead_ids?.length || 0} leads
                       </p>
                     </div>
@@ -721,7 +721,7 @@ export default function ImportPage() {
                         onChange={e => updateSheetBranch(i, e.target.value)}
                         className={`rounded-lg border px-3 py-2 text-sm sm:w-48 ${s.branch ? c.border + ' ' + c.bg + ' ' + c.text + ' font-medium' : 'border-slate-200 bg-white text-slate-500'}`}
                       >
-                        <option value="">— Overslaan —</option>
+                        <option value="">- Overslaan -</option>
                         {branches.filter(b => b.is_active).map(b => <option key={b.slug} value={b.slug}>{b.name}</option>)}
                       </select>
                     </div>
@@ -779,7 +779,7 @@ export default function ImportPage() {
           <div className="p-6">
             <div className="mb-4 flex items-center justify-between">
               <div>
-                <h2 className="font-semibold text-slate-900">Kolommen koppelen — {currentMappingSheet.name}</h2>
+                <h2 className="font-semibold text-slate-900">Kolommen koppelen: {currentMappingSheet.name}</h2>
                 <p className="mt-0.5 text-xs text-slate-500">
                   {currentMappingSheet.rows.length} rijen · Branche: {branches.find(b => b.slug === currentMappingSheet.branch)?.name}
                 </p>
@@ -807,7 +807,7 @@ export default function ImportPage() {
                       onChange={e => updateMapping(sheets.indexOf(currentMappingSheet), header, e.target.value)}
                       className={`w-full rounded-lg border px-3 py-2.5 text-sm sm:w-48 sm:shrink-0 sm:py-1.5 ${crmField ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-white text-slate-500'}`}
                     >
-                      <option value="">— Overslaan —</option>
+                      <option value="">- Overslaan -</option>
                       {fields.map(f => (
                         <option
                           key={f.key}
@@ -853,7 +853,7 @@ export default function ImportPage() {
                             }
                           </td>
                           {Object.entries(currentMappingSheet.mapping).map(([, f]) => (
-                            <td key={f} className="max-w-[150px] truncate whitespace-nowrap px-2.5 py-2 text-slate-700">{mapped[f] || '—'}</td>
+                            <td key={f} className="max-w-[150px] truncate whitespace-nowrap px-2.5 py-2 text-slate-700">{mapped[f] || '-'}</td>
                           ))}
                         </tr>
                       );

@@ -166,7 +166,7 @@ export default function MaatwerkLeadsPage() {
               Perfect voor deze markten
             </h2>
             <p className="mx-auto mt-3 max-w-lg text-[14px] leading-relaxed text-slate-500 md:mt-4 md:text-[16px]">
-              Van industriële B2B tot premium consumentenmarkten — onze maatwerk
+              Van industriële B2B tot premium consumentenmarkten. Onze maatwerk
               aanpak levert in elke niche.
             </p>
           </div>
@@ -373,7 +373,7 @@ export default function MaatwerkLeadsPage() {
             </h2>
             <p className="mt-3 text-[15px] leading-relaxed text-white/70 md:mt-4 md:text-lg">
               Vertel ons over uw branche en wij maken de perfecte leadgeneratie
-              strategie — volledig op maat, zonder verplichtingen.
+              strategie. Volledig op maat, zonder verplichtingen.
             </p>
             <div className="mt-6 flex flex-col gap-3 sm:flex-row md:mt-8">
               <Link

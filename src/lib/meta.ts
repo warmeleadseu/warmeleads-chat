@@ -190,7 +190,7 @@ export async function syncMetaAdSpend(dateFrom: string, dateTo: string): Promise
       }
     }
 
-    // Fallback: leads with campaign but no spend on their exact day — use total campaign spend / total our leads
+    // Fallback: leads with campaign but no spend on their exact day, use total campaign spend / total our leads
     for (const [campaignId, leadIds] of ourLeadsByCampaign) {
       const uncosted = leadIds.filter(id => !updatedLeadIds.has(id));
       if (uncosted.length === 0) continue;

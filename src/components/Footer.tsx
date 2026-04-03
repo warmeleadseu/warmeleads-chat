@@ -77,7 +77,7 @@ export function Footer() {
 
         <div className="border-t border-slate-800/60">
           <div className="mx-auto flex max-w-7xl flex-col gap-1.5 px-5 py-4 text-[11px] text-slate-600 md:flex-row md:items-center md:justify-between md:py-5 md:text-xs lg:px-8">
-            <p>&copy; {new Date().getFullYear()} WarmeLeads.eu &mdash; Alle rechten voorbehouden.</p>
+            <p>&copy; {new Date().getFullYear()} WarmeLeads.eu · Alle rechten voorbehouden.</p>
             <p>KvK: 88929280 &bull; Stavangerweg 21-1, 9723 JC Groningen</p>
           </div>
         </div>

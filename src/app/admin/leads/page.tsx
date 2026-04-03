@@ -402,7 +402,7 @@ export default function LeadsCRMPage() {
                       </td>
                     )}
                     <td className="px-3 py-2.5 text-xs text-slate-500">
-                      <div>{lead.customers?.name || '—'}</div>
+                      <div>{lead.customers?.name || '-'}</div>
                       {(lead as any).assignment_count > 0 && (
                         <span className="inline-flex items-center gap-0.5 rounded-full bg-purple-50 px-1.5 py-0.5 text-[10px] font-medium text-purple-600" title={(lead as any).assigned_customers?.join(', ')}>
                           {(lead as any).assignment_count}x toegewezen
@@ -418,7 +418,7 @@ export default function LeadsCRMPage() {
                           </select>
                         ) : col === 'telefoonnummer' ? (
                           <span className="flex items-center gap-1">
-                            <span className="block max-w-[140px] truncate">{lead.telefoonnummer || '—'}</span>
+                            <span className="block max-w-[140px] truncate">{lead.telefoonnummer || '-'}</span>
                             {lead.phone_valid === false && (
                               <span title="Mogelijk nep telefoonnummer" className="shrink-0">
                                 <ExclamationTriangleIcon className="h-3.5 w-3.5 text-amber-500" />
@@ -427,10 +427,10 @@ export default function LeadsCRMPage() {
                           </span>
                         ) : col === 'lead_cost' ? (
                           <span className={`text-xs font-medium ${lead.lead_cost ? 'text-slate-700' : 'text-slate-300'}`}>
-                            {lead.lead_cost ? `€${Number(lead.lead_cost).toFixed(2)}` : '—'}
+                            {lead.lead_cost ? `€${Number(lead.lead_cost).toFixed(2)}` : '-'}
                           </span>
                         ) : (
-                          <span className="block max-w-[160px] truncate">{getLeadFieldValue(lead, col) || '—'}</span>
+                          <span className="block max-w-[160px] truncate">{getLeadFieldValue(lead, col) || '-'}</span>
                         )}
                       </td>
                     ))}
@@ -457,9 +457,9 @@ export default function LeadsCRMPage() {
             <div key={lead.id} onClick={() => setEditLead(lead)} className="cursor-pointer rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition active:bg-slate-50">
               <div className="mb-2 flex items-start justify-between">
                 <div className="min-w-0 flex-1">
-                  <p className="font-semibold text-slate-900">{lead.naam_klant || '—'}</p>
+                  <p className="font-semibold text-slate-900">{lead.naam_klant || '-'}</p>
                   <p className="text-xs text-slate-500">
-                    {lead.customers?.name || '—'}
+                    {lead.customers?.name || '-'}
                     {(lead as any).assignment_count > 0 && (
                       <span className="ml-1 text-[10px] text-purple-500">({(lead as any).assignment_count}x)</span>
                     )}
@@ -642,7 +642,7 @@ function LeadFormPanel({
               <label className="mb-1 block text-xs font-medium text-slate-500">Klant (bedrijf)</label>
               <select value={form.customer_id} onChange={e => set('customer_id', e.target.value)}
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900">
-                <option value="">— Selecteer —</option>
+                <option value="">- Selecteer -</option>
                 {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
@@ -685,7 +685,7 @@ function LeadFormPanel({
               <div>
                 <label className="mb-1 block text-xs font-medium text-slate-500">Provincie</label>
                 <select value={form.provincie || ''} onChange={e => set('provincie', e.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900">
-                  <option value="">— Selecteer —</option>
+                  <option value="">- Selecteer -</option>
                   <optgroup label="Nederland">{PROVINCES_NL.map(p => <option key={p} value={p}>{p}</option>)}</optgroup>
                   <optgroup label="België">{PROVINCES_BE.map(p => <option key={p} value={p}>{p}</option>)}</optgroup>
                 </select>
@@ -722,12 +722,12 @@ function LeadFormPanel({
                       <textarea value={form[f.key] || ''} onChange={e => set(f.key, e.target.value)} rows={2} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
                     ) : f.field_type === 'select' ? (
                       <select value={form[f.key] || ''} onChange={e => set(f.key, e.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900">
-                        <option value="">— Selecteer —</option>
+                        <option value="">- Selecteer -</option>
                         {f.options.map(o => <option key={o} value={o}>{o}</option>)}
                       </select>
                     ) : f.field_type === 'boolean' ? (
                       <select value={form[f.key] || ''} onChange={e => set(f.key, e.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900">
-                        <option value="">— Selecteer —</option>
+                        <option value="">- Selecteer -</option>
                         <option value="Ja">Ja</option>
                         <option value="Nee">Nee</option>
                       </select>

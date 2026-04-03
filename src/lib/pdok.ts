@@ -13,7 +13,7 @@ export function isValidPlace(val: string | undefined): boolean {
   if (!val) return false;
   const v = val.trim();
   if (v.length < 2) return false;
-  if (/^[-–—.…\/\\]+$/.test(v)) return false;
+  if (/^[-–.…\/\\]+$/.test(v)) return false;
   if (v.includes('@')) return false;
   if (/^\+?\d[\d\s\-().]{6,}$/.test(v)) return false;
   if (/^\d+$/.test(v)) return false;
@@ -261,11 +261,11 @@ export async function resolveAddress(
   if (nlResult?.lat && !beResult?.lat) return nlResult;
   if (beResult?.lat && !nlResult?.lat) return beResult;
 
-  // Both found results — prefer the one with a more specific match (plaatsnaam set)
+  // Both found results, prefer the one with a more specific match (plaatsnaam set)
   if (nlResult?.plaatsnaam && !beResult?.plaatsnaam) return nlResult;
   if (beResult?.plaatsnaam && !nlResult?.plaatsnaam) return beResult;
 
-  // Both have results — default to NL (more common usage)
+  // Both have results, default to NL (more common usage)
   return nlResult || beResult || null;
 }
 

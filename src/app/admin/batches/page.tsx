@@ -334,7 +334,7 @@ export default function BatchesPage() {
                         <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_COLORS[b.status]}`}>{STATUS_LABELS[b.status]}</span>
                       </td>
                       <td className="px-4 py-3 text-right text-slate-700">
-                        {b.price_per_lead ? `€${Number(b.price_per_lead).toFixed(2)}` : '—'}
+                        {b.price_per_lead ? `€${Number(b.price_per_lead).toFixed(2)}` : '-'}
                       </td>
                       <td className="px-4 py-3 text-right text-slate-700">
                         {b.leads_per_week || '∞'}
@@ -345,7 +345,7 @@ export default function BatchesPage() {
                             <AdjustmentsHorizontalIcon className="h-3.5 w-3.5 text-amber-500" />
                             <span className="text-xs text-amber-600">{b.lead_filters.length}</span>
                           </div>
-                        ) : <span className="text-xs text-slate-300">—</span>}
+                        ) : <span className="text-xs text-slate-300">-</span>}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-1">
@@ -558,7 +558,7 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-500">€/lead</label>
               <input type="number" step="0.01" value={form.price_per_lead} onChange={e => setForm(f => ({ ...f, price_per_lead: e.target.value }))}
-                placeholder="—"
+                placeholder="-"
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
             </div>
           </div>
@@ -689,7 +689,7 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-500">€/lead</label>
               <input type="number" step="0.01" value={form.price_per_lead} onChange={e => setForm(f => ({ ...f, price_per_lead: e.target.value }))}
-                placeholder="—"
+                placeholder="-"
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
             </div>
           </div>

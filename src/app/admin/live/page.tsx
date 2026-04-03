@@ -494,9 +494,9 @@ export default function LiveDashboard() {
   // Speed/streak metrics
   const sortedLeads = [...data.recentLeads].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   const lastLeadTime = sortedLeads[0]?.createdAt;
-  const lastLeadAgo = lastLeadTime ? timeAgo(lastLeadTime) : '—';
+  const lastLeadAgo = lastLeadTime ? timeAgo(lastLeadTime) : '-';
 
-  let avgInterval = '—';
+  let avgInterval = '-';
   if (sortedLeads.length >= 2) {
     const todayLeads = sortedLeads.filter(l => {
       const d = new Date(l.createdAt);
@@ -787,7 +787,7 @@ export default function LiveDashboard() {
                                 Nieuw
                               </motion.span>
                             )}
-                            <p className="truncate text-sm font-semibold text-white/80">{lead.name || '—'}</p>
+                            <p className="truncate text-sm font-semibold text-white/80">{lead.name || '-'}</p>
                           </div>
                           <div className="mt-0.5 flex items-center gap-2 text-[11px] text-white/30">
                             {lead.city && <span>{lead.city}</span>}

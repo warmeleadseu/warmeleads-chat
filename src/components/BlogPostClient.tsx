@@ -343,7 +343,7 @@ export default function BlogPostClient({ article, relatedArticles }: BlogPostCli
                     &ldquo;Door de implementatie van deze strategieën zagen we binnen 3 maanden een toename van 127%
                     in gekwalificeerde leads. De ROI was fenomenaal.&rdquo;
                     <footer className="text-slate-500 text-sm mt-2 not-italic">
-                      — Marketing Director bij groot Nederlands installatiebedrijf
+                      · Marketing Director bij groot Nederlands installatiebedrijf
                     </footer>
                   </blockquote>
                 </div>

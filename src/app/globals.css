@@ -101,7 +101,7 @@
     @apply transition-all duration-200;
   }
   
-  /* Gradient Text — matches the logo wordmark gradient */
+  /* Gradient Text (matches the logo wordmark gradient) */
   .gradient-text {
     background: linear-gradient(135deg, #FF6B35, #FF4757, #E74C8C);
     -webkit-background-clip: text;

@@ -96,7 +96,7 @@ export function BranchLeadsPageContent({ metadata }: BranchLeadsPageProps) {
                 <ul className="mb-8 space-y-3 text-left">
                   <li className="flex items-center gap-2">
                     <CheckCircleIcon className="h-5 w-5 shrink-0 text-brand-orange" />
-                    <span className="text-slate-700">100% exclusief — alleen voor jou</span>
+                    <span className="text-slate-700">100% exclusief, alleen voor jou</span>
                   </li>
                   <li className="flex items-center gap-2">
                     <CheckCircleIcon className="h-5 w-5 shrink-0 text-brand-orange" />
@@ -165,7 +165,7 @@ export function BranchLeadsPageContent({ metadata }: BranchLeadsPageProps) {
         <div className="mx-auto max-w-6xl px-5 lg:px-8">
           <h2 className="mb-3 text-center text-3xl font-bold text-slate-900">Waarom WarmeLeads?</h2>
           <p className="mx-auto mb-12 max-w-2xl text-center text-slate-500">
-            Verse, gekwalificeerde leads uit eigen campagnes — realtime in je portaal
+            Verse, gekwalificeerde leads uit eigen campagnes. Realtime in je portaal.
           </p>
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
             <div className="rounded-xl border border-slate-200 bg-white p-6 text-center shadow-sm">

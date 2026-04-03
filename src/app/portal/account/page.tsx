@@ -68,7 +68,7 @@ type TabKey = (typeof TABS)[number]['key'];
 /* ─── Helpers ──────────────────────────────────────────────── */
 
 function formatDate(d: string) {
-  if (!d) return '—';
+  if (!d) return '-';
   return new Date(d).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
@@ -236,7 +236,7 @@ function AccountTab({
             { label: 'Bedrijfsnaam', value: data.name, icon: BuildingOfficeIcon },
             { label: 'Contactpersoon', value: data.contact_person, icon: UserCircleIcon },
             { label: 'E-mailadres', value: data.email, icon: EnvelopeIcon },
-            { label: 'Telefoonnummer', value: data.phone || '—', icon: PhoneIcon },
+            { label: 'Telefoonnummer', value: data.phone || '-', icon: PhoneIcon },
           ].map((field) => (
             <div key={field.label}>
               <label className="mb-1 block text-xs font-medium text-slate-500">{field.label}</label>
@@ -559,7 +559,7 @@ function InsightsTab({
                   {item.pct}%
                 </div>
               ) : (
-                <span className="text-xs text-slate-300">—</span>
+                <span className="text-xs text-slate-300">-</span>
               )}
             </div>
             <p className="mt-1 text-xs text-slate-400">

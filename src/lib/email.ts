@@ -79,7 +79,7 @@ function badge(text: string): string {
 function row(label: string, value: string): string {
   return `<tr>
     <td style="padding:8px 12px;color:#94A3B8;font-size:14px;border-bottom:1px solid rgba(255,255,255,.05)">${label}</td>
-    <td style="padding:8px 12px;color:#E2E8F0;font-size:14px;border-bottom:1px solid rgba(255,255,255,.05)">${value || '—'}</td>
+    <td style="padding:8px 12px;color:#E2E8F0;font-size:14px;border-bottom:1px solid rgba(255,255,255,.05)">${value || '-'}</td>
   </tr>`;
 }
 
@@ -216,9 +216,9 @@ export async function sendDailyLeadDigest(
   const leadRows = leads
     .map(l => `<tr>
       <td style="padding:8px 12px;color:#E2E8F0;font-size:14px;border-bottom:1px solid rgba(255,255,255,.05)">${l.naam_klant}</td>
-      <td style="padding:8px 12px;color:#CBD5E1;font-size:14px;border-bottom:1px solid rgba(255,255,255,.05)">${l.plaatsnaam || '—'}</td>
-      <td style="padding:8px 12px;color:#CBD5E1;font-size:14px;border-bottom:1px solid rgba(255,255,255,.05)">${l.telefoonnummer || '—'}</td>
-      <td style="padding:8px 12px;border-bottom:1px solid rgba(255,255,255,.05)">${l.branch ? badge(l.branch) : '—'}</td>
+      <td style="padding:8px 12px;color:#CBD5E1;font-size:14px;border-bottom:1px solid rgba(255,255,255,.05)">${l.plaatsnaam || '-'}</td>
+      <td style="padding:8px 12px;color:#CBD5E1;font-size:14px;border-bottom:1px solid rgba(255,255,255,.05)">${l.telefoonnummer || '-'}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid rgba(255,255,255,.05)">${l.branch ? badge(l.branch) : '-'}</td>
     </tr>`)
     .join('');
 
@@ -280,11 +280,11 @@ export async function sendFeedbackDigest(
       return `<tr>
         <td style="padding:8px 12px;color:#E2E8F0;font-size:14px;border-bottom:1px solid rgba(255,255,255,.05)">${f.leadName}</td>
         <td style="padding:8px 12px;color:#CBD5E1;font-size:14px;border-bottom:1px solid rgba(255,255,255,.05)">${f.customerName}</td>
-        <td style="padding:8px 12px;color:#CBD5E1;font-size:14px;border-bottom:1px solid rgba(255,255,255,.05)">${f.branch || '—'}</td>
+        <td style="padding:8px 12px;color:#CBD5E1;font-size:14px;border-bottom:1px solid rgba(255,255,255,.05)">${f.branch || '-'}</td>
         <td style="padding:8px 12px;border-bottom:1px solid rgba(255,255,255,.05)">
           <span style="display:inline-block;background:${r.color}20;color:${r.color};padding:3px 10px;border-radius:6px;font-size:13px;font-weight:600">${r.label}</span>
         </td>
-        ${f.comment ? `<td style="padding:8px 12px;color:#94A3B8;font-size:13px;font-style:italic;border-bottom:1px solid rgba(255,255,255,.05)">${f.comment}</td>` : `<td style="padding:8px 12px;border-bottom:1px solid rgba(255,255,255,.05)">—</td>`}
+        ${f.comment ? `<td style="padding:8px 12px;color:#94A3B8;font-size:13px;font-style:italic;border-bottom:1px solid rgba(255,255,255,.05)">${f.comment}</td>` : `<td style="padding:8px 12px;border-bottom:1px solid rgba(255,255,255,.05)">-</td>`}
       </tr>`;
     })
     .join('');

@@ -81,7 +81,7 @@ export default function MeerKlantenNodigPage() {
               className="mt-4 max-w-xl text-[15px] leading-relaxed text-white/70 md:mt-6 md:text-lg"
             >
               Plan een gratis strategiegesprek en ontvang een concreet plan voor
-              meer gekwalificeerde leads — afgestemd op jouw regio, niche en budget.
+              meer gekwalificeerde leads, afgestemd op jouw regio, niche en budget.
             </motion.p>
 
             <motion.div variants={fadeUp} custom={3} className="mt-6 flex flex-col gap-3 sm:flex-row md:mt-8">
@@ -519,7 +519,7 @@ export default function MeerKlantenNodigPage() {
             </h2>
             <p className="mt-3 text-[15px] leading-relaxed text-white/70 md:mt-4 md:text-lg">
               Stop met zoeken. Start met groeien. Plan je gratis strategiegesprek
-              en ontvang een concreet plan — zonder verplichtingen.
+              en ontvang een concreet plan. Zonder verplichtingen.
             </p>
             <div className="mt-6 flex flex-col gap-3 sm:flex-row md:mt-8">
               <a
