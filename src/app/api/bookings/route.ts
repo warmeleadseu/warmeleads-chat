@@ -68,84 +68,93 @@ function generateSlots(start: string, end: string, duration: number, lunch?: { e
   return slots;
 }
 
+function parseSchedule(raw: unknown): typeof DEFAULT_SCHEDULE {
+  try {
+    if (!raw) return DEFAULT_SCHEDULE;
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    if (parsed?.days && typeof parsed.days === 'object') return parsed;
+  } catch { /* fall through */ }
+  return DEFAULT_SCHEDULE;
+}
+
 export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url);
-
-  if (searchParams.get('info') === 'true') {
+  try {
+    const { searchParams } = new URL(req.url);
     const supabase = createServerClient();
-    const { data: setting } = await supabase.from('app_settings').select('value').eq('key', 'booking_schedule').single();
-    const schedule = setting?.value ? (typeof setting.value === 'string' ? JSON.parse(setting.value) : setting.value) : DEFAULT_SCHEDULE;
-    const enabledDays = Object.entries(schedule.days || {})
-      .filter(([, v]) => (v as { enabled: boolean }).enabled)
-      .map(([k]) => k);
-    return NextResponse.json({ enabledDays });
-  }
 
-  const date = searchParams.get('date');
+    let schedule = DEFAULT_SCHEDULE;
+    try {
+      const { data: setting } = await supabase.from('app_settings').select('value').eq('key', 'booking_schedule').single();
+      schedule = parseSchedule(setting?.value);
+    } catch { /* use default */ }
 
-  if (!date) return NextResponse.json({ error: 'date required' }, { status: 400 });
-
-  const d = new Date(date + 'T00:00:00');
-  if (isNaN(d.getTime())) return NextResponse.json({ error: 'Invalid date' }, { status: 400 });
-
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  if (d < today) return NextResponse.json({ slots: [] });
-
-  const supabase = createServerClient();
-
-  const { data: setting } = await supabase
-    .from('app_settings')
-    .select('value')
-    .eq('key', 'booking_schedule')
-    .single();
-
-  const schedule = setting?.value
-    ? (typeof setting.value === 'string' ? JSON.parse(setting.value) : setting.value)
-    : DEFAULT_SCHEDULE;
-
-  const dayKey = DAY_KEYS[d.getDay()];
-  const dayConfig = schedule.days?.[dayKey];
-
-  if (!dayConfig?.enabled) return NextResponse.json({ slots: [] });
-
-  const allSlots = generateSlots(
-    dayConfig.start || '09:00',
-    dayConfig.end || '17:00',
-    schedule.slotDuration || 30,
-    schedule.lunch,
-  );
-
-  const [bookingsResult, blockedResult] = await Promise.all([
-    supabase.from('bookings').select('time').eq('date', date).neq('status', 'geannuleerd'),
-    supabase.from('booking_blocked').select('time').eq('date', date),
-  ]);
-
-  const bookedTimes = new Set((bookingsResult.data || []).map((b: { time: string }) => b.time));
-
-  const blockedAll = (blockedResult.data || []).some((b: { time: string | null }) => !b.time);
-  if (blockedAll) return NextResponse.json({ slots: [] });
-
-  const blockedTimes = new Set(
-    (blockedResult.data || []).filter((b: { time: string | null }) => b.time).map((b: { time: string | null }) => b.time),
-  );
-
-  const now = new Date();
-  const isToday = d.toDateString() === now.toDateString();
-
-  const available = allSlots.filter(slot => {
-    if (bookedTimes.has(slot)) return false;
-    if (blockedTimes.has(slot)) return false;
-    if (isToday) {
-      const [h, m] = slot.split(':').map(Number);
-      const slotTime = new Date(now);
-      slotTime.setHours(h, m, 0, 0);
-      if (slotTime.getTime() - now.getTime() < 2 * 60 * 60 * 1000) return false;
+    if (searchParams.get('info') === 'true') {
+      const enabledDays = Object.entries(schedule.days || {})
+        .filter(([, v]) => (v as { enabled: boolean }).enabled)
+        .map(([k]) => k);
+      return NextResponse.json({ enabledDays });
     }
-    return true;
-  });
 
-  return NextResponse.json({ slots: available });
+    const date = searchParams.get('date');
+    if (!date) return NextResponse.json({ error: 'date required' }, { status: 400 });
+
+    const d = new Date(date + 'T00:00:00');
+    if (isNaN(d.getTime())) return NextResponse.json({ error: 'Invalid date' }, { status: 400 });
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (d < today) return NextResponse.json({ slots: [] });
+
+    const dayKey = DAY_KEYS[d.getDay()];
+    const dayConfig = schedule.days?.[dayKey];
+    if (!dayConfig?.enabled) return NextResponse.json({ slots: [] });
+
+    const allSlots = generateSlots(
+      dayConfig.start || '09:00',
+      dayConfig.end || '17:00',
+      schedule.slotDuration || 30,
+      schedule.lunch,
+    );
+
+    let bookedTimes = new Set<string>();
+    let blockedTimes = new Set<string>();
+    let blockedAll = false;
+
+    try {
+      const { data } = await supabase.from('bookings').select('time').eq('date', date).neq('status', 'geannuleerd');
+      if (data) bookedTimes = new Set(data.map((b: { time: string }) => b.time));
+    } catch { /* table may not exist yet */ }
+
+    try {
+      const { data } = await supabase.from('booking_blocked').select('time').eq('date', date);
+      if (data) {
+        blockedAll = data.some((b: { time: string | null }) => !b.time);
+        blockedTimes = new Set(data.filter((b: { time: string | null }) => b.time).map((b: { time: string | null }) => b.time!));
+      }
+    } catch { /* table may not exist yet */ }
+
+    if (blockedAll) return NextResponse.json({ slots: [] });
+
+    const now = new Date();
+    const isToday = d.toDateString() === now.toDateString();
+
+    const available = allSlots.filter(slot => {
+      if (bookedTimes.has(slot)) return false;
+      if (blockedTimes.has(slot)) return false;
+      if (isToday) {
+        const [h, m] = slot.split(':').map(Number);
+        const slotTime = new Date(now);
+        slotTime.setHours(h, m, 0, 0);
+        if (slotTime.getTime() - now.getTime() < 2 * 60 * 60 * 1000) return false;
+      }
+      return true;
+    });
+
+    return NextResponse.json({ slots: available });
+  } catch (err) {
+    console.error('Booking GET error:', err);
+    return NextResponse.json({ slots: [], error: 'Er is iets misgegaan' }, { status: 500 });
+  }
 }
 
 export async function POST(req: Request) {
