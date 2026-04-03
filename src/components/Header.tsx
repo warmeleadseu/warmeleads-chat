@@ -18,7 +18,7 @@ import {
 
 const navLinks = [
   { label: 'Oplossingen', href: '/maatwerk-leads', icon: CubeTransparentIcon, desc: 'Leads op maat voor jouw niche' },
-  { label: 'Hoe het werkt', href: '/#proces', icon: Cog6ToothIcon, desc: 'Ons bewezen 4-stappen proces' },
+  { label: 'Hoe het werkt', href: '/hoe-het-werkt', icon: Cog6ToothIcon, desc: 'Ons bewezen 4-stappen proces' },
   { label: 'Inzichten', href: '/blog', icon: BookOpenIcon, desc: 'Tips, cases & strategieën' },
 ];
 

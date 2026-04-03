@@ -14,6 +14,15 @@ import {
   BoltIcon,
   ArrowTrendingUpIcon,
   ChatBubbleLeftRightIcon,
+  DevicePhoneMobileIcon,
+  BellAlertIcon,
+  EnvelopeIcon,
+  UserIcon,
+  MagnifyingGlassCircleIcon,
+  CheckCircleIcon,
+  CurrencyEuroIcon,
+  MapPinIcon,
+  BeakerIcon,
 } from '@heroicons/react/24/outline';
 import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid';
 import { Header } from '@/components/Header';
@@ -40,7 +49,6 @@ export default function HomePage() {
 
       {/* ── Hero ── */}
       <section className="relative min-h-[520px] overflow-hidden bg-brand-navy md:min-h-[600px] lg:min-h-[640px]">
-        {/* Background photo — fills right side on desktop, full background on mobile */}
         <div className="absolute inset-0">
           <Image
             src="/images/hero-install.jpg"
@@ -52,16 +60,12 @@ export default function HomePage() {
           />
         </div>
 
-        {/* Diagonal gradient overlay — blends navy from left into photo on right */}
         <div className="pointer-events-none absolute inset-0 bg-brand-navy/90 md:bg-transparent">
-          {/* Mobile: heavy overlay for readability */}
-          {/* Desktop: diagonal blend from solid navy to semi-transparent */}
           <div className="hidden h-full w-full md:block" style={{
             background: 'linear-gradient(105deg, #1A1A2E 0%, #1A1A2E 42%, rgba(26,26,46,0.85) 55%, rgba(26,26,46,0.5) 70%, rgba(26,26,46,0.25) 85%, rgba(26,26,46,0.15) 100%)',
           }} />
         </div>
 
-        {/* Subtle brand color accents */}
         <div className="pointer-events-none absolute inset-0">
           <div className="absolute -left-20 bottom-0 h-[400px] w-[400px] rounded-full bg-brand-purple/20 blur-[120px]" />
           <div className="absolute left-1/4 top-0 h-[300px] w-[300px] rounded-full bg-brand-pink/10 blur-[100px]" />
@@ -80,7 +84,7 @@ export default function HomePage() {
               className="mb-4 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-white/80 backdrop-blur md:mb-5 md:px-4 md:text-[12px]"
             >
               <SparklesIcon className="h-3.5 w-3.5 text-brand-orange" />
-              Performance leadgeneratie
+              Exclusieve leadgeneratie
             </motion.p>
 
             <motion.h1
@@ -97,8 +101,9 @@ export default function HomePage() {
               custom={2}
               className="mt-4 max-w-xl text-[15px] leading-relaxed text-white/70 md:mt-6 md:text-lg"
             >
-              WarmeLeads bouwt een voorspelbare leadmachine voor installatiebedrijven
-              en commerciële teams die willen groeien op kwaliteit, niet op geluk.
+              WarmeLeads genereert exclusieve, verse leads voor installatiebedrijven en
+              commerciële teams. Realtime in jouw portaal, automatisch gekwalificeerd,
+              met een persoonlijke accountmanager die met je meedenkt.
             </motion.p>
 
             <motion.div variants={fadeUp} custom={3} className="mt-6 flex flex-col gap-3 sm:flex-row md:mt-8">
@@ -110,15 +115,14 @@ export default function HomePage() {
                 <ArrowRightIcon className="h-4 w-4 transition group-hover:translate-x-0.5" />
               </Link>
               <Link
-                href="/maatwerk-leads"
+                href="/hoe-het-werkt"
                 className="inline-flex items-center justify-center gap-2 rounded-lg border border-white/25 bg-white/10 px-6 py-3.5 text-sm font-semibold text-white backdrop-blur transition hover:bg-white/20"
               >
-                Bekijk aanpak en pricing
+                Bekijk hoe het werkt
               </Link>
             </motion.div>
           </motion.div>
 
-          {/* Hero metrics */}
           <motion.div
             initial="hidden"
             animate="visible"
@@ -126,9 +130,9 @@ export default function HomePage() {
             className="mt-10 grid grid-cols-1 gap-3 sm:grid-cols-3 md:mt-14 md:gap-4 lg:max-w-3xl"
           >
             {[
-              { value: '24u', label: 'Gemiddelde eerste levering', icon: ClockIcon },
-              { value: '98%', label: 'Lead bereikbaarheid', icon: PhoneIcon },
-              { value: '30+', label: 'Actieve niche campagnes', icon: ChartBarIcon },
+              { value: '100%', label: 'Exclusieve leads', icon: ShieldCheckIcon },
+              { value: '<24u', label: 'Eerste levering', icon: ClockIcon },
+              { value: '4.8★', label: 'Klantwaardering', icon: ChartBarIcon },
             ].map((item, i) => (
               <motion.div
                 key={item.label}
@@ -181,8 +185,8 @@ export default function HomePage() {
               <span className="text-slate-500">En voor volume.</span>
             </h2>
             <p className="mt-3 text-[14px] leading-relaxed text-slate-500 md:mt-4 md:text-[16px]">
-              We combineren slimme targeting, snelle opvolging en transparante data
-              zodat jouw salesteam alleen tijd besteedt aan leads die ertoe doen.
+              We combineren slimme targeting, automatische kwaliteitscontroles en transparante
+              data zodat jouw salesteam alleen tijd besteedt aan leads die ertoe doen.
             </p>
           </div>
 
@@ -190,19 +194,19 @@ export default function HomePage() {
             {[
               {
                 title: 'Exclusieve aanvragen',
-                description: 'Geen doorverkoop of bulk lijsten. Elke lead is van jou — in de afgesproken regio en niche. Gegarandeerd.',
+                description: 'Geen doorverkoop of bulk lijsten. Elke lead is van jou — in de afgesproken regio en niche. Op het moment dat jij een batch afneemt, starten wij de campagnes afgestemd op jouw targetgebied.',
                 icon: ShieldCheckIcon,
                 accent: 'bg-brand-purple',
               },
               {
-                title: 'Snelle sales opvolging',
-                description: 'Realtime levering op het piekmoment van intentie. Direct bellen, appen of inplannen via jouw eigen flow.',
+                title: 'Automatisch gekwalificeerd',
+                description: 'Elke lead doorloopt automatisch meerdere quality checks voordat deze in jouw portaal verschijnt. Alleen leads die aan jouw eisen voldoen, worden doorgestuurd.',
                 icon: BoltIcon,
                 accent: 'bg-brand-pink',
               },
               {
                 title: 'Schaalbaar lead volume',
-                description: 'Start gecontroleerd in één regio, bewijs rendement, en schaal uit naar meerdere gebieden met stabiliteit.',
+                description: 'Start gecontroleerd in één regio, bewijs rendement, en schaal uit naar meerdere gebieden. Van 10 tot 500+ leads per week — wij schalen mee.',
                 icon: ArrowTrendingUpIcon,
                 accent: 'bg-brand-orange',
               },
@@ -227,6 +231,264 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* ── Portal Showcase ── */}
+      <section className="relative overflow-hidden border-y border-slate-100 bg-slate-50">
+        <div className="pointer-events-none absolute right-0 top-0 h-full w-1/2 bg-gradient-to-l from-brand-purple/[0.03] to-transparent" />
+        <div className="relative mx-auto max-w-7xl px-5 py-14 md:py-20 lg:px-8">
+          <div className="grid items-center gap-8 md:grid-cols-2 md:gap-16">
+            <motion.div
+              initial={{ opacity: 0, x: -20 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.5 }}
+            >
+              <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-brand-purple md:mb-3 md:text-[12px]">
+                Jouw eigen klantportaal
+              </p>
+              <h2 className="text-2xl font-bold tracking-tight md:text-3xl lg:text-4xl">
+                Alle leads direct in je<br />
+                <span className="text-slate-500">eigen portaal.</span>
+              </h2>
+              <p className="mt-3 text-[14px] leading-relaxed text-slate-600 md:mt-4 md:text-[15px]">
+                Zodra een lead door alle quality checks komt, verschijnt deze realtime in jouw
+                persoonlijke portaal. Een moderne webapp die je ook als app op je telefoon kunt
+                installeren — zodat je altijd en overal je leads kunt opvolgen.
+              </p>
+
+              <div className="mt-6 space-y-3 md:mt-8">
+                {[
+                  { icon: BoltIcon, title: 'Realtime levering', desc: 'Leads verschijnen direct in je portaal op het moment dat ze binnenkomen.' },
+                  { icon: BellAlertIcon, title: 'Pushnotificaties & e-mail', desc: 'Ontvang een melding op je telefoon of per e-mail bij elke nieuwe lead.' },
+                  { icon: DevicePhoneMobileIcon, title: 'Installeerbaar als app', desc: 'Installeer het portaal als app op je telefoon. Geen download nodig.' },
+                  { icon: PhoneIcon, title: 'Direct bellen of appen', desc: 'Bel, WhatsApp of mail je leads met één klik vanuit het portaal.' },
+                ].map((item) => (
+                  <div key={item.title} className="flex items-start gap-3 rounded-lg border border-slate-200/80 bg-white p-3 shadow-sm md:p-4">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-purple/10">
+                      <item.icon className="h-4 w-4 text-brand-purple" />
+                    </div>
+                    <div>
+                      <p className="text-[14px] font-semibold text-slate-900">{item.title}</p>
+                      <p className="mt-0.5 text-[12px] leading-relaxed text-slate-500 md:text-[13px]">{item.desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.5, delay: 0.1 }}
+              className="relative"
+            >
+              <div className="relative mx-auto w-full max-w-md">
+                <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl shadow-slate-200/60">
+                  <div className="bg-brand-navy px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <div className="h-2.5 w-2.5 rounded-full bg-brand-orange" />
+                      <p className="text-[11px] font-medium text-white/70">warmeleads.eu/portal</p>
+                    </div>
+                  </div>
+                  <div className="space-y-3 p-4">
+                    <div className="rounded-lg bg-gradient-to-r from-brand-purple/10 to-brand-pink/10 p-3">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-brand-purple">Nieuwe lead</p>
+                      <p className="mt-1 text-[13px] font-semibold text-slate-800">Jan de Vries — Zonnepanelen</p>
+                      <p className="mt-0.5 text-[11px] text-slate-500">Utrecht · 14 panelen · Budget €8.000+</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <div className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-green-50 py-2 text-[11px] font-semibold text-green-700">
+                        <PhoneIcon className="h-3.5 w-3.5" /> Bellen
+                      </div>
+                      <div className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-green-50 py-2 text-[11px] font-semibold text-green-700">
+                        <ChatBubbleLeftRightIcon className="h-3.5 w-3.5" /> WhatsApp
+                      </div>
+                      <div className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-blue-50 py-2 text-[11px] font-semibold text-blue-700">
+                        <EnvelopeIcon className="h-3.5 w-3.5" /> Mail
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      {[
+                        { name: 'Petra Bakker', product: 'Thuisbatterij', loc: 'Amsterdam', time: '3 min geleden' },
+                        { name: 'Mohammed El Amrani', product: 'Warmtepomp', loc: 'Rotterdam', time: '18 min geleden' },
+                        { name: 'Lisa Jansen', product: 'Airco', loc: 'Den Haag', time: '45 min geleden' },
+                      ].map((lead) => (
+                        <div key={lead.name} className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2.5">
+                          <div>
+                            <p className="text-[12px] font-semibold text-slate-800">{lead.name}</p>
+                            <p className="text-[10px] text-slate-400">{lead.product} · {lead.loc}</p>
+                          </div>
+                          <span className="text-[10px] text-slate-400">{lead.time}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <div className="pointer-events-none absolute -right-6 -top-6 h-32 w-32 rounded-full bg-brand-orange/10 blur-[40px]" />
+                <div className="pointer-events-none absolute -bottom-8 -left-8 h-40 w-40 rounded-full bg-brand-purple/10 blur-[50px]" />
+              </div>
+            </motion.div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Process — 4 steps ── */}
+      <section id="proces" className="bg-slate-950 text-white">
+        <div className="mx-auto max-w-7xl px-5 py-14 md:py-20 lg:px-8">
+          <div className="mb-8 max-w-2xl md:mb-12">
+            <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-brand-orange md:mb-3 md:text-[12px]">
+              Hoe het werkt
+            </p>
+            <h2 className="text-2xl font-bold tracking-tight md:text-4xl">
+              Van intake naar voorspelbare leadstroom.
+            </h2>
+            <p className="mt-3 text-[14px] leading-relaxed text-white/50 md:mt-4 md:text-[16px]">
+              Vier stappen. Geen verrassingen. Vanaf dag één transparant over
+              volume, kosten en kwaliteit.
+            </p>
+          </div>
+
+          <div className="relative grid gap-4 md:grid-cols-4 md:gap-0">
+            <div className="pointer-events-none absolute left-0 right-0 top-1/2 z-0 hidden -translate-y-1/2 md:block">
+              <div className="mx-auto h-px w-[calc(100%-120px)] bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+            </div>
+
+            {[
+              { step: '01', title: 'Strategiegesprek', description: 'We bepalen samen doelgroep, regio, volume en gewenste kostprijs per lead. Je krijgt een helder plan met concrete verwachtingen.' },
+              { step: '02', title: 'Campagne op maat', description: 'We bouwen campagnes die we vooraf grondig testen, afgestemd op jouw targetgebied en propositie. Klaar binnen 24–72 uur.' },
+              { step: '03', title: 'Automatische quality checks', description: 'Elke lead doorloopt automatisch meerdere kwaliteitscontroles. Contactgegevens, interesse en geschiktheid worden geverifieerd.' },
+              { step: '04', title: 'Realtime in jouw portaal', description: 'Leads die aan al jouw eisen voldoen worden direct in je portaal geplaatst. Bel, app of mail ze met één klik.' },
+            ].map((item, i) => (
+              <motion.article
+                key={item.step}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: '-50px' }}
+                transition={{ duration: 0.5, delay: i * 0.1 }}
+                className="group relative z-10 overflow-hidden rounded-xl border border-white/10 bg-white/[0.04] p-5 transition hover:bg-white/[0.08] md:mx-1.5 md:p-6"
+              >
+                <p className="absolute -right-2 -top-4 text-[60px] font-black leading-none text-white/[0.04] select-none md:text-[70px]">{item.step}</p>
+                <div className="relative z-10">
+                  <div className="mb-4 flex items-center gap-3 md:mb-5">
+                    <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-brand-orange text-[13px] font-bold text-slate-950">{item.step}</span>
+                    <div className="h-px flex-1 bg-white/10" />
+                  </div>
+                  <h3 className="text-[16px] font-bold md:text-lg">{item.title}</h3>
+                  <p className="mt-1.5 text-[13px] leading-relaxed text-white/60 md:mt-2 md:text-sm">{item.description}</p>
+                </div>
+              </motion.article>
+            ))}
+          </div>
+
+          <div className="mt-8 text-center md:mt-12">
+            <Link
+              href="/hoe-het-werkt"
+              className="inline-flex items-center gap-2 text-[13px] font-semibold text-brand-orange transition hover:text-white md:text-sm"
+            >
+              Bekijk het volledige proces
+              <ArrowRightIcon className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Results strip ── */}
+      <section className="bg-brand-purple">
+        <div className="mx-auto grid max-w-7xl grid-cols-2 gap-px bg-white/10 md:grid-cols-4">
+          {[
+            { value: '500+', label: 'Leads per maand' },
+            { value: '40+', label: 'Actieve klanten' },
+            { value: '<24u', label: 'Eerste levering' },
+            { value: '4.8★', label: 'Klantwaardering' },
+          ].map((item, i) => (
+            <motion.div
+              key={item.label}
+              initial={{ opacity: 0, y: 10 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.4, delay: i * 0.05 }}
+              className="bg-brand-purple px-5 py-6 text-center md:py-8"
+            >
+              <p className="text-2xl font-extrabold text-white md:text-3xl">{item.value}</p>
+              <p className="mt-1 text-[11px] font-medium uppercase tracking-wider text-white/60 md:text-[12px]">{item.label}</p>
+            </motion.div>
+          ))}
+        </div>
+      </section>
+
+      {/* ── Personal approach ── */}
+      <section className="relative overflow-hidden bg-white">
+        <div className="mx-auto max-w-7xl px-5 py-14 md:py-20 lg:px-8">
+          <div className="grid items-center gap-8 md:grid-cols-2 md:gap-16">
+            <motion.div
+              initial={{ opacity: 0, x: -20 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.5 }}
+              className="order-2 md:order-1"
+            >
+              <div className="relative overflow-hidden rounded-2xl">
+                <Image
+                  src="/images/team-meeting.jpg"
+                  alt="Persoonlijk strategiegesprek met accountmanager"
+                  width={600}
+                  height={400}
+                  className="h-auto w-full object-cover"
+                />
+                <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-brand-navy/20 to-transparent" />
+              </div>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.5 }}
+              className="order-1 md:order-2"
+            >
+              <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-brand-pink md:mb-3 md:text-[12px]">
+                Persoonlijke aanpak
+              </p>
+              <h2 className="text-2xl font-bold tracking-tight md:text-3xl lg:text-4xl">
+                Geen callcenter.<br />
+                <span className="text-slate-500">Een persoonlijke accountmanager.</span>
+              </h2>
+              <p className="mt-3 text-[14px] leading-relaxed text-slate-600 md:mt-4 md:text-[15px]">
+                Bij WarmeLeads geloven we in échte samenwerking. Daarom krijg je een vaste
+                accountmanager die jouw business begrijpt, meedenkt over strategie en altijd
+                bereikbaar is — telefonisch, per mail én persoonlijk op locatie.
+              </p>
+
+              <div className="mt-6 space-y-3">
+                {[
+                  { icon: UserIcon, text: 'Vaste accountmanager die jouw business kent' },
+                  { icon: MapPinIcon, text: 'Persoonlijke bezoeken op jouw locatie' },
+                  { icon: PhoneIcon, text: 'Altijd bereikbaar voor vragen en advies' },
+                  { icon: ChartBarIcon, text: 'Proactief meedenken over groei en optimalisatie' },
+                ].map((item) => (
+                  <div key={item.text} className="flex items-center gap-3">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-pink/10">
+                      <item.icon className="h-4 w-4 text-brand-pink" />
+                    </div>
+                    <p className="text-[13px] font-medium text-slate-700 md:text-sm">{item.text}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-6 md:mt-8">
+                <Link
+                  href="/meer-klanten-nodig"
+                  className="group inline-flex items-center gap-2 text-[13px] font-semibold text-brand-pink transition hover:text-brand-purple md:text-sm"
+                >
+                  Maak kennis met ons team
+                  <ArrowRightIcon className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
+                </Link>
+              </div>
+            </motion.div>
+          </div>
+        </div>
+      </section>
+
       {/* ── Testimonial / Social proof ── */}
       <section className="relative overflow-hidden border-y border-slate-100 bg-slate-50">
         <div className="pointer-events-none absolute right-0 top-0 h-full w-1/2 bg-gradient-to-l from-orange-50/60 to-transparent" />
@@ -246,24 +508,12 @@ export default function HomePage() {
                 <span className="text-slate-500">voor zich.</span>
               </h2>
 
-              {/* Team photo */}
-              <div className="relative mt-6 overflow-hidden rounded-xl md:mt-8">
-                <Image
-                  src="/images/team-meeting.jpg"
-                  alt="Salesteam in overleg"
-                  width={500}
-                  height={300}
-                  className="h-auto w-full object-cover"
-                />
-                <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-brand-navy/30 to-transparent" />
-              </div>
-
-              <div className="mt-5 flex items-center gap-6 md:mt-6">
+              <div className="mt-6 flex items-center gap-6 md:mt-8">
                 <div>
                   <p className="text-3xl font-extrabold text-brand-navy md:text-4xl">4.8</p>
                   <div className="mt-1 flex gap-0.5">
                     {[...Array(5)].map((_, i) => (
-                      <StarIconSolid key={i} className={`h-4 w-4 ${i < 5 ? 'text-brand-orange' : 'text-slate-300'}`} />
+                      <StarIconSolid key={i} className="h-4 w-4 text-brand-orange" />
                     ))}
                   </div>
                   <p className="mt-1 text-[11px] text-slate-400">Gemiddelde score</p>
@@ -323,81 +573,112 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── Process ── */}
-      <section id="proces" className="bg-slate-950 text-white">
+      {/* ── Verticals + New branches ── */}
+      <section className="bg-gradient-to-b from-white to-slate-50">
         <div className="mx-auto max-w-7xl px-5 py-14 md:py-20 lg:px-8">
-          <div className="mb-8 max-w-2xl md:mb-12">
-            <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-brand-orange md:mb-3 md:text-[12px]">
-              Hoe het werkt
-            </p>
-            <h2 className="text-2xl font-bold tracking-tight md:text-4xl">
-              Van intake naar voorspelbare leadstroom.
-            </h2>
-            <p className="mt-3 text-[14px] leading-relaxed text-white/50 md:mt-4 md:text-[16px]">
-              Drie stappen. Geen verrassingen. Vanaf dag één transparant over
-              volume, kosten en kwaliteit.
-            </p>
-          </div>
-
-          <div className="relative grid gap-4 md:grid-cols-3 md:gap-0">
-            {/* Connector line (desktop only) */}
-            <div className="pointer-events-none absolute left-0 right-0 top-1/2 z-0 hidden -translate-y-1/2 md:block">
-              <div className="mx-auto h-px w-[calc(100%-120px)] bg-gradient-to-r from-transparent via-white/20 to-transparent" />
-            </div>
-
-            {[
-              { step: '01', title: 'Strategiegesprek', description: 'We bepalen samen doelgroep, regio, volume en gewenste kostprijs per lead. Je krijgt een helder plan.' },
-              { step: '02', title: 'Campagne setup', description: 'We bouwen targeting, funnel en leadkwalificatie op basis van jouw propositie en markt. Klaar in 24–72 uur.' },
-              { step: '03', title: 'Live + optimalisatie', description: 'Je ontvangt leads direct. We sturen wekelijks bij op data, kwaliteit en omzetimpact. Jij stuurt mee.' },
-            ].map((item, i) => (
-              <motion.article
-                key={item.step}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: '-50px' }}
-                transition={{ duration: 0.5, delay: i * 0.1 }}
-                className="group relative z-10 overflow-hidden rounded-xl border border-white/10 bg-white/[0.04] p-5 transition hover:bg-white/[0.08] md:mx-2 md:p-7"
-              >
-                <p className="absolute -right-2 -top-4 text-[60px] font-black leading-none text-white/[0.04] select-none md:text-[80px]">{item.step}</p>
-                <div className="relative z-10">
-                  <div className="mb-4 flex items-center gap-3 md:mb-5">
-                    <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-brand-orange text-[13px] font-bold text-slate-950">{item.step}</span>
-                    <div className="h-px flex-1 bg-white/10" />
-                  </div>
-                  <h3 className="text-[16px] font-bold md:text-lg">{item.title}</h3>
-                  <p className="mt-1.5 text-[13px] leading-relaxed text-white/60 md:mt-2 md:text-sm">{item.description}</p>
-                </div>
-              </motion.article>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── Results strip ── */}
-      <section className="bg-brand-purple">
-        <div className="mx-auto grid max-w-7xl grid-cols-2 gap-px bg-white/10 md:grid-cols-4">
-          {[
-            { value: '500+', label: 'Leads per maand' },
-            { value: '40+', label: 'Actieve klanten' },
-            { value: '<24u', label: 'Eerste levering' },
-            { value: '4.8★', label: 'Klantwaardering' },
-          ].map((item, i) => (
+          <div className="grid gap-5 md:grid-cols-2 md:gap-8">
             <motion.div
-              key={item.label}
-              initial={{ opacity: 0, y: 10 }}
-              whileInView={{ opacity: 1, y: 0 }}
+              initial={{ opacity: 0, x: -20 }}
+              whileInView={{ opacity: 1, x: 0 }}
               viewport={{ once: true }}
-              transition={{ duration: 0.4, delay: i * 0.05 }}
-              className="bg-brand-purple px-5 py-6 text-center md:py-8"
+              transition={{ duration: 0.5 }}
+              className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm md:p-7"
             >
-              <p className="text-2xl font-extrabold text-white md:text-3xl">{item.value}</p>
-              <p className="mt-1 text-[11px] font-medium uppercase tracking-wider text-white/60 md:text-[12px]">{item.label}</p>
+              <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-brand-purple md:mb-3 md:text-[12px]">
+                Onze markten
+              </p>
+              <h2 className="text-xl font-bold tracking-tight md:text-2xl">
+                Gespecialiseerd in verduurzaming
+              </h2>
+              <p className="mt-2 text-[13px] leading-relaxed text-slate-600 md:mt-3 md:text-sm">
+                We zijn gespecialiseerd in leadgeneratie voor de verduurzamingsbranche, maar
+                genereren leads in vrijwel elke branche.
+              </p>
+              <div className="mt-5 grid grid-cols-2 gap-2 md:mt-6 md:grid-cols-3">
+                {[
+                  { label: 'Zonnepanelen', href: '/leads-zonnepanelen' },
+                  { label: 'Warmtepompen', href: '/leads-warmtepompen' },
+                  { label: 'Thuisbatterijen', href: '/leads-thuisbatterijen' },
+                  { label: 'Financial Lease', href: '/leads-financial-lease' },
+                  { label: 'Airco', href: '/leads-airco' },
+                  { label: 'Isolatie', href: '/maatwerk-leads' },
+                  { label: 'Laadpalen', href: '/maatwerk-leads' },
+                  { label: 'B2B Energie', href: '/maatwerk-leads' },
+                ].map((item) => (
+                  <Link
+                    key={item.label}
+                    href={item.href}
+                    className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-center text-[12px] font-semibold text-slate-700 transition hover:border-brand-purple/30 hover:bg-brand-purple/5 hover:text-brand-purple md:px-3 md:py-2.5 md:text-[13px]"
+                  >
+                    {item.label}
+                  </Link>
+                ))}
+              </div>
             </motion.div>
-          ))}
+
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.5 }}
+              className="flex flex-col rounded-xl border border-slate-200 bg-white p-5 shadow-sm md:p-7"
+            >
+              <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-brand-pink md:mb-3 md:text-[12px]">
+                Nieuwe branche?
+              </p>
+              <h3 className="text-xl font-bold tracking-tight md:text-2xl">
+                Wij onderzoeken het voor je
+              </h3>
+              <p className="mt-2 text-[13px] leading-relaxed text-slate-600 md:mt-3 md:text-sm">
+                Werkt u in een branche waarin we nog niet eerder leads hebben gegenereerd?
+                Geen probleem. We investeren eerst in onderzoek om de beste strategie
+                en tarieven te bepalen.
+              </p>
+
+              <div className="mt-5 rounded-xl border border-brand-orange/20 bg-brand-orange/5 p-4 md:mt-6 md:p-5">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-orange">
+                    <BeakerIcon className="h-5 w-5 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-[14px] font-bold text-slate-900 md:text-[15px]">Onderzoekskosten: €750</p>
+                    <p className="mt-1 text-[12px] leading-relaxed text-slate-600 md:text-[13px]">
+                      Dit bedrag investeren we in marktonderzoek, campagne-testen en strategie-ontwikkeling
+                      voor jouw branche. Je krijgt dit bedrag volledig terug in leads — het kost je dus
+                      uiteindelijk niets extra.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-5 grid grid-cols-3 gap-2 md:mt-6 md:gap-3">
+                {[
+                  { value: '€750', label: 'Onderzoek', bg: 'bg-brand-navy' },
+                  { value: '100%', label: 'Terug in leads', bg: 'bg-brand-purple' },
+                  { value: '2-4 wk', label: 'Onderzoekstijd', bg: 'bg-brand-orange' },
+                ].map((item) => (
+                  <div key={item.label} className={`${item.bg} rounded-lg p-3 text-center text-white md:p-4`}>
+                    <p className="text-xl font-bold md:text-2xl">{item.value}</p>
+                    <p className="mt-0.5 text-[10px] uppercase tracking-wide text-white/80 md:mt-1 md:text-[11px]">{item.label}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-auto pt-5 md:pt-6">
+                <Link
+                  href="/meer-klanten-nodig"
+                  className="group flex items-center gap-2 text-[13px] font-semibold text-brand-pink transition hover:text-brand-purple md:text-sm"
+                >
+                  Bespreek jouw branche
+                  <ArrowRightIcon className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
+                </Link>
+              </div>
+            </motion.div>
+          </div>
         </div>
       </section>
 
-      {/* ── Photo break — strategy visual ── */}
+      {/* ── Photo break ── */}
       <section className="relative h-[240px] overflow-hidden md:h-[360px]">
         <Image
           src="/images/hero-sales-alt.jpg"
@@ -429,83 +710,6 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── Verticals + Case snapshot ── */}
-      <section className="bg-gradient-to-b from-white to-slate-50">
-        <div className="mx-auto max-w-7xl px-5 py-14 md:py-20 lg:px-8">
-          <div className="grid gap-5 md:grid-cols-2 md:gap-8">
-            <motion.div
-              initial={{ opacity: 0, x: -20 }}
-              whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.5 }}
-              className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm md:p-7"
-            >
-              <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-brand-purple md:mb-3 md:text-[12px]">
-                Markten
-              </p>
-              <h2 className="text-xl font-bold tracking-tight md:text-2xl">
-                Focus op niches met hoge intentie
-              </h2>
-              <p className="mt-2 text-[13px] leading-relaxed text-slate-600 md:mt-3 md:text-sm">
-                We werken in bewezen segmenten waar opvolgbaarheid en orderkans hoog zijn.
-              </p>
-              <div className="mt-5 grid grid-cols-2 gap-2 md:mt-6 md:grid-cols-3">
-                {['Zonnepanelen', 'Warmtepompen', 'Thuisbatterijen', 'Financial Lease', 'Airco', 'Isolatie', 'Laadpalen', 'B2B Energie'].map((item) => (
-                  <div
-                    key={item}
-                    className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-center text-[12px] font-semibold text-slate-700 transition hover:border-brand-purple/30 hover:bg-brand-purple/5 hover:text-brand-purple md:px-3 md:py-2.5 md:text-[13px]"
-                  >
-                    {item}
-                  </div>
-                ))}
-              </div>
-            </motion.div>
-
-            <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.5 }}
-              className="flex flex-col rounded-xl border border-slate-200 bg-white p-5 shadow-sm md:p-7"
-            >
-              <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-brand-pink md:mb-3 md:text-[12px]">
-                Case Snapshot
-              </p>
-              <h3 className="text-xl font-bold tracking-tight md:text-2xl">
-                Van onvoorspelbaar naar stabiele pijplijn
-              </h3>
-              <p className="mt-2 text-[13px] leading-relaxed text-slate-600 md:mt-3 md:text-sm">
-                Een regionaal installatieteam ging van onregelmatige instroom naar
-                een stabiele wekelijkse pijplijn met duidelijk volume en conversie.
-              </p>
-              <div className="mt-5 grid grid-cols-3 gap-2 md:mt-6 md:gap-3">
-                {[
-                  { value: '+41%', label: 'Meer afspraken', bg: 'bg-brand-navy' },
-                  { value: '-23%', label: 'Lagere CPL', bg: 'bg-brand-purple' },
-                  { value: '7 wkn', label: 'Naar stabiliteit', bg: 'bg-brand-orange' },
-                ].map((item) => (
-                  <div key={item.label} className={`${item.bg} rounded-lg p-3 text-center text-white md:p-4`}>
-                    <p className="text-xl font-bold md:text-2xl">{item.value}</p>
-                    <p className="mt-0.5 text-[10px] uppercase tracking-wide text-white/80 md:mt-1 md:text-[11px]">{item.label}</p>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-auto pt-5 md:pt-6">
-                <div className="flex items-start gap-3 rounded-lg bg-slate-50 p-4">
-                  <ChatBubbleLeftRightIcon className="mt-0.5 h-5 w-5 shrink-0 text-brand-pink" />
-                  <div>
-                    <p className="text-[12px] italic leading-relaxed text-slate-600 md:text-[13px]">
-                      &ldquo;We dachten dat het te mooi was om waar te zijn. Na 7 weken draaiden we stabiel 20 afspraken per week.&rdquo;
-                    </p>
-                    <p className="mt-2 text-[11px] font-semibold text-slate-500">— Klant in zonnepanelen, regio Zuid-Holland</p>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        </div>
-      </section>
-
       {/* ── FAQ ── */}
       <section className="relative overflow-hidden bg-brand-navy">
         <div className="pointer-events-none absolute inset-0">
@@ -528,12 +732,15 @@ export default function HomePage() {
 
           <div className="space-y-2.5 md:space-y-3">
             {[
-              { q: 'Zijn de leads exclusief of gedeeld?', a: 'Primair werken we met exclusieve leads. Elke aanvraag is enkel voor jou, in jouw regio. Indien gewenst bespreken we een gedeeld model voor schaal en kostprijs.' },
-              { q: 'Hoe snel kunnen we live?', a: 'In de meeste gevallen binnen 24 tot 72 uur na intake, afhankelijk van niche en regio. We starten zodra de funnel staat — geen wekenlange aanlooptijd.' },
+              { q: 'Zijn de leads exclusief of gedeeld?', a: 'Primair werken we met exclusieve leads. Elke aanvraag is enkel voor jou, in jouw regio. Zodra je een batch afneemt starten wij campagnes specifiek voor jouw targetgebied. Indien gewenst bespreken we een gedeeld model voor schaal en kostprijs.' },
+              { q: 'Hoe snel kunnen we live?', a: 'In de meeste gevallen binnen 24 tot 72 uur na intake, afhankelijk van niche en regio. We starten zodra de campagnes staan — geen wekenlange aanlooptijd.' },
+              { q: 'Hoe werkt het klantportaal?', a: 'Je krijgt toegang tot een modern portaal op warmeleads.eu/portal. Hier zie je al je leads realtime binnenkomen met alle details. Je kunt leads direct bellen, WhatsAppen of mailen. Het portaal is installeerbaar als app op je telefoon, inclusief pushnotificaties bij elke nieuwe lead.' },
+              { q: 'Hoe worden leads gekwalificeerd?', a: 'Elke lead doorloopt automatisch meerdere quality checks aan onze achterkant. Contactgegevens worden geverifieerd, interesse en geschiktheid worden gecontroleerd. Alleen leads die aan al jouw specifieke eisen voldoen komen in je portaal terecht.' },
+              { q: 'Krijg ik een vast aanspreekpunt?', a: 'Ja. Elke klant krijgt een persoonlijke accountmanager die jouw business kent, meedenkt over strategie en altijd bereikbaar is. Niet alleen telefonisch — onze accountmanagers komen ook bij je langs op locatie.' },
+              { q: 'Wat als jullie nog niet in mijn branche actief zijn?', a: 'Geen probleem. Voor €750 onderzoekskosten ontdekken we de beste strategie en tarieven voor jouw branche. Dit bedrag krijg je volledig terug in leads, dus het kost je uiteindelijk niets extra.' },
               { q: 'Kunnen jullie koppelen met ons CRM?', a: 'Ja. We ondersteunen directe koppelingen via webhooks, API of handmatige exports zodat je salesflow direct doorloopt zonder extra administratie.' },
               { q: 'Wat is een realistisch startvolume?', a: 'Dat hangt af van jouw niche en postcodegebied. Tijdens het strategiegesprek krijg je een concreet startschema met verwacht volume en kostprijs.' },
               { q: 'Zit ik vast aan een contract?', a: 'Nee. We werken zonder lock-in. Je kunt maandelijks opschalen, afschalen of stoppen. Ons verdienmodel is gebaseerd op resultaat, niet op binding.' },
-              { q: 'Hoe meten jullie leadkwaliteit?', a: 'We tracken bereikbaarheid, afspraakratio en conversie. Wekelijks rapporteren we transparant zodat je precies weet wat elke lead oplevert.' },
             ].map((item, i) => (
               <details key={item.q} className="group rounded-xl border border-white/[0.08] bg-white/[0.04] backdrop-blur-sm transition-colors open:border-brand-purple/30 open:bg-white/[0.07]">
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-4 md:px-6 md:py-5 [&::-webkit-details-marker]:hidden">
@@ -582,10 +789,10 @@ export default function HomePage() {
                 <ArrowRightIcon className="h-4 w-4 transition group-hover:translate-x-0.5" />
               </Link>
               <Link
-                href="/meer-klanten-nodig"
+                href="/hoe-het-werkt"
                 className="inline-flex items-center justify-center rounded-lg border border-white/25 bg-white/10 px-6 py-3.5 text-sm font-semibold text-white backdrop-blur transition hover:bg-white/20"
               >
-                Bekijk onze oplossingen
+                Bekijk hoe het werkt
               </Link>
             </div>
           </div>

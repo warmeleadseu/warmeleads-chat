@@ -7,14 +7,19 @@ const footerColumns = [
     title: 'Oplossingen',
     links: [
       { label: 'Maatwerk leads', href: '/maatwerk-leads' },
-      { label: 'Meer klanten nodig', href: '/meer-klanten-nodig' },
-      { label: 'Leadgeneratie gids', href: '/leadgeneratie-gids' },
+      { label: 'Zonnepanelen leads', href: '/leads-zonnepanelen' },
+      { label: 'Warmtepompen leads', href: '/leads-warmtepompen' },
+      { label: 'Thuisbatterij leads', href: '/leads-thuisbatterijen' },
+      { label: 'Airco leads', href: '/leads-airco' },
+      { label: 'Financial Lease leads', href: '/leads-financial-lease' },
     ],
   },
   {
-    title: 'Meer',
+    title: 'Bedrijf',
     links: [
-      { label: 'Blog', href: '/blog' },
+      { label: 'Hoe het werkt', href: '/hoe-het-werkt' },
+      { label: 'Meer klanten nodig', href: '/meer-klanten-nodig' },
+      { label: 'Blog & inzichten', href: '/blog' },
       { label: 'Leadgeneratie gids', href: '/leadgeneratie-gids' },
       { label: 'Klantportaal', href: '/portal' },
     ],
