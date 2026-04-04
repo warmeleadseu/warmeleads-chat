@@ -22,7 +22,9 @@ import {
   BellSlashIcon,
   ExclamationTriangleIcon,
   SparklesIcon,
+  DevicePhoneMobileIcon,
 } from '@heroicons/react/24/outline';
+import { usePushNotifications, type PushState } from '../usePushNotifications';
 
 /* ─── Types ────────────────────────────────────────────────── */
 
@@ -369,6 +371,9 @@ function AccountTab({
         </AnimatePresence>
       </div>
 
+      {/* Push notificaties */}
+      <AccountPushToggle showToast={showToast} />
+
       {/* Member since */}
       <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex items-center gap-3">
@@ -391,6 +396,72 @@ function AccountTab({
           </a>
         </p>
       </div>
+    </div>
+  );
+}
+
+/* ─── Push Toggle (Account) ───────────────────────────────── */
+function AccountPushToggle({ showToast }: { showToast: (msg: string, type?: 'success' | 'error') => void }) {
+  const { state, toggling, toggle } = usePushNotifications();
+
+  const handleToggle = async () => {
+    const success = await toggle();
+    if (success) showToast(state === 'enabled' ? 'Push notificaties uitgeschakeld' : 'Push notificaties ingeschakeld');
+    else if (state !== 'denied') showToast('Kon push notificaties niet wijzigen', 'error');
+  };
+
+  if (state === 'loading' || state === 'unsupported') return null;
+
+  const isEnabled = state === 'enabled';
+  const isDenied = state === 'denied';
+  const isIos = state === 'ios-not-installed';
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h3 className="mb-4 text-sm font-semibold text-slate-900">Push notificaties</h3>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          {isEnabled ? (
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-purple/10">
+              <DevicePhoneMobileIcon className="h-5 w-5 text-brand-purple" />
+            </div>
+          ) : (
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100">
+              <DevicePhoneMobileIcon className="h-5 w-5 text-slate-400" />
+            </div>
+          )}
+          <div>
+            <p className="text-sm font-medium text-slate-900">Meldingen op dit apparaat</p>
+            <p className="text-xs text-slate-500">
+              {isEnabled && 'Actief'}
+              {state === 'disabled' && 'Ontvang direct een melding op uw telefoon'}
+              {isDenied && 'Geblokkeerd in uw browser'}
+              {isIos && 'Installeer eerst de app'}
+            </p>
+          </div>
+        </div>
+        {!isDenied && !isIos && (
+          <button
+            onClick={handleToggle}
+            disabled={toggling}
+            className={`relative h-6 w-11 rounded-full transition-colors disabled:opacity-50 ${isEnabled ? 'bg-brand-purple' : 'bg-slate-200'}`}
+          >
+            <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${isEnabled ? 'translate-x-[22px]' : 'translate-x-0.5'}`} />
+          </button>
+        )}
+      </div>
+      {isDenied && (
+        <div className="mt-3 flex items-start gap-2 rounded-lg bg-amber-50 p-3">
+          <ExclamationTriangleIcon className="h-4 w-4 shrink-0 text-amber-500 mt-0.5" />
+          <p className="text-xs text-amber-700">Notificaties zijn geblokkeerd in uw browser. Ga naar uw browserinstellingen om dit te wijzigen.</p>
+        </div>
+      )}
+      {isIos && (
+        <div className="mt-3 flex items-start gap-2 rounded-lg bg-blue-50 p-3">
+          <DevicePhoneMobileIcon className="h-4 w-4 shrink-0 text-blue-500 mt-0.5" />
+          <p className="text-xs text-blue-700">Installeer de app op uw startscherm om push notificaties te ontvangen.</p>
+        </div>
+      )}
     </div>
   );
 }

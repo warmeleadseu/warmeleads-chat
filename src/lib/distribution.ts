@@ -1,5 +1,6 @@
 import { createServerClient } from './supabase';
 import { sendLeadNotification } from './email';
+import { sendNewLeadPush } from './pushNotification';
 import { syncBatchDelivered } from './batchSync';
 
 const MAX_ASSIGNMENTS = 3;
@@ -250,11 +251,16 @@ export async function distributeLead(lead: LeadForDistribution): Promise<Distrib
 
     try {
       const { data: custData } = await supabase.from('customers').select('id, name, email, contact_person, email_notifications').eq('id', m.customer_id).single();
-      if (custData?.email && custData.email_notifications) {
+      if (custData) {
         const { data: leadData } = await supabase.from('leads').select('*').eq('id', lead.id).single();
-        if (leadData) sendLeadNotification(custData, leadData);
+        if (leadData) {
+          if (custData.email && custData.email_notifications) {
+            sendLeadNotification(custData, leadData);
+          }
+          sendNewLeadPush(custData.id, leadData).catch(() => {});
+        }
       }
-    } catch { /* email failure should not block distribution */ }
+    } catch { /* notification failure should not block distribution */ }
   }
 
   return result;

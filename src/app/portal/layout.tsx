@@ -1,15 +1,18 @@
 'use client';
 
-import { useState, useEffect, useCallback, ReactNode } from 'react';
+import { useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowRightOnRectangleIcon,
   ArrowLeftIcon,
   InboxStackIcon,
   UserCircleIcon,
+  DevicePhoneMobileIcon,
+  XMarkIcon,
+  ArrowUpOnSquareIcon,
 } from '@heroicons/react/24/outline';
 import { PortalContext, type PortalCustomer } from './portalContext';
 
@@ -181,6 +184,100 @@ function PortalFooter() {
   );
 }
 
+function isIOS() {
+  if (typeof navigator === 'undefined') return false;
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
+function isStandalone() {
+  if (typeof window === 'undefined') return false;
+  return window.matchMedia('(display-mode: standalone)').matches || (window.navigator as unknown as { standalone?: boolean }).standalone === true;
+}
+
+function InstallBanner() {
+  const [show, setShow] = useState(false);
+  const [iosHint, setIosHint] = useState(false);
+  const deferredPrompt = useRef<BeforeInstallPromptEvent | null>(null);
+
+  useEffect(() => {
+    if (isStandalone()) return;
+    if (localStorage.getItem('wl-install-dismissed')) return;
+
+    if (isIOS()) {
+      setIosHint(true);
+      setShow(true);
+      return;
+    }
+
+    const handler = (e: Event) => {
+      e.preventDefault();
+      deferredPrompt.current = e as BeforeInstallPromptEvent;
+      setShow(true);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+  const handleInstall = async () => {
+    if (deferredPrompt.current) {
+      deferredPrompt.current.prompt();
+      const result = await deferredPrompt.current.userChoice;
+      if (result.outcome === 'accepted') setShow(false);
+      deferredPrompt.current = null;
+    }
+  };
+
+  const dismiss = () => {
+    setShow(false);
+    localStorage.setItem('wl-install-dismissed', '1');
+  };
+
+  if (!show) return null;
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0, y: -8 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -8 }}
+        className="mx-auto mb-4 max-w-7xl px-4 sm:px-6 lg:px-8"
+      >
+        <div className="relative flex items-center gap-3 rounded-xl border border-brand-purple/20 bg-brand-purple/[0.04] px-4 py-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-purple/10">
+            <DevicePhoneMobileIcon className="h-5 w-5 text-brand-purple" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium text-slate-800">Installeer de WarmeLeads app</p>
+            {iosHint ? (
+              <p className="text-xs text-slate-500">
+                Tik op <ArrowUpOnSquareIcon className="inline h-3.5 w-3.5 -mt-0.5 text-brand-purple" /> en kies &quot;Zet op beginscherm&quot;
+              </p>
+            ) : (
+              <p className="text-xs text-slate-500">Voeg toe aan uw startscherm voor snelle toegang en notificaties</p>
+            )}
+          </div>
+          {!iosHint && (
+            <button
+              onClick={handleInstall}
+              className="shrink-0 rounded-lg bg-brand-purple px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-brand-purple/90"
+            >
+              Installeer
+            </button>
+          )}
+          <button onClick={dismiss} className="shrink-0 rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
+            <XMarkIcon className="h-4 w-4" />
+          </button>
+        </div>
+      </motion.div>
+    </AnimatePresence>
+  );
+}
+
+interface BeforeInstallPromptEvent extends Event {
+  prompt(): Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+}
+
 export default function PortalLayout({ children }: { children: ReactNode }) {
   const [customer, setCustomer] = useState<PortalCustomer | null>(null);
   const [loading, setLoading] = useState(true);
@@ -199,6 +296,15 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
     } catch { /* noop */ }
     setLoading(false);
   }, []);
+
+  useEffect(() => {
+    if (!customer) return;
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch((err) => {
+        console.error('SW registration failed:', err);
+      });
+    }
+  }, [customer]);
 
   const handleLogin = useCallback((c: PortalCustomer, token: string) => {
     setCustomer(c);
@@ -224,6 +330,7 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
     <PortalContext.Provider value={{ customer, logout: handleLogout }}>
       <div className="flex min-h-screen flex-col bg-slate-50">
         <PortalHeader customer={customer} onLogout={handleLogout} />
+        <InstallBanner />
         <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 lg:px-8">
           {children}
         </main>

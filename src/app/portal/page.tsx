@@ -32,7 +32,10 @@ import {
   HandThumbDownIcon,
   DocumentArrowDownIcon,
   TableCellsIcon,
+  DevicePhoneMobileIcon,
+  ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline';
+import { usePushNotifications, type PushState } from './usePushNotifications';
 
 function WhatsAppIcon({ className }: { className?: string }) {
   return (
@@ -1017,6 +1020,7 @@ export default function PortalPage() {
               notificationFrequency={notificationFrequency}
               onSave={saveNotifPrefs}
               onClose={() => setShowSettings(false)}
+              showToast={showToast}
             />
           )}
         </AnimatePresence>,
@@ -1421,20 +1425,99 @@ function LeadFeedback({ leadId, showToast }: { leadId: string; showToast: (m: st
   );
 }
 
+/* ─── Push Toggle Component ───────────────────────────────── */
+function PushToggleSection({ pushState, pushToggling, onToggle, showToast }: {
+  pushState: PushState;
+  pushToggling: boolean;
+  onToggle: () => Promise<boolean>;
+  showToast: (msg: string, type?: 'success' | 'error') => void;
+}) {
+  const handleToggle = async () => {
+    const success = await onToggle();
+    if (success) {
+      showToast(pushState === 'enabled' ? 'Push notificaties uitgeschakeld' : 'Push notificaties ingeschakeld');
+    } else if (pushState !== 'denied') {
+      showToast('Kon push notificaties niet wijzigen', 'error');
+    }
+  };
+
+  if (pushState === 'loading') return null;
+  if (pushState === 'unsupported') return null;
+
+  const isEnabled = pushState === 'enabled';
+  const isDenied = pushState === 'denied';
+  const isIosNotInstalled = pushState === 'ios-not-installed';
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          {isEnabled ? (
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-purple/10">
+              <DevicePhoneMobileIcon className="h-5 w-5 text-brand-purple" />
+            </div>
+          ) : (
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100">
+              <DevicePhoneMobileIcon className="h-5 w-5 text-slate-400" />
+            </div>
+          )}
+          <div>
+            <p className="text-sm font-medium text-slate-900">Push notificaties</p>
+            <p className="text-xs text-slate-500">
+              {isEnabled && 'Actief op dit apparaat'}
+              {pushState === 'disabled' && 'Ontvang direct een melding op uw telefoon'}
+              {isDenied && 'Geblokkeerd in uw browser'}
+              {isIosNotInstalled && 'Installeer eerst de app'}
+            </p>
+          </div>
+        </div>
+        {!isDenied && !isIosNotInstalled && (
+          <button
+            onClick={handleToggle}
+            disabled={pushToggling}
+            className={`relative h-6 w-11 rounded-full transition-colors disabled:opacity-50 ${isEnabled ? 'bg-brand-purple' : 'bg-slate-200'}`}
+          >
+            <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${isEnabled ? 'translate-x-[22px]' : 'translate-x-0.5'}`} />
+          </button>
+        )}
+      </div>
+      {isDenied && (
+        <div className="flex items-start gap-2 rounded-lg bg-amber-50 p-3">
+          <ExclamationTriangleIcon className="h-4 w-4 shrink-0 text-amber-500 mt-0.5" />
+          <p className="text-xs text-amber-700">
+            Notificaties zijn geblokkeerd in uw browser. Ga naar uw browserinstellingen om dit te wijzigen.
+          </p>
+        </div>
+      )}
+      {isIosNotInstalled && (
+        <div className="flex items-start gap-2 rounded-lg bg-blue-50 p-3">
+          <DevicePhoneMobileIcon className="h-4 w-4 shrink-0 text-blue-500 mt-0.5" />
+          <p className="text-xs text-blue-700">
+            Installeer de app op uw startscherm om push notificaties te ontvangen.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ─── Settings Panel ──────────────────────────────────────── */
 function SettingsPanel({
   emailNotifications,
   notificationFrequency,
   onSave,
   onClose,
+  showToast,
 }: {
   emailNotifications: boolean;
   notificationFrequency: string;
   onSave: (enabled: boolean, freq: string) => void;
   onClose: () => void;
+  showToast: (msg: string, type?: 'success' | 'error') => void;
 }) {
   const [enabled, setEnabled] = useState(emailNotifications);
   const [freq, setFreq] = useState(notificationFrequency);
+  const push = usePushNotifications();
 
   useEffect(() => {
     setEnabled(emailNotifications);
@@ -1532,6 +1615,15 @@ function SettingsPanel({
                 </div>
               )}
             </div>
+          </div>
+          <div>
+            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">Push notificaties</h3>
+            <PushToggleSection
+              pushState={push.state}
+              pushToggling={push.toggling}
+              onToggle={push.toggle}
+              showToast={showToast}
+            />
           </div>
           <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
             <p className="text-xs text-slate-400">
