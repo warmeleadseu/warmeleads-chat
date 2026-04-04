@@ -302,9 +302,18 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!customer) return;
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch((err) => {
-        console.error('SW registration failed:', err);
-      });
+      (async () => {
+        try {
+          const existing = await navigator.serviceWorker.getRegistration('/');
+          if (existing) {
+            existing.update().catch(() => {});
+            return;
+          }
+          await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+        } catch (err) {
+          console.error('SW registration failed:', err);
+        }
+      })();
     }
   }, [customer]);
 

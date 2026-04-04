@@ -1444,18 +1444,19 @@ function LeadFeedback({ leadId, showToast }: { leadId: string; showToast: (m: st
 }
 
 /* ─── Push Toggle Component ───────────────────────────────── */
-function PushToggleSection({ pushState, pushToggling, onToggle, showToast }: {
+function PushToggleSection({ pushState, pushToggling, onToggle, showToast, lastError }: {
   pushState: PushState;
   pushToggling: boolean;
   onToggle: () => Promise<boolean>;
   showToast: (msg: string, type?: 'success' | 'error') => void;
+  lastError?: string | null;
 }) {
   const handleToggle = async () => {
     const success = await onToggle();
     if (success) {
       showToast(pushState === 'enabled' ? 'Push notificaties uitgeschakeld' : 'Push notificaties ingeschakeld');
     } else if (pushState !== 'denied') {
-      showToast('Kon push notificaties niet wijzigen', 'error');
+      showToast(lastError || 'Kon push notificaties niet wijzigen', 'error');
     }
   };
 
@@ -1641,6 +1642,7 @@ function SettingsPanel({
               pushToggling={push.toggling}
               onToggle={push.toggle}
               showToast={showToast}
+              lastError={push.lastError}
             />
           </div>
           <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">

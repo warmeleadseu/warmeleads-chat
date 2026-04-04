@@ -415,12 +415,12 @@ function AccountTab({
 
 /* ─── Push Toggle (Account) ───────────────────────────────── */
 function AccountPushToggle({ showToast }: { showToast: (msg: string, type?: 'success' | 'error') => void }) {
-  const { state, toggling, toggle } = usePushNotifications();
+  const { state, toggling, toggle, lastError } = usePushNotifications();
 
   const handleToggle = async () => {
     const success = await toggle();
     if (success) showToast(state === 'enabled' ? 'Push notificaties uitgeschakeld' : 'Push notificaties ingeschakeld');
-    else if (state !== 'denied') showToast('Kon push notificaties niet wijzigen', 'error');
+    else if (state !== 'denied') showToast(lastError || 'Kon push notificaties niet wijzigen', 'error');
   };
 
   if (state === 'loading' || state === 'unsupported') return null;
