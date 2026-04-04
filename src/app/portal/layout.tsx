@@ -10,6 +10,7 @@ import {
   ArrowLeftIcon,
   InboxStackIcon,
   UserCircleIcon,
+  ShoppingCartIcon,
   DevicePhoneMobileIcon,
   XMarkIcon,
   ArrowUpOnSquareIcon,
@@ -115,6 +116,7 @@ function LoginScreen({ onLogin }: { onLogin: (c: PortalCustomer, t: string) => v
 
 const PORTAL_NAV = [
   { label: 'Leads', href: '/portal', icon: InboxStackIcon },
+  { label: 'Bestellen', href: '/portal/bestellen', icon: ShoppingCartIcon },
   { label: 'Account & Insights', href: '/portal/account', icon: UserCircleIcon },
 ];
 

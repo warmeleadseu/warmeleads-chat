@@ -330,6 +330,78 @@ export async function sendFeedbackDigest(
   );
 }
 
+export async function sendBatchMilestoneEmail(
+  customer: Customer,
+  batch: BatchInfo & { branch_name?: string },
+  milestone: '80pct' | 'completed' | 'reminder',
+): Promise<boolean> {
+  const branchLabel = batch.branch_name || batch.branch;
+  const pct = batch.batch_size > 0 ? Math.round((batch.leads_delivered / batch.batch_size) * 100) : 0;
+  const orderUrl = 'https://warmeleads.eu/portal/bestellen?batch=' + batch.id;
+
+  const titles: Record<string, string> = {
+    '80pct': `Uw batch ${branchLabel} is voor ${pct}% voltooid`,
+    completed: `Uw batch ${branchLabel} is voltooid!`,
+    reminder: `U mist momenteel leads in ${branchLabel}`,
+  };
+
+  const bodies: Record<string, string> = {
+    '80pct': `
+      <p>Hallo ${customer.contact_person || customer.name},</p>
+      <p>Uw batch <strong>${branchLabel}</strong> is al voor <strong>${pct}%</strong> voltooid 
+         (${batch.leads_delivered} van ${batch.batch_size} leads geleverd).</p>
+      <p>Bestel nu een vervolg batch zodat u geen leads mist zodra deze batch vol is.</p>`,
+    completed: `
+      <p>Hallo ${customer.contact_person || customer.name},</p>
+      <p>Uw batch <strong>${branchLabel}</strong> is volledig voltooid! 
+         Alle ${batch.batch_size} leads zijn geleverd.</p>
+      <p>Wilt u blijven groeien? Bestel direct een nieuwe batch en ontvang weer verse leads.</p>`,
+    reminder: `
+      <p>Hallo ${customer.contact_person || customer.name},</p>
+      <p>Het is nu een paar dagen geleden dat uw batch <strong>${branchLabel}</strong> is voltooid. 
+         Momenteel ontvangt u geen nieuwe leads in dit segment.</p>
+      <p>Bestel een nieuwe batch om weer leads te ontvangen.</p>`,
+  };
+
+  const content = `
+    ${bodies[milestone]}
+    <p style="margin-top:24px">
+      <a href="${orderUrl}" style="display:inline-block;background:#F97316;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700;font-size:15px">
+        Nieuwe batch bestellen &rarr;
+      </a>
+    </p>`;
+
+  return sendEmail(
+    customer.email,
+    titles[milestone],
+    layout(titles[milestone], content),
+  );
+}
+
+export async function sendOrderConfirmationEmail(
+  customer: Customer,
+  order: { branch: string; branch_name?: string; batch_size: number; total_price: number },
+): Promise<boolean> {
+  const branchLabel = order.branch_name || order.branch;
+  const content = `
+    <p>Hallo ${customer.contact_person || customer.name},</p>
+    <p>Bedankt voor uw bestelling! Uw nieuwe batch is aangemaakt en leads worden automatisch toegewezen.</p>
+    ${dataTable(
+      row('Branche', branchLabel) +
+      row('Batch grootte', `${order.batch_size} leads`) +
+      row('Totaalprijs', `&euro;${Number(order.total_price).toFixed(2)}`)
+    )}
+    <p style="margin-top:20px">
+      <a href="https://warmeleads.eu/portal" style="display:inline-block;background:#F97316;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">Bekijk in portaal &rarr;</a>
+    </p>`;
+
+  return sendEmail(
+    customer.email,
+    `Bevestiging: nieuwe batch ${branchLabel} (${order.batch_size} leads)`,
+    layout('Bestelling Bevestigd', content),
+  );
+}
+
 function getISOWeek(date: Date): number {
   const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
   d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));

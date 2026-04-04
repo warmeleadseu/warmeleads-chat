@@ -23,6 +23,7 @@ import {
   ExclamationTriangleIcon,
   SparklesIcon,
   DevicePhoneMobileIcon,
+  ShoppingCartIcon,
 } from '@heroicons/react/24/outline';
 import { usePushNotifications, type PushState } from '../usePushNotifications';
 
@@ -57,12 +58,24 @@ interface TargetArea {
   leads_count: number;
 }
 
+interface OrderData {
+  id: string;
+  branch: string;
+  batch_size: number;
+  price_per_lead: number;
+  total_price: number;
+  status: string;
+  created_at: string;
+  paid_at: string | null;
+}
+
 /* ─── Constants ────────────────────────────────────────────── */
 
 const TABS = [
   { key: 'account', label: 'Mijn Account', icon: UserCircleIcon },
   { key: 'insights', label: 'Prestaties', icon: ChartBarIcon },
   { key: 'areas', label: 'Gebieden', icon: GlobeAltIcon },
+  { key: 'orders', label: 'Bestellingen', icon: ShoppingCartIcon },
 ] as const;
 
 type TabKey = (typeof TABS)[number]['key'];
@@ -792,6 +805,66 @@ function AreasTab({
 
 /* ─── Main Page ────────────────────────────────────────────── */
 
+function OrdersTab({ data, loading }: { data: OrderData[]; loading: boolean }) {
+  if (loading) {
+    return (
+      <div className="space-y-3">
+        {[0, 1, 2].map(i => (
+          <div key={i} className="h-20 animate-pulse rounded-xl border border-slate-200 bg-white" />
+        ))}
+      </div>
+    );
+  }
+
+  if (data.length === 0) {
+    return (
+      <div className="rounded-xl border border-slate-200 bg-white px-6 py-12 text-center">
+        <ShoppingCartIcon className="mx-auto mb-3 h-10 w-10 text-slate-300" />
+        <p className="text-sm font-medium text-slate-700">Geen bestellingen</p>
+        <p className="mt-1 text-xs text-slate-400">U heeft nog geen batches besteld via het portaal.</p>
+      </div>
+    );
+  }
+
+  const statusLabel = (s: string) => {
+    switch (s) {
+      case 'paid': return { text: 'Betaald', cls: 'bg-emerald-50 text-emerald-600' };
+      case 'pending': return { text: 'In behandeling', cls: 'bg-amber-50 text-amber-600' };
+      case 'failed': return { text: 'Mislukt', cls: 'bg-red-50 text-red-600' };
+      case 'expired': return { text: 'Verlopen', cls: 'bg-slate-100 text-slate-500' };
+      case 'cancelled': return { text: 'Geannuleerd', cls: 'bg-slate-100 text-slate-500' };
+      default: return { text: s, cls: 'bg-slate-100 text-slate-500' };
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      {data.map(order => {
+        const st = statusLabel(order.status);
+        return (
+          <div key={order.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-slate-900">{order.batch_size} leads &middot; {order.branch}</p>
+                <p className="mt-0.5 text-xs text-slate-400">
+                  {new Date(order.created_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' })}
+                  {order.paid_at && (
+                    <> &middot; Betaald op {new Date(order.paid_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}</>
+                  )}
+                </p>
+              </div>
+              <div className="text-right">
+                <span className={`inline-block rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${st.cls}`}>{st.text}</span>
+                <p className="mt-1 text-sm font-bold text-slate-900">&euro;{Number(order.total_price).toFixed(2)}</p>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function AccountPage() {
   const { customer } = usePortal();
   const [activeTab, setActiveTab] = useState<TabKey>('account');
@@ -804,6 +877,9 @@ export default function AccountPage() {
 
   const [areasData, setAreasData] = useState<TargetArea[]>([]);
   const [areasLoading, setAreasLoading] = useState(false);
+
+  const [ordersData, setOrdersData] = useState<OrderData[]>([]);
+  const [ordersLoading, setOrdersLoading] = useState(false);
 
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
   const toastTimer = useRef<NodeJS.Timeout | null>(null);
@@ -850,11 +926,24 @@ export default function AccountPage() {
     finally { setAreasLoading(false); }
   }, []);
 
+  const fetchOrders = useCallback(async () => {
+    setOrdersLoading(true);
+    try {
+      const res = await portalFetch('/api/portal/orders');
+      if (res.ok) {
+        const d = await res.json();
+        setOrdersData(Array.isArray(d) ? d : []);
+      }
+    } catch { /* ignore */ }
+    finally { setOrdersLoading(false); }
+  }, []);
+
   useEffect(() => {
     if (activeTab === 'account' && !accountData) fetchAccount();
     if (activeTab === 'insights' && !insightsData) fetchInsights();
     if (activeTab === 'areas' && areasData.length === 0) fetchAreas();
-  }, [activeTab, accountData, insightsData, areasData.length, fetchAccount, fetchInsights, fetchAreas]);
+    if (activeTab === 'orders' && ordersData.length === 0) fetchOrders();
+  }, [activeTab, accountData, insightsData, areasData.length, ordersData.length, fetchAccount, fetchInsights, fetchAreas, fetchOrders]);
 
   return (
     <div className="space-y-6">
@@ -928,6 +1017,9 @@ export default function AccountPage() {
           )}
           {activeTab === 'areas' && (
             <AreasTab data={areasData} loading={areasLoading} />
+          )}
+          {activeTab === 'orders' && (
+            <OrdersTab data={ordersData} loading={ordersLoading} />
           )}
         </motion.div>
       </AnimatePresence>

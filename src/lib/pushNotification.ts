@@ -89,3 +89,40 @@ export async function sendNewLeadPush(
     console.error('sendNewLeadPush error:', err);
   }
 }
+
+/**
+ * Send a batch milestone push notification.
+ */
+export async function sendBatchMilestonePush(
+  customerId: string,
+  batchId: string,
+  branchName: string,
+  milestone: '80pct' | 'completed' | 'reminder',
+): Promise<void> {
+  const messages: Record<string, { title: string; body: string }> = {
+    '80pct': {
+      title: 'Batch bijna vol!',
+      body: `Uw batch ${branchName} is bijna voltooid. Bestel nu een vervolg batch.`,
+    },
+    completed: {
+      title: 'Batch voltooid!',
+      body: `Uw batch ${branchName} is volledig geleverd. Bestel een nieuwe batch om leads te blijven ontvangen.`,
+    },
+    reminder: {
+      title: `U mist leads in ${branchName}`,
+      body: 'Uw batch is al een paar dagen voltooid. Bestel een nieuwe batch om weer leads te ontvangen.',
+    },
+  };
+
+  const msg = messages[milestone];
+  try {
+    await sendPushToCustomer(customerId, {
+      title: msg.title,
+      body: msg.body,
+      url: `/portal/bestellen?batch=${batchId}`,
+      tag: `batch-${milestone}`,
+    });
+  } catch (err) {
+    console.error('sendBatchMilestonePush error:', err);
+  }
+}

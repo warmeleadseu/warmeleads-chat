@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import Link from 'next/link';
 import { usePortal } from './portalContext';
 import { portalFetch } from '@/lib/portalAuth';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -32,6 +33,7 @@ import {
   HandThumbDownIcon,
   DocumentArrowDownIcon,
   TableCellsIcon,
+  ShoppingCartIcon,
   DevicePhoneMobileIcon,
   ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline';
@@ -524,6 +526,15 @@ export default function PortalPage() {
                           )}
                         </div>
                       )}
+                      {pct >= 80 && (
+                        <Link
+                          href={`/portal/bestellen?batch=${b.id}`}
+                          className="mt-2.5 flex items-center justify-center gap-1.5 rounded-lg bg-gradient-to-r from-brand-purple to-brand-pink px-3 py-2 text-[12px] font-semibold text-white shadow-sm transition hover:shadow-md"
+                        >
+                          <ShoppingCartIcon className="h-3.5 w-3.5" />
+                          Vervolg batch bestellen
+                        </Link>
+                      )}
                       {b.lead_filters && Array.isArray(b.lead_filters) && b.lead_filters.length > 0 && (
                         <div className="mt-2 flex flex-wrap items-center gap-1 border-t border-slate-50 pt-2">
                           <span className="text-[10px] text-slate-400">Filters:</span>
@@ -569,6 +580,13 @@ export default function PortalPage() {
                         <span className="text-slate-400"> · {new Date(b.completed_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
                       )}
                     </p>
+                    <Link
+                      href={`/portal/bestellen?batch=${b.id}`}
+                      className="mt-2 inline-flex items-center gap-1 rounded-md bg-brand-purple/10 px-2.5 py-1 text-[11px] font-semibold text-brand-purple transition hover:bg-brand-purple/20"
+                    >
+                      <ShoppingCartIcon className="h-3 w-3" />
+                      Opnieuw bestellen
+                    </Link>
                   </div>
                 ))}
               </div>
