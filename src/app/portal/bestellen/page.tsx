@@ -133,9 +133,12 @@ export default function BestellenPage() {
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [customer, sourceBatchId, orderRedirectId, redirectStatus, fetchData]);
 
+  const BTW_RATE = 0.21;
   const effectiveSize = useCustom ? (parseInt(customSize) || 0) : batchSize;
   const pricePerLead = selectedBatch?.price_per_lead || 0;
-  const totalPrice = effectiveSize * pricePerLead;
+  const subtotal = effectiveSize * pricePerLead;
+  const btwAmount = Math.round(subtotal * BTW_RATE * 100) / 100;
+  const totalInclBtw = subtotal + btwAmount;
 
   const handleOrder = async () => {
     if (!selectedBatch || effectiveSize < 10) return;
@@ -249,7 +252,7 @@ export default function BestellenPage() {
             className="mt-5 rounded-xl border border-emerald-100 bg-emerald-50 px-5 py-3 text-left"
           >
             <p className="text-sm font-medium text-emerald-800">
-              {redirectOrder.batch_size} leads &middot; &euro;{Number(redirectOrder.total_price).toFixed(2)}
+              {redirectOrder.batch_size} leads &middot; &euro;{(Number(redirectOrder.total_price) * 1.21).toFixed(2)} incl. BTW
             </p>
             <p className="mt-0.5 text-xs text-emerald-600">Batch is direct actief</p>
           </motion.div>
@@ -332,7 +335,7 @@ export default function BestellenPage() {
                 </div>
                 <div className="mt-3 flex items-baseline justify-between">
                   <p className="text-sm text-slate-600">{b.leads_delivered} / {b.batch_size} leads</p>
-                  <p className="text-sm font-bold text-slate-900">&euro;{Number(b.price_per_lead).toFixed(2)}<span className="text-xs font-normal text-slate-400"> /lead</span></p>
+                  <p className="text-sm font-bold text-slate-900">&euro;{Number(b.price_per_lead).toFixed(2)}<span className="text-xs font-normal text-slate-400"> /lead excl. BTW</span></p>
                 </div>
                 {isActive && (
                   <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100">
@@ -363,7 +366,7 @@ export default function BestellenPage() {
                   </div>
                   <div className="text-right">
                     <StatusBadge status={o.status} />
-                    <p className="mt-0.5 text-xs font-semibold text-slate-500">&euro;{Number(o.total_price).toFixed(2)}</p>
+                    <p className="mt-0.5 text-xs font-semibold text-slate-500">&euro;{(Number(o.total_price) * 1.21).toFixed(2)} <span className="font-normal text-slate-400">incl. BTW</span></p>
                   </div>
                 </div>
               ))}
@@ -503,15 +506,24 @@ export default function BestellenPage() {
                 <span className="font-medium text-slate-900">{effectiveSize}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">Prijs per lead</span>
+                <span className="text-slate-500">Prijs per lead <span className="text-slate-400">(excl. BTW)</span></span>
                 <span className="font-medium text-slate-900">&euro;{pricePerLead.toFixed(2)}</span>
               </div>
               <div className="border-t border-slate-200 pt-2.5">
-                <div className="flex items-baseline justify-between">
-                  <span className="font-semibold text-slate-700">Totaal</span>
-                  <span className="text-xl font-bold text-brand-purple">&euro;{totalPrice.toFixed(2)}</span>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Subtotaal excl. BTW</span>
+                  <span className="font-medium text-slate-900">&euro;{subtotal.toFixed(2)}</span>
                 </div>
-                <p className="mt-0.5 text-right text-[11px] text-slate-400">incl. BTW</p>
+                <div className="mt-1 flex justify-between">
+                  <span className="text-slate-500">BTW 21%</span>
+                  <span className="font-medium text-slate-900">&euro;{btwAmount.toFixed(2)}</span>
+                </div>
+              </div>
+              <div className="border-t border-slate-200 pt-2.5">
+                <div className="flex items-baseline justify-between">
+                  <span className="font-semibold text-slate-700">Totaal incl. BTW</span>
+                  <span className="text-xl font-bold text-brand-purple">&euro;{totalInclBtw.toFixed(2)}</span>
+                </div>
               </div>
             </div>
           </div>
@@ -539,7 +551,7 @@ export default function BestellenPage() {
             ) : (
               <>
                 <CreditCardIcon className="h-5 w-5" />
-                Betaal &euro;{totalPrice.toFixed(2)}
+                Betaal &euro;{totalInclBtw.toFixed(2)} incl. BTW
               </>
             )}
           </button>

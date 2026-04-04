@@ -380,16 +380,26 @@ export async function sendBatchMilestoneEmail(
 
 export async function sendOrderConfirmationEmail(
   customer: Customer,
-  order: { branch: string; branch_name?: string; batch_size: number; total_price: number },
+  order: { branch: string; branch_name?: string; batch_size: number; total_price: number; price_per_lead?: number },
 ): Promise<boolean> {
   const branchLabel = order.branch_name || order.branch;
+  const subtotal = Number(order.total_price);
+  const btwAmount = Math.round(subtotal * 0.21 * 100) / 100;
+  const totalInclBtw = subtotal + btwAmount;
+
   const content = `
     <p>Hallo ${customer.contact_person || customer.name},</p>
     <p>Bedankt voor uw bestelling! Uw nieuwe batch is aangemaakt en leads worden automatisch toegewezen.</p>
     ${dataTable(
       row('Branche', branchLabel) +
       row('Batch grootte', `${order.batch_size} leads`) +
-      row('Totaalprijs', `&euro;${Number(order.total_price).toFixed(2)}`)
+      (order.price_per_lead ? row('Prijs per lead (excl. BTW)', `&euro;${Number(order.price_per_lead).toFixed(2)}`) : '') +
+      row('Subtotaal excl. BTW', `&euro;${subtotal.toFixed(2)}`) +
+      row('BTW 21%', `&euro;${btwAmount.toFixed(2)}`) +
+      `<tr>
+        <td style="padding:10px 12px;color:#F97316;font-size:15px;font-weight:700;border-top:2px solid rgba(249,115,22,.2)">Totaal incl. BTW</td>
+        <td style="padding:10px 12px;color:#F97316;font-size:15px;font-weight:700;text-align:right;border-top:2px solid rgba(249,115,22,.2)">&euro;${totalInclBtw.toFixed(2)}</td>
+      </tr>`
     )}
     <p style="margin-top:20px">
       <a href="https://warmeleads.eu/portal" style="display:inline-block;background:#F97316;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">Bekijk in portaal &rarr;</a>

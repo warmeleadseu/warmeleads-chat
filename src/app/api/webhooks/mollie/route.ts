@@ -92,6 +92,7 @@ export async function POST(request: NextRequest) {
           branch_name: branchName,
           batch_size: order.batch_size,
           total_price: order.total_price,
+          price_per_lead: order.price_per_lead,
         }).catch(() => {});
 
         sendPushToCustomer(customer.id, {

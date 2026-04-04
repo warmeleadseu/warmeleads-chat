@@ -84,6 +84,8 @@ export async function POST(request: NextRequest) {
     }
 
     const total_price = Number(price_per_lead) * batch_size;
+    const btw_amount = Math.round(total_price * 0.21 * 100) / 100;
+    const total_incl_btw = total_price + btw_amount;
 
     const { data: order, error: orderErr } = await supabase
       .from('batch_orders')
@@ -112,8 +114,8 @@ export async function POST(request: NextRequest) {
     const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://warmeleads.eu';
     const payment = await createBatchPayment({
       orderId: order.id,
-      amount: total_price,
-      description: `WarmeLeads batch: ${batch_size} ${branchName} leads`,
+      amount: total_incl_btw,
+      description: `WarmeLeads batch: ${batch_size} ${branchName} leads (incl. 21% BTW)`,
       redirectUrl: `${baseUrl}/portal/bestellen?order=${order.id}&status=redirect`,
       webhookUrl: `${baseUrl}/api/webhooks/mollie`,
       customerEmail: custData.email,

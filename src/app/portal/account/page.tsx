@@ -847,7 +847,8 @@ function OrdersTab({ data, loading }: { data: OrderData[]; loading: boolean }) {
   };
 
   const paidCount = data.filter(o => o.status === 'paid').length;
-  const totalSpent = data.filter(o => o.status === 'paid').reduce((sum, o) => sum + Number(o.total_price), 0);
+  const totalExBtw = data.filter(o => o.status === 'paid').reduce((sum, o) => sum + Number(o.total_price), 0);
+  const totalInclBtw = Math.round(totalExBtw * 1.21 * 100) / 100;
 
   return (
     <div className="space-y-4">
@@ -859,7 +860,8 @@ function OrdersTab({ data, loading }: { data: OrderData[]; loading: boolean }) {
           </div>
           <div className="flex-1 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs text-slate-500">Totaal uitgegeven</p>
-            <p className="mt-1 text-lg font-bold text-brand-purple">&euro;{totalSpent.toFixed(2)}</p>
+            <p className="mt-1 text-lg font-bold text-brand-purple">&euro;{totalInclBtw.toFixed(2)}</p>
+            <p className="text-[10px] text-slate-400">incl. BTW</p>
           </div>
         </div>
       )}
@@ -889,8 +891,8 @@ function OrdersTab({ data, loading }: { data: OrderData[]; loading: boolean }) {
                     <span className={`h-1.5 w-1.5 rounded-full ${st.dot}`} />
                     {st.text}
                   </span>
-                  <p className="mt-1.5 text-sm font-bold text-slate-900">&euro;{Number(order.total_price).toFixed(2)}</p>
-                  <p className="text-[10px] text-slate-400">&euro;{Number(order.price_per_lead).toFixed(2)} /lead</p>
+                  <p className="mt-1.5 text-sm font-bold text-slate-900">&euro;{(Number(order.total_price) * 1.21).toFixed(2)}</p>
+                  <p className="text-[10px] text-slate-400">incl. BTW &middot; &euro;{Number(order.price_per_lead).toFixed(2)} /lead excl.</p>
                 </div>
               </div>
             </div>
