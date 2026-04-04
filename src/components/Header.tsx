@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { usePathname } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -24,6 +25,7 @@ const navLinks = [
 
 export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const pathname = usePathname();
 
   useEffect(() => {
     if (mobileMenuOpen) {
@@ -185,7 +187,8 @@ export function Header() {
           </>
         )}
       </AnimatePresence>
-      {/* Sticky mobile CTA bar (always visible on small screens) */}
+      {/* Sticky mobile CTA bar (hidden on /plan-gesprek) */}
+      {pathname !== '/plan-gesprek' && (
       <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-slate-200 bg-white/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-lg sm:hidden">
         <Link
           href="/plan-gesprek"
@@ -195,6 +198,7 @@ export function Header() {
           <ArrowRightIcon className="h-4 w-4 transition group-hover:translate-x-0.5" />
         </Link>
       </div>
+      )}
     </>
   );
 }
