@@ -239,36 +239,68 @@ function InstallBanner() {
   return (
     <AnimatePresence>
       <motion.div
-        initial={{ opacity: 0, y: -8 }}
+        initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -8 }}
-        className="mx-auto mb-4 max-w-7xl px-4 sm:px-6 lg:px-8"
+        exit={{ opacity: 0, y: 20 }}
+        transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+        className="fixed inset-x-0 bottom-0 z-50 p-4 sm:bottom-6 sm:left-auto sm:right-6 sm:max-w-sm sm:p-0"
       >
-        <div className="relative flex items-center gap-3 rounded-xl border border-brand-purple/20 bg-brand-purple/[0.04] px-4 py-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-purple/10">
-            <DevicePhoneMobileIcon className="h-5 w-5 text-brand-purple" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium text-slate-800">Installeer de WarmeLeads app</p>
-            {iosHint ? (
-              <p className="text-xs text-slate-500">
-                Tik op <ArrowUpOnSquareIcon className="inline h-3.5 w-3.5 -mt-0.5 text-brand-purple" /> en kies &quot;Zet op beginscherm&quot;
-              </p>
-            ) : (
-              <p className="text-xs text-slate-500">Voeg toe aan uw startscherm voor snelle toegang en notificaties</p>
+        <div className="relative overflow-hidden rounded-2xl bg-white shadow-2xl shadow-slate-900/10 ring-1 ring-slate-900/[0.08]">
+          {/* Gradient accent */}
+          <div className="h-1 bg-gradient-to-r from-brand-purple via-brand-pink to-brand-purple" />
+
+          <div className="p-4 sm:p-5">
+            <div className="flex items-start gap-3.5">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-purple to-brand-pink shadow-md shadow-brand-purple/20">
+                <DevicePhoneMobileIcon className="h-5.5 w-5.5 text-white" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[15px] font-semibold text-slate-900">WarmeLeads installeren</p>
+                {iosHint ? (
+                  <p className="mt-0.5 text-[13px] leading-snug text-slate-500">
+                    Tik op <ArrowUpOnSquareIcon className="inline h-4 w-4 -mt-0.5 text-brand-purple" /> in uw browser en kies <span className="font-medium text-slate-700">&quot;Zet op beginscherm&quot;</span>
+                  </p>
+                ) : (
+                  <p className="mt-0.5 text-[13px] leading-snug text-slate-500">
+                    Snelle toegang vanaf uw startscherm met push notificaties
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={dismiss}
+                className="shrink-0 rounded-lg p-1.5 text-slate-300 transition hover:bg-slate-100 hover:text-slate-500"
+                aria-label="Sluiten"
+              >
+                <XMarkIcon className="h-4.5 w-4.5" />
+              </button>
+            </div>
+
+            {!iosHint && (
+              <div className="mt-4 flex gap-2.5">
+                <button
+                  onClick={handleInstall}
+                  className="flex-1 rounded-xl bg-gradient-to-r from-brand-purple to-brand-pink px-4 py-2.5 text-[13px] font-bold text-white shadow-sm transition hover:shadow-md active:scale-[0.98]"
+                >
+                  Installeer app
+                </button>
+                <button
+                  onClick={dismiss}
+                  className="rounded-xl px-4 py-2.5 text-[13px] font-medium text-slate-500 transition hover:bg-slate-50"
+                >
+                  Niet nu
+                </button>
+              </div>
+            )}
+
+            {iosHint && (
+              <button
+                onClick={dismiss}
+                className="mt-3 w-full rounded-xl bg-slate-50 px-4 py-2 text-center text-[13px] font-medium text-slate-500 transition hover:bg-slate-100"
+              >
+                Begrepen
+              </button>
             )}
           </div>
-          {!iosHint && (
-            <button
-              onClick={handleInstall}
-              className="shrink-0 rounded-lg bg-brand-purple px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-brand-purple/90"
-            >
-              Installeer
-            </button>
-          )}
-          <button onClick={dismiss} className="shrink-0 rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
-            <XMarkIcon className="h-4 w-4" />
-          </button>
         </div>
       </motion.div>
     </AnimatePresence>

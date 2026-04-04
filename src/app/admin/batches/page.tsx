@@ -63,10 +63,11 @@ const STATUS_COLORS: Record<string, string> = {
   active: 'bg-emerald-100 text-emerald-700',
   paused: 'bg-amber-100 text-amber-700',
   completed: 'bg-blue-100 text-blue-700',
+  cancelled: 'bg-red-100 text-red-700',
 };
 
 const STATUS_LABELS: Record<string, string> = {
-  active: 'Actief', paused: 'Gepauzeerd', completed: 'Afgerond',
+  active: 'Actief', paused: 'Gepauzeerd', completed: 'Afgerond', cancelled: 'Geannuleerd',
 };
 
 export default function BatchesPage() {
@@ -331,7 +332,7 @@ export default function BatchesPage() {
                         </div>
                       </td>
                       <td className="px-4 py-3">
-                        <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_COLORS[b.status]}`}>{STATUS_LABELS[b.status]}</span>
+                        <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_COLORS[b.status] || 'bg-slate-100 text-slate-600'}`}>{STATUS_LABELS[b.status] || b.status}</span>
                       </td>
                       <td className="px-4 py-3 text-right text-slate-700">
                         {b.price_per_lead ? `€${Number(b.price_per_lead).toFixed(2)}` : '-'}
@@ -385,7 +386,7 @@ export default function BatchesPage() {
                       <p className="font-semibold text-slate-900">{b.customers?.name || 'Onbekend'}</p>
                       <div className="mt-1 flex items-center gap-1.5">
                         <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${c.light} ${c.text}`}>{br.name}</span>
-                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${STATUS_COLORS[b.status]}`}>{STATUS_LABELS[b.status]}</span>
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${STATUS_COLORS[b.status] || 'bg-slate-100 text-slate-600'}`}>{STATUS_LABELS[b.status] || b.status}</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-0.5">

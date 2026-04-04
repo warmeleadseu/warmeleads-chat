@@ -810,7 +810,7 @@ function OrdersTab({ data, loading }: { data: OrderData[]; loading: boolean }) {
     return (
       <div className="space-y-3">
         {[0, 1, 2].map(i => (
-          <div key={i} className="h-20 animate-pulse rounded-xl border border-slate-200 bg-white" />
+          <div key={i} className="h-24 animate-pulse rounded-xl border border-slate-200 bg-white" />
         ))}
       </div>
     );
@@ -818,49 +818,85 @@ function OrdersTab({ data, loading }: { data: OrderData[]; loading: boolean }) {
 
   if (data.length === 0) {
     return (
-      <div className="rounded-xl border border-slate-200 bg-white px-6 py-12 text-center">
-        <ShoppingCartIcon className="mx-auto mb-3 h-10 w-10 text-slate-300" />
-        <p className="text-sm font-medium text-slate-700">Geen bestellingen</p>
+      <div className="rounded-xl border border-slate-200 bg-white px-6 py-16 text-center">
+        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100">
+          <ShoppingCartIcon className="h-7 w-7 text-slate-400" />
+        </div>
+        <p className="text-sm font-semibold text-slate-700">Geen bestellingen</p>
         <p className="mt-1 text-xs text-slate-400">U heeft nog geen batches besteld via het portaal.</p>
+        <a
+          href="/portal/bestellen"
+          className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-purple/10 px-3.5 py-2 text-xs font-semibold text-brand-purple transition hover:bg-brand-purple/20"
+        >
+          <ShoppingCartIcon className="h-3.5 w-3.5" />
+          Eerste batch bestellen
+        </a>
       </div>
     );
   }
 
-  const statusLabel = (s: string) => {
-    switch (s) {
-      case 'paid': return { text: 'Betaald', cls: 'bg-emerald-50 text-emerald-600' };
-      case 'pending': return { text: 'In behandeling', cls: 'bg-amber-50 text-amber-600' };
-      case 'failed': return { text: 'Mislukt', cls: 'bg-red-50 text-red-600' };
-      case 'expired': return { text: 'Verlopen', cls: 'bg-slate-100 text-slate-500' };
-      case 'cancelled': return { text: 'Geannuleerd', cls: 'bg-slate-100 text-slate-500' };
-      default: return { text: s, cls: 'bg-slate-100 text-slate-500' };
-    }
+  const statusConfig = (s: string) => {
+    const map: Record<string, { text: string; cls: string; dot: string }> = {
+      paid: { text: 'Betaald', cls: 'bg-emerald-50 text-emerald-600', dot: 'bg-emerald-500' },
+      pending: { text: 'In behandeling', cls: 'bg-amber-50 text-amber-600', dot: 'bg-amber-500' },
+      failed: { text: 'Mislukt', cls: 'bg-red-50 text-red-600', dot: 'bg-red-500' },
+      expired: { text: 'Verlopen', cls: 'bg-slate-100 text-slate-500', dot: 'bg-slate-400' },
+      cancelled: { text: 'Geannuleerd', cls: 'bg-slate-100 text-slate-500', dot: 'bg-slate-400' },
+    };
+    return map[s] || { text: s, cls: 'bg-slate-100 text-slate-500', dot: 'bg-slate-400' };
   };
 
+  const paidCount = data.filter(o => o.status === 'paid').length;
+  const totalSpent = data.filter(o => o.status === 'paid').reduce((sum, o) => sum + Number(o.total_price), 0);
+
   return (
-    <div className="space-y-3">
-      {data.map(order => {
-        const st = statusLabel(order.status);
-        return (
-          <div key={order.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-semibold text-slate-900">{order.batch_size} leads &middot; {order.branch}</p>
-                <p className="mt-0.5 text-xs text-slate-400">
-                  {new Date(order.created_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' })}
+    <div className="space-y-4">
+      {paidCount > 0 && (
+        <div className="flex gap-3">
+          <div className="flex-1 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <p className="text-xs text-slate-500">Totaal besteld</p>
+            <p className="mt-1 text-lg font-bold text-slate-900">{paidCount} {paidCount === 1 ? 'batch' : 'batches'}</p>
+          </div>
+          <div className="flex-1 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <p className="text-xs text-slate-500">Totaal uitgegeven</p>
+            <p className="mt-1 text-lg font-bold text-brand-purple">&euro;{totalSpent.toFixed(2)}</p>
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-2.5">
+        {data.map(order => {
+          const st = statusConfig(order.status);
+          return (
+            <div key={order.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:shadow-md">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-semibold text-slate-900">{order.batch_size} leads</p>
+                    <span className="rounded-full bg-brand-purple/10 px-2 py-0.5 text-[10px] font-semibold text-brand-purple">{order.branch}</span>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-400">
+                    {new Date(order.created_at).toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })}
+                  </p>
                   {order.paid_at && (
-                    <> &middot; Betaald op {new Date(order.paid_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}</>
+                    <p className="mt-0.5 text-[11px] text-emerald-500">
+                      Betaald op {new Date(order.paid_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long' })}
+                    </p>
                   )}
-                </p>
-              </div>
-              <div className="text-right">
-                <span className={`inline-block rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${st.cls}`}>{st.text}</span>
-                <p className="mt-1 text-sm font-bold text-slate-900">&euro;{Number(order.total_price).toFixed(2)}</p>
+                </div>
+                <div className="text-right">
+                  <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${st.cls}`}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${st.dot}`} />
+                    {st.text}
+                  </span>
+                  <p className="mt-1.5 text-sm font-bold text-slate-900">&euro;{Number(order.total_price).toFixed(2)}</p>
+                  <p className="text-[10px] text-slate-400">&euro;{Number(order.price_per_lead).toFixed(2)} /lead</p>
+                </div>
               </div>
             </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }
