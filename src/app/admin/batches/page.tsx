@@ -472,6 +472,7 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
 }) {
   const [form, setForm] = useState({
     batch_size: batch.batch_size,
+    leads_delivered: batch.leads_delivered,
     price_per_lead: batch.price_per_lead ? String(batch.price_per_lead) : '',
     leads_per_week: batch.leads_per_week ? String(batch.leads_per_week) : '',
     notes: batch.notes || '',
@@ -495,6 +496,7 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
         body: JSON.stringify({
           id: batch.id,
           batch_size: form.batch_size,
+          leads_delivered: form.leads_delivered,
           price_per_lead: form.price_per_lead ? parseFloat(form.price_per_lead) : null,
           leads_per_week: form.leads_per_week ? parseInt(form.leads_per_week) : null,
           notes: form.notes || null,
@@ -509,7 +511,9 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
 
   const br = branches.find(b => b.slug === batch.branch);
   const cust = customers.find(c => c.id === batch.customer_id);
-  const pct = batch.batch_size > 0 ? Math.min(100, Math.round((batch.leads_delivered / batch.batch_size) * 100)) : 0;
+  const livePct = form.batch_size > 0 ? Math.min(100, Math.round((form.leads_delivered / form.batch_size) * 100)) : 0;
+  const deliveredChanged = form.leads_delivered !== batch.leads_delivered;
+  const autoStatus = form.leads_delivered >= form.batch_size ? 'completed' : form.leads_delivered < form.batch_size && batch.status === 'completed' ? 'active' : batch.status;
 
   return (
     <>
@@ -530,26 +534,44 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
         </div>
 
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
-          {/* Current progress */}
+          {/* Live progress */}
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
             <div className="mb-1 flex items-baseline justify-between">
-              <span className="text-sm font-bold text-slate-800">{batch.leads_delivered} / {batch.batch_size} geleverd</span>
-              <span className="text-xs font-medium text-slate-500">{pct}%</span>
+              <span className="text-sm font-bold text-slate-800">{form.leads_delivered} / {form.batch_size} geleverd</span>
+              <span className="text-xs font-medium text-slate-500">{livePct}%</span>
             </div>
             <div className="h-2.5 overflow-hidden rounded-full bg-slate-200">
-              <div className={`h-full rounded-full ${pct >= 100 ? 'bg-blue-500' : pct >= 75 ? 'bg-emerald-500' : pct >= 50 ? 'bg-amber-500' : 'bg-brand-purple'}`}
-                style={{ width: `${pct}%` }} />
+              <div className={`h-full rounded-full transition-all duration-300 ${livePct >= 100 ? 'bg-blue-500' : livePct >= 75 ? 'bg-emerald-500' : livePct >= 50 ? 'bg-amber-500' : 'bg-brand-purple'}`}
+                style={{ width: `${livePct}%` }} />
             </div>
-            <p className="mt-1.5 text-[11px] text-slate-400">Status: {STATUS_LABELS[batch.status] || batch.status}</p>
+            <div className="mt-1.5 flex items-center justify-between">
+              <p className="text-[11px] text-slate-400">Status: {STATUS_LABELS[autoStatus] || autoStatus}</p>
+              {deliveredChanged && autoStatus !== batch.status && (
+                <p className="text-[11px] font-medium text-amber-600">
+                  Status wordt automatisch naar &apos;{STATUS_LABELS[autoStatus]}&apos;
+                </p>
+              )}
+            </div>
           </div>
 
           {/* Fields */}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-500">Geleverde leads</label>
+              <input type="number" value={form.leads_delivered} onChange={e => setForm(f => ({ ...f, leads_delivered: Math.max(0, Number(e.target.value)) }))} min={0}
+                className={`w-full rounded-lg border px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50 ${
+                  deliveredChanged ? 'border-amber-300 bg-amber-50/50 ring-1 ring-amber-200' : 'border-slate-200'
+                }`} />
+              <p className="mt-1 text-[10px] text-slate-400">Pas aan voor extern geleverde leads (mail/Excel)</p>
+            </div>
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-500">Batch grootte</label>
-              <input type="number" value={form.batch_size} onChange={e => setForm(f => ({ ...f, batch_size: Number(e.target.value) }))} min={1}
+              <input type="number" value={form.batch_size} onChange={e => setForm(f => ({ ...f, batch_size: Math.max(1, Number(e.target.value)) }))} min={1}
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
             </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-500">Per week</label>
               <input type="number" value={form.leads_per_week} onChange={e => setForm(f => ({ ...f, leads_per_week: e.target.value }))}
