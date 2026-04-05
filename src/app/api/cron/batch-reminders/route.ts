@@ -44,14 +44,16 @@ export async function GET(request: NextRequest) {
     const customer = customerMap.get(batch.customer_id);
     if (!customer) continue;
 
-    const hasActiveBatch = await supabase
+    const { count: activeCount, error: activeErr } = await supabase
       .from('customer_batches')
       .select('id', { count: 'exact', head: true })
       .eq('customer_id', batch.customer_id)
       .eq('branch', batch.branch)
       .eq('status', 'active');
 
-    if ((hasActiveBatch.count || 0) > 0) {
+    if (activeErr) continue;
+
+    if ((activeCount || 0) > 0) {
       await supabase.from('customer_batches').update({ notified_reminder: true }).eq('id', batch.id);
       continue;
     }

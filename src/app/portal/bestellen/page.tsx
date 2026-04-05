@@ -12,13 +12,13 @@ import {
   XCircleIcon,
   ArrowPathIcon,
   ChevronLeftIcon,
-  InformationCircleIcon,
   MinusIcon,
   PlusIcon,
   CubeIcon,
   CreditCardIcon,
   ClockIcon,
   SparklesIcon,
+  TrashIcon,
 } from '@heroicons/react/24/outline';
 
 interface Batch {
@@ -109,13 +109,21 @@ export default function BestellenPage() {
         if (found) {
           setRedirectOrder(found);
           if (found.status === 'pending') {
+            let pollCount = 0;
             pollRef.current = setInterval(async () => {
-              const res = await portalFetch('/api/portal/orders').then(r => r.json());
-              const updated = (Array.isArray(res) ? res : []).find((o: Order) => o.id === orderRedirectId);
-              if (updated && updated.status !== 'pending') {
-                setRedirectOrder(updated);
+              pollCount++;
+              if (pollCount > 40) {
                 if (pollRef.current) clearInterval(pollRef.current);
+                return;
               }
+              try {
+                const res = await portalFetch('/api/portal/orders').then(r => r.json());
+                const updated = (Array.isArray(res) ? res : []).find((o: Order) => o.id === orderRedirectId);
+                if (updated && updated.status !== 'pending') {
+                  setRedirectOrder(updated);
+                  if (pollRef.current) clearInterval(pollRef.current);
+                }
+              } catch { /* ignore polling errors */ }
             }, 3000);
           }
         }
@@ -139,6 +147,25 @@ export default function BestellenPage() {
   const subtotal = effectiveSize * pricePerLead;
   const btwAmount = Math.round(subtotal * BTW_RATE * 100) / 100;
   const totalInclBtw = subtotal + btwAmount;
+
+  const handleCancelOrder = async (orderId: string) => {
+    if (!confirm('Weet u zeker dat u deze bestelling wilt verwijderen?')) return;
+    try {
+      const res = await portalFetch('/api/portal/orders', {
+        method: 'DELETE',
+        body: JSON.stringify({ order_id: orderId }),
+      });
+      if (res.ok) {
+        setOrders(prev => prev.filter(o => o.id !== orderId));
+        showToast('Bestelling verwijderd');
+      } else {
+        const d = await res.json().catch(() => ({}));
+        showToast(d.error || 'Verwijderen mislukt', 'error');
+      }
+    } catch {
+      showToast('Verwijderen mislukt', 'error');
+    }
+  };
 
   const handleOrder = async () => {
     if (!selectedBatch || effectiveSize < 10) return;
@@ -189,6 +216,8 @@ export default function BestellenPage() {
   if (redirectOrder) {
     const isPaid = redirectOrder.status === 'paid';
     const isPending = redirectOrder.status === 'pending';
+    const isExpired = redirectOrder.status === 'expired';
+    const isCancelled = redirectOrder.status === 'cancelled';
     const isFailed = !isPaid && !isPending;
 
     return (
@@ -216,7 +245,7 @@ export default function BestellenPage() {
           transition={{ delay: 0.15 }}
           className="text-xl font-bold text-slate-900 sm:text-2xl"
         >
-          {isPaid ? 'Betaling gelukt!' : isPending ? 'Betaling wordt verwerkt...' : 'Betaling niet gelukt'}
+          {isPaid ? 'Betaling gelukt!' : isPending ? 'Betaling wordt verwerkt...' : isExpired ? 'Betaling verlopen' : isCancelled ? 'Betaling geannuleerd' : 'Betaling niet gelukt'}
         </motion.h2>
 
         <motion.p
@@ -364,9 +393,20 @@ export default function BestellenPage() {
                       {new Date(o.created_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' })}
                     </p>
                   </div>
-                  <div className="text-right">
-                    <StatusBadge status={o.status} />
-                    <p className="mt-0.5 text-xs font-semibold text-slate-500">&euro;{(Number(o.total_price) * 1.21).toFixed(2)} <span className="font-normal text-slate-400">incl. BTW</span></p>
+                  <div className="flex items-center gap-2">
+                    <div className="text-right">
+                      <StatusBadge status={o.status} />
+                      <p className="mt-0.5 text-xs font-semibold text-slate-500">&euro;{(Number(o.total_price) * 1.21).toFixed(2)} <span className="font-normal text-slate-400">incl. BTW</span></p>
+                    </div>
+                    {o.status !== 'paid' && (
+                      <button
+                        onClick={() => handleCancelOrder(o.id)}
+                        className="shrink-0 rounded-lg p-1.5 text-slate-300 transition hover:bg-red-50 hover:text-red-500"
+                        title="Bestelling verwijderen"
+                      >
+                        <TrashIcon className="h-4 w-4" />
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}

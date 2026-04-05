@@ -427,7 +427,7 @@ export default function BlogPageClient() {
               className="inline-flex items-center gap-2 bg-white text-brand-navy px-8 py-4 rounded-xl font-bold text-lg hover:scale-105 transition-transform shadow-lg"
             >
               Blijf op de hoogte
-              <ArrowRightIcon className="h-4.5 w-4.5" />
+              <ArrowRightIcon className="h-[18px] w-[18px]" />
             </Link>
           </motion.div>
         </div>

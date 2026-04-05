@@ -24,8 +24,9 @@ import {
   SparklesIcon,
   DevicePhoneMobileIcon,
   ShoppingCartIcon,
+  TrashIcon,
 } from '@heroicons/react/24/outline';
-import { usePushNotifications, type PushState } from '../usePushNotifications';
+import { usePushNotifications } from '../usePushNotifications';
 
 /* ─── Types ────────────────────────────────────────────────── */
 
@@ -805,7 +806,7 @@ function AreasTab({
 
 /* ─── Main Page ────────────────────────────────────────────── */
 
-function OrdersTab({ data, loading }: { data: OrderData[]; loading: boolean }) {
+function OrdersTab({ data, loading, onDelete }: { data: OrderData[]; loading: boolean; onDelete: (id: string) => void }) {
   if (loading) {
     return (
       <div className="space-y-3">
@@ -886,13 +887,24 @@ function OrdersTab({ data, loading }: { data: OrderData[]; loading: boolean }) {
                     </p>
                   )}
                 </div>
-                <div className="text-right">
-                  <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${st.cls}`}>
-                    <span className={`h-1.5 w-1.5 rounded-full ${st.dot}`} />
-                    {st.text}
-                  </span>
-                  <p className="mt-1.5 text-sm font-bold text-slate-900">&euro;{(Number(order.total_price) * 1.21).toFixed(2)}</p>
-                  <p className="text-[10px] text-slate-400">incl. BTW &middot; &euro;{Number(order.price_per_lead).toFixed(2)} /lead excl.</p>
+                <div className="flex items-start gap-2">
+                  <div className="text-right">
+                    <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${st.cls}`}>
+                      <span className={`h-1.5 w-1.5 rounded-full ${st.dot}`} />
+                      {st.text}
+                    </span>
+                    <p className="mt-1.5 text-sm font-bold text-slate-900">&euro;{(Number(order.total_price) * 1.21).toFixed(2)}</p>
+                    <p className="text-[10px] text-slate-400">incl. BTW &middot; &euro;{Number(order.price_per_lead).toFixed(2)} /lead excl.</p>
+                  </div>
+                  {order.status !== 'paid' && (
+                    <button
+                      onClick={() => onDelete(order.id)}
+                      className="mt-0.5 shrink-0 rounded-lg p-1.5 text-slate-300 transition hover:bg-red-50 hover:text-red-500"
+                      title="Bestelling verwijderen"
+                    >
+                      <TrashIcon className="h-4 w-4" />
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -1057,7 +1069,28 @@ export default function AccountPage() {
             <AreasTab data={areasData} loading={areasLoading} />
           )}
           {activeTab === 'orders' && (
-            <OrdersTab data={ordersData} loading={ordersLoading} />
+            <OrdersTab
+              data={ordersData}
+              loading={ordersLoading}
+              onDelete={async (id) => {
+                if (!confirm('Weet u zeker dat u deze bestelling wilt verwijderen?')) return;
+                try {
+                  const res = await portalFetch('/api/portal/orders', {
+                    method: 'DELETE',
+                    body: JSON.stringify({ order_id: id }),
+                  });
+                  if (res.ok) {
+                    setOrdersData(prev => prev.filter(o => o.id !== id));
+                    showToast('Bestelling verwijderd');
+                  } else {
+                    const d = await res.json().catch(() => ({}));
+                    showToast(d.error || 'Verwijderen mislukt', 'error');
+                  }
+                } catch {
+                  showToast('Verwijderen mislukt', 'error');
+                }
+              }}
+            />
           )}
         </motion.div>
       </AnimatePresence>

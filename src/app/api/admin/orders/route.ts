@@ -34,3 +34,33 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json(enriched);
 }
+
+export async function DELETE(request: NextRequest) {
+  const admin = await verifyAdmin(request);
+  if (!admin) return unauthorized();
+
+  try {
+    const { order_id } = await request.json();
+    if (!order_id) return NextResponse.json({ error: 'order_id is verplicht' }, { status: 400 });
+
+    const supabase = createServerClient();
+
+    const { data: order } = await supabase
+      .from('batch_orders')
+      .select('id, status')
+      .eq('id', order_id)
+      .single();
+
+    if (!order) return NextResponse.json({ error: 'Bestelling niet gevonden' }, { status: 404 });
+
+    if (order.status === 'paid') {
+      return NextResponse.json({ error: 'Een betaalde bestelling kan niet worden verwijderd' }, { status: 400 });
+    }
+
+    await supabase.from('batch_orders').delete().eq('id', order_id);
+
+    return NextResponse.json({ success: true });
+  } catch {
+    return NextResponse.json({ error: 'Verwijderen mislukt' }, { status: 500 });
+  }
+}

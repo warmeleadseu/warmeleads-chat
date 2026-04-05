@@ -112,15 +112,23 @@ export async function POST(request: NextRequest) {
     const branchName = branchRow?.name || branch;
 
     const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://warmeleads.eu';
-    const payment = await createBatchPayment({
-      orderId: order.id,
-      amount: total_incl_btw,
-      description: `WarmeLeads batch: ${batch_size} ${branchName} leads (incl. 21% BTW)`,
-      redirectUrl: `${baseUrl}/portal/bestellen?order=${order.id}&status=redirect`,
-      webhookUrl: `${baseUrl}/api/webhooks/mollie`,
-      customerEmail: custData.email,
-      customerName: custData.name,
-    });
+
+    let payment;
+    try {
+      payment = await createBatchPayment({
+        orderId: order.id,
+        amount: total_incl_btw,
+        description: `WarmeLeads batch: ${batch_size} ${branchName} leads (incl. 21% BTW)`,
+        redirectUrl: `${baseUrl}/portal/bestellen?order=${order.id}&status=redirect`,
+        webhookUrl: `${baseUrl}/api/webhooks/mollie`,
+        customerEmail: custData.email,
+        customerName: custData.name,
+      });
+    } catch (mollieErr) {
+      console.error('Mollie payment creation failed, cleaning up order:', mollieErr);
+      await supabase.from('batch_orders').delete().eq('id', order.id);
+      return NextResponse.json({ error: 'Betaling aanmaken mislukt. Probeer het opnieuw.' }, { status: 500 });
+    }
 
     await supabase
       .from('batch_orders')
@@ -134,5 +142,36 @@ export async function POST(request: NextRequest) {
   } catch (err) {
     console.error('Order creation error:', err);
     return NextResponse.json({ error: 'Er is iets misgegaan bij het aanmaken van de bestelling.' }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  const customer = await verifyCustomer(request);
+  if (!customer) return portalUnauthorized();
+
+  try {
+    const { order_id } = await request.json();
+    if (!order_id) return NextResponse.json({ error: 'order_id is verplicht' }, { status: 400 });
+
+    const supabase = createServerClient();
+
+    const { data: order } = await supabase
+      .from('batch_orders')
+      .select('id, status, customer_id')
+      .eq('id', order_id)
+      .eq('customer_id', customer.id)
+      .single();
+
+    if (!order) return NextResponse.json({ error: 'Bestelling niet gevonden' }, { status: 404 });
+
+    if (order.status === 'paid') {
+      return NextResponse.json({ error: 'Een betaalde bestelling kan niet worden verwijderd' }, { status: 400 });
+    }
+
+    await supabase.from('batch_orders').delete().eq('id', order_id).eq('customer_id', customer.id);
+
+    return NextResponse.json({ success: true });
+  } catch {
+    return NextResponse.json({ error: 'Verwijderen mislukt' }, { status: 500 });
   }
 }

@@ -219,10 +219,10 @@ export default function PortalPage() {
   const [emailNotifications, setEmailNotifications] = useState(false);
   const [notificationFrequency, setNotificationFrequency] = useState('instant');
 
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
   const toastTimer = useRef<NodeJS.Timeout | null>(null);
-  const showToast = useCallback((msg: string) => {
-    setToast(msg);
+  const showToast = useCallback((msg: string, type: 'success' | 'error' = 'success') => {
+    setToast({ msg, type });
     if (toastTimer.current) clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(null), 3000);
   }, []);
@@ -443,11 +443,17 @@ export default function PortalPage() {
             initial={{ opacity: 0, y: 50 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 50 }}
-            className="fixed bottom-6 left-1/2 z-[100] -translate-x-1/2 rounded-xl bg-slate-900 px-5 py-3 text-sm font-medium text-white shadow-xl"
+            className={`fixed bottom-6 left-1/2 z-[100] -translate-x-1/2 rounded-xl px-5 py-3 text-sm font-medium text-white shadow-xl ${
+              toast.type === 'error' ? 'bg-red-600' : 'bg-slate-900'
+            }`}
           >
             <div className="flex items-center gap-2">
-              <CheckCircleIcon className="h-4 w-4 text-emerald-400" />
-              {toast}
+              {toast.type === 'error' ? (
+                <ExclamationTriangleIcon className="h-4 w-4 text-red-200" />
+              ) : (
+                <CheckCircleIcon className="h-4 w-4 text-emerald-400" />
+              )}
+              {toast.msg}
             </div>
           </motion.div>
         )}

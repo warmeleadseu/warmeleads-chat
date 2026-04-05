@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { getPayment } from '@/lib/mollie';
 import { distributeUnassignedLeads } from '@/lib/distribution';
-import { sendOrderConfirmationEmail } from '@/lib/email';
+import { sendOrderConfirmationEmail, sendEmail } from '@/lib/email';
 import { sendPushToCustomer } from '@/lib/pushNotification';
 
 export async function POST(request: NextRequest) {
@@ -65,6 +65,19 @@ export async function POST(request: NextRequest) {
           .from('batch_orders')
           .update({ status: 'paid', paid_at: new Date().toISOString() })
           .eq('id', orderId);
+
+        sendEmail(
+          'info@warmeleads.eu',
+          `[URGENT] Batch aanmaken mislukt voor order ${orderId}`,
+          `<p>De Mollie betaling is gelukt maar de batch kon niet worden aangemaakt in de database.</p>
+           <p><strong>Order ID:</strong> ${orderId}</p>
+           <p><strong>Klant ID:</strong> ${order.customer_id}</p>
+           <p><strong>Branche:</strong> ${order.branch}</p>
+           <p><strong>Batch size:</strong> ${order.batch_size}</p>
+           <p><strong>Error:</strong> ${batchError?.message || 'Unknown'}</p>
+           <p>Maak de batch handmatig aan via de admin.</p>`,
+        ).catch(() => {});
+
         return NextResponse.json({ ok: true });
       }
 

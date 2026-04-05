@@ -128,7 +128,7 @@ export function Header() {
                   className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-500 transition hover:bg-slate-200"
                   aria-label="Sluit menu"
                 >
-                  <XMarkIcon className="h-4.5 w-4.5" />
+                  <XMarkIcon className="h-[18px] w-[18px]" />
                 </button>
               </div>
 

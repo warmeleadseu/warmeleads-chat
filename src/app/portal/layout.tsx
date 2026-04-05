@@ -252,7 +252,7 @@ function InstallBanner() {
           <div className="p-4 sm:p-5">
             <div className="flex items-start gap-3.5">
               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-purple to-brand-pink shadow-md shadow-brand-purple/20">
-                <DevicePhoneMobileIcon className="h-5.5 w-5.5 text-white" />
+                <DevicePhoneMobileIcon className="h-[22px] w-[22px] text-white" />
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-[15px] font-semibold text-slate-900">WarmeLeads installeren</p>
@@ -271,7 +271,7 @@ function InstallBanner() {
                 className="shrink-0 rounded-lg p-1.5 text-slate-300 transition hover:bg-slate-100 hover:text-slate-500"
                 aria-label="Sluiten"
               >
-                <XMarkIcon className="h-4.5 w-4.5" />
+                <XMarkIcon className="h-[18px] w-[18px]" />
               </button>
             </div>
 

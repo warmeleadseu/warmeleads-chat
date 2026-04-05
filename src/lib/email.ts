@@ -8,6 +8,7 @@ function getResend(): Resend | null {
 }
 
 const FROM = 'WarmeLeads <noreply@warmeleads.eu>';
+const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://warmeleads.eu';
 
 interface Customer {
   id: string;
@@ -129,7 +130,7 @@ export async function sendLeadNotification(
     )}
     ${lead.notities ? `<p style="margin-top:12px;padding:12px;background:rgba(249,115,22,.08);border-radius:8px;color:#E2E8F0;font-size:14px"><strong style="color:#F97316">Notities:</strong> ${lead.notities}</p>` : ''}
     <p style="margin-top:20px">
-      <a href="https://warmeleads.eu/portal" style="display:inline-block;background:#F97316;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">Bekijk in portaal &rarr;</a>
+      <a href="${BASE_URL}/portal" style="display:inline-block;background:#F97316;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">Bekijk in portaal &rarr;</a>
     </p>`;
 
   return sendEmail(
@@ -155,7 +156,7 @@ export async function sendBatchCompletionNotification(
     )}
     <p style="margin-top:16px">Ga naar het admin-paneel om een eventuele vervolg-batch aan te maken.</p>
     <p style="margin-top:20px">
-      <a href="https://warmeleads.eu/admin/verdeling" style="display:inline-block;background:#F97316;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">Naar verdeling &rarr;</a>
+      <a href="${BASE_URL}/admin/verdeling" style="display:inline-block;background:#F97316;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">Naar verdeling &rarr;</a>
     </p>`;
 
   return sendEmail(
@@ -196,7 +197,7 @@ export async function sendWeeklyReport(
         ${branchRows}
       </table>` : ''}
     <p style="margin-top:20px">
-      <a href="https://warmeleads.eu/admin" style="display:inline-block;background:#F97316;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">Naar dashboard &rarr;</a>
+      <a href="${BASE_URL}/admin" style="display:inline-block;background:#F97316;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">Naar dashboard &rarr;</a>
     </p>`;
 
   const weekNr = getISOWeek(new Date());
@@ -235,7 +236,7 @@ export async function sendDailyLeadDigest(
       ${leadRows}
     </table>
     <p style="margin-top:20px">
-      <a href="https://warmeleads.eu/portal" style="display:inline-block;background:#F97316;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">Bekijk details in portaal &rarr;</a>
+      <a href="${BASE_URL}/portal" style="display:inline-block;background:#F97316;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">Bekijk details in portaal &rarr;</a>
     </p>`;
 
   const today = new Date().toLocaleDateString('nl-NL', {
@@ -314,7 +315,7 @@ export async function sendFeedbackDigest(
       ${feedbackRows}
     </table>
     <p style="margin-top:20px">
-      <a href="https://warmeleads.eu/admin" style="display:inline-block;background:#F97316;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">Naar dashboard &rarr;</a>
+      <a href="${BASE_URL}/admin" style="display:inline-block;background:#F97316;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">Naar dashboard &rarr;</a>
     </p>`;
 
   const today = new Date().toLocaleDateString('nl-NL', {
@@ -337,7 +338,7 @@ export async function sendBatchMilestoneEmail(
 ): Promise<boolean> {
   const branchLabel = batch.branch_name || batch.branch;
   const pct = batch.batch_size > 0 ? Math.round((batch.leads_delivered / batch.batch_size) * 100) : 0;
-  const orderUrl = 'https://warmeleads.eu/portal/bestellen?batch=' + batch.id;
+  const orderUrl = `${BASE_URL}/portal/bestellen?batch=${batch.id}`;
 
   const titles: Record<string, string> = {
     '80pct': `Uw batch ${branchLabel} is voor ${pct}% voltooid`,
@@ -402,7 +403,7 @@ export async function sendOrderConfirmationEmail(
       </tr>`
     )}
     <p style="margin-top:20px">
-      <a href="https://warmeleads.eu/portal" style="display:inline-block;background:#F97316;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">Bekijk in portaal &rarr;</a>
+      <a href="${BASE_URL}/portal" style="display:inline-block;background:#F97316;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">Bekijk in portaal &rarr;</a>
     </p>`;
 
   return sendEmail(
