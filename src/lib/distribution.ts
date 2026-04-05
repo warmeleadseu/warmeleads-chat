@@ -126,10 +126,11 @@ export async function distributeLead(lead: LeadForDistribution): Promise<Distrib
 
   const { data: activeBatches } = await supabase
     .from('customer_batches')
-    .select('id, customer_id, branch, batch_size, leads_delivered, leads_per_week, lead_filters, customers!inner(id, is_active, portal_active)')
+    .select('id, customer_id, branch, batch_size, leads_delivered, leads_per_week, lead_filters, created_at, customers!inner(id, is_active, portal_active)')
     .eq('branch', lead.branch)
     .eq('status', 'active')
-    .eq('customers.is_active', true);
+    .eq('customers.is_active', true)
+    .order('created_at', { ascending: true });
 
   if (!activeBatches || activeBatches.length === 0) return result;
 
@@ -222,7 +223,8 @@ export async function distributeLead(lead: LeadForDistribution): Promise<Distrib
 
   matches.sort((a, b) => {
     if (a.min_radius !== b.min_radius) return a.min_radius - b.min_radius;
-    if (a.fill_pct !== b.fill_pct) return a.fill_pct - b.fill_pct;
+    // Prefer batches closer to completion (higher fill%) to finish them first
+    if (a.fill_pct !== b.fill_pct) return b.fill_pct - a.fill_pct;
     return a.distance_km - b.distance_km;
   });
 
