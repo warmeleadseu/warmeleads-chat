@@ -15,14 +15,62 @@ export async function POST(request: NextRequest) {
     }
 
     const payment = await getPayment(paymentId);
-    const orderId = (payment.metadata as { orderId?: string })?.orderId;
+    const rawOrderId = (payment.metadata as { orderId?: string })?.orderId;
 
-    if (!orderId) {
+    if (!rawOrderId) {
       console.error('[mollie-webhook] no orderId in metadata for payment', paymentId);
       return NextResponse.json({ ok: true });
     }
 
     const supabase = createServerClient();
+    const status = payment.status;
+
+    // Direct batch payment (from portal pay-batch endpoint)
+    if (rawOrderId.startsWith('batch:')) {
+      const batchId = rawOrderId.replace('batch:', '');
+      const { data: batch } = await supabase
+        .from('customer_batches')
+        .select('id, is_paid, customer_id, branch, batch_size')
+        .eq('id', batchId)
+        .single();
+
+      if (!batch) {
+        console.error('[mollie-webhook] batch not found for direct payment', batchId);
+        return NextResponse.json({ ok: true });
+      }
+
+      if (batch.is_paid) return NextResponse.json({ ok: true });
+
+      if (status === 'paid') {
+        await supabase
+          .from('customer_batches')
+          .update({ is_paid: true })
+          .eq('id', batchId);
+
+        const { data: cust } = await supabase
+          .from('customers')
+          .select('id, name, email, contact_person')
+          .eq('id', batch.customer_id)
+          .single();
+
+        if (cust) {
+          const { data: branchRow } = await supabase.from('branches').select('name').eq('slug', batch.branch).single();
+          const branchName = branchRow?.name || batch.branch;
+
+          sendPushToCustomer(cust.id, {
+            title: 'Betaling ontvangen!',
+            body: `Uw batch ${branchName} (${batch.batch_size} leads) is betaald.`,
+            url: '/portal',
+            tag: 'batch-paid',
+          }).catch(() => {});
+        }
+      }
+
+      return NextResponse.json({ ok: true });
+    }
+
+    // Portal order payment (from bestellen page)
+    const orderId = rawOrderId;
 
     const { data: order } = await supabase
       .from('batch_orders')
@@ -39,8 +87,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    const status = payment.status;
-
     if (status === 'paid') {
       const { data: newBatch, error: batchError } = await supabase
         .from('customer_batches')
@@ -55,6 +101,7 @@ export async function POST(request: NextRequest) {
           notes: order.notes ? `[Portal bestelling] ${order.notes}` : '[Portal bestelling]',
           status: 'active',
           leads_delivered: 0,
+          is_paid: true,
         })
         .select()
         .single();

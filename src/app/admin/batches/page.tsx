@@ -24,7 +24,7 @@ interface Batch {
   id: string; customer_id: string; branch: string; batch_size: number;
   price_per_lead: number | null; total_price: number | null;
   leads_per_week: number | null; leads_delivered: number; status: string;
-  notes: string | null; lead_filters: LeadFilter[];
+  is_paid: boolean; notes: string | null; lead_filters: LeadFilter[];
   created_at: string; completed_at: string | null;
   customers?: { name: string } | null;
 }
@@ -332,7 +332,12 @@ export default function BatchesPage() {
                         </div>
                       </td>
                       <td className="px-4 py-3">
-                        <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_COLORS[b.status] || 'bg-slate-100 text-slate-600'}`}>{STATUS_LABELS[b.status] || b.status}</span>
+                        <div className="flex flex-col gap-1">
+                          <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_COLORS[b.status] || 'bg-slate-100 text-slate-600'}`}>{STATUS_LABELS[b.status] || b.status}</span>
+                          {!b.is_paid && (
+                            <span className="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-600">Onbetaald</span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-right text-slate-700">
                         {b.price_per_lead ? `€${Number(b.price_per_lead).toFixed(2)}` : '-'}
@@ -387,6 +392,7 @@ export default function BatchesPage() {
                       <div className="mt-1 flex items-center gap-1.5">
                         <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${c.light} ${c.text}`}>{br.name}</span>
                         <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${STATUS_COLORS[b.status] || 'bg-slate-100 text-slate-600'}`}>{STATUS_LABELS[b.status] || b.status}</span>
+                        {!b.is_paid && <span className="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-600">Onbetaald</span>}
                       </div>
                     </div>
                     <div className="flex items-center gap-0.5">
@@ -473,6 +479,7 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
   const [form, setForm] = useState({
     batch_size: batch.batch_size,
     leads_delivered: batch.leads_delivered,
+    is_paid: batch.is_paid !== false,
     price_per_lead: batch.price_per_lead ? String(batch.price_per_lead) : '',
     leads_per_week: batch.leads_per_week ? String(batch.leads_per_week) : '',
     notes: batch.notes || '',
@@ -497,6 +504,7 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
           id: batch.id,
           batch_size: form.batch_size,
           leads_delivered: form.leads_delivered,
+          is_paid: form.is_paid,
           price_per_lead: form.price_per_lead ? parseFloat(form.price_per_lead) : null,
           leads_per_week: form.leads_per_week ? parseInt(form.leads_per_week) : null,
           notes: form.notes || null,
@@ -592,6 +600,24 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
               className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
           </div>
 
+          {/* Payment status */}
+          <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <div>
+              <p className="text-sm font-medium text-slate-700">Betaalstatus</p>
+              <p className="text-[11px] text-slate-400">
+                {form.is_paid ? 'Batch is betaald' : 'Klant kan via portaal betalen'}
+              </p>
+            </div>
+            <button type="button" onClick={() => setForm(f => ({ ...f, is_paid: !f.is_paid }))}
+              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors ${
+                form.is_paid ? 'bg-emerald-500' : 'bg-red-400'
+              }`}>
+              <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${
+                form.is_paid ? 'translate-x-6' : 'translate-x-1'
+              }`} />
+            </button>
+          </div>
+
           {/* Lead filters */}
           <div>
             <label className="mb-1.5 block text-xs font-medium text-slate-500">Lead vereisten (filters)</label>
@@ -621,7 +647,7 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
   onClose: () => void; onCreated: () => void;
 }) {
   const [form, setForm] = useState({
-    customer_id: '', branch: '', batch_size: 100,
+    customer_id: '', branch: '', batch_size: 100, is_paid: true,
     price_per_lead: '', leads_per_week: '', notes: '', lead_filters: [] as LeadFilter[],
   });
   const [saving, setSaving] = useState(false);
@@ -645,6 +671,7 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
           customer_id: form.customer_id,
           branch: form.branch,
           batch_size: form.batch_size,
+          is_paid: form.is_paid,
           price_per_lead: form.price_per_lead ? parseFloat(form.price_per_lead) : null,
           leads_per_week: form.leads_per_week ? parseInt(form.leads_per_week) : null,
           notes: form.notes || null,
@@ -721,6 +748,24 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
             <label className="mb-1 block text-xs font-medium text-slate-500">Notities</label>
             <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={2}
               className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
+          </div>
+
+          {/* Payment status */}
+          <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <div>
+              <p className="text-sm font-medium text-slate-700">Betaalstatus</p>
+              <p className="text-[11px] text-slate-400">
+                {form.is_paid ? 'Batch wordt als betaald gemarkeerd' : 'Klant kan via portaal betalen'}
+              </p>
+            </div>
+            <button type="button" onClick={() => setForm(f => ({ ...f, is_paid: !f.is_paid }))}
+              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors ${
+                form.is_paid ? 'bg-emerald-500' : 'bg-red-400'
+              }`}>
+              <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${
+                form.is_paid ? 'translate-x-6' : 'translate-x-1'
+              }`} />
+            </button>
           </div>
 
           {form.branch && (

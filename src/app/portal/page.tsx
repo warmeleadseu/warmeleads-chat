@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { usePortal } from './portalContext';
 import { portalFetch } from '@/lib/portalAuth';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -36,6 +37,7 @@ import {
   ShoppingCartIcon,
   DevicePhoneMobileIcon,
   ExclamationTriangleIcon,
+  CreditCardIcon,
 } from '@heroicons/react/24/outline';
 import { usePushNotifications, type PushState } from './usePushNotifications';
 
@@ -193,6 +195,7 @@ function formatDateLong(d: string) {
 
 export default function PortalPage() {
   const { customer } = usePortal();
+  const searchParams = useSearchParams();
 
   const [stats, setStats] = useState<Stats>({ totalLeads: 0, newThisWeek: 0, contacted: 0, sold: 0 });
   const [statsLoading, setStatsLoading] = useState(true);
@@ -219,6 +222,7 @@ export default function PortalPage() {
   const [emailNotifications, setEmailNotifications] = useState(false);
   const [notificationFrequency, setNotificationFrequency] = useState('instant');
 
+  const [payingBatch, setPayingBatch] = useState<string | null>(null);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
   const toastTimer = useRef<NodeJS.Timeout | null>(null);
   const showToast = useCallback((msg: string, type: 'success' | 'error' = 'success') => {
@@ -226,6 +230,14 @@ export default function PortalPage() {
     if (toastTimer.current) clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(null), 3000);
   }, []);
+
+  useEffect(() => {
+    const paidParam = searchParams.get('paid');
+    if (paidParam) {
+      showToast('Betaling verwerkt! Uw batch is nu actief.');
+      window.history.replaceState({}, '', '/portal');
+    }
+  }, [searchParams, showToast]);
 
   const showBranchFilter = customer.branches.length > 1;
   const conversionRate = stats.totalLeads > 0
@@ -428,6 +440,28 @@ export default function PortalPage() {
     setPage(1);
   };
 
+  const handlePayBatch = useCallback(async (batchId: string) => {
+    setPayingBatch(batchId);
+    try {
+      const res = await portalFetch('/api/portal/pay-batch', {
+        method: 'POST',
+        body: JSON.stringify({ batch_id: batchId }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || 'Betaling starten mislukt', 'error');
+        return;
+      }
+      if (data.checkoutUrl) {
+        window.location.href = data.checkoutUrl;
+      }
+    } catch {
+      showToast('Er is iets misgegaan', 'error');
+    } finally {
+      setPayingBatch(null);
+    }
+  }, [showToast]);
+
   const viewNewLeads = () => {
     setStatusFilter('nieuw');
     setPage(1);
@@ -504,6 +538,9 @@ export default function PortalPage() {
                           <span className="rounded-full bg-brand-purple/10 px-2.5 py-0.5 text-[11px] font-semibold text-brand-purple">
                             {b.branch_name || b.branch}
                           </span>
+                          {b.is_paid === false && (
+                            <span className="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-600">Onbetaald</span>
+                          )}
                           {b.leads_per_week > 0 && (
                             <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">max {b.leads_per_week}/week</span>
                           )}
@@ -532,7 +569,20 @@ export default function PortalPage() {
                           )}
                         </div>
                       )}
-                      {pct >= 80 && (
+                      {b.is_paid === false && (
+                        <button
+                          onClick={() => handlePayBatch(b.id)}
+                          disabled={payingBatch === b.id}
+                          className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-lg border-2 border-red-200 bg-red-50 px-3 py-2 text-[12px] font-semibold text-red-700 transition hover:bg-red-100 disabled:opacity-50"
+                        >
+                          {payingBatch === b.id ? (
+                            <><span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-red-300 border-t-red-600" /> Laden...</>
+                          ) : (
+                            <><CreditCardIcon className="h-3.5 w-3.5" /> Batch betalen &middot; &euro;{(Number(b.total_price || 0) * 1.21).toFixed(2)}</>
+                          )}
+                        </button>
+                      )}
+                      {b.is_paid !== false && pct >= 80 && (
                         <Link
                           href={`/portal/bestellen?batch=${b.id}`}
                           className="mt-2.5 flex items-center justify-center gap-1.5 rounded-lg bg-gradient-to-r from-brand-purple to-brand-pink px-3 py-2 text-[12px] font-semibold text-white shadow-sm transition hover:shadow-md"
