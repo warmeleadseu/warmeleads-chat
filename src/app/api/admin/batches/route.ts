@@ -3,6 +3,7 @@ import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
 import { distributeUnassignedLeads } from '@/lib/distribution';
 import { checkBatchMilestones } from '@/lib/batchNotifications';
+import { createInvoice, sendNewBatchAdminEmail } from '@/lib/invoice';
 
 export async function GET(request: NextRequest) {
   const admin = await verifyAdmin(request);
@@ -54,6 +55,34 @@ export async function POST(request: NextRequest) {
 
   // Auto-distribute recent leads to the new batch (non-blocking)
   try { distributeUnassignedLeads(); } catch { /* non-blocking */ }
+
+  // Admin notification email + invoice if paid with pricing
+  const batchIsPaid = is_paid !== false;
+  const { data: custRow } = await supabase.from('customers').select('name').eq('id', customer_id).single();
+  const { data: brRow } = await supabase.from('branches').select('name').eq('slug', branch).single();
+  const brName = brRow?.name || branch;
+
+  sendNewBatchAdminEmail({
+    customer_name: custRow?.name || 'Onbekend',
+    branch_name: brName,
+    batch_size,
+    total_price: total_price || 0,
+    price_per_lead: price_per_lead || 0,
+    is_paid: batchIsPaid,
+    source: 'admin',
+  }).catch(() => {});
+
+  if (batchIsPaid && price_per_lead && total_price) {
+    createInvoice({
+      customer_id,
+      batch_id: data.id,
+      branch_name: brName,
+      batch_size,
+      price_per_lead,
+      total_price,
+      paid_at: new Date().toISOString(),
+    }).catch(e => console.error('[admin/batches] invoice creation failed:', e));
+  }
 
   return NextResponse.json(data, { status: 201 });
 }

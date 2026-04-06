@@ -4,6 +4,7 @@ import { getPayment } from '@/lib/mollie';
 import { distributeUnassignedLeads } from '@/lib/distribution';
 import { sendOrderConfirmationEmail, sendEmail } from '@/lib/email';
 import { sendPushToCustomer } from '@/lib/pushNotification';
+import { createInvoice, sendNewBatchAdminEmail } from '@/lib/invoice';
 
 export async function POST(request: NextRequest) {
   try {
@@ -33,10 +34,10 @@ export async function POST(request: NextRequest) {
         // Atomic claim: only update if currently unpaid
         const { data: claimed, error: claimErr } = await supabase
           .from('customer_batches')
-          .update({ is_paid: true })
+          .update({ is_paid: true, mollie_payment_id: paymentId })
           .eq('id', batchId)
           .eq('is_paid', false)
-          .select('id, customer_id, branch, batch_size')
+          .select('id, customer_id, branch, batch_size, price_per_lead, total_price')
           .single();
 
         if (claimErr || !claimed) {
@@ -49,10 +50,10 @@ export async function POST(request: NextRequest) {
           .eq('id', claimed.customer_id)
           .single();
 
-        if (cust) {
-          const { data: branchRow } = await supabase.from('branches').select('name').eq('slug', claimed.branch).single();
-          const branchName = branchRow?.name || claimed.branch;
+        const { data: branchRow } = await supabase.from('branches').select('name').eq('slug', claimed.branch).single();
+        const branchName = branchRow?.name || claimed.branch;
 
+        if (cust) {
           sendPushToCustomer(cust.id, {
             title: 'Betaling ontvangen!',
             body: `Uw batch ${branchName} (${claimed.batch_size} leads) is betaald.`,
@@ -60,6 +61,31 @@ export async function POST(request: NextRequest) {
             tag: 'batch-paid',
           }).catch(() => {});
         }
+
+        // Create invoice
+        if (claimed.price_per_lead && claimed.total_price) {
+          createInvoice({
+            customer_id: claimed.customer_id,
+            batch_id: claimed.id,
+            branch_name: branchName,
+            batch_size: claimed.batch_size,
+            price_per_lead: Number(claimed.price_per_lead),
+            total_price: Number(claimed.total_price),
+            mollie_payment_id: paymentId,
+            paid_at: new Date().toISOString(),
+          }).catch(e => console.error('[mollie-webhook] invoice creation failed:', e));
+        }
+
+        // Admin notification
+        sendNewBatchAdminEmail({
+          customer_name: cust?.name || 'Onbekend',
+          branch_name: branchName,
+          batch_size: claimed.batch_size,
+          total_price: Number(claimed.total_price || 0),
+          price_per_lead: Number(claimed.price_per_lead || 0),
+          is_paid: true,
+          source: 'portal_pay',
+        }).catch(() => {});
 
         distributeUnassignedLeads().catch(() => {});
       }
@@ -132,10 +158,10 @@ export async function POST(request: NextRequest) {
         .eq('id', order.customer_id)
         .single();
 
-      if (customer) {
-        const { data: branchRow } = await supabase.from('branches').select('name').eq('slug', order.branch).single();
-        const branchName = branchRow?.name || order.branch;
+      const { data: branchRow } = await supabase.from('branches').select('name').eq('slug', order.branch).single();
+      const branchName = branchRow?.name || order.branch;
 
+      if (customer) {
         sendOrderConfirmationEmail(customer, {
           branch: order.branch,
           branch_name: branchName,
@@ -151,6 +177,30 @@ export async function POST(request: NextRequest) {
           tag: 'order-confirmed',
         }).catch(() => {});
       }
+
+      // Create invoice
+      createInvoice({
+        customer_id: order.customer_id,
+        batch_order_id: orderId,
+        batch_id: newBatch.id,
+        branch_name: branchName,
+        batch_size: order.batch_size,
+        price_per_lead: Number(order.price_per_lead),
+        total_price: Number(order.total_price),
+        mollie_payment_id: paymentId,
+        paid_at: new Date().toISOString(),
+      }).catch(e => console.error('[mollie-webhook] invoice creation failed:', e));
+
+      // Admin notification
+      sendNewBatchAdminEmail({
+        customer_name: customer?.name || 'Onbekend',
+        branch_name: branchName,
+        batch_size: order.batch_size,
+        total_price: Number(order.total_price),
+        price_per_lead: Number(order.price_per_lead),
+        is_paid: true,
+        source: 'portal',
+      }).catch(() => {});
 
       distributeUnassignedLeads().catch(() => {});
 

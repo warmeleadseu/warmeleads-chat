@@ -23,6 +23,7 @@ import {
   RectangleStackIcon,
   CalendarDaysIcon,
   ShoppingCartIcon,
+  DocumentTextIcon,
 } from '@heroicons/react/24/outline';
 import { AdminContext, type AdminUser } from './adminContext';
 
@@ -34,6 +35,7 @@ const NAV = [
   { label: 'Klanten', href: '/admin/customers', icon: BuildingOfficeIcon },
   { label: 'Batches', href: '/admin/batches', icon: RectangleStackIcon },
   { label: 'Bestellingen', href: '/admin/orders', icon: ShoppingCartIcon },
+  { label: 'Facturen', href: '/admin/invoices', icon: DocumentTextIcon },
   { label: 'Branches', href: '/admin/branches', icon: Squares2X2Icon },
   { label: 'Agenda', href: '/admin/agenda', icon: CalendarDaysIcon },
   { label: 'Koppelingen', href: '/admin/koppelingen', icon: Cog6ToothIcon },
