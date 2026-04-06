@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { usePortal } from '../portalContext';
-import { portalFetch } from '@/lib/portalAuth';
+import { portalFetch, portalHeaders } from '@/lib/portalAuth';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   EyeIcon,
@@ -857,9 +857,11 @@ function InvoicesTab({ data, loading, onDownload }: {
               <div className="min-w-0 flex-1">
                 <div className="mb-1 flex items-center gap-2">
                   <span className="rounded bg-brand-purple/10 px-2 py-0.5 text-[11px] font-bold text-brand-purple">{inv.invoice_number}</span>
-                  <span className="flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+                  <span className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                    inv.status === 'credit_note' ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'
+                  }`}>
                     <CheckCircleIcon className="h-3 w-3" />
-                    Betaald
+                    {inv.status === 'credit_note' ? 'Creditnota' : 'Betaald'}
                   </span>
                 </div>
                 <p className="text-sm text-slate-700">{inv.description}</p>
@@ -1092,9 +1094,8 @@ export default function AccountPage() {
 
   const downloadInvoicePdf = useCallback(async (inv: { id: string; invoice_number: string }) => {
     try {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('portal_token') : null;
       const res = await fetch(`/api/invoices/${inv.id}/pdf`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        headers: portalHeaders(),
       });
       if (!res.ok) throw new Error();
       const blob = await res.blob();

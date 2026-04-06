@@ -16,41 +16,32 @@ interface CreateInvoiceParams {
   paid_at?: string;
 }
 
-async function getCompanyDetails(supabase: ReturnType<typeof createServerClient>) {
-  const keys = [
-    'company_name', 'company_address', 'company_postcode', 'company_city',
-    'company_kvk', 'company_btw', 'company_iban', 'company_email',
-  ];
-  const { data } = await supabase.from('app_settings').select('key, value').in('key', keys);
-  const map: Record<string, string> = {};
-  (data || []).forEach(r => { map[r.key] = r.value || ''; });
-  return {
-    company_name: map.company_name || 'WarmeLeads',
-    company_address: map.company_address || '',
-    company_postcode: map.company_postcode || '',
-    company_city: map.company_city || '',
-    company_kvk: map.company_kvk || '',
-    company_btw: map.company_btw || '',
-    company_iban: map.company_iban || '',
-    company_email: map.company_email || 'info@warmeleads.eu',
-  };
-}
-
 async function getNextInvoiceNumber(supabase: ReturnType<typeof createServerClient>): Promise<string> {
   const year = new Date().getFullYear();
-  const { data } = await supabase.rpc('nextval_invoice');
+  const { data, error } = await supabase.rpc('nextval_invoice');
 
-  if (data) {
+  if (!error && data != null && Number(data) > 0) {
     return `WL-${year}-${String(data).padStart(4, '0')}`;
   }
 
-  // Fallback: count existing invoices this year
-  const { count } = await supabase
-    .from('invoices')
-    .select('id', { count: 'exact', head: true })
-    .gte('created_at', `${year}-01-01T00:00:00Z`);
+  if (error) console.error('[invoice] nextval_invoice RPC failed:', error.message);
 
-  return `WL-${year}-${String((count || 0) + 1).padStart(4, '0')}`;
+  // Fallback: find highest existing number this year and increment
+  const { data: latest } = await supabase
+    .from('invoices')
+    .select('invoice_number')
+    .like('invoice_number', `WL-${year}-%`)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .single();
+
+  if (latest?.invoice_number) {
+    const parts = latest.invoice_number.split('-');
+    const lastNum = parseInt(parts[2] || '0', 10);
+    return `WL-${year}-${String(lastNum + 1).padStart(4, '0')}`;
+  }
+
+  return `WL-${year}-0001`;
 }
 
 export async function createInvoice(params: CreateInvoiceParams) {
@@ -109,7 +100,7 @@ export async function createInvoice(params: CreateInvoiceParams) {
   }
 
   // Send invoice email to customer
-  sendInvoiceEmail(customer, invoice).catch(() => {});
+  sendInvoiceEmail(customer, invoice).catch(e => console.error('[invoice] email send failed:', e));
 
   return invoice;
 }

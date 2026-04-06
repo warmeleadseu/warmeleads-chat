@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Create invoice
-        if (claimed.price_per_lead && claimed.total_price) {
+        if (Number(claimed.price_per_lead) > 0 && Number(claimed.total_price) > 0) {
           createInvoice({
             customer_id: claimed.customer_id,
             batch_id: claimed.id,
@@ -73,7 +73,15 @@ export async function POST(request: NextRequest) {
             total_price: Number(claimed.total_price),
             mollie_payment_id: paymentId,
             paid_at: new Date().toISOString(),
-          }).catch(e => console.error('[mollie-webhook] invoice creation failed:', e));
+          }).catch(e => {
+            console.error('[mollie-webhook] invoice creation failed:', e);
+            sendEmail('info@warmeleads.eu', `[WAARSCHUWING] Factuur aanmaken mislukt`,
+              `<p>Batch betaling is gelukt maar de factuur kon niet worden aangemaakt.</p>
+               <p><strong>Batch ID:</strong> ${claimed.id}</p>
+               <p><strong>Klant:</strong> ${cust?.name || 'Onbekend'}</p>
+               <p><strong>Error:</strong> ${e?.message || String(e)}</p>`
+            ).catch(() => {});
+          });
         }
 
         // Admin notification
@@ -189,7 +197,15 @@ export async function POST(request: NextRequest) {
         total_price: Number(order.total_price),
         mollie_payment_id: paymentId,
         paid_at: new Date().toISOString(),
-      }).catch(e => console.error('[mollie-webhook] invoice creation failed:', e));
+      }).catch(e => {
+        console.error('[mollie-webhook] invoice creation failed:', e);
+        sendEmail('info@warmeleads.eu', `[WAARSCHUWING] Factuur aanmaken mislukt`,
+          `<p>Bestelling is betaald maar de factuur kon niet worden aangemaakt.</p>
+           <p><strong>Order ID:</strong> ${orderId}</p>
+           <p><strong>Klant:</strong> ${customer?.name || 'Onbekend'}</p>
+           <p><strong>Error:</strong> ${e?.message || String(e)}</p>`
+        ).catch(() => {});
+      });
 
       // Admin notification
       sendNewBatchAdminEmail({

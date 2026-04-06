@@ -8,7 +8,7 @@ import {
   ArrowDownTrayIcon,
   CheckCircleIcon,
 } from '@heroicons/react/24/outline';
-import { adminFetch } from '@/lib/adminAuth';
+import { adminFetch, adminHeaders } from '@/lib/adminAuth';
 
 interface Invoice {
   id: string;
@@ -60,9 +60,8 @@ export default function AdminInvoicesPage() {
 
   const downloadPdf = useCallback(async (invoice: Invoice) => {
     try {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('admin_token') : null;
       const res = await fetch(`/api/invoices/${invoice.id}/pdf`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        headers: adminHeaders(),
       });
       if (!res.ok) throw new Error();
       const blob = await res.blob();

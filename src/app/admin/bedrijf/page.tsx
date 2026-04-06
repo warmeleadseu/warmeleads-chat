@@ -47,14 +47,20 @@ export default function BedrijfsgegevensPage() {
     setSaving(true);
     setSaved(false);
     try {
+      let failed = false;
       for (const f of FIELDS) {
-        await adminFetch('/api/admin/settings', {
+        const res = await adminFetch('/api/admin/settings', {
           method: 'PUT',
           body: JSON.stringify({ key: f.key, value: values[f.key] || '' }),
         });
+        if (!res.ok) failed = true;
       }
-      setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
+      if (failed) {
+        alert('Sommige velden konden niet worden opgeslagen. Probeer opnieuw.');
+      } else {
+        setSaved(true);
+        setTimeout(() => setSaved(false), 3000);
+      }
     } catch {
       alert('Opslaan mislukt');
     }
