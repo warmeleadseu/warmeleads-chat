@@ -38,7 +38,7 @@ export async function PUT(request: NextRequest) {
     updates.email_notifications = body.email_notifications;
   }
   if (typeof body.notification_frequency === 'string') {
-    const allowed = ['daily', 'weekly', 'none'];
+    const allowed = ['instant', 'daily', 'weekly', 'none'];
     if (allowed.includes(body.notification_frequency)) {
       updates.notification_frequency = body.notification_frequency;
     }

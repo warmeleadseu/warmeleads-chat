@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
     if (!custData) return NextResponse.json({ error: 'Klant niet gevonden' }, { status: 404 });
 
     let branch = body.branch;
-    let price_per_lead = body.price_per_lead;
+    let price_per_lead: number | null = null;
     let leads_per_week: number | null = null;
     let lead_filters: unknown[] = [];
 
@@ -56,13 +56,13 @@ export async function POST(request: NextRequest) {
 
       if (sourceBatch) {
         branch = branch || sourceBatch.branch;
-        price_per_lead = price_per_lead || sourceBatch.price_per_lead;
+        price_per_lead = sourceBatch.price_per_lead;
         leads_per_week = sourceBatch.leads_per_week;
         lead_filters = sourceBatch.lead_filters || [];
       }
     }
 
-    if (!branch) {
+    if (!branch || !price_per_lead) {
       const { data: latestBatch } = await supabase
         .from('customer_batches')
         .select('branch, price_per_lead, leads_per_week, lead_filters')
@@ -72,10 +72,10 @@ export async function POST(request: NextRequest) {
         .single();
 
       if (latestBatch) {
-        branch = latestBatch.branch;
+        branch = branch || latestBatch.branch;
         price_per_lead = price_per_lead || latestBatch.price_per_lead;
-        leads_per_week = latestBatch.leads_per_week;
-        lead_filters = latestBatch.lead_filters || [];
+        leads_per_week = leads_per_week || latestBatch.leads_per_week;
+        lead_filters = lead_filters.length > 0 ? lead_filters : (latestBatch.lead_filters || []);
       }
     }
 

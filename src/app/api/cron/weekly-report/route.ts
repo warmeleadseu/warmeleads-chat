@@ -48,12 +48,12 @@ export async function GET(request: NextRequest) {
     .eq('is_active', true);
 
   const { count: activeBatches } = await supabase
-    .from('batches')
+    .from('customer_batches')
     .select('id', { count: 'exact', head: true })
     .eq('status', 'active');
 
   const { count: completedBatches } = await supabase
-    .from('batches')
+    .from('customer_batches')
     .select('id', { count: 'exact', head: true })
     .eq('status', 'completed')
     .gte('completed_at', mondayISO);

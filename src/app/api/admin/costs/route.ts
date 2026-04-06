@@ -13,8 +13,9 @@ export async function GET(request: NextRequest) {
   // ── 0. Batch start dates per branch ──
   const { data: allBatches } = await supabase
     .from('customer_batches')
-    .select('id, customer_id, branch, batch_size, leads_delivered, price_per_lead, total_price, status, leads_per_week, created_at, customers(name)')
+    .select('id, customer_id, branch, batch_size, leads_delivered, price_per_lead, total_price, status, leads_per_week, created_at, is_paid, customers(name)')
     .in('status', ['active', 'completed'])
+    .neq('is_paid', false)
     .order('created_at', { ascending: false });
 
   const branchStartDate = new Map<string, string>();

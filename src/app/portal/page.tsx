@@ -32,7 +32,6 @@ import {
   StarIcon,
   HandThumbUpIcon,
   HandThumbDownIcon,
-  DocumentArrowDownIcon,
   TableCellsIcon,
   ShoppingCartIcon,
   DevicePhoneMobileIcon,

@@ -49,7 +49,8 @@ export async function GET(request: NextRequest) {
       .select('id', { count: 'exact', head: true })
       .eq('customer_id', batch.customer_id)
       .eq('branch', batch.branch)
-      .eq('status', 'active');
+      .eq('status', 'active')
+      .neq('is_paid', false);
 
     if (activeErr) continue;
 

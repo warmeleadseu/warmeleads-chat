@@ -126,10 +126,11 @@ export async function distributeLead(lead: LeadForDistribution): Promise<Distrib
 
   const { data: activeBatches } = await supabase
     .from('customer_batches')
-    .select('id, customer_id, branch, batch_size, leads_delivered, leads_per_week, lead_filters, created_at, customers!inner(id, is_active, portal_active)')
+    .select('id, customer_id, branch, batch_size, leads_delivered, leads_per_week, lead_filters, created_at, is_paid, customers!inner(id, is_active, portal_active)')
     .eq('branch', lead.branch)
     .eq('status', 'active')
     .eq('customers.is_active', true)
+    .neq('is_paid', false)
     .order('created_at', { ascending: true });
 
   if (!activeBatches || activeBatches.length === 0) return result;
