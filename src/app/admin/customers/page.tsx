@@ -703,16 +703,16 @@ function ReminderPreviewModal({ customer, portalUrl, sending, onSend, onClose }:
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; background: #1A1A2E;">
       <div style="background: linear-gradient(135deg, #3B2F75 0%, #E74C8C 50%, #FF6B35 100%); padding: 44px 32px 36px; text-align: center; border-radius: 16px 16px 0 0;">
         <img src="${logoUrl}" alt="WarmeLeads" width="160" style="max-width: 160px; height: auto;" />
-        <p style="color: rgba(255,255,255,0.7); margin: 14px 0 0; font-size: 13px; letter-spacing: 0.5px;">UW PERSOONLIJKE LEADPORTAAL</p>
+        <p style="color: rgba(255,255,255,0.7); margin: 14px 0 0; font-size: 13px; letter-spacing: 0.5px;">JOUW PERSOONLIJKE LEADPORTAAL</p>
       </div>
       <div style="margin: 0 20px; background: #ffffff; border-radius: 16px; padding: 36px 32px; position: relative; top: -8px;">
         <p style="color: #1A1A2E; font-size: 18px; font-weight: 700; line-height: 1.4; margin: 0 0 8px;">Hallo ${greeting},</p>
         <p style="color: #475569; font-size: 15px; line-height: 1.7; margin: 0 0 24px;">
-          Uw persoonlijke leadportaal staat klaar! Hier vindt u al uw leads overzichtelijk op een plek, kunt u nieuwe batches bestellen en uw account beheren.
+          Je persoonlijke leadportaal staat klaar! Hier vind je al je leads overzichtelijk op een plek, kun je nieuwe batches bestellen en je account beheren.
         </p>
         ${customer.portal_password ? `
         <div style="background: linear-gradient(135deg, #FFF5F0 0%, #FFF0F5 100%); border: 1px solid #FFE0D0; border-radius: 14px; padding: 24px; margin: 0 0 28px;">
-          <p style="color: #FF6B35; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 16px;">Uw inloggegevens</p>
+          <p style="color: #FF6B35; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 16px;">Je inloggegevens</p>
           <table style="width: 100%; border-collapse: collapse;">
             <tr>
               <td style="color: #64748b; font-size: 13px; padding: 6px 0; width: 100px;">E-mail</td>
@@ -727,17 +727,17 @@ function ReminderPreviewModal({ customer, portalUrl, sending, onSend, onClose }:
         ` : ''}
         <div style="text-align: center; margin: 0 0 28px;">
           <a href="${portalUrl}" style="display: inline-block; background: linear-gradient(135deg, #FF6B35 0%, #FF4757 100%); color: white; text-decoration: none; padding: 16px 40px; border-radius: 12px; font-weight: 700; font-size: 15px; letter-spacing: 0.3px;">
-            Ga naar uw portaal &rarr;
+            Ga naar je portaal &rarr;
           </a>
         </div>
         <div style="border-top: 1px solid #f1f5f9; padding-top: 20px;">
           <p style="color: #94a3b8; font-size: 13px; line-height: 1.6; margin: 0; text-align: center;">
-            <strong style="color: #64748b;">Tip:</strong> Installeer het portaal als app op uw telefoon voor snelle toegang en pushnotificaties.
+            <strong style="color: #64748b;">Tip:</strong> Installeer het portaal als app op je telefoon voor snelle toegang en pushnotificaties.
           </p>
         </div>
       </div>
       <div style="padding: 28px 32px; text-align: center;">
-        <p style="color: rgba(255,255,255,0.3); font-size: 12px; margin: 0;">WarmeLeads &middot; Uw partner in exclusieve leads</p>
+        <p style="color: rgba(255,255,255,0.3); font-size: 12px; margin: 0;">WarmeLeads &middot; Jouw partner in exclusieve leads</p>
       </div>
     </div>
   `;
@@ -760,7 +760,7 @@ function ReminderPreviewModal({ customer, portalUrl, sending, onSend, onClose }:
               <h2 className="text-lg font-bold text-slate-900">E-mail preview</h2>
               <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-slate-500">
                 <span>Naar: <span className="font-medium text-slate-700">{customer.email}</span></span>
-                <span>Onderwerp: <span className="font-medium text-slate-700">Uw WarmeLeads portaal staat klaar!</span></span>
+                <span>Onderwerp: <span className="font-medium text-slate-700">Je WarmeLeads portaal staat klaar!</span></span>
               </div>
             </div>
             <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100">
