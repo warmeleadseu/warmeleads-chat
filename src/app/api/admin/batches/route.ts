@@ -108,13 +108,16 @@ export async function PUT(request: NextRequest) {
     );
   }
 
-  const { data: existing } = await supabase
+  const { data: existing, error: fetchError } = await supabase
     .from('customer_batches')
-    .select('price_per_lead, batch_size, leads_delivered, status, is_paid, lookback_days, compensations')
+    .select('*')
     .eq('id', id)
     .single();
 
-  if (!existing) return NextResponse.json({ error: 'Batch niet gevonden' }, { status: 404 });
+  if (fetchError || !existing) {
+    console.error('[admin/batches PUT] fetch error:', fetchError?.message);
+    return NextResponse.json({ error: fetchError?.message || 'Batch niet gevonden' }, { status: fetchError ? 500 : 404 });
+  }
 
   // Append compensation entry when extra leads are added
   if (compensation && compensation.amount > 0) {
@@ -156,14 +159,28 @@ export async function PUT(request: NextRequest) {
     }
   }
 
+  // Only send columns that exist in the table
+  const allowedFields = [
+    'batch_size', 'leads_delivered', 'is_paid', 'price_per_lead', 'total_price',
+    'leads_per_day', 'leads_per_week', 'notes', 'lead_filters', 'status',
+    'completed_at', 'lookback_days', 'compensations',
+  ];
+  const safeUpdates: Record<string, unknown> = {};
+  for (const key of allowedFields) {
+    if (key in updates) safeUpdates[key] = updates[key];
+  }
+
   const { data, error } = await supabase
     .from('customer_batches')
-    .update(updates)
+    .update(safeUpdates)
     .eq('id', id)
     .select()
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    console.error('[admin/batches PUT] update error:', error.message);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 
   // Trigger milestone notifications when leads_delivered changes
   if (updates.leads_delivered !== undefined && updates.leads_delivered !== existing.leads_delivered) {
