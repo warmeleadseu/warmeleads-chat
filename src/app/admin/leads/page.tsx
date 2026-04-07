@@ -13,8 +13,178 @@ import {
   ChevronUpDownIcon,
   MapPinIcon,
   ExclamationTriangleIcon,
+  CheckIcon,
+  ChevronDownIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
+
+/* ── Multi-select dropdown ─────────────────────────────────── */
+
+interface MultiSelectOption { value: string; label: string; }
+interface MultiSelectGroup { label: string; options: MultiSelectOption[]; }
+
+function MultiSelect({
+  label,
+  allLabel,
+  options,
+  groups,
+  selected,
+  onChange,
+  searchable = false,
+}: {
+  label: string;
+  allLabel: string;
+  options?: MultiSelectOption[];
+  groups?: MultiSelectGroup[];
+  selected: string[];
+  onChange: (v: string[]) => void;
+  searchable?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const ref = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  const allOptions = useMemo(() => {
+    if (groups) return groups.flatMap(g => g.options);
+    return options || [];
+  }, [options, groups]);
+
+  const allValues = useMemo(() => allOptions.map(o => o.value), [allOptions]);
+  const isAll = selected.length === 0;
+
+  const filtered = useMemo(() => {
+    if (!search) return null;
+    const q = search.toLowerCase();
+    return allOptions.filter(o => o.label.toLowerCase().includes(q));
+  }, [search, allOptions]);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) { setOpen(false); setSearch(''); }
+    };
+    if (open) document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  useEffect(() => {
+    if (open && searchable) setTimeout(() => searchRef.current?.focus(), 50);
+  }, [open, searchable]);
+
+  const toggle = (val: string) => {
+    if (selected.includes(val)) {
+      const next = selected.filter(v => v !== val);
+      onChange(next);
+    } else {
+      const next = [...selected, val];
+      if (next.length === allValues.length) onChange([]);
+      else onChange(next);
+    }
+  };
+
+  const selectAll = () => onChange([]);
+  const deselectAll = () => onChange([allValues[0]]);
+
+  const triggerLabel = useMemo(() => {
+    if (isAll) return allLabel;
+    if (selected.length === 1) {
+      const opt = allOptions.find(o => o.value === selected[0]);
+      return opt?.label || selected[0];
+    }
+    return `${selected.length} ${label}`;
+  }, [isAll, selected, allLabel, label, allOptions]);
+
+  const hasSelection = !isAll;
+
+  const renderCheckbox = (opt: MultiSelectOption) => {
+    const checked = isAll || selected.includes(opt.value);
+    return (
+      <button
+        key={opt.value}
+        type="button"
+        onClick={() => toggle(opt.value)}
+        className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-sm transition hover:bg-slate-50"
+      >
+        <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition ${checked ? 'border-brand-purple bg-brand-purple text-white' : 'border-slate-300 bg-white'}`}>
+          {checked && <CheckIcon className="h-3 w-3" />}
+        </span>
+        <span className="truncate text-slate-700">{opt.label}</span>
+      </button>
+    );
+  };
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className={`flex w-full items-center justify-between gap-1 rounded-lg border px-3 py-2 text-sm transition ${hasSelection ? 'border-brand-purple/40 bg-brand-purple/5 text-brand-purple font-medium' : 'border-slate-200 bg-white text-slate-700'}`}
+      >
+        <span className="truncate">{triggerLabel}</span>
+        <ChevronDownIcon className={`h-3.5 w-3.5 shrink-0 transition ${open ? 'rotate-180' : ''} ${hasSelection ? 'text-brand-purple' : 'text-slate-400'}`} />
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.15 }}
+            className="absolute left-0 top-full z-50 mt-1 w-64 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg"
+          >
+            {searchable && (
+              <div className="border-b border-slate-100 p-2">
+                <div className="relative">
+                  <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                  <input
+                    ref={searchRef}
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                    placeholder="Zoeken..."
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50/50 py-1.5 pl-8 pr-3 text-sm text-slate-700 outline-none focus:border-brand-purple/50 focus:bg-white"
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="border-b border-slate-100 px-3 py-1.5">
+              <div className="flex items-center justify-between">
+                <button type="button" onClick={selectAll} className={`text-xs font-medium transition ${isAll ? 'text-brand-purple' : 'text-slate-400 hover:text-slate-600'}`}>
+                  Alles
+                </button>
+                {hasSelection && (
+                  <button type="button" onClick={selectAll} className="text-xs text-slate-400 hover:text-slate-600">
+                    Reset
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="max-h-64 overflow-y-auto py-1">
+              {filtered ? (
+                filtered.length === 0 ? (
+                  <p className="px-3 py-3 text-center text-xs text-slate-400">Geen resultaten</p>
+                ) : (
+                  filtered.map(opt => renderCheckbox(opt))
+                )
+              ) : groups ? (
+                groups.map(g => (
+                  <div key={g.label}>
+                    <p className="px-3 pb-0.5 pt-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">{g.label}</p>
+                    {g.options.map(opt => renderCheckbox(opt))}
+                  </div>
+                ))
+              ) : (
+                allOptions.map(opt => renderCheckbox(opt))
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
 
 interface Customer { id: string; name: string; }
 interface BranchField { id: string; key: string; label: string; field_type: string; options: string[]; is_required: boolean; sort_order: number; }
@@ -79,11 +249,11 @@ export default function LeadsCRMPage() {
   const [validatingPhones, setValidatingPhones] = useState(false);
   const [phoneValidationResult, setPhoneValidationResult] = useState<{ validated: number; invalid: number } | null>(null);
 
-  const [branch, setBranch] = useState('all');
-  const [customerId, setCustomerId] = useState('all');
-  const [status, setStatus] = useState('all');
-  const [province, setProvince] = useState('all');
-  const [source, setSource] = useState('all');
+  const [selBranches, setSelBranches] = useState<string[]>([]);
+  const [selCustomers, setSelCustomers] = useState<string[]>([]);
+  const [selStatuses, setSelStatuses] = useState<string[]>([]);
+  const [selProvinces, setSelProvinces] = useState<string[]>([]);
+  const [selSources, setSelSources] = useState<string[]>([]);
   const [phoneFilter, setPhoneFilter] = useState('all');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -110,11 +280,11 @@ export default function LeadsCRMPage() {
   const fetchLeads = useCallback(async () => {
     setLoading(true);
     const p = new URLSearchParams();
-    if (branch !== 'all') p.set('branch', branch);
-    if (customerId !== 'all') p.set('customer_id', customerId);
-    if (status !== 'all') p.set('status', status);
-    if (province !== 'all') p.set('province', province);
-    if (source !== 'all') p.set('source', source);
+    if (selBranches.length > 0) p.set('branch', selBranches.join(','));
+    if (selCustomers.length > 0) p.set('customer_id', selCustomers.join(','));
+    if (selStatuses.length > 0) p.set('status', selStatuses.join(','));
+    if (selProvinces.length > 0) p.set('province', selProvinces.join(','));
+    if (selSources.length > 0) p.set('source', selSources.join(','));
     if (phoneFilter !== 'all') p.set('phone_valid', phoneFilter);
     if (dateFrom) p.set('date_from', dateFrom);
     if (dateTo) p.set('date_to', dateTo);
@@ -126,11 +296,11 @@ export default function LeadsCRMPage() {
     const res = await adminFetch(`/api/admin/leads?${p}`);
     if (res.ok) { const d = await res.json(); setLeads(d.leads || []); setTotal(d.total || 0); }
     setLoading(false);
-  }, [branch, customerId, status, province, source, phoneFilter, dateFrom, dateTo, search, page, perPage, sortBy, sortDir]);
+  }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, phoneFilter, dateFrom, dateTo, search, page, perPage, sortBy, sortDir]);
 
   useEffect(() => { fetchMeta(); }, [fetchMeta]);
   useEffect(() => { fetchLeads(); }, [fetchLeads]);
-  useEffect(() => { setPage(1); }, [branch, customerId, status, province, source, phoneFilter, dateFrom, dateTo, search, perPage]);
+  useEffect(() => { setPage(1); }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, phoneFilter, dateFrom, dateTo, search, perPage]);
 
   const branchMap = useMemo(() => {
     const m: Record<string, BranchConfig> = {};
@@ -145,9 +315,9 @@ export default function LeadsCRMPage() {
   }, [branches]);
 
   const currentBranchFields = useMemo(() => {
-    if (branch === 'all') return [];
-    return branchMap[branch]?.branch_fields || [];
-  }, [branch, branchMap]);
+    if (selBranches.length !== 1) return [];
+    return branchMap[selBranches[0]]?.branch_fields || [];
+  }, [selBranches, branchMap]);
 
   const visibleCols = useMemo(() => {
     const base: string[] = ['naam_klant', 'email', 'telefoonnummer', 'postcode', 'plaatsnaam', 'status', 'wervingsdatum'];
@@ -294,29 +464,50 @@ export default function LeadsCRMPage() {
             className="w-full rounded-lg border border-slate-200 bg-slate-50/50 py-2.5 pl-9 pr-4 text-sm text-slate-700 outline-none focus:border-brand-purple/50 focus:bg-white focus:ring-1 focus:ring-brand-purple/30" />
         </div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-          <select value={branch} onChange={e => setBranch(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
-            <option value="all">Alle branches</option>
-            {branches.filter(b => b.is_active).map(b => <option key={b.slug} value={b.slug}>{b.name}</option>)}
-          </select>
-          <select value={customerId} onChange={e => setCustomerId(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
-            <option value="all">Alle klanten</option>
-            {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-          <select value={status} onChange={e => setStatus(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
-            <option value="all">Alle statussen</option>
-            {STATUSES.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
-          </select>
-          <select value={province} onChange={e => setProvince(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
-            <option value="all">Alle provincies</option>
-            <optgroup label="Nederland">{PROVINCES_NL.map(p => <option key={p} value={p}>{p}</option>)}</optgroup>
-            <optgroup label="België">{PROVINCES_BE.map(p => <option key={p} value={p}>{p}</option>)}</optgroup>
-          </select>
-          <select value={source} onChange={e => setSource(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
-            <option value="all">Alle bronnen</option>
-            <option value="handmatig">Handmatig</option>
-            <option value="excel_import">Excel import</option>
-            <option value="zapier">Zapier</option>
-          </select>
+          <MultiSelect
+            label="branches"
+            allLabel="Alle branches"
+            options={branches.filter(b => b.is_active).map(b => ({ value: b.slug, label: b.name }))}
+            selected={selBranches}
+            onChange={setSelBranches}
+          />
+          <MultiSelect
+            label="klanten"
+            allLabel="Alle klanten"
+            options={customers.map(c => ({ value: c.id, label: c.name }))}
+            selected={selCustomers}
+            onChange={setSelCustomers}
+            searchable
+          />
+          <MultiSelect
+            label="statussen"
+            allLabel="Alle statussen"
+            options={STATUSES.map(s => ({ value: s, label: s.charAt(0).toUpperCase() + s.slice(1) }))}
+            selected={selStatuses}
+            onChange={setSelStatuses}
+          />
+          <MultiSelect
+            label="provincies"
+            allLabel="Alle provincies"
+            groups={[
+              { label: 'Nederland', options: PROVINCES_NL.map(p => ({ value: p, label: p })) },
+              { label: 'België', options: PROVINCES_BE.map(p => ({ value: p, label: p })) },
+            ]}
+            selected={selProvinces}
+            onChange={setSelProvinces}
+            searchable
+          />
+          <MultiSelect
+            label="bronnen"
+            allLabel="Alle bronnen"
+            options={[
+              { value: 'handmatig', label: 'Handmatig' },
+              { value: 'excel_import', label: 'Excel import' },
+              { value: 'zapier', label: 'Zapier' },
+            ]}
+            selected={selSources}
+            onChange={setSelSources}
+          />
           <select value={phoneFilter} onChange={e => setPhoneFilter(e.target.value)} className={`rounded-lg border px-3 py-2 text-sm ${phoneFilter === 'false' ? 'border-amber-300 bg-amber-50 text-amber-700' : 'border-slate-200 bg-white text-slate-700'}`}>
             <option value="all">Alle nummers</option>
             <option value="false">Verdacht nummer</option>
@@ -369,7 +560,7 @@ export default function LeadsCRMPage() {
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50/80">
                 <th className="w-10 px-3 py-3"><input type="checkbox" checked={selected.size === leads.length && leads.length > 0} onChange={toggleAll} className="h-4 w-4 rounded border-slate-300" /></th>
-                {branch === 'all' && (
+                {selBranches.length !== 1 && (
                   <th className="cursor-pointer px-3 py-3 text-xs font-semibold text-slate-500 hover:text-slate-700" onClick={() => toggleSort('branch')}>
                     <span className="inline-flex items-center gap-1">Branche <ChevronUpDownIcon className="h-3 w-3" /></span>
                   </th>
@@ -396,7 +587,7 @@ export default function LeadsCRMPage() {
                 return (
                   <tr key={lead.id} onClick={() => setEditLead(lead)} className="cursor-pointer border-b border-slate-50 transition hover:bg-slate-50/50">
                     <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}><input type="checkbox" checked={selected.has(lead.id)} onChange={() => toggleSelect(lead.id)} className="h-4 w-4 rounded border-slate-300" /></td>
-                    {branch === 'all' && (
+                    {selBranches.length !== 1 && (
                       <td className="px-3 py-2.5">
                         <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ${badge.light} ${badge.text}`}>{badge.name}</span>
                       </td>
@@ -509,7 +700,7 @@ export default function LeadsCRMPage() {
             lead={editLead}
             customers={customers}
             branches={branches}
-            defaultBranch={branch !== 'all' ? branch : branches[0]?.slug || 'thuisbatterij'}
+            defaultBranch={selBranches.length === 1 ? selBranches[0] : branches[0]?.slug || 'thuisbatterij'}
             onClose={() => { setEditLead(null); setShowNew(false); }}
             onSaved={() => { setEditLead(null); setShowNew(false); fetchLeads(); }}
           />

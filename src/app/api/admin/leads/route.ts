@@ -32,11 +32,31 @@ export async function GET(request: NextRequest) {
     .from('leads')
     .select('*, customers(id, name)', { count: 'exact' });
 
-  if (branch && branch !== 'all') query = query.eq('branch', branch);
-  if (customerId && customerId !== 'all') query = query.eq('customer_id', customerId);
-  if (status && status !== 'all') query = query.eq('status', status);
-  if (province && province !== 'all') query = query.eq('provincie', province);
-  if (source && source !== 'all') query = query.eq('bron', source);
+  if (branch) {
+    const vals = branch.split(',').filter(Boolean);
+    if (vals.length === 1) query = query.eq('branch', vals[0]);
+    else if (vals.length > 1) query = query.in('branch', vals);
+  }
+  if (customerId) {
+    const vals = customerId.split(',').filter(Boolean);
+    if (vals.length === 1) query = query.eq('customer_id', vals[0]);
+    else if (vals.length > 1) query = query.in('customer_id', vals);
+  }
+  if (status) {
+    const vals = status.split(',').filter(Boolean);
+    if (vals.length === 1) query = query.eq('status', vals[0]);
+    else if (vals.length > 1) query = query.in('status', vals);
+  }
+  if (province) {
+    const vals = province.split(',').filter(Boolean);
+    if (vals.length === 1) query = query.eq('provincie', vals[0]);
+    else if (vals.length > 1) query = query.in('provincie', vals);
+  }
+  if (source) {
+    const vals = source.split(',').filter(Boolean);
+    if (vals.length === 1) query = query.eq('bron', vals[0]);
+    else if (vals.length > 1) query = query.in('bron', vals);
+  }
   if (phoneValid === 'false') query = query.eq('phone_valid', false);
   if (phoneValid === 'true') query = query.eq('phone_valid', true);
   if (dateFrom) query = query.gte('wervingsdatum', dateFrom);
