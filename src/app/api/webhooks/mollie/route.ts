@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { getPayment } from '@/lib/mollie';
-import { distributeUnassignedLeads } from '@/lib/distribution';
+import { backfillBatch } from '@/lib/distribution';
 import { sendOrderConfirmationEmail, sendEmail } from '@/lib/email';
 import { sendPushToCustomer } from '@/lib/pushNotification';
 import { createInvoice, sendNewBatchAdminEmail } from '@/lib/invoice';
@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
           source: 'portal_pay',
         }).catch(() => {});
 
-        distributeUnassignedLeads().catch(() => {});
+        backfillBatch(claimed.id, 3).catch(() => {});
       }
 
       return NextResponse.json({ ok: true });
@@ -219,7 +219,7 @@ export async function POST(request: NextRequest) {
         source: 'portal',
       }).catch(() => {});
 
-      distributeUnassignedLeads().catch(() => {});
+      backfillBatch(newBatch.id, 3).catch(() => {});
 
     } else if (status === 'failed') {
       await supabase.from('batch_orders').update({ status: 'failed' }).eq('id', orderId);

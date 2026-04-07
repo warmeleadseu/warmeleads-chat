@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
-import { distributeUnassignedLeads } from '@/lib/distribution';
+import { backfillBatch, distributeUnassignedLeads } from '@/lib/distribution';
 import { checkBatchMilestones } from '@/lib/batchNotifications';
 import { createInvoice, sendNewBatchAdminEmail } from '@/lib/invoice';
 
@@ -34,12 +34,13 @@ export async function POST(request: NextRequest) {
   const supabase = createServerClient();
   const body = await request.json();
 
-  const { customer_id, branch, batch_size, price_per_lead, leads_per_week, leads_per_day, notes, lead_filters, is_paid } = body;
+  const { customer_id, branch, batch_size, price_per_lead, leads_per_week, leads_per_day, notes, lead_filters, is_paid, lookback_days } = body;
   if (!customer_id || !branch || !batch_size) {
     return NextResponse.json({ error: 'Vereiste velden ontbreken' }, { status: 400 });
   }
 
   const total_price = price_per_lead ? price_per_lead * batch_size : null;
+  const lookback = typeof lookback_days === 'number' ? Math.max(0, Math.min(30, lookback_days)) : 3;
   const sanitizedFilters = Array.isArray(lead_filters) ? lead_filters.filter(
     (f: { field?: string; operator?: string; value?: string; values?: string[] }) =>
       f.field && f.operator && ((f.values && f.values.length > 0) || (f.value !== undefined && f.value !== ''))
@@ -47,14 +48,16 @@ export async function POST(request: NextRequest) {
 
   const { data, error } = await supabase
     .from('customer_batches')
-    .insert({ customer_id, branch, batch_size, price_per_lead, total_price, leads_per_week: leads_per_week || null, leads_per_day: leads_per_day || null, notes, lead_filters: sanitizedFilters, is_paid: is_paid !== false })
+    .insert({ customer_id, branch, batch_size, price_per_lead, total_price, leads_per_week: leads_per_week || null, leads_per_day: leads_per_day || null, notes, lead_filters: sanitizedFilters, is_paid: is_paid !== false, lookback_days: lookback })
     .select()
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // Auto-distribute recent leads to the new batch (non-blocking)
-  try { distributeUnassignedLeads(); } catch { /* non-blocking */ }
+  // Targeted backfill: only assign leads from the specified lookback period to this batch
+  if (lookback > 0) {
+    try { backfillBatch(data.id, lookback); } catch { /* non-blocking */ }
+  }
 
   // Admin notification email + invoice if paid with pricing
   const batchIsPaid = is_paid !== false;

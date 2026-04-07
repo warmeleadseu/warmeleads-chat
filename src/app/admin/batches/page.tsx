@@ -25,7 +25,7 @@ interface Batch {
   price_per_lead: number | null; total_price: number | null;
   leads_per_week: number | null; leads_per_day: number | null;
   leads_delivered: number; status: string;
-  is_paid: boolean; notes: string | null; lead_filters: LeadFilter[];
+  is_paid: boolean; lookback_days: number | null; notes: string | null; lead_filters: LeadFilter[];
   created_at: string; completed_at: string | null;
   customers?: { name: string } | null;
 }
@@ -614,6 +614,23 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
               className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
           </div>
 
+          {/* Lookback info (read-only) */}
+          {batch.lookback_days !== null && batch.lookback_days !== undefined && (
+            <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <div>
+                <p className="text-sm font-medium text-slate-700">Lookback bij aanmaak</p>
+                <p className="text-[11px] text-slate-400">
+                  {batch.lookback_days === 0
+                    ? 'Geen backfill, alleen nieuwe leads'
+                    : `Bestaande leads van ${batch.lookback_days} dag(en) toegewezen`}
+                </p>
+              </div>
+              <span className="rounded-full bg-slate-200 px-2.5 py-0.5 text-xs font-semibold text-slate-600">
+                {batch.lookback_days}d
+              </span>
+            </div>
+          )}
+
           {/* Payment status */}
           <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 p-3">
             <div>
@@ -662,7 +679,7 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
 }) {
   const [form, setForm] = useState({
     customer_id: '', branch: '', batch_size: 100, is_paid: true,
-    price_per_lead: '', leads_per_day: '', leads_per_week: '', notes: '', lead_filters: [] as LeadFilter[],
+    price_per_lead: '', leads_per_day: '', leads_per_week: '', lookback_days: '3', notes: '', lead_filters: [] as LeadFilter[],
   });
   const [saving, setSaving] = useState(false);
   const [branchFields, setBranchFields] = useState<BranchField[]>([]);
@@ -689,6 +706,7 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
           price_per_lead: form.price_per_lead ? parseFloat(form.price_per_lead) : null,
           leads_per_day: form.leads_per_day ? parseInt(form.leads_per_day) : null,
           leads_per_week: form.leads_per_week ? parseInt(form.leads_per_week) : null,
+          lookback_days: parseInt(form.lookback_days) || 0,
           notes: form.notes || null,
           lead_filters: form.lead_filters.filter(f => f.field && (f.values?.length || 0) > 0),
         }),
@@ -765,6 +783,44 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
               <input type="number" value={form.leads_per_week} onChange={e => setForm(f => ({ ...f, leads_per_week: e.target.value }))}
                 placeholder="∞" min={1}
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
+            </div>
+          </div>
+
+          {/* Lookback */}
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <div className="mb-2 flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-slate-700">Lookback dagen</p>
+                <p className="text-[11px] text-slate-400">
+                  {form.lookback_days === '0'
+                    ? 'Alleen nieuwe leads, geen bestaande leads laden'
+                    : `Direct bestaande leads van de afgelopen ${form.lookback_days || 3} dag(en) toewijzen`}
+                </p>
+              </div>
+              <input
+                type="number"
+                value={form.lookback_days}
+                onChange={e => setForm(f => ({ ...f, lookback_days: e.target.value }))}
+                min={0}
+                max={30}
+                className="w-16 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-center text-sm font-semibold text-slate-900 outline-none focus:border-brand-purple/50"
+              />
+            </div>
+            <div className="flex gap-1">
+              {[0, 1, 3, 7, 14].map(d => (
+                <button
+                  key={d}
+                  type="button"
+                  onClick={() => setForm(f => ({ ...f, lookback_days: String(d) }))}
+                  className={`rounded-md px-2 py-1 text-[11px] font-medium transition ${
+                    form.lookback_days === String(d)
+                      ? 'bg-brand-purple text-white'
+                      : 'bg-white text-slate-500 hover:bg-slate-100'
+                  }`}
+                >
+                  {d === 0 ? 'Geen' : `${d}d`}
+                </button>
+              ))}
             </div>
           </div>
 

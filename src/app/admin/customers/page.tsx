@@ -1024,7 +1024,7 @@ function BatchesPanel({ customer, branchOptions, onClose }: { customer: Customer
   const [batches, setBatches] = useState<Batch[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState<{ branch: string; batch_size: number; price_per_lead: string; leads_per_day: string; leads_per_week: string; notes: string; lead_filters: LeadFilter[] }>({ branch: '', batch_size: 100, price_per_lead: '', leads_per_day: '', leads_per_week: '', notes: '', lead_filters: [] });
+  const [form, setForm] = useState<{ branch: string; batch_size: number; price_per_lead: string; leads_per_day: string; leads_per_week: string; lookback_days: string; notes: string; lead_filters: LeadFilter[] }>({ branch: '', batch_size: 100, price_per_lead: '', leads_per_day: '', leads_per_week: '', lookback_days: '3', notes: '', lead_filters: [] });
   const [saving, setSaving] = useState(false);
 
   const fetchBatches = useCallback(async () => {
@@ -1048,6 +1048,7 @@ function BatchesPanel({ customer, branchOptions, onClose }: { customer: Customer
           price_per_lead: form.price_per_lead ? parseFloat(form.price_per_lead) : null,
           leads_per_day: form.leads_per_day ? parseInt(form.leads_per_day) : null,
           leads_per_week: form.leads_per_week ? parseInt(form.leads_per_week) : null,
+          lookback_days: parseInt(form.lookback_days) || 0,
           notes: form.notes || null,
           lead_filters: form.lead_filters.filter(f => f.field && (f.values?.length || 0) > 0),
         }),
@@ -1059,7 +1060,7 @@ function BatchesPanel({ customer, branchOptions, onClose }: { customer: Customer
         return;
       }
       setShowAdd(false);
-      setForm({ branch: '', batch_size: 100, price_per_lead: '', leads_per_day: '', leads_per_week: '', notes: '', lead_filters: [] });
+      setForm({ branch: '', batch_size: 100, price_per_lead: '', leads_per_day: '', leads_per_week: '', lookback_days: '3', notes: '', lead_filters: [] });
       fetchBatches();
     } catch {
       alert('Er ging iets mis');
@@ -1156,6 +1157,25 @@ function BatchesPanel({ customer, branchOptions, onClose }: { customer: Customer
                     placeholder="Onbeperkt" min={1}
                     className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
                 </div>
+              </div>
+              <div className="mb-3">
+                <label className="mb-1 block text-xs font-medium text-slate-500">Lookback dagen</label>
+                <div className="flex items-center gap-2">
+                  <input type="number" value={form.lookback_days} onChange={e => setForm(f => ({ ...f, lookback_days: e.target.value }))}
+                    min={0} max={30}
+                    className="w-16 rounded-lg border border-slate-200 bg-white px-2 py-2 text-center text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
+                  <div className="flex gap-1">
+                    {[0, 1, 3, 7].map(d => (
+                      <button key={d} type="button" onClick={() => setForm(f => ({ ...f, lookback_days: String(d) }))}
+                        className={`rounded-md px-2 py-1 text-[11px] font-medium transition ${form.lookback_days === String(d) ? 'bg-brand-purple text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
+                        {d === 0 ? 'Geen' : `${d}d`}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <p className="mt-1 text-[10px] text-slate-400">
+                  {form.lookback_days === '0' ? 'Alleen nieuwe leads' : `Bestaande leads van ${form.lookback_days || 3} dag(en) toewijzen`}
+                </p>
               </div>
               <div className="mb-3">
                 <label className="mb-1 block text-xs font-medium text-slate-500">Notities</label>

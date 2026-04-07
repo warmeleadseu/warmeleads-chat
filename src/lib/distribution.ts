@@ -310,6 +310,99 @@ export async function distributeLeads(leads: LeadForDistribution[]): Promise<{ d
 }
 
 /**
+ * Targeted backfill for a single newly created batch.
+ * Only assigns leads from the last `lookbackDays` to this specific batch.
+ * If lookbackDays is 0, no backfill is performed (only future leads via cron).
+ */
+export async function backfillBatch(batchId: string, lookbackDays: number): Promise<{ assigned: number }> {
+  if (lookbackDays <= 0) return { assigned: 0 };
+
+  const supabase = createServerClient();
+
+  const { data: batch } = await supabase
+    .from('customer_batches')
+    .select('id, customer_id, branch, batch_size, leads_delivered, leads_per_week, leads_per_day, lead_filters, is_paid, customers!inner(id, is_active)')
+    .eq('id', batchId)
+    .eq('status', 'active')
+    .single();
+
+  if (!batch || batch.leads_delivered >= batch.batch_size) return { assigned: 0 };
+  if (batch.is_paid === false) return { assigned: 0 };
+
+  const { data: targets } = await supabase
+    .from('customer_targets')
+    .select('*')
+    .eq('customer_id', batch.customer_id)
+    .eq('is_active', true);
+
+  if (!targets || targets.length === 0) return { assigned: 0 };
+
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - lookbackDays);
+
+  const { data: leads } = await supabase
+    .from('leads')
+    .select('*')
+    .eq('branch', batch.branch)
+    .neq('bron', 'excel_import')
+    .neq('phone_valid', false)
+    .not('lat', 'is', null)
+    .not('lng', 'is', null)
+    .gte('created_at', cutoff.toISOString())
+    .order('created_at', { ascending: false });
+
+  if (!leads || leads.length === 0) return { assigned: 0 };
+
+  const { data: existingAssignments } = await supabase
+    .from('lead_assignments')
+    .select('lead_id')
+    .eq('customer_id', batch.customer_id);
+
+  const alreadyAssigned = new Set((existingAssignments || []).map(a => a.lead_id));
+
+  const filters: LeadFilter[] = Array.isArray(batch.lead_filters) ? batch.lead_filters : [];
+  let assigned = 0;
+  const remaining = batch.batch_size - batch.leads_delivered;
+
+  for (const lead of leads) {
+    if (assigned >= remaining) break;
+    if (alreadyAssigned.has(lead.id)) continue;
+    if (!matchesAllFilters(lead as LeadForDistribution, filters)) continue;
+
+    let inRange = false;
+    let bestDist = Infinity;
+    for (const t of targets) {
+      const dist = haversineKm(lead.lat, lead.lng, t.lat, t.lng);
+      if (dist <= t.radius_km) { inRange = true; bestDist = Math.min(bestDist, dist); }
+    }
+    if (!inRange) continue;
+
+    const { error } = await supabase
+      .from('lead_assignments')
+      .insert({ lead_id: lead.id, customer_id: batch.customer_id, batch_id: batch.id, distance_km: Math.round(bestDist * 10) / 10 });
+
+    if (!error) {
+      assigned++;
+      alreadyAssigned.add(lead.id);
+
+      try {
+        const { data: custData } = await supabase.from('customers').select('id, name, email, contact_person, email_notifications').eq('id', batch.customer_id).single();
+        if (custData) {
+          if (custData.email && custData.email_notifications) sendLeadNotification(custData, lead);
+          sendNewLeadPush(custData.id, lead).catch(() => {});
+        }
+      } catch { /* notification failure should not block */ }
+    }
+  }
+
+  if (assigned > 0) {
+    await syncBatchDelivered(supabase, batch.id);
+  }
+
+  return { assigned };
+}
+
+/**
  * Smart distribution with average-tracking:
  * 1. First pass: assign leads that have 0 assignments (new leads get priority)
  * 2. Second pass: if average assignments per lead < TARGET_AVG, re-assign eligible leads
