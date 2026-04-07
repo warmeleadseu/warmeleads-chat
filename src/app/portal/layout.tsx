@@ -60,7 +60,7 @@ function LoginScreen({ onLogin }: { onLogin: (c: PortalCustomer, t: string) => v
           <p className="mt-3 text-sm text-white/40">Klantportaal</p>
         </div>
 
-        <form onSubmit={submit} className="rounded-2xl border border-white/10 bg-white/[0.05] p-6 backdrop-blur-xl">
+        <form onSubmit={submit} autoComplete="off" className="rounded-2xl border border-white/10 bg-white/[0.05] p-6 backdrop-blur-xl">
           {error && (
             <div className="mb-4 rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-2.5 text-sm text-red-300">{error}</div>
           )}
@@ -69,6 +69,8 @@ function LoginScreen({ onLogin }: { onLogin: (c: PortalCustomer, t: string) => v
               <label className="mb-1.5 block text-xs font-medium text-white/50">E-mail</label>
               <input
                 type="email"
+                name="wl-portal-email"
+                autoComplete="username"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -80,6 +82,8 @@ function LoginScreen({ onLogin }: { onLogin: (c: PortalCustomer, t: string) => v
               <label className="mb-1.5 block text-xs font-medium text-white/50">Wachtwoord</label>
               <input
                 type="password"
+                name="wl-portal-password"
+                autoComplete="current-password"
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}

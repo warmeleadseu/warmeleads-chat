@@ -87,7 +87,7 @@ function LoginScreen({ onLogin }: { onLogin: (u: AdminUser, t: string) => void }
           <Image src="/logo-wit.png" alt="WarmeLeads" width={160} height={48} className="mx-auto h-9 w-auto" />
           <p className="mt-3 text-sm text-white/40">Admin Panel</p>
         </div>
-        <form onSubmit={submit} className="rounded-2xl border border-white/10 bg-white/[0.05] p-6 backdrop-blur-xl">
+        <form onSubmit={submit} autoComplete="off" className="rounded-2xl border border-white/10 bg-white/[0.05] p-6 backdrop-blur-xl">
           {error && (
             <div className="mb-4 rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-2.5 text-sm text-red-300">{error}</div>
           )}
@@ -96,6 +96,8 @@ function LoginScreen({ onLogin }: { onLogin: (u: AdminUser, t: string) => void }
               <label className="mb-1.5 block text-xs font-medium text-white/50">E-mail</label>
               <input
                 type="email"
+                name="wl-admin-email"
+                autoComplete="username"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -107,6 +109,8 @@ function LoginScreen({ onLogin }: { onLogin: (u: AdminUser, t: string) => void }
               <label className="mb-1.5 block text-xs font-medium text-white/50">Wachtwoord</label>
               <input
                 type="password"
+                name="wl-admin-password"
+                autoComplete="current-password"
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
