@@ -494,6 +494,8 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
   });
   const [saving, setSaving] = useState(false);
   const [branchFields, setBranchFields] = useState<BranchField[]>([]);
+  const [extraLeads, setExtraLeads] = useState(0);
+  const [extraReason, setExtraReason] = useState('');
 
   useEffect(() => {
     adminFetch(`/api/admin/branches/fields?branch=${batch.branch}`)
@@ -502,21 +504,27 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
       .catch(() => {});
   }, [batch.branch]);
 
+  const effectiveBatchSize = form.batch_size + extraLeads;
+
   const save = async () => {
     setSaving(true);
     try {
+      const batchSizeGrew = effectiveBatchSize > batch.batch_size;
       const res = await adminFetch('/api/admin/batches', {
         method: 'PUT',
         body: JSON.stringify({
           id: batch.id,
-          batch_size: form.batch_size,
+          batch_size: effectiveBatchSize,
           leads_delivered: form.leads_delivered,
           is_paid: form.is_paid,
           price_per_lead: form.price_per_lead ? parseFloat(form.price_per_lead) : null,
           leads_per_day: form.leads_per_day ? parseInt(form.leads_per_day) : null,
           leads_per_week: form.leads_per_week ? parseInt(form.leads_per_week) : null,
-          notes: form.notes || null,
+          notes: extraLeads > 0 && extraReason
+            ? `${form.notes ? form.notes + '\n' : ''}+${extraLeads} leads: ${extraReason}`.trim()
+            : form.notes || null,
           lead_filters: form.lead_filters.filter(f => f.field && (f.values?.length || 0) > 0),
+          trigger_backfill: batchSizeGrew,
         }),
       });
       if (res.ok) onSaved();
@@ -527,9 +535,10 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
 
   const br = branches.find(b => b.slug === batch.branch);
   const cust = customers.find(c => c.id === batch.customer_id);
-  const livePct = form.batch_size > 0 ? Math.min(100, Math.round((form.leads_delivered / form.batch_size) * 100)) : 0;
+  const livePct = effectiveBatchSize > 0 ? Math.min(100, Math.round((form.leads_delivered / effectiveBatchSize) * 100)) : 0;
   const deliveredChanged = form.leads_delivered !== batch.leads_delivered;
-  const autoStatus = form.leads_delivered >= form.batch_size ? 'completed' : form.leads_delivered < form.batch_size && batch.status === 'completed' ? 'active' : batch.status;
+  const sizeChanged = effectiveBatchSize !== batch.batch_size;
+  const autoStatus = form.leads_delivered >= effectiveBatchSize ? 'completed' : form.leads_delivered < effectiveBatchSize && batch.status === 'completed' ? 'active' : batch.status;
 
   return (
     <>
@@ -553,7 +562,7 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
           {/* Live progress */}
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
             <div className="mb-1 flex items-baseline justify-between">
-              <span className="text-sm font-bold text-slate-800">{form.leads_delivered} / {form.batch_size} geleverd</span>
+              <span className="text-sm font-bold text-slate-800">{form.leads_delivered} / {effectiveBatchSize} geleverd</span>
               <span className="text-xs font-medium text-slate-500">{livePct}%</span>
             </div>
             <div className="h-2.5 overflow-hidden rounded-full bg-slate-200">
@@ -562,7 +571,7 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
             </div>
             <div className="mt-1.5 flex items-center justify-between">
               <p className="text-[11px] text-slate-400">Status: {STATUS_LABELS[autoStatus] || autoStatus}</p>
-              {deliveredChanged && autoStatus !== batch.status && (
+              {(deliveredChanged || sizeChanged) && autoStatus !== batch.status && (
                 <p className="text-[11px] font-medium text-amber-600">
                   Status wordt automatisch naar &apos;{STATUS_LABELS[autoStatus]}&apos;
                 </p>
@@ -585,6 +594,39 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
               <input type="number" value={form.batch_size} onChange={e => setForm(f => ({ ...f, batch_size: Math.max(1, Number(e.target.value)) }))} min={1}
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
             </div>
+          </div>
+
+          {/* Extra leads toevoegen */}
+          <div className="rounded-lg border border-dashed border-brand-purple/30 bg-brand-purple/5 p-3">
+            <div className="mb-2 flex items-center gap-2">
+              <PlusIcon className="h-4 w-4 text-brand-purple" />
+              <p className="text-sm font-medium text-brand-purple">Extra leads toevoegen</p>
+            </div>
+            <p className="mb-3 text-[11px] text-slate-500">
+              Voeg extra leads toe aan deze batch, bijv. als compensatie. Het systeem vult de extra plekken direct waar mogelijk.
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1 block text-[11px] font-medium text-slate-500">Aantal</label>
+                <input type="number" value={extraLeads || ''} onChange={e => setExtraLeads(Math.max(0, Number(e.target.value)))}
+                  placeholder="0" min={0}
+                  className="w-full rounded-lg border border-brand-purple/20 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/20" />
+              </div>
+              <div>
+                <label className="mb-1 block text-[11px] font-medium text-slate-500">Reden</label>
+                <input type="text" value={extraReason} onChange={e => setExtraReason(e.target.value)}
+                  placeholder="Bijv. compensatie batch #X"
+                  className="w-full rounded-lg border border-brand-purple/20 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/20" />
+              </div>
+            </div>
+            {extraLeads > 0 && (
+              <div className="mt-2 flex items-center gap-2 rounded-md bg-white px-3 py-2">
+                <CheckCircleIcon className="h-4 w-4 text-brand-purple" />
+                <p className="text-xs text-slate-600">
+                  Batch grootte wordt <span className="font-semibold text-slate-900">{form.batch_size}</span> → <span className="font-bold text-brand-purple">{effectiveBatchSize}</span> ({form.batch_size} + {extraLeads})
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-3 gap-3">

@@ -96,7 +96,7 @@ export async function PUT(request: NextRequest) {
 
   const supabase = createServerClient();
   const body = await request.json();
-  const { id, ...updates } = body;
+  const { id, trigger_backfill, ...updates } = body;
 
   if (!id) return NextResponse.json({ error: 'ID ontbreekt' }, { status: 400 });
 
@@ -109,7 +109,7 @@ export async function PUT(request: NextRequest) {
 
   const { data: existing } = await supabase
     .from('customer_batches')
-    .select('price_per_lead, batch_size, leads_delivered, status, is_paid')
+    .select('price_per_lead, batch_size, leads_delivered, status, is_paid, lookback_days')
     .eq('id', id)
     .single();
 
@@ -159,8 +159,15 @@ export async function PUT(request: NextRequest) {
     checkBatchMilestones(supabase, id, updates.leads_delivered, batchSize).catch(() => {});
   }
 
+  // When batch_size grew and backfill requested, fill the extra slots
+  const batchGrew = trigger_backfill && updates.batch_size && updates.batch_size > existing.batch_size;
+  if (batchGrew) {
+    const lookback = existing.lookback_days ?? 3;
+    try { backfillBatch(id, Math.max(lookback, 3)); } catch { /* non-blocking */ }
+  }
+
   // When a batch is (re)activated, trigger distribution
-  if (updates.status === 'active') {
+  if (updates.status === 'active' && !batchGrew) {
     try { distributeUnassignedLeads(); } catch { /* non-blocking */ }
   }
 
