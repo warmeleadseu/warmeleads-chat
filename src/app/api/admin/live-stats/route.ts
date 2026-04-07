@@ -187,6 +187,7 @@ export async function GET(request: NextRequest) {
       batchSize: b.batch_size,
       delivered: b.leads_delivered,
       pricePerLead: b.price_per_lead,
+      leadsPerDay: b.leads_per_day,
       leadsPerWeek: b.leads_per_week,
       notes: b.notes,
     })),

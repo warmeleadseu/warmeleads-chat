@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
   const [leadsRes, assignRes, batchRes, targetRes, custRes] = await Promise.all([
     supabase.from('leads').select('id, naam_klant, email, branch, postcode, plaatsnaam, lat, lng, land, created_at').order('created_at', { ascending: false }),
     supabase.from('lead_assignments').select('id, lead_id, customer_id, batch_id, distance_km, assigned_at, customers(name)'),
-    supabase.from('customer_batches').select('id, customer_id, branch, batch_size, leads_delivered, leads_per_week, status, customers(name)'),
+    supabase.from('customer_batches').select('id, customer_id, branch, batch_size, leads_delivered, leads_per_day, leads_per_week, status, customers(name)'),
     supabase.from('customer_targets').select('id, customer_id, label, lat, lng, radius_km, is_active'),
     supabase.from('customers').select('id, name, is_active, portal_active'),
   ]);

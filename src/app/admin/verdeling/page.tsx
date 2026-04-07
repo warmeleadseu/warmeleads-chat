@@ -40,6 +40,7 @@ interface Batch {
   branch: string;
   batch_size: number;
   leads_delivered: number;
+  leads_per_day: number | null;
   leads_per_week: number | null;
   status: string;
   price_per_lead: number | null;
@@ -604,6 +605,7 @@ export default function VerdelingPage() {
                         <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
                           {b.price_per_lead && <span>€{Number(b.price_per_lead).toFixed(2)}/lead</span>}
                           {b.total_price && <span className="font-medium text-emerald-600">Totaal: €{Number(b.total_price).toFixed(2)}</span>}
+                          {b.leads_per_day && <span>{b.leads_per_day}/dag</span>}
                           {b.leads_per_week && <span>{b.leads_per_week}/week</span>}
                           <span>Gestart: {created.toLocaleDateString('nl-NL')}</span>
                           {completedAt && <span>Voltooid: {completedAt.toLocaleDateString('nl-NL')}</span>}
@@ -688,7 +690,7 @@ export default function VerdelingPage() {
                                   {statusLabels[b.status] || b.status}
                                 </span>
                               </td>
-                              <td className="px-4 py-3 text-xs text-slate-500">{b.leads_per_week || '∞'}</td>
+                              <td className="px-4 py-3 text-xs text-slate-500">{b.leads_per_day ? `${b.leads_per_day}/dag` : '∞'} · {b.leads_per_week ? `${b.leads_per_week}/week` : '∞'}</td>
                               <td className="px-4 py-3 text-slate-500">{b.price_per_lead ? `€${Number(b.price_per_lead).toFixed(2)}` : '-'}</td>
                               <td className="px-4 py-3 text-xs text-slate-400">{new Date(b.created_at).toLocaleDateString('nl-NL')}</td>
                             </tr>

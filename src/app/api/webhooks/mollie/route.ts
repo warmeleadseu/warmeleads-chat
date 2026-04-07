@@ -128,6 +128,7 @@ export async function POST(request: NextRequest) {
           price_per_lead: order.price_per_lead,
           total_price: order.total_price,
           leads_per_week: order.leads_per_week,
+          leads_per_day: order.leads_per_day,
           lead_filters: order.lead_filters || [],
           notes: order.notes ? `[Portal bestelling] ${order.notes}` : '[Portal bestelling]',
           status: 'active',

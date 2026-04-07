@@ -53,16 +53,16 @@ export async function GET(request: NextRequest) {
 
   const active = activeBatches.map(batch => {
     const batchAssignments = weekAssignments.filter(a => a.batch_id === batch.id);
-    const leads_per_day = batchAssignments.length / 7;
+    const avg_leads_per_day = batchAssignments.length / 7;
 
     const thisWeekAssignments = batchAssignments.filter(
       a => new Date(a.created_at) >= monday
     );
 
     let estimated_completion: string | null = null;
-    if (leads_per_day > 0) {
+    if (avg_leads_per_day > 0) {
       const remaining = (batch.batch_size || 0) - (batch.leads_delivered || 0);
-      const daysLeft = remaining / leads_per_day;
+      const daysLeft = remaining / avg_leads_per_day;
       const completionDate = new Date(now);
       completionDate.setDate(completionDate.getDate() + daysLeft);
       estimated_completion = completionDate.toISOString();
@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
     return {
       ...batch,
       branch_name: branchMap[batch.branch] || batch.branch,
-      leads_per_day: Math.round(leads_per_day * 10) / 10,
+      avg_leads_per_day: Math.round(avg_leads_per_day * 10) / 10,
       estimated_completion,
       this_week_count: thisWeekAssignments.length,
     };

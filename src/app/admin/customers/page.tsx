@@ -49,7 +49,7 @@ interface LeadFilter {
 interface Batch {
   id: string; customer_id: string; branch: string; batch_size: number;
   price_per_lead: number | null; total_price: number | null;
-  leads_per_week: number | null;
+  leads_per_day: number | null; leads_per_week: number | null;
   leads_delivered: number; status: string; notes: string | null;
   lead_filters: LeadFilter[];
   created_at: string; completed_at: string | null;
@@ -1007,7 +1007,7 @@ function BatchesPanel({ customer, branchOptions, onClose }: { customer: Customer
   const [batches, setBatches] = useState<Batch[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState<{ branch: string; batch_size: number; price_per_lead: string; leads_per_week: string; notes: string; lead_filters: LeadFilter[] }>({ branch: '', batch_size: 100, price_per_lead: '', leads_per_week: '', notes: '', lead_filters: [] });
+  const [form, setForm] = useState<{ branch: string; batch_size: number; price_per_lead: string; leads_per_day: string; leads_per_week: string; notes: string; lead_filters: LeadFilter[] }>({ branch: '', batch_size: 100, price_per_lead: '', leads_per_day: '', leads_per_week: '', notes: '', lead_filters: [] });
   const [saving, setSaving] = useState(false);
 
   const fetchBatches = useCallback(async () => {
@@ -1029,6 +1029,7 @@ function BatchesPanel({ customer, branchOptions, onClose }: { customer: Customer
           branch: form.branch,
           batch_size: form.batch_size,
           price_per_lead: form.price_per_lead ? parseFloat(form.price_per_lead) : null,
+          leads_per_day: form.leads_per_day ? parseInt(form.leads_per_day) : null,
           leads_per_week: form.leads_per_week ? parseInt(form.leads_per_week) : null,
           notes: form.notes || null,
           lead_filters: form.lead_filters.filter(f => f.field && (f.values?.length || 0) > 0),
@@ -1041,7 +1042,7 @@ function BatchesPanel({ customer, branchOptions, onClose }: { customer: Customer
         return;
       }
       setShowAdd(false);
-      setForm({ branch: '', batch_size: 100, price_per_lead: '', leads_per_week: '', notes: '', lead_filters: [] });
+      setForm({ branch: '', batch_size: 100, price_per_lead: '', leads_per_day: '', leads_per_week: '', notes: '', lead_filters: [] });
       fetchBatches();
     } catch {
       alert('Er ging iets mis');
@@ -1113,22 +1114,30 @@ function BatchesPanel({ customer, branchOptions, onClose }: { customer: Customer
                   ))}
                 </select>
               </div>
-              <div className="mb-3 grid grid-cols-3 gap-3">
+              <div className="mb-3 grid grid-cols-2 gap-3">
                 <div>
                   <label className="mb-1 block text-xs font-medium text-slate-500">Batch grootte *</label>
                   <input type="number" value={form.batch_size} onChange={e => setForm(f => ({ ...f, batch_size: Number(e.target.value) }))} min={1}
                     className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-slate-500">Per week</label>
-                  <input type="number" value={form.leads_per_week} onChange={e => setForm(f => ({ ...f, leads_per_week: e.target.value }))}
+                  <label className="mb-1 block text-xs font-medium text-slate-500">Prijs/lead</label>
+                  <input type="number" step="0.01" value={form.price_per_lead} onChange={e => setForm(f => ({ ...f, price_per_lead: e.target.value }))}
+                    placeholder="€" className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
+                </div>
+              </div>
+              <div className="mb-3 grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-500">Max per dag</label>
+                  <input type="number" value={form.leads_per_day} onChange={e => setForm(f => ({ ...f, leads_per_day: e.target.value }))}
                     placeholder="Onbeperkt" min={1}
                     className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-slate-500">Prijs/lead</label>
-                  <input type="number" step="0.01" value={form.price_per_lead} onChange={e => setForm(f => ({ ...f, price_per_lead: e.target.value }))}
-                    placeholder="€" className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
+                  <label className="mb-1 block text-xs font-medium text-slate-500">Max per week</label>
+                  <input type="number" value={form.leads_per_week} onChange={e => setForm(f => ({ ...f, leads_per_week: e.target.value }))}
+                    placeholder="Onbeperkt" min={1}
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
                 </div>
               </div>
               <div className="mb-3">
@@ -1216,6 +1225,9 @@ function BatchesPanel({ customer, branchOptions, onClose }: { customer: Customer
 
                     {/* Details */}
                     <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
+                      {b.leads_per_day && (
+                        <span className="font-medium text-brand-purple">{b.leads_per_day}/dag</span>
+                      )}
                       {b.leads_per_week && (
                         <span className="font-medium text-brand-purple">{b.leads_per_week}/week</span>
                       )}

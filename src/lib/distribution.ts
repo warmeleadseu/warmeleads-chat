@@ -126,7 +126,7 @@ export async function distributeLead(lead: LeadForDistribution): Promise<Distrib
 
   const { data: activeBatches } = await supabase
     .from('customer_batches')
-    .select('id, customer_id, branch, batch_size, leads_delivered, leads_per_week, lead_filters, created_at, is_paid, customers!inner(id, is_active, portal_active)')
+    .select('id, customer_id, branch, batch_size, leads_delivered, leads_per_week, leads_per_day, lead_filters, created_at, is_paid, customers!inner(id, is_active, portal_active)')
     .eq('branch', lead.branch)
     .eq('status', 'active')
     .eq('customers.is_active', true)
@@ -136,23 +136,37 @@ export async function distributeLead(lead: LeadForDistribution): Promise<Distrib
   if (!activeBatches || activeBatches.length === 0) return result;
 
   const batchesWithWeeklyLimit = activeBatches.filter(b => b.leads_per_week && b.leads_per_week > 0);
+  const batchesWithDailyLimit = activeBatches.filter(b => b.leads_per_day && b.leads_per_day > 0);
   const weeklyCountByBatch: Record<string, number> = {};
+  const dailyCountByBatch: Record<string, number> = {};
 
-  if (batchesWithWeeklyLimit.length > 0) {
+  if (batchesWithWeeklyLimit.length > 0 || batchesWithDailyLimit.length > 0) {
     const now = new Date();
     const weekStart = new Date(now);
     weekStart.setDate(weekStart.getDate() - weekStart.getDay() + (weekStart.getDay() === 0 ? -6 : 1));
     weekStart.setHours(0, 0, 0, 0);
 
-    const batchIds = batchesWithWeeklyLimit.map(b => b.id);
-    const { data: weekAssignments } = await supabase
+    const dayStart = new Date(now);
+    dayStart.setHours(0, 0, 0, 0);
+
+    const allLimitBatchIds = [...new Set([
+      ...batchesWithWeeklyLimit.map(b => b.id),
+      ...batchesWithDailyLimit.map(b => b.id),
+    ])];
+
+    const { data: periodAssignments } = await supabase
       .from('lead_assignments')
-      .select('batch_id')
-      .in('batch_id', batchIds)
+      .select('batch_id, assigned_at')
+      .in('batch_id', allLimitBatchIds)
       .gte('assigned_at', weekStart.toISOString());
 
-    for (const a of weekAssignments || []) {
-      if (a.batch_id) weeklyCountByBatch[a.batch_id] = (weeklyCountByBatch[a.batch_id] || 0) + 1;
+    for (const a of periodAssignments || []) {
+      if (a.batch_id) {
+        weeklyCountByBatch[a.batch_id] = (weeklyCountByBatch[a.batch_id] || 0) + 1;
+        if (new Date(a.assigned_at) >= dayStart) {
+          dailyCountByBatch[a.batch_id] = (dailyCountByBatch[a.batch_id] || 0) + 1;
+        }
+      }
     }
   }
 
@@ -189,6 +203,11 @@ export async function distributeLead(lead: LeadForDistribution): Promise<Distrib
     if (batch.leads_per_week && batch.leads_per_week > 0) {
       const thisWeekCount = weeklyCountByBatch[batch.id] || 0;
       if (thisWeekCount >= batch.leads_per_week) continue;
+    }
+
+    if (batch.leads_per_day && batch.leads_per_day > 0) {
+      const todayCount = dailyCountByBatch[batch.id] || 0;
+      if (todayCount >= batch.leads_per_day) continue;
     }
 
     const custTargets = targetsByCustomer[batch.customer_id];

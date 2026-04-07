@@ -540,6 +540,9 @@ export default function PortalPage() {
                           {b.is_paid === false && (
                             <span className="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-600">Onbetaald</span>
                           )}
+                          {b.leads_per_day > 0 && (
+                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">max {b.leads_per_day}/dag</span>
+                          )}
                           {b.leads_per_week > 0 && (
                             <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">max {b.leads_per_week}/week</span>
                           )}
@@ -560,9 +563,9 @@ export default function PortalPage() {
                           </span>
                         )}
                       </div>
-                      {(b.leads_per_day > 0 || b.this_week_count > 0) && (
+                      {(b.avg_leads_per_day > 0 || b.this_week_count > 0) && (
                         <div className="mt-2 flex gap-3 border-t border-slate-50 pt-2 text-[11px] text-slate-400">
-                          {b.leads_per_day > 0 && <span>~{b.leads_per_day.toFixed(1)} leads/dag</span>}
+                          {b.avg_leads_per_day > 0 && <span>~{b.avg_leads_per_day.toFixed(1)} leads/dag</span>}
                           {b.this_week_count > 0 && (
                             <span className="font-medium text-brand-purple">Deze week: {b.this_week_count}</span>
                           )}

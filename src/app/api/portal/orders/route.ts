@@ -44,12 +44,13 @@ export async function POST(request: NextRequest) {
     let branch = body.branch;
     let price_per_lead: number | null = null;
     let leads_per_week: number | null = null;
+    let leads_per_day: number | null = null;
     let lead_filters: unknown[] = [];
 
     if (source_batch_id) {
       const { data: sourceBatch } = await supabase
         .from('customer_batches')
-        .select('branch, price_per_lead, leads_per_week, lead_filters')
+        .select('branch, price_per_lead, leads_per_week, leads_per_day, lead_filters')
         .eq('id', source_batch_id)
         .eq('customer_id', customer.id)
         .single();
@@ -58,6 +59,7 @@ export async function POST(request: NextRequest) {
         branch = branch || sourceBatch.branch;
         price_per_lead = sourceBatch.price_per_lead;
         leads_per_week = sourceBatch.leads_per_week;
+        leads_per_day = sourceBatch.leads_per_day;
         lead_filters = sourceBatch.lead_filters || [];
       }
     }
@@ -65,7 +67,7 @@ export async function POST(request: NextRequest) {
     if (!branch || !price_per_lead) {
       const { data: latestBatch } = await supabase
         .from('customer_batches')
-        .select('branch, price_per_lead, leads_per_week, lead_filters')
+        .select('branch, price_per_lead, leads_per_week, leads_per_day, lead_filters')
         .eq('customer_id', customer.id)
         .order('created_at', { ascending: false })
         .limit(1)
@@ -75,6 +77,7 @@ export async function POST(request: NextRequest) {
         branch = branch || latestBatch.branch;
         price_per_lead = price_per_lead || latestBatch.price_per_lead;
         leads_per_week = leads_per_week || latestBatch.leads_per_week;
+        leads_per_day = leads_per_day || latestBatch.leads_per_day;
         lead_filters = lead_filters.length > 0 ? lead_filters : (latestBatch.lead_filters || []);
       }
     }
@@ -96,6 +99,7 @@ export async function POST(request: NextRequest) {
         price_per_lead,
         total_price,
         leads_per_week,
+        leads_per_day,
         lead_filters,
         notes: notes || null,
         source_batch_id: source_batch_id || null,

@@ -34,6 +34,7 @@ interface Batch {
   leads_delivered: number;
   price_per_lead: number;
   total_price: number;
+  leads_per_day: number | null;
   leads_per_week: number | null;
   lead_filters: unknown[];
   status: string;
