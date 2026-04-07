@@ -7,6 +7,7 @@ const MAX_ASSIGNMENTS = 3;
 const TARGET_AVG_ASSIGNMENTS = 2;
 const MAX_LEAD_AGE_DAYS = 3;
 const COOLDOWN_HOURS = 12;
+const FAIRNESS_WINDOW_HOURS = 24;
 
 function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371;
@@ -194,7 +195,7 @@ export async function distributeLead(lead: LeadForDistribution): Promise<Distrib
     batch_id: string;
     min_radius: number;
     distance_km: number;
-    fill_pct: number;
+    recent_24h: number;
   }
 
   const matches: Match[] = [];
@@ -238,16 +239,38 @@ export async function distributeLead(lead: LeadForDistribution): Promise<Distrib
           batch_id: batch.id,
           min_radius: bestMatch.radius,
           distance_km: Math.round(bestMatch.distance * 10) / 10,
-          fill_pct: batch.leads_delivered / batch.batch_size,
+          recent_24h: 0,
         });
       }
     }
   }
 
+  // Fetch recent assignment counts per batch for fairness sorting
+  if (matches.length > 1) {
+    const fairnessCutoff = new Date(Date.now() - FAIRNESS_WINDOW_HOURS * 60 * 60 * 1000);
+    const matchBatchIds = matches.map(m => m.batch_id);
+
+    const { data: recentAssignments } = await supabase
+      .from('lead_assignments')
+      .select('batch_id')
+      .in('batch_id', matchBatchIds)
+      .gte('assigned_at', fairnessCutoff.toISOString());
+
+    const recentByBatch: Record<string, number> = {};
+    for (const a of recentAssignments || []) {
+      if (a.batch_id) recentByBatch[a.batch_id] = (recentByBatch[a.batch_id] || 0) + 1;
+    }
+    for (const m of matches) {
+      m.recent_24h = recentByBatch[m.batch_id] || 0;
+    }
+  }
+
   matches.sort((a, b) => {
+    // 1. Smallest target radius wins (specific area > broad area)
     if (a.min_radius !== b.min_radius) return a.min_radius - b.min_radius;
-    // Prefer batches closer to completion (higher fill%) to finish them first
-    if (a.fill_pct !== b.fill_pct) return b.fill_pct - a.fill_pct;
+    // 2. Fewest recent assignments wins (fairness round-robin)
+    if (a.recent_24h !== b.recent_24h) return a.recent_24h - b.recent_24h;
+    // 3. Shortest distance as tiebreaker
     return a.distance_km - b.distance_km;
   });
 
