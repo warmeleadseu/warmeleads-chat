@@ -374,7 +374,6 @@ export default function CustomersPage() {
                         {c.is_active ? 'Actief' : 'Inactief'}
                       </span>
                       {isNew && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-600">Nieuwe klant</span>}
-                      {neverLogged && <span className="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-500">Nooit ingelogd</span>}
                       {!neverLogged && isChurning && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-600">Dreigt af te haken</span>}
                     </div>
                   </div>
