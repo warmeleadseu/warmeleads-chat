@@ -60,6 +60,10 @@ const STATUS_COLORS: Record<string, string> = {
 const STATUS_BADGE: Record<string, string> = {
   nieuw: 'bg-blue-100 text-blue-700', gecontacteerd: 'bg-amber-100 text-amber-700', geen_gehoor: 'bg-orange-100 text-orange-700', offerte: 'bg-purple-100 text-purple-700', verkocht: 'bg-emerald-100 text-emerald-700', afgewezen: 'bg-red-100 text-red-700',
 };
+const STATUS_LABELS: Record<string, string> = {
+  nieuw: 'Nieuw', gecontacteerd: 'Gecontacteerd', geen_gehoor: 'Geen gehoor',
+  offerte: 'Offerte', verkocht: 'Verkocht', afgewezen: 'Afgewezen',
+};
 
 const PERIOD_LABELS: Record<string, string> = {
   day: 'Vandaag', week: 'Week', month: 'Maand', quarter: 'Kwartaal', year: 'Jaar',
@@ -618,7 +622,7 @@ export default function AdminDashboard() {
             {Object.entries(stats.byStatus).map(([status, count]) => (
               <div key={status}>
                 <div className="mb-1 flex items-center justify-between text-sm">
-                  <span className="capitalize text-slate-600">{status}</span>
+                  <span className="text-slate-600">{STATUS_LABELS[status] || status}</span>
                   <span className="font-medium text-slate-900">{count}</span>
                 </div>
                 <div className="h-2 overflow-hidden rounded-full bg-slate-100">
@@ -693,7 +697,7 @@ export default function AdminDashboard() {
                     ); })()}
                   </td>
                   <td className="px-3 py-2.5 text-slate-500">{lead.customers?.name || '-'}</td>
-                  <td className="px-3 py-2.5 capitalize text-slate-500">{lead.status}</td>
+                  <td className="px-3 py-2.5 text-slate-500">{STATUS_LABELS[lead.status] || lead.status}</td>
                   <td className="px-3 py-2.5 text-slate-400">{lead.wervingsdatum || '-'}</td>
                 </tr>
               ))}
@@ -715,8 +719,8 @@ export default function AdminDashboard() {
                   <p className="font-medium text-slate-800">{lead.naam_klant}</p>
                   <p className="mt-0.5 text-xs text-slate-500">{lead.customers?.name || '-'}</p>
                 </div>
-                <span className={`ml-2 shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium capitalize ${STATUS_BADGE[lead.status] || 'bg-slate-100 text-slate-600'}`}>
-                  {lead.status}
+                <span className={`ml-2 shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_BADGE[lead.status] || 'bg-slate-100 text-slate-600'}`}>
+                  {STATUS_LABELS[lead.status] || lead.status}
                 </span>
               </div>
               <div className="mt-1.5 flex items-center gap-3 text-xs text-slate-400">

@@ -312,6 +312,11 @@ interface Lead {
 }
 
 const STATUSES = ['nieuw', 'gecontacteerd', 'geen_gehoor', 'offerte', 'verkocht', 'afgewezen'] as const;
+const STATUS_LABELS: Record<string, string> = {
+  nieuw: 'Nieuw', gecontacteerd: 'Gecontacteerd', geen_gehoor: 'Geen gehoor',
+  offerte: 'Offerte', verkocht: 'Verkocht', afgewezen: 'Afgewezen',
+};
+const statusLabel = (s: string) => STATUS_LABELS[s] || s;
 const STATUS_COLORS: Record<string, string> = {
   nieuw: 'bg-blue-100 text-blue-700',
   gecontacteerd: 'bg-amber-100 text-amber-700',
@@ -611,7 +616,7 @@ export default function LeadsCRMPage() {
           <MultiSelect
             label="statussen"
             allLabel="Alle statussen"
-            options={STATUSES.map(s => ({ value: s, label: s.charAt(0).toUpperCase() + s.slice(1) }))}
+            options={STATUSES.map(s => ({ value: s, label: statusLabel(s) }))}
             selected={selStatuses}
             onChange={setSelStatuses}
             counts={facets.status}
@@ -686,7 +691,7 @@ export default function LeadsCRMPage() {
           <FacetBreakdown
             title="Verdeling per status"
             counts={facets.status || {}}
-            options={STATUSES.map(s => ({ value: s, label: s.charAt(0).toUpperCase() + s.slice(1) }))}
+            options={STATUSES.map(s => ({ value: s, label: statusLabel(s) }))}
             selected={selStatuses}
           />
           <FacetBreakdown
@@ -715,7 +720,7 @@ export default function LeadsCRMPage() {
               <span className="text-sm font-medium text-brand-purple">{selected.size} geselecteerd</span>
               <select value={bulkStatus} onChange={e => setBulkStatus(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm">
                 <option value="">Status wijzigen...</option>
-                {STATUSES.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+                {STATUSES.map(s => <option key={s} value={s}>{statusLabel(s)}</option>)}
               </select>
               {bulkStatus && <button onClick={handleBulkStatus} className="rounded-lg bg-brand-purple px-3 py-1.5 text-sm font-medium text-white">Toepassen</button>}
               <button onClick={handleBulkDelete} className="rounded-lg bg-red-500 px-3 py-1.5 text-sm font-medium text-white">Verwijderen</button>
@@ -777,7 +782,7 @@ export default function LeadsCRMPage() {
                         {col === 'status' ? (
                           <select value={lead.status} onChange={e => handleQuickStatus(lead.id, e.target.value)}
                             className={`rounded-full border-0 px-2.5 py-0.5 text-[11px] font-medium ${STATUS_COLORS[lead.status] || 'bg-slate-100 text-slate-600'}`}>
-                            {STATUSES.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+                            {STATUSES.map(s => <option key={s} value={s}>{statusLabel(s)}</option>)}
                           </select>
                         ) : col === 'telefoonnummer' ? (
                           <span className="flex items-center gap-1">
@@ -831,7 +836,7 @@ export default function LeadsCRMPage() {
                 <div onClick={e => e.stopPropagation()}>
                   <select value={lead.status} onChange={e => handleQuickStatus(lead.id, e.target.value)}
                     className={`ml-2 shrink-0 rounded-full border-0 px-2 py-0.5 text-[11px] font-medium ${STATUS_COLORS[lead.status] || 'bg-slate-100 text-slate-600'}`}>
-                    {STATUSES.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+                    {STATUSES.map(s => <option key={s} value={s}>{statusLabel(s)}</option>)}
                   </select>
                 </div>
               </div>
@@ -1061,7 +1066,7 @@ function LeadFormPanel({
               <div>
                 <label className="mb-1 block text-xs font-medium text-slate-500">Status</label>
                 <select value={form.status || 'nieuw'} onChange={e => set('status', e.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900">
-                  {STATUSES.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+                  {STATUSES.map(s => <option key={s} value={s}>{statusLabel(s)}</option>)}
                 </select>
               </div>
               <div>
