@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   PlusIcon,
@@ -23,6 +23,9 @@ import {
   MagnifyingGlassIcon,
   AdjustmentsHorizontalIcon,
   ChevronDownIcon,
+  LinkSlashIcon,
+  CheckCircleIcon,
+  ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
 
@@ -73,6 +76,7 @@ export default function CustomersPage() {
   const [showPw, setShowPw] = useState<string | null>(null);
   const [targetsFor, setTargetsFor] = useState<Customer | null>(null);
   const [batchesFor, setBatchesFor] = useState<Customer | null>(null);
+  const [leadsFor, setLeadsFor] = useState<Customer | null>(null);
   const [allBatches, setAllBatches] = useState<Batch[]>([]);
 
   const portalUrl = typeof window !== 'undefined' ? `${window.location.origin}/portal` : 'https://www.warmeleads.eu/portal';
@@ -380,14 +384,18 @@ export default function CustomersPage() {
                   );
                 })()}
 
-                {/* Middle actions - Targets & Batches */}
+                {/* Middle actions - Targets, Batches & Lead Manager */}
                 <div className="flex items-center border-t border-slate-100">
                   <button onClick={() => setTargetsFor(c)} className="flex flex-1 items-center justify-center gap-1.5 py-2.5 text-xs font-medium text-slate-500 transition hover:bg-slate-50 hover:text-brand-purple">
-                    <MapPinIcon className="h-3.5 w-3.5" /> Targetgebieden
+                    <MapPinIcon className="h-3.5 w-3.5" /> Targets
                   </button>
                   <div className="h-6 w-px bg-slate-100" />
                   <button onClick={() => setBatchesFor(c)} className="flex flex-1 items-center justify-center gap-1.5 py-2.5 text-xs font-medium text-slate-500 transition hover:bg-slate-50 hover:text-brand-purple">
                     <CurrencyEuroIcon className="h-3.5 w-3.5" /> Batches
+                  </button>
+                  <div className="h-6 w-px bg-slate-100" />
+                  <button onClick={() => setLeadsFor(c)} className="flex flex-1 items-center justify-center gap-1.5 py-2.5 text-xs font-medium text-slate-500 transition hover:bg-slate-50 hover:text-red-500">
+                    <LinkSlashIcon className="h-3.5 w-3.5" /> Leads beheren
                   </button>
                 </div>
 
@@ -437,6 +445,15 @@ export default function CustomersPage() {
             customer={batchesFor}
             branchOptions={branchOptions}
             onClose={() => setBatchesFor(null)}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {leadsFor && (
+          <LeadManagerPanel
+            customer={leadsFor}
+            onClose={() => { setLeadsFor(null); fetch_(); }}
           />
         )}
       </AnimatePresence>
@@ -1262,6 +1279,374 @@ function BatchesPanel({ customer, branchOptions, onClose }: { customer: Customer
           )}
         </div>
       </motion.div>
+    </>
+  );
+}
+
+/* ─── Lead Manager Panel ───────────────────────────────── */
+
+interface AssignedLead {
+  id: string;
+  naam_klant: string;
+  email: string;
+  branch: string;
+  postcode: string;
+  plaatsnaam: string;
+  status: string;
+  created_at: string;
+  assignment_id: string;
+  batch_id: string | null;
+  assigned_at: string;
+}
+
+function LeadManagerPanel({ customer, onClose }: {
+  customer: Customer;
+  onClose: () => void;
+}) {
+  const [leads, setLeads] = useState<AssignedLead[]>([]);
+  const [batches, setBatches] = useState<{ id: string; branch: string; batch_size: number; leads_delivered: number }[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [branchFilter, setBranchFilter] = useState('all');
+  const [batchFilter, setBatchFilter] = useState('all');
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [deleting, setDeleting] = useState(false);
+  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+  const lastChecked = useRef<number | null>(null);
+
+  const showToast = useCallback((msg: string, type: 'success' | 'error' = 'success') => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 4000);
+  }, []);
+
+  const fetchLeads = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await adminFetch(`/api/admin/assignments?customer_id=${customer.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        const mapped: AssignedLead[] = (data || []).map((a: any) => ({
+          id: a.lead_id,
+          naam_klant: a.leads?.naam_klant || '',
+          email: a.leads?.email || '',
+          branch: a.leads?.branch || '',
+          postcode: a.leads?.postcode || '',
+          plaatsnaam: a.leads?.plaatsnaam || '',
+          status: '',
+          created_at: '',
+          assignment_id: a.id,
+          batch_id: a.batch_id,
+          assigned_at: a.assigned_at,
+        }));
+        setLeads(mapped);
+      }
+    } catch { /* ignore */ }
+    setLoading(false);
+  }, [customer.id]);
+
+  const fetchBatches = useCallback(async () => {
+    try {
+      const res = await adminFetch(`/api/admin/batches?customer_id=${customer.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setBatches((data || []).map((b: any) => ({
+          id: b.id,
+          branch: b.branch,
+          batch_size: b.batch_size,
+          leads_delivered: b.leads_delivered,
+        })));
+      }
+    } catch { /* ignore */ }
+  }, [customer.id]);
+
+  useEffect(() => { fetchLeads(); fetchBatches(); }, [fetchLeads, fetchBatches]);
+
+  const filtered = useMemo(() => {
+    let list = leads;
+    if (branchFilter !== 'all') list = list.filter(l => l.branch === branchFilter);
+    if (batchFilter !== 'all') list = list.filter(l => l.batch_id === batchFilter);
+    if (search) {
+      const s = search.toLowerCase();
+      list = list.filter(l =>
+        l.naam_klant.toLowerCase().includes(s) ||
+        l.email.toLowerCase().includes(s) ||
+        l.postcode.toLowerCase().includes(s) ||
+        l.plaatsnaam.toLowerCase().includes(s)
+      );
+    }
+    return list;
+  }, [leads, branchFilter, batchFilter, search]);
+
+  const uniqueBranches = useMemo(() => [...new Set(leads.map(l => l.branch))].filter(Boolean), [leads]);
+  const allFilteredSelected = filtered.length > 0 && filtered.every(l => selected.has(l.id));
+
+  const toggleAll = () => {
+    if (allFilteredSelected) {
+      const filteredIds = new Set(filtered.map(l => l.id));
+      setSelected(prev => { const next = new Set(prev); filteredIds.forEach(id => next.delete(id)); return next; });
+    } else {
+      setSelected(prev => { const next = new Set(prev); filtered.forEach(l => next.add(l.id)); return next; });
+    }
+  };
+
+  const toggleOne = (leadId: string, index: number, shiftKey: boolean) => {
+    if (shiftKey && lastChecked.current !== null) {
+      const start = Math.min(lastChecked.current, index);
+      const end = Math.max(lastChecked.current, index);
+      const range = filtered.slice(start, end + 1).map(l => l.id);
+      setSelected(prev => {
+        const next = new Set(prev);
+        const shouldSelect = !prev.has(leadId);
+        range.forEach(id => shouldSelect ? next.add(id) : next.delete(id));
+        return next;
+      });
+    } else {
+      setSelected(prev => {
+        const next = new Set(prev);
+        next.has(leadId) ? next.delete(leadId) : next.add(leadId);
+        return next;
+      });
+    }
+    lastChecked.current = index;
+  };
+
+  const bulkUnassign = async () => {
+    const count = selected.size;
+    if (count === 0) return;
+
+    const threshold = 50;
+    const msg = count > threshold
+      ? `Je staat op het punt ${count} leads los te koppelen van ${customer.name}. Dit kan niet ongedaan worden gemaakt. Typ "BEVESTIG" om door te gaan.`
+      : `${count} lead${count > 1 ? 's' : ''} loskoppelen van ${customer.name}?`;
+
+    if (count > threshold) {
+      const input = prompt(msg);
+      if (input !== 'BEVESTIG') return;
+    } else {
+      if (!confirm(msg)) return;
+    }
+
+    setDeleting(true);
+    try {
+      const res = await adminFetch('/api/admin/assignments/bulk-delete', {
+        method: 'POST',
+        body: JSON.stringify({
+          customer_id: customer.id,
+          lead_ids: Array.from(selected),
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        showToast(`${data.deleted} lead${data.deleted !== 1 ? 's' : ''} losgekoppeld, ${data.batches_synced} batch${data.batches_synced !== 1 ? 'es' : ''} bijgewerkt`);
+        setSelected(new Set());
+        fetchLeads();
+        fetchBatches();
+      } else {
+        const d = await res.json().catch(() => ({}));
+        showToast(d.error || 'Loskoppelen mislukt', 'error');
+      }
+    } catch {
+      showToast('Er ging iets mis', 'error');
+    }
+    setDeleting(false);
+  };
+
+  const unassignAll = async () => {
+    if (filtered.length === 0) return;
+
+    const count = filtered.length;
+    const input = prompt(
+      `ALLE ${count} zichtbare leads loskoppelen van ${customer.name}? Dit kan niet ongedaan worden gemaakt.\n\nTyp "BEVESTIG" om door te gaan.`
+    );
+    if (input !== 'BEVESTIG') return;
+
+    setDeleting(true);
+    try {
+      const body: Record<string, unknown> = { customer_id: customer.id, all: true };
+      const filters: Record<string, string> = {};
+      if (branchFilter !== 'all') filters.branch = branchFilter;
+      if (batchFilter !== 'all') filters.batch_id = batchFilter;
+      if (search) filters.search = search;
+      if (Object.keys(filters).length > 0) body.filters = filters;
+
+      const res = await adminFetch('/api/admin/assignments/bulk-delete', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        showToast(`${data.deleted} lead${data.deleted !== 1 ? 's' : ''} losgekoppeld`);
+        setSelected(new Set());
+        fetchLeads();
+        fetchBatches();
+      } else {
+        const d = await res.json().catch(() => ({}));
+        showToast(d.error || 'Loskoppelen mislukt', 'error');
+      }
+    } catch {
+      showToast('Er ging iets mis', 'error');
+    }
+    setDeleting(false);
+  };
+
+  return (
+    <>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm" onClick={onClose} />
+      <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
+        transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+        className="fixed inset-y-0 right-0 z-[60] flex w-full max-w-2xl flex-col bg-white shadow-2xl">
+
+        {/* Header */}
+        <div className="shrink-0 border-b border-slate-100">
+          <div className="h-[3px] bg-gradient-to-r from-red-500 to-amber-500" />
+          <div className="flex items-center justify-between px-5 py-4">
+            <div>
+              <h2 className="text-lg font-bold text-slate-900">Leads beheren</h2>
+              <p className="mt-0.5 text-xs text-slate-500">{customer.name} &middot; {leads.length} leads gekoppeld</p>
+            </div>
+            <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100">
+              <XMarkIcon className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Filters */}
+        <div className="shrink-0 border-b border-slate-100 px-5 py-3 space-y-2">
+          <div className="relative">
+            <MagnifyingGlassIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="Zoek op naam, e-mail, postcode, plaats..."
+              className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-sm text-slate-900 outline-none focus:border-brand-purple/50 focus:bg-white" />
+          </div>
+          <div className="flex gap-2">
+            <select value={branchFilter} onChange={e => setBranchFilter(e.target.value)}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 outline-none">
+              <option value="all">Alle branches</option>
+              {uniqueBranches.map(b => <option key={b} value={b}>{b}</option>)}
+            </select>
+            <select value={batchFilter} onChange={e => setBatchFilter(e.target.value)}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 outline-none">
+              <option value="all">Alle batches</option>
+              {batches.map(b => (
+                <option key={b.id} value={b.id}>{b.branch} ({b.leads_delivered}/{b.batch_size})</option>
+              ))}
+            </select>
+            <button onClick={fetchLeads} disabled={loading}
+              className="ml-auto rounded-lg border border-slate-200 p-1.5 text-slate-400 hover:bg-slate-50 disabled:opacity-50">
+              <ArrowPathIcon className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
+        </div>
+
+        {/* Selection bar */}
+        <AnimatePresence>
+          {selected.size > 0 && (
+            <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
+              className="shrink-0 overflow-hidden border-b border-red-100 bg-red-50">
+              <div className="flex items-center justify-between px-5 py-2.5">
+                <span className="text-sm font-medium text-red-700">{selected.size} lead{selected.size !== 1 ? 's' : ''} geselecteerd</span>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setSelected(new Set())}
+                    className="rounded-lg px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-white">
+                    Deselecteren
+                  </button>
+                  <button onClick={bulkUnassign} disabled={deleting}
+                    className="flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-red-700 disabled:opacity-50">
+                    {deleting ? <ArrowPathIcon className="h-3.5 w-3.5 animate-spin" /> : <LinkSlashIcon className="h-3.5 w-3.5" />}
+                    Loskoppelen
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Lead list */}
+        <div className="flex-1 overflow-y-auto">
+          {loading && leads.length === 0 ? (
+            <div className="flex items-center justify-center py-20 text-slate-400">
+              <ArrowPathIcon className="mr-2 h-5 w-5 animate-spin" /> Laden...
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="py-16 text-center text-sm text-slate-400">
+              {leads.length === 0 ? 'Geen leads gekoppeld aan deze klant' : 'Geen leads gevonden met deze filters'}
+            </div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 z-10 bg-slate-50/95 backdrop-blur-sm">
+                <tr className="border-b border-slate-100 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
+                  <th className="px-4 py-2.5 w-10">
+                    <input type="checkbox" checked={allFilteredSelected} onChange={toggleAll}
+                      className="h-3.5 w-3.5 rounded border-slate-300 text-brand-purple focus:ring-brand-purple/30" />
+                  </th>
+                  <th className="px-3 py-2.5">Naam</th>
+                  <th className="hidden px-3 py-2.5 sm:table-cell">E-mail</th>
+                  <th className="px-3 py-2.5">Branche</th>
+                  <th className="hidden px-3 py-2.5 sm:table-cell">Plaats</th>
+                  <th className="px-3 py-2.5">Toegewezen</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {filtered.map((lead, idx) => (
+                  <tr key={lead.assignment_id}
+                    className={`transition ${selected.has(lead.id) ? 'bg-red-50/50' : 'hover:bg-slate-50/50'}`}>
+                    <td className="px-4 py-2.5">
+                      <input type="checkbox" checked={selected.has(lead.id)}
+                        onChange={(e) => toggleOne(lead.id, idx, (e.nativeEvent as MouseEvent).shiftKey)}
+                        className="h-3.5 w-3.5 rounded border-slate-300 text-brand-purple focus:ring-brand-purple/30" />
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <p className="font-medium text-slate-900 truncate max-w-[140px]">{lead.naam_klant || '-'}</p>
+                    </td>
+                    <td className="hidden px-3 py-2.5 sm:table-cell">
+                      <span className="text-xs text-slate-500 truncate max-w-[160px] block">{lead.email || '-'}</span>
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <span className="rounded-full bg-brand-purple/10 px-2 py-0.5 text-[10px] font-medium text-brand-purple">{lead.branch || '-'}</span>
+                    </td>
+                    <td className="hidden px-3 py-2.5 sm:table-cell text-xs text-slate-500">{lead.plaatsnaam || '-'}</td>
+                    <td className="px-3 py-2.5 text-xs text-slate-400">
+                      {new Date(lead.assigned_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="shrink-0 border-t border-slate-100 px-5 py-3">
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-slate-400">
+              {filtered.length} van {leads.length} leads zichtbaar
+            </p>
+            {filtered.length > 0 && (
+              <button onClick={unassignAll} disabled={deleting}
+                className="flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600 transition hover:bg-red-100 disabled:opacity-50">
+                <ExclamationTriangleIcon className="h-3.5 w-3.5" />
+                Alle zichtbare loskoppelen ({filtered.length})
+              </button>
+            )}
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Toast */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }}
+            className={`fixed bottom-6 right-6 z-[100] flex items-center gap-2 rounded-xl px-5 py-3 text-sm font-medium text-white shadow-lg ${
+              toast.type === 'error' ? 'bg-red-600' : 'bg-slate-900'
+            }`}>
+            {toast.type === 'error' ? <ExclamationTriangleIcon className="h-4 w-4 text-red-200" /> : <CheckCircleIcon className="h-4 w-4 text-emerald-400" />}
+            {toast.msg}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </>
   );
 }
