@@ -111,6 +111,7 @@ export default function CustomersPage() {
   const [sortBy, setSortBy] = useState('name');
   const [sendingReminder, setSendingReminder] = useState<string | null>(null);
   const [reminderSent, setReminderSent] = useState<Set<string>>(new Set());
+  const [previewReminder, setPreviewReminder] = useState<Customer | null>(null);
 
   const portalUrl = typeof window !== 'undefined' ? `${window.location.origin}/portal` : 'https://www.warmeleads.eu/portal';
 
@@ -178,6 +179,7 @@ export default function CustomersPage() {
       });
       if (res.ok) {
         setReminderSent(prev => new Set(prev).add(c.id));
+        setPreviewReminder(null);
       } else {
         const d = await res.json();
         alert(d.error || 'Versturen mislukt');
@@ -541,17 +543,15 @@ export default function CustomersPage() {
                       )}
                       {neverLogged && c.email && (
                         <button
-                          onClick={() => sendReminder(c)}
-                          disabled={sendingReminder === c.id || reminderSent.has(c.id)}
+                          onClick={() => setPreviewReminder(c)}
+                          disabled={reminderSent.has(c.id)}
                           className={`inline-flex min-h-[32px] items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition disabled:opacity-50 ${
                             reminderSent.has(c.id)
                               ? 'border-emerald-200 bg-emerald-50 text-emerald-600'
                               : 'border-brand-purple/30 bg-brand-purple/5 text-brand-purple hover:bg-brand-purple/10'
                           }`}
                         >
-                          {sendingReminder === c.id ? (
-                            <ArrowPathIcon className="h-3.5 w-3.5 animate-spin" />
-                          ) : reminderSent.has(c.id) ? (
+                          {reminderSent.has(c.id) ? (
                             <CheckIcon className="h-3.5 w-3.5" />
                           ) : (
                             <EnvelopeIcon className="h-3.5 w-3.5" />
@@ -670,7 +670,119 @@ export default function CustomersPage() {
           />
         )}
       </AnimatePresence>
+
+      {/* Reminder email preview modal */}
+      <AnimatePresence>
+        {previewReminder && (
+          <ReminderPreviewModal
+            customer={previewReminder}
+            portalUrl={portalUrl}
+            sending={sendingReminder === previewReminder.id}
+            onSend={() => sendReminder(previewReminder)}
+            onClose={() => setPreviewReminder(null)}
+          />
+        )}
+      </AnimatePresence>
     </div>
+  );
+}
+
+/* ─── Reminder Preview Modal ──────────────────────────────── */
+function ReminderPreviewModal({ customer, portalUrl, sending, onSend, onClose }: {
+  customer: Customer; portalUrl: string; sending: boolean;
+  onSend: () => void; onClose: () => void;
+}) {
+  const greeting = customer.contact_person || customer.name;
+  const emailHtml = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto;">
+      <div style="background: linear-gradient(135deg, #7c3aed, #a855f7); padding: 32px; border-radius: 16px 16px 0 0; text-align: center;">
+        <h1 style="color: white; margin: 0; font-size: 24px;">WarmeLeads</h1>
+        <p style="color: rgba(255,255,255,0.8); margin: 8px 0 0; font-size: 14px;">Uw persoonlijke leadportaal</p>
+      </div>
+      <div style="background: #ffffff; padding: 32px; border: 1px solid #e2e8f0; border-top: none;">
+        <p style="color: #334155; font-size: 16px; line-height: 1.6;">Hallo ${greeting},</p>
+        <p style="color: #334155; font-size: 15px; line-height: 1.6;">
+          We wilden u laten weten dat uw persoonlijke leadportaal klaarstaat! Hier vindt u al uw leads overzichtelijk op een plek, kunt u nieuwe batches bestellen en uw account beheren.
+        </p>
+        ${customer.portal_password ? `
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin: 24px 0;">
+          <p style="color: #64748b; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 12px;">Uw inloggegevens</p>
+          <p style="color: #334155; font-size: 14px; margin: 0 0 6px;"><strong>E-mail:</strong> ${customer.email}</p>
+          <p style="color: #334155; font-size: 14px; margin: 0;"><strong>Wachtwoord:</strong> ${customer.portal_password}</p>
+        </div>
+        ` : ''}
+        <div style="text-align: center; margin: 28px 0;">
+          <a href="${portalUrl}" style="display: inline-block; background: linear-gradient(135deg, #7c3aed, #a855f7); color: white; text-decoration: none; padding: 14px 32px; border-radius: 10px; font-weight: 700; font-size: 15px;">
+            Ga naar uw portaal
+          </a>
+        </div>
+        <p style="color: #94a3b8; font-size: 13px; line-height: 1.5;">
+          Tip: u kunt het portaal als app op uw telefoon installeren voor snelle toegang en pushnotificaties.
+        </p>
+      </div>
+      <div style="padding: 20px; text-align: center;">
+        <p style="color: #94a3b8; font-size: 12px; margin: 0;">WarmeLeads &middot; Uw partner in exclusieve leads</p>
+      </div>
+    </div>
+  `;
+
+  return (
+    <>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 20 }}
+        className="fixed inset-4 z-[60] mx-auto my-auto flex max-h-[90vh] max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl sm:inset-auto sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-full"
+      >
+        {/* Header */}
+        <div className="shrink-0 border-b border-slate-100">
+          <div className="h-[3px] bg-warmeleads-gradient" />
+          <div className="flex items-center justify-between px-5 py-4">
+            <div>
+              <h2 className="text-lg font-bold text-slate-900">E-mail preview</h2>
+              <p className="mt-0.5 text-xs text-slate-500">
+                Naar: <span className="font-medium text-slate-700">{customer.email}</span> &middot; Onderwerp: <span className="font-medium text-slate-700">Uw WarmeLeads portaal staat klaar!</span>
+              </p>
+            </div>
+            <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100">
+              <XMarkIcon className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Email preview */}
+        <div className="flex-1 overflow-y-auto bg-slate-50 p-5">
+          <div className="mx-auto max-w-[580px] rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div dangerouslySetInnerHTML={{ __html: emailHtml }} />
+          </div>
+        </div>
+
+        {/* Footer with send button */}
+        <div className="shrink-0 border-t border-slate-100 bg-white px-5 py-4">
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-slate-400">
+              Deze mail wordt exact zo verstuurd naar {customer.contact_person || customer.name}
+            </p>
+            <div className="flex items-center gap-2">
+              <button onClick={onClose}
+                className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50">
+                Annuleren
+              </button>
+              <button onClick={onSend} disabled={sending}
+                className="inline-flex items-center gap-2 rounded-lg bg-button-gradient px-5 py-2.5 text-sm font-bold text-white shadow-sm disabled:opacity-50">
+                {sending ? (
+                  <><ArrowPathIcon className="h-4 w-4 animate-spin" /> Versturen...</>
+                ) : (
+                  <><EnvelopeIcon className="h-4 w-4" /> Verstuur e-mail</>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      </motion.div>
+    </>
   );
 }
 
