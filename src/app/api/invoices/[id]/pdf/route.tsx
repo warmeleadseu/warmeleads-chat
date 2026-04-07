@@ -28,6 +28,24 @@ export async function GET(
     return NextResponse.json({ error: 'Factuur niet gevonden' }, { status: 404 });
   }
 
+  // Serve uploaded PDF if available
+  if (invoice.uploaded_pdf_path) {
+    const { data: fileData, error: dlErr } = await supabase.storage
+      .from('invoices')
+      .download(invoice.uploaded_pdf_path);
+
+    if (!dlErr && fileData) {
+      const arrayBuf = await fileData.arrayBuffer();
+      return new NextResponse(new Uint8Array(arrayBuf), {
+        headers: {
+          'Content-Type': 'application/pdf',
+          'Content-Disposition': `inline; filename="${invoice.invoice_number}.pdf"`,
+          'Cache-Control': 'private, max-age=3600',
+        },
+      });
+    }
+  }
+
   // Get company details
   const keys = [
     'company_name', 'company_address', 'company_postcode', 'company_city',

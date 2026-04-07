@@ -131,7 +131,7 @@ export async function PUT(request: NextRequest) {
   const allowed = [
     'customer_name', 'customer_email', 'customer_address', 'customer_vat_id',
     'description', 'line_items', 'subtotal', 'btw_percentage', 'btw_amount',
-    'total_incl_btw', 'status', 'paid_at',
+    'total_incl_btw', 'status', 'paid_at', 'uploaded_pdf_path',
   ];
   const safeUpdates: Record<string, unknown> = {};
   for (const key of allowed) {
@@ -158,6 +158,12 @@ export async function DELETE(request: NextRequest) {
   const { id } = await request.json();
 
   if (!id) return NextResponse.json({ error: 'ID ontbreekt' }, { status: 400 });
+
+  // Remove uploaded PDF from storage if exists
+  const { data: inv } = await supabase.from('invoices').select('uploaded_pdf_path').eq('id', id).single();
+  if (inv?.uploaded_pdf_path) {
+    await supabase.storage.from('invoices').remove([inv.uploaded_pdf_path]);
+  }
 
   const { error } = await supabase.from('invoices').delete().eq('id', id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

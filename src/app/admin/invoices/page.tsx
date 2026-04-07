@@ -7,11 +7,13 @@ import {
   MagnifyingGlassIcon,
   DocumentTextIcon,
   ArrowDownTrayIcon,
+  ArrowUpTrayIcon,
   CheckCircleIcon,
   PlusIcon,
   PencilSquareIcon,
   TrashIcon,
   XMarkIcon,
+  PaperClipIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch, adminHeaders } from '@/lib/adminAuth';
 
@@ -35,6 +37,7 @@ interface Invoice {
   created_at: string;
   batch_order_id: string | null;
   batch_id: string | null;
+  uploaded_pdf_path: string | null;
 }
 
 interface Customer { id: string; name: string; email: string }
@@ -185,7 +188,10 @@ export default function AdminInvoicesPage() {
                 {filtered.map(inv => (
                   <tr key={inv.id} className="group transition hover:bg-slate-50/50">
                     <td className="px-4 py-3">
-                      <span className="rounded bg-brand-purple/10 px-2 py-0.5 text-xs font-bold text-brand-purple">{inv.invoice_number}</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="rounded bg-brand-purple/10 px-2 py-0.5 text-xs font-bold text-brand-purple">{inv.invoice_number}</span>
+                        {inv.uploaded_pdf_path && <PaperClipIcon className="h-3.5 w-3.5 text-amber-500" title="Geüploade PDF" />}
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <p className="font-medium text-slate-900">{inv.customer_name}</p>
@@ -314,6 +320,7 @@ function InvoicePanel({ customers, onClose, onSaved }: {
     status: 'paid',
     paid_at: new Date().toISOString().split('T')[0],
   });
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
 
   const sub = Number(form.subtotal) || 0;
@@ -336,8 +343,26 @@ function InvoicePanel({ customers, onClose, onSaved }: {
           paid_at: form.paid_at ? new Date(form.paid_at).toISOString() : null,
         }),
       });
-      if (res.ok) onSaved();
-      else { const d = await res.json(); alert(d.error || 'Aanmaken mislukt'); }
+      if (!res.ok) { const d = await res.json(); alert(d.error || 'Aanmaken mislukt'); setSaving(false); return; }
+
+      const invoice = await res.json();
+
+      if (pdfFile && invoice?.id) {
+        const fd = new FormData();
+        fd.append('file', pdfFile);
+        fd.append('invoice_id', invoice.id);
+        const uploadRes = await fetch('/api/admin/invoices/upload', {
+          method: 'POST',
+          headers: { Authorization: adminHeaders().Authorization },
+          body: fd,
+        });
+        if (!uploadRes.ok) {
+          const d = await uploadRes.json().catch(() => ({}));
+          alert(`Factuur aangemaakt, maar PDF upload mislukt: ${d.error || 'onbekende fout'}`);
+        }
+      }
+
+      onSaved();
     } catch { alert('Er ging iets mis'); }
     setSaving(false);
   };
@@ -407,6 +432,30 @@ function InvoicePanel({ customers, onClose, onSaved }: {
             </div>
           </div>
 
+          {/* PDF Upload */}
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-500">PDF uploaden (optioneel)</label>
+            <div className="relative">
+              {pdfFile ? (
+                <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
+                  <PaperClipIcon className="h-4 w-4 shrink-0 text-emerald-600" />
+                  <span className="flex-1 truncate text-sm text-emerald-700">{pdfFile.name}</span>
+                  <button onClick={() => setPdfFile(null)} className="text-slate-400 hover:text-red-500">
+                    <XMarkIcon className="h-4 w-4" />
+                  </button>
+                </div>
+              ) : (
+                <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-slate-300 px-3 py-3 text-sm text-slate-500 transition hover:border-brand-purple/40 hover:text-brand-purple">
+                  <ArrowUpTrayIcon className="h-4 w-4" />
+                  <span>Kies een PDF-bestand...</span>
+                  <input type="file" accept="application/pdf" className="hidden"
+                    onChange={e => { if (e.target.files?.[0]) setPdfFile(e.target.files[0]); }} />
+                </label>
+              )}
+            </div>
+            <p className="mt-1 text-[10px] text-slate-400">Upload een eigen factuur-PDF. Deze wordt getoond in het klantportaal i.p.v. de automatisch gegenereerde factuur.</p>
+          </div>
+
           {/* Preview */}
           {sub > 0 && (
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-1.5">
@@ -456,6 +505,9 @@ function EditInvoicePanel({ invoice, onClose, onSaved }: {
     paid_at: invoice.paid_at ? invoice.paid_at.split('T')[0] : '',
   });
   const [saving, setSaving] = useState(false);
+  const [hasUploadedPdf, setHasUploadedPdf] = useState(!!invoice.uploaded_pdf_path);
+  const [newPdf, setNewPdf] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   const sub = Number(form.subtotal) || 0;
   const btwPct = Number(form.btw_percentage) || 21;
@@ -484,6 +536,42 @@ function EditInvoicePanel({ invoice, onClose, onSaved }: {
       else { const d = await res.json(); alert(d.error || 'Opslaan mislukt'); }
     } catch { alert('Er ging iets mis'); }
     setSaving(false);
+  };
+
+  const uploadPdf = async (file: File) => {
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('invoice_id', invoice.id);
+      const res = await fetch('/api/admin/invoices/upload', {
+        method: 'POST',
+        headers: { Authorization: adminHeaders().Authorization },
+        body: fd,
+      });
+      if (res.ok) {
+        setHasUploadedPdf(true);
+        setNewPdf(null);
+      } else {
+        const d = await res.json().catch(() => ({}));
+        alert(d.error || 'Upload mislukt');
+      }
+    } catch { alert('Upload mislukt'); }
+    setUploading(false);
+  };
+
+  const removePdf = async () => {
+    if (!confirm('Geüploade PDF verwijderen? De automatisch gegenereerde PDF wordt dan weer getoond.')) return;
+    setUploading(true);
+    try {
+      const res = await adminFetch('/api/admin/invoices/upload', {
+        method: 'DELETE',
+        body: JSON.stringify({ invoice_id: invoice.id }),
+      });
+      if (res.ok) setHasUploadedPdf(false);
+      else alert('Verwijderen mislukt');
+    } catch { alert('Verwijderen mislukt'); }
+    setUploading(false);
   };
 
   return (
@@ -592,6 +680,64 @@ function EditInvoicePanel({ invoice, onClose, onSaved }: {
               <p className="text-[11px] text-slate-400">Mollie referentie: <span className="font-mono text-slate-500">{invoice.mollie_payment_id}</span></p>
             </div>
           )}
+
+          {/* PDF Management */}
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-slate-500">Factuur PDF</label>
+            {hasUploadedPdf ? (
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <PaperClipIcon className="h-4 w-4 text-emerald-600" />
+                    <span className="text-sm font-medium text-emerald-700">Eigen PDF geüpload</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <label className="cursor-pointer rounded-lg px-2 py-1 text-xs font-medium text-slate-500 transition hover:bg-white hover:text-brand-purple">
+                      Vervangen
+                      <input type="file" accept="application/pdf" className="hidden"
+                        onChange={e => { if (e.target.files?.[0]) uploadPdf(e.target.files[0]); }} />
+                    </label>
+                    <button onClick={removePdf} disabled={uploading}
+                      className="rounded-lg px-2 py-1 text-xs font-medium text-red-500 transition hover:bg-red-50 disabled:opacity-50">
+                      Verwijderen
+                    </button>
+                  </div>
+                </div>
+                {uploading && <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-emerald-100"><div className="h-full w-1/2 animate-pulse rounded-full bg-emerald-500" /></div>}
+              </div>
+            ) : (
+              <div>
+                {newPdf ? (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <PaperClipIcon className="h-4 w-4 text-amber-600" />
+                        <span className="truncate text-sm text-amber-700">{newPdf.name}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <button onClick={() => uploadPdf(newPdf)} disabled={uploading}
+                          className="rounded-lg bg-brand-purple px-2.5 py-1 text-xs font-bold text-white disabled:opacity-50">
+                          {uploading ? 'Uploaden...' : 'Uploaden'}
+                        </button>
+                        <button onClick={() => setNewPdf(null)} className="text-slate-400 hover:text-red-500">
+                          <XMarkIcon className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                    {uploading && <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-amber-100"><div className="h-full w-1/2 animate-pulse rounded-full bg-amber-500" /></div>}
+                  </div>
+                ) : (
+                  <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-slate-300 px-3 py-3 text-sm text-slate-500 transition hover:border-brand-purple/40 hover:text-brand-purple">
+                    <ArrowUpTrayIcon className="h-4 w-4" />
+                    <span>Eigen PDF uploaden...</span>
+                    <input type="file" accept="application/pdf" className="hidden"
+                      onChange={e => { if (e.target.files?.[0]) setNewPdf(e.target.files[0]); }} />
+                  </label>
+                )}
+                <p className="mt-1 text-[10px] text-slate-400">Momenteel wordt de automatisch gegenereerde PDF getoond. Upload een eigen PDF om deze te vervangen.</p>
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="shrink-0 border-t border-slate-100 px-5 py-4">
