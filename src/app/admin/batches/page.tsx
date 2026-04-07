@@ -20,12 +20,14 @@ import {
 import { adminFetch } from '@/lib/adminAuth';
 
 interface LeadFilter { field: string; operator: string; value: string; values?: string[] }
+interface Compensation { amount: number; reason: string; date: string }
 interface Batch {
   id: string; customer_id: string; branch: string; batch_size: number;
   price_per_lead: number | null; total_price: number | null;
   leads_per_week: number | null; leads_per_day: number | null;
   leads_delivered: number; status: string;
   is_paid: boolean; lookback_days: number | null; notes: string | null; lead_filters: LeadFilter[];
+  compensations: Compensation[];
   created_at: string; completed_at: string | null;
   customers?: { name: string } | null;
 }
@@ -510,22 +512,24 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
     setSaving(true);
     try {
       const batchSizeGrew = effectiveBatchSize > batch.batch_size;
+      const payload: Record<string, unknown> = {
+        id: batch.id,
+        batch_size: effectiveBatchSize,
+        leads_delivered: form.leads_delivered,
+        is_paid: form.is_paid,
+        price_per_lead: form.price_per_lead ? parseFloat(form.price_per_lead) : null,
+        leads_per_day: form.leads_per_day ? parseInt(form.leads_per_day) : null,
+        leads_per_week: form.leads_per_week ? parseInt(form.leads_per_week) : null,
+        notes: form.notes || null,
+        lead_filters: form.lead_filters.filter(f => f.field && (f.values?.length || 0) > 0),
+        trigger_backfill: batchSizeGrew,
+      };
+      if (extraLeads > 0) {
+        payload.compensation = { amount: extraLeads, reason: extraReason };
+      }
       const res = await adminFetch('/api/admin/batches', {
         method: 'PUT',
-        body: JSON.stringify({
-          id: batch.id,
-          batch_size: effectiveBatchSize,
-          leads_delivered: form.leads_delivered,
-          is_paid: form.is_paid,
-          price_per_lead: form.price_per_lead ? parseFloat(form.price_per_lead) : null,
-          leads_per_day: form.leads_per_day ? parseInt(form.leads_per_day) : null,
-          leads_per_week: form.leads_per_week ? parseInt(form.leads_per_week) : null,
-          notes: extraLeads > 0 && extraReason
-            ? `${form.notes ? form.notes + '\n' : ''}+${extraLeads} leads: ${extraReason}`.trim()
-            : form.notes || null,
-          lead_filters: form.lead_filters.filter(f => f.field && (f.values?.length || 0) > 0),
-          trigger_backfill: batchSizeGrew,
-        }),
+        body: JSON.stringify(payload),
       });
       if (res.ok) onSaved();
       else { const d = await res.json(); alert(d.error || 'Opslaan mislukt'); }
@@ -535,6 +539,8 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
 
   const br = branches.find(b => b.slug === batch.branch);
   const cust = customers.find(c => c.id === batch.customer_id);
+  const existingCompensations: Compensation[] = Array.isArray(batch.compensations) ? batch.compensations : [];
+  const totalPreviousComp = existingCompensations.reduce((s, c) => s + c.amount, 0);
   const livePct = effectiveBatchSize > 0 ? Math.min(100, Math.round((form.leads_delivered / effectiveBatchSize) * 100)) : 0;
   const deliveredChanged = form.leads_delivered !== batch.leads_delivered;
   const sizeChanged = effectiveBatchSize !== batch.batch_size;
@@ -596,35 +602,55 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
             </div>
           </div>
 
-          {/* Extra leads toevoegen */}
+          {/* Extra leads toevoegen (compensatie) */}
           <div className="rounded-lg border border-dashed border-brand-purple/30 bg-brand-purple/5 p-3">
             <div className="mb-2 flex items-center gap-2">
               <PlusIcon className="h-4 w-4 text-brand-purple" />
-              <p className="text-sm font-medium text-brand-purple">Extra leads toevoegen</p>
+              <p className="text-sm font-medium text-brand-purple">Compensatie leads toevoegen</p>
             </div>
             <p className="mb-3 text-[11px] text-slate-500">
-              Voeg extra leads toe aan deze batch, bijv. als compensatie. Het systeem vult de extra plekken direct waar mogelijk.
+              Voeg extra leads toe als compensatie. De klant ziet dit in zijn portaal. Het systeem vult de extra plekken direct.
             </p>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="mb-1 block text-[11px] font-medium text-slate-500">Aantal</label>
-                <input type="number" value={extraLeads || ''} onChange={e => setExtraLeads(Math.max(0, Number(e.target.value)))}
-                  placeholder="0" min={0}
-                  className="w-full rounded-lg border border-brand-purple/20 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/20" />
+            <div className="space-y-2">
+              <div className="grid grid-cols-5 gap-2">
+                <div className="col-span-2">
+                  <label className="mb-1 block text-[11px] font-medium text-slate-500">Aantal</label>
+                  <input type="number" value={extraLeads || ''} onChange={e => setExtraLeads(Math.max(0, Number(e.target.value)))}
+                    placeholder="0" min={0}
+                    className="w-full rounded-lg border border-brand-purple/20 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/20" />
+                </div>
+                <div className="col-span-3">
+                  <label className="mb-1 block text-[11px] font-medium text-slate-500">Reden *</label>
+                  <input type="text" value={extraReason} onChange={e => setExtraReason(e.target.value)}
+                    placeholder="Bijv. compensatie slechte leads"
+                    className="w-full rounded-lg border border-brand-purple/20 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/20" />
+                </div>
               </div>
-              <div>
-                <label className="mb-1 block text-[11px] font-medium text-slate-500">Reden</label>
-                <input type="text" value={extraReason} onChange={e => setExtraReason(e.target.value)}
-                  placeholder="Bijv. compensatie batch #X"
-                  className="w-full rounded-lg border border-brand-purple/20 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/20" />
-              </div>
+              {extraLeads > 0 && (
+                <div className="flex items-center gap-2 rounded-md bg-white px-3 py-2">
+                  <CheckCircleIcon className="h-4 w-4 text-brand-purple" />
+                  <p className="text-xs text-slate-600">
+                    Batch grootte wordt <span className="font-semibold text-slate-900">{form.batch_size}</span> → <span className="font-bold text-brand-purple">{effectiveBatchSize}</span> (+{extraLeads} compensatie)
+                  </p>
+                </div>
+              )}
             </div>
-            {extraLeads > 0 && (
-              <div className="mt-2 flex items-center gap-2 rounded-md bg-white px-3 py-2">
-                <CheckCircleIcon className="h-4 w-4 text-brand-purple" />
-                <p className="text-xs text-slate-600">
-                  Batch grootte wordt <span className="font-semibold text-slate-900">{form.batch_size}</span> → <span className="font-bold text-brand-purple">{effectiveBatchSize}</span> ({form.batch_size} + {extraLeads})
-                </p>
+
+            {/* Eerdere compensaties */}
+            {existingCompensations.length > 0 && (
+              <div className="mt-3 border-t border-brand-purple/10 pt-3">
+                <p className="mb-1.5 text-[11px] font-semibold text-slate-500">Eerdere compensaties ({totalPreviousComp} leads totaal)</p>
+                <div className="space-y-1">
+                  {existingCompensations.map((c, i) => (
+                    <div key={i} className="flex items-center justify-between rounded-md bg-white px-2.5 py-1.5 text-[11px]">
+                      <div className="flex items-center gap-2">
+                        <span className="rounded-full bg-brand-purple/10 px-2 py-0.5 font-bold text-brand-purple">+{c.amount}</span>
+                        <span className="text-slate-600">{c.reason || 'Geen reden opgegeven'}</span>
+                      </div>
+                      <span className="text-slate-400">{new Date(c.date).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>

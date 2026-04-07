@@ -96,7 +96,7 @@ export async function PUT(request: NextRequest) {
 
   const supabase = createServerClient();
   const body = await request.json();
-  const { id, trigger_backfill, ...updates } = body;
+  const { id, trigger_backfill, compensation, ...updates } = body;
 
   if (!id) return NextResponse.json({ error: 'ID ontbreekt' }, { status: 400 });
 
@@ -109,11 +109,20 @@ export async function PUT(request: NextRequest) {
 
   const { data: existing } = await supabase
     .from('customer_batches')
-    .select('price_per_lead, batch_size, leads_delivered, status, is_paid, lookback_days')
+    .select('price_per_lead, batch_size, leads_delivered, status, is_paid, lookback_days, compensations')
     .eq('id', id)
     .single();
 
   if (!existing) return NextResponse.json({ error: 'Batch niet gevonden' }, { status: 404 });
+
+  // Append compensation entry when extra leads are added
+  if (compensation && compensation.amount > 0) {
+    const existingComps = Array.isArray(existing.compensations) ? existing.compensations : [];
+    updates.compensations = [
+      ...existingComps,
+      { amount: compensation.amount, reason: compensation.reason || '', date: new Date().toISOString() },
+    ];
+  }
 
   // Recalculate total_price when batch_size or price_per_lead changes
   if (updates.batch_size || updates.price_per_lead) {
