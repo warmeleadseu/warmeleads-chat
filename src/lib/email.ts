@@ -49,6 +49,7 @@ interface WeeklyStats {
 }
 
 function layout(title: string, content: string): string {
+  const logoUrl = `${BASE_URL}/logo-wit.png`;
   return `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
@@ -57,9 +58,9 @@ function layout(title: string, content: string): string {
 <tr><td align="center">
 <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%">
   <tr><td style="padding:24px 32px;text-align:center">
-    <span style="font-size:24px;font-weight:700;color:#F97316;letter-spacing:-.5px">WarmeLeads</span>
+    <img src="${logoUrl}" alt="WarmeLeads" width="140" style="max-width:140px;height:auto" />
   </td></tr>
-  <tr><td style="background:#16213E;border-radius:12px;padding:32px;border:1px solid rgba(249,115,22,.15)">
+  <tr><td style="background:#16213E;border-radius:12px;padding:32px;border:1px solid rgba(255,107,53,.15)">
     <h1 style="margin:0 0 20px;font-size:20px;color:#fff;font-weight:600">${title}</h1>
     <div style="color:#CBD5E1;font-size:15px;line-height:1.6">${content}</div>
   </td></tr>
@@ -74,7 +75,7 @@ function layout(title: string, content: string): string {
 }
 
 function badge(text: string): string {
-  return `<span style="display:inline-block;background:rgba(249,115,22,.15);color:#F97316;padding:3px 10px;border-radius:6px;font-size:13px;font-weight:600">${text}</span>`;
+  return `<span style="display:inline-block;background:rgba(255,107,53,.15);color:#FF6B35;padding:3px 10px;border-radius:6px;font-size:13px;font-weight:600">${text}</span>`;
 }
 
 function row(label: string, value: string): string {
@@ -128,9 +129,9 @@ export async function sendLeadNotification(
       row('Provincie', lead.provincie || '') +
       row('Datum', lead.wervingsdatum || '')
     )}
-    ${lead.notities ? `<p style="margin-top:12px;padding:12px;background:rgba(249,115,22,.08);border-radius:8px;color:#E2E8F0;font-size:14px"><strong style="color:#F97316">Notities:</strong> ${lead.notities}</p>` : ''}
+    ${lead.notities ? `<p style="margin-top:12px;padding:12px;background:rgba(255,107,53,.08);border-radius:8px;color:#E2E8F0;font-size:14px"><strong style="color:#FF6B35">Notities:</strong> ${lead.notities}</p>` : ''}
     <p style="margin-top:20px">
-      <a href="${BASE_URL}/portal" style="display:inline-block;background:#F97316;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">Bekijk in portaal &rarr;</a>
+      <a href="${BASE_URL}/portal" style="display:inline-block;background:linear-gradient(135deg,#FF6B35,#FF4757);color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">Bekijk in portaal &rarr;</a>
     </p>`;
 
   return sendEmail(
@@ -156,7 +157,7 @@ export async function sendBatchCompletionNotification(
     )}
     <p style="margin-top:16px">Ga naar het admin-paneel om een eventuele vervolg-batch aan te maken.</p>
     <p style="margin-top:20px">
-      <a href="${BASE_URL}/admin/verdeling" style="display:inline-block;background:#F97316;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">Naar verdeling &rarr;</a>
+      <a href="${BASE_URL}/admin/verdeling" style="display:inline-block;background:linear-gradient(135deg,#FF6B35,#FF4757);color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">Naar verdeling &rarr;</a>
     </p>`;
 
   return sendEmail(
@@ -173,7 +174,7 @@ export async function sendWeeklyReport(
   const branchRows = stats.topBranches
     .map(b => `<tr>
       <td style="padding:6px 12px;color:#E2E8F0;font-size:14px;border-bottom:1px solid rgba(255,255,255,.05)">${b.name}</td>
-      <td style="padding:6px 12px;color:#F97316;font-size:14px;font-weight:600;text-align:right;border-bottom:1px solid rgba(255,255,255,.05)">${b.count}</td>
+      <td style="padding:6px 12px;color:#FF6B35;font-size:14px;font-weight:600;text-align:right;border-bottom:1px solid rgba(255,255,255,.05)">${b.count}</td>
     </tr>`)
     .join('');
 
@@ -188,16 +189,16 @@ export async function sendWeeklyReport(
       row('Voltooide batches', String(stats.completedBatches))
     )}
     ${stats.topBranches.length > 0 ? `
-      <h2 style="margin:24px 0 12px;font-size:16px;color:#F97316;font-weight:600">Top Branches</h2>
+      <h2 style="margin:24px 0 12px;font-size:16px;color:#FF6B35;font-weight:600">Top Branches</h2>
       <table width="100%" cellpadding="0" cellspacing="0" style="border-radius:8px;overflow:hidden;background:rgba(255,255,255,.03)">
-        <tr style="background:rgba(249,115,22,.1)">
-          <th style="padding:8px 12px;text-align:left;color:#F97316;font-size:13px;font-weight:600">Branche</th>
-          <th style="padding:8px 12px;text-align:right;color:#F97316;font-size:13px;font-weight:600">Leads</th>
-        </tr>
+      <tr style="background:rgba(255,107,53,.1)">
+        <th style="padding:8px 12px;text-align:left;color:#FF6B35;font-size:13px;font-weight:600">Branche</th>
+        <th style="padding:8px 12px;text-align:right;color:#FF6B35;font-size:13px;font-weight:600">Leads</th>
+      </tr>
         ${branchRows}
       </table>` : ''}
     <p style="margin-top:20px">
-      <a href="${BASE_URL}/admin" style="display:inline-block;background:#F97316;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">Naar dashboard &rarr;</a>
+      <a href="${BASE_URL}/admin" style="display:inline-block;background:linear-gradient(135deg,#FF6B35,#FF4757);color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">Naar dashboard &rarr;</a>
     </p>`;
 
   const weekNr = getISOWeek(new Date());
@@ -227,16 +228,16 @@ export async function sendDailyLeadDigest(
     <p>Hallo ${customer.contact_person || customer.name},</p>
     <p>Hier zijn je leads van vandaag: ${badge(String(leads.length) + (leads.length === 1 ? ' lead' : ' leads'))}</p>
     <table width="100%" cellpadding="0" cellspacing="0" style="margin:16px 0;border-radius:8px;overflow:hidden;background:rgba(255,255,255,.03)">
-      <tr style="background:rgba(249,115,22,.1)">
-        <th style="padding:8px 12px;text-align:left;color:#F97316;font-size:13px;font-weight:600">Naam</th>
-        <th style="padding:8px 12px;text-align:left;color:#F97316;font-size:13px;font-weight:600">Plaats</th>
-        <th style="padding:8px 12px;text-align:left;color:#F97316;font-size:13px;font-weight:600">Telefoon</th>
-        <th style="padding:8px 12px;text-align:left;color:#F97316;font-size:13px;font-weight:600">Branche</th>
+      <tr style="background:rgba(255,107,53,.1)">
+        <th style="padding:8px 12px;text-align:left;color:#FF6B35;font-size:13px;font-weight:600">Naam</th>
+        <th style="padding:8px 12px;text-align:left;color:#FF6B35;font-size:13px;font-weight:600">Plaats</th>
+        <th style="padding:8px 12px;text-align:left;color:#FF6B35;font-size:13px;font-weight:600">Telefoon</th>
+        <th style="padding:8px 12px;text-align:left;color:#FF6B35;font-size:13px;font-weight:600">Branche</th>
       </tr>
       ${leadRows}
     </table>
     <p style="margin-top:20px">
-      <a href="${BASE_URL}/portal" style="display:inline-block;background:#F97316;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">Bekijk details in portaal &rarr;</a>
+      <a href="${BASE_URL}/portal" style="display:inline-block;background:linear-gradient(135deg,#FF6B35,#FF4757);color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">Bekijk details in portaal &rarr;</a>
     </p>`;
 
   const today = new Date().toLocaleDateString('nl-NL', {
@@ -305,17 +306,17 @@ export async function sendFeedbackDigest(
     <p>Er ${feedbackItems.length === 1 ? 'is' : 'zijn'} ${badge(String(feedbackItems.length))} nieuwe feedback${feedbackItems.length === 1 ? '' : 's'} binnengekomen van klanten:</p>
     <div style="margin:12px 0">${summaryBadges}</div>
     <table width="100%" cellpadding="0" cellspacing="0" style="margin:16px 0;border-radius:8px;overflow:hidden;background:rgba(255,255,255,.03)">
-      <tr style="background:rgba(249,115,22,.1)">
-        <th style="padding:8px 12px;text-align:left;color:#F97316;font-size:13px;font-weight:600">Lead</th>
-        <th style="padding:8px 12px;text-align:left;color:#F97316;font-size:13px;font-weight:600">Klant</th>
-        <th style="padding:8px 12px;text-align:left;color:#F97316;font-size:13px;font-weight:600">Branche</th>
-        <th style="padding:8px 12px;text-align:left;color:#F97316;font-size:13px;font-weight:600">Feedback</th>
-        <th style="padding:8px 12px;text-align:left;color:#F97316;font-size:13px;font-weight:600">Opmerking</th>
+      <tr style="background:rgba(255,107,53,.1)">
+        <th style="padding:8px 12px;text-align:left;color:#FF6B35;font-size:13px;font-weight:600">Lead</th>
+        <th style="padding:8px 12px;text-align:left;color:#FF6B35;font-size:13px;font-weight:600">Klant</th>
+        <th style="padding:8px 12px;text-align:left;color:#FF6B35;font-size:13px;font-weight:600">Branche</th>
+        <th style="padding:8px 12px;text-align:left;color:#FF6B35;font-size:13px;font-weight:600">Feedback</th>
+        <th style="padding:8px 12px;text-align:left;color:#FF6B35;font-size:13px;font-weight:600">Opmerking</th>
       </tr>
       ${feedbackRows}
     </table>
     <p style="margin-top:20px">
-      <a href="${BASE_URL}/admin" style="display:inline-block;background:#F97316;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">Naar dashboard &rarr;</a>
+      <a href="${BASE_URL}/admin" style="display:inline-block;background:linear-gradient(135deg,#FF6B35,#FF4757);color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">Naar dashboard &rarr;</a>
     </p>`;
 
   const today = new Date().toLocaleDateString('nl-NL', {
@@ -367,7 +368,7 @@ export async function sendBatchMilestoneEmail(
   const content = `
     ${bodies[milestone]}
     <p style="margin-top:24px">
-      <a href="${orderUrl}" style="display:inline-block;background:#F97316;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700;font-size:15px">
+      <a href="${orderUrl}" style="display:inline-block;background:linear-gradient(135deg,#FF6B35,#FF4757);color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700;font-size:15px">
         Nieuwe batch bestellen &rarr;
       </a>
     </p>`;
@@ -398,12 +399,12 @@ export async function sendOrderConfirmationEmail(
       row('Subtotaal excl. BTW', `&euro;${subtotal.toFixed(2)}`) +
       row('BTW 21%', `&euro;${btwAmount.toFixed(2)}`) +
       `<tr>
-        <td style="padding:10px 12px;color:#F97316;font-size:15px;font-weight:700;border-top:2px solid rgba(249,115,22,.2)">Totaal incl. BTW</td>
-        <td style="padding:10px 12px;color:#F97316;font-size:15px;font-weight:700;text-align:right;border-top:2px solid rgba(249,115,22,.2)">&euro;${totalInclBtw.toFixed(2)}</td>
+        <td style="padding:10px 12px;color:#FF6B35;font-size:15px;font-weight:700;border-top:2px solid rgba(255,107,53,.2)">Totaal incl. BTW</td>
+        <td style="padding:10px 12px;color:#FF6B35;font-size:15px;font-weight:700;text-align:right;border-top:2px solid rgba(255,107,53,.2)">&euro;${totalInclBtw.toFixed(2)}</td>
       </tr>`
     )}
     <p style="margin-top:20px">
-      <a href="${BASE_URL}/portal" style="display:inline-block;background:#F97316;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">Bekijk in portaal &rarr;</a>
+      <a href="${BASE_URL}/portal" style="display:inline-block;background:linear-gradient(135deg,#FF6B35,#FF4757);color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">Bekijk in portaal &rarr;</a>
     </p>`;
 
   return sendEmail(

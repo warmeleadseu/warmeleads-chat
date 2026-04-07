@@ -693,40 +693,36 @@ function ReminderPreviewModal({ customer, portalUrl, sending, onSend, onClose }:
   onSend: () => void; onClose: () => void;
 }) {
   const greeting = customer.contact_person || customer.name;
+  const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://warmeleads.eu';
+  const logoUrl = `${baseUrl}/logo-wit.png`;
   const emailHtml = `
-    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; background: #0b0f1a;">
-      <!-- Header with gradient -->
-      <div style="background: linear-gradient(135deg, #0b0f1a 0%, #1a1040 50%, #0b0f1a 100%); padding: 40px 32px 32px; text-align: center; border-radius: 16px 16px 0 0;">
-        <div style="margin-bottom: 8px;">
-          <span style="font-size: 28px; font-weight: 800; letter-spacing: -0.5px;">
-            <span style="color: #ffffff;">Warme</span><span style="background: linear-gradient(135deg, #7c3aed, #a855f7); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">Leads</span>
-          </span>
-        </div>
-        <p style="color: rgba(255,255,255,0.5); margin: 0; font-size: 13px; letter-spacing: 0.5px;">UW PERSOONLIJKE LEADPORTAAL</p>
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; background: #1A1A2E;">
+      <div style="background: linear-gradient(135deg, #3B2F75 0%, #E74C8C 50%, #FF6B35 100%); padding: 44px 32px 36px; text-align: center; border-radius: 16px 16px 0 0;">
+        <img src="${logoUrl}" alt="WarmeLeads" width="160" style="max-width: 160px; height: auto;" />
+        <p style="color: rgba(255,255,255,0.7); margin: 14px 0 0; font-size: 13px; letter-spacing: 0.5px;">UW PERSOONLIJKE LEADPORTAAL</p>
       </div>
-      <!-- Main content card -->
       <div style="margin: 0 20px; background: #ffffff; border-radius: 16px; padding: 36px 32px; position: relative; top: -8px;">
-        <p style="color: #0f172a; font-size: 18px; font-weight: 700; line-height: 1.4; margin: 0 0 8px;">Hallo ${greeting},</p>
+        <p style="color: #1A1A2E; font-size: 18px; font-weight: 700; line-height: 1.4; margin: 0 0 8px;">Hallo ${greeting},</p>
         <p style="color: #475569; font-size: 15px; line-height: 1.7; margin: 0 0 24px;">
           Uw persoonlijke leadportaal staat klaar! Hier vindt u al uw leads overzichtelijk op een plek, kunt u nieuwe batches bestellen en uw account beheren.
         </p>
         ${customer.portal_password ? `
-        <div style="background: linear-gradient(135deg, #f8f6ff 0%, #f1f0ff 100%); border: 1px solid #e8e4ff; border-radius: 14px; padding: 24px; margin: 0 0 28px;">
-          <p style="color: #7c3aed; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 16px;">Uw inloggegevens</p>
+        <div style="background: linear-gradient(135deg, #FFF5F0 0%, #FFF0F5 100%); border: 1px solid #FFE0D0; border-radius: 14px; padding: 24px; margin: 0 0 28px;">
+          <p style="color: #FF6B35; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 16px;">Uw inloggegevens</p>
           <table style="width: 100%; border-collapse: collapse;">
             <tr>
               <td style="color: #64748b; font-size: 13px; padding: 6px 0; width: 100px;">E-mail</td>
-              <td style="color: #0f172a; font-size: 14px; font-weight: 600; padding: 6px 0;">${customer.email}</td>
+              <td style="color: #1A1A2E; font-size: 14px; font-weight: 600; padding: 6px 0;">${customer.email}</td>
             </tr>
             <tr>
-              <td style="color: #64748b; font-size: 13px; padding: 6px 0; border-top: 1px solid #e8e4ff;">Wachtwoord</td>
-              <td style="color: #0f172a; font-size: 14px; font-weight: 600; padding: 6px 0; border-top: 1px solid #e8e4ff; font-family: monospace;">${customer.portal_password}</td>
+              <td style="color: #64748b; font-size: 13px; padding: 6px 0; border-top: 1px solid #FFE0D0;">Wachtwoord</td>
+              <td style="color: #1A1A2E; font-size: 14px; font-weight: 600; padding: 6px 0; border-top: 1px solid #FFE0D0; font-family: monospace;">${customer.portal_password}</td>
             </tr>
           </table>
         </div>
         ` : ''}
         <div style="text-align: center; margin: 0 0 28px;">
-          <a href="${portalUrl}" style="display: inline-block; background: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%); color: white; text-decoration: none; padding: 16px 40px; border-radius: 12px; font-weight: 700; font-size: 15px; letter-spacing: 0.3px; box-shadow: 0 4px 14px rgba(124,58,237,0.35);">
+          <a href="${portalUrl}" style="display: inline-block; background: linear-gradient(135deg, #FF6B35 0%, #FF4757 100%); color: white; text-decoration: none; padding: 16px 40px; border-radius: 12px; font-weight: 700; font-size: 15px; letter-spacing: 0.3px;">
             Ga naar uw portaal &rarr;
           </a>
         </div>
@@ -736,7 +732,6 @@ function ReminderPreviewModal({ customer, portalUrl, sending, onSend, onClose }:
           </p>
         </div>
       </div>
-      <!-- Footer -->
       <div style="padding: 28px 32px; text-align: center;">
         <p style="color: rgba(255,255,255,0.3); font-size: 12px; margin: 0;">WarmeLeads &middot; Uw partner in exclusieve leads</p>
       </div>
@@ -771,7 +766,7 @@ function ReminderPreviewModal({ customer, portalUrl, sending, onSend, onClose }:
         </div>
 
         {/* Email preview */}
-        <div className="flex-1 overflow-y-auto bg-[#0b0f1a] p-4 sm:p-6">
+        <div className="flex-1 overflow-y-auto bg-[#1A1A2E] p-4 sm:p-6">
           <div dangerouslySetInnerHTML={{ __html: emailHtml }} />
         </div>
 
