@@ -746,57 +746,60 @@ function ReminderPreviewModal({ customer, portalUrl, sending, onSend, onClose }:
     <>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.95 }}
-        className="fixed left-1/2 top-1/2 z-[60] flex max-h-[85vh] w-[calc(100%-2rem)] max-w-[640px] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
-      >
-        {/* Header */}
-        <div className="shrink-0 border-b border-slate-100">
-          <div className="h-[3px] bg-warmeleads-gradient" />
-          <div className="flex items-center justify-between px-5 py-4">
-            <div>
-              <h2 className="text-lg font-bold text-slate-900">E-mail preview</h2>
-              <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-slate-500">
-                <span>Naar: <span className="font-medium text-slate-700">{customer.email}</span></span>
-                <span>Onderwerp: <span className="font-medium text-slate-700">Je WarmeLeads portaal staat klaar!</span></span>
+      <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" onClick={onClose}>
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.95 }}
+          onClick={(e) => e.stopPropagation()}
+          className="flex max-h-[85vh] w-full max-w-[640px] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
+        >
+          {/* Header */}
+          <div className="shrink-0 border-b border-slate-100">
+            <div className="h-[3px] bg-warmeleads-gradient" />
+            <div className="flex items-center justify-between px-5 py-4">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">E-mail preview</h2>
+                <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-slate-500">
+                  <span>Naar: <span className="font-medium text-slate-700">{customer.email}</span></span>
+                  <span>Onderwerp: <span className="font-medium text-slate-700">Je WarmeLeads portaal staat klaar!</span></span>
+                </div>
+              </div>
+              <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100">
+                <XMarkIcon className="h-5 w-5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Email preview */}
+          <div className="flex-1 overflow-y-auto bg-[#1A1A2E] p-4 sm:p-6">
+            <div dangerouslySetInnerHTML={{ __html: emailHtml }} />
+          </div>
+
+          {/* Footer with send button */}
+          <div className="shrink-0 border-t border-slate-100 bg-white px-5 py-4">
+            <div className="flex items-center justify-between gap-3">
+              <p className="hidden text-xs text-slate-400 sm:block">
+                Wordt exact zo verstuurd naar {customer.contact_person || customer.name}
+              </p>
+              <div className="flex w-full items-center gap-2 sm:w-auto">
+                <button onClick={onClose}
+                  className="flex-1 rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 sm:flex-initial">
+                  Annuleren
+                </button>
+                <button onClick={onSend} disabled={sending}
+                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-button-gradient px-5 py-2.5 text-sm font-bold text-white shadow-sm disabled:opacity-50 sm:flex-initial">
+                  {sending ? (
+                    <><ArrowPathIcon className="h-4 w-4 animate-spin" /> Versturen...</>
+                  ) : (
+                    <><EnvelopeIcon className="h-4 w-4" /> Verstuur e-mail</>
+                  )}
+                </button>
               </div>
             </div>
-            <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100">
-              <XMarkIcon className="h-5 w-5" />
-            </button>
           </div>
-        </div>
-
-        {/* Email preview */}
-        <div className="flex-1 overflow-y-auto bg-[#1A1A2E] p-4 sm:p-6">
-          <div dangerouslySetInnerHTML={{ __html: emailHtml }} />
-        </div>
-
-        {/* Footer with send button */}
-        <div className="shrink-0 border-t border-slate-100 bg-white px-5 py-4">
-          <div className="flex items-center justify-between gap-3">
-            <p className="hidden text-xs text-slate-400 sm:block">
-              Wordt exact zo verstuurd naar {customer.contact_person || customer.name}
-            </p>
-            <div className="flex w-full items-center gap-2 sm:w-auto">
-              <button onClick={onClose}
-                className="flex-1 rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 sm:flex-initial">
-                Annuleren
-              </button>
-              <button onClick={onSend} disabled={sending}
-                className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-button-gradient px-5 py-2.5 text-sm font-bold text-white shadow-sm disabled:opacity-50 sm:flex-initial">
-                {sending ? (
-                  <><ArrowPathIcon className="h-4 w-4 animate-spin" /> Versturen...</>
-                ) : (
-                  <><EnvelopeIcon className="h-4 w-4" /> Verstuur e-mail</>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      </motion.div>
+        </motion.div>
+      </div>
     </>
   );
 }
