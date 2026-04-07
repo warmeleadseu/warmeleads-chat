@@ -1,6 +1,4 @@
--- Server-side faceted counting for the Leads CRM.
--- Returns per-dimension counts with true faceted logic:
--- each dimension excludes its own filter, applies all others.
+-- Fix: cast text date params to date type for wervingsdatum comparisons
 CREATE OR REPLACE FUNCTION get_lead_facets(
   p_branches text[] DEFAULT NULL,
   p_customers text[] DEFAULT NULL,
