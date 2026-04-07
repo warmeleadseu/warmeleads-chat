@@ -54,11 +54,11 @@ const BRANCH_COLOR_MAP: Record<string, { dot: string; light: string; text: strin
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  nieuw: 'bg-blue-500', gecontacteerd: 'bg-amber-500', offerte: 'bg-purple-500', verkocht: 'bg-emerald-500', afgewezen: 'bg-red-400',
+  nieuw: 'bg-blue-500', gecontacteerd: 'bg-amber-500', geen_gehoor: 'bg-orange-500', offerte: 'bg-purple-500', verkocht: 'bg-emerald-500', afgewezen: 'bg-red-400',
 };
 
 const STATUS_BADGE: Record<string, string> = {
-  nieuw: 'bg-blue-100 text-blue-700', gecontacteerd: 'bg-amber-100 text-amber-700', offerte: 'bg-purple-100 text-purple-700', verkocht: 'bg-emerald-100 text-emerald-700', afgewezen: 'bg-red-100 text-red-700',
+  nieuw: 'bg-blue-100 text-blue-700', gecontacteerd: 'bg-amber-100 text-amber-700', geen_gehoor: 'bg-orange-100 text-orange-700', offerte: 'bg-purple-100 text-purple-700', verkocht: 'bg-emerald-100 text-emerald-700', afgewezen: 'bg-red-100 text-red-700',
 };
 
 const PERIOD_LABELS: Record<string, string> = {

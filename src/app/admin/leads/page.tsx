@@ -311,10 +311,11 @@ interface Lead {
   created_at: string; updated_at: string;
 }
 
-const STATUSES = ['nieuw', 'gecontacteerd', 'offerte', 'verkocht', 'afgewezen'] as const;
+const STATUSES = ['nieuw', 'gecontacteerd', 'geen_gehoor', 'offerte', 'verkocht', 'afgewezen'] as const;
 const STATUS_COLORS: Record<string, string> = {
   nieuw: 'bg-blue-100 text-blue-700',
   gecontacteerd: 'bg-amber-100 text-amber-700',
+  geen_gehoor: 'bg-orange-100 text-orange-700',
   offerte: 'bg-purple-100 text-purple-700',
   verkocht: 'bg-emerald-100 text-emerald-700',
   afgewezen: 'bg-red-100 text-red-700',

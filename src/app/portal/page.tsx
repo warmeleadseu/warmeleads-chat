@@ -37,6 +37,9 @@ import {
   DevicePhoneMobileIcon,
   ExclamationTriangleIcon,
   CreditCardIcon,
+  ClipboardDocumentCheckIcon,
+  FlagIcon,
+  ChevronDownIcon,
 } from '@heroicons/react/24/outline';
 import { usePushNotifications, type PushState } from './usePushNotifications';
 
@@ -58,6 +61,7 @@ const STATUS_OPTIONS = [
   { value: 'all', label: 'Alle statussen' },
   { value: 'nieuw', label: 'Nieuw' },
   { value: 'gecontacteerd', label: 'Gecontacteerd' },
+  { value: 'geen_gehoor', label: 'Geen gehoor' },
   { value: 'offerte', label: 'Offerte' },
   { value: 'verkocht', label: 'Verkocht' },
   { value: 'afgewezen', label: 'Afgewezen' },
@@ -66,6 +70,7 @@ const STATUS_OPTIONS = [
 const STATUS_COLORS: Record<string, string> = {
   nieuw: 'bg-blue-100 text-blue-700',
   gecontacteerd: 'bg-amber-100 text-amber-700',
+  geen_gehoor: 'bg-orange-100 text-orange-700',
   offerte: 'bg-purple-100 text-purple-700',
   verkocht: 'bg-emerald-100 text-emerald-700',
   afgewezen: 'bg-slate-100 text-slate-500',
@@ -1136,6 +1141,14 @@ function LeadDetailPanel({
     setNotesDirty(false);
   };
 
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+
+  const copyField = (value: string, label: string) => {
+    navigator.clipboard.writeText(value);
+    setCopiedField(label);
+    setTimeout(() => setCopiedField(null), 1500);
+  };
+
   const copyContactInfo = () => {
     const lines = [
       lead.naam_klant,
@@ -1144,7 +1157,7 @@ function LeadDetailPanel({
       [lead.postcode, lead.huisnummer, lead.plaatsnaam, lead.provincie].filter(Boolean).join(', '),
     ].filter(Boolean);
     navigator.clipboard.writeText(lines.join('\n'));
-    showToast('Contactgegevens gekopieerd');
+    showToast('Alle contactgegevens gekopieerd');
   };
 
   const bInfo = getBranch(lead.branch);
@@ -1223,36 +1236,67 @@ function LeadDetailPanel({
                   className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
                 >
                   <ClipboardDocumentIcon className="h-3.5 w-3.5" />
-                  Kopieer
+                  Kopieer alles
                 </button>
               </div>
-              <div className="space-y-2 rounded-xl border border-slate-100 bg-slate-50 p-4">
+              <div className="divide-y divide-slate-100 rounded-xl border border-slate-100 bg-slate-50">
                 {lead.telefoonnummer && (
-                  <div className="flex items-center justify-between">
-                    <a href={`tel:${lead.telefoonnummer}`} className="flex items-center gap-3 text-sm text-slate-700 hover:text-brand-purple">
-                      <PhoneIcon className="h-4 w-4 text-slate-400" /> {lead.telefoonnummer}
+                  <div className="flex items-center gap-3 px-4 py-3">
+                    <PhoneIcon className="h-4 w-4 shrink-0 text-slate-400" />
+                    <a href={`tel:${lead.telefoonnummer}`} className="min-w-0 flex-1 truncate text-sm text-slate-700 hover:text-brand-purple">
+                      {lead.telefoonnummer}
                     </a>
-                    <a
-                      href={whatsappUrl(lead.telefoonnummer)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 rounded-md bg-green-50 px-2 py-1 text-[11px] font-medium text-green-700 transition hover:bg-green-100"
-                    >
-                      <WhatsAppIcon className="h-3 w-3" /> WhatsApp
-                    </a>
+                    <div className="flex shrink-0 items-center gap-1">
+                      <a href={whatsappUrl(lead.telefoonnummer)} target="_blank" rel="noopener noreferrer"
+                        className="rounded-md bg-green-50 p-1.5 text-green-600 transition hover:bg-green-100" title="WhatsApp">
+                        <WhatsAppIcon className="h-3.5 w-3.5" />
+                      </a>
+                      <button onClick={() => copyField(lead.telefoonnummer, 'tel')}
+                        className={`rounded-md p-1.5 transition ${copiedField === 'tel' ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600'}`}
+                        title="Kopieer telefoonnummer">
+                        {copiedField === 'tel' ? <ClipboardDocumentCheckIcon className="h-3.5 w-3.5" /> : <ClipboardDocumentIcon className="h-3.5 w-3.5" />}
+                      </button>
+                    </div>
                   </div>
                 )}
                 {lead.email && (
-                  <a href={`mailto:${lead.email}`} className="flex items-center gap-3 text-sm text-slate-700 hover:text-brand-purple">
-                    <EnvelopeIcon className="h-4 w-4 text-slate-400" /> {lead.email}
-                  </a>
+                  <div className="flex items-center gap-3 px-4 py-3">
+                    <EnvelopeIcon className="h-4 w-4 shrink-0 text-slate-400" />
+                    <a href={`mailto:${lead.email}`} className="min-w-0 flex-1 truncate text-sm text-slate-700 hover:text-brand-purple">
+                      {lead.email}
+                    </a>
+                    <button onClick={() => copyField(lead.email, 'email')}
+                      className={`shrink-0 rounded-md p-1.5 transition ${copiedField === 'email' ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600'}`}
+                      title="Kopieer e-mailadres">
+                      {copiedField === 'email' ? <ClipboardDocumentCheckIcon className="h-3.5 w-3.5" /> : <ClipboardDocumentIcon className="h-3.5 w-3.5" />}
+                    </button>
+                  </div>
                 )}
-                {(lead.postcode || lead.plaatsnaam) && (
-                  <p className="flex items-center gap-3 text-sm text-slate-700">
-                    <MapPinIcon className="h-4 w-4 text-slate-400" />
-                    {[lead.postcode, lead.huisnummer, lead.plaatsnaam, lead.provincie].filter(Boolean).join(', ')}
-                  </p>
+                {lead.naam_klant && (
+                  <div className="flex items-center gap-3 px-4 py-3">
+                    <UserGroupIcon className="h-4 w-4 shrink-0 text-slate-400" />
+                    <span className="min-w-0 flex-1 truncate text-sm text-slate-700">{lead.naam_klant}</span>
+                    <button onClick={() => copyField(lead.naam_klant, 'naam')}
+                      className={`shrink-0 rounded-md p-1.5 transition ${copiedField === 'naam' ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600'}`}
+                      title="Kopieer naam">
+                      {copiedField === 'naam' ? <ClipboardDocumentCheckIcon className="h-3.5 w-3.5" /> : <ClipboardDocumentIcon className="h-3.5 w-3.5" />}
+                    </button>
+                  </div>
                 )}
+                {(lead.postcode || lead.plaatsnaam) && (() => {
+                  const adres = [lead.postcode, lead.huisnummer, lead.plaatsnaam, lead.provincie].filter(Boolean).join(', ');
+                  return (
+                    <div className="flex items-center gap-3 px-4 py-3">
+                      <MapPinIcon className="h-4 w-4 shrink-0 text-slate-400" />
+                      <span className="min-w-0 flex-1 truncate text-sm text-slate-700">{adres}</span>
+                      <button onClick={() => copyField(adres, 'adres')}
+                        className={`shrink-0 rounded-md p-1.5 transition ${copiedField === 'adres' ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600'}`}
+                        title="Kopieer adres">
+                        {copiedField === 'adres' ? <ClipboardDocumentCheckIcon className="h-3.5 w-3.5" /> : <ClipboardDocumentIcon className="h-3.5 w-3.5" />}
+                      </button>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
 
@@ -1278,6 +1322,9 @@ function LeadDetailPanel({
 
             {/* Feedback */}
             <LeadFeedback leadId={lead.id} showToast={showToast} />
+
+            {/* Reclamatie */}
+            <LeadReclamation leadId={lead.id} showToast={showToast} />
 
             {/* Notes */}
             <div>
@@ -1320,6 +1367,7 @@ function MiniCharts({ stats, getBranch }: { stats: Stats & { statusBreakdown?: R
   const statusColors: Record<string, string> = {
     nieuw: '#3B82F6',
     gecontacteerd: '#F59E0B',
+    geen_gehoor: '#F97316',
     offerte: '#8B5CF6',
     verkocht: '#10B981',
     afgewezen: '#94A3B8',
@@ -1328,6 +1376,7 @@ function MiniCharts({ stats, getBranch }: { stats: Stats & { statusBreakdown?: R
   const statusLabels: Record<string, string> = {
     nieuw: 'Nieuw',
     gecontacteerd: 'Gecontacteerd',
+    geen_gehoor: 'Geen gehoor',
     offerte: 'Offerte',
     verkocht: 'Verkocht',
     afgewezen: 'Afgewezen',
@@ -1495,6 +1544,143 @@ function LeadFeedback({ leadId, showToast }: { leadId: string; showToast: (m: st
             placeholder="Optionele opmerking..."
             className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs text-slate-700 outline-none focus:border-brand-purple/50"
           />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── Lead Reclamation ─────────────────────────────────────── */
+const RECLAMATION_REASONS = [
+  { value: 'foutieve_gegevens', label: 'Foutieve contactgegevens' },
+  { value: 'dubbele_lead', label: 'Dubbele lead' },
+  { value: 'buiten_doelgebied', label: 'Buiten mijn doelgebied' },
+  { value: 'niet_geinteresseerd', label: 'Niet geïnteresseerd (cold lead)' },
+  { value: 'anders', label: 'Anders' },
+] as const;
+
+const RECLAMATION_STATUS_MAP: Record<string, { label: string; cls: string }> = {
+  pending: { label: 'In behandeling', cls: 'bg-amber-50 text-amber-700' },
+  approved: { label: 'Goedgekeurd', cls: 'bg-emerald-50 text-emerald-700' },
+  rejected: { label: 'Afgewezen', cls: 'bg-red-50 text-red-600' },
+};
+
+function LeadReclamation({ leadId, showToast }: { leadId: string; showToast: (m: string) => void }) {
+  const [existing, setExisting] = useState<{ id: string; reason: string; description?: string; status: string; created_at: string } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState('');
+  const [description, setDescription] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    setLoading(true);
+    setOpen(false);
+    setReason('');
+    setDescription('');
+    portalFetch(`/api/portal/reclamations?lead_id=${leadId}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.reclamation) setExisting(d.reclamation); else setExisting(null); })
+      .finally(() => setLoading(false));
+  }, [leadId]);
+
+  const submit = async () => {
+    if (!reason) { showToast('Selecteer een reden'); return; }
+    setSubmitting(true);
+    try {
+      const res = await portalFetch('/api/portal/reclamations', {
+        method: 'POST',
+        body: JSON.stringify({ lead_id: leadId, reason, description: description || undefined }),
+      });
+      if (res.ok) {
+        const d = await res.json();
+        setExisting(d.reclamation);
+        setOpen(false);
+        showToast('Reclamatie ingediend');
+      } else {
+        const d = await res.json().catch(() => ({}));
+        showToast(d.error || 'Reclamatie indienen mislukt');
+      }
+    } catch {
+      showToast('Er ging iets mis');
+    }
+    setSubmitting(false);
+  };
+
+  if (loading) return null;
+
+  if (existing) {
+    const st = RECLAMATION_STATUS_MAP[existing.status] || RECLAMATION_STATUS_MAP.pending;
+    const reasonLabel = RECLAMATION_REASONS.find(r => r.value === existing.reason)?.label || existing.reason;
+    return (
+      <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+        <div className="mb-2 flex items-center justify-between">
+          <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400">
+            <FlagIcon className="h-3.5 w-3.5" /> Reclamatie
+          </h3>
+          <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold ${st.cls}`}>{st.label}</span>
+        </div>
+        <p className="text-sm text-slate-600">{reasonLabel}</p>
+        {existing.description && <p className="mt-1 text-xs text-slate-400">{existing.description}</p>}
+        <p className="mt-2 text-[10px] text-slate-400">
+          Ingediend op {new Date(existing.created_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' })}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {!open ? (
+        <button
+          onClick={() => setOpen(true)}
+          className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-slate-200 px-4 py-3 text-xs font-medium text-slate-400 transition hover:border-red-300 hover:bg-red-50 hover:text-red-500"
+        >
+          <FlagIcon className="h-4 w-4" />
+          Reclamatie indienen
+        </button>
+      ) : (
+        <div className="rounded-xl border border-red-100 bg-red-50/50 p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="flex items-center gap-1.5 text-xs font-semibold text-red-700">
+              <FlagIcon className="h-3.5 w-3.5" /> Reclamatie indienen
+            </h3>
+            <button onClick={() => setOpen(false)} className="rounded p-0.5 text-slate-400 hover:text-slate-600">
+              <XMarkIcon className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="space-y-3">
+            <div>
+              <label className="mb-1 block text-[11px] font-medium text-slate-500">Reden</label>
+              <div className="relative">
+                <select value={reason} onChange={(e) => setReason(e.target.value)}
+                  className="w-full appearance-none rounded-lg border border-red-200 bg-white px-3 py-2 pr-8 text-sm text-slate-700 outline-none focus:border-red-300 focus:ring-1 focus:ring-red-200">
+                  <option value="">Selecteer een reden...</option>
+                  {RECLAMATION_REASONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                </select>
+                <ChevronDownIcon className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              </div>
+            </div>
+            <div>
+              <label className="mb-1 block text-[11px] font-medium text-slate-500">Toelichting <span className="text-slate-300">(optioneel)</span></label>
+              <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2}
+                placeholder="Omschrijf kort het probleem..."
+                className="w-full rounded-lg border border-red-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-red-300 focus:ring-1 focus:ring-red-200" />
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => setOpen(false)}
+                className="flex-1 rounded-lg border border-slate-200 bg-white py-2 text-xs font-medium text-slate-600 hover:bg-slate-50">
+                Annuleren
+              </button>
+              <button onClick={submit} disabled={submitting || !reason}
+                className="flex-1 rounded-lg bg-red-600 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-red-700 disabled:opacity-50">
+                {submitting ? 'Indienen...' : 'Indienen'}
+              </button>
+            </div>
+            <p className="text-[10px] leading-relaxed text-slate-400">
+              Reclamaties worden binnen 2 werkdagen beoordeeld. Bij goedkeuring wordt de lead niet in rekening gebracht.
+            </p>
+          </div>
         </div>
       )}
     </div>

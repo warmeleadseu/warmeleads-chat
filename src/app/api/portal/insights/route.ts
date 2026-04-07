@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
   if (allIds.length === 0) {
     return NextResponse.json({
       conversionFunnel: {
-        nieuw: 0, gecontacteerd: 0, offerte: 0, verkocht: 0, afgewezen: 0, conversionRate: 0,
+        nieuw: 0, gecontacteerd: 0, geen_gehoor: 0, offerte: 0, verkocht: 0, afgewezen: 0, conversionRate: 0,
       },
       quality: { averageScore: 0, phoneValidPct: 0, totalWithScore: 0 },
       responseSpeed: { averageHours: null },
@@ -48,6 +48,7 @@ export async function GET(request: NextRequest) {
   // Conversion funnel
   const nieuw = leads.filter(l => l.status === 'nieuw').length;
   const gecontacteerd = leads.filter(l => l.status === 'gecontacteerd').length;
+  const geen_gehoor = leads.filter(l => l.status === 'geen_gehoor').length;
   const offerte = leads.filter(l => l.status === 'offerte').length;
   const verkocht = leads.filter(l => l.status === 'verkocht').length;
   const afgewezen = leads.filter(l => l.status === 'afgewezen').length;
@@ -121,7 +122,7 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({
     conversionFunnel: {
-      nieuw, gecontacteerd, offerte, verkocht, afgewezen, conversionRate,
+      nieuw, gecontacteerd, geen_gehoor, offerte, verkocht, afgewezen, conversionRate,
     },
     quality: { averageScore, phoneValidPct, totalWithScore: withScore.length },
     responseSpeed: { averageHours },

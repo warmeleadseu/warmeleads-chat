@@ -44,7 +44,7 @@ interface AccountData {
 }
 
 interface InsightsData {
-  conversionFunnel: { nieuw: number; gecontacteerd: number; offerte: number; verkocht: number; afgewezen: number; conversionRate: number };
+  conversionFunnel: { nieuw: number; gecontacteerd: number; geen_gehoor: number; offerte: number; verkocht: number; afgewezen: number; conversionRate: number };
   quality: { averageScore: number; phoneValidPct: number; totalWithScore: number };
   responseSpeed: { averageHours: number | null };
   periodComparison: { thisWeek: number; lastWeek: number; thisMonth: number; lastMonth: number };
@@ -495,7 +495,7 @@ function InsightsTab({
   if (loading) return <InsightsSkeleton />;
   if (!data) return null;
 
-  const hasData = data.conversionFunnel.nieuw + data.conversionFunnel.gecontacteerd + data.conversionFunnel.offerte + data.conversionFunnel.verkocht + data.conversionFunnel.afgewezen > 0;
+  const hasData = data.conversionFunnel.nieuw + data.conversionFunnel.gecontacteerd + (data.conversionFunnel.geen_gehoor || 0) + data.conversionFunnel.offerte + data.conversionFunnel.verkocht + data.conversionFunnel.afgewezen > 0;
   if (!hasData) {
     return (
       <div className="rounded-xl border border-slate-200 bg-white py-16 text-center shadow-sm">
@@ -512,12 +512,13 @@ function InsightsTab({
   const funnelSteps = [
     { key: 'nieuw', label: 'Nieuw', count: f.nieuw, color: 'bg-blue-500' },
     { key: 'gecontacteerd', label: 'Gecontacteerd', count: f.gecontacteerd, color: 'bg-amber-500' },
+    { key: 'geen_gehoor', label: 'Geen gehoor', count: f.geen_gehoor || 0, color: 'bg-orange-500' },
     { key: 'offerte', label: 'Offerte', count: f.offerte, color: 'bg-purple-500' },
     { key: 'verkocht', label: 'Verkocht', count: f.verkocht, color: 'bg-emerald-500' },
     { key: 'afgewezen', label: 'Afgewezen', count: f.afgewezen, color: 'bg-red-400' },
   ];
   const funnelMax = Math.max(...funnelSteps.map((s) => s.count), 1);
-  const funnelTotal = f.nieuw + f.gecontacteerd + f.offerte + f.verkocht + f.afgewezen || 1;
+  const funnelTotal = f.nieuw + f.gecontacteerd + (f.geen_gehoor || 0) + f.offerte + f.verkocht + f.afgewezen || 1;
 
   const ql = qualityLabel(data.quality.averageScore / 10);
   const weekChange = pctChange(data.periodComparison.thisWeek, data.periodComparison.lastWeek);
