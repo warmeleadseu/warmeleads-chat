@@ -107,6 +107,9 @@ export async function distributeLead(lead: LeadForDistribution): Promise<Distrib
     if (leadRow) fullLead = { ...leadRow, lat: lead.lat, lng: lead.lng };
   }
 
+  // Never distribute leads with invalid phone numbers
+  if (fullLead.phone_valid === false) return result;
+
   const { data: existingAssignments } = await supabase
     .from('lead_assignments')
     .select('customer_id, assigned_at')
@@ -325,6 +328,7 @@ export async function distributeUnassignedLeads(): Promise<{ distributed: number
     .from('leads')
     .select('*')
     .neq('bron', 'excel_import')
+    .neq('phone_valid', false)
     .not('lat', 'is', null)
     .not('lng', 'is', null)
     .gte('created_at', cutoff.toISOString())
