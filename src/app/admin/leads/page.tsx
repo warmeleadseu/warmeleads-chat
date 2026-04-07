@@ -31,6 +31,7 @@ function MultiSelect({
   selected,
   onChange,
   searchable = false,
+  counts,
 }: {
   label: string;
   allLabel: string;
@@ -39,6 +40,7 @@ function MultiSelect({
   selected: string[];
   onChange: (v: string[]) => void;
   searchable?: boolean;
+  counts?: Record<string, number>;
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -85,30 +87,49 @@ function MultiSelect({
   const selectAll = () => onChange([]);
   const deselectAll = () => onChange([allValues[0]]);
 
+  const selectedCount = useMemo(() => {
+    if (!counts || selected.length === 0) return null;
+    return selected.reduce((s, v) => s + (counts[v] || 0), 0);
+  }, [counts, selected]);
+
   const triggerLabel = useMemo(() => {
     if (isAll) return allLabel;
     if (selected.length === 1) {
       const opt = allOptions.find(o => o.value === selected[0]);
-      return opt?.label || selected[0];
+      const lbl = opt?.label || selected[0];
+      return selectedCount !== null ? `${lbl} (${selectedCount})` : lbl;
     }
-    return `${selected.length} ${label}`;
-  }, [isAll, selected, allLabel, label, allOptions]);
+    return selectedCount !== null
+      ? `${selected.length} ${label} (${selectedCount})`
+      : `${selected.length} ${label}`;
+  }, [isAll, selected, allLabel, label, allOptions, selectedCount]);
 
   const hasSelection = !isAll;
 
+  const totalFacetCount = useMemo(() => {
+    if (!counts) return 0;
+    return Object.values(counts).reduce((s, n) => s + n, 0);
+  }, [counts]);
+
   const renderCheckbox = (opt: MultiSelectOption) => {
     const checked = isAll || selected.includes(opt.value);
+    const count = counts?.[opt.value];
+    const hasCount = count !== undefined;
+    const zeroCount = hasCount && count === 0;
     return (
       <button
         key={opt.value}
         type="button"
         onClick={() => toggle(opt.value)}
-        className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-sm transition hover:bg-slate-50"
+        className={`flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-sm transition hover:bg-slate-50 ${zeroCount ? 'opacity-40' : ''}`}
       >
         <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition ${checked ? 'border-brand-purple bg-brand-purple text-white' : 'border-slate-300 bg-white'}`}>
           {checked && <CheckIcon className="h-3 w-3" />}
         </span>
-        <span className="truncate text-slate-700">{opt.label}</span>
+        <span className="flex-1 truncate text-slate-700">{opt.label}</span>
+        {hasCount && (
+          <span className={`tabular-nums text-xs ${zeroCount ? 'text-slate-300' : 'text-slate-400'}`}>{count.toLocaleString('nl-NL')}</span>
+        )}
       </button>
     );
   };
@@ -182,6 +203,93 @@ function MultiSelect({
           </motion.div>
         )}
       </AnimatePresence>
+    </div>
+  );
+}
+
+/* ── Facet breakdown bar ───────────────────────────────────── */
+
+const FACET_COLORS = [
+  { bg: 'bg-blue-500', dot: 'bg-blue-500', text: 'text-blue-700', light: 'bg-blue-50' },
+  { bg: 'bg-emerald-500', dot: 'bg-emerald-500', text: 'text-emerald-700', light: 'bg-emerald-50' },
+  { bg: 'bg-amber-500', dot: 'bg-amber-500', text: 'text-amber-700', light: 'bg-amber-50' },
+  { bg: 'bg-purple-500', dot: 'bg-purple-500', text: 'text-purple-700', light: 'bg-purple-50' },
+  { bg: 'bg-rose-500', dot: 'bg-rose-500', text: 'text-rose-700', light: 'bg-rose-50' },
+  { bg: 'bg-cyan-500', dot: 'bg-cyan-500', text: 'text-cyan-700', light: 'bg-cyan-50' },
+  { bg: 'bg-indigo-500', dot: 'bg-indigo-500', text: 'text-indigo-700', light: 'bg-indigo-50' },
+  { bg: 'bg-orange-500', dot: 'bg-orange-500', text: 'text-orange-700', light: 'bg-orange-50' },
+  { bg: 'bg-teal-500', dot: 'bg-teal-500', text: 'text-teal-700', light: 'bg-teal-50' },
+  { bg: 'bg-pink-500', dot: 'bg-pink-500', text: 'text-pink-700', light: 'bg-pink-50' },
+  { bg: 'bg-lime-500', dot: 'bg-lime-500', text: 'text-lime-700', light: 'bg-lime-50' },
+  { bg: 'bg-violet-500', dot: 'bg-violet-500', text: 'text-violet-700', light: 'bg-violet-50' },
+];
+
+function FacetBreakdown({
+  title,
+  counts,
+  options,
+  selected,
+}: {
+  title: string;
+  counts: Record<string, number>;
+  options: { value: string; label: string }[];
+  selected: string[];
+}) {
+  const items = useMemo(() => {
+    const vals = selected.length > 0 ? selected : Object.keys(counts);
+    return vals
+      .map(v => {
+        const opt = options.find(o => o.value === v);
+        return { value: v, label: opt?.label || v, count: counts[v] || 0 };
+      })
+      .filter(item => item.count > 0)
+      .sort((a, b) => b.count - a.count);
+  }, [counts, options, selected]);
+
+  const total = useMemo(() => items.reduce((s, i) => s + i.count, 0), [items]);
+
+  if (items.length < 2 || total === 0) return null;
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+      <div className="mb-2 flex items-center justify-between">
+        <p className="text-xs font-semibold text-slate-500">{title}</p>
+        <p className="text-xs tabular-nums text-slate-400">{total.toLocaleString('nl-NL')} totaal</p>
+      </div>
+
+      <div className="mb-2.5 flex h-5 overflow-hidden rounded-full bg-slate-100">
+        {items.map((item, i) => {
+          const pct = (item.count / total) * 100;
+          const color = FACET_COLORS[i % FACET_COLORS.length];
+          return (
+            <div
+              key={item.value}
+              className={`${color.bg} flex items-center justify-center transition-all duration-500 first:rounded-l-full last:rounded-r-full`}
+              style={{ width: `${Math.max(pct, 1.5)}%` }}
+              title={`${item.label}: ${item.count.toLocaleString('nl-NL')} (${pct.toFixed(1)}%)`}
+            >
+              {pct > 10 && (
+                <span className="truncate px-1.5 text-[10px] font-semibold text-white">{item.count.toLocaleString('nl-NL')}</span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="flex flex-wrap gap-x-4 gap-y-1">
+        {items.map((item, i) => {
+          const pct = ((item.count / total) * 100).toFixed(1);
+          const color = FACET_COLORS[i % FACET_COLORS.length];
+          return (
+            <div key={item.value} className="flex items-center gap-1.5 text-xs">
+              <span className={`h-2 w-2 shrink-0 rounded-full ${color.dot}`} />
+              <span className="text-slate-600">{item.label}</span>
+              <span className="font-semibold tabular-nums text-slate-900">{item.count.toLocaleString('nl-NL')}</span>
+              <span className="tabular-nums text-slate-400">({pct}%)</span>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -263,6 +371,8 @@ export default function LeadsCRMPage() {
   const [sortBy, setSortBy] = useState('wervingsdatum');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
+  const [facets, setFacets] = useState<Record<string, Record<string, number>>>({});
+
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [editLead, setEditLead] = useState<Lead | null>(null);
   const [showNew, setShowNew] = useState(false);
@@ -298,8 +408,24 @@ export default function LeadsCRMPage() {
     setLoading(false);
   }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, phoneFilter, dateFrom, dateTo, search, page, perPage, sortBy, sortDir]);
 
+  const fetchFacets = useCallback(async () => {
+    const p = new URLSearchParams();
+    if (selBranches.length > 0) p.set('branch', selBranches.join(','));
+    if (selCustomers.length > 0) p.set('customer_id', selCustomers.join(','));
+    if (selStatuses.length > 0) p.set('status', selStatuses.join(','));
+    if (selProvinces.length > 0) p.set('province', selProvinces.join(','));
+    if (selSources.length > 0) p.set('source', selSources.join(','));
+    if (phoneFilter !== 'all') p.set('phone_valid', phoneFilter);
+    if (dateFrom) p.set('date_from', dateFrom);
+    if (dateTo) p.set('date_to', dateTo);
+    if (search) p.set('search', search);
+    const res = await adminFetch(`/api/admin/leads/facets?${p}`);
+    if (res.ok) { const d = await res.json(); setFacets(d.facets || {}); }
+  }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, phoneFilter, dateFrom, dateTo, search]);
+
   useEffect(() => { fetchMeta(); }, [fetchMeta]);
   useEffect(() => { fetchLeads(); }, [fetchLeads]);
+  useEffect(() => { fetchFacets(); }, [fetchFacets]);
   useEffect(() => { setPage(1); }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, phoneFilter, dateFrom, dateTo, search, perPage]);
 
   const branchMap = useMemo(() => {
@@ -470,6 +596,7 @@ export default function LeadsCRMPage() {
             options={branches.filter(b => b.is_active).map(b => ({ value: b.slug, label: b.name }))}
             selected={selBranches}
             onChange={setSelBranches}
+            counts={facets.branch}
           />
           <MultiSelect
             label="klanten"
@@ -478,6 +605,7 @@ export default function LeadsCRMPage() {
             selected={selCustomers}
             onChange={setSelCustomers}
             searchable
+            counts={facets.customer_id}
           />
           <MultiSelect
             label="statussen"
@@ -485,6 +613,7 @@ export default function LeadsCRMPage() {
             options={STATUSES.map(s => ({ value: s, label: s.charAt(0).toUpperCase() + s.slice(1) }))}
             selected={selStatuses}
             onChange={setSelStatuses}
+            counts={facets.status}
           />
           <MultiSelect
             label="provincies"
@@ -496,6 +625,7 @@ export default function LeadsCRMPage() {
             selected={selProvinces}
             onChange={setSelProvinces}
             searchable
+            counts={facets.province}
           />
           <MultiSelect
             label="bronnen"
@@ -507,6 +637,7 @@ export default function LeadsCRMPage() {
             ]}
             selected={selSources}
             onChange={setSelSources}
+            counts={facets.source}
           />
           <select value={phoneFilter} onChange={e => setPhoneFilter(e.target.value)} className={`rounded-lg border px-3 py-2 text-sm ${phoneFilter === 'false' ? 'border-amber-300 bg-amber-50 text-amber-700' : 'border-slate-200 bg-white text-slate-700'}`}>
             <option value="all">Alle nummers</option>
@@ -535,6 +666,46 @@ export default function LeadsCRMPage() {
           )}
         </div>
       </div>
+
+      {/* Facet breakdown bars */}
+      {Object.keys(facets).length > 0 && (
+        <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <FacetBreakdown
+            title="Verdeling per branche"
+            counts={facets.branch || {}}
+            options={branches.filter(b => b.is_active).map(b => ({ value: b.slug, label: b.name }))}
+            selected={selBranches}
+          />
+          <FacetBreakdown
+            title="Verdeling per provincie"
+            counts={facets.province || {}}
+            options={[...PROVINCES_NL, ...PROVINCES_BE].map(p => ({ value: p, label: p }))}
+            selected={selProvinces}
+          />
+          <FacetBreakdown
+            title="Verdeling per status"
+            counts={facets.status || {}}
+            options={STATUSES.map(s => ({ value: s, label: s.charAt(0).toUpperCase() + s.slice(1) }))}
+            selected={selStatuses}
+          />
+          <FacetBreakdown
+            title="Verdeling per klant"
+            counts={facets.customer_id || {}}
+            options={customers.map(c => ({ value: c.id, label: c.name }))}
+            selected={selCustomers}
+          />
+          <FacetBreakdown
+            title="Verdeling per bron"
+            counts={facets.source || {}}
+            options={[
+              { value: 'handmatig', label: 'Handmatig' },
+              { value: 'excel_import', label: 'Excel import' },
+              { value: 'zapier', label: 'Zapier' },
+            ]}
+            selected={selSources}
+          />
+        </div>
+      )}
 
       <AnimatePresence>
         {selected.size > 0 && (
