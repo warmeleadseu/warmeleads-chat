@@ -124,11 +124,13 @@ export async function PUT(request: NextRequest) {
     ];
   }
 
-  // Recalculate total_price when batch_size or price_per_lead changes
+  // Recalculate total_price - exclude compensation leads (those are free)
   if (updates.batch_size || updates.price_per_lead) {
     const ppl = updates.price_per_lead ?? existing.price_per_lead;
-    const bs = updates.batch_size ?? existing.batch_size;
-    if (ppl) updates.total_price = ppl * bs;
+    const totalComps = (updates.compensations || existing.compensations || [])
+      .reduce((s: number, c: { amount: number }) => s + (c.amount || 0), 0);
+    const paidLeads = (updates.batch_size ?? existing.batch_size) - totalComps;
+    if (ppl) updates.total_price = ppl * Math.max(0, paidLeads);
   }
 
   // Validate leads_delivered

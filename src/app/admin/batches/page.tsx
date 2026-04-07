@@ -315,6 +315,7 @@ export default function BatchesPage() {
                   const pct = b.batch_size > 0 ? Math.min(100, Math.round((b.leads_delivered / b.batch_size) * 100)) : 0;
                   const br = getBranch(b.branch);
                   const c = COLOR_MAP[br.color] || COLOR_MAP.slate;
+                  const compTotal = (Array.isArray(b.compensations) ? b.compensations : []).reduce((s: number, x: Compensation) => s + x.amount, 0);
                   return (
                     <tr key={b.id} className="group transition hover:bg-slate-50/50">
                       <td className="px-4 py-3">
@@ -332,7 +333,12 @@ export default function BatchesPage() {
                                 style={{ width: `${pct}%` }} />
                             </div>
                           </div>
-                          <span className="whitespace-nowrap text-xs text-slate-600">{b.leads_delivered}/{b.batch_size} <span className="text-slate-400">({pct}%)</span></span>
+                          <div>
+                            <span className="whitespace-nowrap text-xs text-slate-600">{b.leads_delivered}/{b.batch_size} <span className="text-slate-400">({pct}%)</span></span>
+                            {compTotal > 0 && (
+                              <p className="whitespace-nowrap text-[10px] font-medium text-emerald-600">+{compTotal} compensatie</p>
+                            )}
+                          </div>
                         </div>
                       </td>
                       <td className="px-4 py-3">
@@ -391,6 +397,7 @@ export default function BatchesPage() {
               const pct = b.batch_size > 0 ? Math.min(100, Math.round((b.leads_delivered / b.batch_size) * 100)) : 0;
               const br = getBranch(b.branch);
               const c = COLOR_MAP[br.color] || COLOR_MAP.slate;
+              const mobileCompTotal = (Array.isArray(b.compensations) ? b.compensations : []).reduce((s: number, x: Compensation) => s + x.amount, 0);
               return (
                 <div key={b.id} className={`rounded-xl border p-4 shadow-sm ${b.status === 'completed' ? 'border-blue-100 bg-blue-50/30' : b.status === 'paused' ? 'border-amber-100 bg-amber-50/20' : 'border-slate-200 bg-white'}`}>
                   <div className="mb-2 flex items-start justify-between">
@@ -419,7 +426,12 @@ export default function BatchesPage() {
                   {/* Progress */}
                   <div className="mb-2">
                     <div className="mb-1 flex items-baseline justify-between">
-                      <span className="text-sm font-bold text-slate-800">{b.leads_delivered} / {b.batch_size}</span>
+                      <div>
+                        <span className="text-sm font-bold text-slate-800">{b.leads_delivered} / {b.batch_size}</span>
+                        {mobileCompTotal > 0 && (
+                          <span className="ml-1.5 text-[10px] font-medium text-emerald-600">+{mobileCompTotal} comp.</span>
+                        )}
+                      </div>
                       <span className="text-xs font-medium text-slate-500">{pct}%</span>
                     </div>
                     <div className="h-2.5 overflow-hidden rounded-full bg-slate-100">
@@ -609,7 +621,7 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
               <p className="text-sm font-medium text-brand-purple">Compensatie leads toevoegen</p>
             </div>
             <p className="mb-3 text-[11px] text-slate-500">
-              Voeg extra leads toe als compensatie. De klant ziet dit in zijn portaal. Het systeem vult de extra plekken direct.
+              Voeg extra leads toe als compensatie. De klant ziet dit in het portaal. Het systeem vult de extra plekken direct.
             </p>
             <div className="space-y-2">
               <div className="grid grid-cols-5 gap-2">
@@ -627,11 +639,16 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
                 </div>
               </div>
               {extraLeads > 0 && (
-                <div className="flex items-center gap-2 rounded-md bg-white px-3 py-2">
-                  <CheckCircleIcon className="h-4 w-4 text-brand-purple" />
-                  <p className="text-xs text-slate-600">
-                    Batch grootte wordt <span className="font-semibold text-slate-900">{form.batch_size}</span> → <span className="font-bold text-brand-purple">{effectiveBatchSize}</span> (+{extraLeads} compensatie)
-                  </p>
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2 rounded-md bg-white px-3 py-2">
+                    <CheckCircleIcon className="h-4 w-4 text-brand-purple" />
+                    <p className="text-xs text-slate-600">
+                      Batch grootte wordt <span className="font-semibold text-slate-900">{form.batch_size}</span> → <span className="font-bold text-brand-purple">{effectiveBatchSize}</span> (+{extraLeads} compensatie)
+                    </p>
+                  </div>
+                  {!extraReason.trim() && (
+                    <p className="text-[11px] font-medium text-red-500">Vul een reden in om op te slaan</p>
+                  )}
                 </div>
               )}
             </div>
@@ -730,7 +747,7 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
         </div>
 
         <div className="shrink-0 border-t border-slate-100 px-5 py-4">
-          <button onClick={save} disabled={saving || form.batch_size < 1}
+          <button onClick={save} disabled={saving || form.batch_size < 1 || (extraLeads > 0 && !extraReason.trim())}
             className="flex w-full items-center justify-center gap-2 rounded-lg bg-button-gradient py-2.5 text-sm font-bold text-white disabled:opacity-50">
             {saving ? <><ArrowPathIcon className="h-4 w-4 animate-spin" /> Opslaan...</> : 'Wijzigingen opslaan'}
           </button>
