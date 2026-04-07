@@ -1,6 +1,6 @@
 -- Create lead_reclamations table for portal complaints
 CREATE TABLE IF NOT EXISTS lead_reclamations (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   customer_id UUID NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
   lead_id UUID NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
   reason TEXT NOT NULL,
