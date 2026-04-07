@@ -26,6 +26,10 @@ import {
   LinkSlashIcon,
   CheckCircleIcon,
   ExclamationTriangleIcon,
+  EnvelopeIcon,
+  ClockIcon,
+  FunnelIcon,
+  ChevronUpDownIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
 
@@ -33,6 +37,30 @@ interface Customer {
   id: string; name: string; contact_person: string; email: string; phone: string;
   branches: string[]; is_active: boolean; portal_active: boolean; has_password?: boolean; portal_password?: string | null; notes: string; created_at: string;
   lead_count?: number;
+  last_login_at?: string | null;
+  login_count?: number;
+}
+
+function getActivityStatus(c: Customer): { label: string; color: string; dotColor: string; sort: number } {
+  if (!c.portal_active || !c.has_password) return { label: 'Portaal niet actief', color: 'text-slate-400', dotColor: 'bg-slate-300', sort: 5 };
+  if (!c.last_login_at || !c.login_count) return { label: 'Nooit ingelogd', color: 'text-red-500', dotColor: 'bg-red-400', sort: 4 };
+  const diff = Date.now() - new Date(c.last_login_at).getTime();
+  const hours = diff / (1000 * 60 * 60);
+  const days = diff / (1000 * 60 * 60 * 24);
+  if (hours < 1) return { label: 'Online', color: 'text-emerald-600', dotColor: 'bg-emerald-500', sort: 0 };
+  if (days < 1) return { label: `${Math.floor(hours)}u geleden`, color: 'text-emerald-600', dotColor: 'bg-emerald-500', sort: 0 };
+  if (days < 7) return { label: `${Math.floor(days)}d geleden`, color: 'text-emerald-600', dotColor: 'bg-emerald-500', sort: 1 };
+  if (days < 30) return { label: `${Math.floor(days)}d geleden`, color: 'text-amber-600', dotColor: 'bg-amber-400', sort: 2 };
+  return { label: `${Math.floor(days)}d geleden`, color: 'text-red-500', dotColor: 'bg-red-400', sort: 3 };
+}
+
+function timeAgo(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const days = diff / (1000 * 60 * 60 * 24);
+  if (days < 1) return 'Vandaag';
+  if (days < 7) return `${Math.floor(days)}d geleden`;
+  if (days < 30) return `${Math.floor(days / 7)}w geleden`;
+  return `${Math.floor(days / 30)}m geleden`;
 }
 
 interface BranchOption { slug: string; name: string; color: string; is_active: boolean; }
@@ -78,6 +106,11 @@ export default function CustomersPage() {
   const [batchesFor, setBatchesFor] = useState<Customer | null>(null);
   const [leadsFor, setLeadsFor] = useState<Customer | null>(null);
   const [allBatches, setAllBatches] = useState<Batch[]>([]);
+  const [search, setSearch] = useState('');
+  const [activityFilter, setActivityFilter] = useState('all');
+  const [sortBy, setSortBy] = useState('name');
+  const [sendingReminder, setSendingReminder] = useState<string | null>(null);
+  const [reminderSent, setReminderSent] = useState<Set<string>>(new Set());
 
   const portalUrl = typeof window !== 'undefined' ? `${window.location.origin}/portal` : 'https://www.warmeleads.eu/portal';
 
@@ -136,6 +169,75 @@ export default function CustomersPage() {
     fetch_();
   };
 
+  const sendReminder = async (c: Customer) => {
+    setSendingReminder(c.id);
+    try {
+      const res = await adminFetch('/api/admin/customers/reminder', {
+        method: 'POST',
+        body: JSON.stringify({ customer_id: c.id }),
+      });
+      if (res.ok) {
+        setReminderSent(prev => new Set(prev).add(c.id));
+      } else {
+        const d = await res.json();
+        alert(d.error || 'Versturen mislukt');
+      }
+    } catch { alert('Er ging iets mis'); }
+    setSendingReminder(null);
+  };
+
+  const portalUsers = customers.filter(c => c.portal_active && c.has_password);
+  const activePortalUsers = portalUsers.filter(c => {
+    if (!c.last_login_at) return false;
+    return Date.now() - new Date(c.last_login_at).getTime() < 7 * 24 * 60 * 60 * 1000;
+  });
+  const neverLoggedIn = portalUsers.filter(c => !c.last_login_at || !c.login_count);
+  const churning = portalUsers.filter(c => {
+    if (!c.last_login_at) return false;
+    return Date.now() - new Date(c.last_login_at).getTime() > 30 * 24 * 60 * 60 * 1000;
+  });
+
+  const filtered = useMemo(() => {
+    let list = [...customers];
+
+    if (search) {
+      const s = search.toLowerCase();
+      list = list.filter(c =>
+        c.name.toLowerCase().includes(s) ||
+        (c.contact_person || '').toLowerCase().includes(s) ||
+        (c.email || '').toLowerCase().includes(s)
+      );
+    }
+
+    if (activityFilter === 'active') {
+      list = list.filter(c => c.last_login_at && Date.now() - new Date(c.last_login_at).getTime() < 7 * 24 * 60 * 60 * 1000);
+    } else if (activityFilter === 'never') {
+      list = list.filter(c => c.portal_active && c.has_password && (!c.last_login_at || !c.login_count));
+    } else if (activityFilter === 'inactive') {
+      list = list.filter(c => c.last_login_at && Date.now() - new Date(c.last_login_at).getTime() > 30 * 24 * 60 * 60 * 1000);
+    }
+
+    list.sort((a, b) => {
+      if (sortBy === 'last_login') {
+        const aTime = a.last_login_at ? new Date(a.last_login_at).getTime() : 0;
+        const bTime = b.last_login_at ? new Date(b.last_login_at).getTime() : 0;
+        return bTime - aTime;
+      }
+      if (sortBy === 'login_count') {
+        return (b.login_count || 0) - (a.login_count || 0);
+      }
+      if (sortBy === 'activity') {
+        return getActivityStatus(a).sort - getActivityStatus(b).sort;
+      }
+      if (sortBy === 'created') {
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      }
+      return a.name.localeCompare(b.name);
+    });
+
+    return list;
+  }, [customers, search, activityFilter, sortBy]);
+
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
@@ -147,6 +249,70 @@ export default function CustomersPage() {
           <PlusIcon className="h-4 w-4" /> Nieuwe klant
         </button>
       </div>
+
+      {/* Activity KPIs */}
+      {!loading && customers.length > 0 && (
+        <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <p className="text-[11px] font-medium uppercase tracking-wider text-slate-400">Actief (7d)</p>
+            <p className="mt-1 text-2xl font-bold text-emerald-600">{activePortalUsers.length}</p>
+            <p className="mt-0.5 text-[11px] text-slate-400">van {portalUsers.length} portaalgebruikers</p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <p className="text-[11px] font-medium uppercase tracking-wider text-slate-400">Nooit ingelogd</p>
+            <p className="mt-1 text-2xl font-bold text-red-500">{neverLoggedIn.length}</p>
+            <p className="mt-0.5 text-[11px] text-slate-400">portaal gereed maar ongebruikt</p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <p className="text-[11px] font-medium uppercase tracking-wider text-slate-400">Dreigt af te haken</p>
+            <p className="mt-1 text-2xl font-bold text-amber-600">{churning.length}</p>
+            <p className="mt-0.5 text-[11px] text-slate-400">&gt;30 dagen geen login</p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <p className="text-[11px] font-medium uppercase tracking-wider text-slate-400">Totaal klanten</p>
+            <p className="mt-1 text-2xl font-bold text-brand-purple">{customers.length}</p>
+            <p className="mt-0.5 text-[11px] text-slate-400">{customers.filter(c => c.is_active).length} actief</p>
+          </div>
+        </div>
+      )}
+
+      {/* Search + filter + sort bar */}
+      {!loading && customers.length > 0 && (
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="relative flex-1 sm:max-w-xs">
+            <MagnifyingGlassIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Zoek op naam, contact, e-mail..."
+              className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm text-slate-800 outline-none focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/30" />
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5">
+              <FunnelIcon className="h-4 w-4 text-slate-400" />
+              <select value={activityFilter} onChange={e => setActivityFilter(e.target.value)}
+                className="bg-transparent text-sm text-slate-700 outline-none">
+                <option value="all">Alle klanten</option>
+                <option value="active">Actief (7d)</option>
+                <option value="never">Nooit ingelogd</option>
+                <option value="inactive">Inactief (30d+)</option>
+              </select>
+            </div>
+            <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5">
+              <ChevronUpDownIcon className="h-4 w-4 text-slate-400" />
+              <select value={sortBy} onChange={e => setSortBy(e.target.value)}
+                className="bg-transparent text-sm text-slate-700 outline-none">
+                <option value="name">Naam</option>
+                <option value="last_login">Laatst ingelogd</option>
+                <option value="login_count">Aantal logins</option>
+                <option value="activity">Activiteitsstatus</option>
+                <option value="created">Aangemaakt</option>
+              </select>
+            </div>
+            {(search || activityFilter !== 'all') && (
+              <button onClick={() => { setSearch(''); setActivityFilter('all'); }}
+                className="text-xs font-medium text-red-500 hover:text-red-600">Filters wissen</button>
+            )}
+          </div>
+        </div>
+      )}
 
       {loading ? (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -174,27 +340,50 @@ export default function CustomersPage() {
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {customers.map(c => {
+          {filtered.length === 0 ? (
+            <div className="col-span-full rounded-xl border border-dashed border-slate-300 bg-white py-12 text-center">
+              <MagnifyingGlassIcon className="mx-auto mb-2 h-8 w-8 text-slate-300" />
+              <p className="text-sm font-medium text-slate-500">Geen klanten gevonden</p>
+              <p className="mt-0.5 text-xs text-slate-400">Pas je zoekterm of filters aan</p>
+            </div>
+          ) : filtered.map(c => {
             const portalReady = c.portal_active && c.has_password && c.email;
+            const activity = getActivityStatus(c);
+            const isNew = Date.now() - new Date(c.created_at).getTime() < 7 * 24 * 60 * 60 * 1000;
+            const neverLogged = c.portal_active && c.has_password && (!c.last_login_at || !c.login_count);
+            const isChurning = c.last_login_at && Date.now() - new Date(c.last_login_at).getTime() > 30 * 24 * 60 * 60 * 1000;
             return (
               <div key={c.id} className="rounded-xl border border-slate-200 bg-white shadow-sm transition hover:shadow-md">
                 <div className="p-5">
                   {/* Header */}
                   <div className="mb-3 flex items-start justify-between">
                     <div className="min-w-0 flex-1">
-                      <h3 className="font-semibold text-slate-900">{c.name}</h3>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-semibold text-slate-900">{c.name}</h3>
+                        {portalReady && (
+                          <span className={`flex items-center gap-1 text-[11px] font-medium ${activity.color}`} title={c.last_login_at ? `Laatste login: ${new Date(c.last_login_at).toLocaleString('nl-NL')}` : 'Nooit ingelogd'}>
+                            <span className={`inline-block h-1.5 w-1.5 rounded-full ${activity.dotColor} ${activity.sort === 0 ? 'animate-pulse' : ''}`} />
+                            {activity.label}
+                          </span>
+                        )}
+                      </div>
                       {c.contact_person && <p className="text-xs text-slate-500">{c.contact_person}</p>}
                     </div>
-                    <span className={`ml-2 shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${c.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
-                      {c.is_active ? 'Actief' : 'Inactief'}
-                    </span>
+                    <div className="ml-2 flex shrink-0 flex-col items-end gap-1">
+                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${c.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                        {c.is_active ? 'Actief' : 'Inactief'}
+                      </span>
+                      {isNew && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-600">Nieuwe klant</span>}
+                      {neverLogged && <span className="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-500">Nooit ingelogd</span>}
+                      {!neverLogged && isChurning && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-600">Dreigt af te haken</span>}
+                    </div>
                   </div>
 
                   {/* Contact */}
                   {c.email && <p className="mb-0.5 text-xs text-slate-500">{c.email}</p>}
                   {c.phone && <p className="mb-2 text-xs text-slate-500">{c.phone}</p>}
 
-                  {/* Branches + leads */}
+                  {/* Branches + leads + login count */}
                   <div className="mb-4 flex flex-wrap items-center gap-1.5">
                     {c.branches?.map(bSlug => {
                       const bo = branchOptions.find(x => x.slug === bSlug);
@@ -213,6 +402,11 @@ export default function CustomersPage() {
                     {typeof c.lead_count === 'number' && (
                       <span className="flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
                         <UserGroupIcon className="h-3 w-3" /> {c.lead_count} leads
+                      </span>
+                    )}
+                    {(c.login_count || 0) > 0 && (
+                      <span className="flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+                        <ClockIcon className="h-3 w-3" /> {c.login_count}x ingelogd
                       </span>
                     )}
                   </div>
@@ -345,6 +539,26 @@ export default function CustomersPage() {
                           <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5" />
                           Open
                         </a>
+                      )}
+                      {neverLogged && c.email && (
+                        <button
+                          onClick={() => sendReminder(c)}
+                          disabled={sendingReminder === c.id || reminderSent.has(c.id)}
+                          className={`inline-flex min-h-[32px] items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition disabled:opacity-50 ${
+                            reminderSent.has(c.id)
+                              ? 'border-emerald-200 bg-emerald-50 text-emerald-600'
+                              : 'border-brand-purple/30 bg-brand-purple/5 text-brand-purple hover:bg-brand-purple/10'
+                          }`}
+                        >
+                          {sendingReminder === c.id ? (
+                            <ArrowPathIcon className="h-3.5 w-3.5 animate-spin" />
+                          ) : reminderSent.has(c.id) ? (
+                            <CheckIcon className="h-3.5 w-3.5" />
+                          ) : (
+                            <EnvelopeIcon className="h-3.5 w-3.5" />
+                          )}
+                          {reminderSent.has(c.id) ? 'Verstuurd!' : 'Reminder'}
+                        </button>
                       )}
                     </div>
                   </div>

@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
 
     const { data: customer, error } = await supabase
       .from('customers')
-      .select('id, name, email, contact_person, branches, is_active, portal_active, password_hash')
+      .select('id, name, email, contact_person, branches, is_active, portal_active, password_hash, login_count')
       .eq('email', email.toLowerCase().trim())
       .single();
 
@@ -38,6 +38,16 @@ export async function POST(request: NextRequest) {
     if (!passwordMatch) {
       return NextResponse.json({ error: 'Ongeldige inloggegevens' }, { status: 401 });
     }
+
+    // Track login activity (non-blocking)
+    supabase
+      .from('customers')
+      .update({
+        last_login_at: new Date().toISOString(),
+        login_count: (customer.login_count || 0) + 1,
+      })
+      .eq('id', customer.id)
+      .then(() => {});
 
     const { password_hash: _, ...safeCustomer } = customer;
 
