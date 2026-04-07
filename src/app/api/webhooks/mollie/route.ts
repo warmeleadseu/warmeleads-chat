@@ -4,7 +4,7 @@ import { getPayment } from '@/lib/mollie';
 import { backfillBatch } from '@/lib/distribution';
 import { sendOrderConfirmationEmail, sendEmail } from '@/lib/email';
 import { sendPushToCustomer } from '@/lib/pushNotification';
-import { createInvoice, sendNewBatchAdminEmail } from '@/lib/invoice';
+import { createInvoice, markInvoicePaid, sendNewBatchAdminEmail } from '@/lib/invoice';
 
 export async function POST(request: NextRequest) {
   try {
@@ -62,21 +62,25 @@ export async function POST(request: NextRequest) {
           }).catch(() => {});
         }
 
-        // Create invoice
+        // Mark existing open invoice as paid, or create new one
         if (Number(claimed.price_per_lead) > 0 && Number(claimed.total_price) > 0) {
-          createInvoice({
-            customer_id: claimed.customer_id,
-            batch_id: claimed.id,
-            branch_name: branchName,
-            batch_size: claimed.batch_size,
-            price_per_lead: Number(claimed.price_per_lead),
-            total_price: Number(claimed.total_price),
-            mollie_payment_id: paymentId,
-            paid_at: new Date().toISOString(),
+          markInvoicePaid(claimed.id, paymentId).then(updated => {
+            if (updated) return;
+            // No open invoice found — create a new one
+            return createInvoice({
+              customer_id: claimed.customer_id,
+              batch_id: claimed.id,
+              branch_name: branchName,
+              batch_size: claimed.batch_size,
+              price_per_lead: Number(claimed.price_per_lead),
+              total_price: Number(claimed.total_price),
+              mollie_payment_id: paymentId,
+              paid_at: new Date().toISOString(),
+            });
           }).catch(e => {
-            console.error('[mollie-webhook] invoice creation failed:', e);
-            sendEmail('info@warmeleads.eu', `[WAARSCHUWING] Factuur aanmaken mislukt`,
-              `<p>Batch betaling is gelukt maar de factuur kon niet worden aangemaakt.</p>
+            console.error('[mollie-webhook] invoice handling failed:', e);
+            sendEmail('info@warmeleads.eu', `[WAARSCHUWING] Factuur aanmaken/bijwerken mislukt`,
+              `<p>Batch betaling is gelukt maar de factuur kon niet worden bijgewerkt.</p>
                <p><strong>Batch ID:</strong> ${claimed.id}</p>
                <p><strong>Klant:</strong> ${cust?.name || 'Onbekend'}</p>
                <p><strong>Error:</strong> ${e?.message || String(e)}</p>`

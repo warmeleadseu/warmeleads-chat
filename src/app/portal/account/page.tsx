@@ -27,6 +27,7 @@ import {
   TrashIcon,
   DocumentTextIcon,
   ArrowDownTrayIcon,
+  CreditCardIcon,
 } from '@heroicons/react/24/outline';
 import { usePushNotifications } from '../usePushNotifications';
 
@@ -812,10 +813,12 @@ function AreasTab({
 
 /* ─── Invoices Tab ─────────────────────────────────────── */
 
-function InvoicesTab({ data, loading, onDownload }: {
-  data: { id: string; invoice_number: string; description: string; subtotal: number; btw_amount: number; total_incl_btw: number; status: string; paid_at: string | null; created_at: string }[];
+function InvoicesTab({ data, loading, onDownload, onPay, payingBatchId }: {
+  data: { id: string; invoice_number: string; description: string; subtotal: number; btw_amount: number; total_incl_btw: number; status: string; paid_at: string | null; created_at: string; batch_id: string | null }[];
   loading: boolean;
   onDownload: (inv: { id: string; invoice_number: string }) => void;
+  onPay: (batchId: string) => void;
+  payingBatchId: string | null;
 }) {
   if (loading) {
     return (
@@ -832,64 +835,118 @@ function InvoicesTab({ data, loading, onDownload }: {
       <div className="rounded-xl border border-dashed border-slate-200 py-16 text-center">
         <DocumentTextIcon className="mx-auto mb-3 h-10 w-10 text-slate-300" />
         <p className="text-sm font-medium text-slate-400">Nog geen facturen</p>
-        <p className="mt-1 text-xs text-slate-300">Facturen verschijnen hier na betaling</p>
+        <p className="mt-1 text-xs text-slate-300">Facturen verschijnen hier zodra er een batch wordt aangemaakt</p>
       </div>
     );
   }
 
+  const openInvoices = data.filter(i => i.status === 'open');
+  const otherInvoices = data.filter(i => i.status !== 'open');
   const totalInclBtw = data.reduce((sum, i) => sum + Number(i.total_incl_btw), 0);
+  const openTotal = openInvoices.reduce((sum, i) => sum + Number(i.total_incl_btw), 0);
+
+  const statusBadge = (inv: typeof data[0]) => {
+    if (inv.status === 'open') return (
+      <span className="flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+        <CreditCardIcon className="h-3 w-3" />
+        Open
+      </span>
+    );
+    if (inv.status === 'credit_note') return (
+      <span className="flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+        <CheckCircleIcon className="h-3 w-3" />
+        Creditnota
+      </span>
+    );
+    return (
+      <span className="flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+        <CheckCircleIcon className="h-3 w-3" />
+        Betaald
+      </span>
+    );
+  };
+
+  const renderInvoice = (inv: typeof data[0]) => (
+    <div key={inv.id} className={`rounded-xl border bg-white p-4 shadow-sm transition hover:shadow-md ${inv.status === 'open' ? 'border-amber-200' : 'border-slate-200'}`}>
+      <div className="flex items-start justify-between">
+        <div className="min-w-0 flex-1">
+          <div className="mb-1 flex flex-wrap items-center gap-2">
+            <span className="rounded bg-brand-purple/10 px-2 py-0.5 text-[11px] font-bold text-brand-purple">{inv.invoice_number}</span>
+            {statusBadge(inv)}
+          </div>
+          <p className="text-sm text-slate-700">{inv.description}</p>
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400">
+            <span>{new Date(inv.created_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+            {inv.paid_at && (
+              <span>Betaald {new Date(inv.paid_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}</span>
+            )}
+          </div>
+        </div>
+        <div className="ml-4 flex shrink-0 items-center gap-3">
+          <div className="text-right">
+            <p className="text-sm font-bold text-slate-900">&euro;{Number(inv.total_incl_btw).toFixed(2)}</p>
+            <p className="text-[10px] text-slate-400">&euro;{Number(inv.subtotal).toFixed(2)} + &euro;{Number(inv.btw_amount).toFixed(2)} BTW</p>
+          </div>
+          {inv.status === 'paid' || inv.status === 'credit_note' ? (
+            <button
+              onClick={() => onDownload(inv)}
+              title="Download PDF"
+              className="rounded-lg p-2 text-slate-400 transition hover:bg-brand-purple/10 hover:text-brand-purple"
+            >
+              <ArrowDownTrayIcon className="h-5 w-5" />
+            </button>
+          ) : null}
+        </div>
+      </div>
+      {inv.status === 'open' && inv.batch_id && (
+        <button
+          onClick={() => onPay(inv.batch_id!)}
+          disabled={payingBatchId === inv.batch_id}
+          className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-brand-orange to-brand-pink px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:shadow-md disabled:opacity-50"
+        >
+          {payingBatchId === inv.batch_id ? (
+            <><span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" /> Bezig...</>
+          ) : (
+            <><CreditCardIcon className="h-4 w-4" /> Betaal nu &middot; &euro;{Number(inv.total_incl_btw).toFixed(2)}</>
+          )}
+        </button>
+      )}
+    </div>
+  );
 
   return (
     <div className="space-y-4">
+      {/* Summary card */}
       <div className="rounded-xl border border-slate-200 bg-gradient-to-r from-brand-purple/5 to-brand-pink/5 p-4">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-xs font-medium text-slate-500">{data.length} facturen totaal</p>
             <p className="text-lg font-bold text-slate-900">&euro;{totalInclBtw.toFixed(2)} <span className="text-xs font-normal text-slate-400">incl. BTW</span></p>
+            {openTotal > 0 && (
+              <p className="mt-0.5 text-xs font-medium text-amber-600">Openstaand: &euro;{openTotal.toFixed(2)}</p>
+            )}
           </div>
           <DocumentTextIcon className="h-8 w-8 text-brand-purple/30" />
         </div>
       </div>
 
-      <div className="space-y-2.5">
-        {data.map(inv => (
-          <div key={inv.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:shadow-md">
-            <div className="flex items-start justify-between">
-              <div className="min-w-0 flex-1">
-                <div className="mb-1 flex items-center gap-2">
-                  <span className="rounded bg-brand-purple/10 px-2 py-0.5 text-[11px] font-bold text-brand-purple">{inv.invoice_number}</span>
-                  <span className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                    inv.status === 'credit_note' ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'
-                  }`}>
-                    <CheckCircleIcon className="h-3 w-3" />
-                    {inv.status === 'credit_note' ? 'Creditnota' : 'Betaald'}
-                  </span>
-                </div>
-                <p className="text-sm text-slate-700">{inv.description}</p>
-                <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400">
-                  <span>{new Date(inv.created_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
-                  {inv.paid_at && (
-                    <span>Betaald {new Date(inv.paid_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}</span>
-                  )}
-                </div>
-              </div>
-              <div className="ml-4 flex shrink-0 items-center gap-3">
-                <div className="text-right">
-                  <p className="text-sm font-bold text-slate-900">&euro;{Number(inv.total_incl_btw).toFixed(2)}</p>
-                  <p className="text-[10px] text-slate-400">&euro;{Number(inv.subtotal).toFixed(2)} + &euro;{Number(inv.btw_amount).toFixed(2)} BTW</p>
-                </div>
-                <button
-                  onClick={() => onDownload(inv)}
-                  title="Download PDF"
-                  className="rounded-lg p-2 text-slate-400 transition hover:bg-brand-purple/10 hover:text-brand-purple"
-                >
-                  <ArrowDownTrayIcon className="h-5 w-5" />
-                </button>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
+      {/* Open invoices first */}
+      {openInvoices.length > 0 && (
+        <div className="space-y-2.5">
+          <p className="text-xs font-semibold uppercase tracking-wider text-amber-600">Openstaande facturen</p>
+          {openInvoices.map(renderInvoice)}
+        </div>
+      )}
+
+      {/* Other invoices */}
+      {otherInvoices.length > 0 && (
+        <div className="space-y-2.5">
+          {openInvoices.length > 0 && (
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Betaalde facturen</p>
+          )}
+          {otherInvoices.map(renderInvoice)}
+        </div>
+      )}
     </div>
   );
 }
@@ -1021,8 +1078,9 @@ export default function AccountPage() {
   const [ordersData, setOrdersData] = useState<OrderData[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
 
-  const [invoicesData, setInvoicesData] = useState<{ id: string; invoice_number: string; description: string; subtotal: number; btw_amount: number; total_incl_btw: number; status: string; paid_at: string | null; created_at: string }[]>([]);
+  const [invoicesData, setInvoicesData] = useState<{ id: string; invoice_number: string; description: string; subtotal: number; btw_amount: number; total_incl_btw: number; status: string; paid_at: string | null; created_at: string; batch_id: string | null }[]>([]);
   const [invoicesLoading, setInvoicesLoading] = useState(false);
+  const [payingInvoice, setPayingInvoice] = useState<string | null>(null);
 
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
   const toastTimer = useRef<NodeJS.Timeout | null>(null);
@@ -1108,6 +1166,27 @@ export default function AccountPage() {
       URL.revokeObjectURL(url);
     } catch {
       showToast('PDF downloaden mislukt', 'error');
+    }
+  }, [showToast]);
+
+  const handlePayInvoice = useCallback(async (batchId: string) => {
+    setPayingInvoice(batchId);
+    try {
+      const res = await portalFetch('/api/portal/pay-batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ batch_id: batchId }),
+      });
+      const data = await res.json();
+      if (data.checkoutUrl) {
+        window.location.href = data.checkoutUrl;
+      } else {
+        showToast(data.error || 'Betaling starten mislukt', 'error');
+      }
+    } catch {
+      showToast('Er ging iets mis bij het starten van de betaling', 'error');
+    } finally {
+      setPayingInvoice(null);
     }
   }, [showToast]);
 
@@ -1218,7 +1297,7 @@ export default function AccountPage() {
           )}
 
           {activeTab === 'invoices' && (
-            <InvoicesTab data={invoicesData} loading={invoicesLoading} onDownload={downloadInvoicePdf} />
+            <InvoicesTab data={invoicesData} loading={invoicesLoading} onDownload={downloadInvoicePdf} onPay={handlePayInvoice} payingBatchId={payingInvoice} />
           )}
         </motion.div>
       </AnimatePresence>

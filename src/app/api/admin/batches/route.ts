@@ -3,7 +3,7 @@ import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
 import { backfillBatch, distributeUnassignedLeads } from '@/lib/distribution';
 import { checkBatchMilestones } from '@/lib/batchNotifications';
-import { createInvoice, sendNewBatchAdminEmail } from '@/lib/invoice';
+import { createInvoice, markInvoicePaid, sendNewBatchAdminEmail } from '@/lib/invoice';
 
 export async function GET(request: NextRequest) {
   const admin = await verifyAdmin(request);
@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
     source: 'admin',
   }).catch(() => {});
 
-  if (batchIsPaid && price_per_lead && total_price) {
+  if (price_per_lead && total_price) {
     createInvoice({
       customer_id,
       batch_id: data.id,
@@ -83,7 +83,8 @@ export async function POST(request: NextRequest) {
       batch_size,
       price_per_lead,
       total_price,
-      paid_at: new Date().toISOString(),
+      status: batchIsPaid ? 'paid' : 'open',
+      ...(batchIsPaid ? { paid_at: new Date().toISOString() } : {}),
     }).catch(e => console.error('[admin/batches] invoice creation failed:', e));
   }
 
@@ -175,6 +176,11 @@ export async function PUT(request: NextRequest) {
   if (batchGrew) {
     const lookback = existing.lookback_days ?? 3;
     try { backfillBatch(id, Math.max(lookback, 3)); } catch { /* non-blocking */ }
+  }
+
+  // When admin manually marks batch as paid, update any open invoice
+  if (updates.is_paid === true && existing.is_paid === false) {
+    markInvoicePaid(id, 'admin-manual').catch(e => console.error('[admin/batches] markInvoicePaid failed:', e));
   }
 
   // When a batch is (re)activated, trigger distribution

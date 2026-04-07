@@ -93,6 +93,10 @@ export default function AdminInvoicesPage() {
     invoices.filter(i => i.status === 'paid').reduce((sum, i) => sum + Number(i.total_incl_btw), 0)
   , [invoices]);
 
+  const totalOpen = useMemo(() =>
+    invoices.filter(i => i.status === 'open').reduce((sum, i) => sum + Number(i.total_incl_btw), 0)
+  , [invoices]);
+
   const downloadPdf = useCallback(async (invoice: Invoice) => {
     try {
       const res = await fetch(`/api/invoices/${invoice.id}/pdf`, { headers: adminHeaders() });
@@ -134,7 +138,7 @@ export default function AdminInvoicesPage() {
             Facturen
           </h1>
           <p className="mt-1 text-sm text-slate-500">
-            {invoices.length} facturen &middot; &euro;{totalRevenue.toFixed(2)} omzet incl. BTW
+            {invoices.length} facturen &middot; &euro;{totalRevenue.toFixed(2)} omzet{totalOpen > 0 ? ` \u00B7 \u20AC${totalOpen.toFixed(2)} openstaand` : ''}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -203,9 +207,9 @@ export default function AdminInvoicesPage() {
                     <td className="px-4 py-3 text-right font-semibold text-slate-900">&euro;{Number(inv.total_incl_btw).toFixed(2)}</td>
                     <td className="px-4 py-3">
                       <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
-                        inv.status === 'credit_note' ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'
+                        inv.status === 'open' ? 'bg-red-50 text-red-700' : inv.status === 'credit_note' ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'
                       }`}>
-                        {inv.status === 'credit_note' ? 'Creditnota' : 'Betaald'}
+                        {inv.status === 'open' ? 'Open' : inv.status === 'credit_note' ? 'Creditnota' : 'Betaald'}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-xs text-slate-500">
@@ -241,9 +245,9 @@ export default function AdminInvoicesPage() {
                   <div className="flex items-center gap-2">
                     <span className="rounded bg-brand-purple/10 px-2 py-0.5 text-xs font-bold text-brand-purple">{inv.invoice_number}</span>
                     <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                      inv.status === 'credit_note' ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'
+                      inv.status === 'open' ? 'bg-red-50 text-red-700' : inv.status === 'credit_note' ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'
                     }`}>
-                      {inv.status === 'credit_note' ? 'Creditnota' : 'Betaald'}
+                      {inv.status === 'open' ? 'Open' : inv.status === 'credit_note' ? 'Creditnota' : 'Betaald'}
                     </span>
                   </div>
                   <div className="flex items-center gap-1">
@@ -423,6 +427,7 @@ function InvoicePanel({ customers, onClose, onSaved }: {
               <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50">
                 <option value="paid">Betaald</option>
+                <option value="open">Open</option>
                 <option value="credit_note">Creditnota</option>
               </select>
             </div>
@@ -650,6 +655,7 @@ function EditInvoicePanel({ invoice, onClose, onSaved }: {
               <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50">
                 <option value="paid">Betaald</option>
+                <option value="open">Open</option>
                 <option value="credit_note">Creditnota</option>
               </select>
             </div>

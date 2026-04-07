@@ -14,6 +14,7 @@ interface CreateInvoiceParams {
   total_price: number;
   mollie_payment_id?: string;
   paid_at?: string;
+  status?: 'paid' | 'open';
 }
 
 async function getNextInvoiceNumber(supabase: ReturnType<typeof createServerClient>): Promise<string> {
@@ -70,6 +71,9 @@ export async function createInvoice(params: CreateInvoiceParams) {
   const invoiceNumber = await getNextInvoiceNumber(supabase);
   const now = new Date().toISOString();
 
+  const invoiceStatus = params.status || 'paid';
+  const isPaid = invoiceStatus === 'paid';
+
   const { data: invoice, error } = await supabase
     .from('invoices')
     .insert({
@@ -88,8 +92,8 @@ export async function createInvoice(params: CreateInvoiceParams) {
       btw_amount: btwAmount,
       total_incl_btw: totalInclBtw,
       mollie_payment_id: params.mollie_payment_id || null,
-      status: 'paid',
-      paid_at: params.paid_at || now,
+      status: invoiceStatus,
+      paid_at: isPaid ? (params.paid_at || now) : null,
     })
     .select()
     .single();
@@ -99,10 +103,109 @@ export async function createInvoice(params: CreateInvoiceParams) {
     throw error;
   }
 
-  // Send invoice email to customer
-  sendInvoiceEmail(customer, invoice).catch(e => console.error('[invoice] email send failed:', e));
+  if (isPaid) {
+    sendInvoiceEmail(customer, invoice).catch(e => console.error('[invoice] email send failed:', e));
+  } else {
+    sendOpenInvoiceEmail(customer, invoice).catch(e => console.error('[invoice] open invoice email send failed:', e));
+  }
 
   return invoice;
+}
+
+export async function markInvoicePaid(batchId: string, molliePaymentId: string) {
+  const supabase = createServerClient();
+
+  const { data: existing } = await supabase
+    .from('invoices')
+    .select('id, invoice_number, total_incl_btw, description, customer_id, status')
+    .eq('batch_id', batchId)
+    .in('status', ['open'])
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .single();
+
+  if (!existing) return null;
+
+  const now = new Date().toISOString();
+  const { data: updated, error } = await supabase
+    .from('invoices')
+    .update({ status: 'paid', paid_at: now, mollie_payment_id: molliePaymentId })
+    .eq('id', existing.id)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('[invoice] markInvoicePaid failed:', error);
+    return null;
+  }
+
+  const { data: customer } = await supabase
+    .from('customers')
+    .select('id, name, email, contact_person')
+    .eq('id', existing.customer_id)
+    .single();
+
+  if (customer) {
+    sendInvoiceEmail(customer, updated).catch(e => console.error('[invoice] paid email send failed:', e));
+  }
+
+  return updated;
+}
+
+function sendOpenInvoiceEmail(
+  customer: { name: string; email: string; contact_person?: string },
+  invoice: { invoice_number: string; total_incl_btw: number; description: string; id: string },
+) {
+  const portalUrl = `${BASE_URL}/portal/account`;
+
+  const content = `
+    <p>Hallo ${customer.contact_person || customer.name},</p>
+    <p>Er staat een nieuwe factuur voor je klaar:</p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:16px 0;border-radius:8px;overflow:hidden;background:rgba(255,255,255,.03)">
+      <tr>
+        <td style="padding:8px 12px;color:#94A3B8;font-size:14px;border-bottom:1px solid rgba(255,255,255,.05)">Factuurnummer</td>
+        <td style="padding:8px 12px;color:#E2E8F0;font-size:14px;border-bottom:1px solid rgba(255,255,255,.05)">${invoice.invoice_number}</td>
+      </tr>
+      <tr>
+        <td style="padding:8px 12px;color:#94A3B8;font-size:14px;border-bottom:1px solid rgba(255,255,255,.05)">Omschrijving</td>
+        <td style="padding:8px 12px;color:#E2E8F0;font-size:14px;border-bottom:1px solid rgba(255,255,255,.05)">${invoice.description}</td>
+      </tr>
+      <tr>
+        <td style="padding:10px 12px;color:#FF6B35;font-size:15px;font-weight:700;border-top:2px solid rgba(255,107,53,.2)">Te betalen</td>
+        <td style="padding:10px 12px;color:#FF6B35;font-size:15px;font-weight:700;text-align:right;border-top:2px solid rgba(255,107,53,.2)">&euro;${Number(invoice.total_incl_btw).toFixed(2)}</td>
+      </tr>
+    </table>
+    <p>Je kunt direct betalen via je portaal. Na betaling wordt je batch direct geactiveerd en ontvang je leads.</p>
+    <p style="margin-top:12px">
+      <a href="${portalUrl}" style="display:inline-block;background:linear-gradient(135deg,#FF6B35,#FF4757);color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">Bekijk factuur &amp; betaal &rarr;</a>
+    </p>`;
+
+  return sendEmail(
+    customer.email,
+    `Nieuwe factuur ${invoice.invoice_number} - WarmeLeads`,
+    `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#1A1A2E;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#1A1A2E;padding:40px 20px">
+<tr><td align="center">
+<table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%">
+  <tr><td style="padding:24px 32px;text-align:center">
+    <img src="${BASE_URL}/logo-wit.png" alt="WarmeLeads" height="32" style="height:32px;width:auto" />
+  </td></tr>
+  <tr><td style="background:#16213E;border-radius:12px;padding:32px;border:1px solid rgba(255,107,53,.15)">
+    <h1 style="margin:0 0 20px;font-size:20px;color:#fff;font-weight:600">Factuur ${invoice.invoice_number}</h1>
+    <div style="color:#CBD5E1;font-size:15px;line-height:1.6">${content}</div>
+  </td></tr>
+  <tr><td style="padding:24px 32px;text-align:center;color:#64748B;font-size:12px">
+    &copy; ${new Date().getFullYear()} WarmeLeads &middot; warmeleads.eu
+  </td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>`,
+  );
 }
 
 function sendInvoiceEmail(
@@ -113,20 +216,20 @@ function sendInvoiceEmail(
 
   const content = `
     <p>Hallo ${customer.contact_person || customer.name},</p>
-    <p>Hierbij ontvangt u factuur <strong>${invoice.invoice_number}</strong> voor:</p>
+    <p>Hierbij je factuur <strong>${invoice.invoice_number}</strong> voor:</p>
     <table width="100%" cellpadding="0" cellspacing="0" style="margin:16px 0;border-radius:8px;overflow:hidden;background:rgba(255,255,255,.03)">
       <tr>
         <td style="padding:8px 12px;color:#94A3B8;font-size:14px;border-bottom:1px solid rgba(255,255,255,.05)">Omschrijving</td>
         <td style="padding:8px 12px;color:#E2E8F0;font-size:14px;border-bottom:1px solid rgba(255,255,255,.05)">${invoice.description}</td>
       </tr>
       <tr>
-        <td style="padding:10px 12px;color:#F97316;font-size:15px;font-weight:700;border-top:2px solid rgba(249,115,22,.2)">Totaal incl. BTW</td>
-        <td style="padding:10px 12px;color:#F97316;font-size:15px;font-weight:700;text-align:right;border-top:2px solid rgba(249,115,22,.2)">&euro;${Number(invoice.total_incl_btw).toFixed(2)}</td>
+        <td style="padding:10px 12px;color:#FF6B35;font-size:15px;font-weight:700;border-top:2px solid rgba(255,107,53,.2)">Totaal incl. BTW</td>
+        <td style="padding:10px 12px;color:#FF6B35;font-size:15px;font-weight:700;text-align:right;border-top:2px solid rgba(255,107,53,.2)">&euro;${Number(invoice.total_incl_btw).toFixed(2)}</td>
       </tr>
     </table>
-    <p>U kunt uw factuur downloaden als PDF via uw portaal:</p>
+    <p>Je kunt je factuur downloaden als PDF via je portaal:</p>
     <p style="margin-top:12px">
-      <a href="${downloadUrl}" style="display:inline-block;background:#F97316;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">Factuur downloaden &rarr;</a>
+      <a href="${downloadUrl}" style="display:inline-block;background:linear-gradient(135deg,#FF6B35,#FF4757);color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">Factuur downloaden &rarr;</a>
     </p>`;
 
   return sendEmail(
@@ -140,9 +243,9 @@ function sendInvoiceEmail(
 <tr><td align="center">
 <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%">
   <tr><td style="padding:24px 32px;text-align:center">
-    <span style="font-size:24px;font-weight:700;color:#F97316;letter-spacing:-.5px">WarmeLeads</span>
+    <img src="${BASE_URL}/logo-wit.png" alt="WarmeLeads" height="32" style="height:32px;width:auto" />
   </td></tr>
-  <tr><td style="background:#16213E;border-radius:12px;padding:32px;border:1px solid rgba(249,115,22,.15)">
+  <tr><td style="background:#16213E;border-radius:12px;padding:32px;border:1px solid rgba(255,107,53,.15)">
     <h1 style="margin:0 0 20px;font-size:20px;color:#fff;font-weight:600">Factuur ${invoice.invoice_number}</h1>
     <div style="color:#CBD5E1;font-size:15px;line-height:1.6">${content}</div>
   </td></tr>
@@ -203,8 +306,8 @@ export async function sendNewBatchAdminEmail(params: {
         <td style="padding:8px 12px;color:#E2E8F0;font-size:14px;border-bottom:1px solid rgba(255,255,255,.05)">&euro;${btwAmount.toFixed(2)}</td>
       </tr>
       <tr>
-        <td style="padding:10px 12px;color:#F97316;font-size:15px;font-weight:700;border-top:2px solid rgba(249,115,22,.2)">Totaal incl. BTW</td>
-        <td style="padding:10px 12px;color:#F97316;font-size:15px;font-weight:700;text-align:right;border-top:2px solid rgba(249,115,22,.2)">&euro;${totalInclBtw.toFixed(2)}</td>
+        <td style="padding:10px 12px;color:#FF6B35;font-size:15px;font-weight:700;border-top:2px solid rgba(255,107,53,.2)">Totaal incl. BTW</td>
+        <td style="padding:10px 12px;color:#FF6B35;font-size:15px;font-weight:700;text-align:right;border-top:2px solid rgba(255,107,53,.2)">&euro;${totalInclBtw.toFixed(2)}</td>
       </tr>
       <tr>
         <td style="padding:8px 12px;color:#94A3B8;font-size:14px;border-bottom:1px solid rgba(255,255,255,.05)">Bron</td>
@@ -216,7 +319,7 @@ export async function sendNewBatchAdminEmail(params: {
       </tr>
     </table>
     <p style="margin-top:12px">
-      <a href="${process.env.NEXT_PUBLIC_SITE_URL || 'https://warmeleads.eu'}/admin/batches" style="display:inline-block;background:#F97316;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">Bekijk in admin &rarr;</a>
+      <a href="${process.env.NEXT_PUBLIC_SITE_URL || 'https://warmeleads.eu'}/admin/batches" style="display:inline-block;background:linear-gradient(135deg,#FF6B35,#FF4757);color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">Bekijk in admin &rarr;</a>
     </p>`;
 
   return sendEmail(
@@ -230,9 +333,9 @@ export async function sendNewBatchAdminEmail(params: {
 <tr><td align="center">
 <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%">
   <tr><td style="padding:24px 32px;text-align:center">
-    <span style="font-size:24px;font-weight:700;color:#F97316;letter-spacing:-.5px">WarmeLeads</span>
+    <img src="${BASE_URL}/logo-wit.png" alt="WarmeLeads" height="32" style="height:32px;width:auto" />
   </td></tr>
-  <tr><td style="background:#16213E;border-radius:12px;padding:32px;border:1px solid rgba(249,115,22,.15)">
+  <tr><td style="background:#16213E;border-radius:12px;padding:32px;border:1px solid rgba(255,107,53,.15)">
     <h1 style="margin:0 0 20px;font-size:20px;color:#fff;font-weight:600">Nieuwe Batch Aangemaakt</h1>
     <div style="color:#CBD5E1;font-size:15px;line-height:1.6">${content}</div>
   </td></tr>

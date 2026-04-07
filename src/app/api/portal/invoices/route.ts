@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
 
   const { data, error } = await supabase
     .from('invoices')
-    .select('id, invoice_number, description, subtotal, btw_percentage, btw_amount, total_incl_btw, status, paid_at, created_at')
+    .select('id, invoice_number, description, subtotal, btw_percentage, btw_amount, total_incl_btw, status, paid_at, created_at, batch_id')
     .eq('customer_id', customer.id)
     .order('created_at', { ascending: false });
 
