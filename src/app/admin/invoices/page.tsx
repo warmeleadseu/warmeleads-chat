@@ -65,7 +65,8 @@ export default function AdminInvoicesPage() {
       const res = await adminFetch('/api/admin/customers');
       if (res.ok) {
         const data = await res.json();
-        setCustomers(Array.isArray(data) ? data.map((c: Record<string, string>) => ({ id: c.id, name: c.name, email: c.email })) : []);
+        const list = data.customers || (Array.isArray(data) ? data : []);
+        setCustomers(list.map((c: Record<string, string>) => ({ id: c.id, name: c.name, email: c.email })));
       }
     } catch { /* ignore */ }
   }, []);
