@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   PlusIcon,
@@ -671,18 +672,21 @@ export default function CustomersPage() {
         )}
       </AnimatePresence>
 
-      {/* Reminder email preview modal */}
-      <AnimatePresence>
-        {previewReminder && (
-          <ReminderPreviewModal
-            customer={previewReminder}
-            portalUrl={portalUrl}
-            sending={sendingReminder === previewReminder.id}
-            onSend={() => sendReminder(previewReminder)}
-            onClose={() => setPreviewReminder(null)}
-          />
-        )}
-      </AnimatePresence>
+      {/* Reminder email preview modal (portalled to body for correct fixed positioning) */}
+      {typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {previewReminder && (
+            <ReminderPreviewModal
+              customer={previewReminder}
+              portalUrl={portalUrl}
+              sending={sendingReminder === previewReminder.id}
+              onSend={() => sendReminder(previewReminder)}
+              onClose={() => setPreviewReminder(null)}
+            />
+          )}
+        </AnimatePresence>,
+        document.body,
+      )}
     </div>
   );
 }
