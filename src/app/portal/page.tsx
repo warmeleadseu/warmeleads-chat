@@ -1579,11 +1579,9 @@ function LeadFeedback({ leadId, showToast }: { leadId: string; showToast: (m: st
 
 /* ─── Lead Reclamation ─────────────────────────────────────── */
 const RECLAMATION_REASONS = [
-  { value: 'foutieve_gegevens', label: 'Foutieve contactgegevens' },
-  { value: 'dubbele_lead', label: 'Dubbele lead' },
-  { value: 'buiten_doelgebied', label: 'Buiten mijn doelgebied' },
-  { value: 'niet_geinteresseerd', label: 'Niet geïnteresseerd (cold lead)' },
-  { value: 'anders', label: 'Anders' },
+  { value: 'foutief_telefoonnummer', label: 'Foutief telefoonnummer' },
+  { value: 'dubbele_lead', label: 'Dubbele lead binnen 30 dagen' },
+  { value: 'buiten_doelgebied', label: 'Buiten mijn afgesproken gebied' },
 ] as const;
 
 const RECLAMATION_STATUS_MAP: Record<string, { label: string; cls: string }> = {

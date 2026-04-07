@@ -3,11 +3,9 @@ import { verifyCustomer, portalUnauthorized } from '@/lib/portalAuth';
 import { createServerClient } from '@/lib/supabase';
 
 const VALID_REASONS = [
-  'foutieve_gegevens',
+  'foutief_telefoonnummer',
   'dubbele_lead',
   'buiten_doelgebied',
-  'niet_geinteresseerd',
-  'anders',
 ] as const;
 
 export async function GET(request: NextRequest) {
