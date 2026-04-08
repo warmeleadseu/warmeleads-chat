@@ -804,7 +804,8 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
       const br = (branchData.branches || []).find((b: { slug: string }) => b.slug === form.branch);
       if (!br) return;
 
-      let tiers = br.pricing_tiers || [];
+      const branchTiers: PricingTierData[] = br.pricing_tiers || [];
+      let tiers: PricingTierData[] = branchTiers;
       let nationwideDiscount = Number(br.nationwide_discount) || 0;
       let isCustom = false;
 
@@ -814,7 +815,11 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
           const cpData = await cpRes.json();
           const custom = (cpData.pricing || []).find((p: { branch_slug: string }) => p.branch_slug === form.branch);
           if (custom && custom.pricing_tiers && custom.pricing_tiers.length > 0) {
-            tiers = custom.pricing_tiers;
+            const customMinLeads = new Set(custom.pricing_tiers.map((t: PricingTierData) => t.min_leads));
+            tiers = [
+              ...branchTiers.filter((t: PricingTierData) => !customMinLeads.has(t.min_leads)),
+              ...custom.pricing_tiers,
+            ].sort((a: PricingTierData, b: PricingTierData) => a.min_leads - b.min_leads);
             if (custom.nationwide_discount != null) nationwideDiscount = Number(custom.nationwide_discount);
             isCustom = true;
           }

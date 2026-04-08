@@ -34,7 +34,21 @@ export async function GET(request: NextRequest) {
   }
 
   const hasCustomPricing = customPricing && customPricing.pricing_tiers && customPricing.pricing_tiers.length > 0;
-  const tiers = hasCustomPricing ? customPricing.pricing_tiers : (branchData.pricing_tiers || []);
+  const branchTiers: { min_leads: number; price_per_lead: number }[] = branchData.pricing_tiers || [];
+  const customTiers: { min_leads: number; price_per_lead: number }[] = hasCustomPricing ? customPricing.pricing_tiers : [];
+
+  let tiers: { min_leads: number; price_per_lead: number }[];
+  if (customTiers.length > 0) {
+    const customMinLeads = new Set(customTiers.map(t => t.min_leads));
+    const merged = [
+      ...branchTiers.filter(t => !customMinLeads.has(t.min_leads)),
+      ...customTiers,
+    ];
+    tiers = merged.sort((a, b) => a.min_leads - b.min_leads);
+  } else {
+    tiers = branchTiers;
+  }
+
   const nationwideDiscount = hasCustomPricing && customPricing.nationwide_discount != null
     ? customPricing.nationwide_discount
     : (branchData.nationwide_discount || 0);
