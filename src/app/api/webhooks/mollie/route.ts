@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
           .update({ is_paid: true, mollie_payment_id: paymentId })
           .eq('id', batchId)
           .eq('is_paid', false)
-          .select('id, customer_id, branch, batch_size, price_per_lead, total_price')
+          .select('id, customer_id, branch, batch_size, price_per_lead, total_price, starts_at, lookback_days')
           .single();
 
         if (claimErr || !claimed) {
@@ -99,7 +99,11 @@ export async function POST(request: NextRequest) {
           source: 'portal_pay',
         }).catch(() => {});
 
-        backfillBatch(claimed.id, 3).catch(() => {});
+        const startsInFuture = claimed.starts_at && new Date(claimed.starts_at) > new Date();
+        if (!startsInFuture) {
+          const lookback = claimed.lookback_days ?? 3;
+          if (lookback > 0) backfillBatch(claimed.id, lookback).catch(() => {});
+        }
       }
 
       return NextResponse.json({ ok: true });

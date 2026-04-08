@@ -130,7 +130,7 @@ export async function distributeLead(lead: LeadForDistribution): Promise<Distrib
 
   const { data: activeBatches } = await supabase
     .from('customer_batches')
-    .select('id, customer_id, branch, batch_size, leads_delivered, leads_per_week, leads_per_day, lead_filters, created_at, is_paid, customers!inner(id, is_active, portal_active)')
+    .select('id, customer_id, branch, batch_size, leads_delivered, leads_per_week, leads_per_day, lead_filters, created_at, is_paid, starts_at, customers!inner(id, is_active, portal_active)')
     .eq('branch', lead.branch)
     .eq('status', 'active')
     .eq('customers.is_active', true)
@@ -200,9 +200,11 @@ export async function distributeLead(lead: LeadForDistribution): Promise<Distrib
 
   const matches: Match[] = [];
 
+  const now = new Date();
   for (const batch of activeBatches) {
     if (batch.leads_delivered >= batch.batch_size) continue;
     if (assignedIds.has(batch.customer_id)) continue;
+    if (batch.starts_at && new Date(batch.starts_at) > now) continue;
 
     if (batch.leads_per_week && batch.leads_per_week > 0) {
       const thisWeekCount = weeklyCountByBatch[batch.id] || 0;
@@ -352,13 +354,14 @@ export async function backfillBatch(batchId: string, lookbackDays: number): Prom
 
   const { data: batch } = await supabase
     .from('customer_batches')
-    .select('id, customer_id, branch, batch_size, leads_delivered, leads_per_week, leads_per_day, lead_filters, is_paid, customers!inner(id, is_active)')
+    .select('id, customer_id, branch, batch_size, leads_delivered, leads_per_week, leads_per_day, lead_filters, is_paid, starts_at, customers!inner(id, is_active)')
     .eq('id', batchId)
     .eq('status', 'active')
     .single();
 
   if (!batch || batch.leads_delivered >= batch.batch_size) return { assigned: 0 };
   if (batch.is_paid === false) return { assigned: 0 };
+  if (batch.starts_at && new Date(batch.starts_at) > new Date()) return { assigned: 0 };
 
   const { data: targets } = await supabase
     .from('customer_targets')
@@ -368,7 +371,8 @@ export async function backfillBatch(batchId: string, lookbackDays: number): Prom
 
   if (!targets || targets.length === 0) return { assigned: 0 };
 
-  const cutoff = new Date();
+  const refDate = batch.starts_at ? new Date(batch.starts_at) : new Date();
+  const cutoff = new Date(refDate);
   cutoff.setDate(cutoff.getDate() - lookbackDays);
 
   const { data: leads } = await supabase

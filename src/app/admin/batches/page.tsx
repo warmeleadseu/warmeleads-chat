@@ -16,6 +16,8 @@ import {
   ChevronUpDownIcon,
   MagnifyingGlassIcon,
   CheckCircleIcon,
+  CalendarDaysIcon,
+  ClockIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
 import { mergeCustomTiers } from '@/lib/pricing';
@@ -29,12 +31,37 @@ interface Batch {
   leads_delivered: number; status: string;
   is_paid: boolean; lookback_days: number | null; notes: string | null; lead_filters: LeadFilter[];
   compensations: Compensation[];
+  starts_at: string | null;
   created_at: string; completed_at: string | null;
   customers?: { name: string } | null;
 }
 interface BranchOption { slug: string; name: string; color: string; is_active: boolean }
 interface Customer { id: string; name: string; is_active: boolean }
 interface BranchField { id: string; key: string; label: string; field_type: string; options: string[] }
+
+function getNLOffset(date: Date): string {
+  const formatter = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Amsterdam', hour: 'numeric', timeZoneName: 'shortOffset' });
+  const parts = formatter.formatToParts(date);
+  const tzPart = parts.find(p => p.type === 'timeZoneName');
+  if (tzPart?.value) {
+    const m = tzPart.value.match(/GMT([+-]\d+)/);
+    if (m) {
+      const h = parseInt(m[1]);
+      return `${h >= 0 ? '+' : '-'}${String(Math.abs(h)).padStart(2, '0')}:00`;
+    }
+  }
+  return '+01:00';
+}
+
+function formatStartsAt(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleString('nl-NL', { timeZone: 'Europe/Amsterdam', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+
+function startsAtInFuture(iso: string | null): boolean {
+  if (!iso) return false;
+  return new Date(iso) > new Date();
+}
 
 const STATUS_OPTS = [
   { value: 'all', label: 'Alle' },
@@ -351,6 +378,12 @@ export default function BatchesPage() {
                           {!b.is_paid && (
                             <span className="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-600">Onbetaald</span>
                           )}
+                          {b.starts_at && new Date(b.starts_at) > new Date() && (
+                            <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                              <ClockIcon className="h-3 w-3" />
+                              Start {new Date(b.starts_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })} {new Date(b.starts_at).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td className="px-4 py-3 text-right text-slate-700">
@@ -411,6 +444,12 @@ export default function BatchesPage() {
                         <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${c.light} ${c.text}`}>{br.name}</span>
                         <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${STATUS_COLORS[b.status] || 'bg-slate-100 text-slate-600'}`}>{STATUS_LABELS[b.status] || b.status}</span>
                         {!b.is_paid && <span className="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-600">Onbetaald</span>}
+                        {b.starts_at && new Date(b.starts_at) > new Date() && (
+                          <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                            <ClockIcon className="h-3 w-3" />
+                            Start {new Date(b.starts_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })} {new Date(b.starts_at).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        )}
                       </div>
                     </div>
                     <div className="flex items-center gap-0.5">
@@ -500,6 +539,7 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
   batch: Batch; branches: BranchOption[]; customers: Customer[];
   onClose: () => void; onSaved: () => void;
 }) {
+  const initStartsAt = batch.starts_at ? new Date(batch.starts_at) : null;
   const [form, setForm] = useState({
     batch_size: batch.batch_size,
     leads_delivered: batch.leads_delivered,
@@ -514,6 +554,13 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
   const [branchFields, setBranchFields] = useState<BranchField[]>([]);
   const [extraLeads, setExtraLeads] = useState(0);
   const [extraReason, setExtraReason] = useState('');
+  const [editStartsAt, setEditStartsAt] = useState(batch.starts_at ? true : false);
+  const [editStartDate, setEditStartDate] = useState(
+    initStartsAt ? initStartsAt.toLocaleDateString('sv-SE', { timeZone: 'Europe/Amsterdam' }) : ''
+  );
+  const [editStartTime, setEditStartTime] = useState(
+    initStartsAt ? initStartsAt.toLocaleTimeString('nl-NL', { timeZone: 'Europe/Amsterdam', hour: '2-digit', minute: '2-digit', hour12: false }) : '09:00'
+  );
 
   useEffect(() => {
     adminFetch(`/api/admin/branches/fields?branch=${batch.branch}`)
@@ -528,6 +575,12 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
     setSaving(true);
     try {
       const batchSizeGrew = effectiveBatchSize > batch.batch_size;
+      let startsAtISO: string | null = null;
+      if (editStartsAt && editStartDate) {
+        const nlDateTime = `${editStartDate}T${editStartTime || '09:00'}:00`;
+        const nlOffset = getNLOffset(new Date(nlDateTime));
+        startsAtISO = `${nlDateTime}${nlOffset}`;
+      }
       const payload: Record<string, unknown> = {
         id: batch.id,
         batch_size: effectiveBatchSize,
@@ -539,6 +592,7 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
         notes: form.notes || null,
         lead_filters: form.lead_filters.filter(f => f.field && (f.values?.length || 0) > 0),
         trigger_backfill: batchSizeGrew,
+        starts_at: startsAtISO,
       };
       if (extraLeads > 0) {
         payload.compensation = { amount: extraLeads, reason: extraReason };
@@ -720,6 +774,65 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
             </div>
           )}
 
+          {/* Startdatum */}
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <div className="mb-2 flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-slate-700">Startdatum</p>
+                <p className="text-[11px] text-slate-400">
+                  {editStartsAt
+                    ? startsAtInFuture(batch.starts_at)
+                      ? 'Batch start op het geplande moment'
+                      : batch.starts_at ? 'Batch is gestart' : 'Geplande start'
+                    : 'Direct gestart'}
+                </p>
+              </div>
+              {startsAtInFuture(batch.starts_at) || !batch.starts_at ? (
+                <button type="button" onClick={() => {
+                  const next = !editStartsAt;
+                  setEditStartsAt(next);
+                  if (next && !editStartDate) {
+                    const tomorrow = new Date();
+                    tomorrow.setDate(tomorrow.getDate() + 1);
+                    setEditStartDate(tomorrow.toISOString().slice(0, 10));
+                  }
+                }}
+                  role="switch" aria-checked={editStartsAt}
+                  className={`relative inline-flex h-[26px] w-[48px] shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 ${
+                    editStartsAt ? 'bg-brand-purple' : 'bg-slate-300'
+                  }`}>
+                  <span className={`pointer-events-none inline-block h-[22px] w-[22px] transform rounded-full bg-white shadow ring-0 transition duration-200 ${
+                    editStartsAt ? 'translate-x-[24px]' : 'translate-x-[2px]'
+                  }`} />
+                </button>
+              ) : (
+                <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700">
+                  Gestart {formatStartsAt(batch.starts_at!)}
+                </span>
+              )}
+            </div>
+            {editStartsAt && (startsAtInFuture(batch.starts_at) || !batch.starts_at) && (
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <div>
+                  <label className="mb-1 block text-[11px] font-medium text-slate-500">Datum</label>
+                  <div className="relative">
+                    <CalendarDaysIcon className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <input type="date" value={editStartDate} onChange={e => setEditStartDate(e.target.value)}
+                      className="w-full rounded-lg border border-brand-purple/20 bg-white py-2 pl-8 pr-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/20" />
+                  </div>
+                </div>
+                <div>
+                  <label className="mb-1 block text-[11px] font-medium text-slate-500">Tijd (NL)</label>
+                  <div className="relative">
+                    <ClockIcon className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <input type="time" value={editStartTime} onChange={e => setEditStartTime(e.target.value)}
+                      className="w-full rounded-lg border border-brand-purple/20 bg-white py-2 pl-8 pr-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/20" />
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Payment status */}
           <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 p-3">
             <div>
@@ -784,6 +897,9 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
   const [branchFields, setBranchFields] = useState<BranchField[]>([]);
   const [pricingInfo, setPricingInfo] = useState<PricingInfo | null>(null);
   const [priceOverride, setPriceOverride] = useState(false);
+  const [scheduledStart, setScheduledStart] = useState(false);
+  const [startsAtDate, setStartsAtDate] = useState('');
+  const [startsAtTime, setStartsAtTime] = useState('09:00');
 
   useEffect(() => {
     if (!form.branch) { setBranchFields([]); return; }
@@ -846,6 +962,12 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
     if (!form.customer_id || !form.branch || !form.batch_size) return;
     setSaving(true);
     try {
+      let startsAtISO: string | null = null;
+      if (scheduledStart && startsAtDate) {
+        const nlDateTime = `${startsAtDate}T${startsAtTime || '09:00'}:00`;
+        const nlOffset = getNLOffset(new Date(nlDateTime));
+        startsAtISO = `${nlDateTime}${nlOffset}`;
+      }
       const res = await adminFetch('/api/admin/batches', {
         method: 'POST',
         body: JSON.stringify({
@@ -859,6 +981,7 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
           lookback_days: parseInt(form.lookback_days) || 0,
           notes: form.notes || null,
           lead_filters: form.lead_filters.filter(f => f.field && (f.values?.length || 0) > 0),
+          starts_at: startsAtISO,
         }),
       });
       if (res.ok) onCreated();
@@ -1007,6 +1130,60 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* Startdatum */}
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <div className="mb-2 flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-slate-700">Startdatum</p>
+                <p className="text-[11px] text-slate-400">
+                  {scheduledStart ? 'Batch start op het ingestelde tijdstip' : 'Batch start direct na aanmaken'}
+                </p>
+              </div>
+              <button type="button" onClick={() => {
+                const next = !scheduledStart;
+                setScheduledStart(next);
+                if (next && !startsAtDate) {
+                  const tomorrow = new Date();
+                  tomorrow.setDate(tomorrow.getDate() + 1);
+                  setStartsAtDate(tomorrow.toISOString().slice(0, 10));
+                }
+              }}
+                role="switch" aria-checked={scheduledStart}
+                className={`relative inline-flex h-[26px] w-[48px] shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 ${
+                  scheduledStart ? 'bg-brand-purple' : 'bg-slate-300'
+                }`}>
+                <span className={`pointer-events-none inline-block h-[22px] w-[22px] transform rounded-full bg-white shadow ring-0 transition duration-200 ${
+                  scheduledStart ? 'translate-x-[24px]' : 'translate-x-[2px]'
+                }`} />
+              </button>
+            </div>
+            {scheduledStart && (
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <div>
+                  <label className="mb-1 block text-[11px] font-medium text-slate-500">Datum</label>
+                  <div className="relative">
+                    <CalendarDaysIcon className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <input type="date" value={startsAtDate} onChange={e => setStartsAtDate(e.target.value)}
+                      min={new Date().toISOString().slice(0, 10)}
+                      className="w-full rounded-lg border border-brand-purple/20 bg-white py-2 pl-8 pr-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/20" />
+                  </div>
+                </div>
+                <div>
+                  <label className="mb-1 block text-[11px] font-medium text-slate-500">Tijd (NL)</label>
+                  <div className="relative">
+                    <ClockIcon className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <input type="time" value={startsAtTime} onChange={e => setStartsAtTime(e.target.value)}
+                      className="w-full rounded-lg border border-brand-purple/20 bg-white py-2 pl-8 pr-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/20" />
+                  </div>
+                </div>
+                <p className="col-span-2 text-[10px] text-slate-400">
+                  Batch is direct betaalbaar, maar leads worden pas toegewezen vanaf dit moment.
+                  De lookback telt dan ook terug vanaf de startdatum.
+                </p>
+              </div>
+            )}
           </div>
 
           <div>

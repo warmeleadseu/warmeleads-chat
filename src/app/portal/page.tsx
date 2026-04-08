@@ -548,6 +548,12 @@ export default function PortalPage() {
                           {b.is_paid === false && (
                             <span className="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-600">Onbetaald</span>
                           )}
+                          {b.starts_at && new Date(b.starts_at) > new Date() && (
+                            <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                              <CalendarDaysIcon className="h-3 w-3" />
+                              Start {new Date(b.starts_at).toLocaleDateString('nl-NL', { timeZone: 'Europe/Amsterdam', day: 'numeric', month: 'short' })} {new Date(b.starts_at).toLocaleTimeString('nl-NL', { timeZone: 'Europe/Amsterdam', hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          )}
                           {b.leads_per_day > 0 && (
                             <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">max {b.leads_per_day}/dag</span>
                           )}
@@ -578,6 +584,19 @@ export default function PortalPage() {
                           </span>
                         )}
                       </div>
+                      {b.starts_at && new Date(b.starts_at) > new Date() && (
+                        <div className="mt-2 flex items-start gap-2 rounded-lg border border-amber-100 bg-amber-50/50 px-3 py-2">
+                          <CalendarDaysIcon className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+                          <div>
+                            <p className="text-[11px] font-medium text-amber-700">
+                              Deze batch start op {new Date(b.starts_at).toLocaleDateString('nl-NL', { timeZone: 'Europe/Amsterdam', weekday: 'long', day: 'numeric', month: 'long' })} om {new Date(b.starts_at).toLocaleTimeString('nl-NL', { timeZone: 'Europe/Amsterdam', hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                            <p className="mt-0.5 text-[10px] text-amber-600/70">
+                              Leads worden vanaf dat moment toegewezen aan uw batch.
+                            </p>
+                          </div>
+                        </div>
+                      )}
                       {totalComp > 0 && (
                         <div className="mt-2 rounded-lg border border-emerald-100 bg-emerald-50/50 px-3 py-2">
                           <div className="flex items-center gap-1.5 text-[11px] font-medium text-emerald-700">

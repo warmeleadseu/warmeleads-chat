@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
   const supabase = createServerClient();
   const body = await request.json();
 
-  const { customer_id, branch, batch_size, price_per_lead, leads_per_week, leads_per_day, notes, lead_filters, is_paid, lookback_days } = body;
+  const { customer_id, branch, batch_size, price_per_lead, leads_per_week, leads_per_day, notes, lead_filters, is_paid, lookback_days, starts_at } = body;
   if (!customer_id || !branch || !batch_size) {
     return NextResponse.json({ error: 'Vereiste velden ontbreken' }, { status: 400 });
   }
@@ -46,16 +46,19 @@ export async function POST(request: NextRequest) {
       f.field && f.operator && ((f.values && f.values.length > 0) || (f.value !== undefined && f.value !== ''))
   ) : [];
 
+  const startsAtValue = starts_at ? new Date(starts_at).toISOString() : null;
+
   const { data, error } = await supabase
     .from('customer_batches')
-    .insert({ customer_id, branch, batch_size, price_per_lead, total_price, leads_per_week: leads_per_week || null, leads_per_day: leads_per_day || null, notes, lead_filters: sanitizedFilters, is_paid: is_paid !== false, lookback_days: lookback })
+    .insert({ customer_id, branch, batch_size, price_per_lead, total_price, leads_per_week: leads_per_week || null, leads_per_day: leads_per_day || null, notes, lead_filters: sanitizedFilters, is_paid: is_paid !== false, lookback_days: lookback, starts_at: startsAtValue })
     .select()
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // Targeted backfill: only assign leads from the specified lookback period to this batch
-  if (lookback > 0) {
+  // Targeted backfill: only if starts_at is NULL or in the past
+  const startsInFuture = startsAtValue && new Date(startsAtValue) > new Date();
+  if (lookback > 0 && !startsInFuture) {
     try { backfillBatch(data.id, lookback); } catch { /* non-blocking */ }
   }
 
@@ -163,7 +166,7 @@ export async function PUT(request: NextRequest) {
   const allowedFields = [
     'batch_size', 'leads_delivered', 'is_paid', 'price_per_lead', 'total_price',
     'leads_per_day', 'leads_per_week', 'notes', 'lead_filters', 'status',
-    'completed_at', 'lookback_days', 'compensations',
+    'completed_at', 'lookback_days', 'compensations', 'starts_at',
   ];
   const safeUpdates: Record<string, unknown> = {};
   for (const key of allowedFields) {

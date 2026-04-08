@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { resolveAddress, isValidPlace } from '@/lib/pdok';
-import { distributeUnassignedLeads } from '@/lib/distribution';
+import { distributeUnassignedLeads, backfillBatch } from '@/lib/distribution';
 import { isPhoneValid } from '@/lib/phoneValidation';
 import { checkLeadProfanity } from '@/lib/profanityFilter';
 import { syncBatchDelivered } from '@/lib/batchSync';
@@ -123,6 +123,29 @@ export async function GET(request: NextRequest) {
   // Phase 4: Distribute (uses 3-day limit internally)
   const distResult = await distributeUnassignedLeads();
 
+  // Phase 5: Backfill batches whose starts_at just passed
+  let cronBackfilled = 0;
+  const { data: pendingStartBatches } = await supabase
+    .from('customer_batches')
+    .select('id, lookback_days, starts_at')
+    .eq('status', 'active')
+    .eq('is_paid', true)
+    .not('starts_at', 'is', null)
+    .lte('starts_at', new Date().toISOString())
+    .eq('leads_delivered', 0);
+
+  if (pendingStartBatches && pendingStartBatches.length > 0) {
+    for (const b of pendingStartBatches) {
+      const lookback = b.lookback_days ?? 3;
+      if (lookback > 0) {
+        try {
+          const result = await backfillBatch(b.id, lookback);
+          cronBackfilled += result.assigned;
+        } catch { /* non-blocking */ }
+      }
+    }
+  }
+
   return NextResponse.json({
     ok: true,
     enriched,
@@ -131,6 +154,7 @@ export async function GET(request: NextRequest) {
     distributed: distResult.distributed,
     assignments: distResult.assignments,
     avgAssignments: distResult.avgAssignments,
+    cronBackfilled,
     timestamp: new Date().toISOString(),
   });
 }
