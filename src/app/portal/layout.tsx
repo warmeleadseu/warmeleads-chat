@@ -14,6 +14,8 @@ import {
   DevicePhoneMobileIcon,
   XMarkIcon,
   ArrowUpOnSquareIcon,
+  EyeIcon,
+  ShieldCheckIcon,
 } from '@heroicons/react/24/outline';
 import { PortalContext, type PortalCustomer } from './portalContext';
 
@@ -316,27 +318,108 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
 }
 
+function AdminViewBanner({ customerName, adminName, onStop }: { customerName: string; adminName: string; onStop: () => void }) {
+  return (
+    <div className="relative z-50 bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg">
+      <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-2 sm:px-6 lg:px-8">
+        <div className="flex items-center gap-2 text-sm">
+          <EyeIcon className="h-4 w-4 shrink-0" />
+          <span className="font-medium">
+            <span className="hidden sm:inline">Admin-weergave</span>
+            <span className="sm:hidden">Admin</span>
+            {' · '}
+          </span>
+          <span className="truncate font-bold">{customerName}</span>
+          <span className="hidden text-white/70 sm:inline">— bekeken door {adminName}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <a
+            href="/admin/customers"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-white/20 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur-sm transition hover:bg-white/30"
+          >
+            <ShieldCheckIcon className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Terug naar admin</span>
+            <span className="sm:hidden">Admin</span>
+          </a>
+          <button
+            onClick={onStop}
+            className="rounded-lg bg-white/20 p-1.5 text-white transition hover:bg-white/30"
+            title="Admin-weergave stoppen"
+          >
+            <XMarkIcon className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function PortalLayout({ children }: { children: ReactNode }) {
   const [customer, setCustomer] = useState<PortalCustomer | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isAdminView, setIsAdminView] = useState(false);
+  const [adminName, setAdminName] = useState('');
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const impersonateToken = params.get('impersonate');
+
+    if (impersonateToken) {
+      // Admin impersonation flow
+      (async () => {
+        try {
+          const res = await fetch('/api/portal/auth/impersonate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: impersonateToken }),
+          });
+          if (!res.ok) throw new Error('Impersonation mislukt');
+          const data = await res.json();
+
+          setCustomer(data.customer);
+          setIsAdminView(true);
+          setAdminName(data.impersonation?.admin_name || 'Admin');
+
+          localStorage.setItem('warmeleads-portal-auth', JSON.stringify({
+            customer: data.customer,
+            token: data.token,
+            timestamp: Date.now(),
+            is_admin_view: true,
+            admin_name: data.impersonation?.admin_name || 'Admin',
+          }));
+
+          // Clean the URL (remove ?impersonate=...)
+          window.history.replaceState({}, '', '/portal');
+        } catch {
+          // Token invalid/expired, fall through to normal auth
+        }
+        setLoading(false);
+      })();
+      return;
+    }
+
+    // Normal session restore
     try {
       const raw = localStorage.getItem('warmeleads-portal-auth');
       if (raw) {
         const parsed = JSON.parse(raw);
         if (parsed.token && parsed.customer && Date.now() - parsed.timestamp < 7 * 24 * 60 * 60 * 1000) {
           setCustomer(parsed.customer);
+          if (parsed.is_admin_view) {
+            setIsAdminView(true);
+            setAdminName(parsed.admin_name || 'Admin');
+          }
         } else {
           localStorage.removeItem('warmeleads-portal-auth');
         }
       }
     } catch { /* noop */ }
     setLoading(false);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    if (!customer) return;
+    if (!customer || isAdminView) return;
     if ('serviceWorker' in navigator) {
       (async () => {
         try {
@@ -351,16 +434,28 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
         }
       })();
     }
-  }, [customer]);
+  }, [customer, isAdminView]);
 
   const handleLogin = useCallback((c: PortalCustomer, token: string) => {
     setCustomer(c);
+    setIsAdminView(false);
+    setAdminName('');
     localStorage.setItem('warmeleads-portal-auth', JSON.stringify({ customer: c, token, timestamp: Date.now() }));
   }, []);
 
   const handleLogout = useCallback(() => {
     setCustomer(null);
+    setIsAdminView(false);
+    setAdminName('');
     localStorage.removeItem('warmeleads-portal-auth');
+  }, []);
+
+  const stopAdminView = useCallback(() => {
+    setCustomer(null);
+    setIsAdminView(false);
+    setAdminName('');
+    localStorage.removeItem('warmeleads-portal-auth');
+    window.location.href = '/admin/customers';
   }, []);
 
   if (loading) {
@@ -376,8 +471,15 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
   return (
     <PortalContext.Provider value={{ customer, logout: handleLogout }}>
       <div className="flex min-h-screen flex-col bg-slate-50">
+        {isAdminView && (
+          <AdminViewBanner
+            customerName={customer.name}
+            adminName={adminName}
+            onStop={stopAdminView}
+          />
+        )}
         <PortalHeader customer={customer} onLogout={handleLogout} />
-        <InstallBanner />
+        {!isAdminView && <InstallBanner />}
         <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 lg:px-8">
           {children}
         </main>

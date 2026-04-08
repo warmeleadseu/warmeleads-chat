@@ -1,0 +1,44 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { createServerClient } from '@/lib/supabase';
+import { jwtVerify } from 'jose';
+
+const SECRET = new TextEncoder().encode(process.env.CRON_SECRET || 'fallback-impersonate-key');
+const ISSUER = 'warmeleads-admin';
+
+export async function POST(request: NextRequest) {
+  try {
+    const { token } = await request.json();
+    if (!token) {
+      return NextResponse.json({ error: 'Token ontbreekt' }, { status: 400 });
+    }
+
+    const { payload } = await jwtVerify(token, SECRET, { issuer: ISSUER });
+
+    if (payload.type !== 'impersonate' || !payload.customer_id) {
+      return NextResponse.json({ error: 'Ongeldig token type' }, { status: 403 });
+    }
+
+    const supabase = createServerClient();
+    const { data: customer, error } = await supabase
+      .from('customers')
+      .select('id, name, email, contact_person, branches, portal_active')
+      .eq('id', payload.customer_id as string)
+      .single();
+
+    if (error || !customer) {
+      return NextResponse.json({ error: 'Klant niet gevonden' }, { status: 404 });
+    }
+
+    return NextResponse.json({
+      success: true,
+      token: customer.id,
+      customer,
+      impersonation: {
+        admin_id: payload.admin_id,
+        admin_name: payload.admin_name,
+      },
+    });
+  } catch {
+    return NextResponse.json({ error: 'Token ongeldig of verlopen' }, { status: 403 });
+  }
+}

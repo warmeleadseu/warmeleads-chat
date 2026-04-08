@@ -115,6 +115,7 @@ export default function CustomersPage() {
   const [sendingReminder, setSendingReminder] = useState<string | null>(null);
   const [reminderSent, setReminderSent] = useState<Set<string>>(new Set());
   const [previewReminder, setPreviewReminder] = useState<Customer | null>(null);
+  const [impersonating, setImpersonating] = useState<string | null>(null);
 
   const portalUrl = typeof window !== 'undefined' ? `${window.location.origin}/portal` : 'https://www.warmeleads.eu/portal';
 
@@ -189,6 +190,20 @@ export default function CustomersPage() {
       }
     } catch { alert('Er ging iets mis'); }
     setSendingReminder(null);
+  };
+
+  const impersonateCustomer = async (customerId: string) => {
+    setImpersonating(customerId);
+    try {
+      const res = await adminFetch('/api/admin/impersonate', {
+        method: 'POST',
+        body: JSON.stringify({ customer_id: customerId }),
+      });
+      if (!res.ok) { const d = await res.json(); alert(d.error || 'Impersonatie mislukt'); return; }
+      const { token } = await res.json();
+      window.open(`/portal?impersonate=${token}`, '_blank');
+    } catch { alert('Er ging iets mis'); }
+    setImpersonating(null);
   };
 
   const portalUsers = customers.filter(c => c.portal_active && c.has_password);
@@ -535,14 +550,18 @@ export default function CustomersPage() {
                         {c.portal_active ? 'Uit' : 'Aan'}
                       </button>
                       {portalReady && (
-                        <a
-                          href="/portal"
-                          target="_blank"
-                          className="inline-flex min-h-[32px] items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-brand-purple transition hover:bg-brand-purple/5"
+                        <button
+                          onClick={() => impersonateCustomer(c.id)}
+                          disabled={impersonating === c.id}
+                          className="inline-flex min-h-[32px] items-center gap-1 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-700 transition hover:bg-amber-100 disabled:opacity-50"
                         >
-                          <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5" />
-                          Open
-                        </a>
+                          {impersonating === c.id ? (
+                            <ArrowPathIcon className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <EyeIcon className="h-3.5 w-3.5" />
+                          )}
+                          Bekijk portaal
+                        </button>
                       )}
                       {neverLogged && c.email && (
                         <button

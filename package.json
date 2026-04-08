@@ -40,6 +40,7 @@
     "date-fns": "^4.1.0",
     "framer-motion": "^12.23.12",
     "handlebars": "^4.7.8",
+    "jose": "^6.2.2",
     "lottie-react": "^2.4.1",
     "lucide-react": "^0.542.0",
     "next": "^14.2.15",
