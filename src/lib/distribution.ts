@@ -401,23 +401,15 @@ export async function backfillBatch(batchId: string, lookbackDays: number): Prom
     .single();
   const myExcludes: string[] = Array.isArray(custRow?.exclude_customers) ? custRow.exclude_customers : [];
 
-  // Also find customers that exclude *us*
-  let reverseExcluders: string[] = [];
-  if (myExcludes.length > 0) {
-    reverseExcluders = [...myExcludes];
-  }
-  const { data: allCusts } = await supabase
+  // Find customers that exclude *us* (reverse direction)
+  const { data: reverseRows } = await supabase
     .from('customers')
-    .select('id, exclude_customers')
-    .not('exclude_customers', 'eq', '{}')
-    .neq('id', batch.customer_id);
-  for (const c of allCusts || []) {
-    const ex: string[] = Array.isArray(c.exclude_customers) ? c.exclude_customers : [];
-    if (ex.includes(batch.customer_id) && !reverseExcluders.includes(c.id)) {
-      reverseExcluders.push(c.id);
-    }
-  }
-  const allExcluded = new Set([...myExcludes, ...reverseExcluders]);
+    .select('id')
+    .neq('id', batch.customer_id)
+    .contains('exclude_customers', [batch.customer_id]);
+  const reverseIds = (reverseRows || []).map(r => r.id);
+
+  const allExcluded = new Set([...myExcludes, ...reverseIds]);
 
   // Build set of lead IDs assigned to any excluded customer
   const excludedLeadIds = new Set<string>();

@@ -566,23 +566,31 @@ export default function CustomersPage() {
                   </div>
                 </div>
 
-                {/* Lead exclusies */}
-                {c.exclude_customers && c.exclude_customers.length > 0 && (
-                  <div className="border-t border-slate-100 px-5 py-3">
-                    <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-red-400">Lead exclusies</p>
-                    <div className="flex flex-wrap gap-1">
-                      {c.exclude_customers.map(exId => {
-                        const exCust = customers.find(x => x.id === exId);
-                        return (
-                          <span key={exId} className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-600">
-                            <LinkSlashIcon className="h-3 w-3" />
-                            {exCust?.name || 'Onbekend'}
-                          </span>
-                        );
-                      })}
+                {/* Lead exclusies (bidirectioneel) */}
+                {(() => {
+                  const direct = c.exclude_customers || [];
+                  const reverse = customers.filter(
+                    other => other.id !== c.id && (other.exclude_customers || []).includes(c.id)
+                  ).map(o => o.id);
+                  const allExIds = [...new Set([...direct, ...reverse])];
+                  if (allExIds.length === 0) return null;
+                  return (
+                    <div className="border-t border-slate-100 px-5 py-3">
+                      <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-red-400">Lead exclusies</p>
+                      <div className="flex flex-wrap gap-1">
+                        {allExIds.map(exId => {
+                          const exCust = customers.find(x => x.id === exId);
+                          return (
+                            <span key={exId} className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-600">
+                              <LinkSlashIcon className="h-3 w-3" />
+                              {exCust?.name || 'Onbekend'}
+                            </span>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {/* Inline batch progress */}
                 {(() => {
@@ -1029,12 +1037,13 @@ function CustomerForm({ customer, branchOptions, allCustomers, onClose, onSaved 
                   className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-8 pr-3 text-sm text-slate-900 outline-none focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/20"
                 />
               </div>
-              {excludeOpen && (
-                <div className="absolute left-0 right-0 z-20 mt-1 max-h-44 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg">
-                  {allCustomers
-                    .filter(c => c.id !== customer?.id && !form.exclude_customers.includes(c.id))
-                    .filter(c => !excludeSearch || c.name.toLowerCase().includes(excludeSearch.toLowerCase()))
-                    .map(c => (
+              {excludeOpen && (() => {
+                const available = allCustomers
+                  .filter(c => c.id !== customer?.id && !form.exclude_customers.includes(c.id))
+                  .filter(c => !excludeSearch || c.name.toLowerCase().includes(excludeSearch.toLowerCase()));
+                return (
+                  <div className="absolute left-0 right-0 z-20 mt-1 max-h-44 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg">
+                    {available.length > 0 ? available.map(c => (
                       <button key={c.id} type="button"
                         onClick={() => {
                           setForm(f => ({ ...f, exclude_customers: [...f.exclude_customers, c.id] }));
@@ -1047,16 +1056,12 @@ function CustomerForm({ customer, branchOptions, allCustomers, onClose, onSaved 
                         <span>{c.name}</span>
                         {!c.is_active && <span className="text-[10px] text-slate-400">(inactief)</span>}
                       </button>
-                    ))
-                  }
-                  {allCustomers
-                    .filter(c => c.id !== customer?.id && !form.exclude_customers.includes(c.id))
-                    .filter(c => !excludeSearch || c.name.toLowerCase().includes(excludeSearch.toLowerCase()))
-                    .length === 0 && (
-                    <p className="px-3 py-2 text-xs text-slate-400">Geen klanten gevonden</p>
-                  )}
-                </div>
-              )}
+                    )) : (
+                      <p className="px-3 py-2 text-xs text-slate-400">Geen klanten gevonden</p>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           </div>
 
