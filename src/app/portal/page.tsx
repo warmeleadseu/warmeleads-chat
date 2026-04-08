@@ -534,7 +534,7 @@ export default function PortalPage() {
               </h2>
               <div className="grid gap-3 sm:grid-cols-2">
                 {batches.active.map((b: Record<string, any>) => {
-                  const pct = b.batch_size > 0 ? Math.round((b.leads_delivered / b.batch_size) * 100) : 0;
+                  const pct = b.batch_size > 0 ? Math.min(100, Math.round((b.leads_delivered / b.batch_size) * 100)) : 0;
                   const comps: { amount: number; reason: string }[] = Array.isArray(b.compensations) ? b.compensations : [];
                   const totalComp = comps.reduce((s: number, c: { amount: number }) => s + c.amount, 0);
                   const originalSize = b.batch_size - totalComp;
@@ -565,7 +565,7 @@ export default function PortalPage() {
                       </div>
                       <div className="flex items-center justify-between text-xs text-slate-500">
                         <span className="font-medium">
-                          {b.leads_delivered} / {b.batch_size} leads
+                          {Math.min(b.leads_delivered, b.batch_size)} / {b.batch_size} leads
                           {totalComp > 0 && (
                             <span className="ml-1 text-emerald-600">
                               (incl. {totalComp} compensatie)
@@ -663,7 +663,7 @@ export default function PortalPage() {
                       </span>
                     </div>
                     <p className="mt-1.5 text-xs text-slate-500">
-                      {b.leads_delivered} / {b.batch_size} leads
+                      {Math.min(b.leads_delivered, b.batch_size)} / {b.batch_size} leads
                       {compTotal > 0 && <span className="text-emerald-600"> (incl. {compTotal} compensatie)</span>}
                       {b.completed_at && (
                         <span className="text-slate-400"> · {new Date(b.completed_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' })}</span>

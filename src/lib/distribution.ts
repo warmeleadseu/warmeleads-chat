@@ -278,6 +278,14 @@ export async function distributeLead(lead: LeadForDistribution): Promise<Distrib
   const toAssign = matches.slice(0, 1);
 
   for (const m of toAssign) {
+    // Fresh count to prevent race condition overdelivery
+    const { count: currentCount } = await supabase
+      .from('lead_assignments')
+      .select('id', { count: 'exact', head: true })
+      .eq('batch_id', m.batch_id);
+    const batchForCheck = activeBatches.find(b => b.id === m.batch_id);
+    if (batchForCheck && (currentCount || 0) >= batchForCheck.batch_size) continue;
+
     const { error } = await supabase
       .from('lead_assignments')
       .insert({
@@ -385,10 +393,15 @@ export async function backfillBatch(batchId: string, lookbackDays: number): Prom
 
   const filters: LeadFilter[] = Array.isArray(batch.lead_filters) ? batch.lead_filters : [];
   let assigned = 0;
-  const remaining = batch.batch_size - batch.leads_delivered;
 
   for (const lead of leads) {
-    if (assigned >= remaining) break;
+    // Fresh count each iteration to prevent overdelivery
+    const { count: currentCount } = await supabase
+      .from('lead_assignments')
+      .select('id', { count: 'exact', head: true })
+      .eq('batch_id', batch.id);
+    if ((currentCount || 0) >= batch.batch_size) break;
+
     if (alreadyAssigned.has(lead.id)) continue;
     if (!matchesAllFilters(lead as LeadForDistribution, filters)) continue;
 

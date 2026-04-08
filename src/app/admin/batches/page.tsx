@@ -334,7 +334,10 @@ export default function BatchesPage() {
                             </div>
                           </div>
                           <div>
-                            <span className="whitespace-nowrap text-xs text-slate-600">{b.leads_delivered}/{b.batch_size} <span className="text-slate-400">({pct}%)</span></span>
+                            <span className="whitespace-nowrap text-xs text-slate-600">
+                              {b.leads_delivered}/{b.batch_size} <span className="text-slate-400">({pct}%)</span>
+                              {b.leads_delivered > b.batch_size && <span className="ml-1 text-[10px] font-medium text-amber-600">overlevering</span>}
+                            </span>
                             {compTotal > 0 && (
                               <p className="whitespace-nowrap text-[10px] font-medium text-emerald-600">+{compTotal} compensatie</p>
                             )}
