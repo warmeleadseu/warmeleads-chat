@@ -67,6 +67,9 @@ export async function POST(request: NextRequest) {
         description: body.description || '',
         is_active: body.is_active ?? true,
         sort_order: body.sort_order ?? 0,
+        pricing_tiers: Array.isArray(body.pricing_tiers) ? body.pricing_tiers : [],
+        min_batch_size: typeof body.min_batch_size === 'number' ? body.min_batch_size : 10,
+        nationwide_discount: typeof body.nationwide_discount === 'number' ? body.nationwide_discount : 0,
       })
       .select()
       .single();

@@ -762,6 +762,15 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
 }
 
 /* ─── Create Panel ────────────────────────────────────────── */
+interface PricingTierData { min_leads: number; price_per_lead: number }
+interface PricingInfo {
+  tiers: PricingTierData[];
+  nationwide_discount: number;
+  min_batch_size: number;
+  is_custom: boolean;
+  computed_price?: number | null;
+}
+
 function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
   branches: BranchOption[]; customers: Customer[];
   onClose: () => void; onCreated: () => void;
@@ -772,6 +781,8 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
   });
   const [saving, setSaving] = useState(false);
   const [branchFields, setBranchFields] = useState<BranchField[]>([]);
+  const [pricingInfo, setPricingInfo] = useState<PricingInfo | null>(null);
+  const [priceOverride, setPriceOverride] = useState(false);
 
   useEffect(() => {
     if (!form.branch) { setBranchFields([]); return; }
@@ -780,6 +791,54 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
       .then(d => setBranchFields(d.fields || []))
       .catch(() => {});
   }, [form.branch]);
+
+  useEffect(() => {
+    if (!form.branch) { setPricingInfo(null); return; }
+    const fetchPricing = async () => {
+      const params = new URLSearchParams({ branch: form.branch });
+      if (form.customer_id) params.set('customer_id', form.customer_id);
+
+      const branchRes = await adminFetch('/api/admin/branches');
+      if (!branchRes.ok) return;
+      const branchData = await branchRes.json();
+      const br = (branchData.branches || []).find((b: { slug: string }) => b.slug === form.branch);
+      if (!br) return;
+
+      let tiers = br.pricing_tiers || [];
+      let nationwideDiscount = Number(br.nationwide_discount) || 0;
+      let isCustom = false;
+
+      if (form.customer_id) {
+        const cpRes = await adminFetch(`/api/admin/customer-pricing?customer_id=${form.customer_id}`);
+        if (cpRes.ok) {
+          const cpData = await cpRes.json();
+          const custom = (cpData.pricing || []).find((p: { branch_slug: string }) => p.branch_slug === form.branch);
+          if (custom && custom.pricing_tiers && custom.pricing_tiers.length > 0) {
+            tiers = custom.pricing_tiers;
+            if (custom.nationwide_discount != null) nationwideDiscount = Number(custom.nationwide_discount);
+            isCustom = true;
+          }
+        }
+      }
+
+      const sorted = [...tiers].sort((a: PricingTierData, b: PricingTierData) => b.min_leads - a.min_leads);
+      const tier = sorted.find((t: PricingTierData) => form.batch_size >= t.min_leads);
+      const computedPrice = tier ? tier.price_per_lead : null;
+
+      setPricingInfo({
+        tiers,
+        nationwide_discount: nationwideDiscount,
+        min_batch_size: br.min_batch_size || 10,
+        is_custom: isCustom,
+        computed_price: computedPrice,
+      });
+
+      if (!priceOverride && computedPrice !== null) {
+        setForm(f => ({ ...f, price_per_lead: String(computedPrice) }));
+      }
+    };
+    fetchPricing();
+  }, [form.branch, form.customer_id, form.batch_size, priceOverride]);
 
   const create = async () => {
     if (!form.customer_id || !form.branch || !form.batch_size) return;
@@ -853,12 +912,47 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-slate-500">€/lead</label>
-              <input type="number" step="0.01" value={form.price_per_lead} onChange={e => setForm(f => ({ ...f, price_per_lead: e.target.value }))}
+              <label className="mb-1 flex items-center gap-1 text-xs font-medium text-slate-500">
+                €/lead
+                {pricingInfo?.computed_price != null && !priceOverride && (
+                  <span className="rounded bg-emerald-50 px-1 py-0.5 text-[9px] font-bold text-emerald-600">AUTO</span>
+                )}
+              </label>
+              <input type="number" step="0.01" value={form.price_per_lead}
+                onChange={e => { setPriceOverride(true); setForm(f => ({ ...f, price_per_lead: e.target.value })); }}
                 placeholder="-"
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
+                className={`w-full rounded-lg border px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50 ${
+                  pricingInfo?.computed_price != null && !priceOverride ? 'border-emerald-300 bg-emerald-50/30' : 'border-slate-200'
+                }`} />
+              {priceOverride && pricingInfo?.computed_price != null && (
+                <button type="button" onClick={() => { setPriceOverride(false); setForm(f => ({ ...f, price_per_lead: String(pricingInfo.computed_price) })); }}
+                  className="mt-0.5 text-[10px] text-brand-purple hover:underline">
+                  Reset naar staffelprijs (€{pricingInfo.computed_price.toFixed(2)})
+                </button>
+              )}
             </div>
           </div>
+
+          {pricingInfo && pricingInfo.tiers.length > 0 && (
+            <div className="rounded-lg border border-slate-200 bg-slate-50/50 p-3">
+              <div className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                Staffelprijzen {pricingInfo.is_custom && <span className="rounded bg-amber-100 px-1 py-0.5 text-amber-700 normal-case">Klantspecifiek</span>}
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {[...pricingInfo.tiers].sort((a, b) => a.min_leads - b.min_leads).map((t, i) => (
+                  <span key={i} className={`rounded-md border px-1.5 py-0.5 text-[10px] font-medium shadow-sm ${
+                    form.batch_size >= t.min_leads && (i === pricingInfo.tiers.length - 1 || form.batch_size < [...pricingInfo.tiers].sort((a, b) => a.min_leads - b.min_leads)[i + 1]?.min_leads)
+                      ? 'border-brand-purple bg-brand-purple/10 text-brand-purple' : 'border-slate-100 bg-white text-slate-600'
+                  }`}>
+                    {t.min_leads}+ → €{Number(t.price_per_lead).toFixed(2)}
+                  </span>
+                ))}
+              </div>
+              {Number(pricingInfo.nationwide_discount) > 0 && (
+                <p className="mt-1 text-[10px] text-emerald-600">Landelijke korting: -€{pricingInfo.nationwide_discount.toFixed(2)}/lead</p>
+              )}
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <div>

@@ -51,8 +51,15 @@ interface Order {
   paid_at: string | null;
 }
 
+interface PricingTier { min_leads: number; price_per_lead: number }
+interface PricingData {
+  tiers: PricingTier[];
+  min_batch_size: number;
+  nationwide_discount: number;
+  is_custom: boolean;
+}
+
 const BTW_RATE = 0.21;
-const QUICK_SIZES = [50, 100, 200, 500];
 
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, { text: string; cls: string; dot: string }> = {
@@ -92,6 +99,7 @@ export default function BestellenPage() {
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
   const [showOrders, setShowOrders] = useState(false);
+  const [pricingData, setPricingData] = useState<PricingData | null>(null);
 
   const [redirectOrder, setRedirectOrder] = useState<Order | null>(null);
   const pollRef = useRef<NodeJS.Timeout | null>(null);
@@ -159,6 +167,14 @@ export default function BestellenPage() {
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [customer, sourceBatchId, orderRedirectId, redirectStatus, fetchData]);
 
+  useEffect(() => {
+    if (!selectedBranch) { setPricingData(null); return; }
+    portalFetch(`/api/portal/pricing?branch=${selectedBranch}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data) setPricingData(data); })
+      .catch(() => {});
+  }, [selectedBranch]);
+
   const allBatches = useMemo(() => [...batches.active, ...batches.completed], [batches]);
 
   const branchGroups = useMemo(() => {
@@ -175,10 +191,28 @@ export default function BestellenPage() {
   const sourceBatch = useMemo(() => activeBranch?.batches[0] || null, [activeBranch]);
 
   const effectiveSize = useCustom ? (parseInt(customSize) || 0) : batchSize;
-  const pricePerLead = sourceBatch?.price_per_lead || 0;
+
+  const dynamicPricePerLead = useMemo(() => {
+    if (!pricingData || !pricingData.tiers || pricingData.tiers.length === 0) {
+      return sourceBatch?.price_per_lead || 0;
+    }
+    const sorted = [...pricingData.tiers].sort((a, b) => b.min_leads - a.min_leads);
+    const tier = sorted.find(t => effectiveSize >= t.min_leads);
+    return tier ? tier.price_per_lead : (sourceBatch?.price_per_lead || 0);
+  }, [pricingData, effectiveSize, sourceBatch]);
+
+  const pricePerLead = dynamicPricePerLead;
   const subtotal = effectiveSize * pricePerLead;
   const btwAmount = Math.round(subtotal * BTW_RATE * 100) / 100;
   const totalInclBtw = subtotal + btwAmount;
+  const minBatchSize = pricingData?.min_batch_size || 10;
+  const QUICK_SIZES = useMemo(() => {
+    const min = minBatchSize;
+    const defaults = [50, 100, 200, 500].filter(s => s >= min);
+    if (defaults.length === 0) return [min];
+    if (!defaults.includes(min) && min < defaults[0]) defaults.unshift(min);
+    return defaults.slice(0, 4);
+  }, [minBatchSize]);
 
   const handleCancelOrder = async (orderId: string) => {
     if (!confirm('Weet u zeker dat u deze bestelling wilt verwijderen?')) return;
@@ -200,7 +234,7 @@ export default function BestellenPage() {
   };
 
   const handleOrder = async () => {
-    if (!sourceBatch || effectiveSize < 10) return;
+    if (!sourceBatch || effectiveSize < minBatchSize) return;
     setSubmitting(true);
     try {
       const res = await portalFetch('/api/portal/orders', {
@@ -209,7 +243,7 @@ export default function BestellenPage() {
           batch_size: effectiveSize,
           source_batch_id: sourceBatch.id,
           branch: sourceBatch.branch,
-          price_per_lead: sourceBatch.price_per_lead,
+          price_per_lead: pricePerLead,
           notes: notes || undefined,
         }),
       });
@@ -558,8 +592,30 @@ export default function BestellenPage() {
             </button>
           </div>
 
-          {effectiveSize > 0 && effectiveSize < 10 && (
-            <p className="mt-2 text-center text-xs text-red-500">Minimaal 10 leads per batch</p>
+          {effectiveSize > 0 && effectiveSize < minBatchSize && (
+            <p className="mt-2 text-center text-xs text-red-500">Minimaal {minBatchSize} leads per batch</p>
+          )}
+
+          {pricingData && pricingData.tiers.length > 0 && (
+            <div className="mt-3 rounded-xl border border-slate-100 bg-slate-50/50 p-3">
+              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Staffelprijzen</p>
+              <div className="flex flex-wrap gap-1.5">
+                {[...pricingData.tiers].sort((a, b) => a.min_leads - b.min_leads).map((t, i) => {
+                  const sortedAsc = [...pricingData.tiers].sort((a, b) => a.min_leads - b.min_leads);
+                  const isActive = effectiveSize >= t.min_leads && (i === sortedAsc.length - 1 || effectiveSize < sortedAsc[i + 1]?.min_leads);
+                  return (
+                    <span key={i} className={`rounded-lg border px-2 py-1 text-[11px] font-medium transition ${
+                      isActive ? 'border-brand-purple bg-brand-purple/10 text-brand-purple' : 'border-slate-200 bg-white text-slate-500'
+                    }`}>
+                      {t.min_leads}+ leads → €{Number(t.price_per_lead).toFixed(2)}
+                    </span>
+                  );
+                })}
+              </div>
+              {pricingData.is_custom && (
+                <p className="mt-1.5 text-[10px] text-amber-600 font-medium">Speciaal tarief voor uw bedrijf</p>
+              )}
+            </div>
           )}
         </div>
 
@@ -591,7 +647,7 @@ export default function BestellenPage() {
           </div>
 
           <div className="border-t border-slate-100 p-4">
-            <button onClick={handleOrder} disabled={submitting || effectiveSize < 10 || !sourceBatch}
+            <button onClick={handleOrder} disabled={submitting || effectiveSize < minBatchSize || !sourceBatch}
               className="flex w-full items-center justify-center gap-2.5 rounded-xl bg-gradient-to-r from-brand-purple to-brand-pink px-6 py-3.5 text-[15px] font-bold text-white shadow-lg transition hover:shadow-xl active:scale-[0.99] disabled:opacity-50 disabled:shadow-none">
               {submitting ? (
                 <><ArrowPathIcon className="h-5 w-5 animate-spin" /> Wordt verwerkt...</>

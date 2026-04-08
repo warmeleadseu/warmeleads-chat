@@ -15,6 +15,7 @@ import {
   UserGroupIcon,
   LinkIcon,
   SwatchIcon,
+  CurrencyEuroIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
 
@@ -29,6 +30,11 @@ interface BranchField {
   sort_order: number;
 }
 
+interface PricingTier {
+  min_leads: number;
+  price_per_lead: number;
+}
+
 interface Branch {
   id: string;
   slug: string;
@@ -40,6 +46,9 @@ interface Branch {
   branch_fields: BranchField[];
   lead_count: number;
   webhook_count: number;
+  pricing_tiers: PricingTier[];
+  min_batch_size: number;
+  nationwide_discount: number;
 }
 
 const COLORS = [
@@ -202,6 +211,24 @@ export default function BranchesPage() {
                     </span>
                   </div>
 
+                  {b.pricing_tiers && b.pricing_tiers.length > 0 && (
+                    <div className="mb-3 rounded-lg border border-slate-100 bg-slate-50/50 p-2.5">
+                      <p className="mb-1.5 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                        <CurrencyEuroIcon className="h-3 w-3" /> Staffels
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {[...b.pricing_tiers].sort((a: PricingTier, b: PricingTier) => a.min_leads - b.min_leads).map((t: PricingTier, i: number) => (
+                          <span key={i} className="rounded-md bg-white px-1.5 py-0.5 text-[10px] font-medium text-slate-600 shadow-sm border border-slate-100">
+                            {t.min_leads}+ → €{Number(t.price_per_lead).toFixed(2)}
+                          </span>
+                        ))}
+                      </div>
+                      {Number(b.nationwide_discount) > 0 && (
+                        <p className="mt-1 text-[10px] text-emerald-600">-€{Number(b.nationwide_discount).toFixed(2)} landelijke korting</p>
+                      )}
+                    </div>
+                  )}
+
                   {b.branch_fields.length > 0 && (
                     <div className="flex flex-wrap gap-1">
                       {b.branch_fields.map(f => (
@@ -273,7 +300,16 @@ function BranchForm({ branch, onClose, onSaved }: { branch: Branch | null; onClo
     color: branch?.color || 'slate',
     description: branch?.description || '',
     is_active: branch?.is_active ?? true,
+    min_batch_size: branch?.min_batch_size ?? 10,
+    nationwide_discount: branch?.nationwide_discount ?? 0,
   });
+  const [tiers, setTiers] = useState<PricingTier[]>(
+    branch?.pricing_tiers && Array.isArray(branch.pricing_tiers)
+      ? [...branch.pricing_tiers].sort((a, b) => a.min_leads - b.min_leads)
+      : []
+  );
+  const [newTierLeads, setNewTierLeads] = useState('');
+  const [newTierPrice, setNewTierPrice] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -288,13 +324,33 @@ function BranchForm({ branch, onClose, onSaved }: { branch: Branch | null; onClo
     }));
   };
 
+  const addTier = () => {
+    const leads = parseInt(newTierLeads);
+    const price = parseFloat(newTierPrice);
+    if (!leads || leads <= 0 || isNaN(price) || price < 0) return;
+    if (tiers.some(t => t.min_leads === leads)) {
+      setError(`Staffel voor ${leads} leads bestaat al`);
+      return;
+    }
+    setTiers(prev => [...prev, { min_leads: leads, price_per_lead: price }].sort((a, b) => a.min_leads - b.min_leads));
+    setNewTierLeads('');
+    setNewTierPrice('');
+    setError('');
+  };
+
+  const removeTier = (idx: number) => {
+    setTiers(prev => prev.filter((_, i) => i !== idx));
+  };
+
   const save = async () => {
     if (!form.name) { setError('Naam is verplicht'); return; }
     if (!form.slug) { setError('Slug is verplicht'); return; }
     setSaving(true);
     setError('');
     try {
-      const payload = isEdit ? { id: branch!.id, ...form } : form;
+      const payload = isEdit
+        ? { id: branch!.id, ...form, pricing_tiers: tiers }
+        : { ...form, pricing_tiers: tiers };
       const res = await adminFetch('/api/admin/branches', {
         method: isEdit ? 'PUT' : 'POST',
         body: JSON.stringify(payload),
@@ -385,6 +441,94 @@ function BranchForm({ branch, onClose, onSaved }: { branch: Branch | null; onClo
               className="rounded border-slate-300"
             />
             <label htmlFor="branch-active" className="text-sm text-slate-700">Actief</label>
+          </div>
+
+          {/* Pricing section */}
+          <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-4">
+            <h3 className="flex items-center gap-1.5 text-sm font-bold text-slate-800">
+              <CurrencyEuroIcon className="h-4 w-4 text-brand-purple" />
+              Prijzen &amp; staffels
+            </h3>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-500">Min. afname (leads)</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={form.min_batch_size}
+                  onChange={e => setForm(f => ({ ...f, min_batch_size: parseInt(e.target.value) || 10 }))}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-500">Korting landelijk (€)</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.50"
+                  value={form.nationwide_discount}
+                  onChange={e => setForm(f => ({ ...f, nationwide_discount: parseFloat(e.target.value) || 0 }))}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50"
+                />
+                <p className="mt-0.5 text-[10px] text-slate-400">Korting per lead bij heel NL/BE</p>
+              </div>
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-slate-500">Prijsstaffels</label>
+              {tiers.length > 0 ? (
+                <div className="space-y-1.5 mb-2.5">
+                  {tiers.map((t, i) => (
+                    <div key={i} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
+                      <span className="flex-1 text-sm text-slate-700">
+                        Vanaf <span className="font-semibold">{t.min_leads}</span> leads
+                      </span>
+                      <span className="text-sm font-bold text-slate-900">€{Number(t.price_per_lead).toFixed(2)}</span>
+                      <button onClick={() => removeTier(i)} className="ml-1 rounded p-1 text-slate-300 hover:bg-red-50 hover:text-red-500">
+                        <TrashIcon className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="mb-2.5 text-xs text-slate-400 italic">Nog geen staffels ingesteld</p>
+              )}
+
+              <div className="flex items-end gap-2">
+                <div className="flex-1">
+                  <label className="mb-0.5 block text-[10px] text-slate-400">Vanaf (leads)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={newTierLeads}
+                    onChange={e => setNewTierLeads(e.target.value)}
+                    placeholder="30"
+                    className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm text-slate-900 outline-none focus:border-brand-purple/50"
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="mb-0.5 block text-[10px] text-slate-400">€ per lead</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.50"
+                    value={newTierPrice}
+                    onChange={e => setNewTierPrice(e.target.value)}
+                    placeholder="37.50"
+                    className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm text-slate-900 outline-none focus:border-brand-purple/50"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={addTier}
+                  disabled={!newTierLeads || !newTierPrice}
+                  className="rounded-lg bg-brand-purple px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
+                >
+                  <PlusIcon className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 
