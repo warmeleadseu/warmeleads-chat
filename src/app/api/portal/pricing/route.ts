@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { verifyCustomer } from '@/lib/portalAuth';
+import { mergeCustomTiers } from '@/lib/pricing';
 
 export async function GET(request: NextRequest) {
   const customer = await verifyCustomer(request);
@@ -37,17 +38,9 @@ export async function GET(request: NextRequest) {
   const branchTiers: { min_leads: number; price_per_lead: number }[] = branchData.pricing_tiers || [];
   const customTiers: { min_leads: number; price_per_lead: number }[] = hasCustomPricing ? customPricing.pricing_tiers : [];
 
-  let tiers: { min_leads: number; price_per_lead: number }[];
-  if (customTiers.length > 0) {
-    const customMinLeads = new Set(customTiers.map(t => t.min_leads));
-    const merged = [
-      ...branchTiers.filter(t => !customMinLeads.has(t.min_leads)),
-      ...customTiers,
-    ];
-    tiers = merged.sort((a, b) => a.min_leads - b.min_leads);
-  } else {
-    tiers = branchTiers;
-  }
+  const tiers = customTiers.length > 0
+    ? mergeCustomTiers(branchTiers, customTiers)
+    : branchTiers;
 
   const nationwideDiscount = hasCustomPricing && customPricing.nationwide_discount != null
     ? customPricing.nationwide_discount

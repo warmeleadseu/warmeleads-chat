@@ -18,6 +18,7 @@ import {
   CheckCircleIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
+import { mergeCustomTiers } from '@/lib/pricing';
 
 interface LeadFilter { field: string; operator: string; value: string; values?: string[] }
 interface Compensation { amount: number; reason: string; date: string }
@@ -815,11 +816,7 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
           const cpData = await cpRes.json();
           const custom = (cpData.pricing || []).find((p: { branch_slug: string }) => p.branch_slug === form.branch);
           if (custom && custom.pricing_tiers && custom.pricing_tiers.length > 0) {
-            const customMinLeads = new Set(custom.pricing_tiers.map((t: PricingTierData) => t.min_leads));
-            tiers = [
-              ...branchTiers.filter((t: PricingTierData) => !customMinLeads.has(t.min_leads)),
-              ...custom.pricing_tiers,
-            ].sort((a: PricingTierData, b: PricingTierData) => a.min_leads - b.min_leads);
+            tiers = mergeCustomTiers(branchTiers, custom.pricing_tiers);
             if (custom.nationwide_discount != null) nationwideDiscount = Number(custom.nationwide_discount);
             isCustom = true;
           }
