@@ -25,12 +25,15 @@ import {
   ShoppingCartIcon,
   DocumentTextIcon,
   BuildingOffice2Icon,
+  FlagIcon,
 } from '@heroicons/react/24/outline';
 import { AdminContext, type AdminUser } from './adminContext';
+import { adminFetch } from '@/lib/adminAuth';
 
 const NAV = [
   { label: 'Dashboard', href: '/admin', icon: HomeIcon },
   { label: 'Leads CRM', href: '/admin/leads', icon: ChartBarSquareIcon },
+  { label: 'Reclamaties', href: '/admin/reclamaties', icon: FlagIcon, badge: true },
   { label: 'Verdeling', href: '/admin/verdeling', icon: ArrowsRightLeftIcon },
   { label: 'Importeren', href: '/admin/import', icon: DocumentArrowUpIcon },
   { label: 'Klanten', href: '/admin/customers', icon: BuildingOfficeIcon },
@@ -132,7 +135,7 @@ function LoginScreen({ onLogin }: { onLogin: (u: AdminUser, t: string) => void }
   );
 }
 
-function Sidebar({ user, onLogout }: { user: AdminUser; onLogout: () => void }) {
+function Sidebar({ user, onLogout, pendingReclamations }: { user: AdminUser; onLogout: () => void; pendingReclamations: number }) {
   const pathname = usePathname();
 
   return (
@@ -155,6 +158,11 @@ function Sidebar({ user, onLogout }: { user: AdminUser; onLogout: () => void }) 
               >
                 <item.icon className={`h-[18px] w-[18px] ${active ? 'text-brand-purple' : 'text-white/40'}`} />
                 {item.label}
+                {'badge' in item && item.badge && pendingReclamations > 0 && (
+                  <span className="ml-auto flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white">
+                    {pendingReclamations}
+                  </span>
+                )}
                 {item.href === '/admin/live' && (
                   <span className="relative ml-auto flex h-2 w-2">
                     <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
@@ -188,7 +196,7 @@ function Sidebar({ user, onLogout }: { user: AdminUser; onLogout: () => void }) 
   );
 }
 
-function MobileHeader({ user, onLogout }: { user: AdminUser; onLogout: () => void }) {
+function MobileHeader({ user, onLogout, pendingReclamations }: { user: AdminUser; onLogout: () => void; pendingReclamations: number }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
 
@@ -242,6 +250,11 @@ function MobileHeader({ user, onLogout }: { user: AdminUser; onLogout: () => voi
                     >
                       <item.icon className={`h-5 w-5 ${active ? 'text-brand-purple' : 'text-white/40'}`} />
                       {item.label}
+                      {'badge' in item && item.badge && pendingReclamations > 0 && (
+                        <span className="ml-auto flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white">
+                          {pendingReclamations}
+                        </span>
+                      )}
                       {item.href === '/admin/live' && (
                         <span className="relative ml-auto flex h-2 w-2">
                           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
@@ -270,6 +283,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [user, setUser] = useState<AdminUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [pendingReclamations, setPendingReclamations] = useState(0);
 
   useEffect(() => {
     try {
@@ -285,6 +299,22 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     } catch { /* noop */ }
     setLoading(false);
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    const fetchCount = async () => {
+      try {
+        const res = await adminFetch('/api/admin/reclamations?count_only=true');
+        if (res.ok) {
+          const data = await res.json();
+          setPendingReclamations(data.pending_count || 0);
+        }
+      } catch { /* ignore */ }
+    };
+    fetchCount();
+    const interval = setInterval(fetchCount, 60_000);
+    return () => clearInterval(interval);
+  }, [user]);
 
   const handleLogin = useCallback((u: AdminUser, token: string) => {
     setUser(u);
@@ -319,8 +349,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   return (
     <AdminContext.Provider value={{ user, logout: handleLogout }}>
       <div className="min-h-screen bg-slate-50">
-        <Sidebar user={user} onLogout={handleLogout} />
-        <MobileHeader user={user} onLogout={handleLogout} />
+        <Sidebar user={user} onLogout={handleLogout} pendingReclamations={pendingReclamations} />
+        <MobileHeader user={user} onLogout={handleLogout} pendingReclamations={pendingReclamations} />
         <main className="lg:pl-60">
           <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">{children}</div>
         </main>
