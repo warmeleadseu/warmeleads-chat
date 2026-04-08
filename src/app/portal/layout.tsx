@@ -130,7 +130,7 @@ function PortalHeader({ customer, onLogout }: { customer: PortalCustomer; onLogo
   const pathname = usePathname();
 
   return (
-    <header className="sticky top-0 z-40 bg-white shadow-sm">
+    <header className="bg-white shadow-sm">
       <div className="h-[3px] bg-warmeleads-gradient" />
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex h-14 items-center justify-between">
@@ -320,7 +320,7 @@ interface BeforeInstallPromptEvent extends Event {
 
 function AdminViewBanner({ customerName, adminName, onStop }: { customerName: string; adminName: string; onStop: () => void }) {
   return (
-    <div className="relative z-50 bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg">
+    <div className="bg-gradient-to-r from-amber-500 to-orange-500 text-white">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-2 sm:px-6 lg:px-8">
         <div className="flex items-center gap-2 text-sm">
           <EyeIcon className="h-4 w-4 shrink-0" />
@@ -361,11 +361,26 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
   const [adminName, setAdminName] = useState('');
 
   useEffect(() => {
+    const restoreSession = () => {
+      try {
+        const raw = localStorage.getItem('warmeleads-portal-auth');
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        if (!parsed.token || !parsed.customer) { localStorage.removeItem('warmeleads-portal-auth'); return; }
+        const maxAge = parsed.is_admin_view ? 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000;
+        if (Date.now() - parsed.timestamp > maxAge) { localStorage.removeItem('warmeleads-portal-auth'); return; }
+        setCustomer(parsed.customer);
+        if (parsed.is_admin_view) {
+          setIsAdminView(true);
+          setAdminName(parsed.admin_name || 'Admin');
+        }
+      } catch { localStorage.removeItem('warmeleads-portal-auth'); }
+    };
+
     const params = new URLSearchParams(window.location.search);
     const impersonateToken = params.get('impersonate');
 
     if (impersonateToken) {
-      // Admin impersonation flow
       (async () => {
         try {
           const res = await fetch('/api/portal/auth/impersonate', {
@@ -388,32 +403,16 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
             admin_name: data.impersonation?.admin_name || 'Admin',
           }));
 
-          // Clean the URL (remove ?impersonate=...)
           window.history.replaceState({}, '', '/portal');
         } catch {
-          // Token invalid/expired, fall through to normal auth
+          restoreSession();
         }
         setLoading(false);
       })();
       return;
     }
 
-    // Normal session restore
-    try {
-      const raw = localStorage.getItem('warmeleads-portal-auth');
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed.token && parsed.customer && Date.now() - parsed.timestamp < 7 * 24 * 60 * 60 * 1000) {
-          setCustomer(parsed.customer);
-          if (parsed.is_admin_view) {
-            setIsAdminView(true);
-            setAdminName(parsed.admin_name || 'Admin');
-          }
-        } else {
-          localStorage.removeItem('warmeleads-portal-auth');
-        }
-      }
-    } catch { /* noop */ }
+    restoreSession();
     setLoading(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -471,14 +470,16 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
   return (
     <PortalContext.Provider value={{ customer, logout: handleLogout }}>
       <div className="flex min-h-screen flex-col bg-slate-50">
-        {isAdminView && (
-          <AdminViewBanner
-            customerName={customer.name}
-            adminName={adminName}
-            onStop={stopAdminView}
-          />
-        )}
-        <PortalHeader customer={customer} onLogout={handleLogout} />
+        <div className="sticky top-0 z-40">
+          {isAdminView && (
+            <AdminViewBanner
+              customerName={customer.name}
+              adminName={adminName}
+              onStop={stopAdminView}
+            />
+          )}
+          <PortalHeader customer={customer} onLogout={handleLogout} />
+        </div>
         {!isAdminView && <InstallBanner />}
         <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 lg:px-8">
           {children}
