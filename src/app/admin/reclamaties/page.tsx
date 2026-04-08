@@ -119,7 +119,13 @@ export default function AdminReclamatiesPage() {
         setReclamations(prev => prev.map(r => r.id === updated.id ? updated : r));
         setSelected(null);
         setAdminNotes('');
-        showToast(status === 'approved' ? 'Reclamatie goedgekeurd' : 'Reclamatie afgewezen');
+        if (status === 'approved') {
+          showToast(updated.batch_updated
+            ? 'Reclamatie goedgekeurd — +1 compensatie lead toegevoegd aan actieve batch'
+            : 'Reclamatie goedgekeurd (geen actieve batch gevonden)');
+        } else {
+          showToast('Reclamatie afgewezen');
+        }
       } else {
         const d = await res.json();
         showToast(d.error || 'Opslaan mislukt', 'error');
@@ -445,7 +451,11 @@ export default function AdminReclamatiesPage() {
 
               {/* Action buttons */}
               {selected.status === 'pending' && (
-                <div className="shrink-0 border-t border-slate-100 px-5 py-4">
+                <div className="shrink-0 border-t border-slate-100 px-5 py-4 space-y-3">
+                  <div className="flex items-start gap-2 rounded-lg bg-blue-50 border border-blue-100 px-3 py-2">
+                    <CheckCircleIcon className="mt-0.5 h-4 w-4 shrink-0 text-blue-500" />
+                    <p className="text-xs text-blue-700">Bij goedkeuring wordt automatisch +1 compensatie lead toegevoegd aan de actieve batch van deze klant.</p>
+                  </div>
                   <div className="grid grid-cols-2 gap-3">
                     <button
                       onClick={() => handleResolve('rejected')}
