@@ -40,6 +40,7 @@ interface Customer {
   lead_count?: number;
   last_login_at?: string | null;
   login_count?: number;
+  exclude_customers?: string[];
 }
 
 function getActivityStatus(c: Customer): { label: string; color: string; dotColor: string; sort: number } {
@@ -565,6 +566,24 @@ export default function CustomersPage() {
                   </div>
                 </div>
 
+                {/* Lead exclusies */}
+                {c.exclude_customers && c.exclude_customers.length > 0 && (
+                  <div className="border-t border-slate-100 px-5 py-3">
+                    <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-red-400">Lead exclusies</p>
+                    <div className="flex flex-wrap gap-1">
+                      {c.exclude_customers.map(exId => {
+                        const exCust = customers.find(x => x.id === exId);
+                        return (
+                          <span key={exId} className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-600">
+                            <LinkSlashIcon className="h-3 w-3" />
+                            {exCust?.name || 'Onbekend'}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 {/* Inline batch progress */}
                 {(() => {
                   const custBatches = allBatches.filter(b => b.customer_id === c.id && b.status === 'active');
@@ -643,6 +662,7 @@ export default function CustomersPage() {
           <CustomerForm
             customer={editing}
             branchOptions={branchOptions}
+            allCustomers={customers}
             onClose={() => { setEditing(null); setShowNew(false); }}
             onSaved={() => { setEditing(null); setShowNew(false); fetch_(); }}
           />
@@ -844,7 +864,7 @@ function PasswordField({ value, onChange, label, placeholder }: { value: string;
   );
 }
 
-function CustomerForm({ customer, branchOptions, onClose, onSaved }: { customer: Customer | null; branchOptions: BranchOption[]; onClose: () => void; onSaved: () => void }) {
+function CustomerForm({ customer, branchOptions, allCustomers, onClose, onSaved }: { customer: Customer | null; branchOptions: BranchOption[]; allCustomers: Customer[]; onClose: () => void; onSaved: () => void }) {
   const isEdit = !!customer;
   const [form, setForm] = useState({
     name: customer?.name || '',
@@ -856,9 +876,23 @@ function CustomerForm({ customer, branchOptions, onClose, onSaved }: { customer:
     portal_active: customer?.portal_active ?? true,
     notes: customer?.notes || '',
     password: '',
+    exclude_customers: customer?.exclude_customers || [] as string[],
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [excludeSearch, setExcludeSearch] = useState('');
+  const [excludeOpen, setExcludeOpen] = useState(false);
+  const excludeRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (excludeRef.current && !excludeRef.current.contains(e.target as Node)) {
+        setExcludeOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   const toggleBranch = (b: string) => {
     setForm(f => ({
@@ -958,6 +992,74 @@ function CustomerForm({ customer, branchOptions, onClose, onSaved }: { customer:
               <label htmlFor="portal" className="text-sm text-slate-700">Portaal actief</label>
             </div>
           </div>
+          {/* Lead exclusies */}
+          <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-3">
+            <div className="mb-2">
+              <p className="text-sm font-medium text-slate-700">Lead exclusies</p>
+              <p className="text-[11px] text-slate-400">
+                Leads die al zijn uitgedeeld aan onderstaande klanten worden niet aan deze klant toegewezen (en vice versa).
+              </p>
+            </div>
+            {form.exclude_customers.length > 0 && (
+              <div className="mb-2 flex flex-wrap gap-1.5">
+                {form.exclude_customers.map(exId => {
+                  const exCust = allCustomers.find(c => c.id === exId);
+                  return (
+                    <span key={exId} className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2.5 py-1 text-[11px] font-semibold text-red-700">
+                      <LinkSlashIcon className="h-3 w-3" />
+                      {exCust?.name || 'Onbekend'}
+                      <button type="button" onClick={() => setForm(f => ({ ...f, exclude_customers: f.exclude_customers.filter(id => id !== exId) }))}
+                        className="ml-0.5 rounded-full p-0.5 hover:bg-red-200">
+                        <XMarkIcon className="h-3 w-3" />
+                      </button>
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+            <div className="relative" ref={excludeRef}>
+              <div className="relative">
+                <MagnifyingGlassIcon className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  value={excludeSearch}
+                  onChange={e => { setExcludeSearch(e.target.value); setExcludeOpen(true); }}
+                  onFocus={() => setExcludeOpen(true)}
+                  placeholder="Zoek klant om toe te voegen..."
+                  className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-8 pr-3 text-sm text-slate-900 outline-none focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/20"
+                />
+              </div>
+              {excludeOpen && (
+                <div className="absolute left-0 right-0 z-20 mt-1 max-h-44 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg">
+                  {allCustomers
+                    .filter(c => c.id !== customer?.id && !form.exclude_customers.includes(c.id))
+                    .filter(c => !excludeSearch || c.name.toLowerCase().includes(excludeSearch.toLowerCase()))
+                    .map(c => (
+                      <button key={c.id} type="button"
+                        onClick={() => {
+                          setForm(f => ({ ...f, exclude_customers: [...f.exclude_customers, c.id] }));
+                          setExcludeSearch('');
+                          setExcludeOpen(false);
+                        }}
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+                      >
+                        <LinkSlashIcon className="h-3.5 w-3.5 text-slate-400" />
+                        <span>{c.name}</span>
+                        {!c.is_active && <span className="text-[10px] text-slate-400">(inactief)</span>}
+                      </button>
+                    ))
+                  }
+                  {allCustomers
+                    .filter(c => c.id !== customer?.id && !form.exclude_customers.includes(c.id))
+                    .filter(c => !excludeSearch || c.name.toLowerCase().includes(excludeSearch.toLowerCase()))
+                    .length === 0 && (
+                    <p className="px-3 py-2 text-xs text-slate-400">Geen klanten gevonden</p>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
           <div>
             <label className="mb-1 block text-xs font-medium text-slate-500">Notities</label>
             <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={3}

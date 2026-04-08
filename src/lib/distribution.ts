@@ -190,6 +190,18 @@ export async function distributeLead(lead: LeadForDistribution): Promise<Distrib
     targetsByCustomer[t.customer_id].push(t);
   }
 
+  // Load exclusion lists for bidirectional lead-exclusion between customers
+  const allRelevantIds = [...new Set([...customerIds, ...assignedIds])];
+  const { data: exclusionData } = await supabase
+    .from('customers')
+    .select('id, exclude_customers')
+    .in('id', allRelevantIds);
+
+  const excludeMap: Record<string, string[]> = {};
+  for (const c of exclusionData || []) {
+    excludeMap[c.id] = Array.isArray(c.exclude_customers) ? c.exclude_customers : [];
+  }
+
   interface Match {
     customer_id: string;
     batch_id: string;
@@ -205,6 +217,16 @@ export async function distributeLead(lead: LeadForDistribution): Promise<Distrib
     if (batch.leads_delivered >= batch.batch_size) continue;
     if (assignedIds.has(batch.customer_id)) continue;
     if (batch.starts_at && new Date(batch.starts_at) > now) continue;
+
+    // Bidirectional exclusion: skip if this lead is already assigned to an excluded customer
+    const candidateExcludes = excludeMap[batch.customer_id] || [];
+    let excluded = false;
+    for (const assignedCustId of assignedIds) {
+      if (candidateExcludes.includes(assignedCustId)) { excluded = true; break; }
+      const assignedExcludes = excludeMap[assignedCustId] || [];
+      if (assignedExcludes.includes(batch.customer_id)) { excluded = true; break; }
+    }
+    if (excluded) continue;
 
     if (batch.leads_per_week && batch.leads_per_week > 0) {
       const thisWeekCount = weeklyCountByBatch[batch.id] || 0;
@@ -371,6 +393,42 @@ export async function backfillBatch(batchId: string, lookbackDays: number): Prom
 
   if (!targets || targets.length === 0) return { assigned: 0 };
 
+  // Load exclusion list for this customer (bidirectional)
+  const { data: custRow } = await supabase
+    .from('customers')
+    .select('exclude_customers')
+    .eq('id', batch.customer_id)
+    .single();
+  const myExcludes: string[] = Array.isArray(custRow?.exclude_customers) ? custRow.exclude_customers : [];
+
+  // Also find customers that exclude *us*
+  let reverseExcluders: string[] = [];
+  if (myExcludes.length > 0) {
+    reverseExcluders = [...myExcludes];
+  }
+  const { data: allCusts } = await supabase
+    .from('customers')
+    .select('id, exclude_customers')
+    .not('exclude_customers', 'eq', '{}')
+    .neq('id', batch.customer_id);
+  for (const c of allCusts || []) {
+    const ex: string[] = Array.isArray(c.exclude_customers) ? c.exclude_customers : [];
+    if (ex.includes(batch.customer_id) && !reverseExcluders.includes(c.id)) {
+      reverseExcluders.push(c.id);
+    }
+  }
+  const allExcluded = new Set([...myExcludes, ...reverseExcluders]);
+
+  // Build set of lead IDs assigned to any excluded customer
+  const excludedLeadIds = new Set<string>();
+  if (allExcluded.size > 0) {
+    const { data: exAssign } = await supabase
+      .from('lead_assignments')
+      .select('lead_id')
+      .in('customer_id', [...allExcluded]);
+    for (const a of exAssign || []) excludedLeadIds.add(a.lead_id);
+  }
+
   const refDate = batch.starts_at ? new Date(batch.starts_at) : new Date();
   const cutoff = new Date(refDate);
   cutoff.setDate(cutoff.getDate() - lookbackDays);
@@ -407,6 +465,7 @@ export async function backfillBatch(batchId: string, lookbackDays: number): Prom
     if ((currentCount || 0) >= batch.batch_size) break;
 
     if (alreadyAssigned.has(lead.id)) continue;
+    if (excludedLeadIds.has(lead.id)) continue;
     if (!matchesAllFilters(lead as LeadForDistribution, filters)) continue;
 
     let inRange = false;
