@@ -725,11 +725,12 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
               </p>
             </div>
             <button type="button" onClick={() => setForm(f => ({ ...f, is_paid: !f.is_paid }))}
-              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors ${
+              role="switch" aria-checked={form.is_paid}
+              className={`relative inline-flex h-[26px] w-[48px] shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 ${
                 form.is_paid ? 'bg-emerald-500' : 'bg-red-400'
               }`}>
-              <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${
-                form.is_paid ? 'translate-x-6' : 'translate-x-1'
+              <span className={`pointer-events-none inline-block h-[22px] w-[22px] transform rounded-full bg-white shadow ring-0 transition duration-200 ${
+                form.is_paid ? 'translate-x-[24px]' : 'translate-x-[2px]'
               }`} />
             </button>
           </div>
@@ -924,11 +925,12 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
               </p>
             </div>
             <button type="button" onClick={() => setForm(f => ({ ...f, is_paid: !f.is_paid }))}
-              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors ${
+              role="switch" aria-checked={form.is_paid}
+              className={`relative inline-flex h-[26px] w-[48px] shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 ${
                 form.is_paid ? 'bg-emerald-500' : 'bg-red-400'
               }`}>
-              <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${
-                form.is_paid ? 'translate-x-6' : 'translate-x-1'
+              <span className={`pointer-events-none inline-block h-[22px] w-[22px] transform rounded-full bg-white shadow ring-0 transition duration-200 ${
+                form.is_paid ? 'translate-x-[24px]' : 'translate-x-[2px]'
               }`} />
             </button>
           </div>

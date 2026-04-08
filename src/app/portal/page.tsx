@@ -1761,13 +1761,14 @@ function PushToggleSection({ pushState, pushToggling, onToggle, showToast, lastE
         </div>
         {!isDenied && !isIosNotInstalled && (
           <button
+            type="button"
             onClick={handleToggle}
             disabled={pushToggling}
             role="switch"
             aria-checked={isEnabled}
-            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-purple/50 disabled:opacity-50 ${isEnabled ? 'bg-brand-purple' : 'bg-slate-200'}`}
+            className={`relative inline-flex h-[26px] w-[48px] shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-purple/50 focus-visible:ring-offset-2 disabled:opacity-50 ${isEnabled ? 'bg-brand-purple' : 'bg-slate-300'}`}
           >
-            <span className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${isEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+            <span className={`pointer-events-none inline-block h-[22px] w-[22px] transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${isEnabled ? 'translate-x-[24px]' : 'translate-x-[2px]'}`} />
           </button>
         )}
       </div>
@@ -1869,12 +1870,13 @@ function SettingsPanel({
                   </div>
                 </div>
                 <button
+                  type="button"
                   onClick={handleToggle}
                   role="switch"
                   aria-checked={enabled}
-                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-purple/50 ${enabled ? 'bg-brand-purple' : 'bg-slate-200'}`}
+                  className={`relative inline-flex h-[26px] w-[48px] shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-purple/50 focus-visible:ring-offset-2 ${enabled ? 'bg-brand-purple' : 'bg-slate-300'}`}
                 >
-                  <span className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${enabled ? 'translate-x-5' : 'translate-x-0'}`} />
+                  <span className={`pointer-events-none inline-block h-[22px] w-[22px] transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${enabled ? 'translate-x-[24px]' : 'translate-x-[2px]'}`} />
                 </button>
               </div>
               {enabled && (
