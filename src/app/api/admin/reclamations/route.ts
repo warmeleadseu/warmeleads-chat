@@ -30,11 +30,6 @@ export async function GET(request: NextRequest) {
     query = query.eq('status', status);
   }
 
-  if (search) {
-    const s = search.toLowerCase();
-    query = query.or(`reason.ilike.%${s}%,description.ilike.%${s}%`);
-  }
-
   const { data, error } = await query;
 
   if (error) {

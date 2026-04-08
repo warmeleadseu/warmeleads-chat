@@ -45,9 +45,6 @@ const REASON_LABELS: Record<string, string> = {
   foutief_telefoonnummer: 'Foutief telefoonnummer',
   dubbele_lead: 'Dubbele lead binnen 30 dagen',
   buiten_doelgebied: 'Buiten afgesproken gebied',
-  foutieve_gegevens: 'Foutieve contactgegevens',
-  niet_geinteresseerd: 'Niet geïnteresseerd',
-  anders: 'Anders',
 };
 
 const STATUS_CONFIG: Record<string, { label: string; cls: string; icon: typeof ClockIcon }> = {
@@ -144,6 +141,11 @@ export default function AdminReclamatiesPage() {
     setAdminNotes(r.admin_notes || '');
   };
 
+  useEffect(() => {
+    document.body.style.overflow = selected ? 'hidden' : '';
+    return () => { document.body.style.overflow = ''; };
+  }, [selected]);
+
   return (
     <div className="space-y-6">
       {/* Toast */}
@@ -153,7 +155,7 @@ export default function AdminReclamatiesPage() {
             initial={{ opacity: 0, y: 50 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 50 }}
-            className={`fixed bottom-6 left-1/2 z-[100] -translate-x-1/2 rounded-xl px-5 py-3 text-sm font-medium text-white shadow-xl ${
+            className={`fixed bottom-6 left-1/2 z-[100] -translate-x-1/2 rounded-xl px-5 py-3 text-sm font-medium text-white shadow-xl max-w-[90vw] text-center ${
               toast.type === 'error' ? 'bg-red-600' : 'bg-slate-900'
             }`}
           >
@@ -177,7 +179,7 @@ export default function AdminReclamatiesPage() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-3 gap-2 sm:gap-3">
         {[
           { key: 'pending', label: 'Openstaand', color: 'border-amber-200 bg-amber-50', text: 'text-amber-700', icon: ClockIcon },
           { key: 'approved', label: 'Goedgekeurd', color: 'border-emerald-200 bg-emerald-50', text: 'text-emerald-700', icon: CheckCircleIcon },
@@ -186,15 +188,15 @@ export default function AdminReclamatiesPage() {
           <button
             key={kpi.key}
             onClick={() => setStatusFilter(statusFilter === kpi.key ? 'all' : kpi.key)}
-            className={`rounded-xl border p-3 text-left transition hover:shadow-sm ${
+            className={`rounded-xl border p-2.5 sm:p-3 text-left transition hover:shadow-sm ${
               statusFilter === kpi.key ? kpi.color : 'border-slate-200 bg-white'
             }`}
           >
             <div className="flex items-center justify-between">
-              <p className={`text-xs font-medium ${statusFilter === kpi.key ? kpi.text : 'text-slate-500'}`}>{kpi.label}</p>
-              <kpi.icon className={`h-4 w-4 ${statusFilter === kpi.key ? kpi.text : 'text-slate-300'}`} />
+              <p className={`text-[10px] sm:text-xs font-medium ${statusFilter === kpi.key ? kpi.text : 'text-slate-500'}`}>{kpi.label}</p>
+              <kpi.icon className={`hidden sm:block h-4 w-4 ${statusFilter === kpi.key ? kpi.text : 'text-slate-300'}`} />
             </div>
-            <p className={`mt-1 text-2xl font-bold ${statusFilter === kpi.key ? kpi.text : 'text-slate-900'}`}>
+            <p className={`mt-1 text-xl sm:text-2xl font-bold ${statusFilter === kpi.key ? kpi.text : 'text-slate-900'}`}>
               {counts[kpi.key as keyof typeof counts]}
             </p>
           </button>
@@ -331,13 +333,15 @@ export default function AdminReclamatiesPage() {
             <motion.div
               initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
               transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-              className="fixed inset-y-0 right-0 z-[60] flex w-full max-w-md flex-col bg-white shadow-2xl"
+              className="fixed inset-y-0 right-0 z-[60] flex w-full flex-col bg-white shadow-2xl sm:max-w-md"
             >
               <div className="shrink-0 border-b border-slate-100">
                 <div className="h-[3px] bg-warmeleads-gradient" />
                 <div className="flex items-center justify-between px-5 py-4">
                   <div>
-                    <h2 className="text-lg font-bold text-slate-900">Reclamatie beoordelen</h2>
+                    <h2 className="text-lg font-bold text-slate-900">
+                      {selected.status === 'pending' ? 'Reclamatie beoordelen' : 'Reclamatie details'}
+                    </h2>
                     <p className="text-xs text-slate-400">{selected.customers?.name}</p>
                   </div>
                   <button onClick={() => { setSelected(null); setAdminNotes(''); }} className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-50 hover:text-slate-600">
