@@ -102,19 +102,43 @@ export async function PUT(request: NextRequest) {
   }
 
   let batchUpdated = false;
+  let batchReactivated = false;
 
   if (status === 'approved' && data.customer_id) {
-    const { data: activeBatch } = await supabase
-      .from('customer_batches')
-      .select('*')
-      .eq('customer_id', data.customer_id)
-      .eq('status', 'active')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single();
+    // Find the specific batch this lead was assigned to
+    let targetBatch: Record<string, any> | null = null;
 
-    if (activeBatch) {
-      const existingComps = Array.isArray(activeBatch.compensations) ? activeBatch.compensations : [];
+    const { data: assignment } = await supabase
+      .from('lead_assignments')
+      .select('batch_id')
+      .eq('lead_id', data.lead_id)
+      .eq('customer_id', data.customer_id)
+      .maybeSingle();
+
+    if (assignment?.batch_id) {
+      const { data: batch } = await supabase
+        .from('customer_batches')
+        .select('*')
+        .eq('id', assignment.batch_id)
+        .single();
+      if (batch) targetBatch = batch;
+    }
+
+    // Fallback: most recent active or completed batch for this customer
+    if (!targetBatch) {
+      const { data: fallbackBatch } = await supabase
+        .from('customer_batches')
+        .select('*')
+        .eq('customer_id', data.customer_id)
+        .in('status', ['active', 'completed'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+      if (fallbackBatch) targetBatch = fallbackBatch;
+    }
+
+    if (targetBatch) {
+      const existingComps = Array.isArray(targetBatch.compensations) ? targetBatch.compensations : [];
       const newComps = [
         ...existingComps,
         {
@@ -124,21 +148,30 @@ export async function PUT(request: NextRequest) {
           reclamation_id: data.id,
         },
       ];
-      const newBatchSize = activeBatch.batch_size + 1;
+      const newBatchSize = targetBatch.batch_size + 1;
       const totalComps = newComps.reduce((s: number, c: { amount: number }) => s + (c.amount || 0), 0);
       const paidLeads = newBatchSize - totalComps;
-      const newTotalPrice = activeBatch.price_per_lead
-        ? activeBatch.price_per_lead * Math.max(0, paidLeads)
-        : activeBatch.total_price;
+      const newTotalPrice = targetBatch.price_per_lead
+        ? targetBatch.price_per_lead * Math.max(0, paidLeads)
+        : targetBatch.total_price;
+
+      const batchUpdate: Record<string, unknown> = {
+        batch_size: newBatchSize,
+        compensations: newComps,
+        total_price: newTotalPrice,
+      };
+
+      // Reactivate completed batch so compensation leads get delivered
+      if (targetBatch.status === 'completed') {
+        batchUpdate.status = 'active';
+        batchUpdate.completed_at = null;
+        batchReactivated = true;
+      }
 
       const { error: batchErr } = await supabase
         .from('customer_batches')
-        .update({
-          batch_size: newBatchSize,
-          compensations: newComps,
-          total_price: newTotalPrice,
-        })
-        .eq('id', activeBatch.id);
+        .update(batchUpdate)
+        .eq('id', targetBatch.id);
 
       if (batchErr) {
         console.error('[admin/reclamations] batch compensation error:', batchErr.message);
@@ -148,5 +181,5 @@ export async function PUT(request: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ...data, batch_updated: batchUpdated });
+  return NextResponse.json({ ...data, batch_updated: batchUpdated, batch_reactivated: batchReactivated });
 }
