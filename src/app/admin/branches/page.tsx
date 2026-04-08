@@ -347,10 +347,21 @@ function BranchForm({ branch, onClose, onSaved }: { branch: Branch | null; onClo
     if (!form.slug) { setError('Slug is verplicht'); return; }
     setSaving(true);
     setError('');
+
+    const finalTiers = [...tiers];
+    if (newTierLeads && newTierPrice) {
+      const leads = parseInt(newTierLeads);
+      const price = parseFloat(newTierPrice);
+      if (leads > 0 && !isNaN(price) && price >= 0 && !finalTiers.some(t => t.min_leads === leads)) {
+        finalTiers.push({ min_leads: leads, price_per_lead: price });
+        finalTiers.sort((a, b) => a.min_leads - b.min_leads);
+      }
+    }
+
     try {
       const payload = isEdit
-        ? { id: branch!.id, ...form, pricing_tiers: tiers }
-        : { ...form, pricing_tiers: tiers };
+        ? { id: branch!.id, ...form, pricing_tiers: finalTiers }
+        : { ...form, pricing_tiers: finalTiers };
       const res = await adminFetch('/api/admin/branches', {
         method: isEdit ? 'PUT' : 'POST',
         body: JSON.stringify(payload),

@@ -2099,22 +2099,45 @@ function CustomerPricingPanel({ customer, branchOptions, onClose }: {
     setEditTiers(prev => prev.filter((_, i) => i !== idx));
   };
 
+  const [saveError, setSaveError] = useState('');
+
   const savePricing = async () => {
     if (!editBranch) return;
     setSaving(true);
-    const res = await adminFetch('/api/admin/customer-pricing', {
-      method: 'POST',
-      body: JSON.stringify({
-        customer_id: customer.id,
-        branch_slug: editBranch,
-        pricing_tiers: editTiers,
-        nationwide_discount: editDiscount ? parseFloat(editDiscount) : null,
-        notes: editNotes || null,
-      }),
-    });
-    if (res.ok) {
-      await fetchData();
-      setEditBranch(null);
+    setSaveError('');
+
+    const finalTiers = [...editTiers];
+    if (newTierLeads && newTierPrice) {
+      const leads = parseInt(newTierLeads);
+      const price = parseFloat(newTierPrice);
+      if (leads > 0 && !isNaN(price) && price >= 0 && !finalTiers.some(t => t.min_leads === leads)) {
+        finalTiers.push({ min_leads: leads, price_per_lead: price });
+        finalTiers.sort((a, b) => a.min_leads - b.min_leads);
+      }
+    }
+
+    try {
+      const res = await adminFetch('/api/admin/customer-pricing', {
+        method: 'POST',
+        body: JSON.stringify({
+          customer_id: customer.id,
+          branch_slug: editBranch,
+          pricing_tiers: finalTiers,
+          nationwide_discount: editDiscount ? parseFloat(editDiscount) : null,
+          notes: editNotes || null,
+        }),
+      });
+      if (res.ok) {
+        setNewTierLeads('');
+        setNewTierPrice('');
+        await fetchData();
+        setEditBranch(null);
+      } else {
+        const d = await res.json().catch(() => ({}));
+        setSaveError(d.error || 'Opslaan mislukt');
+      }
+    } catch {
+      setSaveError('Er ging iets mis bij het opslaan');
     }
     setSaving(false);
   };
@@ -2204,13 +2227,17 @@ function CustomerPricingPanel({ customer, branchOptions, onClose }: {
                         <div className="mb-1 flex items-center gap-1.5">
                           <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">KLANTSPECIFIEK</span>
                         </div>
-                        <div className="flex flex-wrap gap-1">
-                          {[...(cp.pricing_tiers || [])].sort((a, b) => a.min_leads - b.min_leads).map((t, i) => (
-                            <span key={i} className="rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
-                              {t.min_leads}+ → €{Number(t.price_per_lead).toFixed(2)}
-                            </span>
-                          ))}
-                        </div>
+                        {cp.pricing_tiers && cp.pricing_tiers.length > 0 ? (
+                          <div className="flex flex-wrap gap-1">
+                            {[...cp.pricing_tiers].sort((a, b) => a.min_leads - b.min_leads).map((t, i) => (
+                              <span key={i} className="rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+                                {t.min_leads}+ → €{Number(t.price_per_lead).toFixed(2)}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-[10px] text-red-500 italic">Geen staffels ingesteld - klik Bewerken om toe te voegen</p>
+                        )}
                         {cp.nationwide_discount != null && Number(cp.nationwide_discount) > 0 && (
                           <p className="mt-1 text-[10px] text-emerald-600">Landelijke korting: -€{Number(cp.nationwide_discount).toFixed(2)}</p>
                         )}
@@ -2223,6 +2250,9 @@ function CustomerPricingPanel({ customer, branchOptions, onClose }: {
 
                     {isEditing && (
                       <div className="border-t border-slate-100 bg-white p-4 space-y-3">
+                        {saveError && (
+                          <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">{saveError}</div>
+                        )}
                         <div>
                           <label className="mb-1.5 block text-xs font-medium text-slate-500">Staffelprijzen</label>
                           {editTiers.length > 0 ? (
@@ -2247,20 +2277,25 @@ function CustomerPricingPanel({ customer, branchOptions, onClose }: {
                             <div className="flex-1">
                               <label className="mb-0.5 block text-[10px] text-slate-400">Vanaf (leads)</label>
                               <input type="number" min="1" value={newTierLeads} onChange={e => setNewTierLeads(e.target.value)}
-                                placeholder="30"
+                                placeholder="bijv. 250"
+                                onKeyDown={e => e.key === 'Enter' && addTier()}
                                 className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
                             </div>
                             <div className="flex-1">
                               <label className="mb-0.5 block text-[10px] text-slate-400">€ per lead</label>
                               <input type="number" min="0" step="0.50" value={newTierPrice} onChange={e => setNewTierPrice(e.target.value)}
-                                placeholder="35.00"
+                                placeholder="bijv. 20.50"
+                                onKeyDown={e => e.key === 'Enter' && addTier()}
                                 className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
                             </div>
                             <button type="button" onClick={addTier} disabled={!newTierLeads || !newTierPrice}
-                              className="rounded-lg bg-brand-purple px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40">
+                              className="rounded-lg bg-brand-purple px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40" title="Staffel toevoegen">
                               <PlusIcon className="h-4 w-4" />
                             </button>
                           </div>
+                          {newTierLeads && newTierPrice && (
+                            <p className="text-[10px] text-amber-600">Klik + of druk Enter om de staffel toe te voegen (wordt ook automatisch meegenomen bij opslaan)</p>
+                          )}
                         </div>
 
                         <div>

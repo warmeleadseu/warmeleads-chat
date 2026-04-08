@@ -532,7 +532,13 @@ export default function BestellenPage() {
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {QUICK_SIZES.map(size => {
               const isActive = !useCustom && batchSize === size;
-              const price = Math.round(size * pricePerLead * (1 + BTW_RATE) * 100) / 100;
+              let sizePrice = pricePerLead;
+              if (pricingData && pricingData.tiers.length > 0) {
+                const sorted = [...pricingData.tiers].sort((a, b) => b.min_leads - a.min_leads);
+                const tier = sorted.find(t => size >= t.min_leads);
+                if (tier) sizePrice = tier.price_per_lead;
+              }
+              const price = Math.round(size * sizePrice * (1 + BTW_RATE) * 100) / 100;
               return (
                 <button key={size} onClick={() => { setBatchSize(size); setUseCustom(false); }}
                   className={`relative rounded-2xl border-2 p-3 text-left transition ${
@@ -563,7 +569,7 @@ export default function BestellenPage() {
               {useCustom ? (
                 <div className="flex items-center gap-3">
                   <div className="flex items-center gap-1.5">
-                    <button onClick={(e) => { e.stopPropagation(); setCustomSize(String(Math.max(10, (parseInt(customSize) || 0) - 10))); }}
+                    <button onClick={(e) => { e.stopPropagation(); setCustomSize(String(Math.max(minBatchSize, (parseInt(customSize) || 0) - 10))); }}
                       className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50">
                       <MinusIcon className="h-4 w-4" />
                     </button>
