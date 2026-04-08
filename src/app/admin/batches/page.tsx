@@ -381,7 +381,7 @@ export default function BatchesPage() {
                           {b.starts_at && new Date(b.starts_at) > new Date() && (
                             <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
                               <ClockIcon className="h-3 w-3" />
-                              Start {new Date(b.starts_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })} {new Date(b.starts_at).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}
+                              Start {formatStartsAt(b.starts_at)}
                             </span>
                           )}
                         </div>
@@ -447,7 +447,7 @@ export default function BatchesPage() {
                         {b.starts_at && new Date(b.starts_at) > new Date() && (
                           <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
                             <ClockIcon className="h-3 w-3" />
-                            Start {new Date(b.starts_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })} {new Date(b.starts_at).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}
+                            Start {formatStartsAt(b.starts_at)}
                           </span>
                         )}
                       </div>
