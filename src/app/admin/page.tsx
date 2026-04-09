@@ -500,7 +500,7 @@ export default function AdminDashboard() {
                     <div key={i} className="group relative flex-1" title={`${d.date}: €${d.spend.toFixed(2)} · ${d.leads} leads`}>
                       <div
                         className="w-full rounded-t bg-brand-purple/60 transition group-hover:bg-brand-purple"
-                        style={{ height: `${Math.max(2, (d.spend / maxSpend) * 100)}%` }}
+                        style={{ height: `max(3px, ${(d.spend / maxSpend) * 100}%)` }}
                       />
                       <div className="pointer-events-none absolute -top-8 left-1/2 hidden -translate-x-1/2 whitespace-nowrap rounded bg-slate-800 px-1.5 py-0.5 text-[10px] text-white group-hover:block">
                         &euro;{d.spend.toFixed(0)} · {d.leads}l
