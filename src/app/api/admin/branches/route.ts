@@ -8,22 +8,19 @@ export async function GET(request: NextRequest) {
 
   const supabase = createServerClient();
 
-  const { data: branches, error } = await supabase
-    .from('branches')
-    .select('*, branch_fields(*)')
-    .order('sort_order', { ascending: true });
+  const [branchRes, leadCountsRes, webhookCountsRes] = await Promise.all([
+    supabase.from('branches').select('*, branch_fields(*)').order('sort_order', { ascending: true }),
+    supabase.from('leads').select('branch'),
+    supabase.from('webhook_keys').select('branch'),
+  ]);
 
+  const { data: branches, error } = branchRes;
   if (error) {
     return NextResponse.json({ error: 'Branches ophalen mislukt' }, { status: 500 });
   }
 
-  const { data: leadCounts } = await supabase
-    .from('leads')
-    .select('branch');
-
-  const { data: webhookCounts } = await supabase
-    .from('webhook_keys')
-    .select('branch');
+  const leadCounts = leadCountsRes.data;
+  const webhookCounts = webhookCountsRes.data;
 
   const leadsByBranch: Record<string, number> = {};
   (leadCounts || []).forEach((l: { branch: string }) => {

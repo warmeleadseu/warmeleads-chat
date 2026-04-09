@@ -138,31 +138,47 @@ export default function AdminDashboard() {
   const [period, setPeriod] = useState<string>('week');
 
   useEffect(() => {
-    Promise.all([
-      adminFetch('/api/admin/stats').then(r => r.json()),
-      adminFetch('/api/admin/branches').then(r => r.json()),
+    /* Phase 1 (blocking): consolidated dashboard + batches → shows UI */
+    const phase1 = Promise.all([
+      adminFetch('/api/admin/dashboard').then(r => r.json()),
       adminFetch('/api/admin/batches').then(r => r.ok ? r.json() : []),
-      adminFetch('/api/admin/assignments').then(r => r.ok ? r.json() : []),
-      adminFetch('/api/admin/costs').then(r => r.ok ? r.json() : null).catch(() => null),
-    ]).then(async ([statsData, branchData, batchData, assignData, costsData]) => {
-      setStats(statsData);
-      const m: Record<string, BranchMeta> = {};
-      (branchData.branches || []).forEach((b: BranchMeta) => { m[b.slug] = b; });
-      setBranchMeta(m);
-      setBatches(batchData || []);
-      setAssignmentCount((assignData || []).length);
-      if (costsData) setCostData(costsData);
-      setLoading(false);
+    ]);
 
-      if (costsData && !costsData.lastSyncAt) {
-        try {
-          const syncRes = await adminFetch('/api/admin/meta-sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ days: 90 }) });
-          if (syncRes.ok) {
-            const freshCosts = await adminFetch('/api/admin/costs').then(r => r.ok ? r.json() : null);
-            if (freshCosts) setCostData(freshCosts);
+    /* Phase 2 (non-blocking): costs starts in parallel, populates when ready */
+    adminFetch('/api/admin/costs')
+      .then(r => r.ok ? r.json() : null)
+      .catch(() => null)
+      .then(async (costsData: CostData | null) => {
+        if (costsData) {
+          setCostData(costsData);
+          if (!costsData.lastSyncAt) {
+            try {
+              const syncRes = await adminFetch('/api/admin/meta-sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ days: 90 }) });
+              if (syncRes.ok) {
+                const freshCosts = await adminFetch('/api/admin/costs').then(r => r.ok ? r.json() : null);
+                if (freshCosts) setCostData(freshCosts);
+              }
+            } catch { /* silent */ }
           }
-        } catch { /* silent; manual sync via Koppelingen still available */ }
-      }
+        }
+      });
+
+    phase1.then(([dashData, batchData]) => {
+      setStats({
+        total: dashData.total,
+        thisWeek: dashData.thisWeek,
+        thisMonth: dashData.thisMonth,
+        customerCount: dashData.customerCount,
+        byStatus: dashData.byStatus,
+        byBranch: dashData.byBranch,
+        byCustomer: dashData.byCustomer,
+        recentLeads: dashData.recentLeads,
+        periodStats: dashData.periodStats,
+      });
+      setBranchMeta(dashData.branchMeta || {});
+      setBatches(batchData || []);
+      setAssignmentCount(dashData.assignmentCount || 0);
+      setLoading(false);
     }).catch(() => setLoading(false));
   }, []);
 
