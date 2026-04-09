@@ -23,6 +23,8 @@ interface AdminUser {
   is_active: boolean;
   last_login: string | null;
   created_at: string;
+  phone?: string | null;
+  title?: string | null;
 }
 
 export default function UsersPage() {
@@ -289,6 +291,8 @@ function UserFormModal({ user, onClose, onSaved }: { user: AdminUser | null; onC
     email: user?.email || '',
     role: user?.role || 'admin',
     password: '',
+    phone: user?.phone || '',
+    title: user?.title || '',
   });
   const [showPassword, setShowPassword] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -297,21 +301,24 @@ function UserFormModal({ user, onClose, onSaved }: { user: AdminUser | null; onC
   const [assignedCustomerIds, setAssignedCustomerIds] = useState<Set<string>>(new Set());
   const [loadingCustomers, setLoadingCustomers] = useState(false);
 
+  const isAM = form.role === 'accountmanager';
+
   useEffect(() => {
-    if (form.role !== 'accountmanager' || !isEdit) return;
+    if (!isAM) return;
     setLoadingCustomers(true);
     adminFetch('/api/admin/customers')
       .then(r => r.ok ? r.json() : { customers: [] })
       .then((data: { customers?: CustomerOption[] }) => {
         const custs = data.customers || [];
         setCustomers(custs);
-        const assigned = new Set(
-          custs.filter(c => c.account_manager_id === user!.id).map(c => c.id)
-        );
-        setAssignedCustomerIds(assigned);
+        if (isEdit) {
+          setAssignedCustomerIds(new Set(
+            custs.filter(c => c.account_manager_id === user!.id).map(c => c.id)
+          ));
+        }
       })
       .finally(() => setLoadingCustomers(false));
-  }, [form.role, isEdit, user]);
+  }, [isAM, isEdit, user]);
 
   const save = async () => {
     if (!form.name || !form.email) { setError('Naam en e-mail zijn verplicht'); return; }
@@ -329,6 +336,10 @@ function UserFormModal({ user, onClose, onSaved }: { user: AdminUser | null; onC
       };
       if (form.password) payload.password = form.password;
       if (isEdit) payload.id = user!.id;
+      if (isAM) {
+        payload.phone = form.phone || null;
+        payload.title = form.title || null;
+      }
 
       const res = await adminFetch('/api/admin/users', {
         method: isEdit ? 'PUT' : 'POST',
@@ -340,15 +351,17 @@ function UserFormModal({ user, onClose, onSaved }: { user: AdminUser | null; onC
         throw new Error(d.error || 'Er ging iets mis');
       }
 
-      if (isEdit && form.role === 'accountmanager') {
-        const allCusts = customers;
-        const updates = allCusts.map(c => {
+      const result = await res.json();
+      const userId = isEdit ? user!.id : result.user?.id;
+
+      if (isAM && userId && customers.length > 0) {
+        const updates = customers.map(c => {
           const shouldAssign = assignedCustomerIds.has(c.id);
-          const wasAssigned = c.account_manager_id === user!.id;
+          const wasAssigned = c.account_manager_id === userId;
           if (shouldAssign && !wasAssigned) {
             return adminFetch('/api/admin/customers', {
               method: 'PUT',
-              body: JSON.stringify({ id: c.id, account_manager_id: user!.id }),
+              body: JSON.stringify({ id: c.id, account_manager_id: userId }),
             });
           } else if (!shouldAssign && wasAssigned) {
             return adminFetch('/api/admin/customers', {
@@ -368,6 +381,8 @@ function UserFormModal({ user, onClose, onSaved }: { user: AdminUser | null; onC
       setSaving(false);
     }
   };
+
+  const set = (key: string, val: string) => setForm(f => ({ ...f, [key]: val }));
 
   return (
     <>
@@ -396,16 +411,14 @@ function UserFormModal({ user, onClose, onSaved }: { user: AdminUser | null; onC
 
         <div className="space-y-4 p-5">
           {error && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-600">
-              {error}
-            </div>
+            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-600">{error}</div>
           )}
 
           <div>
             <label className="mb-1 block text-xs font-medium text-slate-500">Naam *</label>
             <input
               value={form.name}
-              onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+              onChange={e => set('name', e.target.value)}
               className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50"
             />
           </div>
@@ -415,7 +428,7 @@ function UserFormModal({ user, onClose, onSaved }: { user: AdminUser | null; onC
             <input
               type="email"
               value={form.email}
-              onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+              onChange={e => set('email', e.target.value)}
               className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50"
             />
           </div>
@@ -428,7 +441,7 @@ function UserFormModal({ user, onClose, onSaved }: { user: AdminUser | null; onC
               <input
                 type={showPassword ? 'text' : 'password'}
                 value={form.password}
-                onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
+                onChange={e => set('password', e.target.value)}
                 placeholder={isEdit ? '••••••••' : 'Min. 8 tekens'}
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 pr-10 text-sm text-slate-900 outline-none focus:border-brand-purple/50"
               />
@@ -446,7 +459,7 @@ function UserFormModal({ user, onClose, onSaved }: { user: AdminUser | null; onC
             <label className="mb-1 block text-xs font-medium text-slate-500">Rol *</label>
             <select
               value={form.role}
-              onChange={e => setForm(f => ({ ...f, role: e.target.value }))}
+              onChange={e => set('role', e.target.value)}
               className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50"
             >
               <option value="admin">Admin</option>
@@ -455,51 +468,73 @@ function UserFormModal({ user, onClose, onSaved }: { user: AdminUser | null; onC
             </select>
           </div>
 
-          {form.role === 'accountmanager' && !isEdit && (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-700">
-              Maak eerst de gebruiker aan. Daarna kun je klanten toewijzen via de bewerkknop.
-            </div>
-          )}
+          {/* AM-specific fields */}
+          {isAM && (
+            <>
+              <div className="border-t border-slate-100 pt-4">
+                <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-amber-600">Accountmanager gegevens</p>
+                <div className="space-y-3">
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-500">Functietitel</label>
+                    <input
+                      value={form.title}
+                      onChange={e => set('title', e.target.value)}
+                      placeholder="bijv. Senior Accountmanager"
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-500">Telefoonnummer</label>
+                    <input
+                      type="tel"
+                      value={form.phone}
+                      onChange={e => set('phone', e.target.value)}
+                      placeholder="bijv. 06 12345678"
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50"
+                    />
+                  </div>
+                </div>
+              </div>
 
-          {form.role === 'accountmanager' && isEdit && (
-            <div>
-              <label className="mb-1 block text-xs font-medium text-slate-500">
-                Toegewezen klanten
-              </label>
-              {loadingCustomers ? (
-                <div className="rounded-lg border border-slate-200 px-3 py-4 text-center text-xs text-slate-400">
-                  Klanten laden...
-                </div>
-              ) : customers.length === 0 ? (
-                <p className="text-xs text-slate-400">Nog geen klanten in het systeem.</p>
-              ) : (
-                <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-slate-200 p-2">
-                  {customers.map(c => (
-                    <label key={c.id} className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-slate-700 transition hover:bg-slate-50 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={assignedCustomerIds.has(c.id)}
-                        onChange={() => {
-                          setAssignedCustomerIds(prev => {
-                            const next = new Set(prev);
-                            if (next.has(c.id)) next.delete(c.id);
-                            else next.add(c.id);
-                            return next;
-                          });
-                        }}
-                        className="rounded border-slate-300 text-brand-purple focus:ring-brand-purple/20"
-                      />
-                      <span className="truncate">{c.name}</span>
-                      {c.account_manager_id && c.account_manager_id !== user?.id && (
-                        <span className="ml-auto shrink-0 rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-600">
-                          andere AM
-                        </span>
-                      )}
-                    </label>
-                  ))}
-                </div>
-              )}
-            </div>
+              <div className="border-t border-slate-100 pt-4">
+                <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-amber-600">
+                  Toegewezen klanten
+                </label>
+                {loadingCustomers ? (
+                  <div className="rounded-lg border border-slate-200 px-3 py-4 text-center text-xs text-slate-400">
+                    Klanten laden...
+                  </div>
+                ) : customers.length === 0 ? (
+                  <p className="text-xs text-slate-400">Nog geen klanten in het systeem.</p>
+                ) : (
+                  <div className="max-h-52 space-y-1 overflow-y-auto rounded-lg border border-slate-200 p-2">
+                    {customers.map(c => (
+                      <label key={c.id} className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-slate-700 transition hover:bg-slate-50 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={assignedCustomerIds.has(c.id)}
+                          onChange={() => {
+                            setAssignedCustomerIds(prev => {
+                              const next = new Set(prev);
+                              if (next.has(c.id)) next.delete(c.id);
+                              else next.add(c.id);
+                              return next;
+                            });
+                          }}
+                          className="rounded border-slate-300 text-brand-purple focus:ring-brand-purple/20"
+                        />
+                        <span className="truncate">{c.name}</span>
+                        {c.account_manager_id && c.account_manager_id !== user?.id && (
+                          <span className="ml-auto shrink-0 rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-600">
+                            andere AM
+                          </span>
+                        )}
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
           )}
         </div>
 

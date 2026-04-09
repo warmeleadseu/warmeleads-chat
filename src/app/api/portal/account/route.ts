@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
 
   const { data, error } = await supabase
     .from('customers')
-    .select('name, contact_person, email, phone, branches, email_notifications, notification_frequency, created_at')
+    .select('name, contact_person, email, phone, branches, email_notifications, notification_frequency, created_at, account_manager_id')
     .eq('id', customer.id)
     .single();
 
@@ -19,7 +19,19 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Kon accountgegevens niet ophalen' }, { status: 500 });
   }
 
-  return NextResponse.json({ customer: data });
+  let accountManager = null;
+  if (data.account_manager_id) {
+    const { data: am } = await supabase
+      .from('admin_users')
+      .select('id, name, email, phone, title')
+      .eq('id', data.account_manager_id)
+      .eq('is_active', true)
+      .single();
+    if (am) accountManager = am;
+  }
+
+  const { account_manager_id: _amId, ...customerData } = data;
+  return NextResponse.json({ customer: customerData, account_manager: accountManager });
 }
 
 export async function PUT(request: NextRequest) {

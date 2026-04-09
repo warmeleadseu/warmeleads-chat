@@ -44,6 +44,14 @@ interface AccountData {
   notification_frequency: string;
 }
 
+interface AccountManagerData {
+  id: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  title: string | null;
+}
+
 interface InsightsData {
   conversionFunnel: { nieuw: number; gecontacteerd: number; geen_gehoor: number; offerte: number; verkocht: number; afgewezen: number; conversionRate: number };
   quality: { averageScore: number; phoneValidPct: number; totalWithScore: number };
@@ -166,10 +174,12 @@ function AccountTab({
   data,
   loading,
   showToast,
+  accountManager,
 }: {
   data: AccountData | null;
   loading: boolean;
   showToast: (msg: string, type?: 'success' | 'error') => void;
+  accountManager: AccountManagerData | null;
 }) {
   const [currentPw, setCurrentPw] = useState('');
   const [newPw, setNewPw] = useState('');
@@ -268,6 +278,47 @@ function AccountTab({
           ))}
         </div>
       </div>
+
+      {/* Uw Accountmanager */}
+      {accountManager && (
+        <div className="overflow-hidden rounded-xl border border-brand-purple/15 bg-gradient-to-br from-brand-purple/[0.03] to-white shadow-sm">
+          <div className="flex items-center gap-2 border-b border-brand-purple/10 bg-brand-purple/[0.04] px-5 py-3">
+            <UserCircleIcon className="h-4 w-4 text-brand-purple" />
+            <h3 className="text-sm font-semibold text-slate-900">Uw accountmanager</h3>
+          </div>
+          <div className="p-5">
+            <div className="flex items-start gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-brand-purple/10 text-lg font-bold text-brand-purple sm:h-14 sm:w-14 sm:text-xl">
+                {accountManager.name.charAt(0).toUpperCase()}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-base font-bold text-slate-900 sm:text-lg">{accountManager.name}</p>
+                {accountManager.title && (
+                  <p className="mt-0.5 text-sm text-slate-500">{accountManager.title}</p>
+                )}
+                <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:gap-4">
+                  <a
+                    href={`mailto:${accountManager.email}`}
+                    className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition hover:border-brand-purple/30 hover:bg-brand-purple/5 hover:text-brand-purple"
+                  >
+                    <EnvelopeIcon className="h-4 w-4 shrink-0 text-brand-purple/60" />
+                    <span className="truncate">{accountManager.email}</span>
+                  </a>
+                  {accountManager.phone && (
+                    <a
+                      href={`tel:${accountManager.phone.replace(/\s/g, '')}`}
+                      className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition hover:border-brand-purple/30 hover:bg-brand-purple/5 hover:text-brand-purple"
+                    >
+                      <PhoneIcon className="h-4 w-4 shrink-0 text-brand-purple/60" />
+                      <span>{accountManager.phone}</span>
+                    </a>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Branches */}
       {data.branches.length > 0 && (
@@ -408,10 +459,22 @@ function AccountTab({
       {/* Contact info */}
       <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
         <p className="text-xs text-slate-500">
-          Wijzigingen aan uw bedrijfsgegevens? Neem contact op via{' '}
-          <a href="mailto:info@warmeleads.eu" className="font-medium text-brand-purple hover:underline">
-            info@warmeleads.eu
-          </a>
+          Wijzigingen aan uw bedrijfsgegevens?{' '}
+          {accountManager ? (
+            <>
+              Neem contact op met uw accountmanager{' '}
+              <a href={`mailto:${accountManager.email}`} className="font-medium text-brand-purple hover:underline">
+                {accountManager.name}
+              </a>
+            </>
+          ) : (
+            <>
+              Neem contact op via{' '}
+              <a href="mailto:info@warmeleads.eu" className="font-medium text-brand-purple hover:underline">
+                info@warmeleads.eu
+              </a>
+            </>
+          )}
         </p>
       </div>
     </div>
@@ -1068,6 +1131,7 @@ export default function AccountPage() {
 
   const [accountData, setAccountData] = useState<AccountData | null>(null);
   const [accountLoading, setAccountLoading] = useState(false);
+  const [accountManager, setAccountManager] = useState<AccountManagerData | null>(null);
 
   const [insightsData, setInsightsData] = useState<InsightsData | null>(null);
   const [insightsLoading, setInsightsLoading] = useState(false);
@@ -1098,6 +1162,7 @@ export default function AccountPage() {
       if (res.ok) {
         const d = await res.json();
         setAccountData(d.customer || d);
+        if (d.account_manager) setAccountManager(d.account_manager);
       }
     } catch { /* ignore */ }
     finally { setAccountLoading(false); }
@@ -1263,6 +1328,7 @@ export default function AccountPage() {
               data={accountData}
               loading={accountLoading}
               showToast={showToast}
+              accountManager={accountManager}
             />
           )}
           {activeTab === 'insights' && (

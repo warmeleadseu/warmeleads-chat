@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
   const supabase = createServerClient();
   const { data, error } = await supabase
     .from('admin_users')
-    .select('id, email, name, role, is_active, last_login, created_at')
+    .select('id, email, name, role, is_active, last_login, created_at, phone, title')
     .order('created_at', { ascending: true });
 
   if (error) {
@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
   if (admin.role !== 'superadmin') return forbidden();
 
   try {
-    const { email, password, name, role } = await request.json();
+    const { email, password, name, role, phone, title } = await request.json();
 
     if (!email || !password || !name) {
       return NextResponse.json({ error: 'E-mail, wachtwoord en naam zijn verplicht' }, { status: 400 });
@@ -43,10 +43,14 @@ export async function POST(request: NextRequest) {
     const password_hash = await bcrypt.hash(password, 12);
     const supabase = createServerClient();
 
+    const insertData: Record<string, unknown> = { email, password_hash, name, role };
+    if (phone !== undefined) insertData.phone = phone || null;
+    if (title !== undefined) insertData.title = title || null;
+
     const { data, error } = await supabase
       .from('admin_users')
-      .insert({ email, password_hash, name, role })
-      .select('id, email, name, role, is_active, created_at')
+      .insert(insertData)
+      .select('id, email, name, role, is_active, created_at, phone, title')
       .single();
 
     if (error) {
@@ -79,12 +83,18 @@ export async function PUT(request: NextRequest) {
       updates.password_hash = await bcrypt.hash(password, 12);
     }
 
+    const allowed = ['name', 'email', 'role', 'is_active', 'password_hash', 'phone', 'title'];
+    const safeUpdates: Record<string, unknown> = {};
+    for (const key of allowed) {
+      if (updates[key] !== undefined) safeUpdates[key] = updates[key];
+    }
+
     const supabase = createServerClient();
     const { data, error } = await supabase
       .from('admin_users')
-      .update(updates)
+      .update(safeUpdates)
       .eq('id', id)
-      .select('id, email, name, role, is_active, last_login, created_at')
+      .select('id, email, name, role, is_active, last_login, created_at, phone, title')
       .single();
 
     if (error) {
