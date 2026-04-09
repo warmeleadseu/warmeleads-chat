@@ -100,7 +100,7 @@ function DashboardSkeleton() {
         <div className="mb-3 flex gap-2">
           {[...Array(5)].map((_, i) => <div key={i} className="h-7 w-16 animate-pulse rounded-full bg-slate-100" />)}
         </div>
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
           {[...Array(3)].map((_, i) => <div key={i} className="h-14 animate-pulse rounded-lg bg-slate-50" />)}
         </div>
       </div>
@@ -222,7 +222,7 @@ export default function AdminDashboard() {
               </div>
               <h2 className="text-sm font-semibold text-slate-900">Periodeoverzicht</h2>
             </div>
-            <div className="flex rounded-lg border border-slate-200 bg-slate-50 p-0.5">
+            <div className="flex flex-wrap gap-0.5 rounded-lg border border-slate-200 bg-slate-50 p-0.5">
               {Object.entries(PERIOD_LABELS).map(([key, label]) => (
                 <button
                   key={key}
@@ -239,7 +239,7 @@ export default function AdminDashboard() {
             </div>
           </div>
           {ps && (
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
               <div className="rounded-lg bg-slate-50 p-4">
                 <div className="flex items-center justify-between">
                   <p className="text-2xl font-bold text-slate-900">{ps.leads}</p>
@@ -277,7 +277,7 @@ export default function AdminDashboard() {
               <h2 className="text-sm font-semibold text-slate-900">Kosten & Marge</h2>
             </div>
             {costData.lastSyncAt && (
-              <span className="text-[10px] text-slate-400">
+              <span className="text-[11px] text-slate-400">
                 Laatst gesynct: {new Date(costData.lastSyncAt).toLocaleString('nl-NL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
               </span>
             )}
@@ -304,36 +304,36 @@ export default function AdminDashboard() {
             <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
               <p className="text-xl font-bold text-slate-900">&euro;{costData.monthSpend.toFixed(0)}</p>
               <p className="mt-0.5 text-[11px] text-slate-500">Ad spend maand</p>
-              <p className="text-[10px] text-slate-400">Week: &euro;{costData.weekSpend.toFixed(0)}</p>
+              <p className="text-[11px] text-slate-400">Week: &euro;{costData.weekSpend.toFixed(0)}</p>
             </div>
             <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
               <p className="text-xl font-bold text-slate-900">&euro;{costData.monthBrutoCpl?.toFixed(2) ?? '-'}</p>
               <p className="mt-0.5 text-[11px] text-slate-500">Bruto CPL</p>
-              <p className="text-[10px] text-slate-400">{costData.leadsWithCost} leads met kosten</p>
+              <p className="text-[11px] text-slate-400">{costData.leadsWithCost} leads met kosten</p>
             </div>
             <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-4 shadow-sm">
               <p className="text-xl font-bold text-emerald-700">&euro;{costData.effectieveCpl?.toFixed(2) ?? '-'}</p>
               <p className="mt-0.5 text-[11px] text-emerald-600 font-medium">Effectieve CPL</p>
-              <p className="text-[10px] text-emerald-500">{costData.avgAssignments}x uitgedeeld</p>
+              <p className="text-[11px] text-emerald-500">{costData.avgAssignments}x uitgedeeld</p>
             </div>
             <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
               <p className="text-xl font-bold text-slate-900">&euro;{costData.totalRevenue.toFixed(0)}</p>
               <p className="mt-0.5 text-[11px] text-slate-500">Omzet (maand)</p>
-              <p className="text-[10px] text-slate-400">{costData.totalAssignments} toewijzingen</p>
+              <p className="text-[11px] text-slate-400">{costData.totalAssignments} toewijzingen</p>
             </div>
             <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
               <p className={`text-xl font-bold ${costData.totalProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                 {costData.totalProfit >= 0 ? '+' : ''}&euro;{costData.totalProfit.toFixed(0)}
               </p>
               <p className="mt-0.5 text-[11px] text-slate-500">Winst (maand)</p>
-              <p className="text-[10px] text-slate-400">Kosten: &euro;{costData.totalCost.toFixed(0)}</p>
+              <p className="text-[11px] text-slate-400">Kosten: &euro;{costData.totalCost.toFixed(0)}</p>
             </div>
             <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
               <p className={`text-xl font-bold ${costData.roi >= 0 ? 'text-brand-purple' : 'text-red-600'}`}>
                 {costData.roi}%
               </p>
               <p className="mt-0.5 text-[11px] text-slate-500">ROI</p>
-              <p className="text-[10px] text-slate-400">(omzet − kosten) / kosten</p>
+              <p className="text-[11px] text-slate-400">(omzet − kosten) / kosten</p>
             </div>
           </div>
 
@@ -347,17 +347,17 @@ export default function AdminDashboard() {
                     const b = getBranch(slug);
                     return (
                       <div key={slug} className="rounded-lg bg-slate-50 px-3 py-2.5">
-                        <div className="flex items-center justify-between">
+                        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
                           <div className="flex items-center gap-2">
                             <span className={`inline-block h-2.5 w-2.5 rounded-full ${b.dot}`} />
                             <span className="text-xs font-medium text-slate-700">{b.name}</span>
-                            <span className="text-[10px] text-slate-400">{data.count} leads</span>
+                            <span className="text-[11px] text-slate-400">{data.count} leads</span>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] text-slate-400">bruto</span>
+                          <div className="flex items-center gap-2 pl-[18px] sm:pl-0">
+                            <span className="text-[11px] text-slate-400">bruto</span>
                             <span className="text-xs font-semibold text-slate-700">&euro;{data.avgCpl.toFixed(2)}</span>
                             <span className="text-slate-300">→</span>
-                            <span className="text-[10px] text-emerald-500">eff.</span>
+                            <span className="text-[11px] text-emerald-500">eff.</span>
                             <span className="text-xs font-bold text-emerald-600">&euro;{data.effectieveCpl.toFixed(2)}</span>
                           </div>
                         </div>
@@ -377,7 +377,7 @@ export default function AdminDashboard() {
                       <div className="flex items-center justify-between">
                         <div className="min-w-0 flex-1">
                           <span className="text-xs font-medium text-slate-700">{cm.name}</span>
-                          <div className="flex gap-2 text-[10px] text-slate-400">
+                          <div className="flex gap-2 text-[11px] text-slate-400">
                             <span>{cm.leads} leads</span>
                             <span>&euro;{cm.revenue.toFixed(0)} omzet</span>
                             <span>&euro;{cm.cost.toFixed(0)} kosten</span>
@@ -387,7 +387,7 @@ export default function AdminDashboard() {
                           <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${cm.margin >= 0 ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}`}>
                             {cm.margin >= 0 ? '+' : ''}&euro;{cm.margin.toFixed(0)}
                           </span>
-                          <span className={`text-[10px] font-medium ${cm.marginPct >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                          <span className={`text-[11px] font-medium ${cm.marginPct >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
                             {cm.marginPct}%
                           </span>
                         </div>
@@ -467,15 +467,15 @@ export default function AdminDashboard() {
                         <div>
                           <p className="text-xs font-medium text-slate-700">{bf.customer}</p>
                           <div className="mt-0.5 flex items-center gap-1.5">
-                            <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-medium ${br.light} ${br.text}`}>{br.name}</span>
-                            <span className="text-[10px] text-slate-400">{bf.delivered}/{bf.batchSize} · &euro;{bf.pricePerLead.toFixed(2)}/lead</span>
+                            <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${br.light} ${br.text}`}>{br.name}</span>
+                            <span className="text-[11px] text-slate-400">{bf.delivered}/{bf.batchSize} · &euro;{bf.pricePerLead.toFixed(2)}/lead</span>
                           </div>
                         </div>
-                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${bf.marginPct >= 50 ? 'bg-emerald-50 text-emerald-600' : bf.marginPct >= 0 ? 'bg-amber-50 text-amber-600' : 'bg-red-50 text-red-600'}`}>
+                        <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${bf.marginPct >= 50 ? 'bg-emerald-50 text-emerald-600' : bf.marginPct >= 0 ? 'bg-amber-50 text-amber-600' : 'bg-red-50 text-red-600'}`}>
                           {bf.marginPct}%
                         </span>
                       </div>
-                      <div className="mt-1.5 flex items-center gap-3 text-[10px]">
+                      <div className="mt-1.5 flex items-center gap-3 text-[11px]">
                         <span className="text-slate-400">Omzet &euro;{bf.revenue.toFixed(0)}</span>
                         <span className="text-slate-400">Kosten &euro;{bf.cost.toFixed(0)}</span>
                         <span className={`font-bold ${bf.profit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
@@ -493,23 +493,23 @@ export default function AdminDashboard() {
           {costData.dailyTrend.length > 0 && (
             <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
               <h3 className="mb-2 text-xs font-semibold text-slate-600">Dagelijkse ad spend (14 dagen)</h3>
-              <div className="flex items-end gap-1" style={{ height: 60 }}>
+              <div className="flex items-end gap-1 h-[72px] sm:h-[80px]">
                 {(() => {
                   const maxSpend = Math.max(...costData.dailyTrend.map(d => d.spend), 1);
                   return costData.dailyTrend.map((d, i) => (
                     <div key={i} className="group relative flex-1" title={`${d.date}: €${d.spend.toFixed(2)} · ${d.leads} leads`}>
                       <div
                         className="w-full rounded-t bg-brand-purple/60 transition group-hover:bg-brand-purple"
-                        style={{ height: `${Math.max(2, (d.spend / maxSpend) * 60)}px` }}
+                        style={{ height: `${Math.max(2, (d.spend / maxSpend) * 100)}%` }}
                       />
-                      <div className="pointer-events-none absolute -top-8 left-1/2 hidden -translate-x-1/2 whitespace-nowrap rounded bg-slate-800 px-1.5 py-0.5 text-[9px] text-white group-hover:block">
+                      <div className="pointer-events-none absolute -top-8 left-1/2 hidden -translate-x-1/2 whitespace-nowrap rounded bg-slate-800 px-1.5 py-0.5 text-[10px] text-white group-hover:block">
                         &euro;{d.spend.toFixed(0)} · {d.leads}l
                       </div>
                     </div>
                   ));
                 })()}
               </div>
-              <div className="mt-1 flex justify-between text-[9px] text-slate-400">
+              <div className="mt-1 flex justify-between text-[10px] text-slate-400">
                 <span>{costData.dailyTrend[0]?.date.slice(5)}</span>
                 <span>{costData.dailyTrend[costData.dailyTrend.length - 1]?.date.slice(5)}</span>
               </div>

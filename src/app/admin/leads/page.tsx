@@ -152,7 +152,7 @@ function MultiSelect({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
             transition={{ duration: 0.15 }}
-            className="absolute left-0 top-full z-50 mt-1 w-64 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg"
+            className="absolute left-0 top-full z-50 mt-1 w-[min(16rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg"
           >
             {searchable && (
               <div className="border-b border-slate-100 p-2">
@@ -865,8 +865,8 @@ export default function LeadsCRMPage() {
             <span className="text-xs">Pagina {page}/{totalPages}</span>
           </div>
           <div className="flex gap-1">
-            <button disabled={page <= 1} onClick={() => setPage(p => p - 1)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-50 disabled:opacity-30"><ChevronLeftIcon className="h-4 w-4" /></button>
-            <button disabled={page >= totalPages} onClick={() => setPage(p => p + 1)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-50 disabled:opacity-30"><ChevronRightIcon className="h-4 w-4" /></button>
+            <button disabled={page <= 1} onClick={() => setPage(p => p - 1)} className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-50 disabled:opacity-30"><ChevronLeftIcon className="h-4 w-4" /></button>
+            <button disabled={page >= totalPages} onClick={() => setPage(p => p + 1)} className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-50 disabled:opacity-30"><ChevronRightIcon className="h-4 w-4" /></button>
           </div>
         </div>
       )}

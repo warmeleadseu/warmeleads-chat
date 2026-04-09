@@ -175,7 +175,7 @@ export default function AdminInvoicesPage() {
       ) : (
         <>
           {/* Desktop table */}
-          <div className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm md:block">
+          <div className="hidden overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm md:block">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50/80 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
@@ -250,14 +250,14 @@ export default function AdminInvoicesPage() {
                       {inv.status === 'open' ? 'Open' : inv.status === 'credit_note' ? 'Creditnota' : 'Betaald'}
                     </span>
                   </div>
-                  <div className="flex items-center gap-1">
-                    <button onClick={() => downloadPdf(inv)} className="rounded-lg p-1.5 text-slate-400 hover:text-brand-purple">
+                  <div className="flex items-center gap-0.5">
+                    <button onClick={() => downloadPdf(inv)} className="rounded-lg p-2.5 text-slate-400 hover:text-brand-purple">
                       <ArrowDownTrayIcon className="h-4 w-4" />
                     </button>
-                    <button onClick={() => setEditInvoice(inv)} className="rounded-lg p-1.5 text-slate-400 hover:text-brand-purple">
+                    <button onClick={() => setEditInvoice(inv)} className="rounded-lg p-2.5 text-slate-400 hover:text-brand-purple">
                       <PencilSquareIcon className="h-4 w-4" />
                     </button>
-                    <button onClick={() => deleteInvoice(inv)} className="rounded-lg p-1.5 text-slate-400 hover:text-red-500">
+                    <button onClick={() => deleteInvoice(inv)} className="rounded-lg p-2.5 text-slate-400 hover:text-red-500">
                       <TrashIcon className="h-4 w-4" />
                     </button>
                   </div>

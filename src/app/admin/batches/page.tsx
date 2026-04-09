@@ -323,7 +323,7 @@ export default function BatchesPage() {
       ) : (
         <>
           {/* Desktop table */}
-          <div className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm md:block">
+          <div className="hidden overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm md:block">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50/80 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
@@ -453,15 +453,15 @@ export default function BatchesPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-0.5">
-                      <button onClick={() => setEditBatch(b)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-brand-purple">
+                      <button onClick={() => setEditBatch(b)} className="rounded-lg p-2.5 text-slate-400 hover:bg-slate-100 hover:text-brand-purple">
                         <PencilSquareIcon className="h-4 w-4" />
                       </button>
                       {b.status !== 'completed' && (
-                        <button onClick={() => toggleStatus(b)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-amber-600">
+                        <button onClick={() => toggleStatus(b)} className="rounded-lg p-2.5 text-slate-400 hover:bg-slate-100 hover:text-amber-600">
                           {b.status === 'active' ? <PauseIcon className="h-4 w-4" /> : <PlayIcon className="h-4 w-4" />}
                         </button>
                       )}
-                      <button onClick={() => removeBatch(b)} className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500">
+                      <button onClick={() => removeBatch(b)} className="rounded-lg p-2.5 text-slate-400 hover:bg-red-50 hover:text-red-500">
                         <TrashIcon className="h-4 w-4" />
                       </button>
                     </div>
