@@ -10,10 +10,12 @@ export async function GET(request: NextRequest) {
 
   const supabase = createServerClient();
 
-  const { data: customers, error } = await supabase
-    .from('customers')
-    .select('*')
-    .order('name', { ascending: true });
+  let query = supabase.from('customers').select('*').order('name', { ascending: true });
+  if (admin.role === 'accountmanager') {
+    query = query.eq('account_manager_id', admin.id);
+  }
+
+  const { data: customers, error } = await query;
 
   if (error) {
     return NextResponse.json({ error: 'Klanten ophalen mislukt' }, { status: 500 });
@@ -54,6 +56,10 @@ export async function POST(request: NextRequest) {
     if (password) {
       rest.password_hash = await bcrypt.hash(password, 12);
       rest.portal_password = password;
+    }
+
+    if (admin.role === 'accountmanager' && !rest.account_manager_id) {
+      rest.account_manager_id = admin.id;
     }
 
     const supabase = createServerClient();

@@ -427,12 +427,35 @@ function BranchDonut({ data }: { data: Record<string, number> }) {
 }
 
 // ─── Main Dashboard ──────────────────────────────────────────────────
+interface AMTargetLive {
+  id: string;
+  admin_user_id: string;
+  am_name: string;
+  label: string;
+  target_type: string;
+  target_value: number;
+  bonus_amount: number;
+  current_value: number;
+  progress_pct: number;
+  period_start: string;
+  period_end: string;
+  status: string;
+}
+
+const TARGET_TYPE_LABELS: Record<string, string> = {
+  revenue: 'Omzet',
+  batches: 'Batches',
+  new_customers: 'Klanten',
+  leads_delivered: 'Leads',
+};
+
 export default function LiveDashboard() {
   const [data, setData] = useState<LiveData | null>(null);
   const [clock, setClock] = useState(new Date());
   const [refreshIn, setRefreshIn] = useState(REFRESH_INTERVAL / 1000);
   const [newLeadIds, setNewLeadIds] = useState<Set<string>>(new Set());
   const [celebratingBatch, setCelebratingBatch] = useState<string | null>(null);
+  const [amTargets, setAmTargets] = useState<AMTargetLive[]>([]);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const prevBatchPcts = useRef<Record<string, number>>({});
@@ -471,8 +494,18 @@ export default function LiveDashboard() {
     setRefreshIn(REFRESH_INTERVAL / 1000);
   }, []);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
-  useEffect(() => { const iv = setInterval(fetchData, REFRESH_INTERVAL); return () => clearInterval(iv); }, [fetchData]);
+  const fetchAMTargets = useCallback(async () => {
+    try {
+      const res = await adminFetch('/api/admin/am-targets');
+      if (res.ok) {
+        const all: AMTargetLive[] = await res.json();
+        setAmTargets(all.filter(t => t.status === 'active'));
+      }
+    } catch { /* silent */ }
+  }, []);
+
+  useEffect(() => { fetchData(); fetchAMTargets(); }, [fetchData, fetchAMTargets]);
+  useEffect(() => { const iv = setInterval(() => { fetchData(); fetchAMTargets(); }, REFRESH_INTERVAL); return () => clearInterval(iv); }, [fetchData, fetchAMTargets]);
   useEffect(() => { const iv = setInterval(() => { setClock(new Date()); setRefreshIn(r => Math.max(0, r - 1)); }, 1000); return () => clearInterval(iv); }, []);
 
   if (!data) {
@@ -875,6 +908,73 @@ export default function LiveDashboard() {
                   {data.costMetrics.totalProfit >= 0 ? '+' : ''}&euro;{data.costMetrics.totalProfit.toLocaleString('nl-NL', { maximumFractionDigits: 0 })}
                 </p>
               </div>
+            </div>
+          </motion.div>
+        )}
+
+        {/* AM Performance Section */}
+        {amTargets.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.25 }}
+            className="shrink-0 rounded-2xl border border-amber-500/10 bg-amber-500/[0.04] p-3 backdrop-blur-sm"
+          >
+            <div className="mb-2 flex items-center gap-2">
+              <svg className="h-4 w-4 text-amber-400/60" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5 2a1 1 0 011 1v1h1a1 1 0 010 2H6v1a1 1 0 01-2 0V6H3a1 1 0 010-2h1V3a1 1 0 011-1zm0 10a1 1 0 011 1v1h1a1 1 0 110 2H6v1a1 1 0 11-2 0v-1H3a1 1 0 110-2h1v-1a1 1 0 011-1zM12 2a1 1 0 01.967.744L14.146 7.2 17.5 9.134a1 1 0 010 1.732l-3.354 1.935-1.18 4.455a1 1 0 01-1.933 0L9.854 12.8 6.5 10.866a1 1 0 010-1.732l3.354-1.935 1.18-4.455A1 1 0 0112 2z" clipRule="evenodd"/></svg>
+              <h2 className="text-sm font-bold text-white/70">AM Performance</h2>
+            </div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+              {amTargets.map(t => {
+                const r = 16;
+                const circ = 2 * Math.PI * r;
+                const filled = Math.min(t.progress_pct, 100);
+                const ringColor = t.progress_pct >= 100 ? '#34d399' : t.progress_pct >= 50 ? '#fbbf24' : '#f87171';
+                return (
+                  <div key={t.id} className="rounded-xl border border-white/[0.04] bg-white/[0.02] p-3">
+                    <div className="mb-2 flex items-center gap-2">
+                      <div className="relative h-10 w-10 shrink-0">
+                        <svg className="-rotate-90 h-10 w-10" viewBox="0 0 40 40">
+                          <circle cx="20" cy="20" r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="3" />
+                          <circle cx="20" cy="20" r={r} fill="none"
+                            stroke={ringColor}
+                            strokeWidth="3"
+                            strokeLinecap="round"
+                            strokeDasharray={circ}
+                            strokeDashoffset={circ - (filled / 100) * circ}
+                            className="transition-all duration-1000"
+                          />
+                        </svg>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <span className="text-[9px] font-black text-white/70">{t.progress_pct}%</span>
+                        </div>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[11px] font-bold text-white/70">{t.am_name}</p>
+                        <p className="truncate text-[9px] text-white/30">{t.label}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-baseline justify-between text-[10px]">
+                      <span className="font-bold tabular-nums text-white/60">
+                        {t.target_type === 'revenue'
+                          ? `€${t.current_value.toLocaleString('nl-NL', { maximumFractionDigits: 0 })}`
+                          : t.current_value.toLocaleString('nl-NL')}
+                      </span>
+                      <span className="text-white/20">
+                        / {t.target_type === 'revenue'
+                          ? `€${t.target_value.toLocaleString('nl-NL', { maximumFractionDigits: 0 })}`
+                          : t.target_value.toLocaleString('nl-NL')}
+                      </span>
+                    </div>
+                    <div className="mt-1 flex items-center justify-between text-[9px] text-white/20">
+                      <span>{TARGET_TYPE_LABELS[t.target_type] || t.target_type}</span>
+                      {t.bonus_amount > 0 && (
+                        <span className="text-amber-400/60">€{t.bonus_amount.toLocaleString('nl-NL', { maximumFractionDigits: 0 })} bonus</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </motion.div>
         )}

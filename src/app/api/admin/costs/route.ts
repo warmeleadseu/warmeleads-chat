@@ -6,6 +6,10 @@ export async function GET(request: NextRequest) {
   const admin = await verifyAdmin(request);
   if (!admin) return unauthorized();
 
+  if (admin.role === 'accountmanager') {
+    return NextResponse.json({ error: 'Geen toegang tot kostendata' }, { status: 403 });
+  }
+
   const supabase = createServerClient();
   const now = new Date();
   const today = now.toISOString().split('T')[0];

@@ -26,28 +26,39 @@ import {
   DocumentTextIcon,
   BuildingOffice2Icon,
   FlagIcon,
+  ShieldCheckIcon,
+  TrophyIcon,
 } from '@heroicons/react/24/outline';
 import { AdminContext, type AdminUser } from './adminContext';
 import { adminFetch } from '@/lib/adminAuth';
 
-const NAV = [
-  { label: 'Dashboard', href: '/admin', icon: HomeIcon },
-  { label: 'Leads CRM', href: '/admin/leads', icon: ChartBarSquareIcon },
-  { label: 'Reclamaties', href: '/admin/reclamaties', icon: FlagIcon, badge: true },
-  { label: 'Verdeling', href: '/admin/verdeling', icon: ArrowsRightLeftIcon },
-  { label: 'Importeren', href: '/admin/import', icon: DocumentArrowUpIcon },
-  { label: 'Klanten', href: '/admin/customers', icon: BuildingOfficeIcon },
-  { label: 'Batches', href: '/admin/batches', icon: RectangleStackIcon },
-  { label: 'Bestellingen', href: '/admin/orders', icon: ShoppingCartIcon },
-  { label: 'Facturen', href: '/admin/invoices', icon: DocumentTextIcon },
-  { label: 'Branches', href: '/admin/branches', icon: Squares2X2Icon },
-  { label: 'Agenda', href: '/admin/agenda', icon: CalendarDaysIcon },
-  { label: 'Bedrijfsgegevens', href: '/admin/bedrijf', icon: BuildingOffice2Icon },
-  { label: 'Koppelingen', href: '/admin/koppelingen', icon: Cog6ToothIcon },
-  { label: 'Live', href: '/admin/live', icon: TvIcon },
-  { label: 'Activiteitenlog', href: '/admin/audit', icon: ClipboardDocumentListIcon },
-  { label: 'Gebruikers', href: '/admin/users', icon: UsersIcon },
+type NavRole = 'superadmin' | 'admin' | 'accountmanager';
+
+const NAV: { label: string; href: string; icon: React.ComponentType<any>; badge?: boolean; roles: NavRole[] }[] = [
+  { label: 'Dashboard', href: '/admin', icon: HomeIcon, roles: ['superadmin', 'admin', 'accountmanager'] },
+  { label: 'Leads CRM', href: '/admin/leads', icon: ChartBarSquareIcon, roles: ['superadmin', 'admin', 'accountmanager'] },
+  { label: 'Reclamaties', href: '/admin/reclamaties', icon: FlagIcon, badge: true, roles: ['superadmin', 'admin', 'accountmanager'] },
+  { label: 'Verdeling', href: '/admin/verdeling', icon: ArrowsRightLeftIcon, roles: ['superadmin'] },
+  { label: 'Importeren', href: '/admin/import', icon: DocumentArrowUpIcon, roles: ['superadmin'] },
+  { label: 'Klanten', href: '/admin/customers', icon: BuildingOfficeIcon, roles: ['superadmin', 'admin', 'accountmanager'] },
+  { label: 'Batches', href: '/admin/batches', icon: RectangleStackIcon, roles: ['superadmin', 'admin', 'accountmanager'] },
+  { label: 'Bestellingen', href: '/admin/orders', icon: ShoppingCartIcon, roles: ['superadmin', 'admin', 'accountmanager'] },
+  { label: 'Facturen', href: '/admin/invoices', icon: DocumentTextIcon, roles: ['superadmin', 'admin', 'accountmanager'] },
+  { label: 'Branches', href: '/admin/branches', icon: Squares2X2Icon, roles: ['superadmin', 'admin'] },
+  { label: 'Agenda', href: '/admin/agenda', icon: CalendarDaysIcon, roles: ['superadmin', 'admin', 'accountmanager'] },
+  { label: 'Bedrijfsgegevens', href: '/admin/bedrijf', icon: BuildingOffice2Icon, roles: ['superadmin'] },
+  { label: 'Koppelingen', href: '/admin/koppelingen', icon: Cog6ToothIcon, roles: ['superadmin'] },
+  { label: 'Live', href: '/admin/live', icon: TvIcon, roles: ['superadmin', 'admin', 'accountmanager'] },
+  { label: 'Activiteitenlog', href: '/admin/audit', icon: ClipboardDocumentListIcon, roles: ['superadmin'] },
+  { label: 'AM Targets', href: '/admin/am-targets', icon: TrophyIcon, roles: ['superadmin'] },
+  { label: 'Gebruikers', href: '/admin/users', icon: UsersIcon, roles: ['superadmin'] },
 ];
+
+const ROLE_BADGE: Record<string, { label: string; className: string }> = {
+  superadmin: { label: 'Superadmin', className: 'bg-brand-purple/20 text-brand-purple' },
+  admin: { label: 'Admin', className: 'bg-sky-500/20 text-sky-300' },
+  accountmanager: { label: 'Accountmanager', className: 'bg-amber-500/20 text-amber-300' },
+};
 
 function LoginScreen({ onLogin }: { onLogin: (u: AdminUser, t: string) => void }) {
   const [email, setEmail] = useState('');
@@ -137,6 +148,8 @@ function LoginScreen({ onLogin }: { onLogin: (u: AdminUser, t: string) => void }
 
 function Sidebar({ user, onLogout, pendingReclamations }: { user: AdminUser; onLogout: () => void; pendingReclamations: number }) {
   const pathname = usePathname();
+  const visibleNav = NAV.filter(item => item.roles.includes(user.role as NavRole));
+  const rb = ROLE_BADGE[user.role] || ROLE_BADGE.admin;
 
   return (
     <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col bg-brand-navy lg:flex">
@@ -146,7 +159,7 @@ function Sidebar({ user, onLogout, pendingReclamations }: { user: AdminUser; onL
       </div>
       <nav className="flex-1 overflow-y-auto px-3 py-4">
         <div className="space-y-0.5">
-          {NAV.map((item) => {
+          {visibleNav.map((item) => {
             const active = item.href === '/admin' ? pathname === '/admin' : pathname.startsWith(item.href);
             return (
               <Link
@@ -158,7 +171,7 @@ function Sidebar({ user, onLogout, pendingReclamations }: { user: AdminUser; onL
               >
                 <item.icon className={`h-[18px] w-[18px] ${active ? 'text-brand-purple' : 'text-white/40'}`} />
                 {item.label}
-                {'badge' in item && item.badge && pendingReclamations > 0 && (
+                {item.badge && pendingReclamations > 0 && (
                   <span className="ml-auto flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white">
                     {pendingReclamations}
                   </span>
@@ -180,8 +193,11 @@ function Sidebar({ user, onLogout, pendingReclamations }: { user: AdminUser; onL
             {user.name.charAt(0).toUpperCase()}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-xs font-medium text-white/80">{user.name}</p>
-            <p className="truncate text-[11px] text-white/30">{user.email}</p>
+            <div className="flex items-center gap-1.5">
+              <p className="truncate text-xs font-medium text-white/80">{user.name}</p>
+              {user.role === 'superadmin' && <ShieldCheckIcon className="h-3 w-3 shrink-0 text-brand-purple" />}
+            </div>
+            <span className={`mt-0.5 inline-block rounded-full px-1.5 py-px text-[9px] font-semibold ${rb.className}`}>{rb.label}</span>
           </div>
         </div>
         <button
@@ -238,7 +254,7 @@ function MobileHeader({ user, onLogout, pendingReclamations }: { user: AdminUser
                   <button onClick={() => setOpen(false)} className="text-white/50"><XMarkIcon className="h-5 w-5" /></button>
                 </div>
                 <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
-                  {NAV.map((item) => {
+                  {NAV.filter(item => item.roles.includes(user.role as NavRole)).map((item) => {
                     const active = item.href === '/admin' ? pathname === '/admin' : pathname.startsWith(item.href);
                     return (
                       <Link
@@ -251,7 +267,7 @@ function MobileHeader({ user, onLogout, pendingReclamations }: { user: AdminUser
                       >
                         <item.icon className={`h-5 w-5 ${active ? 'text-brand-purple' : 'text-white/40'}`} />
                         {item.label}
-                        {'badge' in item && item.badge && pendingReclamations > 0 && (
+                        {item.badge && pendingReclamations > 0 && (
                           <span className="ml-auto flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white">
                             {pendingReclamations}
                           </span>
@@ -267,7 +283,12 @@ function MobileHeader({ user, onLogout, pendingReclamations }: { user: AdminUser
                   })}
                 </nav>
                 <div className="shrink-0 border-t border-white/[0.06] px-4 py-4">
-                  <p className="mb-3 truncate text-sm text-white/40">{user.name}</p>
+                  <div className="mb-3 flex items-center gap-2">
+                    <p className="truncate text-sm text-white/40">{user.name}</p>
+                    <span className={`shrink-0 rounded-full px-1.5 py-px text-[9px] font-semibold ${(ROLE_BADGE[user.role] || ROLE_BADGE.admin).className}`}>
+                      {(ROLE_BADGE[user.role] || ROLE_BADGE.admin).label}
+                    </span>
+                  </div>
                   <button onClick={onLogout} className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-sm text-white/40 transition hover:bg-white/[0.06] hover:text-red-400">
                     <ArrowRightOnRectangleIcon className="h-4 w-4" /> Uitloggen
                   </button>

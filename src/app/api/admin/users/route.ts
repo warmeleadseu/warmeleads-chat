@@ -36,8 +36,8 @@ export async function POST(request: NextRequest) {
     if (!email || !password || !name) {
       return NextResponse.json({ error: 'E-mail, wachtwoord en naam zijn verplicht' }, { status: 400 });
     }
-    if (!['admin', 'superadmin'].includes(role)) {
-      return NextResponse.json({ error: 'Rol moet admin of superadmin zijn' }, { status: 400 });
+    if (!['admin', 'superadmin', 'accountmanager'].includes(role)) {
+      return NextResponse.json({ error: 'Ongeldige rol' }, { status: 400 });
     }
 
     const password_hash = await bcrypt.hash(password, 12);
@@ -71,8 +71,8 @@ export async function PUT(request: NextRequest) {
     const { id, password, ...updates } = await request.json();
     if (!id) return NextResponse.json({ error: 'ID is verplicht' }, { status: 400 });
 
-    if (updates.role && !['admin', 'superadmin'].includes(updates.role)) {
-      return NextResponse.json({ error: 'Rol moet admin of superadmin zijn' }, { status: 400 });
+    if (updates.role && !['admin', 'superadmin', 'accountmanager'].includes(updates.role)) {
+      return NextResponse.json({ error: 'Ongeldige rol' }, { status: 400 });
     }
 
     if (password) {

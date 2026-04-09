@@ -17,6 +17,22 @@ import {
   BanknotesIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
+import { useAdmin } from './adminContext';
+import { TrophyIcon } from '@heroicons/react/24/outline';
+
+interface AMTarget {
+  id: string;
+  label: string;
+  target_type: string;
+  target_value: number;
+  bonus_amount: number;
+  current_value: number;
+  progress_pct: number;
+  period_start: string;
+  period_end: string;
+  status: string;
+  am_name: string;
+}
 
 interface PeriodStat { leads: number; prevLeads: number; assigned: number; prevAssigned: number; }
 
@@ -129,15 +145,24 @@ interface CostData {
 }
 
 export default function AdminDashboard() {
+  const { user } = useAdmin();
   const [stats, setStats] = useState<Stats | null>(null);
   const [branchMeta, setBranchMeta] = useState<Record<string, BranchMeta>>({});
   const [batches, setBatches] = useState<BatchInfo[]>([]);
   const [assignmentCount, setAssignmentCount] = useState(0);
   const [costData, setCostData] = useState<CostData | null>(null);
+  const [myTargets, setMyTargets] = useState<AMTarget[]>([]);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState<string>('week');
 
   useEffect(() => {
+    if (user.role === 'accountmanager') {
+      adminFetch('/api/admin/am-targets')
+        .then(r => r.ok ? r.json() : [])
+        .then((data: AMTarget[]) => setMyTargets(data.filter(t => t.status === 'active')))
+        .catch(() => {});
+    }
+
     /* Phase 1 (blocking): consolidated dashboard + batches → shows UI */
     const phase1 = Promise.all([
       adminFetch('/api/admin/dashboard').then(r => r.json()),
@@ -227,6 +252,54 @@ export default function AdminDashboard() {
           </div>
         ))}
       </div>
+
+      {/* My Targets (AM only) */}
+      {user.role === 'accountmanager' && myTargets.length > 0 && (
+        <div className="mb-6 rounded-xl border border-amber-200 bg-gradient-to-br from-amber-50/60 to-white p-5 shadow-sm">
+          <div className="mb-4 flex items-center gap-2">
+            <div className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-amber-100">
+              <TrophyIcon className="h-4 w-4 text-amber-600" />
+            </div>
+            <h2 className="text-sm font-semibold text-slate-900">Mijn targets</h2>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {myTargets.map(t => {
+              const isRevenue = t.target_type === 'revenue';
+              const cur = isRevenue
+                ? new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR' }).format(t.current_value)
+                : t.current_value.toLocaleString('nl-NL');
+              const tgt = isRevenue
+                ? new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR' }).format(t.target_value)
+                : t.target_value.toLocaleString('nl-NL');
+              const daysLeft = Math.max(0, Math.ceil((new Date(t.period_end + 'T23:59:59').getTime() - Date.now()) / 86400000));
+              const color = t.progress_pct >= 100 ? '#10b981' : t.progress_pct >= 50 ? '#f59e0b' : '#ef4444';
+              return (
+                <div key={t.id} className="rounded-lg bg-white p-4 shadow-sm border border-slate-100">
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-900 truncate">{t.label}</span>
+                    {t.bonus_amount > 0 && (
+                      <span className="shrink-0 ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700">
+                        Bonus: {new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR' }).format(t.bonus_amount)}
+                      </span>
+                    )}
+                  </div>
+                  <div className="mb-1 flex items-baseline justify-between">
+                    <span className="text-lg font-bold text-slate-900">{cur}</span>
+                    <span className="text-xs text-slate-400">/ {tgt}</span>
+                  </div>
+                  <div className="mb-2 h-2 overflow-hidden rounded-full bg-slate-100">
+                    <div className="h-full rounded-full transition-all duration-700" style={{ width: `${Math.min(t.progress_pct, 100)}%`, backgroundColor: color }} />
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] text-slate-400">
+                    <span>{t.progress_pct}% behaald</span>
+                    <span className={daysLeft <= 7 ? 'text-amber-600 font-medium' : ''}>{daysLeft}d over</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Period Overview */}
       {stats.periodStats && (

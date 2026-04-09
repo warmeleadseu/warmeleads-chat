@@ -40,12 +40,15 @@ async function fetchAllLight<T>(
   supabase: ReturnType<typeof createServerClient>,
   table: string,
   columns: string,
+  filter?: { column: string; values: string[] },
 ): Promise<T[]> {
   const PAGE = 1000;
   const rows: T[] = [];
   let from = 0;
   while (true) {
-    const { data } = await supabase.from(table).select(columns).range(from, from + PAGE - 1);
+    let q = supabase.from(table).select(columns).range(from, from + PAGE - 1);
+    if (filter) q = q.in(filter.column, filter.values);
+    const { data } = await q;
     if (!data || data.length === 0) break;
     rows.push(...(data as T[]));
     if (data.length < PAGE) break;
@@ -65,6 +68,27 @@ export async function GET(request: NextRequest) {
   const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
   const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
+  const isAM = admin.role === 'accountmanager';
+  let amCustomerIds: string[] = [];
+  if (isAM) {
+    const { data: myCusts } = await supabase.from('customers').select('id').eq('account_manager_id', admin.id);
+    amCustomerIds = (myCusts || []).map(c => c.id);
+    if (amCustomerIds.length === 0) {
+      const { data: brData } = await supabase.from('branches').select('slug, name, color').order('sort_order', { ascending: true });
+      const bm: Record<string, { slug: string; name: string; color: string }> = {};
+      (brData || []).forEach((b: any) => { bm[b.slug] = b; });
+      return NextResponse.json({
+        total: 0, thisWeek: 0, thisMonth: 0, customerCount: 0, assignmentCount: 0,
+        byStatus: {}, byBranch: {}, byCustomer: {}, recentLeads: [],
+        periodStats: Object.fromEntries(['day','week','month','quarter','year'].map(p => [p, { leads: 0, prevLeads: 0, assigned: 0, prevAssigned: 0 }])),
+        branchMeta: bm,
+      });
+    }
+  }
+
+  const scopeLeads = (q: any) => isAM ? q.in('customer_id', amCustomerIds) : q;
+  const scopeAssign = (q: any) => isAM ? q.in('customer_id', amCustomerIds) : q;
+
   const periods = ['day', 'week', 'month', 'quarter', 'year'];
   const periodBounds = periods.map(p => ({
     period: p,
@@ -83,29 +107,36 @@ export async function GET(request: NextRequest) {
     allAssignments,
   ] = await Promise.all([
     Promise.all([
-      supabase.from('leads').select('id', { count: 'exact', head: true }),
-      supabase.from('leads').select('id', { count: 'exact', head: true }).neq('bron', 'excel_import').gte('created_at', weekAgo),
-      supabase.from('leads').select('id', { count: 'exact', head: true }).neq('bron', 'excel_import').gte('created_at', monthAgo),
-      supabase.from('customers').select('id', { count: 'exact', head: true }),
-      supabase.from('lead_assignments').select('id', { count: 'exact', head: true }),
+      scopeLeads(supabase.from('leads').select('id', { count: 'exact', head: true })),
+      scopeLeads(supabase.from('leads').select('id', { count: 'exact', head: true }).neq('bron', 'excel_import').gte('created_at', weekAgo)),
+      scopeLeads(supabase.from('leads').select('id', { count: 'exact', head: true }).neq('bron', 'excel_import').gte('created_at', monthAgo)),
+      isAM
+        ? Promise.resolve({ count: amCustomerIds.length })
+        : supabase.from('customers').select('id', { count: 'exact', head: true }),
+      scopeAssign(supabase.from('lead_assignments').select('id', { count: 'exact', head: true })),
     ]),
-    supabase.from('leads').select('*, customers(id, name)').neq('bron', 'excel_import').order('created_at', { ascending: false }).limit(10),
+    scopeLeads(supabase.from('leads').select('*, customers(id, name)').neq('bron', 'excel_import').order('created_at', { ascending: false }).limit(10)),
     supabase.from('branches').select('slug, name, color').order('sort_order', { ascending: true }),
-    supabase.from('customers').select('id, name'),
+    isAM
+      ? supabase.from('customers').select('id, name').in('id', amCustomerIds)
+      : supabase.from('customers').select('id, name'),
     Promise.all(
       STATUSES.map(s =>
-        supabase.from('leads').select('id', { count: 'exact', head: true }).eq('status', s),
+        scopeLeads(supabase.from('leads').select('id', { count: 'exact', head: true }).eq('status', s)),
       ),
     ),
     Promise.all(
       periodBounds.flatMap(({ start, prevStart }) => [
-        supabase.from('leads').select('id', { count: 'exact', head: true }).neq('bron', 'excel_import').gte('created_at', start),
-        supabase.from('leads').select('id', { count: 'exact', head: true }).neq('bron', 'excel_import').gte('created_at', prevStart).lt('created_at', start),
-        supabase.from('lead_assignments').select('id', { count: 'exact', head: true }).gte('assigned_at', start),
-        supabase.from('lead_assignments').select('id', { count: 'exact', head: true }).gte('assigned_at', prevStart).lt('assigned_at', start),
+        scopeLeads(supabase.from('leads').select('id', { count: 'exact', head: true }).neq('bron', 'excel_import').gte('created_at', start)),
+        scopeLeads(supabase.from('leads').select('id', { count: 'exact', head: true }).neq('bron', 'excel_import').gte('created_at', prevStart).lt('created_at', start)),
+        scopeAssign(supabase.from('lead_assignments').select('id', { count: 'exact', head: true }).gte('assigned_at', start)),
+        scopeAssign(supabase.from('lead_assignments').select('id', { count: 'exact', head: true }).gte('assigned_at', prevStart).lt('assigned_at', start)),
       ]),
     ),
-    fetchAllLight<{ lead_id: string; customer_id: string }>(supabase, 'lead_assignments', 'lead_id, customer_id'),
+    fetchAllLight<{ lead_id: string; customer_id: string }>(
+      supabase, 'lead_assignments', 'lead_id, customer_id',
+      isAM ? { column: 'customer_id', values: amCustomerIds } : undefined,
+    ),
   ]);
 
   const [totalRes, weekRes, monthRes, customersRes, assignCountRes] = basicCounts;

@@ -81,7 +81,14 @@ export default function UsersPage() {
 
   const roleBadge = (role: string) => {
     if (role === 'superadmin') return 'bg-purple-100 text-purple-700';
+    if (role === 'accountmanager') return 'bg-amber-100 text-amber-700';
     return 'bg-blue-100 text-blue-700';
+  };
+
+  const roleLabel = (role: string) => {
+    if (role === 'superadmin') return 'Superadmin';
+    if (role === 'accountmanager') return 'Accountmanager';
+    return 'Admin';
   };
 
   const statusBadge = (active: boolean) => {
@@ -165,7 +172,7 @@ export default function UsersPage() {
                     <td className="whitespace-nowrap px-5 py-3.5">
                       <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${roleBadge(u.role)}`}>
                         {u.role === 'superadmin' && <ShieldCheckIcon className="h-3 w-3" />}
-                        {u.role}
+                        {roleLabel(u.role)}
                       </span>
                     </td>
                     <td className="whitespace-nowrap px-5 py-3.5">
@@ -273,6 +280,8 @@ export default function UsersPage() {
   );
 }
 
+interface CustomerOption { id: string; name: string; account_manager_id?: string | null; }
+
 function UserFormModal({ user, onClose, onSaved }: { user: AdminUser | null; onClose: () => void; onSaved: () => void }) {
   const isEdit = !!user;
   const [form, setForm] = useState({
@@ -284,6 +293,25 @@ function UserFormModal({ user, onClose, onSaved }: { user: AdminUser | null; onC
   const [showPassword, setShowPassword] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [customers, setCustomers] = useState<CustomerOption[]>([]);
+  const [assignedCustomerIds, setAssignedCustomerIds] = useState<Set<string>>(new Set());
+  const [loadingCustomers, setLoadingCustomers] = useState(false);
+
+  useEffect(() => {
+    if (form.role !== 'accountmanager' || !isEdit) return;
+    setLoadingCustomers(true);
+    adminFetch('/api/admin/customers')
+      .then(r => r.ok ? r.json() : { customers: [] })
+      .then((data: { customers?: CustomerOption[] }) => {
+        const custs = data.customers || [];
+        setCustomers(custs);
+        const assigned = new Set(
+          custs.filter(c => c.account_manager_id === user!.id).map(c => c.id)
+        );
+        setAssignedCustomerIds(assigned);
+      })
+      .finally(() => setLoadingCustomers(false));
+  }, [form.role, isEdit, user]);
 
   const save = async () => {
     if (!form.name || !form.email) { setError('Naam en e-mail zijn verplicht'); return; }
@@ -311,6 +339,28 @@ function UserFormModal({ user, onClose, onSaved }: { user: AdminUser | null; onC
         const d = await res.json();
         throw new Error(d.error || 'Er ging iets mis');
       }
+
+      if (isEdit && form.role === 'accountmanager') {
+        const allCusts = customers;
+        const updates = allCusts.map(c => {
+          const shouldAssign = assignedCustomerIds.has(c.id);
+          const wasAssigned = c.account_manager_id === user!.id;
+          if (shouldAssign && !wasAssigned) {
+            return adminFetch('/api/admin/customers', {
+              method: 'PUT',
+              body: JSON.stringify({ id: c.id, account_manager_id: user!.id }),
+            });
+          } else if (!shouldAssign && wasAssigned) {
+            return adminFetch('/api/admin/customers', {
+              method: 'PUT',
+              body: JSON.stringify({ id: c.id, account_manager_id: null }),
+            });
+          }
+          return null;
+        }).filter(Boolean);
+        await Promise.all(updates);
+      }
+
       onSaved();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Er ging iets mis');
@@ -401,8 +451,50 @@ function UserFormModal({ user, onClose, onSaved }: { user: AdminUser | null; onC
             >
               <option value="admin">Admin</option>
               <option value="superadmin">Superadmin</option>
+              <option value="accountmanager">Accountmanager</option>
             </select>
           </div>
+
+          {form.role === 'accountmanager' && isEdit && (
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-500">
+                Toegewezen klanten
+              </label>
+              {loadingCustomers ? (
+                <div className="rounded-lg border border-slate-200 px-3 py-4 text-center text-xs text-slate-400">
+                  Klanten laden...
+                </div>
+              ) : customers.length === 0 ? (
+                <p className="text-xs text-slate-400">Nog geen klanten in het systeem.</p>
+              ) : (
+                <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-slate-200 p-2">
+                  {customers.map(c => (
+                    <label key={c.id} className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-slate-700 transition hover:bg-slate-50 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={assignedCustomerIds.has(c.id)}
+                        onChange={() => {
+                          setAssignedCustomerIds(prev => {
+                            const next = new Set(prev);
+                            if (next.has(c.id)) next.delete(c.id);
+                            else next.add(c.id);
+                            return next;
+                          });
+                        }}
+                        className="rounded border-slate-300 text-brand-purple focus:ring-brand-purple/20"
+                      />
+                      <span className="truncate">{c.name}</span>
+                      {c.account_manager_id && c.account_manager_id !== user?.id && (
+                        <span className="ml-auto shrink-0 rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-600">
+                          andere AM
+                        </span>
+                      )}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="sticky bottom-0 border-t border-slate-100 bg-white px-5 py-4">

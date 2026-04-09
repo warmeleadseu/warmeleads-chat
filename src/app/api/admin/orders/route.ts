@@ -8,10 +8,19 @@ export async function GET(request: NextRequest) {
 
   const supabase = createServerClient();
 
-  const { data: orders, error } = await supabase
+  let orderQuery = supabase
     .from('batch_orders')
     .select('*, customers(name, email, contact_person)')
     .order('created_at', { ascending: false });
+
+  if (admin.role === 'accountmanager') {
+    const { data: myCustomers } = await supabase.from('customers').select('id').eq('account_manager_id', admin.id);
+    const ids = (myCustomers || []).map(c => c.id);
+    if (ids.length === 0) return NextResponse.json([]);
+    orderQuery = orderQuery.in('customer_id', ids);
+  }
+
+  const { data: orders, error } = await orderQuery;
 
   if (error) {
     return NextResponse.json({ error: 'Kon bestellingen niet ophalen' }, { status: 500 });

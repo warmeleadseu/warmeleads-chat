@@ -33,6 +33,7 @@ import {
   ChevronUpDownIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
+import { useAdmin } from '../adminContext';
 
 interface Customer {
   id: string; name: string; contact_person: string; email: string; phone: string;
@@ -41,6 +42,7 @@ interface Customer {
   last_login_at?: string | null;
   login_count?: number;
   exclude_customers?: string[];
+  account_manager_id?: string | null;
 }
 
 function getActivityStatus(c: Customer): { label: string; color: string; dotColor: string; sort: number } {
@@ -92,9 +94,12 @@ interface BranchField {
   id: string; key: string; label: string; field_type: string; options: string[];
 }
 
+interface AccountManager { id: string; name: string; role: string }
+
 export default function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [branchOptions, setBranchOptions] = useState<BranchOption[]>([]);
+  const [accountManagers, setAccountManagers] = useState<AccountManager[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<Customer | null>(null);
   const [showNew, setShowNew] = useState(false);
@@ -137,6 +142,12 @@ export default function CustomersPage() {
     if (res.ok) { const d = await res.json(); setBranchOptions((d.branches || []).map((b: any) => ({ slug: b.slug, name: b.name, color: b.color, is_active: b.is_active }))); }
   }, []);
   useEffect(() => { fetchBranches(); }, [fetchBranches]);
+
+  useEffect(() => {
+    adminFetch('/api/admin/users').then(r => r.ok ? r.json() : null).then(d => {
+      if (d?.users) setAccountManagers(d.users.filter((u: any) => u.is_active && u.role === 'accountmanager'));
+    }).catch(() => {});
+  }, []);
 
   const handleDelete = async (id: string, name: string) => {
     if (!confirm(`${name} verwijderen? Leads van deze klant worden niet verwijderd.`)) return;
@@ -400,7 +411,12 @@ export default function CustomersPage() {
 
                   {/* Contact */}
                   {c.email && <p className="mb-0.5 text-xs text-slate-500">{c.email}</p>}
-                  {c.phone && <p className="mb-2 text-xs text-slate-500">{c.phone}</p>}
+                  {c.phone && <p className="mb-0.5 text-xs text-slate-500">{c.phone}</p>}
+                  {c.account_manager_id && (() => {
+                    const am = accountManagers.find(a => a.id === c.account_manager_id);
+                    return am ? <p className="mb-0.5 text-xs text-amber-600 font-medium">AM: {am.name}</p> : null;
+                  })()}
+                  <div className="mb-2" />
 
                   {/* Branches + leads + login count */}
                   <div className="mb-4 flex flex-wrap items-center gap-1.5">
@@ -687,6 +703,7 @@ export default function CustomersPage() {
             customer={editing}
             branchOptions={branchOptions}
             allCustomers={customers}
+            accountManagers={accountManagers}
             onClose={() => { setEditing(null); setShowNew(false); }}
             onSaved={() => { setEditing(null); setShowNew(false); fetch_(); }}
           />
@@ -888,7 +905,8 @@ function PasswordField({ value, onChange, label, placeholder }: { value: string;
   );
 }
 
-function CustomerForm({ customer, branchOptions, allCustomers, onClose, onSaved }: { customer: Customer | null; branchOptions: BranchOption[]; allCustomers: Customer[]; onClose: () => void; onSaved: () => void }) {
+function CustomerForm({ customer, branchOptions, allCustomers, accountManagers, onClose, onSaved }: { customer: Customer | null; branchOptions: BranchOption[]; allCustomers: Customer[]; accountManagers: AccountManager[]; onClose: () => void; onSaved: () => void }) {
+  const { user: currentUser } = useAdmin();
   const isEdit = !!customer;
   const [form, setForm] = useState({
     name: customer?.name || '',
@@ -901,6 +919,7 @@ function CustomerForm({ customer, branchOptions, allCustomers, onClose, onSaved 
     notes: customer?.notes || '',
     password: '',
     exclude_customers: customer?.exclude_customers || [] as string[],
+    account_manager_id: customer?.account_manager_id || '',
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -1000,6 +1019,21 @@ function CustomerForm({ customer, branchOptions, allCustomers, onClose, onSaved 
               ))}
             </div>
           </div>
+          {currentUser.role !== 'accountmanager' && accountManagers.length > 0 && (
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-500">Accountmanager</label>
+              <select
+                value={form.account_manager_id}
+                onChange={e => setForm(f => ({ ...f, account_manager_id: e.target.value }))}
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50"
+              >
+                <option value="">Geen accountmanager</option>
+                {accountManagers.map(am => (
+                  <option key={am.id} value={am.id}>{am.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <PasswordField
             value={form.password}
             onChange={val => setForm(f => ({ ...f, password: val }))}

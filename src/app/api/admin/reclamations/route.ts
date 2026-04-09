@@ -30,6 +30,13 @@ export async function GET(request: NextRequest) {
     query = query.eq('status', status);
   }
 
+  if (admin.role === 'accountmanager') {
+    const { data: myCustomers } = await supabase.from('customers').select('id').eq('account_manager_id', admin.id);
+    const ids = (myCustomers || []).map(c => c.id);
+    if (ids.length === 0) return NextResponse.json({ reclamations: [] });
+    query = query.in('customer_id', ids);
+  }
+
   const { data, error } = await query;
 
   if (error) {
