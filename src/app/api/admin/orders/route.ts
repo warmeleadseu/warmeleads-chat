@@ -56,9 +56,14 @@ export async function DELETE(request: NextRequest) {
 
     const { data: order } = await supabase
       .from('batch_orders')
-      .select('id, status')
+      .select('id, status, customer_id')
       .eq('id', order_id)
       .single();
+
+    if (admin.role === 'accountmanager' && order) {
+      const { data: myCust } = await supabase.from('customers').select('id').eq('account_manager_id', admin.id).eq('id', order.customer_id).single();
+      if (!myCust) return NextResponse.json({ error: 'Geen toegang tot deze bestelling' }, { status: 403 });
+    }
 
     if (!order) return NextResponse.json({ error: 'Bestelling niet gevonden' }, { status: 404 });
 

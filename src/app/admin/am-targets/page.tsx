@@ -8,7 +8,6 @@ import {
   TrashIcon,
   XMarkIcon,
   TrophyIcon,
-  ChartBarIcon,
   ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';

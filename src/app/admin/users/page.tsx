@@ -455,6 +455,12 @@ function UserFormModal({ user, onClose, onSaved }: { user: AdminUser | null; onC
             </select>
           </div>
 
+          {form.role === 'accountmanager' && !isEdit && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-700">
+              Maak eerst de gebruiker aan. Daarna kun je klanten toewijzen via de bewerkknop.
+            </div>
+          )}
+
           {form.role === 'accountmanager' && isEdit && (
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-500">

@@ -46,6 +46,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Vereiste velden ontbreken' }, { status: 400 });
   }
 
+  if (admin.role === 'accountmanager') {
+    const { data: myCust } = await supabase.from('customers').select('id').eq('account_manager_id', admin.id).eq('id', customer_id).single();
+    if (!myCust) return NextResponse.json({ error: 'Geen toegang tot deze klant' }, { status: 403 });
+  }
+
   const total_price = price_per_lead ? price_per_lead * batch_size : null;
   const lookback = typeof lookback_days === 'number' ? Math.max(0, Math.min(30, lookback_days)) : 3;
   const sanitizedFilters = Array.isArray(lead_filters) ? lead_filters.filter(
@@ -127,6 +132,11 @@ export async function PUT(request: NextRequest) {
   if (fetchError || !existing) {
     console.error('[admin/batches PUT] fetch error:', fetchError?.message);
     return NextResponse.json({ error: fetchError?.message || 'Batch niet gevonden' }, { status: fetchError ? 500 : 404 });
+  }
+
+  if (admin.role === 'accountmanager') {
+    const { data: myCust } = await supabase.from('customers').select('id').eq('account_manager_id', admin.id).eq('id', existing.customer_id).single();
+    if (!myCust) return NextResponse.json({ error: 'Geen toegang tot deze batch' }, { status: 403 });
   }
 
   // Append compensation entry when extra leads are added
@@ -225,6 +235,14 @@ export async function DELETE(request: NextRequest) {
   const supabase = createServerClient();
   const id = request.nextUrl.searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'ID ontbreekt' }, { status: 400 });
+
+  if (admin.role === 'accountmanager') {
+    const { data: batch } = await supabase.from('customer_batches').select('customer_id').eq('id', id).single();
+    if (batch) {
+      const { data: myCust } = await supabase.from('customers').select('id').eq('account_manager_id', admin.id).eq('id', batch.customer_id).single();
+      if (!myCust) return NextResponse.json({ error: 'Geen toegang tot deze batch' }, { status: 403 });
+    }
+  }
 
   const { error } = await supabase.from('customer_batches').delete().eq('id', id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

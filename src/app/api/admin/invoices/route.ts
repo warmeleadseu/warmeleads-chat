@@ -42,11 +42,15 @@ export async function POST(request: NextRequest) {
 
   const { data: customer } = await supabase
     .from('customers')
-    .select('id, name, email, address, vat_id')
+    .select('id, name, email, address, vat_id, account_manager_id')
     .eq('id', customer_id)
     .single();
 
   if (!customer) return NextResponse.json({ error: 'Klant niet gevonden' }, { status: 404 });
+
+  if (admin.role === 'accountmanager' && customer.account_manager_id !== admin.id) {
+    return NextResponse.json({ error: 'Geen toegang tot deze klant' }, { status: 403 });
+  }
 
   const sub = Number(subtotal);
   const btwPct = Number(btw_percentage ?? 21);
@@ -118,6 +122,14 @@ export async function PUT(request: NextRequest) {
   const { id, ...updates } = body;
   if (!id) return NextResponse.json({ error: 'ID ontbreekt' }, { status: 400 });
 
+  if (admin.role === 'accountmanager') {
+    const { data: inv } = await supabase.from('invoices').select('customer_id').eq('id', id).single();
+    if (inv) {
+      const { data: myCust } = await supabase.from('customers').select('id').eq('id', inv.customer_id).eq('account_manager_id', admin.id).single();
+      if (!myCust) return NextResponse.json({ error: 'Geen toegang tot deze factuur' }, { status: 403 });
+    }
+  }
+
   // Recalculate BTW when subtotal or btw_percentage changes
   if (updates.subtotal !== undefined || updates.btw_percentage !== undefined) {
     const { data: existing } = await supabase
@@ -162,6 +174,10 @@ export async function PUT(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   const admin = await verifyAdmin(request);
   if (!admin) return unauthorized();
+
+  if (admin.role === 'accountmanager') {
+    return NextResponse.json({ error: 'Accountmanagers kunnen geen facturen verwijderen' }, { status: 403 });
+  }
 
   const supabase = createServerClient();
   const { id } = await request.json();

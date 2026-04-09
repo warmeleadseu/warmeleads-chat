@@ -17,6 +17,7 @@ import {
   ChatBubbleLeftEllipsisIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
+import { useAdmin } from '../adminContext';
 
 interface Reclamation {
   id: string;
@@ -54,6 +55,8 @@ const STATUS_CONFIG: Record<string, { label: string; cls: string; icon: typeof C
 };
 
 export default function AdminReclamatiesPage() {
+  const { user: currentAdmin } = useAdmin();
+  const canResolve = currentAdmin.role !== 'accountmanager';
   const [reclamations, setReclamations] = useState<Reclamation[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -457,7 +460,7 @@ export default function AdminReclamatiesPage() {
               </div>
 
               {/* Action buttons */}
-              {selected.status === 'pending' && (
+              {selected.status === 'pending' && canResolve && (
                 <div className="shrink-0 border-t border-slate-100 px-5 py-4 space-y-3">
                   <div className="flex items-start gap-2 rounded-lg bg-blue-50 border border-blue-100 px-3 py-2">
                     <CheckCircleIcon className="mt-0.5 h-4 w-4 shrink-0 text-blue-500" />

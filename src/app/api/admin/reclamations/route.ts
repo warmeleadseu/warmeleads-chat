@@ -14,10 +14,19 @@ export async function GET(request: NextRequest) {
   const supabase = createServerClient();
 
   if (countOnly) {
-    const { count } = await supabase
+    let countQuery = supabase
       .from('lead_reclamations')
       .select('id', { count: 'exact', head: true })
       .eq('status', 'pending');
+
+    if (admin.role === 'accountmanager') {
+      const { data: myCustomers } = await supabase.from('customers').select('id').eq('account_manager_id', admin.id);
+      const ids = (myCustomers || []).map(c => c.id);
+      if (ids.length === 0) return NextResponse.json({ pending_count: 0 });
+      countQuery = countQuery.in('customer_id', ids);
+    }
+
+    const { count } = await countQuery;
     return NextResponse.json({ pending_count: count || 0 });
   }
 
@@ -75,6 +84,10 @@ const REASON_LABELS: Record<string, string> = {
 export async function PUT(request: NextRequest) {
   const admin = await verifyAdmin(request);
   if (!admin) return unauthorized();
+
+  if (admin.role === 'accountmanager') {
+    return NextResponse.json({ error: 'Alleen superadmin/admin kan reclamaties beoordelen' }, { status: 403 });
+  }
 
   const body = await request.json();
   const { id, status, admin_notes } = body;

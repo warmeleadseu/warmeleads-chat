@@ -156,7 +156,7 @@ export async function PUT(request: NextRequest) {
   for (const key of allowed) {
     if (updates[key] !== undefined) safe[key] = updates[key];
   }
-  if (safe.target_value) safe.target_value = Number(safe.target_value);
+  if (safe.target_value !== undefined) safe.target_value = Number(safe.target_value);
   if (safe.bonus_amount !== undefined) safe.bonus_amount = Number(safe.bonus_amount);
 
   const supabase = createServerClient();

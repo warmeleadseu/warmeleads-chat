@@ -15,10 +15,10 @@ import {
   InboxIcon,
   CurrencyEuroIcon,
   BanknotesIcon,
+  TrophyIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
 import { useAdmin } from './adminContext';
-import { TrophyIcon } from '@heroicons/react/24/outline';
 
 interface AMTarget {
   id: string;
@@ -169,8 +169,8 @@ export default function AdminDashboard() {
       adminFetch('/api/admin/batches').then(r => r.ok ? r.json() : []),
     ]);
 
-    /* Phase 2 (non-blocking): costs starts in parallel, populates when ready */
-    adminFetch('/api/admin/costs')
+    /* Phase 2 (non-blocking): costs starts in parallel, populates when ready (skip for AMs) */
+    if (user.role !== 'accountmanager') adminFetch('/api/admin/costs')
       .then(r => r.ok ? r.json() : null)
       .catch(() => null)
       .then(async (costsData: CostData | null) => {
