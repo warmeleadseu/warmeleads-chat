@@ -231,45 +231,47 @@ function MobileHeader({ user, onLogout, pendingReclamations }: { user: AdminUser
               transition={{ type: 'spring', damping: 28, stiffness: 320 }}
               className="fixed inset-y-0 left-0 z-[60] w-[min(280px,80vw)] bg-brand-navy lg:hidden"
             >
-              <div className="h-[3px] bg-warmeleads-gradient" />
-              <div className="flex h-14 items-center justify-between px-4">
-                <Image src="/logo-wit.png" alt="WarmeLeads" width={110} height={33} className="h-6 w-auto" />
-                <button onClick={() => setOpen(false)} className="text-white/50"><XMarkIcon className="h-5 w-5" /></button>
-              </div>
-              <nav className="px-3 py-4 space-y-1">
-                {NAV.map((item) => {
-                  const active = item.href === '/admin' ? pathname === '/admin' : pathname.startsWith(item.href);
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      onClick={() => setOpen(false)}
-                      className={`flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium transition ${
-                        active ? 'bg-brand-purple/20 text-white' : 'text-white/50 hover:text-white/80'
-                      }`}
-                    >
-                      <item.icon className={`h-5 w-5 ${active ? 'text-brand-purple' : 'text-white/40'}`} />
-                      {item.label}
-                      {'badge' in item && item.badge && pendingReclamations > 0 && (
-                        <span className="ml-auto flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white">
-                          {pendingReclamations}
-                        </span>
-                      )}
-                      {item.href === '/admin/live' && (
-                        <span className="relative ml-auto flex h-2 w-2">
-                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
-                          <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
-                        </span>
-                      )}
-                    </Link>
-                  );
-                })}
-              </nav>
-              <div className="absolute bottom-0 left-0 right-0 border-t border-white/[0.06] px-4 py-4">
-                <p className="mb-3 truncate text-sm text-white/40">{user.name}</p>
-                <button onClick={onLogout} className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-sm text-white/40 transition hover:bg-white/[0.06] hover:text-red-400">
-                  <ArrowRightOnRectangleIcon className="h-4 w-4" /> Uitloggen
-                </button>
+              <div className="flex h-full flex-col">
+                <div className="h-[3px] shrink-0 bg-warmeleads-gradient" />
+                <div className="flex h-14 shrink-0 items-center justify-between px-4">
+                  <Image src="/logo-wit.png" alt="WarmeLeads" width={110} height={33} className="h-6 w-auto" />
+                  <button onClick={() => setOpen(false)} className="text-white/50"><XMarkIcon className="h-5 w-5" /></button>
+                </div>
+                <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
+                  {NAV.map((item) => {
+                    const active = item.href === '/admin' ? pathname === '/admin' : pathname.startsWith(item.href);
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        onClick={() => setOpen(false)}
+                        className={`flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium transition ${
+                          active ? 'bg-brand-purple/20 text-white' : 'text-white/50 hover:text-white/80'
+                        }`}
+                      >
+                        <item.icon className={`h-5 w-5 ${active ? 'text-brand-purple' : 'text-white/40'}`} />
+                        {item.label}
+                        {'badge' in item && item.badge && pendingReclamations > 0 && (
+                          <span className="ml-auto flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white">
+                            {pendingReclamations}
+                          </span>
+                        )}
+                        {item.href === '/admin/live' && (
+                          <span className="relative ml-auto flex h-2 w-2">
+                            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
+                            <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
+                          </span>
+                        )}
+                      </Link>
+                    );
+                  })}
+                </nav>
+                <div className="shrink-0 border-t border-white/[0.06] px-4 py-4">
+                  <p className="mb-3 truncate text-sm text-white/40">{user.name}</p>
+                  <button onClick={onLogout} className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-sm text-white/40 transition hover:bg-white/[0.06] hover:text-red-400">
+                    <ArrowRightOnRectangleIcon className="h-4 w-4" /> Uitloggen
+                  </button>
+                </div>
               </div>
             </motion.div>
           </>
