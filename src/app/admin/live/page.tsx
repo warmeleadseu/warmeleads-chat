@@ -498,6 +498,7 @@ export default function LiveDashboard() {
   const [celebrationVideo, setCelebrationVideo] = useState<PaidBatch | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const celebrationIframeRef = useRef<HTMLIFrameElement>(null);
   const prevBatchPcts = useRef<Record<string, number>>({});
   const seenPaidIds = useRef<Set<string>>(new Set());
 
@@ -542,9 +543,6 @@ export default function LiveDashboard() {
               const withVideo = newPaid.find((pb: PaidBatch) => pb.celebrationVideoUrl);
               if (withVideo) {
                 setCelebrationVideo(withVideo);
-                const clipLen = withVideo.videoEnd && withVideo.videoStart != null ? (withVideo.videoEnd - withVideo.videoStart) * 1000 : 25000;
-                const timeout = Math.min(Math.max(clipLen + 3000, 8000), 120000);
-                setTimeout(() => setCelebrationVideo(null), timeout);
               }
             }
             for (const pb of d.recentPaidBatches) seenPaidIds.current.add(pb.id);
@@ -628,9 +626,6 @@ export default function LiveDashboard() {
             if (canvasRef.current) fireConfetti(canvasRef.current);
             if (vid.celebrationVideoUrl) {
               setCelebrationVideo(vid);
-              const clipLen = vid.videoEnd && vid.videoStart != null ? (vid.videoEnd - vid.videoStart) * 1000 : 25000;
-              const timeout = Math.min(Math.max(clipLen + 3000, 8000), 120000);
-              setTimeout(() => setCelebrationVideo(null), timeout);
             }
             break;
           }
@@ -638,6 +633,42 @@ export default function LiveDashboard() {
       }
     } catch { /* silent */ }
   }, []);
+
+  // Auto-close celebration video when YouTube reports playback ended
+  useEffect(() => {
+    if (!celebrationVideo?.celebrationVideoUrl) return;
+
+    const handleMessage = (e: MessageEvent) => {
+      if (!e.origin.includes('youtube.com')) return;
+      try {
+        const data = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
+        if (data.event === 'onStateChange' && data.info === 0) {
+          setTimeout(() => setCelebrationVideo(null), 1500);
+        }
+      } catch { /* not a YouTube message */ }
+    };
+
+    window.addEventListener('message', handleMessage);
+
+    // Tell YouTube iframe we want state change events
+    const sendListening = setInterval(() => {
+      if (celebrationIframeRef.current?.contentWindow) {
+        celebrationIframeRef.current.contentWindow.postMessage(
+          JSON.stringify({ event: 'listening', id: 1 }),
+          'https://www.youtube.com'
+        );
+      }
+    }, 800);
+
+    // Safety fallback: close after 3 minutes max if YouTube messaging fails
+    const safety = setTimeout(() => setCelebrationVideo(null), 180000);
+
+    return () => {
+      window.removeEventListener('message', handleMessage);
+      clearInterval(sendListening);
+      clearTimeout(safety);
+    };
+  }, [celebrationVideo]);
 
   useEffect(() => { fetchData(); fetchAMTargets(); fetchTestEvents(); }, [fetchData, fetchAMTargets, fetchTestEvents]);
   useEffect(() => {
@@ -780,7 +811,8 @@ export default function LiveDashboard() {
               >
                 <div className="relative w-full" style={{ paddingBottom: '56.25%' }}>
                   <iframe
-                    src={`https://www.youtube.com/embed/${extractYouTubeId(celebrationVideo.celebrationVideoUrl!)}?autoplay=1&start=${celebrationVideo.videoStart || 0}${celebrationVideo.videoEnd ? `&end=${celebrationVideo.videoEnd}` : ''}`}
+                    ref={celebrationIframeRef}
+                    src={`https://www.youtube.com/embed/${extractYouTubeId(celebrationVideo.celebrationVideoUrl!)}?autoplay=1&enablejsapi=1&start=${celebrationVideo.videoStart || 0}${celebrationVideo.videoEnd ? `&end=${celebrationVideo.videoEnd}` : ''}`}
                     className="absolute inset-0 h-full w-full"
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                     allowFullScreen
