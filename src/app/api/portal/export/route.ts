@@ -20,24 +20,42 @@ const COLUMN_HEADERS = [
 async function getCustomerLeadData(
   supabase: ReturnType<typeof createServerClient>,
   customerId: string,
+  leadSource: 'all' | 'fresh' | 'bulk' = 'all',
 ): Promise<{ ids: string[]; assignedAtMap: Record<string, string> }> {
-  const { data: directLeads } = await supabase
-    .from('leads')
-    .select('id')
-    .eq('customer_id', customerId);
-
-  const { data: assignedLeads } = await supabase
-    .from('lead_assignments')
-    .select('lead_id, assigned_at')
-    .eq('customer_id', customerId);
-
   const ids = new Set<string>();
   const assignedAtMap: Record<string, string> = {};
-  (directLeads || []).forEach(l => ids.add(l.id));
-  (assignedLeads || []).forEach(a => {
-    ids.add(a.lead_id);
-    assignedAtMap[a.lead_id] = a.assigned_at;
-  });
+
+  if (leadSource !== 'bulk') {
+    const { data: directLeads } = await supabase
+      .from('leads')
+      .select('id')
+      .eq('customer_id', customerId);
+    (directLeads || []).forEach(l => ids.add(l.id));
+  }
+
+  if (leadSource === 'bulk') {
+    const { data: bulkLeads } = await supabase
+      .from('lead_assignments')
+      .select('lead_id, assigned_at')
+      .eq('customer_id', customerId)
+      .eq('source', 'bulk_export');
+    (bulkLeads || []).forEach(a => {
+      ids.add(a.lead_id);
+      assignedAtMap[a.lead_id] = a.assigned_at;
+    });
+  } else {
+    let assignQuery = supabase
+      .from('lead_assignments')
+      .select('lead_id, assigned_at')
+      .eq('customer_id', customerId);
+    if (leadSource === 'fresh') assignQuery = assignQuery.neq('source', 'bulk_export');
+    const { data: assignedLeads } = await assignQuery;
+    (assignedLeads || []).forEach(a => {
+      ids.add(a.lead_id);
+      assignedAtMap[a.lead_id] = a.assigned_at;
+    });
+  }
+
   return { ids: Array.from(ids), assignedAtMap };
 }
 
@@ -78,8 +96,9 @@ export async function GET(request: NextRequest) {
   const branch = url.searchParams.get('branch');
   const from = url.searchParams.get('from');
   const to = url.searchParams.get('to');
+  const leadSource = (url.searchParams.get('lead_source') || 'all') as 'all' | 'fresh' | 'bulk';
 
-  const { ids: leadIds, assignedAtMap } = await getCustomerLeadData(supabase, customer.id);
+  const { ids: leadIds, assignedAtMap } = await getCustomerLeadData(supabase, customer.id, leadSource);
   if (leadIds.length === 0) {
     return format === 'xlsx'
       ? buildXlsx([], {})

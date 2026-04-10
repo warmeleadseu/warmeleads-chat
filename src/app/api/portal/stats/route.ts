@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
   if (allIds.length === 0) {
     return NextResponse.json({
       totalLeads: 0, newThisWeek: 0, contacted: 0, sold: 0,
-      statusBreakdown: {}, branchBreakdown: {},
+      bulkLeads: 0, statusBreakdown: {}, branchBreakdown: {},
     });
   }
 

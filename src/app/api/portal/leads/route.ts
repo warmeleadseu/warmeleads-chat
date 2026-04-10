@@ -18,7 +18,17 @@ async function getCustomerLeadData(
     (directLeads || []).forEach(l => ids.add(l.id));
   }
 
-  if (leadSource === 'all' || leadSource === 'fresh') {
+  if (leadSource === 'bulk') {
+    const { data: bulkLeads } = await supabase
+      .from('lead_assignments')
+      .select('lead_id, assigned_at')
+      .eq('customer_id', customerId)
+      .eq('source', 'bulk_export');
+    (bulkLeads || []).forEach(a => {
+      ids.add(a.lead_id);
+      assignedAtMap[a.lead_id] = a.assigned_at;
+    });
+  } else {
     let assignQuery = supabase
       .from('lead_assignments')
       .select('lead_id, assigned_at')
@@ -29,21 +39,6 @@ async function getCustomerLeadData(
       ids.add(a.lead_id);
       assignedAtMap[a.lead_id] = a.assigned_at;
     });
-  }
-
-  if (leadSource === 'bulk' || leadSource === 'all') {
-    let bulkQuery = supabase
-      .from('lead_assignments')
-      .select('lead_id, assigned_at')
-      .eq('customer_id', customerId)
-      .eq('source', 'bulk_export');
-    const { data: bulkLeads } = await bulkQuery;
-    if (leadSource === 'bulk') {
-      (bulkLeads || []).forEach(a => {
-        ids.add(a.lead_id);
-        assignedAtMap[a.lead_id] = a.assigned_at;
-      });
-    }
   }
 
   const { count: bulkCount } = await supabase

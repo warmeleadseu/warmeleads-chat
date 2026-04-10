@@ -417,6 +417,7 @@ export default function PortalPage() {
       if (branchFilter !== 'all') params.set('branch', branchFilter);
       if (dateFrom) params.set('from', dateFrom);
       if (dateTo) params.set('to', dateTo);
+      if (leadSource !== 'all') params.set('lead_source', leadSource);
       const res = await portalFetch(`/api/portal/export?${params}`);
       if (!res.ok) throw new Error();
       const blob = await res.blob();
@@ -909,9 +910,9 @@ export default function PortalPage() {
         <div className="rounded-xl bg-slate-100 p-1">
           <div className="relative flex">
             {([
-              { key: 'all' as const, label: 'Alle leads', count: total, dot: null },
-              { key: 'fresh' as const, label: 'Verse leads', count: leadSource === 'fresh' ? total : (stats.totalLeads - (stats.bulkLeads || 0)), dot: 'bg-emerald-500' },
-              { key: 'bulk' as const, label: 'Bulk leads', count: leadSource === 'bulk' ? total : (stats.bulkLeads || bulkCount), dot: 'bg-indigo-500' },
+              { key: 'all' as const, label: 'Alle leads', count: stats.totalLeads, dot: null },
+              { key: 'fresh' as const, label: 'Verse leads', count: stats.totalLeads - (stats.bulkLeads || 0), dot: 'bg-emerald-500' },
+              { key: 'bulk' as const, label: 'Bulk leads', count: stats.bulkLeads || 0, dot: 'bg-indigo-500' },
             ]).map(tab => (
               <button
                 key={tab.key}
