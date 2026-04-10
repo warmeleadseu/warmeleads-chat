@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 
-const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://warmeleads.eu';
+const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.warmeleads.eu';
 const LOGO = `${BASE_URL}/warmeleads-logo-2026.png`;
 const YEAR = new Date().getFullYear();
 

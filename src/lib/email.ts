@@ -9,7 +9,7 @@ function getResend(): Resend | null {
 }
 
 const FROM = 'WarmeLeads <noreply@warmeleads.eu>';
-const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://warmeleads.eu';
+const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.warmeleads.eu';
 
 export interface EmailLogOptions {
   type: string;

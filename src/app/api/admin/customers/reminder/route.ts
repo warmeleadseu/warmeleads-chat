@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Portaal is niet actief voor deze klant' }, { status: 400 });
     }
 
-    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://warmeleads.eu';
+    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.warmeleads.eu';
     const portalUrl = `${baseUrl}/portal`;
     const logoUrl = `${baseUrl}/warmeleads-logo-2026.png`;
     const greeting = customer.contact_person || customer.name;

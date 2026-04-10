@@ -6,7 +6,7 @@ import { sendOrderConfirmationEmail, sendEmail } from '@/lib/email';
 import { sendPushToCustomer } from '@/lib/pushNotification';
 import { createInvoice, markInvoicePaid, sendNewBatchAdminEmail } from '@/lib/invoice';
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://warmeleads.eu';
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.warmeleads.eu';
 
 function errorEmailHtml(title: string, details: string): string {
   const logoUrl = `${SITE_URL}/warmeleads-logo-2026.png`;

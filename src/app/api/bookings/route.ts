@@ -191,7 +191,7 @@ export async function POST(req: Request) {
     const dateObj = new Date(date + 'T00:00:00');
     const fmtDate = dateObj.toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://warmeleads.eu';
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.warmeleads.eu';
     const logoUrl = `${siteUrl}/warmeleads-logo-2026.png`;
     const year = new Date().getFullYear();
 

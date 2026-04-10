@@ -2,7 +2,7 @@ import { createServerClient } from '@/lib/supabase';
 import { sendEmail } from '@/lib/email';
 import type { InvoiceLineItem } from '@/lib/invoicePdf';
 
-const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://warmeleads.eu';
+const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.warmeleads.eu';
 
 interface CreateInvoiceParams {
   customer_id: string;
