@@ -2,9 +2,9 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { checkBatchMilestones } from './batchNotifications';
 
 /**
- * Count actual lead_assignments for a batch and sync `leads_delivered`.
- * Automatically marks batch as completed or re-activates it based on count.
- * Triggers milestone notifications (80%, 100%) when thresholds are crossed.
+ * Count actual lead_assignments for a batch, add external offset,
+ * and sync `leads_delivered`. Automatically marks batch as completed
+ * or re-activates it based on count.
  */
 export async function syncBatchDelivered(
   supabase: SupabaseClient,
@@ -15,15 +15,18 @@ export async function syncBatchDelivered(
     .select('id', { count: 'exact', head: true })
     .eq('batch_id', batchId);
 
-  const delivered = count || 0;
+  const assignmentCount = count || 0;
 
   const { data: batch } = await supabase
     .from('customer_batches')
-    .select('batch_size, status')
+    .select('batch_size, status, leads_delivered_external')
     .eq('id', batchId)
     .single();
 
-  if (!batch) return delivered;
+  if (!batch) return assignmentCount;
+
+  const external = batch.leads_delivered_external || 0;
+  const delivered = assignmentCount + external;
 
   const updates: Record<string, unknown> = { leads_delivered: delivered };
 

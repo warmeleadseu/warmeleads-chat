@@ -157,22 +157,31 @@ export async function PUT(request: NextRequest) {
     if (ppl) updates.total_price = ppl * Math.max(0, paidLeads);
   }
 
-  // Validate leads_delivered
+  // Validate leads_delivered and compute external offset
   if (updates.leads_delivered !== undefined) {
     const delivered = Number(updates.leads_delivered);
     if (isNaN(delivered) || delivered < 0) {
       return NextResponse.json({ error: 'Geleverde leads moet 0 of hoger zijn' }, { status: 400 });
     }
-    updates.leads_delivered = delivered;
+
+    const { count: assignmentCount } = await supabase
+      .from('lead_assignments')
+      .select('id', { count: 'exact', head: true })
+      .eq('batch_id', id);
+
+    const systemCount = assignmentCount || 0;
+    const external = Math.max(0, delivered - systemCount);
+
+    updates.leads_delivered = systemCount + external;
+    updates.leads_delivered_external = external;
 
     const batchSize = updates.batch_size ?? existing.batch_size;
 
-    // Auto-update status based on leads_delivered vs batch_size
     if (!updates.status) {
-      if (delivered >= batchSize && existing.status !== 'completed') {
+      if (updates.leads_delivered >= batchSize && existing.status !== 'completed') {
         updates.status = 'completed';
         updates.completed_at = new Date().toISOString();
-      } else if (delivered < batchSize && existing.status === 'completed') {
+      } else if (updates.leads_delivered < batchSize && existing.status === 'completed') {
         updates.status = 'active';
         updates.completed_at = null;
       }
@@ -181,9 +190,10 @@ export async function PUT(request: NextRequest) {
 
   // Only send columns that exist in the table
   const allowedFields = [
-    'batch_size', 'leads_delivered', 'is_paid', 'price_per_lead', 'total_price',
-    'leads_per_day', 'leads_per_week', 'notes', 'lead_filters', 'status',
-    'completed_at', 'lookback_days', 'compensations', 'starts_at',
+    'batch_size', 'leads_delivered', 'leads_delivered_external', 'is_paid',
+    'price_per_lead', 'total_price', 'leads_per_day', 'leads_per_week',
+    'notes', 'lead_filters', 'status', 'completed_at', 'lookback_days',
+    'compensations', 'starts_at',
   ];
   const safeUpdates: Record<string, unknown> = {};
   for (const key of allowedFields) {

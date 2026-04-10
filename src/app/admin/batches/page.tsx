@@ -28,7 +28,7 @@ interface Batch {
   id: string; customer_id: string; branch: string; batch_size: number;
   price_per_lead: number | null; total_price: number | null;
   leads_per_week: number | null; leads_per_day: number | null;
-  leads_delivered: number; status: string;
+  leads_delivered: number; leads_delivered_external: number; status: string;
   is_paid: boolean; lookback_days: number | null; notes: string | null; lead_filters: LeadFilter[];
   compensations: Compensation[];
   starts_at: string | null;
@@ -663,7 +663,15 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
                 className={`w-full rounded-lg border px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50 ${
                   deliveredChanged ? 'border-amber-300 bg-amber-50/50 ring-1 ring-amber-200' : 'border-slate-200'
                 }`} />
-              <p className="mt-1 text-[10px] text-slate-400">Pas aan voor extern geleverde leads (mail/Excel)</p>
+              {batch.leads_delivered_external > 0 ? (
+                <p className="mt-1 text-[10px] text-slate-500">
+                  <span className="font-medium">{batch.leads_delivered - batch.leads_delivered_external}</span> via systeem
+                  {' + '}
+                  <span className="font-medium text-amber-600">{batch.leads_delivered_external}</span> extern
+                </p>
+              ) : (
+                <p className="mt-1 text-[10px] text-slate-400">Pas aan voor extern geleverde leads (mail/Excel)</p>
+              )}
             </div>
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-500">Batch grootte</label>

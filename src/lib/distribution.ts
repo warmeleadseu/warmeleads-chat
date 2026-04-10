@@ -130,7 +130,7 @@ export async function distributeLead(lead: LeadForDistribution): Promise<Distrib
 
   const { data: activeBatches } = await supabase
     .from('customer_batches')
-    .select('id, customer_id, branch, batch_size, leads_delivered, leads_per_week, leads_per_day, lead_filters, created_at, is_paid, starts_at, customers!inner(id, is_active, portal_active)')
+    .select('id, customer_id, branch, batch_size, leads_delivered, leads_delivered_external, leads_per_week, leads_per_day, lead_filters, created_at, is_paid, starts_at, customers!inner(id, is_active, portal_active)')
     .eq('branch', lead.branch)
     .eq('status', 'active')
     .eq('customers.is_active', true)
@@ -302,13 +302,14 @@ export async function distributeLead(lead: LeadForDistribution): Promise<Distrib
   const toAssign = matches.slice(0, 1);
 
   for (const m of toAssign) {
-    // Fresh count to prevent race condition overdelivery
+    // Fresh count to prevent race condition overdelivery (include external offset)
     const { count: currentCount } = await supabase
       .from('lead_assignments')
       .select('id', { count: 'exact', head: true })
       .eq('batch_id', m.batch_id);
     const batchForCheck = activeBatches.find(b => b.id === m.batch_id);
-    if (batchForCheck && (currentCount || 0) >= batchForCheck.batch_size) continue;
+    const externalOffset = (batchForCheck as any)?.leads_delivered_external || 0;
+    if (batchForCheck && (currentCount || 0) + externalOffset >= batchForCheck.batch_size) continue;
 
     const { error } = await supabase
       .from('lead_assignments')
@@ -376,7 +377,7 @@ export async function backfillBatch(batchId: string, lookbackDays: number): Prom
 
   const { data: batch } = await supabase
     .from('customer_batches')
-    .select('id, customer_id, branch, batch_size, leads_delivered, leads_per_week, leads_per_day, lead_filters, is_paid, starts_at, customers!inner(id, is_active)')
+    .select('id, customer_id, branch, batch_size, leads_delivered, leads_delivered_external, leads_per_week, leads_per_day, lead_filters, is_paid, starts_at, customers!inner(id, is_active)')
     .eq('id', batchId)
     .eq('status', 'active')
     .single();
@@ -448,13 +449,15 @@ export async function backfillBatch(batchId: string, lookbackDays: number): Prom
   const filters: LeadFilter[] = Array.isArray(batch.lead_filters) ? batch.lead_filters : [];
   let assigned = 0;
 
+  const backfillExternal = (batch as any).leads_delivered_external || 0;
+
   for (const lead of leads) {
-    // Fresh count each iteration to prevent overdelivery
+    // Fresh count each iteration to prevent overdelivery (include external offset)
     const { count: currentCount } = await supabase
       .from('lead_assignments')
       .select('id', { count: 'exact', head: true })
       .eq('batch_id', batch.id);
-    if ((currentCount || 0) >= batch.batch_size) break;
+    if ((currentCount || 0) + backfillExternal >= batch.batch_size) break;
 
     if (alreadyAssigned.has(lead.id)) continue;
     if (excludedLeadIds.has(lead.id)) continue;
