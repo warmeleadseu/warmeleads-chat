@@ -117,6 +117,7 @@ interface Stats {
   newThisWeek: number;
   contacted: number;
   sold: number;
+  bulkLeads?: number;
   statusBreakdown?: Record<string, number>;
   branchBreakdown?: Record<string, number>;
 }
@@ -219,6 +220,8 @@ export default function PortalPage() {
   const [dateTo, setDateTo] = useState('');
   const [sort, setSort] = useState('created_at');
   const [order, setOrder] = useState<'asc' | 'desc'>('desc');
+  const [leadSource, setLeadSource] = useState<'all' | 'fresh' | 'bulk'>('all');
+  const [bulkCount, setBulkCount] = useState(0);
 
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [showFilters, setShowFilters] = useState(false);
@@ -273,6 +276,7 @@ export default function PortalPage() {
     if (search) params.set('search', search);
     if (dateFrom) params.set('from', dateFrom);
     if (dateTo) params.set('to', dateTo);
+    if (leadSource !== 'all') params.set('lead_source', leadSource);
 
     const res = await portalFetch(`/api/portal/leads?${params}`);
     if (res.ok) {
@@ -280,9 +284,10 @@ export default function PortalPage() {
       setLeads(data.leads || []);
       setTotal(data.total || 0);
       setTotalPages(data.totalPages || 1);
+      if (data.bulkCount !== undefined) setBulkCount(data.bulkCount);
     }
     setLoading(false);
-  }, [page, sort, order, statusFilter, branchFilter, search, dateFrom, dateTo]);
+  }, [page, sort, order, statusFilter, branchFilter, search, dateFrom, dateTo, leadSource]);
 
   const fetchBranches = useCallback(async () => {
     const res = await portalFetch('/api/portal/branches');
@@ -898,6 +903,44 @@ export default function PortalPage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Lead source tabs */}
+      {(bulkCount > 0 || (stats.bulkLeads && stats.bulkLeads > 0)) && (
+        <div className="rounded-xl bg-slate-100 p-1">
+          <div className="relative flex">
+            {([
+              { key: 'all' as const, label: 'Alle leads', count: total, dot: null },
+              { key: 'fresh' as const, label: 'Verse leads', count: leadSource === 'fresh' ? total : (stats.totalLeads - (stats.bulkLeads || 0)), dot: 'bg-emerald-500' },
+              { key: 'bulk' as const, label: 'Bulk leads', count: leadSource === 'bulk' ? total : (stats.bulkLeads || bulkCount), dot: 'bg-indigo-500' },
+            ]).map(tab => (
+              <button
+                key={tab.key}
+                onClick={() => { setLeadSource(tab.key); setPage(1); }}
+                className={`relative z-10 flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                  leadSource === tab.key ? 'text-slate-900' : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                {tab.dot && <span className={`h-2 w-2 shrink-0 rounded-full ${tab.dot}`} />}
+                <span className="hidden sm:inline">{tab.label}</span>
+                <span className="sm:hidden">{tab.key === 'all' ? 'Alle' : tab.key === 'fresh' ? 'Vers' : 'Bulk'}</span>
+                <span className={`rounded-full px-1.5 py-0.5 text-[11px] tabular-nums ${
+                  leadSource === tab.key ? 'bg-slate-200 text-slate-700' : 'bg-transparent text-slate-400'
+                }`}>
+                  {tab.count.toLocaleString('nl-NL')}
+                </span>
+                {leadSource === tab.key && (
+                  <motion.div
+                    layoutId="leadSourcePill"
+                    className="absolute inset-0 rounded-lg bg-white shadow-sm"
+                    style={{ zIndex: -1 }}
+                    transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                  />
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Results count */}
       <p className="text-xs text-slate-500">

@@ -186,6 +186,7 @@ export async function POST(request: NextRequest) {
     const assignments = leadIds.map(leadId => ({
       lead_id: leadId,
       customer_id: custId,
+      source: 'bulk_export' as const,
       ...(activeBatch ? { batch_id: activeBatch.id } : {}),
     }));
 
@@ -194,7 +195,7 @@ export async function POST(request: NextRequest) {
       const chunk = assignments.slice(i, i + CHUNK);
       await supabase
         .from('lead_assignments')
-        .upsert(chunk, { onConflict: 'lead_id,customer_id' });
+        .upsert(chunk, { onConflict: 'lead_id,customer_id', ignoreDuplicates: true });
     }
   }
 

@@ -2,25 +2,57 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyCustomer, portalUnauthorized } from '@/lib/portalAuth';
 import { createServerClient } from '@/lib/supabase';
 
-async function getCustomerLeadData(supabase: ReturnType<typeof createServerClient>, customerId: string): Promise<{ ids: string[]; assignedAtMap: Record<string, string> }> {
-  const { data: directLeads } = await supabase
-    .from('leads')
-    .select('id')
-    .eq('customer_id', customerId);
-
-  const { data: assignedLeads } = await supabase
-    .from('lead_assignments')
-    .select('lead_id, assigned_at')
-    .eq('customer_id', customerId);
-
+async function getCustomerLeadData(
+  supabase: ReturnType<typeof createServerClient>,
+  customerId: string,
+  leadSource: 'all' | 'fresh' | 'bulk' = 'all',
+): Promise<{ ids: string[]; assignedAtMap: Record<string, string>; bulkCount: number }> {
   const ids = new Set<string>();
   const assignedAtMap: Record<string, string> = {};
-  (directLeads || []).forEach(l => ids.add(l.id));
-  (assignedLeads || []).forEach(a => {
-    ids.add(a.lead_id);
-    assignedAtMap[a.lead_id] = a.assigned_at;
-  });
-  return { ids: Array.from(ids), assignedAtMap };
+
+  if (leadSource !== 'bulk') {
+    const { data: directLeads } = await supabase
+      .from('leads')
+      .select('id')
+      .eq('customer_id', customerId);
+    (directLeads || []).forEach(l => ids.add(l.id));
+  }
+
+  if (leadSource === 'all' || leadSource === 'fresh') {
+    let assignQuery = supabase
+      .from('lead_assignments')
+      .select('lead_id, assigned_at')
+      .eq('customer_id', customerId);
+    if (leadSource === 'fresh') assignQuery = assignQuery.neq('source', 'bulk_export');
+    const { data: assignedLeads } = await assignQuery;
+    (assignedLeads || []).forEach(a => {
+      ids.add(a.lead_id);
+      assignedAtMap[a.lead_id] = a.assigned_at;
+    });
+  }
+
+  if (leadSource === 'bulk' || leadSource === 'all') {
+    let bulkQuery = supabase
+      .from('lead_assignments')
+      .select('lead_id, assigned_at')
+      .eq('customer_id', customerId)
+      .eq('source', 'bulk_export');
+    const { data: bulkLeads } = await bulkQuery;
+    if (leadSource === 'bulk') {
+      (bulkLeads || []).forEach(a => {
+        ids.add(a.lead_id);
+        assignedAtMap[a.lead_id] = a.assigned_at;
+      });
+    }
+  }
+
+  const { count: bulkCount } = await supabase
+    .from('lead_assignments')
+    .select('id', { count: 'exact', head: true })
+    .eq('customer_id', customerId)
+    .eq('source', 'bulk_export');
+
+  return { ids: Array.from(ids), assignedAtMap, bulkCount: bulkCount || 0 };
 }
 
 export async function GET(request: NextRequest) {
@@ -39,10 +71,11 @@ export async function GET(request: NextRequest) {
   const page = parseInt(url.searchParams.get('page') || '1');
   const limit = parseInt(url.searchParams.get('limit') || '25');
   const branch = url.searchParams.get('branch');
+  const leadSource = (url.searchParams.get('lead_source') || 'all') as 'all' | 'fresh' | 'bulk';
 
-  const { ids: leadIds, assignedAtMap } = await getCustomerLeadData(supabase, customer.id);
+  const { ids: leadIds, assignedAtMap, bulkCount } = await getCustomerLeadData(supabase, customer.id, leadSource);
   if (leadIds.length === 0) {
-    return NextResponse.json({ leads: [], total: 0, page, totalPages: 0 });
+    return NextResponse.json({ leads: [], total: 0, page, totalPages: 0, bulkCount });
   }
 
   const allowedSorts = ['created_at', 'naam_klant', 'email', 'status', 'wervingsdatum', 'plaatsnaam', 'provincie', 'branch'];
@@ -80,6 +113,7 @@ export async function GET(request: NextRequest) {
     total: count || 0,
     page,
     totalPages: Math.ceil((count || 0) / limit),
+    bulkCount,
   });
 }
 
@@ -96,7 +130,7 @@ export async function PUT(request: NextRequest) {
 
     const supabase = createServerClient();
 
-    const { ids: leadIds } = await getCustomerLeadData(supabase, customer.id);
+    const { ids: leadIds } = await getCustomerLeadData(supabase, customer.id, 'all');
     if (!leadIds.includes(id)) {
       return NextResponse.json({ error: 'Lead niet gevonden' }, { status: 404 });
     }

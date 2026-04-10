@@ -52,11 +52,18 @@ export async function GET(request: NextRequest) {
   const branchCounts: Record<string, number> = {};
   leads.forEach(l => { branchCounts[l.branch] = (branchCounts[l.branch] || 0) + 1; });
 
+  const { count: bulkLeads } = await supabase
+    .from('lead_assignments')
+    .select('id', { count: 'exact', head: true })
+    .eq('customer_id', customer.id)
+    .eq('source', 'bulk_export');
+
   return NextResponse.json({
     totalLeads,
     newThisWeek,
     contacted,
     sold,
+    bulkLeads: bulkLeads || 0,
     statusBreakdown: statusCounts,
     branchBreakdown: branchCounts,
   });
