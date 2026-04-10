@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
   const supabase = createServerClient();
   const { data, error } = await supabase
     .from('admin_users')
-    .select('id, email, name, role, is_active, last_login, created_at, phone, title')
+    .select('id, email, name, role, is_active, last_login, created_at, phone, title, celebration_video_url')
     .order('created_at', { ascending: true });
 
   if (error) {
