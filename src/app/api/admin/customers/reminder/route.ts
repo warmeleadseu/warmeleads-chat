@@ -84,6 +84,7 @@ export async function POST(request: NextRequest) {
       customer.email,
       'Je WarmeLeads portaal staat klaar!',
       html,
+      { type: 'portal_reminder', toName: customer.contact_person || customer.name, metadata: { customer_id: customer.id } },
     );
 
     if (!sent) {

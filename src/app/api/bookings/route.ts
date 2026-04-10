@@ -232,8 +232,8 @@ export async function POST(req: Request) {
   </div>
 </div>`;
 
-    await sendEmail(email, `Bevestiging strategiegesprek - ${fmtDate} om ${time}`, confirmHtml);
-    await sendEmail('info@warmeleads.eu', `Nieuw strategiegesprek: ${name} - ${fmtDate} om ${time}`, notifyHtml);
+    await sendEmail(email, `Bevestiging strategiegesprek - ${fmtDate} om ${time}`, confirmHtml, { type: 'booking_confirmation', toName: name, metadata: { date: fmtDate, time } });
+    await sendEmail('info@warmeleads.eu', `Nieuw strategiegesprek: ${name} - ${fmtDate} om ${time}`, notifyHtml, { type: 'booking_admin', metadata: { name, date: fmtDate, time } });
 
     return NextResponse.json({ success: true, booking: data });
   } catch (err: unknown) {

@@ -83,7 +83,8 @@ export async function POST(request: NextRequest) {
               `<p>Batch betaling is gelukt maar de factuur kon niet worden bijgewerkt.</p>
                <p><strong>Batch ID:</strong> ${claimed.id}</p>
                <p><strong>Klant:</strong> ${cust?.name || 'Onbekend'}</p>
-               <p><strong>Error:</strong> ${e?.message || String(e)}</p>`
+               <p><strong>Error:</strong> ${e?.message || String(e)}</p>`,
+              { type: 'mollie_error', metadata: { batch_id: claimed.id, error_type: 'invoice_update_failed' } },
             ).catch(() => {});
           });
         }
@@ -159,6 +160,7 @@ export async function POST(request: NextRequest) {
            <p><strong>Batch size:</strong> ${order.batch_size}</p>
            <p><strong>Error:</strong> ${batchError?.message || 'Unknown'}</p>
            <p>Maak de batch handmatig aan via de admin.</p>`,
+          { type: 'mollie_error', metadata: { order_id: orderId, error_type: 'batch_insert_failed' } },
         ).catch(() => {});
 
         return NextResponse.json({ ok: true });
@@ -212,7 +214,8 @@ export async function POST(request: NextRequest) {
           `<p>Bestelling is betaald maar de factuur kon niet worden aangemaakt.</p>
            <p><strong>Order ID:</strong> ${orderId}</p>
            <p><strong>Klant:</strong> ${customer?.name || 'Onbekend'}</p>
-           <p><strong>Error:</strong> ${e?.message || String(e)}</p>`
+           <p><strong>Error:</strong> ${e?.message || String(e)}</p>`,
+          { type: 'mollie_error', metadata: { order_id: orderId, error_type: 'invoice_create_failed' } },
         ).catch(() => {});
       });
 

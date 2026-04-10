@@ -1,4 +1,5 @@
 import { Resend } from 'resend';
+import { createServerClient } from '@/lib/supabase';
 
 let _resend: Resend | null = null;
 function getResend(): Resend | null {
@@ -9,6 +10,37 @@ function getResend(): Resend | null {
 
 const FROM = 'WarmeLeads <noreply@warmeleads.eu>';
 const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://warmeleads.eu';
+
+export interface EmailLogOptions {
+  type: string;
+  toName?: string;
+  metadata?: Record<string, unknown>;
+}
+
+async function logEmail(
+  to: string,
+  subject: string,
+  html: string,
+  status: 'sent' | 'failed',
+  options?: EmailLogOptions,
+  error?: string,
+) {
+  try {
+    const supabase = createServerClient();
+    await supabase.from('email_log').insert({
+      type: options?.type || 'unknown',
+      to_email: to,
+      to_name: options?.toName || null,
+      subject,
+      html,
+      status,
+      error: error || null,
+      metadata: options?.metadata || {},
+    });
+  } catch (e) {
+    console.error('[email-log] failed to log:', e);
+  }
+}
 
 interface Customer {
   id: string;
@@ -93,21 +125,26 @@ export async function sendEmail(
   to: string,
   subject: string,
   html: string,
+  logOptions?: EmailLogOptions,
 ): Promise<boolean> {
   try {
     const resend = getResend();
     if (!resend) {
       console.warn('[email] RESEND_API_KEY not configured, skipping send');
+      logEmail(to, subject, html, 'failed', logOptions, 'RESEND_API_KEY not configured').catch(() => {});
       return false;
     }
     const { error } = await resend.emails.send({ from: FROM, to, subject, html });
     if (error) {
       console.error('[email] send failed:', error);
+      logEmail(to, subject, html, 'failed', logOptions, String(error.message || error)).catch(() => {});
       return false;
     }
+    logEmail(to, subject, html, 'sent', logOptions).catch(() => {});
     return true;
   } catch (err) {
     console.error('[email] unexpected error:', err);
+    logEmail(to, subject, html, 'failed', logOptions, String(err)).catch(() => {});
     return false;
   }
 }
@@ -138,6 +175,7 @@ export async function sendLeadNotification(
     customer.email,
     `Nieuwe lead: ${lead.naam_klant}`,
     layout('Nieuwe Lead Ontvangen', content),
+    { type: 'lead_notification', toName: customer.contact_person || customer.name, metadata: { customer_id: customer.id, lead_name: lead.naam_klant, branch: lead.branch } },
   );
 }
 
@@ -164,6 +202,7 @@ export async function sendBatchCompletionNotification(
     adminEmail,
     `Batch voltooid: ${customerName} – ${batchInfo.branch}`,
     layout('Batch Voltooid', content),
+    { type: 'batch_completed_admin', metadata: { batch_id: batchInfo.id, customer_name: customerName } },
   );
 }
 
@@ -206,6 +245,7 @@ export async function sendWeeklyReport(
     adminEmail,
     `WarmeLeads weekrapport – week ${weekNr}`,
     layout(`Weekrapport – Week ${weekNr}`, content),
+    { type: 'weekly_report', metadata: { week: weekNr } },
   );
 }
 
@@ -250,6 +290,7 @@ export async function sendDailyLeadDigest(
     customer.email,
     `Dagelijkse leads – ${today}`,
     layout('Dagelijks Lead Overzicht', content),
+    { type: 'daily_digest', toName: customer.contact_person || customer.name, metadata: { customer_id: customer.id, lead_count: leads.length } },
   );
 }
 
@@ -329,6 +370,7 @@ export async function sendFeedbackDigest(
     adminEmail,
     `Feedback overzicht – ${today} (${feedbackItems.length} nieuwe)`,
     layout('Dagelijks Feedback Overzicht', content),
+    { type: 'feedback_digest', metadata: { count: feedbackItems.length } },
   );
 }
 
@@ -373,10 +415,12 @@ export async function sendBatchMilestoneEmail(
       </a>
     </p>`;
 
+  const milestoneTypes: Record<string, string> = { '80pct': 'batch_80pct', completed: 'batch_completed', reminder: 'batch_reminder' };
   return sendEmail(
     customer.email,
     titles[milestone],
     layout(titles[milestone], content),
+    { type: milestoneTypes[milestone] || 'batch_milestone', toName: customer.contact_person || customer.name, metadata: { customer_id: customer.id, batch_id: batch.id, milestone } },
   );
 }
 
@@ -411,6 +455,7 @@ export async function sendOrderConfirmationEmail(
     customer.email,
     `Bevestiging: nieuwe batch ${branchLabel} (${order.batch_size} leads)`,
     layout('Bestelling Bevestigd', content),
+    { type: 'order_confirmation', toName: customer.contact_person || customer.name, metadata: { customer_id: customer.id, branch: order.branch, batch_size: order.batch_size } },
   );
 }
 

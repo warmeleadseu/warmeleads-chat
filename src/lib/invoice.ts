@@ -180,10 +180,7 @@ function sendOpenInvoiceEmail(
       <a href="${portalUrl}" style="display:inline-block;background:linear-gradient(135deg,#FF6B35,#FF4757);color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">Bekijk factuur &amp; betaal &rarr;</a>
     </p>`;
 
-  return sendEmail(
-    customer.email,
-    `Nieuwe factuur ${invoice.invoice_number} - WarmeLeads`,
-    `<!DOCTYPE html>
+  const fullHtml = `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="margin:0;padding:0;background:#1A1A2E;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
@@ -204,7 +201,13 @@ function sendOpenInvoiceEmail(
 </td></tr>
 </table>
 </body>
-</html>`,
+</html>`;
+
+  return sendEmail(
+    customer.email,
+    `Nieuwe factuur ${invoice.invoice_number} - WarmeLeads`,
+    fullHtml,
+    { type: 'invoice_open', toName: customer.contact_person || customer.name, metadata: { invoice_id: invoice.id, invoice_number: invoice.invoice_number } },
   );
 }
 
@@ -232,10 +235,7 @@ function sendInvoiceEmail(
       <a href="${downloadUrl}" style="display:inline-block;background:linear-gradient(135deg,#FF6B35,#FF4757);color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">Factuur downloaden &rarr;</a>
     </p>`;
 
-  return sendEmail(
-    customer.email,
-    `Factuur ${invoice.invoice_number} - WarmeLeads`,
-    `<!DOCTYPE html>
+  const fullHtml = `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="margin:0;padding:0;background:#1A1A2E;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
@@ -256,7 +256,13 @@ function sendInvoiceEmail(
 </td></tr>
 </table>
 </body>
-</html>`,
+</html>`;
+
+  return sendEmail(
+    customer.email,
+    `Factuur ${invoice.invoice_number} - WarmeLeads`,
+    fullHtml,
+    { type: 'invoice_paid', toName: customer.contact_person || customer.name, metadata: { invoice_id: invoice.id, invoice_number: invoice.invoice_number } },
   );
 }
 
@@ -322,9 +328,10 @@ export async function sendNewBatchAdminEmail(params: {
       <a href="${process.env.NEXT_PUBLIC_SITE_URL || 'https://warmeleads.eu'}/admin/batches" style="display:inline-block;background:linear-gradient(135deg,#FF6B35,#FF4757);color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">Bekijk in admin &rarr;</a>
     </p>`;
 
+  const subject = `Nieuwe batch: ${params.customer_name} - ${params.batch_size} ${params.branch_name} leads`;
   return sendEmail(
     'info@warmeleads.eu',
-    `Nieuwe batch: ${params.customer_name} - ${params.batch_size} ${params.branch_name} leads`,
+    subject,
     `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
@@ -347,5 +354,6 @@ export async function sendNewBatchAdminEmail(params: {
 </table>
 </body>
 </html>`,
+    { type: 'new_batch_admin', metadata: { customer_name: params.customer_name, branch: params.branch_name, batch_size: params.batch_size, source: params.source } },
   );
 }

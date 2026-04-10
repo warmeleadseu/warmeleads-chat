@@ -69,7 +69,7 @@ export async function PATCH(request: NextRequest) {
   </div>
 </div>`;
 
-    await sendEmail(booking.email, `Afspraak geannuleerd - ${fmtDate}`, html);
+    await sendEmail(booking.email, `Afspraak geannuleerd - ${fmtDate}`, html, { type: 'booking_cancelled', toName: booking.name, metadata: { date: fmtDate } });
   }
 
   return NextResponse.json({ success: true });
