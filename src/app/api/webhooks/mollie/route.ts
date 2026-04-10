@@ -6,6 +6,56 @@ import { sendOrderConfirmationEmail, sendEmail } from '@/lib/email';
 import { sendPushToCustomer } from '@/lib/pushNotification';
 import { createInvoice, markInvoicePaid, sendNewBatchAdminEmail } from '@/lib/invoice';
 
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://warmeleads.eu';
+
+function errorEmailHtml(title: string, details: string): string {
+  const logoUrl = `${SITE_URL}/warmeleads-logo-2026.png`;
+  const year = new Date().getFullYear();
+  return `<!DOCTYPE html>
+<html lang="nl">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title></head>
+<body style="margin:0;padding:0;background-color:#f8fafc;font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased">
+  <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background-color:#f8fafc">
+    <tr><td align="center" style="padding:40px 16px">
+      <table width="600" cellpadding="0" cellspacing="0" role="presentation" style="max-width:600px;width:100%">
+        <tr><td style="height:4px;background:linear-gradient(135deg,#3B2F75 0%,#E74C8C 35%,#FF6B35 70%,#FF4757 100%);border-radius:12px 12px 0 0;font-size:0;line-height:0">&nbsp;</td></tr>
+        <tr><td style="background-color:#ffffff;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0">
+          <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+            <tr><td style="padding:32px 40px 24px;border-bottom:1px solid #f1f5f9">
+              <img src="${logoUrl}" alt="WarmeLeads" width="130" style="max-width:130px;height:auto;display:block" />
+            </td></tr>
+          </table>
+          <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+            <tr><td style="padding:32px 40px">
+              <table cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom:24px">
+                <tr><td style="background-color:#fef2f2;border:1px solid #fecaca;border-radius:20px;padding:6px 14px">
+                  <span style="color:#dc2626;font-size:12px;font-weight:700;letter-spacing:0.5px">&#9888; WAARSCHUWING</span>
+                </td></tr>
+              </table>
+              <h1 style="margin:0 0 24px;font-size:20px;font-weight:700;color:#0f172a;line-height:1.3">${title}</h1>
+              <div style="font-size:14px;color:#475569;line-height:1.7">${details}</div>
+              <table cellpadding="0" cellspacing="0" role="presentation" style="margin:28px 0 8px">
+                <tr><td style="border-radius:10px;background:linear-gradient(135deg,#FF6B35,#FF4757)">
+                  <a href="${SITE_URL}/admin" target="_blank" style="display:inline-block;padding:14px 32px;color:#ffffff;font-size:14px;font-weight:700;text-decoration:none;letter-spacing:0.3px">Naar admin &rarr;</a>
+                </td></tr>
+              </table>
+            </td></tr>
+          </table>
+        </td></tr>
+        <tr><td style="background-color:#f8fafc;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px;padding:24px 40px">
+          <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+            <tr><td style="border-top:1px solid #e2e8f0;padding-top:20px">
+              <p style="margin:0;font-size:12px;color:#cbd5e1;line-height:1.5">&copy; ${year} WarmeLeads &middot; <a href="${SITE_URL}" style="color:#cbd5e1;text-decoration:none">warmeleads.eu</a></p>
+            </td></tr>
+          </table>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
@@ -80,10 +130,13 @@ export async function POST(request: NextRequest) {
           }).catch(e => {
             console.error('[mollie-webhook] invoice handling failed:', e);
             sendEmail('info@warmeleads.eu', `[WAARSCHUWING] Factuur aanmaken/bijwerken mislukt`,
-              `<p>Batch betaling is gelukt maar de factuur kon niet worden bijgewerkt.</p>
-               <p><strong>Batch ID:</strong> ${claimed.id}</p>
-               <p><strong>Klant:</strong> ${cust?.name || 'Onbekend'}</p>
-               <p><strong>Error:</strong> ${e?.message || String(e)}</p>`,
+              errorEmailHtml('Factuur bijwerken mislukt', `
+                <p style="margin:0 0 16px">Batch betaling is gelukt maar de factuur kon niet worden bijgewerkt.</p>
+                <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;margin-bottom:16px">
+                  <tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9;width:120px">Batch ID</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;font-weight:600;border-bottom:1px solid #f1f5f9;font-family:monospace">${claimed.id}</td></tr>
+                  <tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">Klant</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;border-bottom:1px solid #f1f5f9">${cust?.name || 'Onbekend'}</td></tr>
+                  <tr><td style="padding:12px 20px;font-size:14px;color:#64748b">Error</td><td style="padding:12px 20px;font-size:14px;color:#dc2626;font-weight:600">${e?.message || String(e)}</td></tr>
+                </table>`),
               { type: 'mollie_error', metadata: { batch_id: claimed.id, error_type: 'invoice_update_failed' } },
             ).catch(() => {});
           });
@@ -153,13 +206,16 @@ export async function POST(request: NextRequest) {
         sendEmail(
           'info@warmeleads.eu',
           `[URGENT] Batch aanmaken mislukt voor order ${orderId}`,
-          `<p>De Mollie betaling is gelukt maar de batch kon niet worden aangemaakt in de database.</p>
-           <p><strong>Order ID:</strong> ${orderId}</p>
-           <p><strong>Klant ID:</strong> ${order.customer_id}</p>
-           <p><strong>Branche:</strong> ${order.branch}</p>
-           <p><strong>Batch size:</strong> ${order.batch_size}</p>
-           <p><strong>Error:</strong> ${batchError?.message || 'Unknown'}</p>
-           <p>Maak de batch handmatig aan via de admin.</p>`,
+          errorEmailHtml('Batch aanmaken mislukt', `
+            <p style="margin:0 0 16px">De Mollie betaling is gelukt maar de batch kon niet worden aangemaakt in de database.</p>
+            <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;margin-bottom:16px">
+              <tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9;width:120px">Order ID</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;font-weight:600;border-bottom:1px solid #f1f5f9;font-family:monospace">${orderId}</td></tr>
+              <tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">Klant ID</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;font-weight:600;border-bottom:1px solid #f1f5f9;font-family:monospace">${order.customer_id}</td></tr>
+              <tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">Branche</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;border-bottom:1px solid #f1f5f9">${order.branch}</td></tr>
+              <tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">Batch size</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;font-weight:600;border-bottom:1px solid #f1f5f9">${order.batch_size}</td></tr>
+              <tr><td style="padding:12px 20px;font-size:14px;color:#64748b">Error</td><td style="padding:12px 20px;font-size:14px;color:#dc2626;font-weight:600">${batchError?.message || 'Unknown'}</td></tr>
+            </table>
+            <p style="margin:0;font-size:14px;color:#64748b">Maak de batch handmatig aan via de admin.</p>`),
           { type: 'mollie_error', metadata: { order_id: orderId, error_type: 'batch_insert_failed' } },
         ).catch(() => {});
 
@@ -211,10 +267,13 @@ export async function POST(request: NextRequest) {
       }).catch(e => {
         console.error('[mollie-webhook] invoice creation failed:', e);
         sendEmail('info@warmeleads.eu', `[WAARSCHUWING] Factuur aanmaken mislukt`,
-          `<p>Bestelling is betaald maar de factuur kon niet worden aangemaakt.</p>
-           <p><strong>Order ID:</strong> ${orderId}</p>
-           <p><strong>Klant:</strong> ${customer?.name || 'Onbekend'}</p>
-           <p><strong>Error:</strong> ${e?.message || String(e)}</p>`,
+          errorEmailHtml('Factuur aanmaken mislukt', `
+            <p style="margin:0 0 16px">Bestelling is betaald maar de factuur kon niet worden aangemaakt.</p>
+            <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;margin-bottom:16px">
+              <tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9;width:120px">Order ID</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;font-weight:600;border-bottom:1px solid #f1f5f9;font-family:monospace">${orderId}</td></tr>
+              <tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">Klant</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;border-bottom:1px solid #f1f5f9">${customer?.name || 'Onbekend'}</td></tr>
+              <tr><td style="padding:12px 20px;font-size:14px;color:#64748b">Error</td><td style="padding:12px 20px;font-size:14px;color:#dc2626;font-weight:600">${e?.message || String(e)}</td></tr>
+            </table>`),
           { type: 'mollie_error', metadata: { order_id: orderId, error_type: 'invoice_create_failed' } },
         ).catch(() => {});
       });

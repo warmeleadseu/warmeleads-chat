@@ -191,46 +191,116 @@ export async function POST(req: Request) {
     const dateObj = new Date(date + 'T00:00:00');
     const fmtDate = dateObj.toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
-    const confirmHtml = `
-<div style="font-family:-apple-system,system-ui,sans-serif;max-width:600px;margin:0 auto">
-  <div style="background:linear-gradient(to bottom right,#1A1A2E,#3B2F75,#E74C8C);padding:32px;border-radius:12px 12px 0 0">
-    <h1 style="color:#fff;font-size:24px;margin:0">Afspraak bevestigd</h1>
-    <p style="color:rgba(255,255,255,.7);margin:8px 0 0;font-size:14px">Je strategiegesprek met WarmeLeads is gepland.</p>
-  </div>
-  <div style="background:#fff;padding:32px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px">
-    <div style="background:#f8f9fa;border-radius:8px;padding:20px;margin-bottom:24px">
-      <p style="margin:0 0 4px;font-size:13px;color:#64748b">Datum</p>
-      <p style="margin:0 0 16px;font-size:16px;font-weight:600;color:#1e293b">${fmtDate}</p>
-      <p style="margin:0 0 4px;font-size:13px;color:#64748b">Tijd</p>
-      <p style="margin:0;font-size:16px;font-weight:600;color:#1e293b">${time} uur</p>
-    </div>
-    <p style="font-size:14px;color:#475569;line-height:1.6">
-      We nemen op het afgesproken moment contact met je op. Heb je in de tussentijd vragen?
-      Neem gerust contact op via <a href="mailto:info@warmeleads.eu" style="color:#3B2F75">info@warmeleads.eu</a>
-      of bel <a href="tel:0850477067" style="color:#3B2F75">085 047 7067</a>.
-    </p>
-    <p style="margin-top:24px;font-size:13px;color:#94a3b8">Met vriendelijke groet,<br>Het WarmeLeads team</p>
-  </div>
-</div>`;
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://warmeleads.eu';
+    const logoUrl = `${siteUrl}/warmeleads-logo-2026.png`;
+    const year = new Date().getFullYear();
 
-    const notifyHtml = `
-<div style="font-family:-apple-system,system-ui,sans-serif;max-width:600px;margin:0 auto">
-  <div style="background:linear-gradient(to bottom right,#1A1A2E,#3B2F75,#E74C8C);padding:32px;border-radius:12px 12px 0 0">
-    <h1 style="color:#fff;font-size:24px;margin:0">Nieuw strategiegesprek ingepland</h1>
-  </div>
-  <div style="background:#fff;padding:32px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px">
-    <table style="width:100%;border-collapse:collapse">
-      <tr><td style="padding:8px 0;color:#64748b;font-size:13px;width:100px">Datum</td><td style="padding:8px 0;font-weight:600;color:#1e293b">${fmtDate}</td></tr>
-      <tr><td style="padding:8px 0;color:#64748b;font-size:13px">Tijd</td><td style="padding:8px 0;font-weight:600;color:#1e293b">${time} uur</td></tr>
-      <tr><td style="padding:8px 0;color:#64748b;font-size:13px">Naam</td><td style="padding:8px 0;font-weight:600;color:#1e293b">${name}</td></tr>
-      ${company ? `<tr><td style="padding:8px 0;color:#64748b;font-size:13px">Bedrijf</td><td style="padding:8px 0;font-weight:600;color:#1e293b">${company}</td></tr>` : ''}
-      <tr><td style="padding:8px 0;color:#64748b;font-size:13px">E-mail</td><td style="padding:8px 0;font-weight:600;color:#1e293b"><a href="mailto:${email}">${email}</a></td></tr>
-      <tr><td style="padding:8px 0;color:#64748b;font-size:13px">Telefoon</td><td style="padding:8px 0;font-weight:600;color:#1e293b"><a href="tel:${phone}">${phone}</a></td></tr>
-      ${branch ? `<tr><td style="padding:8px 0;color:#64748b;font-size:13px">Branche</td><td style="padding:8px 0;font-weight:600;color:#1e293b">${branch}</td></tr>` : ''}
-      ${message ? `<tr><td style="padding:8px 0;color:#64748b;font-size:13px">Toelichting</td><td style="padding:8px 0;color:#1e293b">${message}</td></tr>` : ''}
-    </table>
-  </div>
-</div>`;
+    const confirmHtml = `<!DOCTYPE html>
+<html lang="nl">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Afspraak bevestigd</title></head>
+<body style="margin:0;padding:0;background-color:#f8fafc;font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased">
+  <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background-color:#f8fafc">
+    <tr><td align="center" style="padding:40px 16px">
+      <table width="600" cellpadding="0" cellspacing="0" role="presentation" style="max-width:600px;width:100%">
+        <tr><td style="height:4px;background:linear-gradient(135deg,#3B2F75 0%,#E74C8C 35%,#FF6B35 70%,#FF4757 100%);border-radius:12px 12px 0 0;font-size:0;line-height:0">&nbsp;</td></tr>
+        <tr><td style="background-color:#ffffff;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0">
+          <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+            <tr><td style="padding:32px 40px 24px;border-bottom:1px solid #f1f5f9">
+              <img src="${logoUrl}" alt="WarmeLeads" width="130" style="max-width:130px;height:auto;display:block" />
+            </td></tr>
+          </table>
+          <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+            <tr><td style="padding:32px 40px">
+              <table cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom:24px">
+                <tr><td style="background-color:#ecfdf5;border:1px solid #d1fae5;border-radius:20px;padding:6px 14px">
+                  <span style="color:#059669;font-size:12px;font-weight:700;letter-spacing:0.5px">&#10003; BEVESTIGD</span>
+                </td></tr>
+              </table>
+              <h1 style="margin:0 0 8px;font-size:20px;font-weight:700;color:#0f172a;line-height:1.3">Afspraak bevestigd</h1>
+              <p style="margin:0 0 28px;font-size:15px;color:#475569;line-height:1.7">Je strategiegesprek met WarmeLeads is gepland.</p>
+              <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom:28px;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
+                <tr><td style="background-color:#f8fafc;padding:14px 20px;border-bottom:1px solid #e2e8f0">
+                  <span style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:1px">Afspraakgegevens</span>
+                </td></tr>
+                <tr><td style="padding:0">
+                  <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+                    <tr><td style="padding:14px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9;width:120px">Datum</td><td style="padding:14px 20px;font-size:14px;color:#0f172a;font-weight:600;border-bottom:1px solid #f1f5f9">${fmtDate}</td></tr>
+                    <tr><td style="padding:14px 20px;font-size:14px;color:#64748b">Tijd</td><td style="padding:14px 20px;font-size:14px;color:#0f172a;font-weight:600">${time} uur</td></tr>
+                  </table>
+                </td></tr>
+              </table>
+              <p style="margin:0 0 8px;font-size:14px;color:#64748b;line-height:1.7">We nemen op het afgesproken moment contact met je op. Heb je in de tussentijd vragen? Neem gerust contact op via <a href="mailto:info@warmeleads.eu" style="color:#3B2F75;text-decoration:none;font-weight:600">info@warmeleads.eu</a> of bel <a href="tel:0850477067" style="color:#3B2F75;text-decoration:none;font-weight:600">085 047 7067</a>.</p>
+              <p style="margin:24px 0 0;font-size:13px;color:#94a3b8">Met vriendelijke groet,<br>Het WarmeLeads team</p>
+            </td></tr>
+          </table>
+        </td></tr>
+        <tr><td style="background-color:#f8fafc;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px;padding:24px 40px">
+          <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+            <tr><td style="border-top:1px solid #e2e8f0;padding-top:20px">
+              <p style="margin:0;font-size:12px;color:#cbd5e1;line-height:1.5">&copy; ${year} WarmeLeads &middot; <a href="${siteUrl}" style="color:#cbd5e1;text-decoration:none">warmeleads.eu</a></p>
+            </td></tr>
+          </table>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+    const notifyHtml = `<!DOCTYPE html>
+<html lang="nl">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Nieuw strategiegesprek</title></head>
+<body style="margin:0;padding:0;background-color:#f8fafc;font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased">
+  <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background-color:#f8fafc">
+    <tr><td align="center" style="padding:40px 16px">
+      <table width="600" cellpadding="0" cellspacing="0" role="presentation" style="max-width:600px;width:100%">
+        <tr><td style="height:4px;background:linear-gradient(135deg,#3B2F75 0%,#E74C8C 35%,#FF6B35 70%,#FF4757 100%);border-radius:12px 12px 0 0;font-size:0;line-height:0">&nbsp;</td></tr>
+        <tr><td style="background-color:#ffffff;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0">
+          <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+            <tr><td style="padding:32px 40px 24px;border-bottom:1px solid #f1f5f9">
+              <img src="${logoUrl}" alt="WarmeLeads" width="130" style="max-width:130px;height:auto;display:block" />
+            </td></tr>
+          </table>
+          <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+            <tr><td style="padding:32px 40px">
+              <table cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom:24px">
+                <tr><td style="background-color:#eff6ff;border:1px solid #bfdbfe;border-radius:20px;padding:6px 14px">
+                  <span style="color:#2563eb;font-size:12px;font-weight:700;letter-spacing:0.5px">NIEUW GESPREK</span>
+                </td></tr>
+              </table>
+              <h1 style="margin:0 0 24px;font-size:20px;font-weight:700;color:#0f172a;line-height:1.3">Nieuw strategiegesprek ingepland</h1>
+              <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom:20px;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
+                <tr><td style="background-color:#f8fafc;padding:14px 20px;border-bottom:1px solid #e2e8f0">
+                  <span style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:1px">Contactgegevens</span>
+                </td></tr>
+                <tr><td style="padding:0">
+                  <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+                    <tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9;width:120px">Datum</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;font-weight:600;border-bottom:1px solid #f1f5f9">${fmtDate}</td></tr>
+                    <tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">Tijd</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;font-weight:600;border-bottom:1px solid #f1f5f9">${time} uur</td></tr>
+                    <tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">Naam</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;font-weight:600;border-bottom:1px solid #f1f5f9">${name}</td></tr>
+                    ${company ? `<tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">Bedrijf</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;font-weight:600;border-bottom:1px solid #f1f5f9">${company}</td></tr>` : ''}
+                    <tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">E-mail</td><td style="padding:12px 20px;font-size:14px;border-bottom:1px solid #f1f5f9"><a href="mailto:${email}" style="color:#3B2F75;text-decoration:none;font-weight:600">${email}</a></td></tr>
+                    <tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">Telefoon</td><td style="padding:12px 20px;font-size:14px;border-bottom:1px solid #f1f5f9"><a href="tel:${phone}" style="color:#3B2F75;text-decoration:none;font-weight:600">${phone}</a></td></tr>
+                    ${branch ? `<tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">Branche</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;border-bottom:1px solid #f1f5f9">${branch}</td></tr>` : ''}
+                    ${message ? `<tr><td style="padding:12px 20px;font-size:14px;color:#64748b">Toelichting</td><td style="padding:12px 20px;font-size:14px;color:#475569">${message}</td></tr>` : ''}
+                  </table>
+                </td></tr>
+              </table>
+            </td></tr>
+          </table>
+        </td></tr>
+        <tr><td style="background-color:#f8fafc;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px;padding:24px 40px">
+          <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+            <tr><td style="border-top:1px solid #e2e8f0;padding-top:20px">
+              <p style="margin:0;font-size:12px;color:#cbd5e1;line-height:1.5">&copy; ${year} WarmeLeads &middot; <a href="${siteUrl}" style="color:#cbd5e1;text-decoration:none">warmeleads.eu</a></p>
+            </td></tr>
+          </table>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
 
     await sendEmail(email, `Bevestiging strategiegesprek - ${fmtDate} om ${time}`, confirmHtml, { type: 'booking_confirmation', toName: name, metadata: { date: fmtDate, time } });
     await sendEmail('info@warmeleads.eu', `Nieuw strategiegesprek: ${name} - ${fmtDate} om ${time}`, notifyHtml, { type: 'booking_admin', metadata: { name, date: fmtDate, time } });

@@ -52,22 +52,56 @@ export async function PATCH(request: NextRequest) {
     const dateObj = new Date(booking.date + 'T00:00:00');
     const fmtDate = dateObj.toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
-    const html = `
-<div style="font-family:-apple-system,system-ui,sans-serif;max-width:600px;margin:0 auto">
-  <div style="background:linear-gradient(to bottom right,#1A1A2E,#3B2F75,#E74C8C);padding:32px;border-radius:12px 12px 0 0">
-    <h1 style="color:#fff;font-size:24px;margin:0">Afspraak geannuleerd</h1>
-  </div>
-  <div style="background:#fff;padding:32px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px">
-    <p style="font-size:14px;color:#475569;line-height:1.6">
-      Helaas is je strategiegesprek op <strong>${fmtDate}</strong> om <strong>${booking.time} uur</strong> geannuleerd.
-    </p>
-    <p style="font-size:14px;color:#475569;line-height:1.6;margin-top:16px">
-      Wil je een nieuw moment inplannen? Dat kan eenvoudig via
-      <a href="https://www.warmeleads.eu/plan-gesprek" style="color:#3B2F75;font-weight:600">onze agenda</a>.
-    </p>
-    <p style="margin-top:24px;font-size:13px;color:#94a3b8">Met vriendelijke groet,<br>Het WarmeLeads team</p>
-  </div>
-</div>`;
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://warmeleads.eu';
+    const logoUrl = `${siteUrl}/warmeleads-logo-2026.png`;
+    const year = new Date().getFullYear();
+
+    const html = `<!DOCTYPE html>
+<html lang="nl">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Afspraak geannuleerd</title></head>
+<body style="margin:0;padding:0;background-color:#f8fafc;font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased">
+  <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background-color:#f8fafc">
+    <tr><td align="center" style="padding:40px 16px">
+      <table width="600" cellpadding="0" cellspacing="0" role="presentation" style="max-width:600px;width:100%">
+        <tr><td style="height:4px;background:linear-gradient(135deg,#3B2F75 0%,#E74C8C 35%,#FF6B35 70%,#FF4757 100%);border-radius:12px 12px 0 0;font-size:0;line-height:0">&nbsp;</td></tr>
+        <tr><td style="background-color:#ffffff;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0">
+          <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+            <tr><td style="padding:32px 40px 24px;border-bottom:1px solid #f1f5f9">
+              <img src="${logoUrl}" alt="WarmeLeads" width="130" style="max-width:130px;height:auto;display:block" />
+            </td></tr>
+          </table>
+          <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+            <tr><td style="padding:32px 40px">
+              <table cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom:24px">
+                <tr><td style="background-color:#fef2f2;border:1px solid #fecaca;border-radius:20px;padding:6px 14px">
+                  <span style="color:#dc2626;font-size:12px;font-weight:700;letter-spacing:0.5px">GEANNULEERD</span>
+                </td></tr>
+              </table>
+              <h1 style="margin:0 0 8px;font-size:20px;font-weight:700;color:#0f172a;line-height:1.3">Afspraak geannuleerd</h1>
+              <p style="margin:0 0 16px;font-size:15px;color:#475569;line-height:1.7">Helaas is je strategiegesprek op <strong style="color:#0f172a">${fmtDate}</strong> om <strong style="color:#0f172a">${booking.time} uur</strong> geannuleerd.</p>
+              <p style="margin:0 0 24px;font-size:14px;color:#64748b;line-height:1.7">Wil je een nieuw moment inplannen? Dat kan eenvoudig via onze agenda:</p>
+              <table cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom:24px">
+                <tr><td style="border-radius:10px;background:linear-gradient(135deg,#FF6B35,#FF4757)">
+                  <a href="${siteUrl}/plan-gesprek" target="_blank" style="display:inline-block;padding:14px 32px;color:#ffffff;font-size:14px;font-weight:700;text-decoration:none;letter-spacing:0.3px">Nieuw gesprek inplannen &rarr;</a>
+                </td></tr>
+              </table>
+              <p style="margin:0;font-size:13px;color:#94a3b8">Met vriendelijke groet,<br>Het WarmeLeads team</p>
+            </td></tr>
+          </table>
+        </td></tr>
+        <tr><td style="background-color:#f8fafc;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px;padding:24px 40px">
+          <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+            <tr><td style="border-top:1px solid #e2e8f0;padding-top:20px">
+              <p style="margin:0 0 6px;font-size:13px;color:#94a3b8;line-height:1.5">Vragen? Neem contact op via <a href="mailto:info@warmeleads.eu" style="color:#3B2F75;text-decoration:none;font-weight:600">info@warmeleads.eu</a> of bel <a href="tel:0850477067" style="color:#3B2F75;text-decoration:none;font-weight:600">085 047 7067</a>.</p>
+              <p style="margin:0;font-size:12px;color:#cbd5e1;line-height:1.5">&copy; ${year} WarmeLeads &middot; <a href="${siteUrl}" style="color:#cbd5e1;text-decoration:none">warmeleads.eu</a></p>
+            </td></tr>
+          </table>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
 
     await sendEmail(booking.email, `Afspraak geannuleerd - ${fmtDate}`, html, { type: 'booking_cancelled', toName: booking.name, metadata: { date: fmtDate } });
   }

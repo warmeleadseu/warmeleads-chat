@@ -84,44 +84,80 @@ interface WeeklyStats {
 }
 
 function layout(title: string, content: string): string {
-  const logoUrl = `${BASE_URL}/logo-wit.png`;
+  const logoUrl = `${BASE_URL}/warmeleads-logo-2026.png`;
+  const year = new Date().getFullYear();
   return `<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#1A1A2E;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#1A1A2E;padding:40px 20px">
-<tr><td align="center">
-<table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%">
-  <tr><td style="padding:24px 32px;text-align:center">
-    <img src="${logoUrl}" alt="WarmeLeads" width="140" style="max-width:140px;height:auto" />
-  </td></tr>
-  <tr><td style="background:#16213E;border-radius:12px;padding:32px;border:1px solid rgba(255,107,53,.15)">
-    <h1 style="margin:0 0 20px;font-size:20px;color:#fff;font-weight:600">${title}</h1>
-    <div style="color:#CBD5E1;font-size:15px;line-height:1.6">${content}</div>
-  </td></tr>
-  <tr><td style="padding:24px 32px;text-align:center;color:#64748B;font-size:12px">
-    &copy; ${new Date().getFullYear()} WarmeLeads &middot; warmeleads.eu
-  </td></tr>
-</table>
-</td></tr>
-</table>
+<html lang="nl">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title></head>
+<body style="margin:0;padding:0;background-color:#f8fafc;font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased">
+  <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background-color:#f8fafc">
+    <tr><td align="center" style="padding:40px 16px">
+      <table width="600" cellpadding="0" cellspacing="0" role="presentation" style="max-width:600px;width:100%">
+        <tr><td style="height:4px;background:linear-gradient(135deg,#3B2F75 0%,#E74C8C 35%,#FF6B35 70%,#FF4757 100%);border-radius:12px 12px 0 0;font-size:0;line-height:0">&nbsp;</td></tr>
+        <tr><td style="background-color:#ffffff;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0">
+          <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+            <tr><td style="padding:32px 40px 24px;border-bottom:1px solid #f1f5f9">
+              <img src="${logoUrl}" alt="WarmeLeads" width="130" style="max-width:130px;height:auto;display:block" />
+            </td></tr>
+          </table>
+          <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+            <tr><td style="padding:32px 40px">
+              <h1 style="margin:0 0 24px;font-size:20px;font-weight:700;color:#0f172a;line-height:1.3">${title}</h1>
+              <div style="font-size:15px;color:#475569;line-height:1.7">${content}</div>
+            </td></tr>
+          </table>
+        </td></tr>
+        <tr><td style="background-color:#f8fafc;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px;padding:24px 40px">
+          <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+            <tr><td style="border-top:1px solid #e2e8f0;padding-top:20px">
+              <p style="margin:0 0 6px;font-size:13px;color:#94a3b8;line-height:1.5">Vragen? Neem contact op via <a href="mailto:info@warmeleads.eu" style="color:#3B2F75;text-decoration:none;font-weight:600">info@warmeleads.eu</a> of bel <a href="tel:0850477067" style="color:#3B2F75;text-decoration:none;font-weight:600">085 047 7067</a>.</p>
+              <p style="margin:0;font-size:12px;color:#cbd5e1;line-height:1.5">&copy; ${year} WarmeLeads &middot; <a href="${BASE_URL}" style="color:#cbd5e1;text-decoration:none">warmeleads.eu</a></p>
+            </td></tr>
+          </table>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
 </body>
 </html>`;
 }
 
 function badge(text: string): string {
-  return `<span style="display:inline-block;background:rgba(255,107,53,.15);color:#FF6B35;padding:3px 10px;border-radius:6px;font-size:13px;font-weight:600">${text}</span>`;
+  return `<span style="display:inline-block;background:#fff7ed;border:1px solid #fed7aa;color:#c2410c;padding:3px 12px;border-radius:20px;font-size:12px;font-weight:700">${text}</span>`;
+}
+
+function statusBadge(text: string, color: 'green' | 'blue' | 'orange' | 'purple' | 'red'): string {
+  const colors = {
+    green: { bg: '#ecfdf5', border: '#d1fae5', text: '#059669' },
+    blue: { bg: '#eff6ff', border: '#bfdbfe', text: '#2563eb' },
+    orange: { bg: '#fff7ed', border: '#fed7aa', text: '#c2410c' },
+    purple: { bg: '#faf5ff', border: '#e9d5ff', text: '#7c3aed' },
+    red: { bg: '#fef2f2', border: '#fecaca', text: '#dc2626' },
+  };
+  const c = colors[color];
+  return `<span style="display:inline-block;background:${c.bg};border:1px solid ${c.border};color:${c.text};padding:5px 14px;border-radius:20px;font-size:12px;font-weight:700;letter-spacing:0.3px">${text}</span>`;
 }
 
 function row(label: string, value: string): string {
   return `<tr>
-    <td style="padding:8px 12px;color:#94A3B8;font-size:14px;border-bottom:1px solid rgba(255,255,255,.05)">${label}</td>
-    <td style="padding:8px 12px;color:#E2E8F0;font-size:14px;border-bottom:1px solid rgba(255,255,255,.05)">${value || '-'}</td>
+    <td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9;width:140px">${label}</td>
+    <td style="padding:12px 20px;font-size:14px;color:#0f172a;border-bottom:1px solid #f1f5f9">${value || '-'}</td>
   </tr>`;
 }
 
-function dataTable(rows: string): string {
-  return `<table width="100%" cellpadding="0" cellspacing="0" style="margin:16px 0;border-radius:8px;overflow:hidden;background:rgba(255,255,255,.03)">${rows}</table>`;
+function dataTable(rows: string, headerLabel?: string): string {
+  const header = headerLabel
+    ? `<tr><td colspan="2" style="background-color:#f8fafc;padding:14px 20px;border-bottom:1px solid #e2e8f0"><span style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:1px">${headerLabel}</span></td></tr>`
+    : '';
+  return `<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="margin:20px 0;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">${header}<tr><td style="padding:0"><table width="100%" cellpadding="0" cellspacing="0" role="presentation">${rows}</table></td></tr></table>`;
+}
+
+function cta(text: string, url: string): string {
+  return `<table cellpadding="0" cellspacing="0" role="presentation" style="margin:28px 0 8px">
+    <tr><td style="border-radius:10px;background:linear-gradient(135deg,#FF6B35,#FF4757)">
+      <a href="${url}" target="_blank" style="display:inline-block;padding:14px 32px;color:#ffffff;font-size:14px;font-weight:700;text-decoration:none;letter-spacing:0.3px">${text}</a>
+    </td></tr>
+  </table>`;
 }
 
 export async function sendEmail(
@@ -156,29 +192,29 @@ export async function sendLeadNotification(
   customer: Customer,
   lead: LeadInfo,
 ): Promise<boolean> {
+  const greeting = customer.contact_person || customer.name;
   const content = `
-    <p>Hallo ${customer.contact_person || customer.name},</p>
-    <p>Er is een nieuwe lead voor je binnengekomen${lead.branch ? ` in de branche ${badge(lead.branch)}` : ''}:</p>
+    <p style="margin:0 0 16px;font-size:16px;font-weight:600;color:#0f172a">Hallo ${greeting},</p>
+    <p style="margin:0 0 8px">Er is een nieuwe lead voor je binnengekomen${lead.branch ? `: ${badge(lead.branch)}` : ''}.</p>
     ${dataTable(
-      row('Naam', lead.naam_klant) +
-      row('E-mail', lead.email || '') +
-      row('Telefoon', lead.telefoonnummer || '') +
+      row('Naam', `<strong style="color:#0f172a">${lead.naam_klant}</strong>`) +
+      row('E-mail', lead.email ? `<a href="mailto:${lead.email}" style="color:#3B2F75;text-decoration:none;font-weight:600">${lead.email}</a>` : '') +
+      row('Telefoon', lead.telefoonnummer ? `<a href="tel:${lead.telefoonnummer}" style="color:#3B2F75;text-decoration:none;font-weight:600">${lead.telefoonnummer}</a>` : '') +
       row('Postcode', lead.postcode || '') +
       row('Huisnummer', lead.huisnummer || '') +
       row('Plaats', lead.plaatsnaam || '') +
       row('Provincie', lead.provincie || '') +
-      row('Datum', lead.wervingsdatum || '')
+      row('Datum', lead.wervingsdatum || ''),
+      'Leadgegevens',
     )}
-    ${lead.notities ? `<p style="margin-top:12px;padding:12px;background:rgba(255,107,53,.08);border-radius:8px;color:#E2E8F0;font-size:14px"><strong style="color:#FF6B35">Notities:</strong> ${lead.notities}</p>` : ''}
-    <p style="margin-top:20px">
-      <a href="${BASE_URL}/portal" style="display:inline-block;background:linear-gradient(135deg,#FF6B35,#FF4757);color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">Bekijk in portaal &rarr;</a>
-    </p>`;
+    ${lead.notities ? `<div style="margin:16px 0;padding:14px 18px;background:#fffbeb;border:1px solid #fde68a;border-radius:10px;font-size:14px;color:#92400e"><strong style="color:#b45309">Notities:</strong> ${lead.notities}</div>` : ''}
+    ${cta('Bekijk in portaal &rarr;', `${BASE_URL}/portal`)}`;
 
   return sendEmail(
     customer.email,
     `Nieuwe lead: ${lead.naam_klant}`,
     layout('Nieuwe Lead Ontvangen', content),
-    { type: 'lead_notification', toName: customer.contact_person || customer.name, metadata: { customer_id: customer.id, lead_name: lead.naam_klant, branch: lead.branch } },
+    { type: 'lead_notification', toName: greeting, metadata: { customer_id: customer.id, lead_name: lead.naam_klant, branch: lead.branch } },
   );
 }
 
@@ -188,18 +224,18 @@ export async function sendBatchCompletionNotification(
   batchInfo: BatchInfo,
 ): Promise<boolean> {
   const content = `
-    <p>Een batch is zojuist voltooid:</p>
+    <p style="margin:0 0 20px">${statusBadge('&#10003; VOLTOOID', 'green')}</p>
+    <p style="margin:0 0 8px">Een batch is zojuist voltooid:</p>
     ${dataTable(
-      row('Klant', customerName) +
+      row('Klant', `<strong style="color:#0f172a">${customerName}</strong>`) +
       row('Branche', batchInfo.branch) +
       row('Batch ID', batchInfo.id.slice(0, 8)) +
-      row('Grootte', `${batchInfo.leads_delivered} / ${batchInfo.batch_size} leads`) +
-      row('Voltooid op', batchInfo.completed_at || new Date().toLocaleDateString('nl-NL'))
+      row('Grootte', `<strong style="color:#0f172a">${batchInfo.leads_delivered} / ${batchInfo.batch_size}</strong> leads`) +
+      row('Voltooid op', batchInfo.completed_at || new Date().toLocaleDateString('nl-NL')),
+      'Batchgegevens',
     )}
-    <p style="margin-top:16px">Ga naar het admin-paneel om een eventuele vervolg-batch aan te maken.</p>
-    <p style="margin-top:20px">
-      <a href="${BASE_URL}/admin/verdeling" style="display:inline-block;background:linear-gradient(135deg,#FF6B35,#FF4757);color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">Naar verdeling &rarr;</a>
-    </p>`;
+    <p style="margin:16px 0 0;font-size:14px;color:#64748b">Ga naar het admin-paneel om een eventuele vervolg-batch aan te maken.</p>
+    ${cta('Naar verdeling &rarr;', `${BASE_URL}/admin/verdeling`)}`;
 
   return sendEmail(
     adminEmail,
@@ -215,33 +251,28 @@ export async function sendWeeklyReport(
 ): Promise<boolean> {
   const branchRows = stats.topBranches
     .map(b => `<tr>
-      <td style="padding:6px 12px;color:#E2E8F0;font-size:14px;border-bottom:1px solid rgba(255,255,255,.05)">${b.name}</td>
-      <td style="padding:6px 12px;color:#FF6B35;font-size:14px;font-weight:600;text-align:right;border-bottom:1px solid rgba(255,255,255,.05)">${b.count}</td>
+      <td style="padding:10px 20px;font-size:14px;color:#0f172a;border-bottom:1px solid #f1f5f9">${b.name}</td>
+      <td style="padding:10px 20px;font-size:14px;color:#3B2F75;font-weight:700;text-align:right;border-bottom:1px solid #f1f5f9">${b.count}</td>
     </tr>`)
     .join('');
 
   const content = `
-    <p>Hier is je wekelijkse samenvatting:</p>
+    <p style="margin:0 0 8px">Hier is je wekelijkse samenvatting:</p>
     ${dataTable(
-      row('Totaal leads', String(stats.totalLeads)) +
-      row('Nieuwe leads deze week', String(stats.newLeadsThisWeek)) +
-      row('Toegewezen deze week', String(stats.assignedThisWeek)) +
+      row('Totaal leads', `<strong style="color:#0f172a">${stats.totalLeads}</strong>`) +
+      row('Nieuwe leads deze week', `<strong style="color:#059669">${stats.newLeadsThisWeek}</strong>`) +
+      row('Toegewezen deze week', `<strong style="color:#0f172a">${stats.assignedThisWeek}</strong>`) +
       row('Actieve klanten', String(stats.activeCustomers)) +
       row('Actieve batches', String(stats.activeBatches)) +
-      row('Voltooide batches', String(stats.completedBatches))
+      row('Voltooide batches', String(stats.completedBatches)),
+      'Statistieken',
     )}
     ${stats.topBranches.length > 0 ? `
-      <h2 style="margin:24px 0 12px;font-size:16px;color:#FF6B35;font-weight:600">Top Branches</h2>
-      <table width="100%" cellpadding="0" cellspacing="0" style="border-radius:8px;overflow:hidden;background:rgba(255,255,255,.03)">
-      <tr style="background:rgba(255,107,53,.1)">
-        <th style="padding:8px 12px;text-align:left;color:#FF6B35;font-size:13px;font-weight:600">Branche</th>
-        <th style="padding:8px 12px;text-align:right;color:#FF6B35;font-size:13px;font-weight:600">Leads</th>
-      </tr>
+      <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="margin:20px 0;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
+        <tr><td colspan="2" style="background-color:#f8fafc;padding:14px 20px;border-bottom:1px solid #e2e8f0"><span style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:1px">Top branches</span></td></tr>
         ${branchRows}
       </table>` : ''}
-    <p style="margin-top:20px">
-      <a href="${BASE_URL}/admin" style="display:inline-block;background:linear-gradient(135deg,#FF6B35,#FF4757);color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">Naar dashboard &rarr;</a>
-    </p>`;
+    ${cta('Naar dashboard &rarr;', `${BASE_URL}/admin`)}`;
 
   const weekNr = getISOWeek(new Date());
   return sendEmail(
@@ -260,40 +291,35 @@ export async function sendDailyLeadDigest(
 
   const leadRows = leads
     .map(l => `<tr>
-      <td style="padding:8px 12px;color:#E2E8F0;font-size:14px;border-bottom:1px solid rgba(255,255,255,.05)">${l.naam_klant}</td>
-      <td style="padding:8px 12px;color:#CBD5E1;font-size:14px;border-bottom:1px solid rgba(255,255,255,.05)">${l.plaatsnaam || '-'}</td>
-      <td style="padding:8px 12px;color:#CBD5E1;font-size:14px;border-bottom:1px solid rgba(255,255,255,.05)">${l.telefoonnummer || '-'}</td>
-      <td style="padding:8px 12px;border-bottom:1px solid rgba(255,255,255,.05)">${l.branch ? badge(l.branch) : '-'}</td>
+      <td style="padding:10px 16px;font-size:14px;color:#0f172a;border-bottom:1px solid #f1f5f9">${l.naam_klant}</td>
+      <td style="padding:10px 16px;font-size:14px;color:#475569;border-bottom:1px solid #f1f5f9">${l.plaatsnaam || '-'}</td>
+      <td style="padding:10px 16px;font-size:14px;color:#475569;border-bottom:1px solid #f1f5f9">${l.telefoonnummer || '-'}</td>
+      <td style="padding:10px 16px;font-size:14px;border-bottom:1px solid #f1f5f9">${l.branch ? badge(l.branch) : '-'}</td>
     </tr>`)
     .join('');
 
+  const greeting = customer.contact_person || customer.name;
   const content = `
-    <p>Hallo ${customer.contact_person || customer.name},</p>
-    <p>Hier zijn je leads van vandaag: ${badge(String(leads.length) + (leads.length === 1 ? ' lead' : ' leads'))}</p>
-    <table width="100%" cellpadding="0" cellspacing="0" style="margin:16px 0;border-radius:8px;overflow:hidden;background:rgba(255,255,255,.03)">
-      <tr style="background:rgba(255,107,53,.1)">
-        <th style="padding:8px 12px;text-align:left;color:#FF6B35;font-size:13px;font-weight:600">Naam</th>
-        <th style="padding:8px 12px;text-align:left;color:#FF6B35;font-size:13px;font-weight:600">Plaats</th>
-        <th style="padding:8px 12px;text-align:left;color:#FF6B35;font-size:13px;font-weight:600">Telefoon</th>
-        <th style="padding:8px 12px;text-align:left;color:#FF6B35;font-size:13px;font-weight:600">Branche</th>
+    <p style="margin:0 0 16px;font-size:16px;font-weight:600;color:#0f172a">Hallo ${greeting},</p>
+    <p style="margin:0 0 8px">Hier zijn je leads van vandaag: ${badge(String(leads.length) + (leads.length === 1 ? ' lead' : ' leads'))}</p>
+    <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="margin:20px 0;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
+      <tr style="background-color:#f8fafc">
+        <th style="padding:10px 16px;text-align:left;font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid #e2e8f0">Naam</th>
+        <th style="padding:10px 16px;text-align:left;font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid #e2e8f0">Plaats</th>
+        <th style="padding:10px 16px;text-align:left;font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid #e2e8f0">Telefoon</th>
+        <th style="padding:10px 16px;text-align:left;font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid #e2e8f0">Branche</th>
       </tr>
       ${leadRows}
     </table>
-    <p style="margin-top:20px">
-      <a href="${BASE_URL}/portal" style="display:inline-block;background:linear-gradient(135deg,#FF6B35,#FF4757);color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">Bekijk details in portaal &rarr;</a>
-    </p>`;
+    ${cta('Bekijk details in portaal &rarr;', `${BASE_URL}/portal`)}`;
 
-  const today = new Date().toLocaleDateString('nl-NL', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-  });
+  const today = new Date().toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' });
 
   return sendEmail(
     customer.email,
     `Dagelijkse leads – ${today}`,
     layout('Dagelijks Lead Overzicht', content),
-    { type: 'daily_digest', toName: customer.contact_person || customer.name, metadata: { customer_id: customer.id, lead_count: leads.length } },
+    { type: 'daily_digest', toName: greeting, metadata: { customer_id: customer.id, lead_count: leads.length } },
   );
 }
 
@@ -306,12 +332,12 @@ interface FeedbackItem {
   createdAt: string;
 }
 
-const RATING_LABELS: Record<string, { label: string; color: string }> = {
-  goed_contact: { label: 'Goed contact gehad', color: '#10B981' },
-  onbereikbaar: { label: 'Onbereikbaar', color: '#F59E0B' },
-  niet_geinteresseerd: { label: 'Niet geïnteresseerd', color: '#64748B' },
-  fout_nummer: { label: 'Fout nummer', color: '#EF4444' },
-  verkocht: { label: 'Verkocht!', color: '#8B5CF6' },
+const RATING_LABELS: Record<string, { label: string; bg: string; border: string; color: string }> = {
+  goed_contact: { label: 'Goed contact gehad', bg: '#ecfdf5', border: '#d1fae5', color: '#059669' },
+  onbereikbaar: { label: 'Onbereikbaar', bg: '#fffbeb', border: '#fde68a', color: '#d97706' },
+  niet_geinteresseerd: { label: 'Niet geïnteresseerd', bg: '#f8fafc', border: '#e2e8f0', color: '#64748b' },
+  fout_nummer: { label: 'Fout nummer', bg: '#fef2f2', border: '#fecaca', color: '#dc2626' },
+  verkocht: { label: 'Verkocht!', bg: '#faf5ff', border: '#e9d5ff', color: '#7c3aed' },
 };
 
 export async function sendFeedbackDigest(
@@ -322,15 +348,15 @@ export async function sendFeedbackDigest(
 
   const feedbackRows = feedbackItems
     .map(f => {
-      const r = RATING_LABELS[f.rating] || { label: f.rating, color: '#94A3B8' };
+      const r = RATING_LABELS[f.rating] || { label: f.rating, bg: '#f8fafc', border: '#e2e8f0', color: '#64748b' };
       return `<tr>
-        <td style="padding:8px 12px;color:#E2E8F0;font-size:14px;border-bottom:1px solid rgba(255,255,255,.05)">${f.leadName}</td>
-        <td style="padding:8px 12px;color:#CBD5E1;font-size:14px;border-bottom:1px solid rgba(255,255,255,.05)">${f.customerName}</td>
-        <td style="padding:8px 12px;color:#CBD5E1;font-size:14px;border-bottom:1px solid rgba(255,255,255,.05)">${f.branch || '-'}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid rgba(255,255,255,.05)">
-          <span style="display:inline-block;background:${r.color}20;color:${r.color};padding:3px 10px;border-radius:6px;font-size:13px;font-weight:600">${r.label}</span>
+        <td style="padding:10px 14px;font-size:14px;color:#0f172a;border-bottom:1px solid #f1f5f9">${f.leadName}</td>
+        <td style="padding:10px 14px;font-size:14px;color:#475569;border-bottom:1px solid #f1f5f9">${f.customerName}</td>
+        <td style="padding:10px 14px;font-size:14px;color:#475569;border-bottom:1px solid #f1f5f9">${f.branch || '-'}</td>
+        <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9">
+          <span style="display:inline-block;background:${r.bg};border:1px solid ${r.border};color:${r.color};padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700">${r.label}</span>
         </td>
-        ${f.comment ? `<td style="padding:8px 12px;color:#94A3B8;font-size:13px;font-style:italic;border-bottom:1px solid rgba(255,255,255,.05)">${f.comment}</td>` : `<td style="padding:8px 12px;border-bottom:1px solid rgba(255,255,255,.05)">-</td>`}
+        <td style="padding:10px 14px;font-size:13px;color:#94a3b8;font-style:italic;border-bottom:1px solid #f1f5f9">${f.comment || '-'}</td>
       </tr>`;
     })
     .join('');
@@ -341,33 +367,27 @@ export async function sendFeedbackDigest(
   }
   const summaryBadges = Object.entries(ratingCounts)
     .map(([key, count]) => {
-      const r = RATING_LABELS[key] || { label: key, color: '#94A3B8' };
-      return `<span style="display:inline-block;background:${r.color}20;color:${r.color};padding:4px 12px;border-radius:6px;font-size:13px;font-weight:600;margin:2px 4px 2px 0">${r.label}: ${count}</span>`;
+      const r = RATING_LABELS[key] || { label: key, bg: '#f8fafc', border: '#e2e8f0', color: '#64748b' };
+      return `<span style="display:inline-block;background:${r.bg};border:1px solid ${r.border};color:${r.color};padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700;margin:2px 4px 2px 0">${r.label}: ${count}</span>`;
     })
     .join('');
 
   const content = `
-    <p>Er ${feedbackItems.length === 1 ? 'is' : 'zijn'} ${badge(String(feedbackItems.length))} nieuwe feedback${feedbackItems.length === 1 ? '' : 's'} binnengekomen van klanten:</p>
-    <div style="margin:12px 0">${summaryBadges}</div>
-    <table width="100%" cellpadding="0" cellspacing="0" style="margin:16px 0;border-radius:8px;overflow:hidden;background:rgba(255,255,255,.03)">
-      <tr style="background:rgba(255,107,53,.1)">
-        <th style="padding:8px 12px;text-align:left;color:#FF6B35;font-size:13px;font-weight:600">Lead</th>
-        <th style="padding:8px 12px;text-align:left;color:#FF6B35;font-size:13px;font-weight:600">Klant</th>
-        <th style="padding:8px 12px;text-align:left;color:#FF6B35;font-size:13px;font-weight:600">Branche</th>
-        <th style="padding:8px 12px;text-align:left;color:#FF6B35;font-size:13px;font-weight:600">Feedback</th>
-        <th style="padding:8px 12px;text-align:left;color:#FF6B35;font-size:13px;font-weight:600">Opmerking</th>
+    <p style="margin:0 0 8px">Er ${feedbackItems.length === 1 ? 'is' : 'zijn'} ${badge(String(feedbackItems.length))} nieuwe feedback${feedbackItems.length === 1 ? '' : 's'} binnengekomen:</p>
+    <div style="margin:16px 0">${summaryBadges}</div>
+    <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="margin:20px 0;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
+      <tr style="background-color:#f8fafc">
+        <th style="padding:10px 14px;text-align:left;font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid #e2e8f0">Lead</th>
+        <th style="padding:10px 14px;text-align:left;font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid #e2e8f0">Klant</th>
+        <th style="padding:10px 14px;text-align:left;font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid #e2e8f0">Branche</th>
+        <th style="padding:10px 14px;text-align:left;font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid #e2e8f0">Feedback</th>
+        <th style="padding:10px 14px;text-align:left;font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid #e2e8f0">Opmerking</th>
       </tr>
       ${feedbackRows}
     </table>
-    <p style="margin-top:20px">
-      <a href="${BASE_URL}/admin" style="display:inline-block;background:linear-gradient(135deg,#FF6B35,#FF4757);color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">Naar dashboard &rarr;</a>
-    </p>`;
+    ${cta('Naar dashboard &rarr;', `${BASE_URL}/admin`)}`;
 
-  const today = new Date().toLocaleDateString('nl-NL', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-  });
+  const today = new Date().toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' });
 
   return sendEmail(
     adminEmail,
@@ -383,6 +403,7 @@ export async function sendBatchMilestoneEmail(
   milestone: '80pct' | 'completed' | 'reminder',
 ): Promise<boolean> {
   const branchLabel = batch.branch_name || batch.branch;
+  const greeting = customer.contact_person || customer.name;
   const pct = batch.batch_size > 0 ? Math.round((batch.leads_delivered / batch.batch_size) * 100) : 0;
   const orderUrl = `${BASE_URL}/portal/bestellen?batch=${batch.id}`;
 
@@ -392,38 +413,38 @@ export async function sendBatchMilestoneEmail(
     reminder: `U mist momenteel leads in ${branchLabel}`,
   };
 
+  const milestoneBadges: Record<string, string> = {
+    '80pct': statusBadge(`${pct}% VOLTOOID`, 'orange'),
+    completed: statusBadge('&#10003; VOLTOOID', 'green'),
+    reminder: statusBadge('GEEN ACTIEVE BATCH', 'red'),
+  };
+
   const bodies: Record<string, string> = {
     '80pct': `
-      <p>Hallo ${customer.contact_person || customer.name},</p>
-      <p>Uw batch <strong>${branchLabel}</strong> is al voor <strong>${pct}%</strong> voltooid 
-         (${batch.leads_delivered} van ${batch.batch_size} leads geleverd).</p>
-      <p>Bestel nu een vervolg batch zodat u geen leads mist zodra deze batch vol is.</p>`,
+      <p style="margin:0 0 16px;font-size:16px;font-weight:600;color:#0f172a">Hallo ${greeting},</p>
+      <p style="margin:0 0 8px">Uw batch <strong style="color:#0f172a">${branchLabel}</strong> is al voor <strong style="color:#3B2F75">${pct}%</strong> voltooid (${batch.leads_delivered} van ${batch.batch_size} leads geleverd).</p>
+      <p style="margin:0">Bestel nu een vervolg batch zodat u geen leads mist zodra deze batch vol is.</p>`,
     completed: `
-      <p>Hallo ${customer.contact_person || customer.name},</p>
-      <p>Uw batch <strong>${branchLabel}</strong> is volledig voltooid! 
-         Alle ${batch.batch_size} leads zijn geleverd.</p>
-      <p>Wilt u blijven groeien? Bestel direct een nieuwe batch en ontvang weer verse leads.</p>`,
+      <p style="margin:0 0 16px;font-size:16px;font-weight:600;color:#0f172a">Hallo ${greeting},</p>
+      <p style="margin:0 0 8px">Uw batch <strong style="color:#0f172a">${branchLabel}</strong> is volledig voltooid! Alle <strong style="color:#3B2F75">${batch.batch_size}</strong> leads zijn geleverd.</p>
+      <p style="margin:0">Wilt u blijven groeien? Bestel direct een nieuwe batch en ontvang weer verse leads.</p>`,
     reminder: `
-      <p>Hallo ${customer.contact_person || customer.name},</p>
-      <p>Het is nu een paar dagen geleden dat uw batch <strong>${branchLabel}</strong> is voltooid. 
-         Momenteel ontvangt u geen nieuwe leads in dit segment.</p>
-      <p>Bestel een nieuwe batch om weer leads te ontvangen.</p>`,
+      <p style="margin:0 0 16px;font-size:16px;font-weight:600;color:#0f172a">Hallo ${greeting},</p>
+      <p style="margin:0 0 8px">Het is nu een paar dagen geleden dat uw batch <strong style="color:#0f172a">${branchLabel}</strong> is voltooid. Momenteel ontvangt u geen nieuwe leads in dit segment.</p>
+      <p style="margin:0">Bestel een nieuwe batch om weer leads te ontvangen.</p>`,
   };
 
   const content = `
+    <p style="margin:0 0 20px">${milestoneBadges[milestone]}</p>
     ${bodies[milestone]}
-    <p style="margin-top:24px">
-      <a href="${orderUrl}" style="display:inline-block;background:linear-gradient(135deg,#FF6B35,#FF4757);color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700;font-size:15px">
-        Nieuwe batch bestellen &rarr;
-      </a>
-    </p>`;
+    ${cta('Nieuwe batch bestellen &rarr;', orderUrl)}`;
 
   const milestoneTypes: Record<string, string> = { '80pct': 'batch_80pct', completed: 'batch_completed', reminder: 'batch_reminder' };
   return sendEmail(
     customer.email,
     titles[milestone],
     layout(titles[milestone], content),
-    { type: milestoneTypes[milestone] || 'batch_milestone', toName: customer.contact_person || customer.name, metadata: { customer_id: customer.id, batch_id: batch.id, milestone } },
+    { type: milestoneTypes[milestone] || 'batch_milestone', toName: greeting, metadata: { customer_id: customer.id, batch_id: batch.id, milestone } },
   );
 }
 
@@ -432,27 +453,28 @@ export async function sendOrderConfirmationEmail(
   order: { branch: string; branch_name?: string; batch_size: number; total_price: number; price_per_lead?: number },
 ): Promise<boolean> {
   const branchLabel = order.branch_name || order.branch;
+  const greeting = customer.contact_person || customer.name;
   const subtotal = Number(order.total_price);
   const btwAmount = Math.round(subtotal * 0.21 * 100) / 100;
   const totalInclBtw = subtotal + btwAmount;
 
   const content = `
-    <p>Hallo ${customer.contact_person || customer.name},</p>
-    <p>Bedankt voor uw bestelling! Uw nieuwe batch is aangemaakt en leads worden automatisch toegewezen.</p>
+    <p style="margin:0 0 20px">${statusBadge('&#10003; BEVESTIGD', 'green')}</p>
+    <p style="margin:0 0 16px;font-size:16px;font-weight:600;color:#0f172a">Hallo ${greeting},</p>
+    <p style="margin:0 0 8px">Bedankt voor je bestelling! Je nieuwe batch is aangemaakt en leads worden automatisch toegewezen.</p>
     ${dataTable(
-      row('Branche', branchLabel) +
-      row('Batch grootte', `${order.batch_size} leads`) +
+      row('Branche', `<strong style="color:#0f172a">${branchLabel}</strong>`) +
+      row('Batch grootte', `<strong style="color:#0f172a">${order.batch_size}</strong> leads`) +
       (order.price_per_lead ? row('Prijs per lead (excl. BTW)', `&euro;${Number(order.price_per_lead).toFixed(2)}`) : '') +
       row('Subtotaal excl. BTW', `&euro;${subtotal.toFixed(2)}`) +
       row('BTW 21%', `&euro;${btwAmount.toFixed(2)}`) +
       `<tr>
-        <td style="padding:10px 12px;color:#FF6B35;font-size:15px;font-weight:700;border-top:2px solid rgba(255,107,53,.2)">Totaal incl. BTW</td>
-        <td style="padding:10px 12px;color:#FF6B35;font-size:15px;font-weight:700;text-align:right;border-top:2px solid rgba(255,107,53,.2)">&euro;${totalInclBtw.toFixed(2)}</td>
-      </tr>`
+        <td style="padding:16px 20px;font-size:15px;color:#3B2F75;font-weight:700;border-bottom:none">Totaal incl. BTW</td>
+        <td style="padding:16px 20px;font-size:18px;color:#3B2F75;font-weight:800;text-align:right;border-bottom:none">&euro;${totalInclBtw.toFixed(2)}</td>
+      </tr>`,
+      'Bestelgegevens',
     )}
-    <p style="margin-top:20px">
-      <a href="${BASE_URL}/portal" style="display:inline-block;background:linear-gradient(135deg,#FF6B35,#FF4757);color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">Bekijk in portaal &rarr;</a>
-    </p>`;
+    ${cta('Bekijk in portaal &rarr;', `${BASE_URL}/portal`)}`;
 
   return sendEmail(
     customer.email,

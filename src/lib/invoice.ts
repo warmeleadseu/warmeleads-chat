@@ -157,49 +157,66 @@ function sendOpenInvoiceEmail(
   invoice: { invoice_number: string; total_incl_btw: number; description: string; id: string },
 ) {
   const portalUrl = `${BASE_URL}/portal/account`;
-
-  const content = `
-    <p>Hallo ${customer.contact_person || customer.name},</p>
-    <p>Er staat een nieuwe factuur voor je klaar:</p>
-    <table width="100%" cellpadding="0" cellspacing="0" style="margin:16px 0;border-radius:8px;overflow:hidden;background:rgba(255,255,255,.03)">
-      <tr>
-        <td style="padding:8px 12px;color:#94A3B8;font-size:14px;border-bottom:1px solid rgba(255,255,255,.05)">Factuurnummer</td>
-        <td style="padding:8px 12px;color:#E2E8F0;font-size:14px;border-bottom:1px solid rgba(255,255,255,.05)">${invoice.invoice_number}</td>
-      </tr>
-      <tr>
-        <td style="padding:8px 12px;color:#94A3B8;font-size:14px;border-bottom:1px solid rgba(255,255,255,.05)">Omschrijving</td>
-        <td style="padding:8px 12px;color:#E2E8F0;font-size:14px;border-bottom:1px solid rgba(255,255,255,.05)">${invoice.description}</td>
-      </tr>
-      <tr>
-        <td style="padding:10px 12px;color:#FF6B35;font-size:15px;font-weight:700;border-top:2px solid rgba(255,107,53,.2)">Te betalen</td>
-        <td style="padding:10px 12px;color:#FF6B35;font-size:15px;font-weight:700;text-align:right;border-top:2px solid rgba(255,107,53,.2)">&euro;${Number(invoice.total_incl_btw).toFixed(2)}</td>
-      </tr>
-    </table>
-    <p>Je kunt direct betalen via je portaal. Na betaling wordt je batch direct geactiveerd en ontvang je leads.</p>
-    <p style="margin-top:12px">
-      <a href="${portalUrl}" style="display:inline-block;background:linear-gradient(135deg,#FF6B35,#FF4757);color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">Bekijk factuur &amp; betaal &rarr;</a>
-    </p>`;
+  const logoUrl = `${BASE_URL}/warmeleads-logo-2026.png`;
+  const greeting = customer.contact_person || customer.name;
+  const year = new Date().getFullYear();
 
   const fullHtml = `<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#1A1A2E;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#1A1A2E;padding:40px 20px">
-<tr><td align="center">
-<table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%">
-  <tr><td style="padding:24px 32px;text-align:center">
-    <img src="${BASE_URL}/logo-wit.png" alt="WarmeLeads" height="32" style="height:32px;width:auto" />
-  </td></tr>
-  <tr><td style="background:#16213E;border-radius:12px;padding:32px;border:1px solid rgba(255,107,53,.15)">
-    <h1 style="margin:0 0 20px;font-size:20px;color:#fff;font-weight:600">Factuur ${invoice.invoice_number}</h1>
-    <div style="color:#CBD5E1;font-size:15px;line-height:1.6">${content}</div>
-  </td></tr>
-  <tr><td style="padding:24px 32px;text-align:center;color:#64748B;font-size:12px">
-    &copy; ${new Date().getFullYear()} WarmeLeads &middot; warmeleads.eu
-  </td></tr>
-</table>
-</td></tr>
-</table>
+<html lang="nl">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Factuur ${invoice.invoice_number}</title></head>
+<body style="margin:0;padding:0;background-color:#f8fafc;font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased">
+  <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background-color:#f8fafc">
+    <tr><td align="center" style="padding:40px 16px">
+      <table width="600" cellpadding="0" cellspacing="0" role="presentation" style="max-width:600px;width:100%">
+        <tr><td style="height:4px;background:linear-gradient(135deg,#3B2F75 0%,#E74C8C 35%,#FF6B35 70%,#FF4757 100%);border-radius:12px 12px 0 0;font-size:0;line-height:0">&nbsp;</td></tr>
+        <tr><td style="background-color:#ffffff;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0">
+          <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+            <tr><td style="padding:32px 40px 24px;border-bottom:1px solid #f1f5f9">
+              <img src="${logoUrl}" alt="WarmeLeads" width="130" style="max-width:130px;height:auto;display:block" />
+            </td></tr>
+          </table>
+          <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+            <tr><td style="padding:32px 40px">
+              <table cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom:24px">
+                <tr><td style="background-color:#fff7ed;border:1px solid #fed7aa;border-radius:20px;padding:6px 14px">
+                  <span style="color:#c2410c;font-size:12px;font-weight:700;letter-spacing:0.5px">OPENSTAAND</span>
+                </td></tr>
+              </table>
+              <p style="margin:0 0 16px;font-size:16px;font-weight:600;color:#0f172a;line-height:1.4">Hallo ${greeting},</p>
+              <p style="margin:0 0 28px;font-size:15px;color:#475569;line-height:1.7">Er staat een nieuwe factuur voor je klaar.</p>
+              <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom:28px;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
+                <tr><td style="background-color:#f8fafc;padding:14px 20px;border-bottom:1px solid #e2e8f0">
+                  <span style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:1px">Factuurgegevens</span>
+                </td></tr>
+                <tr><td style="padding:0">
+                  <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+                    <tr><td style="padding:14px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9;width:140px">Factuurnummer</td><td style="padding:14px 20px;font-size:14px;color:#0f172a;font-weight:600;border-bottom:1px solid #f1f5f9">${invoice.invoice_number}</td></tr>
+                    <tr><td style="padding:14px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">Omschrijving</td><td style="padding:14px 20px;font-size:14px;color:#0f172a;border-bottom:1px solid #f1f5f9">${invoice.description}</td></tr>
+                    <tr><td style="padding:14px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">Status</td><td style="padding:14px 20px;font-size:14px;border-bottom:1px solid #f1f5f9"><span style="color:#c2410c;font-weight:600">Openstaand</span></td></tr>
+                    <tr><td style="padding:16px 20px;font-size:15px;color:#3B2F75;font-weight:700">Te betalen</td><td style="padding:16px 20px;font-size:18px;color:#3B2F75;font-weight:800;text-align:right">&euro;${Number(invoice.total_incl_btw).toFixed(2)}</td></tr>
+                  </table>
+                </td></tr>
+              </table>
+              <p style="margin:0 0 24px;font-size:14px;color:#64748b;line-height:1.7">Je kunt direct betalen via je portaal. Na betaling wordt je batch direct geactiveerd en ontvang je leads.</p>
+              <table cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom:8px">
+                <tr><td style="border-radius:10px;background:linear-gradient(135deg,#FF6B35,#FF4757)">
+                  <a href="${portalUrl}" target="_blank" style="display:inline-block;padding:14px 32px;color:#ffffff;font-size:14px;font-weight:700;text-decoration:none;letter-spacing:0.3px">Bekijk factuur &amp; betaal &rarr;</a>
+                </td></tr>
+              </table>
+            </td></tr>
+          </table>
+        </td></tr>
+        <tr><td style="background-color:#f8fafc;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px;padding:24px 40px">
+          <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+            <tr><td style="border-top:1px solid #e2e8f0;padding-top:20px">
+              <p style="margin:0 0 6px;font-size:13px;color:#94a3b8;line-height:1.5">Vragen over deze factuur? Neem contact op via <a href="mailto:info@warmeleads.eu" style="color:#3B2F75;text-decoration:none;font-weight:600">info@warmeleads.eu</a> of bel <a href="tel:0850477067" style="color:#3B2F75;text-decoration:none;font-weight:600">085 047 7067</a>.</p>
+              <p style="margin:0;font-size:12px;color:#cbd5e1;line-height:1.5">&copy; ${year} WarmeLeads &middot; <a href="${BASE_URL}" style="color:#cbd5e1;text-decoration:none">warmeleads.eu</a></p>
+            </td></tr>
+          </table>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
 </body>
 </html>`;
 
@@ -207,7 +224,7 @@ function sendOpenInvoiceEmail(
     customer.email,
     `Nieuwe factuur ${invoice.invoice_number} - WarmeLeads`,
     fullHtml,
-    { type: 'invoice_open', toName: customer.contact_person || customer.name, metadata: { invoice_id: invoice.id, invoice_number: invoice.invoice_number } },
+    { type: 'invoice_open', toName: greeting, metadata: { invoice_id: invoice.id, invoice_number: invoice.invoice_number } },
   );
 }
 
@@ -338,82 +355,77 @@ export async function sendNewBatchAdminEmail(params: {
   const subtotal = Number(params.total_price);
   const btwAmount = Math.round(subtotal * 0.21 * 100) / 100;
   const totalInclBtw = subtotal + btwAmount;
+  const logoUrl = `${BASE_URL}/warmeleads-logo-2026.png`;
+  const year = new Date().getFullYear();
 
   const sourceLabel =
     params.source === 'portal' ? 'Portal bestelling'
     : params.source === 'portal_pay' ? 'Portal batch betaling'
     : 'Admin aangemaakt';
 
-  const content = `
-    <p>Er is een nieuwe batch aangemaakt:</p>
-    <table width="100%" cellpadding="0" cellspacing="0" style="margin:16px 0;border-radius:8px;overflow:hidden;background:rgba(255,255,255,.03)">
-      <tr>
-        <td style="padding:8px 12px;color:#94A3B8;font-size:14px;border-bottom:1px solid rgba(255,255,255,.05)">Klant</td>
-        <td style="padding:8px 12px;color:#E2E8F0;font-size:14px;border-bottom:1px solid rgba(255,255,255,.05)">${params.customer_name}</td>
-      </tr>
-      <tr>
-        <td style="padding:8px 12px;color:#94A3B8;font-size:14px;border-bottom:1px solid rgba(255,255,255,.05)">Branche</td>
-        <td style="padding:8px 12px;color:#E2E8F0;font-size:14px;border-bottom:1px solid rgba(255,255,255,.05)">${params.branch_name}</td>
-      </tr>
-      <tr>
-        <td style="padding:8px 12px;color:#94A3B8;font-size:14px;border-bottom:1px solid rgba(255,255,255,.05)">Batch grootte</td>
-        <td style="padding:8px 12px;color:#E2E8F0;font-size:14px;border-bottom:1px solid rgba(255,255,255,.05)">${params.batch_size} leads</td>
-      </tr>
-      <tr>
-        <td style="padding:8px 12px;color:#94A3B8;font-size:14px;border-bottom:1px solid rgba(255,255,255,.05)">Prijs per lead</td>
-        <td style="padding:8px 12px;color:#E2E8F0;font-size:14px;border-bottom:1px solid rgba(255,255,255,.05)">&euro;${Number(params.price_per_lead).toFixed(2)}</td>
-      </tr>
-      <tr>
-        <td style="padding:8px 12px;color:#94A3B8;font-size:14px;border-bottom:1px solid rgba(255,255,255,.05)">Subtotaal excl. BTW</td>
-        <td style="padding:8px 12px;color:#E2E8F0;font-size:14px;border-bottom:1px solid rgba(255,255,255,.05)">&euro;${subtotal.toFixed(2)}</td>
-      </tr>
-      <tr>
-        <td style="padding:8px 12px;color:#94A3B8;font-size:14px;border-bottom:1px solid rgba(255,255,255,.05)">BTW 21%</td>
-        <td style="padding:8px 12px;color:#E2E8F0;font-size:14px;border-bottom:1px solid rgba(255,255,255,.05)">&euro;${btwAmount.toFixed(2)}</td>
-      </tr>
-      <tr>
-        <td style="padding:10px 12px;color:#FF6B35;font-size:15px;font-weight:700;border-top:2px solid rgba(255,107,53,.2)">Totaal incl. BTW</td>
-        <td style="padding:10px 12px;color:#FF6B35;font-size:15px;font-weight:700;text-align:right;border-top:2px solid rgba(255,107,53,.2)">&euro;${totalInclBtw.toFixed(2)}</td>
-      </tr>
-      <tr>
-        <td style="padding:8px 12px;color:#94A3B8;font-size:14px;border-bottom:1px solid rgba(255,255,255,.05)">Bron</td>
-        <td style="padding:8px 12px;color:#E2E8F0;font-size:14px;border-bottom:1px solid rgba(255,255,255,.05)">${sourceLabel}</td>
-      </tr>
-      <tr>
-        <td style="padding:8px 12px;color:#94A3B8;font-size:14px">Betaalstatus</td>
-        <td style="padding:8px 12px;color:${params.is_paid ? '#10B981' : '#EF4444'};font-size:14px;font-weight:600">${params.is_paid ? 'Betaald' : 'Onbetaald'}</td>
-      </tr>
-    </table>
-    <p style="margin-top:12px">
-      <a href="${process.env.NEXT_PUBLIC_SITE_URL || 'https://warmeleads.eu'}/admin/batches" style="display:inline-block;background:linear-gradient(135deg,#FF6B35,#FF4757);color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">Bekijk in admin &rarr;</a>
-    </p>`;
-
   const subject = `Nieuwe batch: ${params.customer_name} - ${params.batch_size} ${params.branch_name} leads`;
+
+  const fullHtml = `<!DOCTYPE html>
+<html lang="nl">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${subject}</title></head>
+<body style="margin:0;padding:0;background-color:#f8fafc;font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased">
+  <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background-color:#f8fafc">
+    <tr><td align="center" style="padding:40px 16px">
+      <table width="600" cellpadding="0" cellspacing="0" role="presentation" style="max-width:600px;width:100%">
+        <tr><td style="height:4px;background:linear-gradient(135deg,#3B2F75 0%,#E74C8C 35%,#FF6B35 70%,#FF4757 100%);border-radius:12px 12px 0 0;font-size:0;line-height:0">&nbsp;</td></tr>
+        <tr><td style="background-color:#ffffff;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0">
+          <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+            <tr><td style="padding:32px 40px 24px;border-bottom:1px solid #f1f5f9">
+              <img src="${logoUrl}" alt="WarmeLeads" width="130" style="max-width:130px;height:auto;display:block" />
+            </td></tr>
+          </table>
+          <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+            <tr><td style="padding:32px 40px">
+              <h1 style="margin:0 0 20px;font-size:20px;font-weight:700;color:#0f172a;line-height:1.3">Nieuwe Batch Aangemaakt</h1>
+              <p style="margin:0 0 20px;font-size:15px;color:#475569;line-height:1.7">Er is een nieuwe batch aangemaakt:</p>
+              <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom:28px;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
+                <tr><td style="background-color:#f8fafc;padding:14px 20px;border-bottom:1px solid #e2e8f0">
+                  <span style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:1px">Batchgegevens</span>
+                </td></tr>
+                <tr><td style="padding:0">
+                  <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+                    <tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9;width:160px">Klant</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;font-weight:600;border-bottom:1px solid #f1f5f9">${params.customer_name}</td></tr>
+                    <tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">Branche</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;border-bottom:1px solid #f1f5f9">${params.branch_name}</td></tr>
+                    <tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">Batch grootte</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;font-weight:600;border-bottom:1px solid #f1f5f9">${params.batch_size} leads</td></tr>
+                    <tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">Prijs per lead</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;border-bottom:1px solid #f1f5f9">&euro;${Number(params.price_per_lead).toFixed(2)}</td></tr>
+                    <tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">Subtotaal excl. BTW</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;border-bottom:1px solid #f1f5f9">&euro;${subtotal.toFixed(2)}</td></tr>
+                    <tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">BTW 21%</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;border-bottom:1px solid #f1f5f9">&euro;${btwAmount.toFixed(2)}</td></tr>
+                    <tr><td style="padding:16px 20px;font-size:15px;color:#3B2F75;font-weight:700;border-bottom:1px solid #f1f5f9">Totaal incl. BTW</td><td style="padding:16px 20px;font-size:18px;color:#3B2F75;font-weight:800;text-align:right;border-bottom:1px solid #f1f5f9">&euro;${totalInclBtw.toFixed(2)}</td></tr>
+                    <tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">Bron</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;border-bottom:1px solid #f1f5f9">${sourceLabel}</td></tr>
+                    <tr><td style="padding:12px 20px;font-size:14px;color:#64748b">Betaalstatus</td><td style="padding:12px 20px;font-size:14px;font-weight:700;color:${params.is_paid ? '#059669' : '#dc2626'}">${params.is_paid ? 'Betaald' : 'Onbetaald'}</td></tr>
+                  </table>
+                </td></tr>
+              </table>
+              <table cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom:8px">
+                <tr><td style="border-radius:10px;background:linear-gradient(135deg,#FF6B35,#FF4757)">
+                  <a href="${BASE_URL}/admin/batches" target="_blank" style="display:inline-block;padding:14px 32px;color:#ffffff;font-size:14px;font-weight:700;text-decoration:none;letter-spacing:0.3px">Bekijk in admin &rarr;</a>
+                </td></tr>
+              </table>
+            </td></tr>
+          </table>
+        </td></tr>
+        <tr><td style="background-color:#f8fafc;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px;padding:24px 40px">
+          <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+            <tr><td style="border-top:1px solid #e2e8f0;padding-top:20px">
+              <p style="margin:0;font-size:12px;color:#cbd5e1;line-height:1.5">&copy; ${year} WarmeLeads &middot; <a href="${BASE_URL}" style="color:#cbd5e1;text-decoration:none">warmeleads.eu</a></p>
+            </td></tr>
+          </table>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
   return sendEmail(
     'info@warmeleads.eu',
     subject,
-    `<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#1A1A2E;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#1A1A2E;padding:40px 20px">
-<tr><td align="center">
-<table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%">
-  <tr><td style="padding:24px 32px;text-align:center">
-    <img src="${BASE_URL}/logo-wit.png" alt="WarmeLeads" height="32" style="height:32px;width:auto" />
-  </td></tr>
-  <tr><td style="background:#16213E;border-radius:12px;padding:32px;border:1px solid rgba(255,107,53,.15)">
-    <h1 style="margin:0 0 20px;font-size:20px;color:#fff;font-weight:600">Nieuwe Batch Aangemaakt</h1>
-    <div style="color:#CBD5E1;font-size:15px;line-height:1.6">${content}</div>
-  </td></tr>
-  <tr><td style="padding:24px 32px;text-align:center;color:#64748B;font-size:12px">
-    &copy; ${new Date().getFullYear()} WarmeLeads &middot; warmeleads.eu
-  </td></tr>
-</table>
-</td></tr>
-</table>
-</body>
-</html>`,
+    fullHtml,
     { type: 'new_batch_admin', metadata: { customer_name: params.customer_name, branch: params.branch_name, batch_size: params.batch_size, source: params.source } },
   );
 }
