@@ -27,6 +27,9 @@ interface PeriodStat { leads: number; prevLeads: number; assigned: number; prevA
 interface BatchInfo { id: string; customer: string; branch: string; batchSize: number; delivered: number; pricePerLead: number | null; leadsPerWeek: number | null; notes: string | null; }
 interface RecentLead { id: string; name: string; branch: string; city: string; province: string; createdAt: string; }
 interface CostMetrics { monthAdSpend: number; brutoCpl: number; effectieveCpl: number; avgAssignments: number; totalProfit: number; }
+interface PaidBatch { id: string; batchId: string; customer: string; branch: string; amount: number; paidAt: string; amId: string | null; amName: string | null; celebrationVideoUrl: string | null; }
+interface AMLeaderboardEntry { id: string; name: string; revenue: number; batches: number; celebrationVideoUrl: string | null; }
+
 interface LiveData {
   totalLeads: number;
   activeCustomers: number;
@@ -40,6 +43,8 @@ interface LiveData {
   branchBreakdown: Record<string, number>;
   phoneQuality: { total: number; invalid: number; validPct: number };
   costMetrics?: CostMetrics;
+  recentPaidBatches?: PaidBatch[];
+  amLeaderboard?: AMLeaderboardEntry[];
   timestamp: string;
 }
 
@@ -232,6 +237,39 @@ function playCelebrationSound() {
       osc.stop(ac.currentTime + 1);
     }, 500);
   } catch { /* browser might block audio */ }
+}
+
+function playSalesBell() {
+  try {
+    const ac = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+    const bellNotes = [1046.5, 1318.5, 1568, 2093];
+    bellNotes.forEach((freq, i) => {
+      const osc = ac.createOscillator();
+      const gain = ac.createGain();
+      osc.type = 'triangle';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0, ac.currentTime + i * 0.15);
+      gain.gain.linearRampToValueAtTime(0.25, ac.currentTime + i * 0.15 + 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + i * 0.15 + 0.6);
+      osc.connect(gain);
+      gain.connect(ac.destination);
+      osc.start(ac.currentTime + i * 0.15);
+      osc.stop(ac.currentTime + i * 0.15 + 0.7);
+    });
+  } catch { /* browser might block audio */ }
+}
+
+function extractYouTubeId(url: string): string | null {
+  if (!url) return null;
+  const patterns = [
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/,
+    /^([a-zA-Z0-9_-]{11})$/,
+  ];
+  for (const p of patterns) {
+    const m = url.match(p);
+    if (m) return m[1];
+  }
+  return null;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────
@@ -456,9 +494,12 @@ export default function LiveDashboard() {
   const [newLeadIds, setNewLeadIds] = useState<Set<string>>(new Set());
   const [celebratingBatch, setCelebratingBatch] = useState<string | null>(null);
   const [amTargets, setAmTargets] = useState<AMTargetLive[]>([]);
+  const [salesToasts, setSalesToasts] = useState<PaidBatch[]>([]);
+  const [celebrationVideo, setCelebrationVideo] = useState<PaidBatch | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const prevBatchPcts = useRef<Record<string, number>>({});
+  const seenPaidIds = useRef<Set<string>>(new Set());
 
   const fetchData = useCallback(async () => {
     try {
@@ -485,6 +526,26 @@ export default function LiveDashboard() {
               setTimeout(() => setCelebratingBatch(null), 5000);
             }
             prevBatchPcts.current[batch.id] = newPct;
+          }
+
+          // Detect newly paid batches for sales bell + video celebration
+          if (d.recentPaidBatches && d.recentPaidBatches.length > 0) {
+            const newPaid = d.recentPaidBatches.filter((pb: PaidBatch) => !seenPaidIds.current.has(pb.id));
+            if (newPaid.length > 0 && seenPaidIds.current.size > 0) {
+              for (const pb of newPaid) {
+                setSalesToasts(prev => [pb, ...prev].slice(0, 5));
+                setTimeout(() => setSalesToasts(prev => prev.filter(t => t.id !== pb.id)), 8000);
+              }
+              playSalesBell();
+              if (canvasRef.current) fireConfetti(canvasRef.current);
+
+              const withVideo = newPaid.find((pb: PaidBatch) => pb.celebrationVideoUrl);
+              if (withVideo) {
+                setCelebrationVideo(withVideo);
+                setTimeout(() => setCelebrationVideo(null), 20000);
+              }
+            }
+            for (const pb of d.recentPaidBatches) seenPaidIds.current.add(pb.id);
           }
 
           return d;
@@ -562,7 +623,7 @@ export default function LiveDashboard() {
         <div className="absolute left-1/2 top-1/2 h-[400px] w-[400px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-emerald-500/[0.03] blur-[150px]" />
       </div>
 
-      {/* Celebration overlay */}
+      {/* Batch completion overlay */}
       <AnimatePresence>
         {celebratingBatch && (
           <motion.div
@@ -586,6 +647,108 @@ export default function LiveDashboard() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Sales Celebration Video Overlay */}
+      <AnimatePresence>
+        {celebrationVideo && celebrationVideo.celebrationVideoUrl && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[95] flex items-center justify-center bg-black/80 backdrop-blur-md"
+            onClick={() => setCelebrationVideo(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.7, y: 40 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.7, y: 40 }}
+              transition={{ type: 'spring', damping: 20, stiffness: 200 }}
+              className="relative w-full max-w-3xl px-4"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="mb-4 text-center">
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: [0, 1.3, 1] }}
+                  transition={{ duration: 0.6 }}
+                  className="mb-2 inline-flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-amber-600 shadow-lg shadow-amber-500/30"
+                >
+                  <span className="text-3xl">🔔</span>
+                </motion.div>
+                <motion.h2
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.3 }}
+                  className="text-3xl font-black text-amber-400"
+                >
+                  Nieuwe verkoop!
+                </motion.h2>
+                <motion.p
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.5 }}
+                  className="mt-1 text-white/60"
+                >
+                  <span className="font-bold text-white">{celebrationVideo.customer}</span>
+                  {celebrationVideo.amName && <span> — verkocht door <span className="font-bold text-amber-300">{celebrationVideo.amName}</span></span>}
+                  {celebrationVideo.amount > 0 && <span> — <span className="font-bold text-emerald-400">€{celebrationVideo.amount.toLocaleString('nl-NL', { minimumFractionDigits: 2 })}</span></span>}
+                </motion.p>
+              </div>
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.4 }}
+                className="overflow-hidden rounded-2xl border-2 border-amber-500/30 shadow-2xl shadow-amber-500/20"
+              >
+                <div className="relative w-full" style={{ paddingBottom: '56.25%' }}>
+                  <iframe
+                    src={`https://www.youtube.com/embed/${extractYouTubeId(celebrationVideo.celebrationVideoUrl!)}?autoplay=1&start=0`}
+                    className="absolute inset-0 h-full w-full"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                  />
+                </div>
+              </motion.div>
+              <motion.button
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 1 }}
+                onClick={() => setCelebrationVideo(null)}
+                className="mx-auto mt-4 block rounded-lg bg-white/10 px-6 py-2 text-sm font-medium text-white/60 transition hover:bg-white/20 hover:text-white"
+              >
+                Sluiten
+              </motion.button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Sales Bell Toast Notifications */}
+      <div className="fixed right-4 top-4 z-[85] flex flex-col gap-2 sm:right-6 sm:top-6">
+        <AnimatePresence>
+          {salesToasts.map((toast) => (
+            <motion.div
+              key={toast.id}
+              initial={{ opacity: 0, x: 100, scale: 0.9 }}
+              animate={{ opacity: 1, x: 0, scale: 1 }}
+              exit={{ opacity: 0, x: 100, scale: 0.9 }}
+              className="flex items-center gap-3 rounded-xl border border-amber-500/30 bg-[#1a1d2e]/95 px-4 py-3 shadow-2xl shadow-amber-500/10 backdrop-blur-xl"
+            >
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-amber-600 shadow-lg shadow-amber-500/30">
+                <span className="text-lg">🔔</span>
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-amber-400">Verkoop!</p>
+                <p className="truncate text-xs text-white/60">
+                  {toast.customer}
+                  {toast.amount > 0 && <span className="ml-1 font-bold text-emerald-400">€{toast.amount.toLocaleString('nl-NL', { minimumFractionDigits: 2 })}</span>}
+                </p>
+                {toast.amName && <p className="text-[10px] text-white/30">door {toast.amName}</p>}
+              </div>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
 
       <div className="relative z-10 flex h-screen flex-col overflow-hidden p-4 sm:p-6 lg:p-5">
         {/* Top bar */}
@@ -929,12 +1092,31 @@ export default function LiveDashboard() {
                 const r = 16;
                 const circ = 2 * Math.PI * r;
                 const filled = Math.min(t.progress_pct, 100);
-                const ringColor = t.progress_pct >= 100 ? '#34d399' : t.progress_pct >= 50 ? '#fbbf24' : '#f87171';
+                const isComplete = t.progress_pct >= 100;
+                const isClose = t.progress_pct >= 75 && !isComplete;
+                const ringColor = isComplete ? '#34d399' : t.progress_pct >= 75 ? '#fbbf24' : t.progress_pct >= 50 ? '#f97316' : '#f87171';
+                const remaining = Math.max(0, t.target_value - (t as any).current_value || 0);
+                const daysLeft = Math.max(0, Math.ceil((new Date(t.period_end + 'T23:59:59').getTime() - Date.now()) / 86400000));
+
                 return (
-                  <div key={t.id} className="rounded-xl border border-white/[0.04] bg-white/[0.02] p-3">
+                  <motion.div
+                    key={t.id}
+                    animate={isClose ? { boxShadow: ['0 0 0px rgba(251,191,36,0)', '0 0 12px rgba(251,191,36,0.15)', '0 0 0px rgba(251,191,36,0)'] } : undefined}
+                    transition={isClose ? { repeat: Infinity, duration: 2.5 } : undefined}
+                    className={`rounded-xl border p-3 ${
+                      isComplete
+                        ? 'border-emerald-500/20 bg-emerald-500/[0.06]'
+                        : isClose
+                        ? 'border-amber-500/15 bg-amber-500/[0.04]'
+                        : 'border-white/[0.04] bg-white/[0.02]'
+                    }`}
+                  >
                     <div className="mb-2 flex items-center gap-2">
                       <div className="relative h-10 w-10 shrink-0">
-                        <svg className="-rotate-90 h-10 w-10" viewBox="0 0 40 40">
+                        {(isClose || isComplete) && (
+                          <div className={`absolute inset-0 rounded-full blur-sm ${isComplete ? 'bg-emerald-400/20' : 'bg-amber-400/15'}`} />
+                        )}
+                        <svg className="-rotate-90 relative h-10 w-10" viewBox="0 0 40 40">
                           <circle cx="20" cy="20" r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="3" />
                           <circle cx="20" cy="20" r={r} fill="none"
                             stroke={ringColor}
@@ -943,10 +1125,14 @@ export default function LiveDashboard() {
                             strokeDasharray={circ}
                             strokeDashoffset={circ - (filled / 100) * circ}
                             className="transition-all duration-1000"
+                            style={isClose ? { filter: `drop-shadow(0 0 3px ${ringColor})` } : undefined}
                           />
                         </svg>
                         <div className="absolute inset-0 flex items-center justify-center">
-                          <span className="text-[9px] font-black text-white/70">{t.progress_pct}%</span>
+                          {isComplete
+                            ? <span className="text-xs">🎉</span>
+                            : <span className="text-[9px] font-black text-white/70">{t.progress_pct}%</span>
+                          }
                         </div>
                       </div>
                       <div className="min-w-0 flex-1">
@@ -966,13 +1152,75 @@ export default function LiveDashboard() {
                           : t.target_value.toLocaleString('nl-NL')}
                       </span>
                     </div>
+                    {!isComplete && remaining > 0 && (
+                      <p className="mt-0.5 text-[9px] text-white/25">
+                        Nog {t.target_type === 'revenue' ? `€${remaining.toLocaleString('nl-NL', { maximumFractionDigits: 0 })}` : remaining} · {daysLeft}d over
+                      </p>
+                    )}
                     <div className="mt-1 flex items-center justify-between text-[9px] text-white/20">
                       <span>{TARGET_TYPE_LABELS[t.target_type] || t.target_type}</span>
                       {t.bonus_amount > 0 && (
-                        <span className="text-amber-400/60">€{t.bonus_amount.toLocaleString('nl-NL', { maximumFractionDigits: 0 })} bonus</span>
+                        <span className={isComplete ? 'font-bold text-emerald-400/70' : 'text-amber-400/60'}>
+                          {isComplete ? '✓ ' : ''}€{t.bonus_amount.toLocaleString('nl-NL', { maximumFractionDigits: 0 })} bonus
+                        </span>
                       )}
                     </div>
-                  </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
+
+        {/* AM Leaderboard */}
+        {data.amLeaderboard && data.amLeaderboard.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.28 }}
+            className="shrink-0 rounded-2xl border border-brand-purple/10 bg-brand-purple/[0.04] p-3 backdrop-blur-sm"
+          >
+            <div className="mb-2 flex items-center gap-2">
+              <svg className="h-4 w-4 text-brand-purple/60" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" /></svg>
+              <h2 className="text-sm font-bold text-white/70">AM Leaderboard</h2>
+              <span className="ml-auto text-[10px] text-white/25">
+                {new Date().toLocaleDateString('nl-NL', { month: 'long', year: 'numeric' })}
+              </span>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {data.amLeaderboard.map((am, rank) => {
+                const isFirst = rank === 0;
+                const medalColors = ['from-amber-400 to-amber-600', 'from-slate-300 to-slate-400', 'from-amber-600 to-amber-800'];
+                const medalBg = rank < 3 ? medalColors[rank] : '';
+                return (
+                  <motion.div
+                    key={am.id}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.3 + rank * 0.05 }}
+                    className={`flex items-center gap-3 rounded-xl border p-3 transition-all ${
+                      isFirst
+                        ? 'border-amber-500/20 bg-amber-500/[0.06] shadow-lg shadow-amber-500/5'
+                        : 'border-white/[0.04] bg-white/[0.02]'
+                    }`}
+                  >
+                    <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-black ${
+                      rank < 3 ? `bg-gradient-to-br ${medalBg} text-white shadow-md` : 'bg-white/[0.06] text-white/30'
+                    }`}>
+                      {rank + 1}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className={`truncate text-sm font-bold ${isFirst ? 'text-amber-300' : 'text-white/70'}`}>{am.name}</p>
+                      <div className="flex items-center gap-2 text-[10px]">
+                        <span className="font-bold tabular-nums text-emerald-400">€{am.revenue.toLocaleString('nl-NL', { maximumFractionDigits: 0 })}</span>
+                        <span className="text-white/20">·</span>
+                        <span className="text-white/30">{am.batches} {am.batches === 1 ? 'batch' : 'batches'}</span>
+                      </div>
+                    </div>
+                    {isFirst && (
+                      <span className="text-lg">👑</span>
+                    )}
+                  </motion.div>
                 );
               })}
             </div>

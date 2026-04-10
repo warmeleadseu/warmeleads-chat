@@ -30,6 +30,7 @@ import {
   TrophyIcon,
   EnvelopeIcon,
   AcademicCapIcon,
+  UserCircleIcon,
 } from '@heroicons/react/24/outline';
 import { AdminContext, type AdminUser } from './adminContext';
 import { adminFetch } from '@/lib/adminAuth';
@@ -51,6 +52,7 @@ const NAV: { label: string; href: string; icon: React.ComponentType<any>; badge?
   { label: 'Bedrijfsgegevens', href: '/admin/bedrijf', icon: BuildingOffice2Icon, roles: ['superadmin'] },
   { label: 'Koppelingen', href: '/admin/koppelingen', icon: Cog6ToothIcon, roles: ['superadmin'] },
   { label: 'Live', href: '/admin/live', icon: TvIcon, roles: ['superadmin', 'admin', 'accountmanager'] },
+  { label: 'Mijn Account', href: '/admin/account', icon: UserCircleIcon, roles: ['superadmin', 'admin', 'accountmanager'] },
   { label: 'E-learning', href: '/admin/e-learning', icon: AcademicCapIcon, roles: ['superadmin', 'accountmanager'] },
   { label: 'E-mails', href: '/admin/emails', icon: EnvelopeIcon, roles: ['superadmin'] },
   { label: 'Activiteitenlog', href: '/admin/audit', icon: ClipboardDocumentListIcon, roles: ['superadmin'] },

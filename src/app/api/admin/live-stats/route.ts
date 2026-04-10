@@ -154,6 +154,87 @@ export async function GET(request: NextRequest) {
 
   const totalProfit = totalRevenue - monthAdSpend;
 
+  // ── Recently paid batches (last 10 min) for celebration detection ──
+  const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+  const { data: recentPaidOrders } = await supabase
+    .from('batch_orders')
+    .select('id, batch_id, amount, paid_at, customer_batches(customer_id, branch, customers(name, account_manager_id))')
+    .eq('status', 'paid')
+    .gte('paid_at', tenMinAgo)
+    .order('paid_at', { ascending: false })
+    .limit(5);
+
+  const recentPaidBatches: { id: string; batchId: string; customer: string; branch: string; amount: number; paidAt: string; amId: string | null; amName: string | null; celebrationVideoUrl: string | null }[] = [];
+
+  if (recentPaidOrders && recentPaidOrders.length > 0) {
+    const amIds = new Set<string>();
+    for (const o of recentPaidOrders) {
+      const cb = o.customer_batches as any;
+      if (cb?.customers?.account_manager_id) amIds.add(cb.customers.account_manager_id);
+    }
+
+    let amMap = new Map<string, { name: string; celebration_video_url: string | null }>();
+    if (amIds.size > 0) {
+      const { data: ams } = await supabase
+        .from('admin_users')
+        .select('id, name, celebration_video_url')
+        .in('id', [...amIds]);
+      for (const am of ams || []) {
+        amMap.set(am.id, { name: am.name, celebration_video_url: am.celebration_video_url });
+      }
+    }
+
+    for (const o of recentPaidOrders) {
+      const cb = o.customer_batches as any;
+      const amId = cb?.customers?.account_manager_id || null;
+      const am = amId ? amMap.get(amId) : null;
+      recentPaidBatches.push({
+        id: o.id,
+        batchId: o.batch_id,
+        customer: cb?.customers?.name || '-',
+        branch: cb?.branch || '-',
+        amount: Number(o.amount) || 0,
+        paidAt: o.paid_at,
+        amId,
+        amName: am?.name || null,
+        celebrationVideoUrl: am?.celebration_video_url || null,
+      });
+    }
+  }
+
+  // ── AM Leaderboard (monthly revenue) ──
+  const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
+  const { data: monthlyOrders } = await supabase
+    .from('batch_orders')
+    .select('amount, customer_batches(customer_id, customers(account_manager_id))')
+    .eq('status', 'paid')
+    .gte('paid_at', monthStart);
+
+  const amRevenue = new Map<string, number>();
+  const amBatchCount = new Map<string, number>();
+  for (const o of monthlyOrders || []) {
+    const cb = o.customer_batches as any;
+    const amId = cb?.customers?.account_manager_id;
+    if (!amId) continue;
+    amRevenue.set(amId, (amRevenue.get(amId) || 0) + (Number(o.amount) || 0));
+    amBatchCount.set(amId, (amBatchCount.get(amId) || 0) + 1);
+  }
+
+  let amLeaderboard: { id: string; name: string; revenue: number; batches: number; celebrationVideoUrl: string | null }[] = [];
+  if (amRevenue.size > 0) {
+    const { data: leaderboardAMs } = await supabase
+      .from('admin_users')
+      .select('id, name, celebration_video_url')
+      .in('id', [...amRevenue.keys()]);
+    amLeaderboard = (leaderboardAMs || []).map(am => ({
+      id: am.id,
+      name: am.name,
+      revenue: amRevenue.get(am.id) || 0,
+      batches: amBatchCount.get(am.id) || 0,
+      celebrationVideoUrl: am.celebration_video_url,
+    })).sort((a, b) => b.revenue - a.revenue);
+  }
+
   const periods = ['day', '3days', 'week', 'month', 'quarter', 'year'] as const;
   const periodStats: Record<string, { leads: number; prevLeads: number; assigned: number; prevAssigned: number }> = {};
 
@@ -212,6 +293,8 @@ export async function GET(request: NextRequest) {
       avgAssignments,
       totalProfit: Math.round(totalProfit * 100) / 100,
     },
+    recentPaidBatches,
+    amLeaderboard,
     timestamp: new Date().toISOString(),
   });
 }

@@ -70,24 +70,35 @@ function ProgressRing({ pct, size = 48, stroke = 4 }: { pct: number; size?: numb
   const r = (size - stroke) / 2;
   const circ = 2 * Math.PI * r;
   const filled = Math.min(pct, 100);
-  const color = pct >= 100 ? '#10b981' : pct >= 50 ? '#f59e0b' : '#ef4444';
+  const color = pct >= 100 ? '#10b981' : pct >= 75 ? '#f59e0b' : pct >= 50 ? '#f97316' : '#ef4444';
+  const isClose = pct >= 75 && pct < 100;
+  const isComplete = pct >= 100;
 
   return (
-    <svg width={size} height={size} className="shrink-0 -rotate-90">
-      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#e2e8f0" strokeWidth={stroke} />
-      <circle
-        cx={size / 2}
-        cy={size / 2}
-        r={r}
-        fill="none"
-        stroke={color}
-        strokeWidth={stroke}
-        strokeLinecap="round"
-        strokeDasharray={circ}
-        strokeDashoffset={circ - (filled / 100) * circ}
-        className="transition-all duration-700"
-      />
-    </svg>
+    <div className="relative" style={{ width: size, height: size }}>
+      {(isClose || isComplete) && (
+        <div
+          className={`absolute inset-0 rounded-full blur-md ${isComplete ? 'bg-emerald-500/20' : 'bg-amber-500/15'}`}
+          style={{ animation: isClose ? 'pulse 2s ease-in-out infinite' : undefined }}
+        />
+      )}
+      <svg width={size} height={size} className="relative shrink-0 -rotate-90">
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#e2e8f0" strokeWidth={stroke} />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          fill="none"
+          stroke={color}
+          strokeWidth={stroke}
+          strokeLinecap="round"
+          strokeDasharray={circ}
+          strokeDashoffset={circ - (filled / 100) * circ}
+          className="transition-all duration-700"
+          style={isClose ? { filter: `drop-shadow(0 0 4px ${color})` } : undefined}
+        />
+      </svg>
+    </div>
   );
 }
 
@@ -382,6 +393,8 @@ function TargetCard({
   const isRevenue = t.target_type === 'revenue';
   const currentLabel = isRevenue ? formatCurrency(t.current_value) : t.current_value.toLocaleString('nl-NL');
   const targetLabel = isRevenue ? formatCurrency(t.target_value) : t.target_value.toLocaleString('nl-NL');
+  const remaining = Math.max(0, t.target_value - t.current_value);
+  const remainingLabel = isRevenue ? formatCurrency(remaining) : remaining.toLocaleString('nl-NL');
 
   const now = new Date();
   const start = new Date(t.period_start + 'T00:00:00');
@@ -390,14 +403,30 @@ function TargetCard({
   const elapsedDays = Math.max(0, Math.min(totalDays, (now.getTime() - start.getTime()) / 86400000));
   const daysLeft = Math.max(0, Math.ceil((end.getTime() - now.getTime()) / 86400000));
   const timePct = Math.round((elapsedDays / totalDays) * 100);
+  const isUrgent = daysLeft <= 7 && daysLeft > 0;
+  const isComplete = t.progress_pct >= 100;
+  const isClose = t.progress_pct >= 75 && !isComplete;
 
   return (
     <motion.div
       layout
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      className="relative overflow-hidden rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:shadow-md"
+      className={`relative overflow-hidden rounded-xl border bg-white p-5 shadow-sm transition hover:shadow-md ${
+        isComplete
+          ? 'border-emerald-200 ring-1 ring-emerald-100'
+          : isClose
+          ? 'border-amber-200 ring-1 ring-amber-50'
+          : 'border-slate-200'
+      }`}
     >
+      {isComplete && (
+        <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-emerald-400 to-emerald-500" />
+      )}
+      {isClose && !isComplete && (
+        <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-amber-400 to-amber-500" />
+      )}
+
       {canEdit && (
         <div className="absolute right-3 top-3 flex gap-1">
           <button onClick={onEdit} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-brand-purple">
@@ -417,46 +446,89 @@ function TargetCard({
         </div>
       </div>
 
-      <div className="mb-3 flex items-baseline justify-between">
+      <div className="mb-1 flex items-baseline justify-between">
         <span className="text-lg font-bold text-slate-900">{currentLabel}</span>
         <span className="text-sm text-slate-400">/ {targetLabel}</span>
       </div>
 
+      {/* Remaining value display */}
+      {!isComplete && remaining > 0 && (
+        <div className="mb-3 flex items-center gap-1.5 text-[11px]">
+          <span className={`font-bold ${isUrgent ? 'text-red-500' : 'text-slate-500'}`}>
+            Nog {remainingLabel} te gaan
+          </span>
+          {isUrgent && (
+            <span className="animate-pulse rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-600">
+              Haast!
+            </span>
+          )}
+        </div>
+      )}
+
+      {isComplete && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="mb-3 flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2.5 py-1.5 text-xs font-bold text-emerald-700"
+        >
+          <span className="text-sm">🎉</span>
+          Target behaald!
+        </motion.div>
+      )}
+
       <div className="mb-1 flex items-center justify-between text-[11px] text-slate-400">
         <span>{TYPE_LABELS[t.target_type]}</span>
-        <span>{t.progress_pct}%</span>
+        <span className="font-bold">{t.progress_pct}%</span>
       </div>
-      <div className="mb-3 h-2 overflow-hidden rounded-full bg-slate-100">
+      <div className="mb-3 h-2.5 overflow-hidden rounded-full bg-slate-100">
         <motion.div
           initial={{ width: 0 }}
           animate={{ width: `${Math.min(t.progress_pct, 100)}%` }}
           transition={{ duration: 0.8, ease: 'easeOut' }}
           className="h-full rounded-full"
           style={{
-            backgroundColor: t.progress_pct >= 100 ? '#10b981' : t.progress_pct >= 50 ? '#f59e0b' : '#ef4444',
+            backgroundColor: isComplete ? '#10b981' : t.progress_pct >= 75 ? '#f59e0b' : t.progress_pct >= 50 ? '#f97316' : '#ef4444',
+            boxShadow: isClose ? '0 0 8px rgba(245, 158, 11, 0.4)' : isComplete ? '0 0 8px rgba(16, 185, 129, 0.4)' : undefined,
           }}
         />
       </div>
 
-      <div className="flex items-center justify-between text-[11px]">
+      {/* Time countdown */}
+      <div className="mb-1.5 flex items-center justify-between text-[11px]">
         <span className="text-slate-400">
           {formatDate(t.period_start)} – {formatDate(t.period_end)}
         </span>
-        <span className={`font-medium ${daysLeft <= 7 ? 'text-amber-600' : 'text-slate-500'}`}>
-          {daysLeft === 0 ? 'Vandaag afgelopen' : `${daysLeft}d over`}
+        <span className={`font-bold ${
+          daysLeft === 0 ? 'text-red-500' : isUrgent ? 'text-amber-600' : 'text-slate-500'
+        }`}>
+          {daysLeft === 0 ? 'Laatste dag!' : `${daysLeft} ${daysLeft === 1 ? 'dag' : 'dagen'} over`}
         </span>
       </div>
-
-      {/* Time progress bar */}
-      <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-slate-100">
-        <div className="h-full rounded-full bg-slate-300 transition-all" style={{ width: `${timePct}%` }} />
+      <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
+        <div
+          className={`h-full rounded-full transition-all ${
+            isUrgent ? 'bg-amber-400' : 'bg-slate-300'
+          }`}
+          style={{ width: `${timePct}%` }}
+        />
       </div>
 
       {t.bonus_amount > 0 && (
-        <div className="mt-3 flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-700">
-          <TrophyIcon className="h-3.5 w-3.5" />
-          Bonus: {formatCurrency(t.bonus_amount)}
-        </div>
+        <motion.div
+          className={`mt-3 flex items-center justify-between rounded-lg px-2.5 py-2 text-xs font-medium ${
+            isComplete
+              ? 'bg-emerald-50 text-emerald-700'
+              : 'bg-gradient-to-r from-amber-50 to-orange-50 text-amber-700'
+          }`}
+          animate={isClose && !isComplete ? { scale: [1, 1.01, 1] } : undefined}
+          transition={isClose && !isComplete ? { repeat: Infinity, duration: 2 } : undefined}
+        >
+          <div className="flex items-center gap-1.5">
+            <TrophyIcon className="h-4 w-4" />
+            <span>{isComplete ? 'Bonus verdiend!' : 'Bonus'}</span>
+          </div>
+          <span className="font-bold">{formatCurrency(t.bonus_amount)}</span>
+        </motion.div>
       )}
     </motion.div>
   );
