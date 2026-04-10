@@ -149,53 +149,114 @@ const BE_PROVINCES: Record<string, { d: string; cx: number; cy: number }> = {
   },
 };
 
-// ─── Confetti ────────────────────────────────────────────────────────
-function fireConfetti(canvas: HTMLCanvasElement) {
+// ─── Celebration Effects ──────────────────────────────────────────────
+type CelebrationVariant = 'confetti' | 'goldenRain' | 'megaBurst';
+
+function fireCelebration(canvas: HTMLCanvasElement, variant: CelebrationVariant = 'confetti') {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
   canvas.width = window.innerWidth;
   canvas.height = window.innerHeight;
+  const W = canvas.width;
+  const H = canvas.height;
 
-  const colors = ['#a855f7', '#ec4899', '#34d399', '#facc15', '#38bdf8', '#f97316', '#f43f5e'];
-  const particles: { x: number; y: number; vx: number; vy: number; size: number; color: string; rotation: number; rotSpeed: number; life: number }[] = [];
+  const confettiColors = ['#a855f7', '#ec4899', '#34d399', '#facc15', '#38bdf8', '#f97316', '#f43f5e', '#ffffff'];
+  const goldColors = ['#fbbf24', '#f59e0b', '#d97706', '#fcd34d', '#fffbeb', '#b45309'];
 
-  for (let i = 0; i < 200; i++) {
-    particles.push({
-      x: canvas.width * (0.3 + Math.random() * 0.4),
-      y: canvas.height * 0.3,
-      vx: (Math.random() - 0.5) * 16,
-      vy: -Math.random() * 18 - 4,
-      size: Math.random() * 8 + 3,
-      color: colors[Math.floor(Math.random() * colors.length)],
-      rotation: Math.random() * 360,
-      rotSpeed: (Math.random() - 0.5) * 12,
-      life: 1,
-    });
+  type PShape = 'rect' | 'circle' | 'streamer';
+  interface CParticle {
+    x: number; y: number; vx: number; vy: number;
+    size: number; color: string; rotation: number; rotSpeed: number;
+    life: number; shape: PShape; flickerPhase: number; flickerSpeed: number;
+  }
+
+  const particles: CParticle[] = [];
+  const shapes: PShape[] = ['rect', 'rect', 'circle', 'streamer'];
+
+  function makeCannon(originX: number, dirX: number, count: number, colors: string[]) {
+    for (let i = 0; i < count; i++) {
+      particles.push({
+        x: originX + (Math.random() - 0.5) * 40,
+        y: H * 0.9,
+        vx: dirX * (Math.random() * 14 + 4),
+        vy: -Math.random() * 24 - 10,
+        size: Math.random() * 9 + 3,
+        color: colors[Math.floor(Math.random() * colors.length)],
+        rotation: Math.random() * 360,
+        rotSpeed: (Math.random() - 0.5) * 15,
+        life: 1,
+        shape: shapes[Math.floor(Math.random() * shapes.length)],
+        flickerPhase: Math.random() * Math.PI * 2,
+        flickerSpeed: 2 + Math.random() * 4,
+      });
+    }
+  }
+
+  if (variant === 'confetti' || variant === 'megaBurst') {
+    const n = variant === 'megaBurst' ? 250 : 180;
+    makeCannon(W * 0.05, 1, n, confettiColors);
+    makeCannon(W * 0.95, -1, n, confettiColors);
+  }
+
+  if (variant === 'goldenRain' || variant === 'megaBurst') {
+    const count = variant === 'megaBurst' ? 200 : 150;
+    for (let i = 0; i < count; i++) {
+      particles.push({
+        x: Math.random() * W,
+        y: -Math.random() * H * 0.5,
+        vx: (Math.random() - 0.5) * 2,
+        vy: Math.random() * 3 + 1.5,
+        size: Math.random() * 5 + 2,
+        color: goldColors[Math.floor(Math.random() * goldColors.length)],
+        rotation: Math.random() * 360,
+        rotSpeed: (Math.random() - 0.5) * 6,
+        life: 1,
+        shape: 'circle',
+        flickerPhase: Math.random() * Math.PI * 2,
+        flickerSpeed: 3 + Math.random() * 5,
+      });
+    }
   }
 
   let frame = 0;
-  const maxFrames = 180;
+  const maxFrames = variant === 'megaBurst' ? 300 : variant === 'goldenRain' ? 200 : 250;
 
   function animate() {
-    if (frame >= maxFrames) {
-      ctx!.clearRect(0, 0, canvas.width, canvas.height);
-      return;
-    }
-    ctx!.clearRect(0, 0, canvas.width, canvas.height);
+    if (frame >= maxFrames) { ctx!.clearRect(0, 0, W, H); return; }
+    ctx!.clearRect(0, 0, W, H);
+
     for (const p of particles) {
       p.x += p.vx;
-      p.vy += 0.35;
+      p.vy += p.shape === 'circle' && (variant === 'goldenRain' || variant === 'megaBurst') ? 0.08 : 0.35;
       p.y += p.vy;
-      p.vx *= 0.99;
+      p.vx *= 0.995;
       p.rotation += p.rotSpeed;
       p.life = Math.max(0, 1 - frame / maxFrames);
+
+      const flicker = 0.5 + 0.5 * Math.sin(frame * p.flickerSpeed * 0.1 + p.flickerPhase);
+      const alpha = p.life * (0.6 + flicker * 0.4);
 
       ctx!.save();
       ctx!.translate(p.x, p.y);
       ctx!.rotate((p.rotation * Math.PI) / 180);
-      ctx!.globalAlpha = p.life;
+      ctx!.globalAlpha = alpha;
       ctx!.fillStyle = p.color;
-      ctx!.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.6);
+
+      if (p.shape === 'rect') {
+        ctx!.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.6);
+      } else if (p.shape === 'circle') {
+        ctx!.beginPath();
+        ctx!.arc(0, 0, p.size / 2, 0, Math.PI * 2);
+        ctx!.fill();
+        ctx!.globalAlpha = alpha * flicker * 0.8;
+        ctx!.fillStyle = '#fff';
+        ctx!.beginPath();
+        ctx!.arc(-p.size * 0.15, -p.size * 0.15, p.size * 0.15, 0, Math.PI * 2);
+        ctx!.fill();
+      } else {
+        ctx!.fillRect(-p.size * 0.15, -p.size * 1.5, p.size * 0.3, p.size * 3);
+      }
+
       ctx!.restore();
     }
     frame++;
@@ -204,57 +265,67 @@ function fireConfetti(canvas: HTMLCanvasElement) {
   animate();
 }
 
-function playCelebrationSound() {
+function playKaChing() {
   try {
     const ac = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+    const master = ac.createGain();
+    master.gain.value = 0.3;
+    master.connect(ac.destination);
 
-    const notes = [523.25, 659.25, 783.99, 1046.5];
-    notes.forEach((freq, i) => {
+    // "Ka" - cash register drawer click (noise burst through highpass)
+    const bufSize = Math.floor(ac.sampleRate * 0.03);
+    const noiseBuf = ac.createBuffer(1, bufSize, ac.sampleRate);
+    const nd = noiseBuf.getChannelData(0);
+    for (let i = 0; i < bufSize; i++) nd[i] = Math.random() * 2 - 1;
+    const noise = ac.createBufferSource();
+    noise.buffer = noiseBuf;
+    const hp = ac.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 2000;
+    const ng = ac.createGain();
+    ng.gain.setValueAtTime(1, ac.currentTime);
+    ng.gain.exponentialRampToValueAtTime(0.01, ac.currentTime + 0.03);
+    noise.connect(hp);
+    hp.connect(ng);
+    ng.connect(master);
+    noise.start(ac.currentTime);
+    noise.stop(ac.currentTime + 0.04);
+
+    // "Ching!" - metallic ding (stacked oscillators through bandpass)
+    const ct = ac.currentTime + 0.08;
+    [3520, 4698].forEach(freq => {
       const osc = ac.createOscillator();
-      const gain = ac.createGain();
-      osc.type = 'sine';
+      const g = ac.createGain();
+      const bp = ac.createBiquadFilter();
+      osc.type = freq === 3520 ? 'sine' : 'triangle';
       osc.frequency.value = freq;
-      gain.gain.setValueAtTime(0, ac.currentTime + i * 0.12);
-      gain.gain.linearRampToValueAtTime(0.15, ac.currentTime + i * 0.12 + 0.05);
-      gain.gain.linearRampToValueAtTime(0, ac.currentTime + i * 0.12 + 0.4);
-      osc.connect(gain);
-      gain.connect(ac.destination);
-      osc.start(ac.currentTime + i * 0.12);
-      osc.stop(ac.currentTime + i * 0.12 + 0.5);
+      bp.type = 'bandpass';
+      bp.frequency.value = freq;
+      bp.Q.value = 8;
+      g.gain.setValueAtTime(0, ct);
+      g.gain.linearRampToValueAtTime(0.8, ct + 0.005);
+      g.gain.exponentialRampToValueAtTime(0.001, ct + 0.6);
+      osc.connect(bp);
+      bp.connect(g);
+      g.connect(master);
+      osc.start(ct);
+      osc.stop(ct + 0.7);
     });
 
-    setTimeout(() => {
+    // Coin sparkle - 3 rapid micro-tones
+    [6000, 7500, 9000].forEach((freq, i) => {
       const osc = ac.createOscillator();
-      const gain = ac.createGain();
-      osc.type = 'triangle';
-      osc.frequency.value = 1318.5;
-      gain.gain.setValueAtTime(0, ac.currentTime);
-      gain.gain.linearRampToValueAtTime(0.2, ac.currentTime + 0.05);
-      gain.gain.linearRampToValueAtTime(0, ac.currentTime + 0.8);
-      osc.connect(gain);
-      gain.connect(ac.destination);
-      osc.start(ac.currentTime);
-      osc.stop(ac.currentTime + 1);
-    }, 500);
-  } catch { /* browser might block audio */ }
-}
-
-function playSalesBell() {
-  try {
-    const ac = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-    const bellNotes = [1046.5, 1318.5, 1568, 2093];
-    bellNotes.forEach((freq, i) => {
-      const osc = ac.createOscillator();
-      const gain = ac.createGain();
-      osc.type = 'triangle';
+      const g = ac.createGain();
+      const t = ct + i * 0.04;
+      osc.type = 'sine';
       osc.frequency.value = freq;
-      gain.gain.setValueAtTime(0, ac.currentTime + i * 0.15);
-      gain.gain.linearRampToValueAtTime(0.25, ac.currentTime + i * 0.15 + 0.03);
-      gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + i * 0.15 + 0.6);
-      osc.connect(gain);
-      gain.connect(ac.destination);
-      osc.start(ac.currentTime + i * 0.15);
-      osc.stop(ac.currentTime + i * 0.15 + 0.7);
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(0.3, t + 0.005);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+      osc.connect(g);
+      g.connect(master);
+      osc.start(t);
+      osc.stop(t + 0.1);
     });
   } catch { /* browser might block audio */ }
 }
@@ -298,6 +369,22 @@ function AnimatedNumber({ value, prefix = '', suffix = '', className = '' }: { v
   }, [value]);
 
   return <span className={className}>{prefix}{display.toLocaleString('nl-NL')}{suffix}</span>;
+}
+
+function CountUpAmount({ value, className = '' }: { value: number; className?: string }) {
+  const [display, setDisplay] = useState(0);
+  useEffect(() => {
+    let f = 0;
+    const total = 40;
+    const iv = setInterval(() => {
+      f++;
+      const eased = 1 - Math.pow(1 - f / total, 3);
+      setDisplay(value * eased);
+      if (f >= total) { clearInterval(iv); setDisplay(value); }
+    }, 25);
+    return () => clearInterval(iv);
+  }, [value]);
+  return <span className={className}>&euro;{display.toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>;
 }
 
 function TrendArrow({ current, previous }: { current: number; previous: number }) {
@@ -522,8 +609,8 @@ export default function LiveDashboard() {
             const newPct = batch.batchSize > 0 ? (batch.delivered / batch.batchSize) * 100 : 0;
             if (newPct >= 100 && prevPct < 100) {
               setCelebratingBatch(batch.id);
-              if (canvasRef.current) fireConfetti(canvasRef.current);
-              playCelebrationSound();
+              if (canvasRef.current) fireCelebration(canvasRef.current, 'megaBurst');
+              playKaChing();
               setTimeout(() => setCelebratingBatch(null), 5000);
             }
             prevBatchPcts.current[batch.id] = newPct;
@@ -537,8 +624,8 @@ export default function LiveDashboard() {
                 setSalesToasts(prev => [pb, ...prev].slice(0, 5));
                 setTimeout(() => setSalesToasts(prev => prev.filter(t => t.id !== pb.id)), 8000);
               }
-              playSalesBell();
-              if (canvasRef.current) fireConfetti(canvasRef.current);
+              playKaChing();
+              if (canvasRef.current) fireCelebration(canvasRef.current, 'goldenRain');
 
               const withVideo = newPaid.find((pb: PaidBatch) => pb.celebrationVideoUrl);
               if (withVideo) {
@@ -576,14 +663,14 @@ export default function LiveDashboard() {
         const p = evt.payload || {};
         switch (evt.event_type) {
           case 'confetti':
-            if (canvasRef.current) fireConfetti(canvasRef.current);
-            playCelebrationSound();
+            if (canvasRef.current) fireCelebration(canvasRef.current, 'confetti');
+            playKaChing();
             break;
 
           case 'batch_complete':
             setCelebratingBatch('test-' + evt.id);
-            if (canvasRef.current) fireConfetti(canvasRef.current);
-            playCelebrationSound();
+            if (canvasRef.current) fireCelebration(canvasRef.current, 'megaBurst');
+            playKaChing();
             setTimeout(() => setCelebratingBatch(null), 5000);
             break;
 
@@ -601,8 +688,8 @@ export default function LiveDashboard() {
             };
             setSalesToasts(prev => [toast, ...prev].slice(0, 5));
             setTimeout(() => setSalesToasts(prev => prev.filter(t => t.id !== toast.id)), 8000);
-            playSalesBell();
-            if (canvasRef.current) fireConfetti(canvasRef.current);
+            playKaChing();
+            if (canvasRef.current) fireCelebration(canvasRef.current, 'goldenRain');
             break;
           }
 
@@ -622,8 +709,8 @@ export default function LiveDashboard() {
             };
             setSalesToasts(prev => [vid, ...prev].slice(0, 5));
             setTimeout(() => setSalesToasts(prev => prev.filter(t => t.id !== vid.id)), 8000);
-            playSalesBell();
-            if (canvasRef.current) fireConfetti(canvasRef.current);
+            playKaChing();
+            if (canvasRef.current) fireCelebration(canvasRef.current, 'goldenRain');
             if (vid.celebrationVideoUrl) {
               setCelebrationVideo(vid);
             }
@@ -732,41 +819,100 @@ export default function LiveDashboard() {
         <div className="absolute left-1/2 top-1/2 h-[400px] w-[400px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-emerald-500/[0.03] blur-[150px]" />
       </div>
 
-      {/* Batch completion overlay */}
+      {/* Batch completion overlay - Cinematic */}
       <AnimatePresence>
         {celebratingBatch && (
           <motion.div
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.8 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
             className="pointer-events-none fixed inset-0 z-[90] flex items-center justify-center"
           >
-            <div className="rounded-3xl border border-emerald-500/30 bg-[#0B0E1A]/90 px-12 py-8 text-center shadow-2xl shadow-emerald-500/20 backdrop-blur-xl">
-              <motion.p
-                initial={{ scale: 0 }}
-                animate={{ scale: [0, 1.2, 1] }}
-                transition={{ duration: 0.5 }}
-                className="mb-2 text-5xl"
+            <motion.div
+              animate={{ scale: [1, 1.15, 1], opacity: [0.3, 0.6, 0.3] }}
+              transition={{ repeat: Infinity, duration: 2.5, ease: 'easeInOut' }}
+              className="absolute h-[600px] w-[600px] rounded-full bg-emerald-500/20 blur-[120px]"
+            />
+            <div className="relative flex flex-col items-center">
+              <div className="relative mb-6 flex items-center justify-center" style={{ width: 120, height: 120 }}>
+                <motion.div
+                  initial={{ scale: 0, opacity: 0.8 }}
+                  animate={{ scale: 2.5, opacity: 0 }}
+                  transition={{ duration: 1.5, ease: 'easeOut' }}
+                  className="absolute rounded-full border-2 border-emerald-400"
+                  style={{ width: 120, height: 120 }}
+                />
+                <motion.div
+                  initial={{ scale: 0, opacity: 0.5 }}
+                  animate={{ scale: 3.2, opacity: 0 }}
+                  transition={{ duration: 2, ease: 'easeOut', delay: 0.2 }}
+                  className="absolute rounded-full border border-emerald-400/50"
+                  style={{ width: 120, height: 120 }}
+                />
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: [0, 1.3, 1] }}
+                  transition={{ duration: 0.6, ease: [0.175, 0.885, 0.32, 1.275] }}
+                  className="relative flex h-[100px] w-[100px] items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-2xl shadow-emerald-500/40"
+                >
+                  <svg className="h-14 w-14 text-white" viewBox="0 0 24 24" fill="none">
+                    <motion.path
+                      d="M5 13l4 4L19 7"
+                      stroke="currentColor"
+                      strokeWidth="3"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      initial={{ pathLength: 0 }}
+                      animate={{ pathLength: 1 }}
+                      transition={{ duration: 0.5, delay: 0.4, ease: 'easeOut' }}
+                    />
+                  </svg>
+                </motion.div>
+              </div>
+              <motion.h2
+                initial={{ opacity: 0, y: 20, letterSpacing: '0.3em' }}
+                animate={{ opacity: 1, y: 0, letterSpacing: '0.15em' }}
+                transition={{ delay: 0.5, duration: 0.8 }}
+                className="text-4xl font-black text-emerald-400 lg:text-5xl"
+                style={{ textShadow: '0 0 40px rgba(52,211,153,0.5), 0 0 80px rgba(52,211,153,0.2)' }}
               >
-                🎉
+                BATCH VOLTOOID
+              </motion.h2>
+              <motion.p
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.8 }}
+                className="mt-3 text-lg font-medium text-white/50"
+              >
+                Alle leads zijn succesvol uitgeleverd
               </motion.p>
-              <p className="text-2xl font-black text-emerald-400">Batch voltooid!</p>
-              <p className="mt-1 text-sm text-white/50">Alle leads zijn uitgeleverd</p>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Sales Celebration Video Overlay */}
+      {/* Sales Celebration Video Overlay - Cinema Mode */}
       <AnimatePresence>
         {celebrationVideo && celebrationVideo.celebrationVideoUrl && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[95] flex items-center justify-center bg-black/80 backdrop-blur-md"
+            className="fixed inset-0 z-[95] flex items-center justify-center bg-black/90 backdrop-blur-lg"
             onClick={() => setCelebrationVideo(null)}
           >
+            {/* Rotating spotlight rays */}
+            <motion.div
+              animate={{ rotate: 360 }}
+              transition={{ repeat: Infinity, duration: 20, ease: 'linear' }}
+              className="pointer-events-none absolute inset-0 opacity-[0.07]"
+              style={{
+                background: 'conic-gradient(from 0deg, transparent, rgba(251,191,36,0.4), transparent, rgba(251,191,36,0.4), transparent, rgba(251,191,36,0.4), transparent)',
+              }}
+            />
+            {/* Center glow */}
+            <div className="pointer-events-none absolute left-1/2 top-1/2 h-[800px] w-[800px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-amber-500/10 blur-[200px]" />
+
             <motion.div
               initial={{ scale: 0.7, y: 40 }}
               animate={{ scale: 1, y: 0 }}
@@ -775,39 +921,42 @@ export default function LiveDashboard() {
               className="relative w-full max-w-6xl px-4"
               onClick={e => e.stopPropagation()}
             >
-              <div className="mb-3 text-center">
-                <motion.div
-                  initial={{ scale: 0 }}
-                  animate={{ scale: [0, 1.3, 1] }}
-                  transition={{ duration: 0.6 }}
-                  className="mb-2 inline-flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-amber-600 shadow-lg shadow-amber-500/30"
-                >
-                  <span className="text-3xl">🔔</span>
-                </motion.div>
+              <div className="mb-4 text-center">
                 <motion.h2
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.3 }}
-                  className="text-3xl font-black text-amber-400 lg:text-4xl"
+                  initial={{ opacity: 0, y: 20, scale: 0.8 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  transition={{ delay: 0.2, type: 'spring', damping: 15 }}
+                  className="text-4xl font-black uppercase tracking-wider text-amber-400 lg:text-5xl"
+                  style={{ textShadow: '0 0 30px rgba(251,191,36,0.6), 0 0 60px rgba(251,191,36,0.3), 0 0 100px rgba(251,191,36,0.1)' }}
                 >
                   Nieuwe verkoop!
                 </motion.h2>
-                <motion.p
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 0.5 }}
-                  className="mt-1 text-lg text-white/60"
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.4 }}
+                  className="mt-2 flex flex-wrap items-center justify-center gap-3"
                 >
-                  <span className="font-bold text-white">{celebrationVideo.customer}</span>
-                  {celebrationVideo.amName && <span> — verkocht door <span className="font-bold text-amber-300">{celebrationVideo.amName}</span></span>}
-                  {celebrationVideo.amount > 0 && <span> — <span className="font-bold text-emerald-400">€{celebrationVideo.amount.toLocaleString('nl-NL', { minimumFractionDigits: 2 })}</span></span>}
-                </motion.p>
+                  <span className="text-lg font-bold text-white/80">{celebrationVideo.customer}</span>
+                  {celebrationVideo.amName && (
+                    <span className="rounded-full bg-amber-500/20 px-4 py-1 text-sm font-bold text-amber-300 shadow-lg shadow-amber-500/10">
+                      {celebrationVideo.amName}
+                    </span>
+                  )}
+                  {celebrationVideo.amount > 0 && (
+                    <CountUpAmount value={celebrationVideo.amount} className="text-2xl font-black text-emerald-400" />
+                  )}
+                </motion.div>
               </div>
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.4 }}
-                className="overflow-hidden rounded-2xl border-2 border-amber-500/30 shadow-2xl shadow-amber-500/20"
+                transition={{ delay: 0.3 }}
+                className="overflow-hidden rounded-2xl shadow-2xl shadow-amber-500/20"
+                style={{
+                  border: '3px solid rgba(251,191,36,0.4)',
+                  boxShadow: '0 0 30px rgba(251,191,36,0.15), 0 25px 50px -12px rgba(0,0,0,0.5), inset 0 0 30px rgba(251,191,36,0.05)',
+                }}
               >
                 <div className="relative w-full" style={{ paddingBottom: '56.25%' }}>
                   <iframe
@@ -824,7 +973,7 @@ export default function LiveDashboard() {
                 animate={{ opacity: 1 }}
                 transition={{ delay: 1 }}
                 onClick={() => setCelebrationVideo(null)}
-                className="mx-auto mt-3 block rounded-lg bg-white/10 px-6 py-2 text-sm font-medium text-white/60 transition hover:bg-white/20 hover:text-white"
+                className="mx-auto mt-4 block rounded-full bg-white/10 px-8 py-2.5 text-sm font-bold text-white/50 transition hover:bg-white/20 hover:text-white"
               >
                 Sluiten
               </motion.button>
@@ -833,28 +982,60 @@ export default function LiveDashboard() {
         )}
       </AnimatePresence>
 
-      {/* Sales Bell Toast Notifications */}
-      <div className="fixed right-4 top-4 z-[85] flex flex-col gap-2 sm:right-6 sm:top-6">
+      {/* Sales Bell Toast Notifications - Premium */}
+      <div className="fixed right-4 top-4 z-[85] flex flex-col gap-3 sm:right-6 sm:top-6">
         <AnimatePresence>
           {salesToasts.map((toast) => (
             <motion.div
               key={toast.id}
-              initial={{ opacity: 0, x: 100, scale: 0.9 }}
-              animate={{ opacity: 1, x: 0, scale: 1 }}
-              exit={{ opacity: 0, x: 100, scale: 0.9 }}
-              className="flex items-center gap-3 rounded-xl border border-amber-500/30 bg-[#1a1d2e]/95 px-4 py-3 shadow-2xl shadow-amber-500/10 backdrop-blur-xl"
+              initial={{ opacity: 0, x: 120, scale: 0.85 }}
+              animate={{ opacity: 1, x: 0, scale: [0.85, 1.03, 1] }}
+              exit={{ opacity: 0, x: 120, scale: 0.85 }}
+              transition={{ type: 'spring', damping: 18, stiffness: 200 }}
+              className="relative min-w-[320px] overflow-hidden rounded-2xl bg-[#1a1d2e]/95 px-5 py-4 backdrop-blur-xl"
+              style={{
+                border: '2px solid rgba(251,191,36,0.35)',
+                boxShadow: '0 0 20px rgba(251,191,36,0.15), 0 20px 40px -10px rgba(0,0,0,0.4)',
+              }}
             >
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-amber-600 shadow-lg shadow-amber-500/30">
-                <span className="text-lg">🔔</span>
+              <motion.div
+                animate={{
+                  boxShadow: [
+                    '0 0 10px rgba(251,191,36,0.1), inset 0 0 10px rgba(251,191,36,0)',
+                    '0 0 25px rgba(251,191,36,0.25), inset 0 0 15px rgba(251,191,36,0.05)',
+                    '0 0 10px rgba(251,191,36,0.1), inset 0 0 10px rgba(251,191,36,0)',
+                  ],
+                }}
+                transition={{ repeat: Infinity, duration: 2 }}
+                className="pointer-events-none absolute inset-0 rounded-2xl"
+              />
+              <div className="flex items-center gap-4">
+                <motion.div
+                  animate={{ rotate: [0, -10, 10, -5, 5, 0] }}
+                  transition={{ duration: 0.6, delay: 0.3 }}
+                  className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-amber-600 shadow-lg shadow-amber-500/30"
+                >
+                  <svg className="h-6 w-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M6 8a6 6 0 0112 0c0 7 3 9 3 9H3s3-2 3-9" />
+                    <path d="M10.3 21a1.94 1.94 0 003.4 0" />
+                  </svg>
+                </motion.div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-base font-black tracking-wide text-amber-400">Ka-Ching!</p>
+                  <p className="mt-0.5 truncate text-sm font-medium text-white/70">{toast.customer}</p>
+                  {toast.amName && <p className="text-xs text-white/35">door {toast.amName}</p>}
+                </div>
+                {toast.amount > 0 && (
+                  <CountUpAmount value={toast.amount} className="text-xl font-black text-emerald-400" />
+                )}
               </div>
-              <div className="min-w-0">
-                <p className="text-sm font-bold text-amber-400">Verkoop!</p>
-                <p className="truncate text-xs text-white/60">
-                  {toast.customer}
-                  {toast.amount > 0 && <span className="ml-1 font-bold text-emerald-400">€{toast.amount.toLocaleString('nl-NL', { minimumFractionDigits: 2 })}</span>}
-                </p>
-                {toast.amName && <p className="text-[10px] text-white/30">door {toast.amName}</p>}
-              </div>
+              {/* Progress countdown bar */}
+              <motion.div
+                initial={{ scaleX: 1 }}
+                animate={{ scaleX: 0 }}
+                transition={{ duration: 8, ease: 'linear' }}
+                className="absolute bottom-0 left-0 right-0 h-[3px] origin-left bg-gradient-to-r from-amber-400 to-amber-600"
+              />
             </motion.div>
           ))}
         </AnimatePresence>
