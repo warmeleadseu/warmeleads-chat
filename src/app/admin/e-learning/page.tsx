@@ -17,11 +17,30 @@ import {
   ListBulletIcon,
   TrophyIcon,
   StarIcon,
+  HandRaisedIcon,
+  CubeIcon,
+  ComputerDesktopIcon,
+  MegaphoneIcon,
+  UserGroupIcon,
+  ScaleIcon,
+  HeartIcon,
+  RocketLaunchIcon,
 } from '@heroicons/react/24/outline';
 import { CheckCircleIcon as CheckCircleSolid, StarIcon as StarSolid } from '@heroicons/react/24/solid';
 import { useAdmin } from '../adminContext';
 import { adminFetch } from '@/lib/adminAuth';
 import { MODULES, type Module, type Lesson, type QuizQuestion, type ContentSection } from '@/lib/elearning-content';
+
+const MODULE_ICONS: Record<string, React.ComponentType<React.SVGProps<SVGSVGElement>>> = {
+  HandRaisedIcon,
+  CubeIcon,
+  ComputerDesktopIcon,
+  MegaphoneIcon,
+  UserGroupIcon,
+  ScaleIcon,
+  HeartIcon,
+  RocketLaunchIcon,
+};
 
 interface ProgressRecord {
   module_id: string;
@@ -445,7 +464,7 @@ export default function ELearningPage() {
                 )}
 
                 <div className="flex items-center gap-3 mb-3">
-                  <span className="text-2xl">{mod.icon}</span>
+                  {(() => { const Icon = MODULE_ICONS[mod.icon]; return Icon ? <Icon className="h-6 w-6 text-brand-purple" /> : null; })()}
                   <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Module {idx + 1}</span>
                 </div>
 
@@ -498,7 +517,7 @@ export default function ELearningPage() {
           <span className="hidden sm:inline">Overzicht</span>
         </button>
         <div className="flex items-center gap-2 min-w-0">
-          <span className="text-lg">{activeModule.icon}</span>
+          {(() => { const Icon = MODULE_ICONS[activeModule.icon]; return Icon ? <Icon className="h-6 w-6 text-brand-purple" /> : null; })()}
           <div className="min-w-0">
             <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Module {moduleIdx + 1}</p>
             <h2 className="text-base sm:text-lg font-bold text-slate-900 truncate">{activeModule.title}</h2>

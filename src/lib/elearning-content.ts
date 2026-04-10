@@ -34,7 +34,7 @@ export const MODULES: Module[] = [
     id: 'welkom',
     title: 'Welkom bij WarmeLeads',
     description: 'Leer wie we zijn, waar we voor staan en wat jouw rol als account manager inhoudt.',
-    icon: '👋',
+    icon: 'HandRaisedIcon',
     lessons: [
       {
         id: 'missie-visie',
@@ -83,7 +83,7 @@ export const MODULES: Module[] = [
     id: 'diensten',
     title: 'Onze Diensten en Producten',
     description: 'Alles over leadgeneratie, het batchsysteem, kwalificatie en onze branches.',
-    icon: '📦',
+    icon: 'CubeIcon',
     lessons: [
       {
         id: 'wat-is-leadgeneratie',
@@ -147,7 +147,7 @@ export const MODULES: Module[] = [
     id: 'portaal',
     title: 'Het Klantportaal',
     description: 'Leer het klantportaal van binnen en buiten kennen zodat je klanten perfect kunt begeleiden.',
-    icon: '💻',
+    icon: 'ComputerDesktopIcon',
     lessons: [
       {
         id: 'portaal-overzicht',
@@ -207,7 +207,7 @@ export const MODULES: Module[] = [
     id: 'marketing',
     title: 'Marketing en Campagnes',
     description: 'Begrijp hoe online adverteren werkt zodat je klanten goed kunt informeren.',
-    icon: '📣',
+    icon: 'MegaphoneIcon',
     lessons: [
       {
         id: 'online-leadgen',
@@ -267,7 +267,7 @@ export const MODULES: Module[] = [
     id: 'verkoop',
     title: 'Het Verkoopgesprek',
     description: 'Leer hoe je effectieve strategiegesprekken voert en deals sluit.',
-    icon: '🤝',
+    icon: 'UserGroupIcon',
     lessons: [
       {
         id: 'voorbereiding',
@@ -336,7 +336,7 @@ export const MODULES: Module[] = [
     id: 'verwachtingen',
     title: 'Verwachtingsmanagement',
     description: 'Leer hoe je realistische verwachtingen schept en klanten tevreden houdt.',
-    icon: '⚖️',
+    icon: 'ScaleIcon',
     lessons: [
       {
         id: 'beloftes',
@@ -396,7 +396,7 @@ export const MODULES: Module[] = [
     id: 'retentie',
     title: 'Klantrelatie en Retentie',
     description: 'Leer hoe je klanten langdurig tevreden houdt en herbestellingen stimuleert.',
-    icon: '💎',
+    icon: 'HeartIcon',
     lessons: [
       {
         id: 'onboarding',
@@ -465,7 +465,7 @@ export const MODULES: Module[] = [
     id: 'groei',
     title: 'Commercieel Groeien',
     description: 'Maximaliseer de omzet per klant door upselling, cross-selling en referrals.',
-    icon: '🚀',
+    icon: 'RocketLaunchIcon',
     lessons: [
       {
         id: 'upselling',
