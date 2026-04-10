@@ -21,12 +21,22 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Klanten ophalen mislukt' }, { status: 500 });
   }
 
-  const { data: assignCounts } = await supabase
-    .from('lead_assignments')
-    .select('customer_id');
+  const PAGE_SIZE = 1000;
+  const allAssignments: { customer_id: string }[] = [];
+  let offset = 0;
+  while (true) {
+    const { data: batch } = await supabase
+      .from('lead_assignments')
+      .select('customer_id')
+      .range(offset, offset + PAGE_SIZE - 1);
+    if (!batch || batch.length === 0) break;
+    allAssignments.push(...batch);
+    if (batch.length < PAGE_SIZE) break;
+    offset += batch.length;
+  }
 
   const counts: Record<string, number> = {};
-  (assignCounts || []).forEach((a: { customer_id: string }) => {
+  allAssignments.forEach((a: { customer_id: string }) => {
     if (a.customer_id) counts[a.customer_id] = (counts[a.customer_id] || 0) + 1;
   });
 

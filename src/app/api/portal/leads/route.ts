@@ -2,6 +2,22 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyCustomer, portalUnauthorized } from '@/lib/portalAuth';
 import { createServerClient } from '@/lib/supabase';
 
+const PAGE_SIZE = 1000;
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function paginateQuery<T>(query: any): Promise<T[]> {
+  const all: T[] = [];
+  let offset = 0;
+  while (true) {
+    const { data } = await query.range(offset, offset + PAGE_SIZE - 1);
+    if (!data || data.length === 0) break;
+    all.push(...(data as T[]));
+    if (data.length < PAGE_SIZE) break;
+    offset += data.length;
+  }
+  return all;
+}
+
 async function getCustomerLeadData(
   supabase: ReturnType<typeof createServerClient>,
   customerId: string,
@@ -11,20 +27,17 @@ async function getCustomerLeadData(
   const assignedAtMap: Record<string, string> = {};
 
   if (leadSource !== 'bulk') {
-    const { data: directLeads } = await supabase
-      .from('leads')
-      .select('id')
-      .eq('customer_id', customerId);
-    (directLeads || []).forEach(l => ids.add(l.id));
+    const directLeads = await paginateQuery<{ id: string }>(
+      supabase.from('leads').select('id').eq('customer_id', customerId),
+    );
+    directLeads.forEach(l => ids.add(l.id));
   }
 
   if (leadSource === 'bulk') {
-    const { data: bulkLeads } = await supabase
-      .from('lead_assignments')
-      .select('lead_id, assigned_at')
-      .eq('customer_id', customerId)
-      .eq('source', 'bulk_export');
-    (bulkLeads || []).forEach(a => {
+    const bulkLeads = await paginateQuery<{ lead_id: string; assigned_at: string }>(
+      supabase.from('lead_assignments').select('lead_id, assigned_at').eq('customer_id', customerId).eq('source', 'bulk_export'),
+    );
+    bulkLeads.forEach(a => {
       ids.add(a.lead_id);
       assignedAtMap[a.lead_id] = a.assigned_at;
     });
@@ -34,8 +47,8 @@ async function getCustomerLeadData(
       .select('lead_id, assigned_at')
       .eq('customer_id', customerId);
     if (leadSource === 'fresh') assignQuery = assignQuery.neq('source', 'bulk_export');
-    const { data: assignedLeads } = await assignQuery;
-    (assignedLeads || []).forEach(a => {
+    const assignedLeads = await paginateQuery<{ lead_id: string; assigned_at: string }>(assignQuery);
+    assignedLeads.forEach(a => {
       ids.add(a.lead_id);
       assignedAtMap[a.lead_id] = a.assigned_at;
     });

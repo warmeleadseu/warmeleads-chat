@@ -17,6 +17,22 @@ const COLUMN_HEADERS = [
   'Notities',
 ];
 
+const PAGE_SIZE = 1000;
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function paginateQuery<T>(query: any): Promise<T[]> {
+  const all: T[] = [];
+  let offset = 0;
+  while (true) {
+    const { data } = await query.range(offset, offset + PAGE_SIZE - 1);
+    if (!data || data.length === 0) break;
+    all.push(...(data as T[]));
+    if (data.length < PAGE_SIZE) break;
+    offset += data.length;
+  }
+  return all;
+}
+
 async function getCustomerLeadData(
   supabase: ReturnType<typeof createServerClient>,
   customerId: string,
@@ -26,20 +42,17 @@ async function getCustomerLeadData(
   const assignedAtMap: Record<string, string> = {};
 
   if (leadSource !== 'bulk') {
-    const { data: directLeads } = await supabase
-      .from('leads')
-      .select('id')
-      .eq('customer_id', customerId);
-    (directLeads || []).forEach(l => ids.add(l.id));
+    const directLeads = await paginateQuery<{ id: string }>(
+      supabase.from('leads').select('id').eq('customer_id', customerId),
+    );
+    directLeads.forEach(l => ids.add(l.id));
   }
 
   if (leadSource === 'bulk') {
-    const { data: bulkLeads } = await supabase
-      .from('lead_assignments')
-      .select('lead_id, assigned_at')
-      .eq('customer_id', customerId)
-      .eq('source', 'bulk_export');
-    (bulkLeads || []).forEach(a => {
+    const bulkLeads = await paginateQuery<{ lead_id: string; assigned_at: string }>(
+      supabase.from('lead_assignments').select('lead_id, assigned_at').eq('customer_id', customerId).eq('source', 'bulk_export'),
+    );
+    bulkLeads.forEach(a => {
       ids.add(a.lead_id);
       assignedAtMap[a.lead_id] = a.assigned_at;
     });
@@ -49,8 +62,8 @@ async function getCustomerLeadData(
       .select('lead_id, assigned_at')
       .eq('customer_id', customerId);
     if (leadSource === 'fresh') assignQuery = assignQuery.neq('source', 'bulk_export');
-    const { data: assignedLeads } = await assignQuery;
-    (assignedLeads || []).forEach(a => {
+    const assignedLeads = await paginateQuery<{ lead_id: string; assigned_at: string }>(assignQuery);
+    assignedLeads.forEach(a => {
       ids.add(a.lead_id);
       assignedAtMap[a.lead_id] = a.assigned_at;
     });
@@ -116,13 +129,7 @@ export async function GET(request: NextRequest) {
   if (from) query = query.gte('wervingsdatum', from);
   if (to) query = query.lte('wervingsdatum', to);
 
-  const { data, error } = await query;
-
-  if (error) {
-    return NextResponse.json({ error: 'Leads ophalen mislukt' }, { status: 500 });
-  }
-
-  const leads = (data || []) as Record<string, unknown>[];
+  const leads = await paginateQuery<Record<string, unknown>>(query);
 
   return format === 'xlsx' ? buildXlsx(leads, assignedAtMap) : buildCsv(leads, assignedAtMap);
 }

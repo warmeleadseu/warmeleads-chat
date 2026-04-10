@@ -12,29 +12,45 @@ export async function GET(request: NextRequest) {
   const customerId = request.nextUrl.searchParams.get('customer_id');
   const batchId = request.nextUrl.searchParams.get('batch_id');
 
-  let query = supabase
+  let baseQuery = supabase
     .from('lead_assignments')
     .select('*, customers(name), leads(naam_klant, email, branch, postcode, plaatsnaam)')
     .order('assigned_at', { ascending: false });
 
-  if (leadId) query = query.eq('lead_id', leadId);
-  if (customerId) query = query.eq('customer_id', customerId);
-  if (batchId) query = query.eq('batch_id', batchId);
+  if (leadId) baseQuery = baseQuery.eq('lead_id', leadId);
+  if (customerId) baseQuery = baseQuery.eq('customer_id', customerId);
+  if (batchId) baseQuery = baseQuery.eq('batch_id', batchId);
 
-  const { data, error } = await query;
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-  const results = data || [];
+  const PAGE_SIZE = 1000;
+  const results: Record<string, unknown>[] = [];
+  let offset = 0;
+  while (true) {
+    const { data: batch, error: batchError } = await baseQuery.range(offset, offset + PAGE_SIZE - 1);
+    if (batchError) return NextResponse.json({ error: batchError.message }, { status: 500 });
+    if (!batch || batch.length === 0) break;
+    results.push(...batch);
+    if (batch.length < PAGE_SIZE) break;
+    offset += batch.length;
+  }
 
   if (customerId && !batchId) {
-    const assignedLeadIds = new Set(results.map((a: { lead_id: string }) => a.lead_id));
+    const assignedLeadIds = new Set(results.map(a => String(a.lead_id)));
 
-    const { data: directLeads } = await supabase
-      .from('leads')
-      .select('id, naam_klant, email, branch, postcode, plaatsnaam, created_at')
-      .eq('customer_id', customerId);
+    const directLeads: Record<string, unknown>[] = [];
+    let dlOffset = 0;
+    while (true) {
+      const { data: dlBatch } = await supabase
+        .from('leads')
+        .select('id, naam_klant, email, branch, postcode, plaatsnaam, created_at')
+        .eq('customer_id', customerId)
+        .range(dlOffset, dlOffset + PAGE_SIZE - 1);
+      if (!dlBatch || dlBatch.length === 0) break;
+      directLeads.push(...dlBatch);
+      if (dlBatch.length < PAGE_SIZE) break;
+      dlOffset += dlBatch.length;
+    }
 
-    const missing = (directLeads || []).filter(l => !assignedLeadIds.has(l.id));
+    const missing = directLeads.filter(l => !assignedLeadIds.has(String(l.id)));
 
     if (missing.length > 0) {
       const rows = missing.map(l => ({ lead_id: l.id, customer_id: customerId }));
