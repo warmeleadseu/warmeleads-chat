@@ -565,8 +565,80 @@ export default function LiveDashboard() {
     } catch { /* silent */ }
   }, []);
 
-  useEffect(() => { fetchData(); fetchAMTargets(); }, [fetchData, fetchAMTargets]);
-  useEffect(() => { const iv = setInterval(() => { fetchData(); fetchAMTargets(); }, REFRESH_INTERVAL); return () => clearInterval(iv); }, [fetchData, fetchAMTargets]);
+  const fetchTestEvents = useCallback(async () => {
+    try {
+      const res = await adminFetch('/api/admin/test-events');
+      if (!res.ok) return;
+      const { events } = await res.json();
+      if (!events || events.length === 0) return;
+
+      for (const evt of events) {
+        const p = evt.payload || {};
+        switch (evt.event_type) {
+          case 'confetti':
+            if (canvasRef.current) fireConfetti(canvasRef.current);
+            playCelebrationSound();
+            break;
+
+          case 'batch_complete':
+            setCelebratingBatch('test-' + evt.id);
+            if (canvasRef.current) fireConfetti(canvasRef.current);
+            playCelebrationSound();
+            setTimeout(() => setCelebratingBatch(null), 5000);
+            break;
+
+          case 'sales_bell': {
+            const toast: PaidBatch = {
+              id: 'test-' + evt.id,
+              batchId: '',
+              customer: p.customer || 'Test Klant B.V.',
+              branch: p.branch || 'test',
+              amount: p.amount || 1250,
+              paidAt: new Date().toISOString(),
+              amId: p.amId || null,
+              amName: p.amName || null,
+              celebrationVideoUrl: null,
+            };
+            setSalesToasts(prev => [toast, ...prev].slice(0, 5));
+            setTimeout(() => setSalesToasts(prev => prev.filter(t => t.id !== toast.id)), 8000);
+            playSalesBell();
+            if (canvasRef.current) fireConfetti(canvasRef.current);
+            break;
+          }
+
+          case 'celebration_video': {
+            const vid: PaidBatch = {
+              id: 'test-' + evt.id,
+              batchId: '',
+              customer: p.customer || 'Test Klant B.V.',
+              branch: p.branch || 'test',
+              amount: p.amount || 2500,
+              paidAt: new Date().toISOString(),
+              amId: p.amId || null,
+              amName: p.amName || 'Accountmanager',
+              celebrationVideoUrl: p.celebrationVideoUrl || null,
+            };
+            setSalesToasts(prev => [vid, ...prev].slice(0, 5));
+            setTimeout(() => setSalesToasts(prev => prev.filter(t => t.id !== vid.id)), 8000);
+            playSalesBell();
+            if (canvasRef.current) fireConfetti(canvasRef.current);
+            if (vid.celebrationVideoUrl) {
+              setCelebrationVideo(vid);
+              setTimeout(() => setCelebrationVideo(null), 25000);
+            }
+            break;
+          }
+        }
+      }
+    } catch { /* silent */ }
+  }, []);
+
+  useEffect(() => { fetchData(); fetchAMTargets(); fetchTestEvents(); }, [fetchData, fetchAMTargets, fetchTestEvents]);
+  useEffect(() => {
+    const mainIv = setInterval(() => { fetchData(); fetchAMTargets(); }, REFRESH_INTERVAL);
+    const testIv = setInterval(fetchTestEvents, 5000);
+    return () => { clearInterval(mainIv); clearInterval(testIv); };
+  }, [fetchData, fetchAMTargets, fetchTestEvents]);
   useEffect(() => { const iv = setInterval(() => { setClock(new Date()); setRefreshIn(r => Math.max(0, r - 1)); }, 1000); return () => clearInterval(iv); }, []);
 
   if (!data) {
