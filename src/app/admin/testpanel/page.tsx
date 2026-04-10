@@ -21,6 +21,8 @@ interface AMUser {
   name: string;
   email: string;
   celebration_video_url: string | null;
+  celebration_video_start: number | null;
+  celebration_video_end: number | null;
 }
 
 interface TestEvent {
@@ -140,6 +142,12 @@ export default function TestPanelPage() {
       payload.celebrationVideoUrl = effectiveVideoUrl;
       if (selectedAMData) {
         payload.amName = selectedAMData.name;
+        if (!customVideoUrl && selectedAMData.celebration_video_start) {
+          payload.videoStart = selectedAMData.celebration_video_start;
+        }
+        if (!customVideoUrl && selectedAMData.celebration_video_end) {
+          payload.videoEnd = selectedAMData.celebration_video_end;
+        }
       }
     }
 
@@ -429,6 +437,13 @@ export default function TestPanelPage() {
                       />
                       <div>
                         <span className="block text-xs font-medium text-emerald-600">Video ingesteld</span>
+                        {(am.celebration_video_start || am.celebration_video_end) && (
+                          <span className="block text-[10px] text-slate-400">
+                            Fragment: {Math.floor((am.celebration_video_start || 0) / 60)}:{((am.celebration_video_start || 0) % 60).toString().padStart(2, '0')}
+                            {' → '}
+                            {am.celebration_video_end ? `${Math.floor(am.celebration_video_end / 60)}:${(am.celebration_video_end % 60).toString().padStart(2, '0')}` : 'einde'}
+                          </span>
+                        )}
                         <button
                           onClick={() => {
                             setSelectedAM(am.id);

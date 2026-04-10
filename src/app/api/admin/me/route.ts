@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
   const supabase = createServerClient();
   const { data, error } = await supabase
     .from('admin_users')
-    .select('id, email, name, role, phone, title, celebration_video_url, created_at, last_login')
+    .select('id, email, name, role, phone, title, celebration_video_url, celebration_video_start, celebration_video_end, created_at, last_login')
     .eq('id', admin.id)
     .single();
 
@@ -26,12 +26,11 @@ export async function PUT(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const allowed = ['celebration_video_url'];
     const updates: Record<string, unknown> = {};
 
-    for (const key of allowed) {
-      if (body[key] !== undefined) updates[key] = body[key] || null;
-    }
+    if (body.celebration_video_url !== undefined) updates.celebration_video_url = body.celebration_video_url || null;
+    if (body.celebration_video_start !== undefined) updates.celebration_video_start = typeof body.celebration_video_start === 'number' ? body.celebration_video_start : 0;
+    if (body.celebration_video_end !== undefined) updates.celebration_video_end = typeof body.celebration_video_end === 'number' ? body.celebration_video_end : null;
 
     if (Object.keys(updates).length === 0) {
       return NextResponse.json({ error: 'Geen wijzigingen' }, { status: 400 });
@@ -42,7 +41,7 @@ export async function PUT(request: NextRequest) {
       .from('admin_users')
       .update(updates)
       .eq('id', admin.id)
-      .select('id, email, name, role, phone, title, celebration_video_url')
+      .select('id, email, name, role, phone, title, celebration_video_url, celebration_video_start, celebration_video_end')
       .single();
 
     if (error) {

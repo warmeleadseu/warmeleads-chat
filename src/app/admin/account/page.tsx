@@ -8,6 +8,7 @@ import {
   CheckCircleIcon,
   ExclamationCircleIcon,
   PlayIcon,
+  ScissorsIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
 import { useAdmin } from '../adminContext';
@@ -20,6 +21,8 @@ interface Profile {
   phone: string | null;
   title: string | null;
   celebration_video_url: string | null;
+  celebration_video_start: number | null;
+  celebration_video_end: number | null;
   created_at: string;
   last_login: string | null;
 }
@@ -37,6 +40,20 @@ function extractYouTubeId(url: string): string | null {
   return null;
 }
 
+function formatSeconds(s: number): string {
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  return `${m}:${sec.toString().padStart(2, '0')}`;
+}
+
+function parseTimeInput(val: string): number {
+  if (val.includes(':')) {
+    const parts = val.split(':');
+    return (parseInt(parts[0]) || 0) * 60 + (parseInt(parts[1]) || 0);
+  }
+  return parseInt(val) || 0;
+}
+
 const ROLE_LABELS: Record<string, string> = {
   superadmin: 'Superadmin',
   admin: 'Admin',
@@ -48,10 +65,13 @@ export default function AccountPage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [videoUrl, setVideoUrl] = useState('');
+  const [videoStart, setVideoStart] = useState('');
+  const [videoEnd, setVideoEnd] = useState('');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
   const [showPreview, setShowPreview] = useState(false);
+  const [previewKey, setPreviewKey] = useState(0);
 
   const fetchProfile = useCallback(async () => {
     try {
@@ -60,6 +80,8 @@ export default function AccountPage() {
         const data = await res.json();
         setProfile(data.user);
         setVideoUrl(data.user.celebration_video_url || '');
+        setVideoStart(data.user.celebration_video_start ? formatSeconds(data.user.celebration_video_start) : '');
+        setVideoEnd(data.user.celebration_video_end ? formatSeconds(data.user.celebration_video_end) : '');
       }
     } catch { /* silent */ }
     setLoading(false);
@@ -78,10 +100,23 @@ export default function AccountPage() {
       return;
     }
 
+    const startSec = videoStart ? parseTimeInput(videoStart) : 0;
+    const endSec = videoEnd ? parseTimeInput(videoEnd) : null;
+
+    if (endSec !== null && endSec <= startSec) {
+      setError('Eindtijd moet later zijn dan starttijd.');
+      setSaving(false);
+      return;
+    }
+
     try {
       const res = await adminFetch('/api/admin/me', {
         method: 'PUT',
-        body: JSON.stringify({ celebration_video_url: videoUrl }),
+        body: JSON.stringify({
+          celebration_video_url: videoUrl,
+          celebration_video_start: startSec,
+          celebration_video_end: endSec,
+        }),
       });
       if (!res.ok) {
         const d = await res.json();
@@ -98,10 +133,18 @@ export default function AccountPage() {
   };
 
   const youtubeId = extractYouTubeId(videoUrl);
+  const startSec = videoStart ? parseTimeInput(videoStart) : 0;
+  const endSec = videoEnd ? parseTimeInput(videoEnd) : null;
+  const clipDuration = endSec && endSec > startSec ? endSec - startSec : null;
+
+  const previewFragment = () => {
+    setShowPreview(true);
+    setPreviewKey(k => k + 1);
+  };
 
   if (loading) {
     return (
-      <div className="mx-auto max-w-2xl">
+      <div className="mx-auto max-w-3xl">
         <div className="mb-6">
           <div className="h-7 w-48 animate-pulse rounded bg-slate-100" />
           <div className="mt-2 h-4 w-72 animate-pulse rounded bg-slate-50" />
@@ -116,7 +159,7 @@ export default function AccountPage() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl">
+    <div className="mx-auto max-w-3xl">
       <div className="mb-6">
         <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">Mijn Account</h1>
         <p className="mt-0.5 text-sm text-slate-500">Bekijk je profiel en personaliseer je instellingen</p>
@@ -207,13 +250,14 @@ export default function AccountPage() {
             </motion.div>
           )}
 
-          <div className="space-y-4">
+          <div className="space-y-5">
+            {/* URL input */}
             <div>
               <label className="mb-1.5 block text-xs font-medium text-slate-500">YouTube URL of Video ID</label>
               <input
                 type="text"
                 value={videoUrl}
-                onChange={e => { setVideoUrl(e.target.value); setError(''); }}
+                onChange={e => { setVideoUrl(e.target.value); setError(''); setShowPreview(false); }}
                 placeholder="https://www.youtube.com/watch?v=dQw4w9WgXcQ"
                 className="w-full rounded-lg border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/20"
               />
@@ -222,14 +266,67 @@ export default function AccountPage() {
               </p>
             </div>
 
-            {/* Preview */}
+            {/* Fragment selection */}
+            {youtubeId && (
+              <div className="rounded-lg border border-slate-200 bg-slate-50/50 p-4">
+                <div className="mb-3 flex items-center gap-2">
+                  <ScissorsIcon className="h-4 w-4 text-slate-500" />
+                  <span className="text-sm font-bold text-slate-700">Fragment selecteren</span>
+                  <span className="text-[11px] text-slate-400">(optioneel)</span>
+                </div>
+                <p className="mb-3 text-xs text-slate-500">
+                  Kies welk stuk van de video afgespeeld wordt. Gebruik het formaat m:ss (bijv. 1:30) of seconden (bijv. 90).
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="mb-1 block text-[11px] font-medium text-slate-500">Starttijd</label>
+                    <input
+                      type="text"
+                      value={videoStart}
+                      onChange={e => setVideoStart(e.target.value)}
+                      placeholder="0:00"
+                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-[11px] font-medium text-slate-500">Eindtijd</label>
+                    <input
+                      type="text"
+                      value={videoEnd}
+                      onChange={e => setVideoEnd(e.target.value)}
+                      placeholder="Einde van video"
+                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50"
+                    />
+                  </div>
+                </div>
+                {clipDuration && (
+                  <p className="mt-2 text-xs text-brand-purple font-medium">
+                    Fragment: {formatSeconds(startSec)} → {formatSeconds(endSec!)} ({clipDuration} seconden)
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Large Preview */}
             {youtubeId && (
               <div>
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-xs font-medium text-slate-500">Preview</span>
+                  {showPreview && (
+                    <button
+                      onClick={previewFragment}
+                      className="text-xs font-medium text-brand-purple hover:underline"
+                    >
+                      Fragment opnieuw afspelen
+                    </button>
+                  )}
+                </div>
                 {showPreview ? (
-                  <div className="overflow-hidden rounded-lg border border-slate-200">
+                  <div className="overflow-hidden rounded-xl border border-slate-200 shadow-sm">
                     <div className="relative w-full" style={{ paddingBottom: '56.25%' }}>
                       <iframe
-                        src={`https://www.youtube.com/embed/${youtubeId}?autoplay=0`}
+                        key={previewKey}
+                        src={`https://www.youtube.com/embed/${youtubeId}?autoplay=1&start=${startSec}${endSec ? `&end=${endSec}` : ''}`}
                         className="absolute inset-0 h-full w-full"
                         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                         allowFullScreen
@@ -238,24 +335,30 @@ export default function AccountPage() {
                   </div>
                 ) : (
                   <button
-                    onClick={() => setShowPreview(true)}
-                    className="group relative w-full overflow-hidden rounded-lg border border-slate-200"
+                    onClick={previewFragment}
+                    className="group relative w-full overflow-hidden rounded-xl border border-slate-200 shadow-sm"
                   >
                     <img
                       src={`https://img.youtube.com/vi/${youtubeId}/hqdefault.jpg`}
                       alt="Video thumbnail"
                       className="w-full transition group-hover:brightness-90"
                     />
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-black/60 text-white transition group-hover:bg-brand-purple group-hover:scale-110">
-                        <PlayIcon className="h-7 w-7 pl-0.5" />
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/10">
+                      <div className="flex h-16 w-16 items-center justify-center rounded-full bg-black/60 text-white transition group-hover:bg-brand-purple group-hover:scale-110">
+                        <PlayIcon className="h-8 w-8 pl-0.5" />
                       </div>
                     </div>
+                    {(startSec > 0 || endSec) && (
+                      <div className="absolute bottom-3 left-3 rounded-lg bg-black/70 px-2.5 py-1 text-xs font-bold text-white backdrop-blur">
+                        {formatSeconds(startSec)} → {endSec ? formatSeconds(endSec) : 'einde'}
+                      </div>
+                    )}
                   </button>
                 )}
               </div>
             )}
 
+            {/* Actions */}
             <div className="flex gap-3">
               <button
                 onClick={handleSave}
@@ -266,7 +369,7 @@ export default function AccountPage() {
               </button>
               {videoUrl && (
                 <button
-                  onClick={() => { setVideoUrl(''); setShowPreview(false); }}
+                  onClick={() => { setVideoUrl(''); setVideoStart(''); setVideoEnd(''); setShowPreview(false); }}
                   className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-slate-50"
                 >
                   Verwijderen

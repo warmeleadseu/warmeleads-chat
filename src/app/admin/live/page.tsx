@@ -27,7 +27,7 @@ interface PeriodStat { leads: number; prevLeads: number; assigned: number; prevA
 interface BatchInfo { id: string; customer: string; branch: string; batchSize: number; delivered: number; pricePerLead: number | null; leadsPerWeek: number | null; notes: string | null; }
 interface RecentLead { id: string; name: string; branch: string; city: string; province: string; createdAt: string; }
 interface CostMetrics { monthAdSpend: number; brutoCpl: number; effectieveCpl: number; avgAssignments: number; totalProfit: number; }
-interface PaidBatch { id: string; batchId: string; customer: string; branch: string; amount: number; paidAt: string; amId: string | null; amName: string | null; celebrationVideoUrl: string | null; }
+interface PaidBatch { id: string; batchId: string; customer: string; branch: string; amount: number; paidAt: string; amId: string | null; amName: string | null; celebrationVideoUrl: string | null; videoStart?: number | null; videoEnd?: number | null; }
 interface AMLeaderboardEntry { id: string; name: string; revenue: number; batches: number; celebrationVideoUrl: string | null; }
 
 interface LiveData {
@@ -542,7 +542,9 @@ export default function LiveDashboard() {
               const withVideo = newPaid.find((pb: PaidBatch) => pb.celebrationVideoUrl);
               if (withVideo) {
                 setCelebrationVideo(withVideo);
-                setTimeout(() => setCelebrationVideo(null), 20000);
+                const clipLen = withVideo.videoEnd && withVideo.videoStart != null ? (withVideo.videoEnd - withVideo.videoStart) * 1000 : 25000;
+                const timeout = Math.min(Math.max(clipLen + 3000, 8000), 120000);
+                setTimeout(() => setCelebrationVideo(null), timeout);
               }
             }
             for (const pb of d.recentPaidBatches) seenPaidIds.current.add(pb.id);
@@ -617,6 +619,8 @@ export default function LiveDashboard() {
               amId: p.amId || null,
               amName: p.amName || 'Accountmanager',
               celebrationVideoUrl: p.celebrationVideoUrl || null,
+              videoStart: p.videoStart ?? null,
+              videoEnd: p.videoEnd ?? null,
             };
             setSalesToasts(prev => [vid, ...prev].slice(0, 5));
             setTimeout(() => setSalesToasts(prev => prev.filter(t => t.id !== vid.id)), 8000);
@@ -624,7 +628,9 @@ export default function LiveDashboard() {
             if (canvasRef.current) fireConfetti(canvasRef.current);
             if (vid.celebrationVideoUrl) {
               setCelebrationVideo(vid);
-              setTimeout(() => setCelebrationVideo(null), 25000);
+              const clipLen = vid.videoEnd && vid.videoStart != null ? (vid.videoEnd - vid.videoStart) * 1000 : 25000;
+              const timeout = Math.min(Math.max(clipLen + 3000, 8000), 120000);
+              setTimeout(() => setCelebrationVideo(null), timeout);
             }
             break;
           }
@@ -735,10 +741,10 @@ export default function LiveDashboard() {
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.7, y: 40 }}
               transition={{ type: 'spring', damping: 20, stiffness: 200 }}
-              className="relative w-full max-w-3xl px-4"
+              className="relative w-full max-w-6xl px-4"
               onClick={e => e.stopPropagation()}
             >
-              <div className="mb-4 text-center">
+              <div className="mb-3 text-center">
                 <motion.div
                   initial={{ scale: 0 }}
                   animate={{ scale: [0, 1.3, 1] }}
@@ -751,7 +757,7 @@ export default function LiveDashboard() {
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.3 }}
-                  className="text-3xl font-black text-amber-400"
+                  className="text-3xl font-black text-amber-400 lg:text-4xl"
                 >
                   Nieuwe verkoop!
                 </motion.h2>
@@ -759,7 +765,7 @@ export default function LiveDashboard() {
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: 0.5 }}
-                  className="mt-1 text-white/60"
+                  className="mt-1 text-lg text-white/60"
                 >
                   <span className="font-bold text-white">{celebrationVideo.customer}</span>
                   {celebrationVideo.amName && <span> — verkocht door <span className="font-bold text-amber-300">{celebrationVideo.amName}</span></span>}
@@ -774,7 +780,7 @@ export default function LiveDashboard() {
               >
                 <div className="relative w-full" style={{ paddingBottom: '56.25%' }}>
                   <iframe
-                    src={`https://www.youtube.com/embed/${extractYouTubeId(celebrationVideo.celebrationVideoUrl!)}?autoplay=1&start=0`}
+                    src={`https://www.youtube.com/embed/${extractYouTubeId(celebrationVideo.celebrationVideoUrl!)}?autoplay=1&start=${celebrationVideo.videoStart || 0}${celebrationVideo.videoEnd ? `&end=${celebrationVideo.videoEnd}` : ''}`}
                     className="absolute inset-0 h-full w-full"
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                     allowFullScreen
@@ -786,7 +792,7 @@ export default function LiveDashboard() {
                 animate={{ opacity: 1 }}
                 transition={{ delay: 1 }}
                 onClick={() => setCelebrationVideo(null)}
-                className="mx-auto mt-4 block rounded-lg bg-white/10 px-6 py-2 text-sm font-medium text-white/60 transition hover:bg-white/20 hover:text-white"
+                className="mx-auto mt-3 block rounded-lg bg-white/10 px-6 py-2 text-sm font-medium text-white/60 transition hover:bg-white/20 hover:text-white"
               >
                 Sluiten
               </motion.button>

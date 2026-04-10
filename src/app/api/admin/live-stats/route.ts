@@ -164,7 +164,7 @@ export async function GET(request: NextRequest) {
     .order('paid_at', { ascending: false })
     .limit(5);
 
-  const recentPaidBatches: { id: string; batchId: string; customer: string; branch: string; amount: number; paidAt: string; amId: string | null; amName: string | null; celebrationVideoUrl: string | null }[] = [];
+  const recentPaidBatches: { id: string; batchId: string; customer: string; branch: string; amount: number; paidAt: string; amId: string | null; amName: string | null; celebrationVideoUrl: string | null; videoStart: number | null; videoEnd: number | null }[] = [];
 
   if (recentPaidOrders && recentPaidOrders.length > 0) {
     const amIds = new Set<string>();
@@ -173,14 +173,14 @@ export async function GET(request: NextRequest) {
       if (cb?.customers?.account_manager_id) amIds.add(cb.customers.account_manager_id);
     }
 
-    let amMap = new Map<string, { name: string; celebration_video_url: string | null }>();
+    let amMap = new Map<string, { name: string; celebration_video_url: string | null; celebration_video_start: number | null; celebration_video_end: number | null }>();
     if (amIds.size > 0) {
       const { data: ams } = await supabase
         .from('admin_users')
-        .select('id, name, celebration_video_url')
+        .select('id, name, celebration_video_url, celebration_video_start, celebration_video_end')
         .in('id', [...amIds]);
       for (const am of ams || []) {
-        amMap.set(am.id, { name: am.name, celebration_video_url: am.celebration_video_url });
+        amMap.set(am.id, { name: am.name, celebration_video_url: am.celebration_video_url, celebration_video_start: am.celebration_video_start, celebration_video_end: am.celebration_video_end });
       }
     }
 
@@ -198,6 +198,8 @@ export async function GET(request: NextRequest) {
         amId,
         amName: am?.name || null,
         celebrationVideoUrl: am?.celebration_video_url || null,
+        videoStart: am?.celebration_video_start ?? null,
+        videoEnd: am?.celebration_video_end ?? null,
       });
     }
   }
