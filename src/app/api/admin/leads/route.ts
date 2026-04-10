@@ -72,8 +72,13 @@ export async function GET(request: NextRequest) {
     query = query.in('customer_id', ids);
   }
 
+  const bulkStatus = url.get('bulk_status');
+  if (bulkStatus === 'never') query = query.eq('bulk_export_count', 0);
+  else if (bulkStatus === 'once') query = query.eq('bulk_export_count', 1);
+  else if (bulkStatus === 'multiple') query = query.gte('bulk_export_count', 2);
+
   const allowedSorts = [
-    'created_at', 'naam_klant', 'email', 'status', 'wervingsdatum', 'plaatsnaam', 'provincie', 'branch',
+    'created_at', 'naam_klant', 'email', 'status', 'wervingsdatum', 'plaatsnaam', 'provincie', 'branch', 'bulk_export_count',
   ];
   const col = allowedSorts.includes(sortBy) ? sortBy : 'created_at';
   query = query.order(col, { ascending: sortDir });

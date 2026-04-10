@@ -303,12 +303,23 @@ interface Lead {
   plaatsnaam: string; provincie: string; wervingsdatum: string; status: string; notities: string; bron: string;
   phone_valid?: boolean;
   lead_cost?: number | string | null;
+  bulk_export_count?: number;
   meta_campaign_id?: string | null;
   meta_adset_id?: string | null;
   meta_ad_id?: string | null;
   custom_fields?: Record<string, string>;
   [key: string]: unknown;
   created_at: string; updated_at: string;
+}
+
+interface LeadExport {
+  id: string;
+  admin_name: string;
+  customer_name: string | null;
+  lead_count: number;
+  added_to_portal: boolean;
+  format: string;
+  created_at: string;
 }
 
 const STATUSES = ['nieuw', 'gecontacteerd', 'geen_gehoor', 'offerte', 'verkocht', 'afgewezen'] as const;
@@ -377,12 +388,17 @@ export default function LeadsCRMPage() {
   const [sortBy, setSortBy] = useState('wervingsdatum');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
+  const [bulkFilter, setBulkFilter] = useState('all');
+
   const [facets, setFacets] = useState<Record<string, Record<string, number>>>({});
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [editLead, setEditLead] = useState<Lead | null>(null);
   const [showNew, setShowNew] = useState(false);
   const [bulkStatus, setBulkStatus] = useState('');
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportHistory, setExportHistory] = useState<LeadExport[]>([]);
+  const [showExportHistory, setShowExportHistory] = useState(false);
 
   const fetchMeta = useCallback(async () => {
     const [custRes, branchRes] = await Promise.all([
@@ -402,6 +418,7 @@ export default function LeadsCRMPage() {
     if (selProvinces.length > 0) p.set('province', selProvinces.join(','));
     if (selSources.length > 0) p.set('source', selSources.join(','));
     if (phoneFilter !== 'all') p.set('phone_valid', phoneFilter);
+    if (bulkFilter !== 'all') p.set('bulk_status', bulkFilter);
     if (dateFrom) p.set('date_from', dateFrom);
     if (dateTo) p.set('date_to', dateTo);
     if (search) p.set('search', search);
@@ -412,7 +429,7 @@ export default function LeadsCRMPage() {
     const res = await adminFetch(`/api/admin/leads?${p}`);
     if (res.ok) { const d = await res.json(); setLeads(d.leads || []); setTotal(d.total || 0); }
     setLoading(false);
-  }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, phoneFilter, dateFrom, dateTo, search, page, perPage, sortBy, sortDir]);
+  }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, phoneFilter, bulkFilter, dateFrom, dateTo, search, page, perPage, sortBy, sortDir]);
 
   const fetchFacets = useCallback(async () => {
     const p = new URLSearchParams();
@@ -422,17 +439,23 @@ export default function LeadsCRMPage() {
     if (selProvinces.length > 0) p.set('province', selProvinces.join(','));
     if (selSources.length > 0) p.set('source', selSources.join(','));
     if (phoneFilter !== 'all') p.set('phone_valid', phoneFilter);
+    if (bulkFilter !== 'all') p.set('bulk_status', bulkFilter);
     if (dateFrom) p.set('date_from', dateFrom);
     if (dateTo) p.set('date_to', dateTo);
     if (search) p.set('search', search);
     const res = await adminFetch(`/api/admin/leads/facets?${p}`);
     if (res.ok) { const d = await res.json(); setFacets(d.facets || {}); }
-  }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, phoneFilter, dateFrom, dateTo, search]);
+  }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, phoneFilter, bulkFilter, dateFrom, dateTo, search]);
 
-  useEffect(() => { fetchMeta(); }, [fetchMeta]);
+  const fetchExportHistory = useCallback(async () => {
+    const res = await adminFetch('/api/admin/leads/export');
+    if (res.ok) { const d = await res.json(); setExportHistory(d.exports || []); }
+  }, []);
+
+  useEffect(() => { fetchMeta(); fetchExportHistory(); }, [fetchMeta, fetchExportHistory]);
   useEffect(() => { fetchLeads(); }, [fetchLeads]);
   useEffect(() => { fetchFacets(); }, [fetchFacets]);
-  useEffect(() => { setPage(1); }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, phoneFilter, dateFrom, dateTo, search, perPage]);
+  useEffect(() => { setPage(1); }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, phoneFilter, bulkFilter, dateFrom, dateTo, search, perPage]);
 
   const branchMap = useMemo(() => {
     const m: Record<string, BranchConfig> = {};
@@ -490,25 +513,20 @@ export default function LeadsCRMPage() {
     setValidatingPhones(false);
   };
 
-  const handleExport = () => {
-    const bFields = currentBranchFields.map(f => f.key);
-    const commonKeys = ['branch', 'naam_klant', 'email', 'telefoonnummer', 'postcode', 'huisnummer', 'plaatsnaam', 'provincie', 'wervingsdatum', 'status', 'notities', 'bron'];
-    const cols = [...commonKeys, ...bFields, 'customer_name'];
-    const header = cols.map(c => c === 'customer_name' ? 'Klant' : fieldLabels[c] || c).join(',');
-    const rows = leads.map(l =>
-      cols.map(c => {
-        if (c === 'customer_name') return `"${(l.customers?.name || '').replace(/"/g, '""')}"`;
-        const v = getLeadFieldValue(l, c);
-        return `"${String(v).replace(/"/g, '""')}"`;
-      }).join(',')
-    );
-    const csv = [header, ...rows].join('\n');
-    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url;
-    a.download = `leads-export-${new Date().toISOString().split('T')[0]}.csv`;
-    a.click(); URL.revokeObjectURL(url);
-  };
+  const currentFilterParams = useMemo(() => {
+    const p: Record<string, string> = {};
+    if (selBranches.length > 0) p.branch = selBranches.join(',');
+    if (selCustomers.length > 0) p.customer_id = selCustomers.join(',');
+    if (selStatuses.length > 0) p.status = selStatuses.join(',');
+    if (selProvinces.length > 0) p.province = selProvinces.join(',');
+    if (selSources.length > 0) p.source = selSources.join(',');
+    if (phoneFilter !== 'all') p.phone_valid = phoneFilter;
+    if (bulkFilter !== 'all') p.bulk_status = bulkFilter;
+    if (dateFrom) p.date_from = dateFrom;
+    if (dateTo) p.date_to = dateTo;
+    if (search) p.search = search;
+    return p;
+  }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, phoneFilter, bulkFilter, dateFrom, dateTo, search]);
 
   const handleQuickStatus = async (id: string, newStatus: string) => {
     await adminFetch('/api/admin/leads', { method: 'PUT', body: JSON.stringify({ id, status: newStatus }) });
@@ -561,8 +579,8 @@ export default function LeadsCRMPage() {
               <><MapPinIcon className="h-4 w-4" /> Adressen aanvullen</>
             )}
           </button>
-          <button onClick={handleExport} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">
-            <ArrowDownTrayIcon className="h-4 w-4" /> Export CSV
+          <button onClick={() => setShowExportModal(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">
+            <ArrowDownTrayIcon className="h-4 w-4" /> Bulk export
           </button>
           <button onClick={() => setShowNew(true)} className="inline-flex items-center gap-1.5 rounded-lg bg-button-gradient px-3.5 py-2 text-sm font-bold text-white shadow-sm">
             <PlusIcon className="h-4 w-4" /> Nieuwe lead
@@ -595,7 +613,7 @@ export default function LeadsCRMPage() {
           <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Zoek op naam, email, telefoon of postcode..."
             className="w-full rounded-lg border border-slate-200 bg-slate-50/50 py-2.5 pl-9 pr-4 text-sm text-slate-700 outline-none focus:border-brand-purple/50 focus:bg-white focus:ring-1 focus:ring-brand-purple/30" />
         </div>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-7">
           <MultiSelect
             label="branches"
             allLabel="Alle branches"
@@ -649,6 +667,12 @@ export default function LeadsCRMPage() {
             <option value="all">Alle nummers</option>
             <option value="false">Verdacht nummer</option>
             <option value="true">Geldig nummer</option>
+          </select>
+          <select value={bulkFilter} onChange={e => setBulkFilter(e.target.value)} className={`rounded-lg border px-3 py-2 text-sm ${bulkFilter !== 'all' ? 'border-indigo-300 bg-indigo-50 text-indigo-700' : 'border-slate-200 bg-white text-slate-700'}`}>
+            <option value="all">Alle bulk status</option>
+            <option value="never">Nog niet verkocht</option>
+            <option value="once">1x verkocht</option>
+            <option value="multiple">2x+ verkocht</option>
           </select>
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -713,6 +737,52 @@ export default function LeadsCRMPage() {
         </div>
       )}
 
+      {/* Export History */}
+      {exportHistory.length > 0 && (
+        <div className="mb-4">
+          <button
+            onClick={() => setShowExportHistory(h => !h)}
+            className="mb-2 inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 hover:text-slate-700"
+          >
+            <ArrowDownTrayIcon className="h-4 w-4" />
+            Recente exports ({exportHistory.length})
+            <ChevronDownIcon className={`h-3.5 w-3.5 transition ${showExportHistory ? 'rotate-180' : ''}`} />
+          </button>
+          <AnimatePresence>
+            {showExportHistory && (
+              <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+                <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-100 bg-slate-50/80">
+                        <th className="px-3 py-2.5 text-xs font-semibold text-slate-500">Datum</th>
+                        <th className="px-3 py-2.5 text-xs font-semibold text-slate-500">Admin</th>
+                        <th className="px-3 py-2.5 text-xs font-semibold text-slate-500">Klant</th>
+                        <th className="px-3 py-2.5 text-xs font-semibold text-slate-500">Leads</th>
+                        <th className="px-3 py-2.5 text-xs font-semibold text-slate-500">Formaat</th>
+                        <th className="px-3 py-2.5 text-xs font-semibold text-slate-500">Portaal</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {exportHistory.map(ex => (
+                        <tr key={ex.id} className="border-b border-slate-50">
+                          <td className="whitespace-nowrap px-3 py-2 text-xs text-slate-600">{new Date(ex.created_at).toLocaleString('nl-NL', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
+                          <td className="px-3 py-2 text-xs text-slate-600">{ex.admin_name}</td>
+                          <td className="px-3 py-2 text-xs text-slate-600">{ex.customer_name || '-'}</td>
+                          <td className="px-3 py-2 text-xs font-medium tabular-nums text-slate-700">{ex.lead_count.toLocaleString('nl-NL')}</td>
+                          <td className="px-3 py-2"><span className={`rounded-full px-2 py-0.5 text-[10px] font-medium uppercase ${ex.format === 'xlsx' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>{ex.format}</span></td>
+                          <td className="px-3 py-2">{ex.added_to_portal ? <span className="rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-medium text-purple-700">Ja</span> : <span className="text-xs text-slate-400">Nee</span>}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      )}
+
       <AnimatePresence>
         {selected.size > 0 && (
           <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
@@ -743,6 +813,12 @@ export default function LeadsCRMPage() {
                   </th>
                 )}
                 <th className="px-3 py-3 text-xs font-semibold text-slate-500">Klant</th>
+                <th className="cursor-pointer whitespace-nowrap px-3 py-3 text-xs font-semibold text-slate-500 hover:text-slate-700" onClick={() => toggleSort('bulk_export_count')}>
+                  <span className="inline-flex items-center gap-1">
+                    Bulk
+                    {sortBy === 'bulk_export_count' && <span className="text-brand-purple">{sortDir === 'asc' ? '↑' : '↓'}</span>}
+                  </span>
+                </th>
                 {visibleCols.map(col => (
                   <th key={col} className="cursor-pointer whitespace-nowrap px-3 py-3 text-xs font-semibold text-slate-500 hover:text-slate-700" onClick={() => toggleSort(col)}>
                     <span className="inline-flex items-center gap-1">
@@ -776,6 +852,13 @@ export default function LeadsCRMPage() {
                           {(lead as any).assignment_count}x toegewezen
                         </span>
                       )}
+                    </td>
+                    <td className="px-3 py-2.5">
+                      {(() => {
+                        const cnt = lead.bulk_export_count ?? 0;
+                        const color = cnt === 0 ? 'bg-emerald-100 text-emerald-700' : cnt === 1 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700';
+                        return <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-medium tabular-nums ${color}`}>{cnt}x</span>;
+                      })()}
                     </td>
                     {visibleCols.map(col => (
                       <td key={col} className="whitespace-nowrap px-3 py-2.5 text-sm text-slate-700" onClick={col === 'status' ? e => e.stopPropagation() : undefined}>
@@ -842,6 +925,11 @@ export default function LeadsCRMPage() {
               </div>
               <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
                 <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${badge.light} ${badge.text}`}>{badge.name}</span>
+                {(() => {
+                  const cnt = lead.bulk_export_count ?? 0;
+                  const color = cnt === 0 ? 'bg-emerald-100 text-emerald-700' : cnt === 1 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700';
+                  return <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium tabular-nums ${color}`}>{cnt}x bulk</span>;
+                })()}
                 {lead.plaatsnaam && <span>{lead.plaatsnaam}</span>}
                 {lead.telefoonnummer && (
                   <span className="flex items-center gap-0.5">
@@ -883,7 +971,170 @@ export default function LeadsCRMPage() {
           />
         )}
       </AnimatePresence>
+
+      <AnimatePresence>
+        {showExportModal && (
+          <ExportModal
+            total={total}
+            customers={customers}
+            filterParams={currentFilterParams}
+            onClose={() => setShowExportModal(false)}
+            onExported={() => { fetchLeads(); fetchExportHistory(); }}
+          />
+        )}
+      </AnimatePresence>
     </div>
+  );
+}
+
+function ExportModal({
+  total, customers, filterParams, onClose, onExported,
+}: {
+  total: number;
+  customers: Customer[];
+  filterParams: Record<string, string>;
+  onClose: () => void;
+  onExported: () => void;
+}) {
+  const [targetCustomerId, setTargetCustomerId] = useState('');
+  const [addToPortal, setAddToPortal] = useState(false);
+  const [format, setFormat] = useState<'csv' | 'xlsx'>('xlsx');
+  const [prioritize, setPrioritize] = useState(true);
+  const [maxLeads, setMaxLeads] = useState('');
+  const [exporting, setExporting] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleExport = async () => {
+    setExporting(true);
+    setError('');
+    try {
+      const body: Record<string, unknown> = {
+        ...filterParams,
+        format,
+        prioritize_least_exported: prioritize,
+      };
+      if (targetCustomerId) {
+        body.target_customer_id = targetCustomerId;
+        body.add_to_portal = addToPortal;
+      }
+      if (maxLeads && Number(maxLeads) > 0) body.max_leads = Number(maxLeads);
+
+      const res = await adminFetch('/api/admin/leads/export', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({ error: 'Export mislukt' }));
+        throw new Error(d.error || 'Export mislukt');
+      }
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const ext = format === 'xlsx' ? 'xlsx' : 'csv';
+      a.download = `leads-bulk-export-${new Date().toISOString().split('T')[0]}.${ext}`;
+      a.click();
+      URL.revokeObjectURL(url);
+      onExported();
+      onClose();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Er ging iets mis');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  return (
+    <>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm" onClick={onClose} />
+      <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+        className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+        <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl" onClick={e => e.stopPropagation()}>
+          <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+            <div>
+              <h2 className="text-lg font-bold text-slate-900">Bulk Lead Export</h2>
+              <p className="mt-0.5 text-sm text-slate-500">{total.toLocaleString('nl-NL')} leads in huidige filters</p>
+            </div>
+            <button onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"><XMarkIcon className="h-5 w-5" /></button>
+          </div>
+
+          <div className="space-y-4 p-5">
+            {error && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-600">{error}</div>}
+
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-slate-500">Exporteren voor klant (optioneel)</label>
+              <select value={targetCustomerId} onChange={e => { setTargetCustomerId(e.target.value); if (!e.target.value) setAddToPortal(false); }}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm text-slate-900">
+                <option value="">- Geen specifieke klant -</option>
+                {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+
+            {targetCustomerId && (
+              <label className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-slate-50/50 px-4 py-3 text-sm text-slate-700 cursor-pointer hover:bg-slate-50">
+                <input type="checkbox" checked={addToPortal} onChange={e => setAddToPortal(e.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300 text-brand-purple focus:ring-brand-purple/30" />
+                <div>
+                  <span className="font-medium">Toevoegen aan klantportaal</span>
+                  <p className="text-xs text-slate-500">Leads worden ook als lead_assignments aan deze klant gekoppeld</p>
+                </div>
+              </label>
+            )}
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-slate-500">Formaat</label>
+                <div className="flex rounded-lg border border-slate-200 overflow-hidden">
+                  <button onClick={() => setFormat('xlsx')} className={`flex-1 px-3 py-2 text-sm font-medium transition ${format === 'xlsx' ? 'bg-brand-purple text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}>
+                    Excel (.xlsx)
+                  </button>
+                  <button onClick={() => setFormat('csv')} className={`flex-1 px-3 py-2 text-sm font-medium transition ${format === 'csv' ? 'bg-brand-purple text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}>
+                    CSV
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-slate-500">Max. aantal leads</label>
+                <input type="number" value={maxLeads} onChange={e => setMaxLeads(e.target.value)} placeholder="Alle"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" min={1} />
+              </div>
+            </div>
+
+            <label className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-slate-50/50 px-4 py-3 text-sm text-slate-700 cursor-pointer hover:bg-slate-50">
+              <input type="checkbox" checked={prioritize} onChange={e => setPrioritize(e.target.checked)}
+                className="h-4 w-4 rounded border-slate-300 text-brand-purple focus:ring-brand-purple/30" />
+              <div>
+                <span className="font-medium">Minst verkochte leads eerst</span>
+                <p className="text-xs text-slate-500">Leads die nog nooit of minder vaak als bulk zijn geëxporteerd krijgen voorrang</p>
+              </div>
+            </label>
+          </div>
+
+          <div className="border-t border-slate-100 px-5 py-4">
+            <div className="flex gap-3">
+              <button onClick={onClose} className="flex-1 rounded-lg border border-slate-200 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50">
+                Annuleren
+              </button>
+              <button onClick={handleExport} disabled={exporting} className="flex-1 rounded-lg bg-button-gradient py-2.5 text-sm font-bold text-white shadow-sm disabled:opacity-60">
+                {exporting ? (
+                  <span className="inline-flex items-center gap-2">
+                    <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                    Exporteren...
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5">
+                    <ArrowDownTrayIcon className="h-4 w-4" />
+                    {maxLeads ? `${Number(maxLeads).toLocaleString('nl-NL')} leads exporteren` : `${total.toLocaleString('nl-NL')} leads exporteren`}
+                  </span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      </motion.div>
+    </>
   );
 }
 
