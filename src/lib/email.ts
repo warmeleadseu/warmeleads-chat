@@ -27,7 +27,7 @@ async function logEmail(
 ) {
   try {
     const supabase = createServerClient();
-    await supabase.from('email_log').insert({
+    const { error: dbError } = await supabase.from('email_log').insert({
       type: options?.type || 'unknown',
       to_email: to,
       to_name: options?.toName || null,
@@ -37,6 +37,9 @@ async function logEmail(
       error: error || null,
       metadata: options?.metadata || {},
     });
+    if (dbError) {
+      console.error('[email-log] insert error:', dbError.message, dbError.code);
+    }
   } catch (e) {
     console.error('[email-log] failed to log:', e);
   }
