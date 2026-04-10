@@ -24,7 +24,46 @@ export async function GET(request: NextRequest) {
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  return NextResponse.json(data);
+  const results = data || [];
+
+  if (customerId && !batchId) {
+    const assignedLeadIds = new Set(results.map((a: { lead_id: string }) => a.lead_id));
+
+    const { data: directLeads } = await supabase
+      .from('leads')
+      .select('id, naam_klant, email, branch, postcode, plaatsnaam, created_at')
+      .eq('customer_id', customerId);
+
+    const missing = (directLeads || []).filter(l => !assignedLeadIds.has(l.id));
+
+    if (missing.length > 0) {
+      const rows = missing.map(l => ({ lead_id: l.id, customer_id: customerId }));
+      await supabase
+        .from('lead_assignments')
+        .upsert(rows, { onConflict: 'lead_id,customer_id' });
+
+      for (const l of missing) {
+        results.push({
+          id: `synced-${l.id}`,
+          lead_id: l.id,
+          customer_id: customerId,
+          batch_id: null,
+          distance_km: null,
+          assigned_at: l.created_at,
+          customers: null,
+          leads: {
+            naam_klant: l.naam_klant,
+            email: l.email,
+            branch: l.branch,
+            postcode: l.postcode,
+            plaatsnaam: l.plaatsnaam,
+          },
+        });
+      }
+    }
+  }
+
+  return NextResponse.json(results);
 }
 
 export async function DELETE(request: NextRequest) {

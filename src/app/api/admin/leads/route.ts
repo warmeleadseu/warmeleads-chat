@@ -183,12 +183,36 @@ export async function PUT(request: NextRequest) {
     }
 
     const supabase = createServerClient();
+
+    const prevCustomerId = updates.customer_id !== undefined
+      ? (await supabase.from('leads').select('customer_id').eq('id', id).single()).data?.customer_id
+      : undefined;
+
     const { data, error } = await supabase.from('leads').update(updates).eq('id', id).select().single();
 
     if (error) {
       console.error('Update error:', error);
       return NextResponse.json({ error: 'Bijwerken mislukt' }, { status: 500 });
     }
+
+    if (updates.customer_id !== undefined && updates.customer_id !== prevCustomerId) {
+      if (prevCustomerId) {
+        await supabase
+          .from('lead_assignments')
+          .delete()
+          .eq('lead_id', id)
+          .eq('customer_id', prevCustomerId);
+      }
+      if (updates.customer_id) {
+        await supabase
+          .from('lead_assignments')
+          .upsert(
+            { lead_id: id, customer_id: updates.customer_id },
+            { onConflict: 'lead_id,customer_id' }
+          );
+      }
+    }
+
     return NextResponse.json({ success: true, lead: data });
   } catch (err) {
     return NextResponse.json({ error: 'Ongeldige data' }, { status: 400 });
