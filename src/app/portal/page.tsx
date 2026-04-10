@@ -906,7 +906,7 @@ export default function PortalPage() {
       </AnimatePresence>
 
       {/* Lead source tabs */}
-      {(bulkCount > 0 || (stats.bulkLeads && stats.bulkLeads > 0)) && (
+      {(bulkCount > 0 || (stats.bulkLeads ?? 0) > 0) && (
         <div className="rounded-xl bg-slate-100 p-1">
           <div className="relative flex">
             {([
