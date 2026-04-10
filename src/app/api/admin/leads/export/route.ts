@@ -7,7 +7,7 @@ import * as XLSX from 'xlsx';
 const COLUMN_HEADERS = [
   'Branche', 'Naam', 'E-mail', 'Telefoon', 'Postcode', 'Huisnr.',
   'Plaats', 'Provincie', 'Datum', 'Status', 'Notities', 'Bron',
-  'CPL', 'Kwaliteit', 'Klant', 'Bulk exports',
+  'CPL', 'Kwaliteit', 'Klant',
 ];
 
 function formatDate(value: string | null): string {
@@ -32,7 +32,6 @@ function leadToRow(lead: Record<string, unknown>): string[] {
     lead.lead_cost ? `€${Number(lead.lead_cost).toFixed(2)}` : '',
     lead.quality_score != null ? String(lead.quality_score) : '',
     String((lead.customers as { name?: string } | null)?.name || ''),
-    String(lead.bulk_export_count ?? 0),
   ];
 }
 
@@ -155,18 +154,24 @@ export async function POST(request: NextRequest) {
     query = query.order('wervingsdatum', { ascending: false });
   }
 
-  if (max_leads && Number(max_leads) > 0) {
-    query = query.limit(Number(max_leads));
+  const hardLimit = max_leads && Number(max_leads) > 0 ? Number(max_leads) : Infinity;
+  const PAGE_SIZE = 1000;
+  const exportedLeads: Record<string, unknown>[] = [];
+  let offset = 0;
+
+  while (exportedLeads.length < hardLimit) {
+    const batchSize = Math.min(PAGE_SIZE, hardLimit - exportedLeads.length);
+    const { data: batch, error: batchError } = await query.range(offset, offset + batchSize - 1);
+    if (batchError) {
+      console.error('Export fetch error:', batchError);
+      return NextResponse.json({ error: 'Leads ophalen mislukt' }, { status: 500 });
+    }
+    if (!batch || batch.length === 0) break;
+    exportedLeads.push(...(batch as Record<string, unknown>[]));
+    if (batch.length < batchSize) break;
+    offset += batch.length;
   }
 
-  const { data: leads, error } = await query;
-
-  if (error) {
-    console.error('Export fetch error:', error);
-    return NextResponse.json({ error: 'Leads ophalen mislukt' }, { status: 500 });
-  }
-
-  const exportedLeads = (leads || []) as Record<string, unknown>[];
   if (exportedLeads.length === 0) {
     return NextResponse.json({ error: 'Geen leads gevonden voor deze filters' }, { status: 404 });
   }
@@ -237,6 +242,7 @@ export async function POST(request: NextRequest) {
     added_to_portal: !!add_to_portal && !!target_customer_id,
     format: format === 'xlsx' ? 'xlsx' : 'csv',
     filters: filterSnapshot,
+    lead_ids: leadIds,
   });
 
   logAudit({
@@ -271,4 +277,66 @@ export async function GET(request: NextRequest) {
   }
 
   return NextResponse.json({ exports: data || [] });
+}
+
+export async function DELETE(request: NextRequest) {
+  const admin = await verifyAdmin(request);
+  if (!admin) return unauthorized();
+
+  const { searchParams } = new URL(request.url);
+  const exportId = searchParams.get('id');
+  if (!exportId) {
+    return NextResponse.json({ error: 'Export ID is verplicht' }, { status: 400 });
+  }
+
+  const supabase = createServerClient();
+
+  const { data: exportRecord, error: fetchError } = await supabase
+    .from('lead_exports')
+    .select('*')
+    .eq('id', exportId)
+    .single();
+
+  if (fetchError || !exportRecord) {
+    return NextResponse.json({ error: 'Export niet gevonden' }, { status: 404 });
+  }
+
+  const leadIds: string[] = exportRecord.lead_ids || [];
+
+  if (leadIds.length > 0) {
+    const CHUNK = 500;
+    for (let i = 0; i < leadIds.length; i += CHUNK) {
+      const chunk = leadIds.slice(i, i + CHUNK);
+      await supabase.rpc('decrement_bulk_export_count', { lead_ids: chunk });
+    }
+  }
+
+  if (exportRecord.added_to_portal && exportRecord.customer_id && leadIds.length > 0) {
+    const CHUNK = 500;
+    for (let i = 0; i < leadIds.length; i += CHUNK) {
+      const chunk = leadIds.slice(i, i + CHUNK);
+      await supabase
+        .from('lead_assignments')
+        .delete()
+        .in('lead_id', chunk)
+        .eq('customer_id', exportRecord.customer_id)
+        .eq('source', 'bulk_export');
+    }
+  }
+
+  await supabase.from('lead_exports').delete().eq('id', exportId);
+
+  logAudit({
+    adminId: admin.id,
+    adminName: admin.name,
+    action: 'undo_export',
+    entityType: 'lead',
+    details: {
+      export_id: exportId,
+      lead_count: leadIds.length,
+      customer: exportRecord.customer_name,
+    },
+  });
+
+  return NextResponse.json({ success: true, undone_leads: leadIds.length });
 }
