@@ -1570,22 +1570,22 @@ export default function LiveDashboard() {
         </div>{/* end main content column */}
 
         {/* AM Sidebar — xl only */}
-        <div className="hidden xl:flex xl:w-[280px] xl:shrink-0 xl:flex-col xl:gap-3 xl:overflow-y-auto">
+        <div className="hidden xl:flex xl:w-[340px] xl:shrink-0 xl:flex-col xl:gap-3 xl:overflow-y-auto">
           {/* AM Performance */}
           {amTargets.length > 0 && (
             <motion.div
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.2 }}
-              className="rounded-2xl border border-amber-500/10 bg-amber-500/[0.04] p-3 backdrop-blur-sm"
+              className="rounded-2xl border border-amber-500/10 bg-amber-500/[0.04] p-4 backdrop-blur-sm"
             >
               <div className="mb-3 flex items-center gap-2">
                 <svg className="h-4 w-4 text-amber-400/60" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5 2a1 1 0 011 1v1h1a1 1 0 010 2H6v1a1 1 0 01-2 0V6H3a1 1 0 010-2h1V3a1 1 0 011-1zm0 10a1 1 0 011 1v1h1a1 1 0 110 2H6v1a1 1 0 11-2 0v-1H3a1 1 0 110-2h1v-1a1 1 0 011-1zM12 2a1 1 0 01.967.744L14.146 7.2 17.5 9.134a1 1 0 010 1.732l-3.354 1.935-1.18 4.455a1 1 0 01-1.933 0L9.854 12.8 6.5 10.866a1 1 0 010-1.732l3.354-1.935 1.18-4.455A1 1 0 0112 2z" clipRule="evenodd"/></svg>
                 <h2 className="text-sm font-bold text-white/70">AM Targets</h2>
               </div>
-              <div className="space-y-2">
+              <div className="space-y-2.5">
                 {[...amTargets].sort((a, b) => b.progress_pct - a.progress_pct).map((t, idx) => {
-                  const r = 16;
+                  const r = 22;
                   const circ = 2 * Math.PI * r;
                   const filled = Math.min(t.progress_pct, 100);
                   const isComplete = t.progress_pct >= 100;
@@ -1601,7 +1601,7 @@ export default function LiveDashboard() {
                       initial={{ opacity: 0, x: 10 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: 0.25 + idx * 0.05 }}
-                      className={`rounded-xl border p-3 ${
+                      className={`rounded-xl border p-3.5 ${
                         isComplete
                           ? 'border-emerald-500/20 bg-emerald-500/[0.06]'
                           : isTop
@@ -1611,14 +1611,14 @@ export default function LiveDashboard() {
                           : 'border-white/[0.04] bg-white/[0.02]'
                       }`}
                     >
-                      <div className="flex items-center gap-3">
-                        <div className="relative h-10 w-10 shrink-0">
+                      <div className="flex items-center gap-3.5">
+                        <div className="relative h-14 w-14 shrink-0">
                           {(isClose || isComplete) && (
                             <div className={`absolute inset-0 rounded-full blur-sm ${isComplete ? 'bg-emerald-400/20' : 'bg-amber-400/15'}`} />
                           )}
-                          <svg className="-rotate-90 relative h-10 w-10" viewBox="0 0 40 40">
-                            <circle cx="20" cy="20" r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="3" />
-                            <circle cx="20" cy="20" r={r} fill="none"
+                          <svg className="-rotate-90 relative h-14 w-14" viewBox="0 0 56 56">
+                            <circle cx="28" cy="28" r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="3" />
+                            <circle cx="28" cy="28" r={r} fill="none"
                               stroke={ringColor}
                               strokeWidth="3"
                               strokeLinecap="round"
@@ -1630,21 +1630,21 @@ export default function LiveDashboard() {
                           </svg>
                           <div className="absolute inset-0 flex items-center justify-center">
                             {t.am_avatar_url ? (
-                              <Image src={t.am_avatar_url} alt={t.am_name} width={28} height={28} className="h-7 w-7 rounded-full object-cover" />
+                              <Image src={t.am_avatar_url} alt={t.am_name} width={40} height={40} className="h-10 w-10 rounded-full object-cover" />
                             ) : isComplete ? (
-                              <span className="text-xs">🎉</span>
+                              <span className="text-base">🎉</span>
                             ) : (
-                              <span className="text-[9px] font-black text-white/70">{t.progress_pct}%</span>
+                              <span className="text-[10px] font-black text-white/70">{t.progress_pct}%</span>
                             )}
                           </div>
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1.5">
-                            {isTop && !isComplete && <span className="text-xs">👑</span>}
-                            <p className={`truncate text-[12px] font-bold ${isTop && !isComplete ? 'text-amber-300' : 'text-white/70'}`}>{t.am_name}</p>
+                            {isTop && !isComplete && <span className="text-sm">👑</span>}
+                            <p className={`truncate text-[13px] font-bold ${isTop && !isComplete ? 'text-amber-300' : 'text-white/70'}`}>{t.am_name}</p>
                           </div>
-                          <p className="truncate text-[10px] text-white/30">{t.label}</p>
-                          <div className="mt-0.5 flex items-baseline justify-between text-[10px]">
+                          <p className="truncate text-[11px] text-white/30">{t.label}</p>
+                          <div className="mt-1 flex items-baseline justify-between text-[11px]">
                             <span className="font-bold tabular-nums text-white/60">
                               {t.target_type === 'revenue'
                                 ? `€${t.current_value.toLocaleString('nl-NL', { maximumFractionDigits: 0 })}`
@@ -1659,11 +1659,11 @@ export default function LiveDashboard() {
                         </div>
                       </div>
                       {!isComplete && remaining > 0 && (
-                        <p className="mt-1.5 text-[9px] text-white/25">
+                        <p className="mt-2 text-[10px] text-white/25">
                           Nog {t.target_type === 'revenue' ? `€${remaining.toLocaleString('nl-NL', { maximumFractionDigits: 0 })}` : remaining} · {daysLeft}d over
                         </p>
                       )}
-                      <div className="mt-1 flex items-center justify-between text-[9px] text-white/20">
+                      <div className="mt-1 flex items-center justify-between text-[10px] text-white/20">
                         <span>{TARGET_TYPE_LABELS[t.target_type] || t.target_type}</span>
                         {t.bonus_amount > 0 && (
                           <span className={isComplete ? 'font-bold text-emerald-400/70' : 'text-amber-400/60'}>
@@ -1684,16 +1684,16 @@ export default function LiveDashboard() {
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.3 }}
-              className="rounded-2xl border border-brand-purple/10 bg-brand-purple/[0.04] p-3 backdrop-blur-sm"
+              className="rounded-2xl border border-brand-purple/10 bg-brand-purple/[0.04] p-4 backdrop-blur-sm"
             >
               <div className="mb-3 flex items-center gap-2">
                 <svg className="h-4 w-4 text-brand-purple/60" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" /></svg>
                 <h2 className="text-sm font-bold text-white/70">Leaderboard</h2>
-                <span className="ml-auto text-[9px] text-white/20">
+                <span className="ml-auto text-[10px] text-white/20">
                   {new Date().toLocaleDateString('nl-NL', { month: 'short', year: 'numeric' })}
                 </span>
               </div>
-              <div className="space-y-2">
+              <div className="space-y-2.5">
                 {data.amLeaderboard.map((am, rank) => {
                   const isFirst = rank === 0;
                   const medalColors = ['from-amber-400 to-amber-600', 'from-slate-300 to-slate-400', 'from-amber-600 to-amber-800'];
@@ -1704,37 +1704,37 @@ export default function LiveDashboard() {
                       initial={{ opacity: 0, x: 10 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: 0.35 + rank * 0.05 }}
-                      className={`flex items-center gap-3 rounded-xl border p-2.5 ${
+                      className={`flex items-center gap-3.5 rounded-xl border p-3 ${
                         isFirst
                           ? 'border-amber-500/20 bg-amber-500/[0.06]'
                           : 'border-white/[0.04] bg-white/[0.02]'
                       }`}
                     >
-                      <div className="relative h-7 w-7 shrink-0">
+                      <div className="relative h-9 w-9 shrink-0">
                         {am.avatarUrl ? (
-                          <Image src={am.avatarUrl} alt={am.name} width={28} height={28} className="h-7 w-7 rounded-full object-cover" />
+                          <Image src={am.avatarUrl} alt={am.name} width={36} height={36} className="h-9 w-9 rounded-full object-cover" />
                         ) : (
-                          <div className={`flex h-7 w-7 items-center justify-center rounded-full text-[10px] font-black ${
+                          <div className={`flex h-9 w-9 items-center justify-center rounded-full text-xs font-black ${
                             rank < 3 ? `bg-gradient-to-br ${medalBg} text-white shadow-md` : 'bg-white/[0.06] text-white/30'
                           }`}>
                             {am.name.charAt(0).toUpperCase()}
                           </div>
                         )}
-                        <span className={`absolute -bottom-0.5 -right-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full text-[8px] font-black ${
+                        <span className={`absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-black ${
                           rank < 3 ? `bg-gradient-to-br ${medalBg} text-white` : 'bg-white/10 text-white/40'
                         }`}>
                           {rank + 1}
                         </span>
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className={`truncate text-[12px] font-bold ${isFirst ? 'text-amber-300' : 'text-white/70'}`}>{am.name}</p>
-                        <div className="flex items-center gap-2 text-[10px]">
+                        <p className={`truncate text-[13px] font-bold ${isFirst ? 'text-amber-300' : 'text-white/70'}`}>{am.name}</p>
+                        <div className="flex items-center gap-2 text-[11px]">
                           <span className="font-bold tabular-nums text-emerald-400">€{am.revenue.toLocaleString('nl-NL', { maximumFractionDigits: 0 })}</span>
                           <span className="text-white/20">·</span>
                           <span className="text-white/30">{am.batches} {am.batches === 1 ? 'batch' : 'batches'}</span>
                         </div>
                       </div>
-                      {isFirst && <span className="text-sm">👑</span>}
+                      {isFirst && <span className="text-base">👑</span>}
                     </motion.div>
                   );
                 })}
