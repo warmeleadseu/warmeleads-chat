@@ -431,7 +431,7 @@ export default function PortalPage() {
     } catch {
       showToast('Export mislukt');
     }
-  }, [statusFilter, branchFilter, dateFrom, dateTo, customer.name, showToast]);
+  }, [statusFilter, branchFilter, dateFrom, dateTo, leadSource, customer.name, showToast]);
 
   const activeFilters = useMemo(() => {
     let count = 0;

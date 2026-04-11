@@ -47,7 +47,6 @@ export async function GET(request: NextRequest) {
     password_hash: undefined,
   }));
 
-
   return NextResponse.json({ customers: enriched });
 }
 
