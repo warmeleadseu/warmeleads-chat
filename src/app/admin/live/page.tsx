@@ -1148,8 +1148,12 @@ export default function LiveDashboard() {
           ))}
         </div>
 
+        {/* Main content + AM sidebar wrapper */}
+        <div className="flex min-h-0 flex-1 gap-3">
+        {/* Main content column */}
+        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overflow-x-hidden">
         {/* Middle section: Batches + Live Feed + Map */}
-        <div className="mb-3 grid min-h-0 flex-1 gap-3 lg:mb-2 lg:grid-cols-7">
+        <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-7">
           {/* Active batches - 3 cols */}
           <div className="flex flex-col overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 backdrop-blur-sm lg:col-span-3">
             <div className="mb-2 flex shrink-0 items-center justify-between">
@@ -1366,13 +1370,13 @@ export default function LiveDashboard() {
           </motion.div>
         )}
 
-        {/* AM Performance Section */}
+        {/* AM Performance Section — inline on <xl */}
         {amTargets.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.25 }}
-            className="shrink-0 rounded-2xl border border-amber-500/10 bg-amber-500/[0.04] p-3 backdrop-blur-sm"
+            className="shrink-0 rounded-2xl border border-amber-500/10 bg-amber-500/[0.04] p-3 backdrop-blur-sm xl:hidden"
           >
             <div className="mb-2 flex items-center gap-2">
               <svg className="h-4 w-4 text-amber-400/60" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5 2a1 1 0 011 1v1h1a1 1 0 010 2H6v1a1 1 0 01-2 0V6H3a1 1 0 010-2h1V3a1 1 0 011-1zm0 10a1 1 0 011 1v1h1a1 1 0 110 2H6v1a1 1 0 11-2 0v-1H3a1 1 0 110-2h1v-1a1 1 0 011-1zM12 2a1 1 0 01.967.744L14.146 7.2 17.5 9.134a1 1 0 010 1.732l-3.354 1.935-1.18 4.455a1 1 0 01-1.933 0L9.854 12.8 6.5 10.866a1 1 0 010-1.732l3.354-1.935 1.18-4.455A1 1 0 0112 2z" clipRule="evenodd"/></svg>
@@ -1463,13 +1467,13 @@ export default function LiveDashboard() {
           </motion.div>
         )}
 
-        {/* AM Leaderboard */}
+        {/* AM Leaderboard — inline on <xl */}
         {data.amLeaderboard && data.amLeaderboard.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.28 }}
-            className="shrink-0 rounded-2xl border border-brand-purple/10 bg-brand-purple/[0.04] p-3 backdrop-blur-sm"
+            className="shrink-0 rounded-2xl border border-brand-purple/10 bg-brand-purple/[0.04] p-3 backdrop-blur-sm xl:hidden"
           >
             <div className="mb-2 flex items-center gap-2">
               <svg className="h-4 w-4 text-brand-purple/60" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" /></svg>
@@ -1548,6 +1552,168 @@ export default function LiveDashboard() {
             );
           })}
         </div>
+        </div>{/* end main content column */}
+
+        {/* AM Sidebar — xl only */}
+        <div className="hidden xl:flex xl:w-[280px] xl:shrink-0 xl:flex-col xl:gap-3 xl:overflow-y-auto">
+          {/* AM Performance */}
+          {amTargets.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.2 }}
+              className="rounded-2xl border border-amber-500/10 bg-amber-500/[0.04] p-3 backdrop-blur-sm"
+            >
+              <div className="mb-3 flex items-center gap-2">
+                <svg className="h-4 w-4 text-amber-400/60" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5 2a1 1 0 011 1v1h1a1 1 0 010 2H6v1a1 1 0 01-2 0V6H3a1 1 0 010-2h1V3a1 1 0 011-1zm0 10a1 1 0 011 1v1h1a1 1 0 110 2H6v1a1 1 0 11-2 0v-1H3a1 1 0 110-2h1v-1a1 1 0 011-1zM12 2a1 1 0 01.967.744L14.146 7.2 17.5 9.134a1 1 0 010 1.732l-3.354 1.935-1.18 4.455a1 1 0 01-1.933 0L9.854 12.8 6.5 10.866a1 1 0 010-1.732l3.354-1.935 1.18-4.455A1 1 0 0112 2z" clipRule="evenodd"/></svg>
+                <h2 className="text-sm font-bold text-white/70">AM Targets</h2>
+              </div>
+              <div className="space-y-2">
+                {[...amTargets].sort((a, b) => b.progress_pct - a.progress_pct).map((t, idx) => {
+                  const r = 16;
+                  const circ = 2 * Math.PI * r;
+                  const filled = Math.min(t.progress_pct, 100);
+                  const isComplete = t.progress_pct >= 100;
+                  const isClose = t.progress_pct >= 75 && !isComplete;
+                  const ringColor = isComplete ? '#34d399' : t.progress_pct >= 75 ? '#fbbf24' : t.progress_pct >= 50 ? '#f97316' : '#f87171';
+                  const remaining = Math.max(0, t.target_value - (t as any).current_value || 0);
+                  const daysLeft = Math.max(0, Math.ceil((new Date(t.period_end + 'T23:59:59').getTime() - Date.now()) / 86400000));
+                  const isTop = idx === 0 && amTargets.length > 1;
+
+                  return (
+                    <motion.div
+                      key={t.id}
+                      initial={{ opacity: 0, x: 10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.25 + idx * 0.05 }}
+                      className={`rounded-xl border p-3 ${
+                        isComplete
+                          ? 'border-emerald-500/20 bg-emerald-500/[0.06]'
+                          : isTop
+                          ? 'border-amber-500/20 bg-amber-500/[0.06]'
+                          : isClose
+                          ? 'border-amber-500/15 bg-amber-500/[0.04]'
+                          : 'border-white/[0.04] bg-white/[0.02]'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="relative h-10 w-10 shrink-0">
+                          {(isClose || isComplete) && (
+                            <div className={`absolute inset-0 rounded-full blur-sm ${isComplete ? 'bg-emerald-400/20' : 'bg-amber-400/15'}`} />
+                          )}
+                          <svg className="-rotate-90 relative h-10 w-10" viewBox="0 0 40 40">
+                            <circle cx="20" cy="20" r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="3" />
+                            <circle cx="20" cy="20" r={r} fill="none"
+                              stroke={ringColor}
+                              strokeWidth="3"
+                              strokeLinecap="round"
+                              strokeDasharray={circ}
+                              strokeDashoffset={circ - (filled / 100) * circ}
+                              className="transition-all duration-1000"
+                              style={isClose ? { filter: `drop-shadow(0 0 3px ${ringColor})` } : undefined}
+                            />
+                          </svg>
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            {isComplete
+                              ? <span className="text-xs">🎉</span>
+                              : <span className="text-[9px] font-black text-white/70">{t.progress_pct}%</span>
+                            }
+                          </div>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5">
+                            {isTop && !isComplete && <span className="text-xs">👑</span>}
+                            <p className={`truncate text-[12px] font-bold ${isTop && !isComplete ? 'text-amber-300' : 'text-white/70'}`}>{t.am_name}</p>
+                          </div>
+                          <p className="truncate text-[10px] text-white/30">{t.label}</p>
+                          <div className="mt-0.5 flex items-baseline justify-between text-[10px]">
+                            <span className="font-bold tabular-nums text-white/60">
+                              {t.target_type === 'revenue'
+                                ? `€${t.current_value.toLocaleString('nl-NL', { maximumFractionDigits: 0 })}`
+                                : t.current_value.toLocaleString('nl-NL')}
+                            </span>
+                            <span className="text-white/20">
+                              / {t.target_type === 'revenue'
+                                ? `€${t.target_value.toLocaleString('nl-NL', { maximumFractionDigits: 0 })}`
+                                : t.target_value.toLocaleString('nl-NL')}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      {!isComplete && remaining > 0 && (
+                        <p className="mt-1.5 text-[9px] text-white/25">
+                          Nog {t.target_type === 'revenue' ? `€${remaining.toLocaleString('nl-NL', { maximumFractionDigits: 0 })}` : remaining} · {daysLeft}d over
+                        </p>
+                      )}
+                      <div className="mt-1 flex items-center justify-between text-[9px] text-white/20">
+                        <span>{TARGET_TYPE_LABELS[t.target_type] || t.target_type}</span>
+                        {t.bonus_amount > 0 && (
+                          <span className={isComplete ? 'font-bold text-emerald-400/70' : 'text-amber-400/60'}>
+                            {isComplete ? '✓ ' : ''}€{t.bonus_amount.toLocaleString('nl-NL', { maximumFractionDigits: 0 })} bonus
+                          </span>
+                        )}
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            </motion.div>
+          )}
+
+          {/* AM Leaderboard */}
+          {data.amLeaderboard && data.amLeaderboard.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.3 }}
+              className="rounded-2xl border border-brand-purple/10 bg-brand-purple/[0.04] p-3 backdrop-blur-sm"
+            >
+              <div className="mb-3 flex items-center gap-2">
+                <svg className="h-4 w-4 text-brand-purple/60" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" /></svg>
+                <h2 className="text-sm font-bold text-white/70">Leaderboard</h2>
+                <span className="ml-auto text-[9px] text-white/20">
+                  {new Date().toLocaleDateString('nl-NL', { month: 'short', year: 'numeric' })}
+                </span>
+              </div>
+              <div className="space-y-2">
+                {data.amLeaderboard.map((am, rank) => {
+                  const isFirst = rank === 0;
+                  const medalColors = ['from-amber-400 to-amber-600', 'from-slate-300 to-slate-400', 'from-amber-600 to-amber-800'];
+                  const medalBg = rank < 3 ? medalColors[rank] : '';
+                  return (
+                    <motion.div
+                      key={am.id}
+                      initial={{ opacity: 0, x: 10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.35 + rank * 0.05 }}
+                      className={`flex items-center gap-3 rounded-xl border p-2.5 ${
+                        isFirst
+                          ? 'border-amber-500/20 bg-amber-500/[0.06]'
+                          : 'border-white/[0.04] bg-white/[0.02]'
+                      }`}
+                    >
+                      <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-black ${
+                        rank < 3 ? `bg-gradient-to-br ${medalBg} text-white shadow-md` : 'bg-white/[0.06] text-white/30'
+                      }`}>
+                        {rank + 1}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className={`truncate text-[12px] font-bold ${isFirst ? 'text-amber-300' : 'text-white/70'}`}>{am.name}</p>
+                        <div className="flex items-center gap-2 text-[10px]">
+                          <span className="font-bold tabular-nums text-emerald-400">€{am.revenue.toLocaleString('nl-NL', { maximumFractionDigits: 0 })}</span>
+                          <span className="text-white/20">·</span>
+                          <span className="text-white/30">{am.batches} {am.batches === 1 ? 'batch' : 'batches'}</span>
+                        </div>
+                      </div>
+                      {isFirst && <span className="text-sm">👑</span>}
+                    </motion.div>
+                  );
+                })}
+              </div>
+            </motion.div>
+          )}
+        </div>{/* end AM sidebar */}
+        </div>{/* end main + sidebar wrapper */}
       </div>
     </div>
   );
