@@ -89,18 +89,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'naam_klant is verplicht' }, { status: 400 });
     }
 
-    // Deduplication: skip if same email+branch already exists (within 30 days)
+    // Deduplication: if same email+branch exists within 30 days, don't create
+    // a new record but still run distribution on the existing lead
     if (lead.email) {
       const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
       const { data: existing } = await supabase
         .from('leads')
-        .select('id')
+        .select('id, branch, lat, lng')
         .eq('email', lead.email)
         .eq('branch', lead.branch)
         .gte('created_at', thirtyDaysAgo)
         .limit(1);
       if (existing && existing.length > 0) {
-        return NextResponse.json({ success: true, lead_id: existing[0].id, deduplicated: true });
+        const dup = existing[0];
+        if (dup.lat && dup.lng) {
+          try {
+            await distributeLead({ id: dup.id, branch: dup.branch, lat: dup.lat, lng: dup.lng });
+          } catch { /* distribution failure should not block webhook */ }
+        }
+        return NextResponse.json({ success: true, lead_id: dup.id, deduplicated: true });
       }
     }
 

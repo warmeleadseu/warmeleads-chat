@@ -188,7 +188,23 @@ export async function POST(request: NextRequest) {
       .limit(1)
       .maybeSingle();
 
-    const assignments = leadIds.map(leadId => ({
+    // Find leads already assigned to this customer within the last 30 days
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const alreadyAssigned = new Set<string>();
+    const CHECK_CHUNK = 500;
+    for (let i = 0; i < leadIds.length; i += CHECK_CHUNK) {
+      const chunk = leadIds.slice(i, i + CHECK_CHUNK);
+      const { data: existing } = await supabase
+        .from('lead_assignments')
+        .select('lead_id')
+        .eq('customer_id', custId)
+        .in('lead_id', chunk)
+        .gte('assigned_at', thirtyDaysAgo);
+      (existing || []).forEach(a => alreadyAssigned.add(a.lead_id));
+    }
+
+    const newLeadIds = leadIds.filter(id => !alreadyAssigned.has(id));
+    const assignments = newLeadIds.map(leadId => ({
       lead_id: leadId,
       customer_id: custId,
       source: 'bulk_export' as const,
@@ -198,9 +214,7 @@ export async function POST(request: NextRequest) {
     const CHUNK = 500;
     for (let i = 0; i < assignments.length; i += CHUNK) {
       const chunk = assignments.slice(i, i + CHUNK);
-      await supabase
-        .from('lead_assignments')
-        .upsert(chunk, { onConflict: 'lead_id,customer_id', ignoreDuplicates: true });
+      await supabase.from('lead_assignments').insert(chunk);
     }
   }
 
