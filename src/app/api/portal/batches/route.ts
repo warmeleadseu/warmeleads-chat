@@ -80,9 +80,9 @@ export async function GET(request: NextRequest) {
   const completed = completedBatches.map(batch => {
     const created = new Date(batch.created_at);
     const completedAt = batch.completed_at ? new Date(batch.completed_at) : now;
-    const duration_days = Math.round(
+    const duration_days = Math.max(1, Math.round(
       (completedAt.getTime() - created.getTime()) / (1000 * 60 * 60 * 24)
-    );
+    ));
 
     return {
       ...batch,

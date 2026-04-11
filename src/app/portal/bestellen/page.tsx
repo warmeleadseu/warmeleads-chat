@@ -96,6 +96,9 @@ export default function BestellenPage() {
   const [batchSize, setBatchSize] = useState(100);
   const [customSize, setCustomSize] = useState('');
   const [useCustom, setUseCustom] = useState(false);
+  const [leadsPerDay, setLeadsPerDay] = useState<number | null>(null);
+  const [customSpeed, setCustomSpeed] = useState('');
+  const [useCustomSpeed, setUseCustomSpeed] = useState(false);
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
@@ -165,6 +168,9 @@ export default function BestellenPage() {
             setUseCustom(true);
             setCustomSize(String(originalSize));
           }
+          if (match.leads_per_day && match.leads_per_day > 0) {
+            setLeadsPerDay(match.leads_per_day);
+          }
         }
       }
 
@@ -200,6 +206,28 @@ export default function BestellenPage() {
   const sourceBatch = useMemo(() => activeBranch?.batches[0] || null, [activeBranch]);
 
   const effectiveSize = useCustom ? (parseInt(customSize) || 0) : batchSize;
+  const effectiveSpeed = useCustomSpeed ? (parseInt(customSpeed) || 0) : leadsPerDay;
+
+  const SPEED_PRESETS = useMemo(() => {
+    if (effectiveSize <= 0) return [5, 10, 20];
+    const presets: number[] = [];
+    const targetDays = [30, 14, 7];
+    for (const days of targetDays) {
+      const perDay = Math.ceil(effectiveSize / days);
+      if (perDay >= 1 && !presets.includes(perDay)) presets.push(perDay);
+    }
+    if (presets.length < 3) {
+      for (const fallback of [5, 10, 20]) {
+        if (!presets.includes(fallback)) presets.push(fallback);
+        if (presets.length >= 3) break;
+      }
+    }
+    return presets.sort((a, b) => a - b).slice(0, 3);
+  }, [effectiveSize]);
+
+  const estimatedDays = effectiveSpeed && effectiveSpeed > 0
+    ? Math.ceil(effectiveSize / effectiveSpeed)
+    : null;
 
   const dynamicPricePerLead = useMemo(() => {
     if (!pricingData || !pricingData.tiers || pricingData.tiers.length === 0) {
@@ -253,6 +281,7 @@ export default function BestellenPage() {
           source_batch_id: sourceBatch.id,
           branch: sourceBatch.branch,
           price_per_lead: pricePerLead,
+          leads_per_day: effectiveSpeed || null,
           notes: notes || undefined,
         }),
       });
@@ -651,6 +680,94 @@ export default function BestellenPage() {
             </div>
           )}
         </div>
+
+        {/* Delivery speed selector */}
+        {effectiveSize > 0 && (
+          <div className="mb-6">
+            <label className="mb-3 block text-sm font-semibold text-slate-800">Leveringssnelheid</label>
+
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <button onClick={() => { setLeadsPerDay(null); setUseCustomSpeed(false); }}
+                className={`relative rounded-2xl border-2 p-3 text-left transition ${
+                  !useCustomSpeed && leadsPerDay === null
+                    ? 'border-brand-purple bg-brand-purple/5 shadow-sm'
+                    : 'border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm'
+                }`}>
+                {!useCustomSpeed && leadsPerDay === null && (
+                  <CheckCircleSolid className="absolute right-2 top-2 h-5 w-5 text-brand-purple" />
+                )}
+                <BoltIcon className={`mb-1 h-5 w-5 ${!useCustomSpeed && leadsPerDay === null ? 'text-brand-purple' : 'text-slate-400'}`} />
+                <p className={`text-sm font-bold ${!useCustomSpeed && leadsPerDay === null ? 'text-brand-purple' : 'text-slate-900'}`}>Zo snel</p>
+                <p className="text-[11px] text-slate-400">mogelijk</p>
+              </button>
+              {SPEED_PRESETS.map(speed => {
+                const isActive = !useCustomSpeed && leadsPerDay === speed;
+                const days = Math.ceil(effectiveSize / speed);
+                return (
+                  <button key={speed} onClick={() => { setLeadsPerDay(speed); setUseCustomSpeed(false); }}
+                    className={`relative rounded-2xl border-2 p-3 text-left transition ${
+                      isActive
+                        ? 'border-brand-purple bg-brand-purple/5 shadow-sm'
+                        : 'border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm'
+                    }`}>
+                    {isActive && (
+                      <CheckCircleSolid className="absolute right-2 top-2 h-5 w-5 text-brand-purple" />
+                    )}
+                    <p className={`text-2xl font-bold ${isActive ? 'text-brand-purple' : 'text-slate-900'}`}>{speed}</p>
+                    <p className="text-[11px] text-slate-400">per dag</p>
+                    <p className={`mt-1 text-xs font-semibold ${isActive ? 'text-brand-purple' : 'text-slate-500'}`}>
+                      ~{days} {days === 1 ? 'dag' : 'dagen'}
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="mt-3">
+              <button onClick={() => { setUseCustomSpeed(true); if (!customSpeed) setCustomSpeed(String(leadsPerDay || SPEED_PRESETS[1] || 10)); }}
+                className={`w-full rounded-2xl border-2 p-3 text-left transition ${
+                  useCustomSpeed ? 'border-brand-purple bg-brand-purple/5' : 'border-dashed border-slate-200 hover:border-slate-300'
+                }`}>
+                {useCustomSpeed ? (
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-1.5">
+                      <button onClick={(e) => { e.stopPropagation(); setCustomSpeed(String(Math.max(1, (parseInt(customSpeed) || 0) - 1))); }}
+                        className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50">
+                        <MinusIcon className="h-4 w-4" />
+                      </button>
+                      <input type="number" min="1" value={customSpeed}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => setCustomSpeed(e.target.value)}
+                        className="h-9 w-16 rounded-xl border border-slate-200 bg-white px-2 text-center text-sm font-bold text-slate-900 outline-none focus:border-brand-purple focus:ring-1 focus:ring-brand-purple/20" />
+                      <button onClick={(e) => { e.stopPropagation(); setCustomSpeed(String((parseInt(customSpeed) || 0) + 1)); }}
+                        className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50">
+                        <PlusIcon className="h-4 w-4" />
+                      </button>
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-brand-purple">{effectiveSpeed} leads / dag</p>
+                      <p className="text-[11px] text-slate-400">
+                        ~{estimatedDays} {estimatedDays === 1 ? 'dag' : 'dagen'} doorlooptijd
+                      </p>
+                    </div>
+                    <CheckCircleSolid className="h-5 w-5 shrink-0 text-brand-purple" />
+                  </div>
+                ) : (
+                  <p className="text-center text-sm font-medium text-slate-400">
+                    Ander aantal per dag kiezen...
+                  </p>
+                )}
+              </button>
+            </div>
+
+            {estimatedDays && !useCustomSpeed && leadsPerDay !== null && (
+              <p className="mt-2 text-center text-xs text-slate-400">
+                <ClockIcon className="mr-1 inline h-3.5 w-3.5" />
+                Geschatte doorlooptijd: ~{estimatedDays} {estimatedDays === 1 ? 'dag' : 'dagen'}
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Notes */}
         <div className="mb-6">

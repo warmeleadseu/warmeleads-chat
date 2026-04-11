@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { batch_size, source_batch_id, notes } = body;
+    const { batch_size, source_batch_id, notes, leads_per_day: customerLeadsPerDay } = body;
 
     if (!batch_size || batch_size < 10) {
       return NextResponse.json({ error: 'Batch grootte moet minimaal 10 zijn' }, { status: 400 });
@@ -80,6 +80,10 @@ export async function POST(request: NextRequest) {
         leads_per_day = leads_per_day || latestBatch.leads_per_day;
         lead_filters = lead_filters.length > 0 ? lead_filters : (latestBatch.lead_filters || []);
       }
+    }
+
+    if (customerLeadsPerDay !== undefined) {
+      leads_per_day = customerLeadsPerDay > 0 ? customerLeadsPerDay : null;
     }
 
     if (!branch || !price_per_lead) {
