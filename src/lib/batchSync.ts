@@ -33,6 +33,27 @@ export async function syncBatchDelivered(
   if (delivered >= batch.batch_size && batch.status === 'active') {
     updates.status = 'completed';
     updates.completed_at = new Date().toISOString();
+
+    // Insert celebration event for live dashboard
+    try {
+      const { data: batchFull } = await supabase
+        .from('customer_batches')
+        .select('branch, customer_id, batch_size, customers(name)')
+        .eq('id', batchId)
+        .single();
+      if (batchFull) {
+        const custName = (batchFull.customers as any)?.name || 'Onbekend';
+        await supabase.from('celebration_events').insert({
+          event_type: 'batch_complete',
+          payload: {
+            customer: custName,
+            branch: batchFull.branch,
+            batchSize: batchFull.batch_size,
+            batchId,
+          },
+        });
+      }
+    } catch { /* non-critical */ }
   } else if (delivered < batch.batch_size && batch.status === 'completed') {
     updates.status = 'active';
     updates.completed_at = null;

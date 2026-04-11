@@ -5,8 +5,18 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { adminFetch } from '@/lib/adminAuth';
+import { getSupabaseBrowserClient } from '@/lib/supabaseBrowser';
+import { audioManager } from '@/lib/celebrationSounds';
 
 const REFRESH_INTERVAL = 30_000;
+
+interface CelebrationEvent {
+  id: string;
+  event_type: string;
+  payload: Record<string, any>;
+  created_at: string;
+  source?: 'db' | 'test';
+}
 
 const PERIOD_LABELS: Record<string, string> = {
   day: '24 uur',
@@ -27,7 +37,7 @@ interface PeriodStat { leads: number; prevLeads: number; assigned: number; prevA
 interface BatchInfo { id: string; customer: string; branch: string; batchSize: number; delivered: number; pricePerLead: number | null; leadsPerWeek: number | null; notes: string | null; }
 interface RecentLead { id: string; name: string; branch: string; city: string; province: string; createdAt: string; }
 interface CostMetrics { monthAdSpend: number; brutoCpl: number; effectieveCpl: number; avgAssignments: number; totalProfit: number; }
-interface PaidBatch { id: string; batchId: string; customer: string; branch: string; amount: number; paidAt: string; amId: string | null; amName: string | null; celebrationVideoUrl: string | null; videoStart?: number | null; videoEnd?: number | null; }
+interface PaidBatch { id: string; batchId: string; customer: string; branch: string; amount: number; paidAt: string; amId: string | null; amName: string | null; amAvatarUrl?: string | null; celebrationVideoUrl: string | null; videoStart?: number | null; videoEnd?: number | null; }
 interface AMLeaderboardEntry { id: string; name: string; revenue: number; batches: number; celebrationVideoUrl: string | null; avatarUrl?: string | null; }
 
 interface LiveData {
@@ -152,7 +162,14 @@ const BE_PROVINCES: Record<string, { d: string; cx: number; cy: number }> = {
 // ─── Celebration Effects ──────────────────────────────────────────────
 type CelebrationVariant = 'confetti' | 'goldenRain' | 'megaBurst';
 
-function fireCelebration(canvas: HTMLCanvasElement, variant: CelebrationVariant = 'confetti') {
+const BRANCH_CONFETTI: Record<string, string[]> = {
+  thuisbatterij: ['#34d399', '#10b981', '#059669', '#6ee7b7', '#a7f3d0'],
+  airco: ['#38bdf8', '#0ea5e9', '#0284c7', '#7dd3fc', '#bae6fd'],
+  zonnepanelen: ['#facc15', '#eab308', '#ca8a04', '#fde047', '#fef08a'],
+};
+
+function fireCelebration(canvas: HTMLCanvasElement, variant: CelebrationVariant = 'confetti', branch?: string) {
+  if (typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
   canvas.width = window.innerWidth;
@@ -160,7 +177,11 @@ function fireCelebration(canvas: HTMLCanvasElement, variant: CelebrationVariant 
   const W = canvas.width;
   const H = canvas.height;
 
-  const confettiColors = ['#a855f7', '#ec4899', '#34d399', '#facc15', '#38bdf8', '#f97316', '#f43f5e', '#ffffff'];
+  const defaultColors = ['#a855f7', '#ec4899', '#34d399', '#facc15', '#38bdf8', '#f97316', '#f43f5e', '#ffffff'];
+  const branchColors = branch ? BRANCH_CONFETTI[branch] : null;
+  const confettiColors = branchColors
+    ? [...branchColors, ...branchColors, ...branchColors, ...defaultColors.slice(0, 3)]
+    : defaultColors;
   const goldColors = ['#fbbf24', '#f59e0b', '#d97706', '#fcd34d', '#fffbeb', '#b45309'];
 
   type PShape = 'rect' | 'circle' | 'streamer';
@@ -265,69 +286,17 @@ function fireCelebration(canvas: HTMLCanvasElement, variant: CelebrationVariant 
   animate();
 }
 
-function playKaChing() {
-  try {
-    const ac = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-    const master = ac.createGain();
-    master.gain.value = 0.3;
-    master.connect(ac.destination);
-
-    // "Ka" - cash register drawer click (noise burst through highpass)
-    const bufSize = Math.floor(ac.sampleRate * 0.03);
-    const noiseBuf = ac.createBuffer(1, bufSize, ac.sampleRate);
-    const nd = noiseBuf.getChannelData(0);
-    for (let i = 0; i < bufSize; i++) nd[i] = Math.random() * 2 - 1;
-    const noise = ac.createBufferSource();
-    noise.buffer = noiseBuf;
-    const hp = ac.createBiquadFilter();
-    hp.type = 'highpass';
-    hp.frequency.value = 2000;
-    const ng = ac.createGain();
-    ng.gain.setValueAtTime(1, ac.currentTime);
-    ng.gain.exponentialRampToValueAtTime(0.01, ac.currentTime + 0.03);
-    noise.connect(hp);
-    hp.connect(ng);
-    ng.connect(master);
-    noise.start(ac.currentTime);
-    noise.stop(ac.currentTime + 0.04);
-
-    // "Ching!" - metallic ding (stacked oscillators through bandpass)
-    const ct = ac.currentTime + 0.08;
-    [3520, 4698].forEach(freq => {
-      const osc = ac.createOscillator();
-      const g = ac.createGain();
-      const bp = ac.createBiquadFilter();
-      osc.type = freq === 3520 ? 'sine' : 'triangle';
-      osc.frequency.value = freq;
-      bp.type = 'bandpass';
-      bp.frequency.value = freq;
-      bp.Q.value = 8;
-      g.gain.setValueAtTime(0, ct);
-      g.gain.linearRampToValueAtTime(0.8, ct + 0.005);
-      g.gain.exponentialRampToValueAtTime(0.001, ct + 0.6);
-      osc.connect(bp);
-      bp.connect(g);
-      g.connect(master);
-      osc.start(ct);
-      osc.stop(ct + 0.7);
-    });
-
-    // Coin sparkle - 3 rapid micro-tones
-    [6000, 7500, 9000].forEach((freq, i) => {
-      const osc = ac.createOscillator();
-      const g = ac.createGain();
-      const t = ct + i * 0.04;
-      osc.type = 'sine';
-      osc.frequency.value = freq;
-      g.gain.setValueAtTime(0, t);
-      g.gain.linearRampToValueAtTime(0.3, t + 0.005);
-      g.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
-      osc.connect(g);
-      g.connect(master);
-      osc.start(t);
-      osc.stop(t + 0.1);
-    });
-  } catch { /* browser might block audio */ }
+function useReducedMotion() {
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    setReduced(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setReduced(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+  return reduced;
 }
 
 function extractYouTubeId(url: string): string | null {
@@ -580,15 +549,22 @@ export default function LiveDashboard() {
   const [clock, setClock] = useState(new Date());
   const [refreshIn, setRefreshIn] = useState(REFRESH_INTERVAL / 1000);
   const [newLeadIds, setNewLeadIds] = useState<Set<string>>(new Set());
-  const [celebratingBatch, setCelebratingBatch] = useState<string | null>(null);
+  const [celebratingBatch, setCelebratingBatch] = useState<{ id: string; customer?: string; branch?: string; batchSize?: number } | null>(null);
   const [amTargets, setAmTargets] = useState<AMTargetLive[]>([]);
   const [salesToasts, setSalesToasts] = useState<PaidBatch[]>([]);
   const [celebrationVideo, setCelebrationVideo] = useState<PaidBatch | null>(null);
+  const [soundEnabled, setSoundEnabled] = useState(audioManager.enabled);
+  const [celebrationQueue, setCelebrationQueue] = useState<CelebrationEvent[]>([]);
+  const [activeOverlay, setActiveOverlay] = useState<CelebrationEvent | null>(null);
+  const [targetHitOverlay, setTargetHitOverlay] = useState<CelebrationEvent | null>(null);
+  const [milestoneToast, setMilestoneToast] = useState<CelebrationEvent | null>(null);
 
+  const reducedMotion = useReducedMotion();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const celebrationIframeRef = useRef<HTMLIFrameElement>(null);
   const prevBatchPcts = useRef<Record<string, number>>({});
   const seenPaidIds = useRef<Set<string>>(new Set());
+  const processedCelebrationIds = useRef<Set<string>>(new Set());
 
   const fetchData = useCallback(async () => {
     try {
@@ -609,30 +585,16 @@ export default function LiveDashboard() {
             const prevPct = prevBatchPcts.current[batch.id] || 0;
             const newPct = batch.batchSize > 0 ? (batch.delivered / batch.batchSize) * 100 : 0;
             if (newPct >= 100 && prevPct < 100) {
-              setCelebratingBatch(batch.id);
-              if (canvasRef.current) fireCelebration(canvasRef.current, 'megaBurst');
-              playKaChing();
+              setCelebratingBatch({ id: batch.id, customer: batch.customer, branch: batch.branch, batchSize: batch.batchSize });
+              if (canvasRef.current) fireCelebration(canvasRef.current, 'megaBurst', batch.branch);
+              audioManager.playForEvent('batch_complete');
               setTimeout(() => setCelebratingBatch(null), 5000);
             }
             prevBatchPcts.current[batch.id] = newPct;
           }
 
-          // Detect newly paid batches for sales bell + video celebration
+          // Seed seenPaidIds to prevent duplicate processing
           if (d.recentPaidBatches && d.recentPaidBatches.length > 0) {
-            const newPaid = d.recentPaidBatches.filter((pb: PaidBatch) => !seenPaidIds.current.has(pb.id));
-            if (newPaid.length > 0 && seenPaidIds.current.size > 0) {
-              for (const pb of newPaid) {
-                setSalesToasts(prev => [pb, ...prev].slice(0, 5));
-                setTimeout(() => setSalesToasts(prev => prev.filter(t => t.id !== pb.id)), 8000);
-              }
-              playKaChing();
-              if (canvasRef.current) fireCelebration(canvasRef.current, 'goldenRain');
-
-              const withVideo = newPaid.find((pb: PaidBatch) => pb.celebrationVideoUrl);
-              if (withVideo) {
-                setCelebrationVideo(withVideo);
-              }
-            }
             for (const pb of d.recentPaidBatches) seenPaidIds.current.add(pb.id);
           }
 
@@ -653,74 +615,188 @@ export default function LiveDashboard() {
     } catch { /* silent */ }
   }, []);
 
-  const fetchTestEvents = useCallback(async () => {
-    try {
-      const res = await adminFetch('/api/admin/test-events');
-      if (!res.ok) return;
-      const { events } = await res.json();
-      if (!events || events.length === 0) return;
+  // Process a celebration event (from queue, realtime, or test)
+  const processCelebration = useCallback((evt: CelebrationEvent) => {
+    if (processedCelebrationIds.current.has(evt.id)) return;
+    processedCelebrationIds.current.add(evt.id);
 
-      for (const evt of events) {
-        const p = evt.payload || {};
-        switch (evt.event_type) {
-          case 'confetti':
-            if (canvasRef.current) fireCelebration(canvasRef.current, 'confetti');
-            playKaChing();
-            break;
+    const p = evt.payload || {};
+    const branch = p.branch || undefined;
 
-          case 'batch_complete':
-            setCelebratingBatch('test-' + evt.id);
-            if (canvasRef.current) fireCelebration(canvasRef.current, 'megaBurst');
-            playKaChing();
-            setTimeout(() => setCelebratingBatch(null), 5000);
-            break;
+    switch (evt.event_type) {
+      case 'sale':
+      case 'sales_bell': {
+        const toast: PaidBatch = {
+          id: evt.id,
+          batchId: p.batchId || '',
+          customer: p.customer || 'Onbekend',
+          branch: p.branch || 'onbekend',
+          amount: p.amount || 0,
+          paidAt: p.paidAt || new Date().toISOString(),
+          amId: p.amId || null,
+          amName: p.amName || null,
+          amAvatarUrl: p.amAvatarUrl || null,
+          celebrationVideoUrl: p.celebrationVideoUrl || null,
+          videoStart: p.videoStart ?? null,
+          videoEnd: p.videoEnd ?? null,
+        };
+        setSalesToasts(prev => [toast, ...prev].slice(0, 5));
+        setTimeout(() => setSalesToasts(prev => prev.filter(t => t.id !== toast.id)), 8000);
+        audioManager.playForEvent('sale', p.amount);
+        if (canvasRef.current) fireCelebration(canvasRef.current, 'goldenRain', branch);
 
-          case 'sales_bell': {
-            const toast: PaidBatch = {
-              id: 'test-' + evt.id,
-              batchId: '',
-              customer: p.customer || 'Test Klant B.V.',
-              branch: p.branch || 'test',
-              amount: p.amount || 1250,
-              paidAt: new Date().toISOString(),
-              amId: p.amId || null,
-              amName: p.amName || null,
-              celebrationVideoUrl: null,
-            };
-            setSalesToasts(prev => [toast, ...prev].slice(0, 5));
-            setTimeout(() => setSalesToasts(prev => prev.filter(t => t.id !== toast.id)), 8000);
-            playKaChing();
-            if (canvasRef.current) fireCelebration(canvasRef.current, 'goldenRain');
-            break;
-          }
-
-          case 'celebration_video': {
-            const vid: PaidBatch = {
-              id: 'test-' + evt.id,
-              batchId: '',
-              customer: p.customer || 'Test Klant B.V.',
-              branch: p.branch || 'test',
-              amount: p.amount || 2500,
-              paidAt: new Date().toISOString(),
-              amId: p.amId || null,
-              amName: p.amName || 'Accountmanager',
-              celebrationVideoUrl: p.celebrationVideoUrl || null,
-              videoStart: p.videoStart ?? null,
-              videoEnd: p.videoEnd ?? null,
-            };
-            setSalesToasts(prev => [vid, ...prev].slice(0, 5));
-            setTimeout(() => setSalesToasts(prev => prev.filter(t => t.id !== vid.id)), 8000);
-            playKaChing();
-            if (canvasRef.current) fireCelebration(canvasRef.current, 'goldenRain');
-            if (vid.celebrationVideoUrl) {
-              setCelebrationVideo(vid);
-            }
-            break;
-          }
+        if (toast.celebrationVideoUrl) {
+          setCelebrationQueue(q => [...q, { ...evt, payload: { ...p, _videoToast: toast } }]);
         }
+        break;
       }
-    } catch { /* silent */ }
+
+      case 'celebration_video': {
+        const vid: PaidBatch = {
+          id: evt.id,
+          batchId: '',
+          customer: p.customer || 'Test Klant B.V.',
+          branch: p.branch || 'test',
+          amount: p.amount || 2500,
+          paidAt: new Date().toISOString(),
+          amId: p.amId || null,
+          amName: p.amName || 'Accountmanager',
+          amAvatarUrl: p.amAvatarUrl || null,
+          celebrationVideoUrl: p.celebrationVideoUrl || null,
+          videoStart: p.videoStart ?? null,
+          videoEnd: p.videoEnd ?? null,
+        };
+        setSalesToasts(prev => [vid, ...prev].slice(0, 5));
+        setTimeout(() => setSalesToasts(prev => prev.filter(t => t.id !== vid.id)), 8000);
+        audioManager.playForEvent('celebration_video');
+        if (canvasRef.current) fireCelebration(canvasRef.current, 'goldenRain', branch);
+        if (vid.celebrationVideoUrl) {
+          setCelebrationVideo(vid);
+        }
+        break;
+      }
+
+      case 'confetti':
+        audioManager.playForEvent('confetti');
+        if (canvasRef.current) fireCelebration(canvasRef.current, 'confetti', branch);
+        break;
+
+      case 'batch_complete':
+        setCelebratingBatch({ id: evt.id, customer: p.customer, branch: p.branch, batchSize: p.batchSize });
+        audioManager.playForEvent('batch_complete');
+        if (canvasRef.current) fireCelebration(canvasRef.current, 'megaBurst', branch);
+        setTimeout(() => setCelebratingBatch(null), 5000);
+        break;
+
+      case 'target_hit':
+        setTargetHitOverlay(evt);
+        audioManager.playForEvent('target_hit');
+        if (canvasRef.current) fireCelebration(canvasRef.current, 'megaBurst');
+        setTimeout(() => setTargetHitOverlay(null), 8000);
+        break;
+
+      case 'milestone':
+        setMilestoneToast(evt);
+        audioManager.playForEvent('milestone');
+        if (canvasRef.current) fireCelebration(canvasRef.current, 'confetti');
+        setTimeout(() => setMilestoneToast(null), 5000);
+        break;
+    }
+
+    // Mark persistent celebration events as displayed
+    if (evt.source === 'db') {
+      adminFetch('/api/admin/celebrations', {
+        method: 'PATCH',
+        body: JSON.stringify({ ids: [evt.id] }),
+      }).catch(() => {});
+    }
   }, []);
+
+  // Process celebration video queue (sequential)
+  useEffect(() => {
+    if (celebrationVideo || celebrationQueue.length === 0) return;
+    const next = celebrationQueue[0];
+    setCelebrationQueue(q => q.slice(1));
+    const p = next.payload || {};
+    if (p._videoToast) {
+      setCelebrationVideo(p._videoToast);
+    }
+  }, [celebrationVideo, celebrationQueue]);
+
+  // Load undisplayed celebrations on mount + subscribe to Realtime
+  useEffect(() => {
+    let mounted = true;
+
+    // Fetch existing undisplayed celebrations
+    adminFetch('/api/admin/celebrations').then(async res => {
+      if (!res.ok || !mounted) return;
+      const { events } = await res.json();
+      if (events && events.length > 0 && mounted) {
+        events.forEach((evt: any, idx: number) => {
+          const ce: CelebrationEvent = { ...evt, source: 'db' };
+          setTimeout(() => {
+            if (mounted) processCelebration(ce);
+          }, idx * 2000);
+        });
+      }
+    }).catch(() => {});
+
+    // Subscribe to Realtime for new celebration events
+    let channel: ReturnType<ReturnType<typeof getSupabaseBrowserClient>['channel']> | null = null;
+    let testChannel: ReturnType<ReturnType<typeof getSupabaseBrowserClient>['channel']> | null = null;
+
+    try {
+      const sb = getSupabaseBrowserClient();
+
+      channel = sb.channel('celebration-events')
+        .on('postgres_changes', {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'celebration_events',
+        }, (payload) => {
+          if (!mounted) return;
+          const row = payload.new as any;
+          processCelebration({ id: row.id, event_type: row.event_type, payload: row.payload || {}, created_at: row.created_at, source: 'db' });
+        })
+        .subscribe();
+
+      testChannel = sb.channel('test-events')
+        .on('postgres_changes', {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'live_test_events',
+        }, (payload) => {
+          if (!mounted) return;
+          const row = payload.new as any;
+          if (row.consumed) return;
+          processCelebration({ id: row.id, event_type: row.event_type, payload: row.payload || {}, created_at: row.created_at, source: 'test' });
+          // Mark test event as consumed
+          adminFetch('/api/admin/test-events', { method: 'GET' }).catch(() => {});
+        })
+        .subscribe();
+    } catch { /* Realtime not available, fall back to polling */ }
+
+    // Fallback polling for test events (in case Realtime is not available)
+    const testPollIv = setInterval(async () => {
+      try {
+        const res = await adminFetch('/api/admin/test-events');
+        if (!res.ok) return;
+        const { events } = await res.json();
+        if (!events || events.length === 0) return;
+        for (const evt of events) {
+          const ce: CelebrationEvent = { id: evt.id, event_type: evt.event_type, payload: evt.payload || {}, created_at: evt.created_at, source: 'test' };
+          processCelebration(ce);
+        }
+      } catch { /* silent */ }
+    }, 5000);
+
+    return () => {
+      mounted = false;
+      clearInterval(testPollIv);
+      if (channel) { try { getSupabaseBrowserClient().removeChannel(channel); } catch {} }
+      if (testChannel) { try { getSupabaseBrowserClient().removeChannel(testChannel); } catch {} }
+    };
+  }, [processCelebration]);
 
   // Auto-close celebration video when YouTube reports playback ended
   useEffect(() => {
@@ -758,12 +834,11 @@ export default function LiveDashboard() {
     };
   }, [celebrationVideo]);
 
-  useEffect(() => { fetchData(); fetchAMTargets(); fetchTestEvents(); }, [fetchData, fetchAMTargets, fetchTestEvents]);
+  useEffect(() => { fetchData(); fetchAMTargets(); }, [fetchData, fetchAMTargets]);
   useEffect(() => {
     const mainIv = setInterval(() => { fetchData(); fetchAMTargets(); }, REFRESH_INTERVAL);
-    const testIv = setInterval(fetchTestEvents, 5000);
-    return () => { clearInterval(mainIv); clearInterval(testIv); };
-  }, [fetchData, fetchAMTargets, fetchTestEvents]);
+    return () => { clearInterval(mainIv); };
+  }, [fetchData, fetchAMTargets]);
   useEffect(() => { const iv = setInterval(() => { setClock(new Date()); setRefreshIn(r => Math.max(0, r - 1)); }, 1000); return () => clearInterval(iv); }, []);
 
   if (!data) {
@@ -879,14 +954,17 @@ export default function LiveDashboard() {
               >
                 BATCH VOLTOOID
               </motion.h2>
-              <motion.p
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.8 }}
-                className="mt-3 text-lg font-medium text-white/50"
-              >
-                Alle leads zijn succesvol uitgeleverd
-              </motion.p>
+              {celebratingBatch.customer ? (
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.8 }} className="mt-3 flex flex-col items-center gap-1">
+                  <p className="text-lg font-bold text-white/70">{celebratingBatch.customer}</p>
+                  {celebratingBatch.branch && <span className={`rounded-full px-3 py-1 text-xs font-bold ${(BRANCH_COLORS[celebratingBatch.branch] || DEFAULT_BRANCH).badge}`}>{celebratingBatch.branch}</span>}
+                  {celebratingBatch.batchSize && <p className="mt-1 text-sm text-white/40">{celebratingBatch.batchSize} leads succesvol uitgeleverd</p>}
+                </motion.div>
+              ) : (
+                <motion.p initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.8 }} className="mt-3 text-lg font-medium text-white/50">
+                  Alle leads zijn succesvol uitgeleverd
+                </motion.p>
+              )}
             </div>
           </motion.div>
         )}
@@ -983,46 +1061,145 @@ export default function LiveDashboard() {
         )}
       </AnimatePresence>
 
+      {/* Target Hit Overlay */}
+      <AnimatePresence>
+        {targetHitOverlay && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={reducedMotion ? { duration: 0 } : undefined}
+            className="fixed inset-0 z-[92] flex items-center justify-center"
+            onClick={() => setTargetHitOverlay(null)}
+          >
+            <motion.div
+              animate={reducedMotion ? undefined : { scale: [1, 1.15, 1], opacity: [0.3, 0.6, 0.3] }}
+              transition={{ repeat: Infinity, duration: 2.5, ease: 'easeInOut' }}
+              className="absolute h-[600px] w-[600px] rounded-full bg-amber-500/20 blur-[120px]"
+            />
+            <div className="relative flex flex-col items-center">
+              <motion.div
+                initial={reducedMotion ? undefined : { scale: 0 }}
+                animate={reducedMotion ? undefined : { scale: [0, 1.3, 1] }}
+                transition={{ duration: 0.6, ease: [0.175, 0.885, 0.32, 1.275] }}
+                className="relative mb-6 flex h-[100px] w-[100px] items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-amber-600 shadow-2xl shadow-amber-500/40"
+              >
+                <svg className="h-14 w-14 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M6 9H4.5a2.5 2.5 0 010-5C7 4 7 7 7 7M18 9h1.5a2.5 2.5 0 000-5C17 4 17 7 17 7" />
+                  <path d="M4 22h16" /><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20 7 22" />
+                  <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20 17 22" />
+                  <path d="M18 2H6v7a6 6 0 1012 0V2z" />
+                </svg>
+              </motion.div>
+              <motion.h2
+                initial={reducedMotion ? undefined : { opacity: 0, y: 20, letterSpacing: '0.3em' }}
+                animate={{ opacity: 1, y: 0, letterSpacing: '0.15em' }}
+                transition={{ delay: 0.5, duration: 0.8 }}
+                className="text-4xl font-black text-amber-400 lg:text-5xl"
+                style={{ textShadow: '0 0 40px rgba(251,191,36,0.5), 0 0 80px rgba(251,191,36,0.2)' }}
+              >
+                TARGET GEHAALD!
+              </motion.h2>
+              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.8 }} className="mt-3 flex flex-col items-center gap-2">
+                <p className="text-xl font-bold text-white/80">{targetHitOverlay.payload.amName}</p>
+                <p className="text-base text-white/50">{targetHitOverlay.payload.targetLabel}</p>
+                <div className="flex items-center gap-4 mt-2">
+                  <span className="rounded-full bg-amber-500/20 px-4 py-1.5 text-sm font-bold text-amber-300">
+                    {targetHitOverlay.payload.targetType}: {targetHitOverlay.payload.targetValue?.toLocaleString('nl-NL')}
+                  </span>
+                  {targetHitOverlay.payload.bonusAmount > 0 && (
+                    <span className="rounded-full bg-emerald-500/20 px-4 py-1.5 text-sm font-bold text-emerald-300">
+                      +&euro;{targetHitOverlay.payload.bonusAmount.toLocaleString('nl-NL')} bonus
+                    </span>
+                  )}
+                </div>
+              </motion.div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Milestone Toast */}
+      <AnimatePresence>
+        {milestoneToast && (
+          <motion.div
+            initial={{ opacity: 0, y: -40, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -40, scale: 0.9 }}
+            transition={reducedMotion ? { duration: 0 } : { type: 'spring', damping: 20 }}
+            className="fixed left-1/2 top-6 z-[88] -translate-x-1/2"
+          >
+            <div className="flex items-center gap-3 rounded-2xl bg-[#1a1d2e]/95 px-6 py-4 backdrop-blur-xl"
+              style={{ border: '2px solid rgba(168,85,247,0.4)', boxShadow: '0 0 30px rgba(168,85,247,0.2), 0 20px 40px -10px rgba(0,0,0,0.4)' }}
+            >
+              <span className="text-2xl">🏆</span>
+              <div>
+                <p className="text-base font-black text-brand-purple">{milestoneToast.payload.milestoneText || 'Milestone!'}</p>
+                {milestoneToast.payload.count && (
+                  <p className="text-xs text-white/40">{milestoneToast.payload.count} verkopen vandaag</p>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Sales Bell Toast Notifications - Premium */}
       <div className="fixed right-4 top-4 z-[85] flex flex-col gap-3 sm:right-6 sm:top-6">
         <AnimatePresence>
-          {salesToasts.map((toast) => (
+          {salesToasts.map((toast) => {
+            const bc = BRANCH_COLORS[toast.branch] || DEFAULT_BRANCH;
+            const borderColor = bc.fill || 'rgba(251,191,36,0.35)';
+            return (
             <motion.div
               key={toast.id}
               initial={{ opacity: 0, x: 120, scale: 0.85 }}
-              animate={{ opacity: 1, x: 0, scale: [0.85, 1.03, 1] }}
+              animate={{ opacity: 1, x: 0, scale: reducedMotion ? 1 : [0.85, 1.03, 1] }}
               exit={{ opacity: 0, x: 120, scale: 0.85 }}
-              transition={{ type: 'spring', damping: 18, stiffness: 200 }}
+              transition={reducedMotion ? { duration: 0.15 } : { type: 'spring', damping: 18, stiffness: 200 }}
               className="relative min-w-[320px] overflow-hidden rounded-2xl bg-[#1a1d2e]/95 px-5 py-4 backdrop-blur-xl"
               style={{
-                border: '2px solid rgba(251,191,36,0.35)',
-                boxShadow: '0 0 20px rgba(251,191,36,0.15), 0 20px 40px -10px rgba(0,0,0,0.4)',
+                border: `2px solid ${borderColor}40`,
+                boxShadow: `0 0 20px ${borderColor}25, 0 20px 40px -10px rgba(0,0,0,0.4)`,
               }}
             >
+              {!reducedMotion && (
               <motion.div
                 animate={{
                   boxShadow: [
-                    '0 0 10px rgba(251,191,36,0.1), inset 0 0 10px rgba(251,191,36,0)',
-                    '0 0 25px rgba(251,191,36,0.25), inset 0 0 15px rgba(251,191,36,0.05)',
-                    '0 0 10px rgba(251,191,36,0.1), inset 0 0 10px rgba(251,191,36,0)',
+                    `0 0 10px ${borderColor}15, inset 0 0 10px ${borderColor}00`,
+                    `0 0 25px ${borderColor}35, inset 0 0 15px ${borderColor}08`,
+                    `0 0 10px ${borderColor}15, inset 0 0 10px ${borderColor}00`,
                   ],
                 }}
                 transition={{ repeat: Infinity, duration: 2 }}
                 className="pointer-events-none absolute inset-0 rounded-2xl"
               />
+              )}
               <div className="flex items-center gap-4">
+                {toast.amAvatarUrl ? (
+                  <Image src={toast.amAvatarUrl} alt={toast.amName || ''} width={48} height={48} className="h-12 w-12 shrink-0 rounded-full object-cover shadow-lg" />
+                ) : (
                 <motion.div
-                  animate={{ rotate: [0, -10, 10, -5, 5, 0] }}
+                  animate={reducedMotion ? undefined : { rotate: [0, -10, 10, -5, 5, 0] }}
                   transition={{ duration: 0.6, delay: 0.3 }}
                   className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-amber-600 shadow-lg shadow-amber-500/30"
                 >
+                  {toast.amName ? (
+                    <span className="text-lg font-black text-white">{toast.amName.charAt(0).toUpperCase()}</span>
+                  ) : (
                   <svg className="h-6 w-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M6 8a6 6 0 0112 0c0 7 3 9 3 9H3s3-2 3-9" />
                     <path d="M10.3 21a1.94 1.94 0 003.4 0" />
                   </svg>
+                  )}
                 </motion.div>
+                )}
                 <div className="min-w-0 flex-1">
-                  <p className="text-base font-black tracking-wide text-amber-400">Ka-Ching!</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-base font-black tracking-wide text-amber-400">Ka-Ching!</p>
+                    <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold ${bc.badge}`}>{toast.branch}</span>
+                  </div>
                   <p className="mt-0.5 truncate text-sm font-medium text-white/70">{toast.customer}</p>
                   {toast.amName && <p className="text-xs text-white/35">door {toast.amName}</p>}
                 </div>
@@ -1030,15 +1207,16 @@ export default function LiveDashboard() {
                   <CountUpAmount value={toast.amount} className="text-xl font-black text-emerald-400" />
                 )}
               </div>
-              {/* Progress countdown bar */}
               <motion.div
                 initial={{ scaleX: 1 }}
                 animate={{ scaleX: 0 }}
                 transition={{ duration: 8, ease: 'linear' }}
-                className="absolute bottom-0 left-0 right-0 h-[3px] origin-left bg-gradient-to-r from-amber-400 to-amber-600"
+                className="absolute bottom-0 left-0 right-0 h-[3px] origin-left"
+                style={{ background: `linear-gradient(to right, ${borderColor}, ${borderColor}80)` }}
               />
             </motion.div>
-          ))}
+            );
+          })}
         </AnimatePresence>
       </div>
 
@@ -1089,6 +1267,31 @@ export default function LiveDashboard() {
             </div>
 
             <div className="h-6 w-px bg-white/[0.06] lg:block hidden" />
+
+            {/* Sound toggle */}
+            <button
+              onClick={() => {
+                const next = audioManager.toggle();
+                setSoundEnabled(next);
+                if (next) audioManager.ensureContext();
+              }}
+              className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/[0.06] text-white/40 transition hover:bg-white/[0.1] hover:text-white/70"
+              title={soundEnabled ? 'Geluid uit' : 'Geluid aan'}
+            >
+              {soundEnabled ? (
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                  <path d="M15.54 8.46a5 5 0 010 7.07" />
+                  <path d="M19.07 4.93a10 10 0 010 14.14" />
+                </svg>
+              ) : (
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                  <line x1="23" y1="9" x2="17" y2="15" />
+                  <line x1="17" y1="9" x2="23" y2="15" />
+                </svg>
+              )}
+            </button>
 
             {/* Refresh indicator */}
             <div className="flex items-center gap-2">
@@ -1177,7 +1380,7 @@ export default function LiveDashboard() {
                 {data.activeBatches.map((b, i) => {
                   const pct = b.batchSize > 0 ? Math.min(100, Math.round((b.delivered / b.batchSize) * 100)) : 0;
                   const bc = BRANCH_COLORS[b.branch] || DEFAULT_BRANCH;
-                  const isCelebrating = celebratingBatch === b.id;
+                  const isCelebrating = celebratingBatch?.id === b.id;
                   return (
                     <motion.div
                       key={b.id}

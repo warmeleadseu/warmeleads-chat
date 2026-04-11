@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { event_type, payload } = body;
 
-    const validTypes = ['sales_bell', 'celebration_video', 'batch_complete', 'confetti'];
+    const validTypes = ['sales_bell', 'celebration_video', 'batch_complete', 'confetti', 'target_hit', 'milestone'];
     if (!validTypes.includes(event_type)) {
       return NextResponse.json({ error: 'Ongeldig event type' }, { status: 400 });
     }

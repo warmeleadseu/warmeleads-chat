@@ -56,6 +56,65 @@ function errorEmailHtml(title: string, details: string): string {
 </html>`;
 }
 
+async function insertCelebrationEvent(
+  supabase: ReturnType<typeof createServerClient>,
+  customerName: string,
+  branch: string,
+  amount: number,
+  customerId: string,
+) {
+  try {
+    const { data: custRow } = await supabase
+      .from('customers')
+      .select('account_manager_id')
+      .eq('id', customerId)
+      .single();
+
+    let amPayload: Record<string, unknown> = {};
+    if (custRow?.account_manager_id) {
+      const { data: am } = await supabase
+        .from('admin_users')
+        .select('id, name, avatar_url, celebration_video_url, celebration_video_start, celebration_video_end')
+        .eq('id', custRow.account_manager_id)
+        .single();
+      if (am) {
+        amPayload = {
+          amId: am.id,
+          amName: am.name,
+          amAvatarUrl: am.avatar_url,
+          celebrationVideoUrl: am.celebration_video_url,
+          videoStart: am.celebration_video_start,
+          videoEnd: am.celebration_video_end,
+        };
+      }
+    }
+
+    await supabase.from('celebration_events').insert({
+      event_type: 'sale',
+      payload: { customer: customerName, branch, amount, ...amPayload },
+    });
+
+    // Milestone detection: count sales today
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const { count } = await supabase
+      .from('celebration_events')
+      .select('id', { count: 'exact', head: true })
+      .eq('event_type', 'sale')
+      .gte('created_at', todayStart.toISOString());
+
+    const milestoneNumbers = [3, 5, 10, 15, 20, 25, 50, 100];
+    if (count && milestoneNumbers.includes(count)) {
+      await supabase.from('celebration_events').insert({
+        event_type: 'milestone',
+        payload: { milestoneText: `${count}e sale vandaag!`, count },
+      });
+    }
+  } catch (e) {
+    console.error('[mollie-webhook] celebration event insert failed:', e);
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
@@ -152,6 +211,15 @@ export async function POST(request: NextRequest) {
           is_paid: true,
           source: 'portal_pay',
         }).catch(() => {});
+
+        // Celebration event for live dashboard
+        insertCelebrationEvent(
+          supabase,
+          cust?.name || 'Onbekend',
+          claimed.branch,
+          Number(claimed.total_price || 0),
+          claimed.customer_id,
+        ).catch(() => {});
 
         const startsInFuture = claimed.starts_at && new Date(claimed.starts_at) > new Date();
         if (!startsInFuture) {
@@ -288,6 +356,15 @@ export async function POST(request: NextRequest) {
         is_paid: true,
         source: 'portal',
       }).catch(() => {});
+
+      // Celebration event for live dashboard
+      insertCelebrationEvent(
+        supabase,
+        customer?.name || 'Onbekend',
+        order.branch,
+        Number(order.total_price || 0),
+        order.customer_id,
+      ).catch(() => {});
 
       backfillBatch(newBatch.id, 3).catch(() => {});
 

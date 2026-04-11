@@ -12,8 +12,12 @@ import {
   ExclamationCircleIcon,
   ArrowPathIcon,
   TrashIcon,
+  TrophyIcon,
+  FireIcon,
+  SpeakerWaveIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
+import { audioManager } from '@/lib/celebrationSounds';
 import { useAdmin } from '../adminContext';
 
 interface AMUser {
@@ -71,6 +75,24 @@ const TEST_EVENTS: TestEvent[] = [
     color: 'text-rose-600',
     bgColor: 'bg-rose-50',
     borderColor: 'border-rose-200 hover:border-rose-400',
+  },
+  {
+    type: 'target_hit',
+    label: 'Target Gehaald',
+    description: 'AM target bereikt overlay met fanfare en gouden confetti',
+    icon: TrophyIcon,
+    color: 'text-orange-600',
+    bgColor: 'bg-orange-50',
+    borderColor: 'border-orange-200 hover:border-orange-400',
+  },
+  {
+    type: 'milestone',
+    label: 'Milestone',
+    description: 'Dagrecord / streak notificatie met crystal bell geluid',
+    icon: FireIcon,
+    color: 'text-violet-600',
+    bgColor: 'bg-violet-50',
+    borderColor: 'border-violet-200 hover:border-violet-400',
   },
 ];
 
@@ -151,6 +173,20 @@ export default function TestPanelPage() {
       }
     }
 
+    if (eventType === 'target_hit') {
+      payload.amName = selectedAMData?.name || 'Test AM';
+      payload.targetLabel = 'Q2 Omzet Target';
+      payload.targetType = 'Omzet';
+      payload.bonusAmount = 500;
+      payload.currentValue = 10000;
+      payload.targetValue = 10000;
+    }
+
+    if (eventType === 'milestone') {
+      payload.milestoneText = '5e sale vandaag!';
+      payload.count = 5;
+    }
+
     try {
       const res = await adminFetch('/api/admin/test-events', {
         method: 'POST',
@@ -205,7 +241,7 @@ export default function TestPanelPage() {
               <li>1. Open het <a href="/admin/live" target="_blank" className="font-bold underline">Live Dashboard</a> in een apart tabblad</li>
               <li>2. Vul hieronder eventueel klantgegevens en AM in</li>
               <li>3. Klik op een event-knop om het te triggeren</li>
-              <li>4. Het event verschijnt binnen 5 seconden op het live dashboard</li>
+              <li>4. Het event verschijnt direct (realtime) op het live dashboard</li>
             </ol>
           </div>
         </div>
@@ -231,7 +267,7 @@ export default function TestPanelPage() {
             className="mb-4 flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-700"
           >
             <CheckCircleIcon className="h-4 w-4 shrink-0" />
-            Event &ldquo;{TEST_EVENTS.find(e => e.type === lastSent.type)?.label}&rdquo; verstuurd! Verschijnt binnen 5 seconden op het live dashboard.
+            Event &ldquo;{TEST_EVENTS.find(e => e.type === lastSent.type)?.label}&rdquo; verstuurd! Verschijnt direct op het live dashboard.
           </motion.div>
         )}
       </AnimatePresence>
@@ -374,6 +410,44 @@ export default function TestPanelPage() {
               </motion.button>
             );
           })}
+        </div>
+      </motion.div>
+
+      {/* Sound Preview */}
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.12 }}
+        className="mb-6 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
+      >
+        <div className="border-b border-slate-100 px-5 py-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-violet-50">
+              <SpeakerWaveIcon className="h-4 w-4 text-violet-600" />
+            </div>
+            <div>
+              <h2 className="font-bold text-slate-900">Geluiden preview</h2>
+              <p className="text-xs text-slate-500">Test elk geluid afzonderlijk (zonder event te triggeren)</p>
+            </div>
+          </div>
+        </div>
+        <div className="grid gap-2 p-5 sm:grid-cols-3">
+          {[
+            { label: 'Kleine sale', fn: () => audioManager.playSmallSale(), color: 'text-amber-600' },
+            { label: 'Grote sale (Ka-Ching)', fn: () => audioManager.playBigSale(), color: 'text-amber-600' },
+            { label: 'Batch voltooid', fn: () => audioManager.playBatchComplete(), color: 'text-emerald-600' },
+            { label: 'Target gehaald', fn: () => audioManager.playTargetHit(), color: 'text-orange-600' },
+            { label: 'Milestone', fn: () => audioManager.playMilestone(), color: 'text-violet-600' },
+          ].map(s => (
+            <button
+              key={s.label}
+              onClick={() => { audioManager.ensureContext(); s.fn(); }}
+              className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 hover:shadow-sm"
+            >
+              <SpeakerWaveIcon className={`h-4 w-4 ${s.color}`} />
+              {s.label}
+            </button>
+          ))}
         </div>
       </motion.div>
 

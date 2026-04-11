@@ -84,10 +84,34 @@ export async function GET(request: NextRequest) {
   const { data: targets, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+  const TARGET_TYPE_LABELS: Record<string, string> = {
+    revenue: 'Omzet', batches: 'Batches', new_customers: 'Klanten', leads_delivered: 'Leads',
+  };
+
   const enriched = await Promise.all(
     (targets || []).map(async (t: any) => {
       const current = await calculateProgress(supabase, t.admin_user_id, t.target_type, t.period_start, t.period_end);
       const pct = Number(t.target_value) > 0 ? Math.round((current / Number(t.target_value)) * 100) : 0;
+
+      // One-time target-hit celebration
+      if (pct >= 100 && !t.celebrated && t.status === 'active') {
+        try {
+          await supabase.from('celebration_events').insert({
+            event_type: 'target_hit',
+            payload: {
+              amName: t.admin_users?.name || 'Onbekend',
+              amAvatarUrl: t.admin_users?.avatar_url || null,
+              targetLabel: t.label,
+              targetType: TARGET_TYPE_LABELS[t.target_type] || t.target_type,
+              bonusAmount: Number(t.bonus_amount) || 0,
+              currentValue: current,
+              targetValue: Number(t.target_value),
+            },
+          });
+          await supabase.from('am_targets').update({ celebrated: true }).eq('id', t.id);
+        } catch { /* non-critical */ }
+      }
+
       return {
         ...t,
         am_name: t.admin_users?.name || 'Onbekend',
