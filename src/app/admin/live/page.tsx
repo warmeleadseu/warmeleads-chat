@@ -1425,10 +1425,13 @@ export default function LiveDashboard() {
                           />
                         </svg>
                         <div className="absolute inset-0 flex items-center justify-center">
-                          {isComplete
-                            ? <span className="text-xs">🎉</span>
-                            : <span className="text-[9px] font-black text-white/70">{t.progress_pct}%</span>
-                          }
+                          {t.am_avatar_url ? (
+                            <Image src={t.am_avatar_url} alt={t.am_name} width={28} height={28} className="h-7 w-7 rounded-full object-cover" />
+                          ) : isComplete ? (
+                            <span className="text-xs">🎉</span>
+                          ) : (
+                            <span className="text-[9px] font-black text-white/70">{t.progress_pct}%</span>
+                          )}
                         </div>
                       </div>
                       <div className="min-w-0 flex-1">
@@ -1500,10 +1503,21 @@ export default function LiveDashboard() {
                         : 'border-white/[0.04] bg-white/[0.02]'
                     }`}
                   >
-                    <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-black ${
-                      rank < 3 ? `bg-gradient-to-br ${medalBg} text-white shadow-md` : 'bg-white/[0.06] text-white/30'
-                    }`}>
-                      {rank + 1}
+                    <div className="relative h-8 w-8 shrink-0">
+                      {am.avatarUrl ? (
+                        <Image src={am.avatarUrl} alt={am.name} width={32} height={32} className="h-8 w-8 rounded-full object-cover" />
+                      ) : (
+                        <div className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-black ${
+                          rank < 3 ? `bg-gradient-to-br ${medalBg} text-white shadow-md` : 'bg-white/[0.06] text-white/30'
+                        }`}>
+                          {am.name.charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                      <span className={`absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-black ${
+                        rank < 3 ? `bg-gradient-to-br ${medalBg} text-white` : 'bg-white/10 text-white/40'
+                      }`}>
+                        {rank + 1}
+                      </span>
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className={`truncate text-sm font-bold ${isFirst ? 'text-amber-300' : 'text-white/70'}`}>{am.name}</p>
