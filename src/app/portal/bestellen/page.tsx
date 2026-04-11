@@ -38,6 +38,7 @@ interface Batch {
   leads_per_week: number | null;
   lead_filters: unknown[];
   status: string;
+  compensations?: { amount: number; reason: string }[];
 }
 
 interface Order {
@@ -155,7 +156,15 @@ export default function BestellenPage() {
         const match = allBatches.find((b: Batch) => b.id === sourceBatchId);
         if (match) {
           setSelectedBranch(match.branch);
-          setBatchSize(match.batch_size);
+          const comps: { amount: number }[] = Array.isArray(match.compensations) ? match.compensations : [];
+          const totalComp = comps.reduce((s: number, c: { amount: number }) => s + c.amount, 0);
+          const originalSize = match.batch_size - totalComp;
+          setBatchSize(originalSize);
+          const standardSizes = [30, 50, 100, 200, 500];
+          if (!standardSizes.includes(originalSize)) {
+            setUseCustom(true);
+            setCustomSize(String(originalSize));
+          }
         }
       }
 
@@ -524,6 +533,24 @@ export default function BestellenPage() {
           </div>
         )}
 
+        {/* Completed batch context */}
+        {sourceBatch && sourceBatch.status === 'completed' && (() => {
+          const comps: { amount: number }[] = Array.isArray(sourceBatch.compensations) ? sourceBatch.compensations : [];
+          const totalComp = comps.reduce((s: number, c: { amount: number }) => s + c.amount, 0);
+          const origSize = sourceBatch.batch_size - totalComp;
+          return (
+            <div className="mb-6 flex items-start gap-3 rounded-2xl border border-emerald-100 bg-emerald-50/50 p-4">
+              <CheckCircleSolid className="mt-0.5 h-5 w-5 shrink-0 text-emerald-500" />
+              <div>
+                <p className="text-sm font-semibold text-slate-800">Herbestelling op basis van uw vorige batch</p>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  {sourceBatch.branch_name || sourceBatch.branch} &middot; {origSize} leads &middot; Voltooid
+                </p>
+              </div>
+            </div>
+          );
+        })()}
+
         {/* Batch size selector */}
         <div className="mb-6">
           <label className="mb-3 block text-sm font-semibold text-slate-800">Hoeveel leads wilt u bestellen?</label>
@@ -664,7 +691,7 @@ export default function BestellenPage() {
             <div className="mt-3 flex items-start gap-2 px-1">
               <SparklesIcon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
               <p className="text-[11px] leading-relaxed text-slate-400">
-                Na betaling wordt uw batch direct aangemaakt. Leads worden automatisch toegewezen met dezelfde instellingen als uw huidige batch.
+                Na betaling wordt uw batch direct aangemaakt. Leads worden automatisch toegewezen met dezelfde instellingen als uw {sourceBatch?.status === 'completed' ? 'vorige' : 'huidige'} batch.
               </p>
             </div>
           </div>
