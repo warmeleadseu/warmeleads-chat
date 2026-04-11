@@ -50,6 +50,7 @@ interface AccountManagerData {
   email: string;
   phone: string | null;
   title: string | null;
+  avatar_url: string | null;
 }
 
 interface InsightsData {
@@ -288,9 +289,17 @@ function AccountTab({
           </div>
           <div className="p-5">
             <div className="flex items-start gap-4">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-brand-purple/10 text-lg font-bold text-brand-purple sm:h-14 sm:w-14 sm:text-xl">
-                {accountManager.name.charAt(0).toUpperCase()}
-              </div>
+              {accountManager.avatar_url ? (
+                <img
+                  src={accountManager.avatar_url}
+                  alt={accountManager.name}
+                  className="h-12 w-12 shrink-0 rounded-full object-cover ring-2 ring-brand-purple/10 sm:h-14 sm:w-14"
+                />
+              ) : (
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-brand-purple/10 text-lg font-bold text-brand-purple sm:h-14 sm:w-14 sm:text-xl">
+                  {accountManager.name.charAt(0).toUpperCase()}
+                </div>
+              )}
               <div className="min-w-0 flex-1">
                 <p className="text-base font-bold text-slate-900 sm:text-lg">{accountManager.name}</p>
                 {accountManager.title && (

@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
   if (data.account_manager_id) {
     const { data: am } = await supabase
       .from('admin_users')
-      .select('id, name, email, phone, title')
+      .select('id, name, email, phone, title, avatar_url')
       .eq('id', data.account_manager_id)
       .eq('is_active', true)
       .single();

@@ -72,7 +72,7 @@ export async function GET(request: NextRequest) {
 
   let query = supabase
     .from('am_targets')
-    .select('*, admin_users(id, name, email)')
+    .select('*, admin_users(id, name, email, avatar_url)')
     .order('period_start', { ascending: false });
 
   if (admin.role === 'accountmanager') {
@@ -92,6 +92,7 @@ export async function GET(request: NextRequest) {
         ...t,
         am_name: t.admin_users?.name || 'Onbekend',
         am_email: t.admin_users?.email || '',
+        am_avatar_url: t.admin_users?.avatar_url || null,
         current_value: current,
         progress_pct: Math.min(pct, 999),
       };

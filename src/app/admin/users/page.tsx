@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   PlusIcon,
@@ -11,7 +11,10 @@ import {
   ShieldCheckIcon,
   UserGroupIcon,
   ExclamationTriangleIcon,
+  CameraIcon,
+  TrashIcon,
 } from '@heroicons/react/24/outline';
+import Image from 'next/image';
 import { adminFetch } from '@/lib/adminAuth';
 import { useAdmin } from '../adminContext';
 
@@ -25,6 +28,7 @@ interface AdminUser {
   created_at: string;
   phone?: string | null;
   title?: string | null;
+  avatar_url?: string | null;
 }
 
 export default function UsersPage() {
@@ -157,11 +161,21 @@ export default function UsersPage() {
                   <tr key={u.id} className={`transition hover:bg-slate-50/50 ${!u.is_active ? 'opacity-60' : ''}`}>
                     <td className="whitespace-nowrap px-5 py-3.5">
                       <div className="flex items-center gap-3">
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-purple/20 to-brand-purple/10">
-                          <span className="text-sm font-bold text-brand-purple">
-                            {u.name.charAt(0).toUpperCase()}
-                          </span>
-                        </div>
+                        {u.avatar_url ? (
+                          <Image
+                            src={u.avatar_url}
+                            alt={u.name}
+                            width={36}
+                            height={36}
+                            className="h-9 w-9 shrink-0 rounded-full object-cover"
+                          />
+                        ) : (
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-purple/20 to-brand-purple/10">
+                            <span className="text-sm font-bold text-brand-purple">
+                              {u.name.charAt(0).toUpperCase()}
+                            </span>
+                          </div>
+                        )}
                         <div>
                           <span className="font-semibold text-slate-900">{u.name}</span>
                           {u.id === currentUser.id && (
@@ -300,8 +314,49 @@ function UserFormModal({ user, onClose, onSaved }: { user: AdminUser | null; onC
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
   const [assignedCustomerIds, setAssignedCustomerIds] = useState<Set<string>>(new Set());
   const [loadingCustomers, setLoadingCustomers] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(user?.avatar_url || null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isAM = form.role === 'accountmanager';
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user?.id) return;
+    setUploadingAvatar(true);
+    setError('');
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('user_id', user.id);
+      const res = await adminFetch('/api/admin/users/avatar', { method: 'POST', body: fd, raw: true });
+      if (!res.ok) {
+        const d = await res.json();
+        throw new Error(d.error || 'Upload mislukt');
+      }
+      const { avatar_url } = await res.json();
+      setAvatarUrl(avatar_url);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Upload mislukt');
+    } finally {
+      setUploadingAvatar(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleAvatarDelete = async () => {
+    if (!user?.id) return;
+    setUploadingAvatar(true);
+    try {
+      await adminFetch('/api/admin/users/avatar', {
+        method: 'DELETE',
+        body: JSON.stringify({ user_id: user.id }),
+      });
+      setAvatarUrl(null);
+    } catch { /* ignore */ } finally {
+      setUploadingAvatar(false);
+    }
+  };
 
   useEffect(() => {
     if (!isAM) return;
@@ -412,6 +467,65 @@ function UserFormModal({ user, onClose, onSaved }: { user: AdminUser | null; onC
         <div className="space-y-4 p-5">
           {error && (
             <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-600">{error}</div>
+          )}
+
+          {/* Avatar upload — only for existing users */}
+          {isEdit && (
+            <div className="flex items-center gap-4">
+              <div className="group relative">
+                {avatarUrl ? (
+                  <Image
+                    src={avatarUrl}
+                    alt={form.name}
+                    width={64}
+                    height={64}
+                    className="h-16 w-16 rounded-full object-cover ring-2 ring-slate-100"
+                  />
+                ) : (
+                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-brand-purple/20 to-brand-purple/10 ring-2 ring-slate-100">
+                    <span className="text-xl font-bold text-brand-purple">
+                      {form.name ? form.name.charAt(0).toUpperCase() : '?'}
+                    </span>
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploadingAvatar}
+                  className="absolute inset-0 flex items-center justify-center rounded-full bg-black/0 transition group-hover:bg-black/40"
+                >
+                  <CameraIcon className="h-5 w-5 text-white opacity-0 transition group-hover:opacity-100" />
+                </button>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploadingAvatar}
+                  className="text-left text-xs font-medium text-brand-purple hover:underline disabled:opacity-50"
+                >
+                  {uploadingAvatar ? 'Uploaden...' : avatarUrl ? 'Foto wijzigen' : 'Foto uploaden'}
+                </button>
+                {avatarUrl && (
+                  <button
+                    type="button"
+                    onClick={handleAvatarDelete}
+                    disabled={uploadingAvatar}
+                    className="flex items-center gap-1 text-left text-xs text-red-500 hover:underline disabled:opacity-50"
+                  >
+                    <TrashIcon className="h-3 w-3" /> Verwijderen
+                  </button>
+                )}
+                <p className="text-[10px] text-slate-400">JPG, PNG of WebP · max 2MB</p>
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={handleAvatarUpload}
+                className="hidden"
+              />
+            </div>
           )}
 
           <div>

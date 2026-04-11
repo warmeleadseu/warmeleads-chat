@@ -28,7 +28,7 @@ interface BatchInfo { id: string; customer: string; branch: string; batchSize: n
 interface RecentLead { id: string; name: string; branch: string; city: string; province: string; createdAt: string; }
 interface CostMetrics { monthAdSpend: number; brutoCpl: number; effectieveCpl: number; avgAssignments: number; totalProfit: number; }
 interface PaidBatch { id: string; batchId: string; customer: string; branch: string; amount: number; paidAt: string; amId: string | null; amName: string | null; celebrationVideoUrl: string | null; videoStart?: number | null; videoEnd?: number | null; }
-interface AMLeaderboardEntry { id: string; name: string; revenue: number; batches: number; celebrationVideoUrl: string | null; }
+interface AMLeaderboardEntry { id: string; name: string; revenue: number; batches: number; celebrationVideoUrl: string | null; avatarUrl?: string | null; }
 
 interface LiveData {
   totalLeads: number;
@@ -556,6 +556,7 @@ interface AMTargetLive {
   id: string;
   admin_user_id: string;
   am_name: string;
+  am_avatar_url?: string | null;
   label: string;
   target_type: string;
   target_value: number;
@@ -1614,10 +1615,13 @@ export default function LiveDashboard() {
                             />
                           </svg>
                           <div className="absolute inset-0 flex items-center justify-center">
-                            {isComplete
-                              ? <span className="text-xs">🎉</span>
-                              : <span className="text-[9px] font-black text-white/70">{t.progress_pct}%</span>
-                            }
+                            {t.am_avatar_url ? (
+                              <Image src={t.am_avatar_url} alt={t.am_name} width={28} height={28} className="h-7 w-7 rounded-full object-cover" />
+                            ) : isComplete ? (
+                              <span className="text-xs">🎉</span>
+                            ) : (
+                              <span className="text-[9px] font-black text-white/70">{t.progress_pct}%</span>
+                            )}
                           </div>
                         </div>
                         <div className="min-w-0 flex-1">
@@ -1692,10 +1696,21 @@ export default function LiveDashboard() {
                           : 'border-white/[0.04] bg-white/[0.02]'
                       }`}
                     >
-                      <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-black ${
-                        rank < 3 ? `bg-gradient-to-br ${medalBg} text-white shadow-md` : 'bg-white/[0.06] text-white/30'
-                      }`}>
-                        {rank + 1}
+                      <div className="relative h-7 w-7 shrink-0">
+                        {am.avatarUrl ? (
+                          <Image src={am.avatarUrl} alt={am.name} width={28} height={28} className="h-7 w-7 rounded-full object-cover" />
+                        ) : (
+                          <div className={`flex h-7 w-7 items-center justify-center rounded-full text-[10px] font-black ${
+                            rank < 3 ? `bg-gradient-to-br ${medalBg} text-white shadow-md` : 'bg-white/[0.06] text-white/30'
+                          }`}>
+                            {am.name.charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                        <span className={`absolute -bottom-0.5 -right-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full text-[8px] font-black ${
+                          rank < 3 ? `bg-gradient-to-br ${medalBg} text-white` : 'bg-white/10 text-white/40'
+                        }`}>
+                          {rank + 1}
+                        </span>
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className={`truncate text-[12px] font-bold ${isFirst ? 'text-amber-300' : 'text-white/70'}`}>{am.name}</p>

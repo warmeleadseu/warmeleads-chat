@@ -222,11 +222,11 @@ export async function GET(request: NextRequest) {
     amBatchCount.set(amId, (amBatchCount.get(amId) || 0) + 1);
   }
 
-  let amLeaderboard: { id: string; name: string; revenue: number; batches: number; celebrationVideoUrl: string | null }[] = [];
+  let amLeaderboard: { id: string; name: string; revenue: number; batches: number; celebrationVideoUrl: string | null; avatarUrl: string | null }[] = [];
   if (amRevenue.size > 0) {
     const { data: leaderboardAMs } = await supabase
       .from('admin_users')
-      .select('id, name, celebration_video_url')
+      .select('id, name, celebration_video_url, avatar_url')
       .in('id', [...amRevenue.keys()]);
     amLeaderboard = (leaderboardAMs || []).map(am => ({
       id: am.id,
@@ -234,6 +234,7 @@ export async function GET(request: NextRequest) {
       revenue: amRevenue.get(am.id) || 0,
       batches: amBatchCount.get(am.id) || 0,
       celebrationVideoUrl: am.celebration_video_url,
+      avatarUrl: am.avatar_url,
     })).sort((a, b) => b.revenue - a.revenue);
   }
 
