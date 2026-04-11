@@ -911,7 +911,7 @@ export default function PortalPage() {
           <div className="relative flex">
             {([
               { key: 'all' as const, label: 'Alle leads', count: stats.totalLeads, dot: null },
-              { key: 'fresh' as const, label: 'Verse leads', count: stats.totalLeads - (stats.bulkLeads || 0), dot: 'bg-emerald-500' },
+              { key: 'fresh' as const, label: 'Verse leads', count: Math.max(0, stats.totalLeads - (stats.bulkLeads || 0)), dot: 'bg-emerald-500' },
               { key: 'bulk' as const, label: 'Bulk leads', count: stats.bulkLeads || 0, dot: 'bg-indigo-500' },
             ]).map(tab => (
               <button

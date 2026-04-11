@@ -2,25 +2,40 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyCustomer, portalUnauthorized } from '@/lib/portalAuth';
 import { createServerClient } from '@/lib/supabase';
 
+const PAGE_SIZE = 1000;
+const IN_CHUNK = 500;
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function paginateQuery<T>(query: any): Promise<T[]> {
+  const all: T[] = [];
+  let offset = 0;
+  while (true) {
+    const { data } = await query.range(offset, offset + PAGE_SIZE - 1);
+    if (!data || data.length === 0) break;
+    all.push(...(data as T[]));
+    if (data.length < PAGE_SIZE) break;
+    offset += data.length;
+  }
+  return all;
+}
+
 export async function GET(request: NextRequest) {
   const customer = await verifyCustomer(request);
   if (!customer) return portalUnauthorized();
 
   const supabase = createServerClient();
 
-  const { data: directLeads } = await supabase
-    .from('leads')
-    .select('id')
-    .eq('customer_id', customer.id);
+  const directLeads = await paginateQuery<{ id: string }>(
+    supabase.from('leads').select('id').eq('customer_id', customer.id),
+  );
 
-  const { data: assignedLeads } = await supabase
-    .from('lead_assignments')
-    .select('lead_id')
-    .eq('customer_id', customer.id);
+  const assignedLeads = await paginateQuery<{ lead_id: string }>(
+    supabase.from('lead_assignments').select('lead_id').eq('customer_id', customer.id),
+  );
 
   const leadIds = new Set<string>();
-  (directLeads || []).forEach(l => leadIds.add(l.id));
-  (assignedLeads || []).forEach(a => leadIds.add(a.lead_id));
+  directLeads.forEach(l => leadIds.add(l.id));
+  assignedLeads.forEach(a => leadIds.add(a.lead_id));
 
   const allIds = Array.from(leadIds);
 
@@ -31,12 +46,15 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  const { data: allLeads } = await supabase
-    .from('leads')
-    .select('id, status, branch, created_at')
-    .in('id', allIds);
-
-  const leads = allLeads || [];
+  const leads: { id: string; status: string; branch: string; created_at: string }[] = [];
+  for (let i = 0; i < allIds.length; i += IN_CHUNK) {
+    const chunk = allIds.slice(i, i + IN_CHUNK);
+    const { data } = await supabase
+      .from('leads')
+      .select('id, status, branch, created_at')
+      .in('id', chunk);
+    if (data) leads.push(...data);
+  }
 
   const weekAgo = new Date();
   weekAgo.setDate(weekAgo.getDate() - 7);

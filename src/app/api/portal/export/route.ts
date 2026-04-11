@@ -18,6 +18,7 @@ const COLUMN_HEADERS = [
 ];
 
 const PAGE_SIZE = 1000;
+const IN_CHUNK = 500;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function paginateQuery<T>(query: any): Promise<T[]> {
@@ -118,18 +119,22 @@ export async function GET(request: NextRequest) {
       : buildCsv([], {});
   }
 
-  let query = supabase
-    .from('leads')
-    .select('*')
-    .in('id', leadIds)
-    .order('wervingsdatum', { ascending: false });
-
-  if (status && status !== 'all') query = query.eq('status', status);
-  if (branch && branch !== 'all') query = query.eq('branch', branch);
-  if (from) query = query.gte('wervingsdatum', from);
-  if (to) query = query.lte('wervingsdatum', to);
-
-  const leads = await paginateQuery<Record<string, unknown>>(query);
+  const leads: Record<string, unknown>[] = [];
+  for (let i = 0; i < leadIds.length; i += IN_CHUNK) {
+    const chunk = leadIds.slice(i, i + IN_CHUNK);
+    let q = supabase.from('leads').select('*').in('id', chunk);
+    if (status && status !== 'all') q = q.eq('status', status);
+    if (branch && branch !== 'all') q = q.eq('branch', branch);
+    if (from) q = q.gte('wervingsdatum', from);
+    if (to) q = q.lte('wervingsdatum', to);
+    const batch = await paginateQuery<Record<string, unknown>>(q);
+    leads.push(...batch);
+  }
+  leads.sort((a, b) => {
+    const da = (a.wervingsdatum as string) ?? '';
+    const db = (b.wervingsdatum as string) ?? '';
+    return db < da ? -1 : db > da ? 1 : 0;
+  });
 
   return format === 'xlsx' ? buildXlsx(leads, assignedAtMap) : buildCsv(leads, assignedAtMap);
 }

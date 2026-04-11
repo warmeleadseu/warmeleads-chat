@@ -3,6 +3,7 @@ import { verifyCustomer, portalUnauthorized } from '@/lib/portalAuth';
 import { createServerClient } from '@/lib/supabase';
 
 const PAGE_SIZE = 1000;
+const IN_CHUNK = 500;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function paginateQuery<T>(query: any): Promise<T[]> {
@@ -88,39 +89,55 @@ export async function GET(request: NextRequest) {
 
   const allowedSorts = ['created_at', 'naam_klant', 'email', 'status', 'wervingsdatum', 'plaatsnaam', 'provincie', 'branch'];
   const col = allowedSorts.includes(sort) ? sort : 'created_at';
+  const asc = order === 'asc';
 
-  let query = supabase
-    .from('leads')
-    .select('*', { count: 'exact' })
-    .in('id', leadIds);
-
-  if (status && status !== 'all') query = query.eq('status', status);
-  if (branch && branch !== 'all') query = query.eq('branch', branch);
-  if (search) {
-    query = query.or(`naam_klant.ilike.%${search}%,email.ilike.%${search}%,telefoonnummer.ilike.%${search}%,postcode.ilike.%${search}%,plaatsnaam.ilike.%${search}%`);
-  }
-  if (from) query = query.gte('wervingsdatum', from);
-  if (to) query = query.lte('wervingsdatum', to);
-
-  query = query.order(col, { ascending: order === 'asc' });
-  query = query.range((page - 1) * limit, page * limit - 1);
-
-  const { data, count, error } = await query;
-
-  if (error) {
-    return NextResponse.json({ error: 'Kon leads niet ophalen' }, { status: 500 });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function applyFilters(q: any) {
+    if (status && status !== 'all') q = q.eq('status', status);
+    if (branch && branch !== 'all') q = q.eq('branch', branch);
+    if (search) {
+      q = q.or(`naam_klant.ilike.%${search}%,email.ilike.%${search}%,telefoonnummer.ilike.%${search}%,postcode.ilike.%${search}%,plaatsnaam.ilike.%${search}%`);
+    }
+    if (from) q = q.gte('wervingsdatum', from);
+    if (to) q = q.lte('wervingsdatum', to);
+    return q;
   }
 
-  const enrichedLeads = (data || []).map(lead => ({
+  let totalCount = 0;
+  const allMatching: Record<string, unknown>[] = [];
+
+  for (let i = 0; i < leadIds.length; i += IN_CHUNK) {
+    const chunk = leadIds.slice(i, i + IN_CHUNK);
+    let q = supabase.from('leads').select('*', { count: 'exact' }).in('id', chunk);
+    q = applyFilters(q);
+    const { data: batchData, count: batchCount, error: batchError } = await q;
+    if (batchError) {
+      return NextResponse.json({ error: 'Kon leads niet ophalen' }, { status: 500 });
+    }
+    totalCount += batchCount || 0;
+    if (batchData) allMatching.push(...batchData);
+  }
+
+  allMatching.sort((a, b) => {
+    const va = (a[col] as string) ?? '';
+    const vb = (b[col] as string) ?? '';
+    const cmp = va < vb ? -1 : va > vb ? 1 : 0;
+    return asc ? cmp : -cmp;
+  });
+
+  const startIdx = (page - 1) * limit;
+  const pageData = allMatching.slice(startIdx, startIdx + limit);
+
+  const enrichedLeads = pageData.map(lead => ({
     ...lead,
-    received_at: assignedAtMap[lead.id] || lead.created_at,
+    received_at: assignedAtMap[lead.id as string] || lead.created_at,
   }));
 
   return NextResponse.json({
     leads: enrichedLeads,
-    total: count || 0,
+    total: totalCount,
     page,
-    totalPages: Math.ceil((count || 0) / limit),
+    totalPages: Math.ceil(totalCount / limit),
     bulkCount,
   });
 }
