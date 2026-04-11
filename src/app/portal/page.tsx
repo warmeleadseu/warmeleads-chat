@@ -40,6 +40,8 @@ import {
   ClipboardDocumentCheckIcon,
   FlagIcon,
   ChevronDownIcon,
+  BoltIcon,
+  ClockIcon,
 } from '@heroicons/react/24/outline';
 import { usePushNotifications, type PushState } from './usePushNotifications';
 
@@ -666,7 +668,110 @@ export default function PortalPage() {
               </div>
             </>
           )}
-          {batches.completed.length > 0 && (
+          {batches.completed.length > 0 && batches.active.length === 0 && (() => {
+            const last = batches.completed[0] as Record<string, any>;
+            const leadsDelivered = Math.min(last.leads_delivered ?? 0, last.batch_size ?? 0);
+            const durationDays = last.duration_days ?? 0;
+            const tempo = durationDays > 0 ? (leadsDelivered / durationDays).toFixed(1) : '—';
+            return (
+              <motion.div
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, ease: 'easeOut' }}
+                className="rounded-2xl border border-slate-200/80 bg-gradient-to-br from-white via-brand-purple/[0.03] to-brand-pink/[0.05] p-5 shadow-sm"
+              >
+                <div className="mb-4">
+                  <h2 className="text-lg font-bold text-slate-800">Klaar voor een nieuwe batch?</h2>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Uw vorige batch is succesvol afgerond. Bestel direct een nieuwe batch om door te gaan met het ontvangen van leads.
+                  </p>
+                </div>
+
+                <motion.div
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.35, delay: 0.15, ease: 'easeOut' }}
+                  className="mb-5 grid grid-cols-3 gap-2.5"
+                >
+                  <div className="rounded-xl border border-slate-100 bg-white/80 p-3 text-center">
+                    <div className="mx-auto mb-1.5 flex h-8 w-8 items-center justify-center rounded-lg bg-brand-purple/10">
+                      <UserGroupIcon className="h-4 w-4 text-brand-purple" />
+                    </div>
+                    <p className="text-base font-bold text-slate-800">{leadsDelivered}</p>
+                    <p className="text-[10px] leading-tight text-slate-400">Leads geleverd</p>
+                  </div>
+                  <div className="rounded-xl border border-slate-100 bg-white/80 p-3 text-center">
+                    <div className="mx-auto mb-1.5 flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50">
+                      <ClockIcon className="h-4 w-4 text-blue-500" />
+                    </div>
+                    <p className="text-base font-bold text-slate-800">{durationDays || '—'}</p>
+                    <p className="text-[10px] leading-tight text-slate-400">Dagen doorlooptijd</p>
+                  </div>
+                  <div className="rounded-xl border border-slate-100 bg-white/80 p-3 text-center">
+                    <div className="mx-auto mb-1.5 flex h-8 w-8 items-center justify-center rounded-lg bg-amber-50">
+                      <BoltIcon className="h-4 w-4 text-amber-500" />
+                    </div>
+                    <p className="text-base font-bold text-slate-800">{tempo}</p>
+                    <p className="text-[10px] leading-tight text-slate-400">Leads per dag</p>
+                  </div>
+                </motion.div>
+
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.3, delay: 0.3 }}
+                >
+                  <Link
+                    href={`/portal/bestellen?batch=${last.id}`}
+                    className="group/cta relative flex w-full items-center justify-center gap-2 overflow-hidden rounded-xl bg-gradient-to-r from-brand-purple to-brand-pink px-4 py-3 text-sm font-semibold text-white shadow-md transition-all hover:shadow-lg hover:brightness-110 active:scale-[0.98]"
+                  >
+                    <span className="absolute inset-0 rounded-xl bg-white/10 opacity-0 transition-opacity group-hover/cta:opacity-100" />
+                    <ShoppingCartIcon className="relative z-10 h-[18px] w-[18px]" />
+                    <span className="relative z-10">Nieuwe batch bestellen</span>
+                  </Link>
+                </motion.div>
+
+                <details className="group mt-4">
+                  <summary className="flex cursor-pointer items-center justify-center gap-1 text-[11px] font-medium text-slate-400 transition hover:text-slate-600">
+                    <ChevronDownIcon className="h-3.5 w-3.5 transition-transform group-open:rotate-180" />
+                    <span>{batches.completed.length} voltooide {batches.completed.length === 1 ? 'batch' : 'batches'} bekijken</span>
+                  </summary>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    {batches.completed.map((b: Record<string, any>) => {
+                      const compTotal = (Array.isArray(b.compensations) ? b.compensations : []).reduce((s: number, c: { amount: number }) => s + c.amount, 0);
+                      return (
+                        <div key={b.id} className="rounded-lg border border-slate-100 bg-white/60 p-3">
+                          <div className="flex items-center justify-between">
+                            <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-semibold text-emerald-600">
+                              {b.branch_name || b.branch} ✓
+                            </span>
+                            <span className="text-[10px] text-slate-400">
+                              {b.duration_days ? `${b.duration_days} dagen` : ''}
+                            </span>
+                          </div>
+                          <p className="mt-1.5 text-xs text-slate-500">
+                            {Math.min(b.leads_delivered, b.batch_size)} / {b.batch_size} leads
+                            {compTotal > 0 && <span className="text-emerald-600"> (incl. {compTotal} compensatie)</span>}
+                            {b.completed_at && (
+                              <span className="text-slate-400"> · {new Date(b.completed_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                            )}
+                          </p>
+                          <Link
+                            href={`/portal/bestellen?batch=${b.id}`}
+                            className="mt-2 inline-flex items-center gap-1 rounded-md bg-brand-purple/10 px-2.5 py-1 text-[11px] font-semibold text-brand-purple transition hover:bg-brand-purple/20"
+                          >
+                            <ShoppingCartIcon className="h-3 w-3" />
+                            Opnieuw bestellen
+                          </Link>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </details>
+              </motion.div>
+            );
+          })()}
+          {batches.completed.length > 0 && batches.active.length > 0 && (
             <details className="group rounded-xl border border-slate-200 bg-white shadow-sm">
               <summary className="flex cursor-pointer items-center justify-between px-4 py-3 text-xs font-medium text-slate-500 transition hover:text-slate-700">
                 <span>{batches.completed.length} voltooide {batches.completed.length === 1 ? 'batch' : 'batches'}</span>
@@ -678,30 +783,30 @@ export default function PortalPage() {
                 {batches.completed.map((b: Record<string, any>) => {
                   const compTotal = (Array.isArray(b.compensations) ? b.compensations : []).reduce((s: number, c: { amount: number }) => s + c.amount, 0);
                   return (
-                  <div key={b.id} className="rounded-lg border border-slate-100 bg-slate-50/50 p-3">
-                    <div className="flex items-center justify-between">
-                      <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-semibold text-emerald-600">
-                        {b.branch_name || b.branch} ✓
-                      </span>
-                      <span className="text-[10px] text-slate-400">
-                        {b.duration_days ? `${b.duration_days} dagen` : ''}
-                      </span>
+                    <div key={b.id} className="rounded-lg border border-slate-100 bg-slate-50/50 p-3">
+                      <div className="flex items-center justify-between">
+                        <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-semibold text-emerald-600">
+                          {b.branch_name || b.branch} ✓
+                        </span>
+                        <span className="text-[10px] text-slate-400">
+                          {b.duration_days ? `${b.duration_days} dagen` : ''}
+                        </span>
+                      </div>
+                      <p className="mt-1.5 text-xs text-slate-500">
+                        {Math.min(b.leads_delivered, b.batch_size)} / {b.batch_size} leads
+                        {compTotal > 0 && <span className="text-emerald-600"> (incl. {compTotal} compensatie)</span>}
+                        {b.completed_at && (
+                          <span className="text-slate-400"> · {new Date(b.completed_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                        )}
+                      </p>
+                      <Link
+                        href={`/portal/bestellen?batch=${b.id}`}
+                        className="mt-2 inline-flex items-center gap-1 rounded-md bg-brand-purple/10 px-2.5 py-1 text-[11px] font-semibold text-brand-purple transition hover:bg-brand-purple/20"
+                      >
+                        <ShoppingCartIcon className="h-3 w-3" />
+                        Opnieuw bestellen
+                      </Link>
                     </div>
-                    <p className="mt-1.5 text-xs text-slate-500">
-                      {Math.min(b.leads_delivered, b.batch_size)} / {b.batch_size} leads
-                      {compTotal > 0 && <span className="text-emerald-600"> (incl. {compTotal} compensatie)</span>}
-                      {b.completed_at && (
-                        <span className="text-slate-400"> · {new Date(b.completed_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
-                      )}
-                    </p>
-                    <Link
-                      href={`/portal/bestellen?batch=${b.id}`}
-                      className="mt-2 inline-flex items-center gap-1 rounded-md bg-brand-purple/10 px-2.5 py-1 text-[11px] font-semibold text-brand-purple transition hover:bg-brand-purple/20"
-                    >
-                      <ShoppingCartIcon className="h-3 w-3" />
-                      Opnieuw bestellen
-                    </Link>
-                  </div>
                   );
                 })}
               </div>
