@@ -1299,6 +1299,7 @@ function TargetsPanel({ customer, onClose }: { customer: Customer; onClose: () =
   };
 
   const startEdit = (t: Target) => {
+    resetAddForm();
     setEditingId(t.id);
     setEditLabel(t.label);
     setEditRadius(t.radius_km);
@@ -1341,7 +1342,10 @@ function TargetsPanel({ customer, onClose }: { customer: Customer; onClose: () =
 
   const saveEdit = async (t: Target) => {
     setSaving(true);
-    const updates: Record<string, unknown> = { id: t.id, label: editLabel };
+    const label = editLabel.trim() || (
+      (t.target_type || 'radius') === 'province' ? editProvinces.join(', ') : t.label
+    );
+    const updates: Record<string, unknown> = { id: t.id, label };
     if ((t.target_type || 'radius') === 'radius') {
       updates.radius_km = editRadius;
       if (editCityResult) {
@@ -1350,9 +1354,6 @@ function TargetsPanel({ customer, onClose }: { customer: Customer; onClose: () =
       }
     } else {
       updates.provinces = editProvinces;
-      if (!editLabel || editLabel === t.label) {
-        updates.label = editProvinces.join(', ');
-      }
     }
     await adminFetch('/api/admin/targets', {
       method: 'PUT',
@@ -1527,10 +1528,10 @@ function TargetsPanel({ customer, onClose }: { customer: Customer; onClose: () =
             </div>
           ) : (
             <div className="mb-5 flex gap-2">
-              <button onClick={() => setShowAdd('radius')} className="inline-flex items-center gap-1.5 rounded-lg bg-button-gradient px-3.5 py-2 text-sm font-bold text-white shadow-sm">
+              <button onClick={() => { cancelEdit(); setShowAdd('radius'); }} className="inline-flex items-center gap-1.5 rounded-lg bg-button-gradient px-3.5 py-2 text-sm font-bold text-white shadow-sm">
                 <MapPinIcon className="h-4 w-4" /> Plaats + radius
               </button>
-              <button onClick={() => setShowAdd('province')} className="inline-flex items-center gap-1.5 rounded-lg border border-brand-purple/30 bg-brand-purple/5 px-3.5 py-2 text-sm font-bold text-brand-purple shadow-sm hover:bg-brand-purple/10">
+              <button onClick={() => { cancelEdit(); setShowAdd('province'); }} className="inline-flex items-center gap-1.5 rounded-lg border border-brand-purple/30 bg-brand-purple/5 px-3.5 py-2 text-sm font-bold text-brand-purple shadow-sm hover:bg-brand-purple/10">
                 <PlusIcon className="h-4 w-4" /> Provincies
               </button>
             </div>

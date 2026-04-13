@@ -86,6 +86,11 @@ export async function PUT(request: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+  const geoFieldChanged = 'lat' in updates || 'lng' in updates || 'radius_km' in updates || 'provinces' in updates || 'is_active' in updates;
+  if (geoFieldChanged) {
+    try { distributeUnassignedLeads(); } catch { /* non-blocking */ }
+  }
+
   return NextResponse.json(data);
 }
 

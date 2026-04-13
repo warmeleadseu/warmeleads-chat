@@ -1116,8 +1116,10 @@ export default function PortalPage() {
                         </div>
                       </td>
                       <td className="px-4 py-3 text-slate-600">{lead.plaatsnaam || '-'}</td>
-                      <td className="px-4 py-3 text-slate-400 tabular-nums">
-                        {formatDistance(lead.distance_km) || <span className="text-slate-300">&ndash;</span>}
+                      <td className="px-4 py-3 tabular-nums">
+                        {formatDistance(lead.distance_km)
+                          ? <span className="text-slate-500">{formatDistance(lead.distance_km)}</span>
+                          : <span className="text-slate-300">&ndash;</span>}
                       </td>
                       <td className="px-4 py-3">
                         {(() => { const b = getBranch(lead.branch); return (
