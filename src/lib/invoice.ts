@@ -48,6 +48,20 @@ async function getNextInvoiceNumber(supabase: ReturnType<typeof createServerClie
 export async function createInvoice(params: CreateInvoiceParams) {
   const supabase = createServerClient();
 
+  if (params.batch_id) {
+    const { data: existingInv } = await supabase
+      .from('invoices')
+      .select('id, invoice_number, status')
+      .eq('batch_id', params.batch_id)
+      .neq('status', 'credit_note')
+      .limit(1)
+      .maybeSingle();
+    if (existingInv) {
+      console.warn(`[invoice] skipping duplicate: invoice ${existingInv.invoice_number} already exists for batch ${params.batch_id}`);
+      return existingInv;
+    }
+  }
+
   const { data: customer, error: custErr } = await supabase
     .from('customers')
     .select('id, name, email, contact_person, address, vat_id, kvk_nummer')
@@ -125,9 +139,19 @@ export async function markInvoicePaid(batchId: string, molliePaymentId: string) 
     .in('status', ['open'])
     .order('created_at', { ascending: false })
     .limit(1)
-    .single();
+    .maybeSingle();
 
-  if (!existing) return null;
+  if (!existing) {
+    const { data: alreadyPaid } = await supabase
+      .from('invoices')
+      .select('id')
+      .eq('batch_id', batchId)
+      .eq('status', 'paid')
+      .limit(1)
+      .maybeSingle();
+    if (alreadyPaid) return alreadyPaid;
+    return null;
+  }
 
   const now = new Date().toISOString();
   const { data: updated, error } = await supabase
