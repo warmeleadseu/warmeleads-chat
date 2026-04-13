@@ -304,12 +304,12 @@ export default function CustomersPage() {
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">Klanten</h1>
           <p className="mt-0.5 text-sm text-slate-500">Bedrijven waarvoor we leads genereren</p>
         </div>
-        <button onClick={() => setShowNew(true)} className="inline-flex items-center gap-1.5 rounded-lg bg-button-gradient px-3.5 py-2 text-sm font-bold text-white shadow-sm">
+        <button onClick={() => setShowNew(true)} className="inline-flex items-center gap-1.5 rounded-lg bg-button-gradient px-3.5 py-2.5 text-sm font-bold text-white shadow-sm">
           <PlusIcon className="h-4 w-4" /> Nieuwe klant
         </button>
       </div>

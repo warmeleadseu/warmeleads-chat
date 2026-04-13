@@ -259,7 +259,7 @@ function MobileHeader({ user, onLogout, pendingReclamations }: { user: AdminUser
                 <div className="h-[3px] shrink-0 bg-warmeleads-gradient" />
                 <div className="flex h-14 shrink-0 items-center justify-between px-4">
                   <Image src="/logo-wit.png" alt="WarmeLeads" width={110} height={33} className="h-6 w-auto" />
-                  <button onClick={() => setOpen(false)} className="text-white/50"><XMarkIcon className="h-5 w-5" /></button>
+                  <button onClick={() => setOpen(false)} className="flex h-10 w-10 items-center justify-center rounded-lg text-white/50 active:bg-white/10"><XMarkIcon className="h-5 w-5" /></button>
                 </div>
                 <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
                   {NAV.filter(item => item.roles.includes(user.role as NavRole)).map((item) => {

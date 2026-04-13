@@ -173,15 +173,15 @@ export default function AccountPage() {
       >
         <div className="h-1 bg-warmeleads-gradient" />
         <div className="p-5 sm:p-6">
-          <div className="flex items-center gap-4">
-            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-brand-purple/10">
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-brand-purple/10">
               <UserCircleIcon className="h-8 w-8 text-brand-purple" />
             </div>
             <div className="min-w-0 flex-1">
               <h2 className="text-lg font-bold text-slate-900">{profile?.name || user.name}</h2>
-              <p className="text-sm text-slate-500">{profile?.email || user.email}</p>
+              <p className="truncate text-sm text-slate-500">{profile?.email || user.email}</p>
             </div>
-            <span className="rounded-full bg-brand-purple/10 px-3 py-1 text-xs font-bold text-brand-purple">
+            <span className="shrink-0 rounded-full bg-brand-purple/10 px-3 py-1 text-xs font-bold text-brand-purple">
               {ROLE_LABELS[profile?.role || user.role] || user.role}
             </span>
           </div>

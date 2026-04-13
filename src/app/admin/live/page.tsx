@@ -1669,7 +1669,7 @@ export default function LiveDashboard() {
             <Image src="/logo-wit.png" alt="WarmeLeads" width={140} height={42} className="h-8 w-auto opacity-80 transition group-hover:opacity-100" />
             <span className="rounded-full bg-white/[0.06] px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-white/30">Live</span>
           </Link>
-          <div className="flex items-center gap-5">
+          <div className="flex items-center gap-3 sm:gap-5">
             {/* Speed metrics */}
             <div className="hidden items-center gap-4 lg:flex">
               <div className="text-right">
@@ -1717,7 +1717,7 @@ export default function LiveDashboard() {
                 setSoundEnabled(next);
                 if (next) audioManager.ensureContext();
               }}
-              className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/[0.06] text-white/40 transition hover:bg-white/[0.1] hover:text-white/70"
+              className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/[0.06] text-white/40 transition hover:bg-white/[0.1] hover:text-white/70"
               title={soundEnabled ? 'Geluid uit' : 'Geluid aan'}
             >
               {soundEnabled ? (
@@ -1756,8 +1756,11 @@ export default function LiveDashboard() {
               <p className="text-lg font-bold tabular-nums text-white/80">
                 {clock.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
               </p>
-              <p className="text-[11px] text-white/25">
+              <p className="hidden text-[11px] text-white/25 sm:block">
                 {clock.toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+              </p>
+              <p className="text-[11px] text-white/25 sm:hidden">
+                {clock.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}
               </p>
             </div>
           </div>

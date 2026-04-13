@@ -110,16 +110,16 @@ export default function UsersPage() {
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">Gebruikersbeheer</h1>
           <p className="mt-0.5 text-sm text-slate-500">Beheer admin-gebruikers en rechten</p>
         </div>
         <button
           onClick={() => setShowNew(true)}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-button-gradient px-3.5 py-2 text-sm font-bold text-white shadow-sm"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-button-gradient px-3.5 py-2.5 text-sm font-bold text-white shadow-sm"
         >
-          <PlusIcon className="h-4 w-4" /> Nieuwe gebruiker
+          <PlusIcon className="h-4 w-4" /> <span className="hidden sm:inline">Nieuwe gebruiker</span><span className="sm:hidden">Nieuw</span>
         </button>
       </div>
 
@@ -144,7 +144,9 @@ export default function UsersPage() {
           <p className="text-sm text-slate-500">Nog geen gebruikers. Voeg je eerste admin toe.</p>
         </div>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <>
+        {/* Desktop table */}
+        <div className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm md:block">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
@@ -234,6 +236,66 @@ export default function UsersPage() {
             </table>
           </div>
         </div>
+
+        {/* Mobile card list */}
+        <div className="space-y-3 md:hidden">
+          {users.map(u => (
+            <div key={u.id} className={`rounded-xl border border-slate-200 bg-white p-4 shadow-sm ${!u.is_active ? 'opacity-60' : ''}`}>
+              <div className="flex items-center gap-3">
+                {u.avatar_url ? (
+                  <Image src={u.avatar_url} alt={u.name} width={40} height={40} className="h-10 w-10 shrink-0 rounded-full object-cover" />
+                ) : (
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-purple/20 to-brand-purple/10">
+                    <span className="text-sm font-bold text-brand-purple">{u.name.charAt(0).toUpperCase()}</span>
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <p className="truncate font-semibold text-slate-900">{u.name}</p>
+                    {u.id === currentUser.id && <span className="shrink-0 text-[10px] text-slate-400">(jij)</span>}
+                  </div>
+                  <p className="truncate text-sm text-slate-500">{u.email}</p>
+                </div>
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${roleBadge(u.role)}`}>
+                  {u.role === 'superadmin' && <ShieldCheckIcon className="h-3 w-3" />}
+                  {roleLabel(u.role)}
+                </span>
+                {u.is_account_manager && u.role !== 'accountmanager' && (
+                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">AM</span>
+                )}
+                <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${statusBadge(u.is_active)}`}>
+                  {u.is_active ? 'Actief' : 'Inactief'}
+                </span>
+              </div>
+              {u.last_login && (
+                <p className="mt-2 text-[11px] text-slate-400">Laatste login: {formatDate(u.last_login)}</p>
+              )}
+              <div className="mt-3 flex items-center gap-2 border-t border-slate-100 pt-3">
+                <button
+                  onClick={() => setEditing(u)}
+                  className="flex items-center gap-1.5 rounded-lg bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600 transition active:bg-slate-100"
+                >
+                  <PencilSquareIcon className="h-3.5 w-3.5" /> Bewerken
+                </button>
+                {u.id !== currentUser.id && (
+                  <button
+                    onClick={() => toggleActive(u)}
+                    className={`rounded-lg px-3 py-2 text-xs font-medium transition ${
+                      u.is_active
+                        ? 'bg-red-50 text-red-600 active:bg-red-100'
+                        : 'bg-emerald-50 text-emerald-600 active:bg-emerald-100'
+                    }`}
+                  >
+                    {u.is_active ? 'Deactiveer' : 'Activeer'}
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+        </>
       )}
 
       {/* Create / Edit Modal */}

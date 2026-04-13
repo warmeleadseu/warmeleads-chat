@@ -213,13 +213,13 @@ export default function BatchesPage() {
       </AnimatePresence>
 
       {/* Header */}
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">Batches</h1>
           <p className="mt-0.5 text-sm text-slate-500">Beheer alle lead batches van al je klanten</p>
         </div>
         <button onClick={() => setShowCreate(true)}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-button-gradient px-3.5 py-2 text-sm font-bold text-white shadow-sm">
+          className="inline-flex items-center gap-1.5 rounded-lg bg-button-gradient px-3.5 py-2.5 text-sm font-bold text-white shadow-sm">
           <PlusIcon className="h-4 w-4" /> Nieuwe batch
         </button>
       </div>
@@ -416,17 +416,17 @@ export default function BatchesPage() {
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-1">
                           <button onClick={e => { e.stopPropagation(); setEditBatch(b); }} title="Bewerken"
-                            className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-brand-purple">
+                            className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-brand-purple">
                             <PencilSquareIcon className="h-4 w-4" />
                           </button>
                           {b.status !== 'completed' && (
                             <button onClick={e => { e.stopPropagation(); toggleStatus(b); }} title={b.status === 'active' ? 'Pauzeren' : 'Heractiveren'}
-                              className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-amber-600">
+                              className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-amber-600">
                               {b.status === 'active' ? <PauseIcon className="h-4 w-4" /> : <PlayIcon className="h-4 w-4" />}
                             </button>
                           )}
                           <button onClick={e => { e.stopPropagation(); removeBatch(b); }} title="Verwijderen"
-                            className="rounded-lg p-1.5 text-slate-400 transition hover:bg-red-50 hover:text-red-500">
+                            className="rounded-lg p-2 text-slate-400 transition hover:bg-red-50 hover:text-red-500">
                             <TrashIcon className="h-4 w-4" />
                           </button>
                         </div>
