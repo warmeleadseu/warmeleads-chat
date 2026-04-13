@@ -20,10 +20,10 @@ export async function GET(request: NextRequest) {
   const supabase = createServerClient();
 
   const [leadsRes, assignRes, batchRes, targetRes, custRes] = await Promise.all([
-    supabase.from('leads').select('id, naam_klant, email, branch, postcode, plaatsnaam, lat, lng, land, created_at').order('created_at', { ascending: false }),
+    supabase.from('leads').select('id, naam_klant, email, branch, postcode, plaatsnaam, lat, lng, land, provincie, created_at').order('created_at', { ascending: false }),
     supabase.from('lead_assignments').select('id, lead_id, customer_id, batch_id, distance_km, assigned_at, customers(name)'),
     supabase.from('customer_batches').select('id, customer_id, branch, batch_size, leads_delivered, leads_per_day, leads_per_week, status, customers(name)'),
-    supabase.from('customer_targets').select('id, customer_id, label, lat, lng, radius_km, is_active'),
+    supabase.from('customer_targets').select('id, customer_id, label, lat, lng, radius_km, is_active, target_type, provinces'),
     supabase.from('customers').select('id, name, is_active, portal_active'),
   ]);
 
@@ -93,12 +93,14 @@ export async function GET(request: NextRequest) {
         continue;
       }
 
-      if (!hasCoords) {
+      const leadProv = (lead as any).provincie as string | undefined;
+
+      if (!hasCoords && !leadProv) {
         potentialMatches.push({
           customer_id: custId,
           customer_name: cust.name,
           assigned: false,
-          reason_not_assigned: 'Lead heeft geen coördinaten (lat/lng)',
+          reason_not_assigned: 'Lead heeft geen coördinaten en geen provincie',
         });
         continue;
       }
@@ -148,29 +150,44 @@ export async function GET(request: NextRequest) {
         continue;
       }
 
+      let provinceMatch: { label: string } | null = null;
       let closestTarget: { label: string; distance: number; radius: number } | null = null;
+
       for (const t of custTargets) {
-        const dist = haversineKm(lead.lat!, lead.lng!, t.lat, t.lng);
-        if (!closestTarget || dist < closestTarget.distance) {
-          closestTarget = { label: t.label, distance: Math.round(dist * 10) / 10, radius: t.radius_km };
+        if ((t.target_type || 'radius') === 'province') {
+          const provs: string[] = Array.isArray(t.provinces) ? t.provinces : [];
+          if (leadProv && provs.includes(leadProv)) {
+            provinceMatch = { label: t.label };
+          }
+        } else if (hasCoords) {
+          const dist = haversineKm(lead.lat!, lead.lng!, t.lat, t.lng);
+          if (!closestTarget || dist < closestTarget.distance) {
+            closestTarget = { label: t.label, distance: Math.round(dist * 10) / 10, radius: t.radius_km };
+          }
         }
       }
 
-      if (closestTarget && closestTarget.distance <= closestTarget.radius) {
+      const radiusInRange = closestTarget && closestTarget.distance <= closestTarget.radius;
+      const inRange = provinceMatch || radiusInRange;
+
+      if (inRange) {
         const leadAssignCount = leadAssignments.length;
+        const matchLabel = provinceMatch
+          ? `Binnen bereik (provincie "${leadProv}" in target "${provinceMatch.label}")`
+          : `Binnen bereik (${closestTarget!.distance}km)`;
         let reason: string;
         if (leadAssignCount >= 3) {
-          reason = `Binnen bereik (${closestTarget.distance}km) maar lead heeft al max 3 toewijzingen`;
+          reason = `${matchLabel} maar lead heeft al max 3 toewijzingen`;
         } else {
-          reason = `Binnen bereik (${closestTarget.distance}km). Wacht op verdeling (klik "Verdeel leads" of wacht op cron).`;
+          reason = `${matchLabel}. Wacht op verdeling (klik "Verdeel leads" of wacht op cron).`;
         }
         potentialMatches.push({
           customer_id: custId,
           customer_name: cust.name,
           assigned: false,
           reason_not_assigned: reason,
-          distance_km: closestTarget.distance,
-          target_label: closestTarget.label,
+          distance_km: provinceMatch ? 0 : closestTarget!.distance,
+          target_label: provinceMatch ? provinceMatch.label : closestTarget!.label,
         });
       } else if (closestTarget) {
         potentialMatches.push({
@@ -180,6 +197,16 @@ export async function GET(request: NextRequest) {
           reason_not_assigned: `Buiten bereik: ${closestTarget.distance}km (max ${closestTarget.radius}km voor "${closestTarget.label}")`,
           distance_km: closestTarget.distance,
           target_label: closestTarget.label,
+        });
+      } else if (!hasCoords && !provinceMatch) {
+        const provTargets = custTargets.filter(t => (t.target_type || 'radius') === 'province');
+        potentialMatches.push({
+          customer_id: custId,
+          customer_name: cust.name,
+          assigned: false,
+          reason_not_assigned: provTargets.length > 0
+            ? `Provincie "${leadProv || '(leeg)'}" niet in targets`
+            : 'Lead heeft geen coördinaten voor radius-targets',
         });
       }
     }

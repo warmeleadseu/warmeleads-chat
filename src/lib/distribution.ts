@@ -99,7 +99,9 @@ interface DistributionResult {
  */
 export async function distributeLead(lead: LeadForDistribution): Promise<DistributionResult> {
   const result: DistributionResult = { lead_id: lead.id, assignments: [] };
-  if (!lead.lat || !lead.lng) return result;
+  const hasCoords = !!(lead.lat && lead.lng);
+  const hasProv = !!(lead as any).provincie;
+  if (!hasCoords && !hasProv) return result;
 
   const supabase = createServerClient();
 
@@ -245,12 +247,22 @@ export async function distributeLead(lead: LeadForDistribution): Promise<Distrib
     if (!custTargets) continue;
 
     let bestMatch: { radius: number; distance: number } | null = null;
+    const leadProv = (fullLead as any).provincie as string | undefined;
 
     for (const t of custTargets) {
-      const dist = haversineKm(lead.lat, lead.lng, t.lat, t.lng);
-      if (dist <= t.radius_km) {
-        if (!bestMatch || t.radius_km < bestMatch.radius) {
-          bestMatch = { radius: t.radius_km, distance: dist };
+      if ((t.target_type || 'radius') === 'province') {
+        const provs: string[] = Array.isArray(t.provinces) ? t.provinces : [];
+        if (leadProv && provs.includes(leadProv)) {
+          if (!bestMatch || 999 < bestMatch.radius) {
+            bestMatch = { radius: 999, distance: 0 };
+          }
+        }
+      } else if (hasCoords) {
+        const dist = haversineKm(lead.lat, lead.lng, t.lat, t.lng);
+        if (dist <= t.radius_km) {
+          if (!bestMatch || t.radius_km < bestMatch.radius) {
+            bestMatch = { radius: t.radius_km, distance: dist };
+          }
         }
       }
     }
@@ -429,16 +441,22 @@ export async function backfillBatch(batchId: string, lookbackDays: number): Prom
   const cutoff = new Date(refDate);
   cutoff.setDate(cutoff.getDate() - lookbackDays);
 
-  const { data: leads } = await supabase
+  const hasProvinceTargets = targets.some(t => (t.target_type || 'radius') === 'province');
+
+  let leadsQuery = supabase
     .from('leads')
     .select('*')
     .eq('branch', batch.branch)
     .neq('bron', 'excel_import')
     .neq('phone_valid', false)
-    .not('lat', 'is', null)
-    .not('lng', 'is', null)
     .gte('created_at', cutoff.toISOString())
     .order('created_at', { ascending: false });
+
+  if (!hasProvinceTargets) {
+    leadsQuery = leadsQuery.not('lat', 'is', null).not('lng', 'is', null);
+  }
+
+  const { data: leads } = await leadsQuery;
 
   if (!leads || leads.length === 0) return { assigned: 0 };
 
@@ -455,7 +473,6 @@ export async function backfillBatch(batchId: string, lookbackDays: number): Prom
   const backfillExternal = (batch as any).leads_delivered_external || 0;
 
   for (const lead of leads) {
-    // Fresh count each iteration to prevent overdelivery (include external offset)
     const { count: currentCount } = await supabase
       .from('lead_assignments')
       .select('id', { count: 'exact', head: true })
@@ -469,8 +486,16 @@ export async function backfillBatch(batchId: string, lookbackDays: number): Prom
     let inRange = false;
     let bestDist = Infinity;
     for (const t of targets) {
-      const dist = haversineKm(lead.lat, lead.lng, t.lat, t.lng);
-      if (dist <= t.radius_km) { inRange = true; bestDist = Math.min(bestDist, dist); }
+      if ((t.target_type || 'radius') === 'province') {
+        const provs: string[] = Array.isArray(t.provinces) ? t.provinces : [];
+        if (lead.provincie && provs.includes(lead.provincie)) {
+          inRange = true;
+          bestDist = Math.min(bestDist, 0);
+        }
+      } else if (lead.lat && lead.lng) {
+        const dist = haversineKm(lead.lat, lead.lng, t.lat, t.lng);
+        if (dist <= t.radius_km) { inRange = true; bestDist = Math.min(bestDist, dist); }
+      }
     }
     if (!inRange) continue;
 

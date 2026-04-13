@@ -65,10 +65,12 @@ interface InsightsData {
 interface TargetArea {
   id: string;
   label: string;
-  lat: number;
-  lng: number;
+  lat: number | null;
+  lng: number | null;
   radius_km: number;
   leads_count: number;
+  target_type?: 'radius' | 'province';
+  provinces?: string[];
 }
 
 interface OrderData {
@@ -801,7 +803,8 @@ function AreasTab({
 }) {
   if (loading) return <AreasSkeleton />;
 
-  const maxRadius = Math.max(...data.map((a) => a.radius_km), 1);
+  const radiusAreas = data.filter(a => (a.target_type || 'radius') === 'radius');
+  const maxRadius = Math.max(...radiusAreas.map((a) => a.radius_km), 1);
 
   if (data.length === 0) {
     return (
@@ -825,7 +828,8 @@ function AreasTab({
   return (
     <div className="space-y-3">
       {data.map((area) => {
-        const radiusPct = (area.radius_km / maxRadius) * 100;
+        const isProvince = area.target_type === 'province';
+        const radiusPct = isProvince ? 0 : (area.radius_km / maxRadius) * 100;
         return (
           <motion.div
             key={area.id}
@@ -836,29 +840,39 @@ function AreasTab({
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div className="flex items-start gap-3">
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-purple/10">
-                  <MapPinIcon className="h-5 w-5 text-brand-purple" />
+                  {isProvince ? (
+                    <GlobeAltIcon className="h-5 w-5 text-brand-purple" />
+                  ) : (
+                    <MapPinIcon className="h-5 w-5 text-brand-purple" />
+                  )}
                 </div>
                 <div>
                   <p className="font-medium text-slate-900">
                     {area.label || (area.radius_km >= 500 ? 'Heel Nederland / België' : `Gebied ${area.id.slice(0, 6)}`)}
                   </p>
-                  {area.radius_km < 500 && area.lat && area.lng && (
+                  {isProvince && area.provinces && area.provinces.length > 0 ? (
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {area.provinces.map(p => (
+                        <span key={p} className="rounded-md bg-brand-purple/10 px-1.5 py-0.5 text-[11px] font-medium text-brand-purple">{p}</span>
+                      ))}
+                    </div>
+                  ) : !isProvince && area.radius_km < 500 && area.lat && area.lng ? (
                     <p className="mt-0.5 text-xs text-slate-400">
                       {area.lat.toFixed(2)}°N, {area.lng.toFixed(2)}°E
                     </p>
-                  )}
+                  ) : null}
                 </div>
               </div>
               <div className="flex items-center gap-2 text-xs">
                 <span className="rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">
-                  {area.radius_km >= 500 ? 'Landelijk' : `${area.radius_km} km`}
+                  {isProvince ? `${(area.provinces || []).length} prov.` : area.radius_km >= 500 ? 'Landelijk' : `${area.radius_km} km`}
                 </span>
                 <span className="rounded-full bg-brand-purple/10 px-2.5 py-1 font-medium text-brand-purple">
                   {area.leads_count} leads
                 </span>
               </div>
             </div>
-            {area.radius_km < 500 && (
+            {!isProvince && area.radius_km < 500 && (
               <div className="mt-3">
                 <div className="mb-1 flex items-center justify-between text-[11px] text-slate-400">
                   <span>Bereik</span>

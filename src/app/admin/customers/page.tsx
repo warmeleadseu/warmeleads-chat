@@ -70,8 +70,9 @@ function timeAgo(dateStr: string): string {
 interface BranchOption { slug: string; name: string; color: string; is_active: boolean; }
 
 interface Target {
-  id: string; customer_id: string; label: string; lat: number; lng: number;
+  id: string; customer_id: string; label: string; lat: number | null; lng: number | null;
   radius_km: number; is_active: boolean; created_at: string;
+  target_type: 'radius' | 'province'; provinces: string[];
 }
 
 interface LeadFilter {
@@ -1143,18 +1144,27 @@ const COUNTRY_PRESETS = [
   { key: 'heel-belgie', label: 'Heel België', lat: 50.5039, lng: 4.4699, radius: 170 },
 ];
 
+const PROVINCES_NL = ['Drenthe', 'Flevoland', 'Friesland', 'Gelderland', 'Groningen', 'Limburg', 'Noord-Brabant', 'Noord-Holland', 'Overijssel', 'Utrecht', 'Zeeland', 'Zuid-Holland'];
+const PROVINCES_BE = ['Antwerpen', 'Brussels', 'Henegouwen', 'Luik', 'Luxemburg', 'Namen', 'Oost-Vlaanderen', 'Vlaams-Brabant', 'Waals-Brabant', 'West-Vlaanderen'];
+
 function TargetsPanel({ customer, onClose }: { customer: Customer; onClose: () => void }) {
   const [targets, setTargets] = useState<Target[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showAdd, setShowAdd] = useState(false);
+  const [showAdd, setShowAdd] = useState<false | 'radius' | 'province'>(false);
+  const [saving, setSaving] = useState(false);
+
+  // Radius form state
   const [cityQuery, setCityQuery] = useState('');
   const [cityResult, setCityResult] = useState<{ lat: number; lng: number; naam: string } | null>(null);
   const [citySearching, setCitySearching] = useState(false);
   const [cityError, setCityError] = useState('');
   const [newRadius, setNewRadius] = useState(25);
   const [newLabel, setNewLabel] = useState('');
-  const [saving, setSaving] = useState(false);
   const searchTimer = useRef<NodeJS.Timeout | null>(null);
+
+  // Province form state
+  const [selectedProvinces, setSelectedProvinces] = useState<string[]>([]);
+  const [provLabel, setProvLabel] = useState('');
 
   const fetchTargets = useCallback(async () => {
     const res = await adminFetch(`/api/admin/targets?customer_id=${customer.id}`);
@@ -1163,6 +1173,13 @@ function TargetsPanel({ customer, onClose }: { customer: Customer; onClose: () =
   }, [customer.id]);
 
   useEffect(() => { fetchTargets(); }, [fetchTargets]);
+
+  const resetAddForm = () => {
+    setShowAdd(false);
+    setCityQuery(''); setCityResult(null); setCityError('');
+    setNewLabel(''); setNewRadius(25);
+    setSelectedProvinces([]); setProvLabel('');
+  };
 
   const searchCity = (q: string) => {
     setCityQuery(q);
@@ -1184,19 +1201,28 @@ function TargetsPanel({ customer, onClose }: { customer: Customer; onClose: () =
     }, 500);
   };
 
-  const addTarget = async () => {
+  const addRadiusTarget = async () => {
     if (!cityResult || !newLabel) return;
     setSaving(true);
     await adminFetch('/api/admin/targets', {
       method: 'POST',
-      body: JSON.stringify({ customer_id: customer.id, label: newLabel, lat: cityResult.lat, lng: cityResult.lng, radius_km: newRadius }),
+      body: JSON.stringify({ customer_id: customer.id, label: newLabel, target_type: 'radius', lat: cityResult.lat, lng: cityResult.lng, radius_km: newRadius }),
     });
     setSaving(false);
-    setShowAdd(false);
-    setCityQuery('');
-    setCityResult(null);
-    setNewLabel('');
-    setNewRadius(25);
+    resetAddForm();
+    fetchTargets();
+  };
+
+  const addProvinceTarget = async () => {
+    if (selectedProvinces.length === 0) return;
+    setSaving(true);
+    const label = provLabel || selectedProvinces.join(', ');
+    await adminFetch('/api/admin/targets', {
+      method: 'POST',
+      body: JSON.stringify({ customer_id: customer.id, label, target_type: 'province', provinces: selectedProvinces }),
+    });
+    setSaving(false);
+    resetAddForm();
     fetchTargets();
   };
 
@@ -1204,7 +1230,7 @@ function TargetsPanel({ customer, onClose }: { customer: Customer; onClose: () =
     setSaving(true);
     await adminFetch('/api/admin/targets', {
       method: 'POST',
-      body: JSON.stringify({ customer_id: customer.id, label: preset.label, lat: preset.lat, lng: preset.lng, radius_km: preset.radius }),
+      body: JSON.stringify({ customer_id: customer.id, label: preset.label, target_type: 'radius', lat: preset.lat, lng: preset.lng, radius_km: preset.radius }),
     });
     setSaving(false);
     fetchTargets();
@@ -1223,6 +1249,12 @@ function TargetsPanel({ customer, onClose }: { customer: Customer; onClose: () =
     });
     fetchTargets();
   };
+
+  const toggleProvince = (prov: string) => {
+    setSelectedProvinces(prev => prev.includes(prov) ? prev.filter(p => p !== prov) : [...prev, prov]);
+  };
+
+  const existingProvs = new Set(targets.flatMap(t => t.provinces || []));
 
   return (
     <>
@@ -1269,10 +1301,10 @@ function TargetsPanel({ customer, onClose }: { customer: Customer; onClose: () =
             </div>
           )}
 
-          {/* Add form */}
-          {showAdd ? (
+          {/* Add buttons / forms */}
+          {showAdd === 'radius' ? (
             <div className="mb-5 rounded-xl border border-brand-purple/20 bg-brand-purple/5 p-4">
-              <h3 className="mb-3 text-sm font-semibold text-slate-800">Nieuw targetgebied</h3>
+              <h3 className="mb-3 text-sm font-semibold text-slate-800">Nieuw targetgebied (plaats + radius)</h3>
               <div className="mb-3">
                 <label className="mb-1 block text-xs font-medium text-slate-500">Zoek plaats</label>
                 <div className="relative">
@@ -1309,18 +1341,90 @@ function TargetsPanel({ customer, onClose }: { customer: Customer; onClose: () =
                 </div>
               </div>
               <div className="flex gap-2">
-                <button onClick={() => { setShowAdd(false); setCityQuery(''); setCityResult(null); }}
+                <button onClick={resetAddForm}
                   className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-500 hover:bg-slate-50">Annuleren</button>
-                <button onClick={addTarget} disabled={!cityResult || !newLabel || saving}
+                <button onClick={addRadiusTarget} disabled={!cityResult || !newLabel || saving}
+                  className="rounded-lg bg-button-gradient px-4 py-2 text-xs font-bold text-white disabled:opacity-50">
+                  {saving ? 'Opslaan...' : 'Toevoegen'}
+                </button>
+              </div>
+            </div>
+          ) : showAdd === 'province' ? (
+            <div className="mb-5 rounded-xl border border-brand-purple/20 bg-brand-purple/5 p-4">
+              <h3 className="mb-3 text-sm font-semibold text-slate-800">Nieuw targetgebied (provincies)</h3>
+              <div className="mb-3">
+                <label className="mb-1.5 block text-xs font-medium text-slate-500">Label (optioneel)</label>
+                <input value={provLabel} onChange={e => setProvLabel(e.target.value)}
+                  placeholder="Wordt automatisch gegenereerd"
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
+              </div>
+              <div className="mb-3">
+                <label className="mb-1.5 block text-xs font-medium text-slate-500">Nederland</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {PROVINCES_NL.map(p => {
+                    const selected = selectedProvinces.includes(p);
+                    const alreadyExists = existingProvs.has(p);
+                    return (
+                      <button key={p} onClick={() => toggleProvince(p)} disabled={alreadyExists}
+                        className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${
+                          alreadyExists
+                            ? 'border-slate-100 bg-slate-50 text-slate-300 cursor-not-allowed'
+                            : selected
+                              ? 'border-brand-purple bg-brand-purple/10 text-brand-purple'
+                              : 'border-slate-200 bg-white text-slate-600 hover:border-brand-purple/50'
+                        }`}>
+                        {p}
+                        {alreadyExists && <span className="ml-1 text-[10px] text-slate-400">(actief)</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="mb-3">
+                <label className="mb-1.5 block text-xs font-medium text-slate-500">België</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {PROVINCES_BE.map(p => {
+                    const selected = selectedProvinces.includes(p);
+                    const alreadyExists = existingProvs.has(p);
+                    return (
+                      <button key={p} onClick={() => toggleProvince(p)} disabled={alreadyExists}
+                        className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${
+                          alreadyExists
+                            ? 'border-slate-100 bg-slate-50 text-slate-300 cursor-not-allowed'
+                            : selected
+                              ? 'border-brand-purple bg-brand-purple/10 text-brand-purple'
+                              : 'border-slate-200 bg-white text-slate-600 hover:border-brand-purple/50'
+                        }`}>
+                        {p}
+                        {alreadyExists && <span className="ml-1 text-[10px] text-slate-400">(actief)</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              {selectedProvinces.length > 0 && (
+                <p className="mb-3 text-xs text-brand-purple">
+                  {selectedProvinces.length} {selectedProvinces.length === 1 ? 'provincie' : 'provincies'} geselecteerd: {selectedProvinces.join(', ')}
+                </p>
+              )}
+              <div className="flex gap-2">
+                <button onClick={resetAddForm}
+                  className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-500 hover:bg-slate-50">Annuleren</button>
+                <button onClick={addProvinceTarget} disabled={selectedProvinces.length === 0 || saving}
                   className="rounded-lg bg-button-gradient px-4 py-2 text-xs font-bold text-white disabled:opacity-50">
                   {saving ? 'Opslaan...' : 'Toevoegen'}
                 </button>
               </div>
             </div>
           ) : (
-            <button onClick={() => setShowAdd(true)} className="mb-5 inline-flex items-center gap-1.5 rounded-lg bg-button-gradient px-3.5 py-2 text-sm font-bold text-white shadow-sm">
-              <PlusIcon className="h-4 w-4" /> Targetgebied toevoegen
-            </button>
+            <div className="mb-5 flex gap-2">
+              <button onClick={() => setShowAdd('radius')} className="inline-flex items-center gap-1.5 rounded-lg bg-button-gradient px-3.5 py-2 text-sm font-bold text-white shadow-sm">
+                <MapPinIcon className="h-4 w-4" /> Plaats + radius
+              </button>
+              <button onClick={() => setShowAdd('province')} className="inline-flex items-center gap-1.5 rounded-lg border border-brand-purple/30 bg-brand-purple/5 px-3.5 py-2 text-sm font-bold text-brand-purple shadow-sm hover:bg-brand-purple/10">
+                <PlusIcon className="h-4 w-4" /> Provincies
+              </button>
+            </div>
           )}
 
           {/* List */}
@@ -1332,25 +1436,37 @@ function TargetsPanel({ customer, onClose }: { customer: Customer; onClose: () =
             <div className="rounded-xl border border-dashed border-slate-200 py-10 text-center">
               <MapPinIcon className="mx-auto mb-2 h-8 w-8 text-slate-300" />
               <p className="text-sm text-slate-500">Nog geen targetgebieden ingesteld</p>
-              <p className="text-xs text-slate-400">Voeg een plaats + radius toe om leads automatisch te matchen</p>
+              <p className="text-xs text-slate-400">Voeg een plaats + radius of provincies toe om leads automatisch te matchen</p>
             </div>
           ) : (
             <div className="space-y-3">
               {targets.map(t => (
                 <div key={t.id} className={`rounded-xl border p-4 transition ${t.is_active ? 'border-slate-200 bg-white' : 'border-slate-100 bg-slate-50 opacity-60'}`}>
                   <div className="flex items-start justify-between">
-                    <div>
+                    <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <MapPinIcon className="h-4 w-4 text-brand-purple" />
-                        <span className="font-semibold text-slate-800">{t.label}</span>
+                        <MapPinIcon className="h-4 w-4 shrink-0 text-brand-purple" />
+                        <span className="font-semibold text-slate-800 truncate">{t.label}</span>
                       </div>
-                      <p className="mt-0.5 text-xs text-slate-500">
-                        Radius: <span className="font-medium">{t.radius_km} km</span>
-                        <span className="mx-1.5 text-slate-300">|</span>
-                        {t.lat.toFixed(3)}, {t.lng.toFixed(3)}
-                      </p>
+                      {(t.target_type || 'radius') === 'province' ? (
+                        <div className="mt-1.5 flex flex-wrap gap-1">
+                          {(t.provinces || []).map(p => (
+                            <span key={p} className="rounded-md bg-brand-purple/10 px-2 py-0.5 text-[11px] font-medium text-brand-purple">{p}</span>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="mt-0.5 text-xs text-slate-500">
+                          Radius: <span className="font-medium">{t.radius_km} km</span>
+                          {t.lat != null && t.lng != null && (
+                            <>
+                              <span className="mx-1.5 text-slate-300">|</span>
+                              {t.lat.toFixed(3)}, {t.lng.toFixed(3)}
+                            </>
+                          )}
+                        </p>
+                      )}
                     </div>
-                    <div className="flex items-center gap-1">
+                    <div className="flex shrink-0 items-center gap-1 ml-2">
                       <button onClick={() => toggleActive(t)}
                         className={`rounded-lg px-2 py-1 text-[11px] font-medium transition ${t.is_active ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
                         {t.is_active ? 'Actief' : 'Inactief'}

@@ -29,20 +29,39 @@ export async function POST(request: NextRequest) {
   const supabase = createServerClient();
   const body = await request.json();
 
-  const { customer_id, label, lat, lng, radius_km } = body;
-  if (!customer_id || !label || lat == null || lng == null) {
+  const { customer_id, label, target_type, lat, lng, radius_km, provinces } = body;
+  if (!customer_id || !label) {
     return NextResponse.json({ error: 'Vereiste velden ontbreken' }, { status: 400 });
+  }
+
+  const type = target_type || 'radius';
+
+  if (type === 'province') {
+    if (!Array.isArray(provinces) || provinces.length === 0) {
+      return NextResponse.json({ error: 'Selecteer minimaal 1 provincie' }, { status: 400 });
+    }
+    const { data, error } = await supabase
+      .from('customer_targets')
+      .insert({ customer_id, label, target_type: 'province', provinces, lat: null, lng: null, radius_km: 0 })
+      .select()
+      .single();
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    try { distributeUnassignedLeads(); } catch { /* non-blocking */ }
+    return NextResponse.json(data, { status: 201 });
+  }
+
+  if (lat == null || lng == null) {
+    return NextResponse.json({ error: 'Lat/lng is verplicht voor radius-targets' }, { status: 400 });
   }
 
   const { data, error } = await supabase
     .from('customer_targets')
-    .insert({ customer_id, label, lat, lng, radius_km: radius_km || 25 })
+    .insert({ customer_id, label, target_type: 'radius', lat, lng, radius_km: radius_km || 25 })
     .select()
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // Auto-distribute recent leads to this new target (non-blocking)
   try { distributeUnassignedLeads(); } catch { /* non-blocking */ }
 
   return NextResponse.json(data, { status: 201 });
