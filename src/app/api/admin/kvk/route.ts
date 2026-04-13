@@ -106,14 +106,17 @@ async function getDetail(kvkNummer: string) {
 
   const rsin = basisData?.rsin || hoofdvestiging?.rsin || '';
 
+  const parsed = bezoekAdres ? parseAdresFields(bezoekAdres) : { straatnaam: '', huisnummer: '', postcode: '', plaats: '' };
+
   return NextResponse.json({
     kvkNummer,
     naam,
     rsin,
     vestigingsnummer: vestigingsnummer || null,
-    adres: bezoekAdres
-      ? formatAdres(bezoekAdres)
-      : '',
+    straatnaam: parsed.straatnaam,
+    huisnummer: parsed.huisnummer,
+    postcode: parsed.postcode,
+    plaats: parsed.plaats,
     sbiActiviteiten: (vestigingData as Record<string, unknown[]>)?.sbiActiviteiten || basisData?.sbiActiviteiten || [],
   });
 }
@@ -128,25 +131,15 @@ function findBezoekadres(obj: Record<string, unknown> | null | undefined): Recor
   return null;
 }
 
-function formatPostcode(pc: string): string {
-  const raw = String(pc).replace(/\s/g, '');
-  if (/^\d{4}[A-Za-z]{2}$/.test(raw)) {
-    return `${raw.slice(0, 4)} ${raw.slice(4).toUpperCase()}`;
-  }
-  return pc;
-}
+function parseAdresFields(a: Record<string, unknown>): { straatnaam: string; huisnummer: string; postcode: string; plaats: string } {
+  const straat = String(a.straatnaam || '');
+  const nr = String(a.huisnummer || '');
+  const letter = String(a.huisletter || '');
+  const toev = String(a.huisnummerToevoeging || '');
+  const rawPc = String(a.postcode || '').replace(/\s/g, '');
+  const pc = /^\d{4}[A-Za-z]{2}$/.test(rawPc) ? `${rawPc.slice(0, 4)} ${rawPc.slice(4).toUpperCase()}` : String(a.postcode || '');
+  const plaats = String(a.plaats || '');
+  const huisnummer = `${nr}${letter}${toev ? `-${toev}` : ''}`.trim();
 
-function formatAdres(a: Record<string, unknown>): string {
-  if (a.volledigAdres) return String(a.volledigAdres);
-  const straat = a.straatnaam || '';
-  const nr = a.huisnummer || '';
-  const letter = a.huisletter || '';
-  const toev = a.huisnummerToevoeging || '';
-  const pc = a.postcode ? formatPostcode(String(a.postcode)) : '';
-  const plaats = a.plaats || '';
-
-  const streetPart = `${straat} ${nr}${letter}${toev ? `-${toev}` : ''}`.trim();
-  const cityPart = [pc, plaats].filter(Boolean).join('  ');
-
-  return [streetPart, cityPart].filter(Boolean).join('\n');
+  return { straatnaam: straat, huisnummer, postcode: pc, plaats };
 }

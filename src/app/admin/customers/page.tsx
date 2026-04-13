@@ -47,6 +47,10 @@ interface Customer {
   account_manager_id?: string | null;
   kvk_nummer?: string | null;
   address?: string | null;
+  street?: string | null;
+  house_number?: string | null;
+  postcode?: string | null;
+  city?: string | null;
   vat_id?: string | null;
 }
 
@@ -67,7 +71,10 @@ interface KvkDetail {
   naam: string;
   rsin: string;
   vestigingsnummer: string | null;
-  adres: string;
+  straatnaam: string;
+  huisnummer: string;
+  postcode: string;
+  plaats: string;
 }
 
 function getActivityStatus(c: Customer): { label: string; color: string; dotColor: string; sort: number } {
@@ -948,7 +955,10 @@ function CustomerForm({ customer, branchOptions, allCustomers, accountManagers, 
     account_manager_id: customer?.account_manager_id || '',
     bulk_price_per_lead: customer?.bulk_price_per_lead != null ? String(customer.bulk_price_per_lead) : '',
     kvk_nummer: customer?.kvk_nummer || '',
-    address: customer?.address || '',
+    street: customer?.street || '',
+    house_number: customer?.house_number || '',
+    postcode: customer?.postcode || '',
+    city: customer?.city || '',
     vat_id: customer?.vat_id || '',
   });
   const [saving, setSaving] = useState(false);
@@ -1028,16 +1038,12 @@ function CustomerForm({ customer, branchOptions, allCustomers, accountManagers, 
     }, 500);
   }, []);
 
+  const fmtPc = (pc: string) => { const raw = pc.replace(/\s/g, ''); return /^\d{4}[A-Za-z]{2}$/.test(raw) ? `${raw.slice(0, 4)} ${raw.slice(4).toUpperCase()}` : pc; };
+
   const selectKvkResult = useCallback(async (r: KvkResult) => {
     setKvkOpen(false);
     setKvkLoading(true);
     setKvkError('');
-
-    const fmtPc = (pc: string) => { const raw = pc.replace(/\s/g, ''); return /^\d{4}[A-Za-z]{2}$/.test(raw) ? `${raw.slice(0, 4)} ${raw.slice(4).toUpperCase()}` : pc; };
-    const searchAdres = [
-      [r.straatnaam, r.huisnummer].filter(Boolean).join(' '),
-      [r.postcode ? fmtPc(r.postcode) : '', r.plaats].filter(Boolean).join('  '),
-    ].filter(Boolean).join('\n');
 
     try {
       const res = await adminFetch(`/api/admin/kvk?kvk=${r.kvkNummer}`);
@@ -1047,7 +1053,10 @@ function CustomerForm({ customer, branchOptions, allCustomers, accountManagers, 
         ...f,
         name: detail.naam || f.name,
         kvk_nummer: detail.kvkNummer,
-        address: detail.adres || searchAdres || f.address,
+        street: detail.straatnaam || r.straatnaam || f.street,
+        house_number: detail.huisnummer || r.huisnummer || f.house_number,
+        postcode: fmtPc(detail.postcode || r.postcode || f.postcode),
+        city: detail.plaats || r.plaats || f.city,
       }));
       setKvkLinked(true);
       setKvkQuery('');
@@ -1056,7 +1065,10 @@ function CustomerForm({ customer, branchOptions, allCustomers, accountManagers, 
         ...f,
         name: r.naam || f.name,
         kvk_nummer: r.kvkNummer,
-        address: searchAdres || f.address,
+        street: r.straatnaam || f.street,
+        house_number: r.huisnummer || f.house_number,
+        postcode: fmtPc(r.postcode || f.postcode),
+        city: r.plaats || f.city,
       }));
       setKvkLinked(true);
       setKvkQuery('');
@@ -1084,12 +1096,15 @@ function CustomerForm({ customer, branchOptions, allCustomers, accountManagers, 
     setSaving(true);
     setError('');
     try {
-      const { password, bulk_price_per_lead: bulkStr, kvk_nummer, address: addr, vat_id: vat, ...rest } = form;
+      const { password, bulk_price_per_lead: bulkStr, kvk_nummer, street, house_number, postcode, city, vat_id: vat, ...rest } = form;
       const payload: Record<string, unknown> = { ...rest };
       if (password) payload.password = password;
       payload.bulk_price_per_lead = bulkStr ? parseFloat(bulkStr) : null;
       payload.kvk_nummer = kvk_nummer || null;
-      payload.address = addr || null;
+      payload.street = street || null;
+      payload.house_number = house_number || null;
+      payload.postcode = postcode || null;
+      payload.city = city || null;
       payload.vat_id = vat || null;
       const body = isEdit ? { id: customer!.id, ...payload } : payload;
       const res = await adminFetch('/api/admin/customers', {
@@ -1222,12 +1237,33 @@ function CustomerForm({ customer, branchOptions, allCustomers, accountManagers, 
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
             </div>
           </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500">Adres</label>
-            <textarea value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))}
-              placeholder={"Straatnaam 123\n1234 AB Plaats"}
-              rows={2}
-              className="w-full resize-none rounded-lg border border-slate-200 px-3 py-2 text-sm leading-relaxed text-slate-900 outline-none focus:border-brand-purple/50" />
+          <div className="grid grid-cols-[1fr_auto] gap-3">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-500">Straat</label>
+              <input value={form.street} onChange={e => setForm(f => ({ ...f, street: e.target.value }))}
+                placeholder="Straatnaam"
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-500">Nr.</label>
+              <input value={form.house_number} onChange={e => setForm(f => ({ ...f, house_number: e.target.value }))}
+                placeholder="13a"
+                className="w-20 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
+            </div>
+          </div>
+          <div className="grid grid-cols-[auto_1fr] gap-3">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-500">Postcode</label>
+              <input value={form.postcode} onChange={e => setForm(f => ({ ...f, postcode: e.target.value }))}
+                placeholder="1234 AB" maxLength={7}
+                className="w-28 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-500">Plaats</label>
+              <input value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))}
+                placeholder="Amsterdam"
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>

@@ -42,11 +42,16 @@ export async function POST(request: NextRequest) {
 
   const { data: customer } = await supabase
     .from('customers')
-    .select('id, name, email, address, vat_id, account_manager_id')
+    .select('id, name, email, street, house_number, postcode, city, vat_id, account_manager_id')
     .eq('id', customer_id)
     .single();
 
   if (!customer) return NextResponse.json({ error: 'Klant niet gevonden' }, { status: 404 });
+
+  const custAddress = [
+    [customer.street, customer.house_number].filter(Boolean).join(' '),
+    [customer.postcode, customer.city].filter(Boolean).join('  '),
+  ].filter(Boolean).join('\n') || null;
 
   if (admin.role === 'accountmanager' && customer.account_manager_id !== admin.id) {
     return NextResponse.json({ error: 'Geen toegang tot deze klant' }, { status: 403 });
@@ -93,7 +98,7 @@ export async function POST(request: NextRequest) {
       customer_id,
       customer_name: customer.name,
       customer_email: customer.email,
-      customer_address: customer.address || null,
+      customer_address: custAddress,
       customer_vat_id: customer.vat_id || null,
       description,
       line_items: items,

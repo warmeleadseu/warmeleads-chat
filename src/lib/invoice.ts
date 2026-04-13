@@ -64,13 +64,18 @@ export async function createInvoice(params: CreateInvoiceParams) {
 
   const { data: customer, error: custErr } = await supabase
     .from('customers')
-    .select('id, name, email, contact_person, address, vat_id, kvk_nummer')
+    .select('id, name, email, contact_person, street, house_number, postcode, city, vat_id, kvk_nummer')
     .eq('id', params.customer_id)
     .single();
 
   if (custErr || !customer) {
     throw new Error(custErr?.message || `Customer not found (id: ${params.customer_id})`);
   }
+
+  const customerAddress = [
+    [customer.street, customer.house_number].filter(Boolean).join(' '),
+    [customer.postcode, customer.city].filter(Boolean).join('  '),
+  ].filter(Boolean).join('\n') || null;
 
   const subtotal = Number(params.total_price);
   const btwPercentage = 21;
@@ -99,7 +104,7 @@ export async function createInvoice(params: CreateInvoiceParams) {
       batch_id: params.batch_id || null,
       customer_name: customer.name,
       customer_email: customer.email,
-      customer_address: customer.address || null,
+      customer_address: customerAddress,
       customer_kvk: customer.kvk_nummer || null,
       customer_vat_id: customer.vat_id || null,
       description: `${params.batch_size} ${params.branch_name} leads`,
