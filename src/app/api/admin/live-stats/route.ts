@@ -37,9 +37,16 @@ export async function GET(request: NextRequest) {
     supabase.from('leads').select('id', { count: 'exact', head: true }).neq('bron', 'excel_import').gte('created_at', todayStart).eq('phone_valid', false),
   ]);
 
+  const PROVINCE_ALIASES: Record<string, string> = {
+    'Fryslân': 'Friesland',
+    'Fryslan': 'Friesland',
+    'Fryslàn': 'Friesland',
+  };
+
   const provinceBreakdown: Record<string, number> = {};
   for (const r of (provincesRes.data || [])) {
     let p = r.provincie as string;
+    p = PROVINCE_ALIASES[p] || p;
     if (p === 'Limburg') {
       const pc = (r.postcode as string || '').replace(/\s/g, '');
       const isBelgian = /^\d{4}$/.test(pc);
