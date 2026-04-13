@@ -1351,7 +1351,7 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
   onClose: () => void; onCreated: () => void;
 }) {
   const [form, setForm] = useState({
-    customer_id: '', branch: '', batch_size: 100, is_paid: true,
+    customer_id: '', branch: '', batch_size: 100, is_paid: false,
     price_per_lead: '', leads_per_day: '', leads_per_week: '', lookback_days: '3', notes: '', lead_filters: [] as LeadFilter[],
   });
   const [saving, setSaving] = useState(false);
