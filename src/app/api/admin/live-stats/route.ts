@@ -197,21 +197,20 @@ export async function GET(request: NextRequest) {
     amBatchCount.set(amId, (amBatchCount.get(amId) || 0) + 1);
   }
 
-  let amLeaderboard: { id: string; name: string; revenue: number; batches: number; celebrationVideoUrl: string | null; avatarUrl: string | null }[] = [];
-  if (amRevenue.size > 0) {
-    const { data: leaderboardAMs } = await supabase
-      .from('admin_users')
-      .select('id, name, celebration_video_url, avatar_url')
-      .in('id', [...amRevenue.keys()]);
-    amLeaderboard = (leaderboardAMs || []).map(am => ({
-      id: am.id,
-      name: am.name,
-      revenue: amRevenue.get(am.id) || 0,
-      batches: amBatchCount.get(am.id) || 0,
-      celebrationVideoUrl: am.celebration_video_url,
-      avatarUrl: am.avatar_url,
-    })).sort((a, b) => b.revenue - a.revenue);
-  }
+  const { data: allAMs } = await supabase
+    .from('admin_users')
+    .select('id, name, celebration_video_url, avatar_url')
+    .eq('is_account_manager', true)
+    .eq('is_active', true);
+
+  const amLeaderboard = (allAMs || []).map(am => ({
+    id: am.id,
+    name: am.name,
+    revenue: amRevenue.get(am.id) || 0,
+    batches: amBatchCount.get(am.id) || 0,
+    celebrationVideoUrl: am.celebration_video_url,
+    avatarUrl: am.avatar_url,
+  })).sort((a, b) => b.revenue - a.revenue);
 
   // All period stats (leads, assignments, revenue, ad spend, profit) from a single RPC
   // to ensure consistent timestamps and eliminate timezone mismatches
