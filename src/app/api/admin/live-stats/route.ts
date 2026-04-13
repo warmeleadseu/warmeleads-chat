@@ -133,7 +133,7 @@ export async function GET(request: NextRequest) {
   const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
   const { data: recentPaidOrders } = await supabase
     .from('batch_orders')
-    .select('id, batch_id, total_price, paid_at, customer_batches(account_manager_id, customer_id, branch, customers(name, account_manager_id))')
+    .select('id, batch_id, total_price, paid_at, customer_batches!batch_orders_batch_id_fkey(account_manager_id, customer_id, branch, customers(name, account_manager_id))')
     .eq('status', 'paid')
     .gte('paid_at', tenMinAgo)
     .order('paid_at', { ascending: false })
@@ -184,7 +184,7 @@ export async function GET(request: NextRequest) {
   const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
   const { data: monthlyOrders } = await supabase
     .from('batch_orders')
-    .select('total_price, customer_batches(account_manager_id, customer_id, customers(account_manager_id))')
+    .select('total_price, customer_batches!batch_orders_batch_id_fkey(account_manager_id, customer_id, customers(account_manager_id))')
     .eq('status', 'paid')
     .gte('paid_at', monthStart);
 
