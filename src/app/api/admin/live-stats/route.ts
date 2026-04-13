@@ -232,7 +232,10 @@ export async function GET(request: NextRequest) {
   }
 
   const periods = ['day', '3days', 'week', 'month', 'quarter', 'year'] as const;
-  const periodStats: Record<string, { leads: number; prevLeads: number; assigned: number; prevAssigned: number }> = {};
+  const periodStats: Record<string, { leads: number; prevLeads: number; assigned: number; prevAssigned: number; revenue: number; prevRevenue: number; adSpend: number; prevAdSpend: number; profit: number; prevProfit: number }> = {};
+
+  // Fetch period profit stats in parallel with period lead/assignment counts
+  const periodProfitPromise = supabase.rpc('period_profit_stats');
 
   for (const p of periods) {
     const start = periodStart(p).toISOString();
@@ -250,7 +253,24 @@ export async function GET(request: NextRequest) {
       prevLeads: leadsPrev.count || 0,
       assigned: assignNow.count || 0,
       prevAssigned: assignPrev.count || 0,
+      revenue: 0, prevRevenue: 0, adSpend: 0, prevAdSpend: 0, profit: 0, prevProfit: 0,
     };
+  }
+
+  // Merge profit data into period stats
+  const { data: profitData } = await periodProfitPromise;
+  if (profitData) {
+    for (const key of Object.keys(profitData)) {
+      const pp = profitData[key];
+      if (periodStats[key] && pp) {
+        periodStats[key].revenue = Math.round((Number(pp.revenue) || 0) * 100) / 100;
+        periodStats[key].prevRevenue = Math.round((Number(pp.prev_revenue) || 0) * 100) / 100;
+        periodStats[key].adSpend = Math.round((Number(pp.ad_spend) || 0) * 100) / 100;
+        periodStats[key].prevAdSpend = Math.round((Number(pp.prev_ad_spend) || 0) * 100) / 100;
+        periodStats[key].profit = Math.round((Number(pp.profit) || 0) * 100) / 100;
+        periodStats[key].prevProfit = Math.round((Number(pp.prev_profit) || 0) * 100) / 100;
+      }
+    }
   }
 
   return NextResponse.json({

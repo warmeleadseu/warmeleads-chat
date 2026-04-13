@@ -33,7 +33,7 @@ const BRANCH_COLORS: Record<string, { bar: string; glow: string; badge: string; 
 };
 const DEFAULT_BRANCH = { bar: 'from-purple-400 to-purple-500', glow: 'shadow-purple-500/30', badge: 'bg-purple-500/20 text-purple-300', fill: '#a78bfa' };
 
-interface PeriodStat { leads: number; prevLeads: number; assigned: number; prevAssigned: number; }
+interface PeriodStat { leads: number; prevLeads: number; assigned: number; prevAssigned: number; revenue: number; prevRevenue: number; adSpend: number; prevAdSpend: number; profit: number; prevProfit: number; }
 interface BatchInfo { id: string; customer: string; branch: string; batchSize: number; delivered: number; pricePerLead: number | null; leadsPerWeek: number | null; notes: string | null; }
 interface RecentLead { id: string; name: string; branch: string; city: string; province: string; createdAt: string; }
 interface CostMetrics { monthAdSpend: number; brutoCpl: number; effectieveCpl: number; avgAssignments: number; batchRevenue: number; bulkRevenue: number; bulkAssignmentCount: number; totalProfit: number; }
@@ -2176,11 +2176,12 @@ export default function LiveDashboard() {
           </motion.div>
         )}
 
-        {/* Period comparison */}
+        {/* Period comparison — two rows: leads + profit */}
         <div className="grid shrink-0 grid-cols-3 gap-2 lg:grid-cols-6">
           {Object.entries(PERIOD_LABELS).map(([key, label], i) => {
             const stat = ps[key];
             if (!stat) return null;
+            const profitPositive = stat.profit >= 0;
             return (
               <motion.div
                 key={key}
@@ -2201,6 +2202,20 @@ export default function LiveDashboard() {
                       {Math.round((stat.assigned / stat.leads) * 100)}%
                     </span>
                   )}
+                </div>
+                {/* Profit line */}
+                <div className="mt-2 border-t border-white/[0.04] pt-2">
+                  <div className="flex items-baseline gap-1.5">
+                    <span className={`text-sm font-black tabular-nums ${profitPositive ? 'text-emerald-400/90' : 'text-red-400/90'}`}>
+                      {profitPositive ? '+' : ''}&euro;{Math.round(stat.profit).toLocaleString('nl-NL')}
+                    </span>
+                    <TrendArrow current={stat.profit} previous={stat.prevProfit} />
+                  </div>
+                  <div className="mt-0.5 flex items-center gap-1 text-[9px] text-white/20">
+                    <span>&euro;{Math.round(stat.revenue).toLocaleString('nl-NL')}</span>
+                    <span className="text-white/10">-</span>
+                    <span>&euro;{Math.round(stat.adSpend).toLocaleString('nl-NL')}</span>
+                  </div>
                 </div>
               </motion.div>
             );
