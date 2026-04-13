@@ -18,6 +18,13 @@ import {
   CheckCircleIcon,
   CalendarDaysIcon,
   ClockIcon,
+  DocumentTextIcon,
+  ArrowDownTrayIcon,
+  DocumentDuplicateIcon,
+  CheckBadgeIcon,
+  ExclamationCircleIcon,
+  InformationCircleIcon,
+  ShoppingCartIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
 import { mergeCustomTiers } from '@/lib/pricing';
@@ -114,6 +121,7 @@ export default function BatchesPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [editBatch, setEditBatch] = useState<Batch | null>(null);
+  const [detailBatchId, setDetailBatchId] = useState<string | null>(null);
   const [toast, setToast] = useState('');
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
@@ -345,7 +353,7 @@ export default function BatchesPage() {
                   const c = COLOR_MAP[br.color] || COLOR_MAP.slate;
                   const compTotal = (Array.isArray(b.compensations) ? b.compensations : []).reduce((s: number, x: Compensation) => s + x.amount, 0);
                   return (
-                    <tr key={b.id} className="group transition hover:bg-slate-50/50">
+                    <tr key={b.id} onClick={() => setDetailBatchId(b.id)} className="group cursor-pointer transition hover:bg-slate-50/50">
                       <td className="px-4 py-3">
                         <p className="font-medium text-slate-900">{b.customers?.name || 'Onbekend'}</p>
                         <p className="text-[11px] text-slate-400">{new Date(b.created_at).toLocaleDateString('nl-NL')}</p>
@@ -405,17 +413,17 @@ export default function BatchesPage() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-1">
-                          <button onClick={() => setEditBatch(b)} title="Bewerken"
+                          <button onClick={e => { e.stopPropagation(); setEditBatch(b); }} title="Bewerken"
                             className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-brand-purple">
                             <PencilSquareIcon className="h-4 w-4" />
                           </button>
                           {b.status !== 'completed' && (
-                            <button onClick={() => toggleStatus(b)} title={b.status === 'active' ? 'Pauzeren' : 'Heractiveren'}
+                            <button onClick={e => { e.stopPropagation(); toggleStatus(b); }} title={b.status === 'active' ? 'Pauzeren' : 'Heractiveren'}
                               className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-amber-600">
                               {b.status === 'active' ? <PauseIcon className="h-4 w-4" /> : <PlayIcon className="h-4 w-4" />}
                             </button>
                           )}
-                          <button onClick={() => removeBatch(b)} title="Verwijderen"
+                          <button onClick={e => { e.stopPropagation(); removeBatch(b); }} title="Verwijderen"
                             className="rounded-lg p-1.5 text-slate-400 transition hover:bg-red-50 hover:text-red-500">
                             <TrashIcon className="h-4 w-4" />
                           </button>
@@ -436,7 +444,7 @@ export default function BatchesPage() {
               const c = COLOR_MAP[br.color] || COLOR_MAP.slate;
               const mobileCompTotal = (Array.isArray(b.compensations) ? b.compensations : []).reduce((s: number, x: Compensation) => s + x.amount, 0);
               return (
-                <div key={b.id} className={`rounded-xl border p-4 shadow-sm ${b.status === 'completed' ? 'border-blue-100 bg-blue-50/30' : b.status === 'paused' ? 'border-amber-100 bg-amber-50/20' : 'border-slate-200 bg-white'}`}>
+                <div key={b.id} onClick={() => setDetailBatchId(b.id)} className={`cursor-pointer rounded-xl border p-4 shadow-sm transition hover:shadow-md ${b.status === 'completed' ? 'border-blue-100 bg-blue-50/30' : b.status === 'paused' ? 'border-amber-100 bg-amber-50/20' : 'border-slate-200 bg-white'}`}>
                   <div className="mb-2 flex items-start justify-between">
                     <div>
                       <p className="font-semibold text-slate-900">{b.customers?.name || 'Onbekend'}</p>
@@ -453,15 +461,15 @@ export default function BatchesPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-0.5">
-                      <button onClick={() => setEditBatch(b)} className="rounded-lg p-2.5 text-slate-400 hover:bg-slate-100 hover:text-brand-purple">
+                      <button onClick={e => { e.stopPropagation(); setEditBatch(b); }} className="rounded-lg p-2.5 text-slate-400 hover:bg-slate-100 hover:text-brand-purple">
                         <PencilSquareIcon className="h-4 w-4" />
                       </button>
                       {b.status !== 'completed' && (
-                        <button onClick={() => toggleStatus(b)} className="rounded-lg p-2.5 text-slate-400 hover:bg-slate-100 hover:text-amber-600">
+                        <button onClick={e => { e.stopPropagation(); toggleStatus(b); }} className="rounded-lg p-2.5 text-slate-400 hover:bg-slate-100 hover:text-amber-600">
                           {b.status === 'active' ? <PauseIcon className="h-4 w-4" /> : <PlayIcon className="h-4 w-4" />}
                         </button>
                       )}
-                      <button onClick={() => removeBatch(b)} className="rounded-lg p-2.5 text-slate-400 hover:bg-red-50 hover:text-red-500">
+                      <button onClick={e => { e.stopPropagation(); removeBatch(b); }} className="rounded-lg p-2.5 text-slate-400 hover:bg-red-50 hover:text-red-500">
                         <TrashIcon className="h-4 w-4" />
                       </button>
                     </div>
@@ -506,6 +514,18 @@ export default function BatchesPage() {
         </>
       )}
 
+      {/* Detail slide-over */}
+      <AnimatePresence>
+        {detailBatchId && (
+          <BatchDetailPanel
+            batchId={detailBatchId}
+            branches={branches}
+            onClose={() => setDetailBatchId(null)}
+            onEdit={(b) => { setDetailBatchId(null); setEditBatch(b); }}
+          />
+        )}
+      </AnimatePresence>
+
       {/* Edit slide-over */}
       <AnimatePresence>
         {editBatch && (
@@ -531,6 +551,378 @@ export default function BatchesPage() {
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+/* ─── Detail Panel ────────────────────────────────────────── */
+interface OrderInfo { id: string; branch: string; batch_size: number; price_per_lead: number; total_price: number; status: string; mollie_payment_id: string | null; created_at: string; paid_at: string | null }
+interface InvoiceInfo { id: string; invoice_number: string | null; description: string | null; subtotal: number; btw_percentage: number; btw_amount: number; total_incl_btw: number; status: string; paid_at: string | null; created_at: string; uploaded_pdf_path: string | null }
+
+function BatchDetailPanel({ batchId, branches, onClose, onEdit }: {
+  batchId: string; branches: BranchOption[];
+  onClose: () => void; onEdit: (b: Batch) => void;
+}) {
+  const [batch, setBatch] = useState<Batch | null>(null);
+  const [orders, setOrders] = useState<OrderInfo[]>([]);
+  const [invoices, setInvoices] = useState<InvoiceInfo[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [copied, setCopied] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    adminFetch(`/api/admin/batches/${batchId}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (d) {
+          setBatch(d.batch);
+          setOrders(d.orders || []);
+          setInvoices(d.invoices || []);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [batchId]);
+
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(label);
+    setTimeout(() => setCopied(null), 2000);
+  };
+
+  const getBranch = (slug: string) => {
+    const br = branches.find(b => b.slug === slug);
+    return { name: br?.name || slug, color: br?.color || 'slate' };
+  };
+
+  const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' });
+  const fmtDateTime = (iso: string) => new Date(iso).toLocaleString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const fmtCurrency = (n: number) => `€${Number(n).toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  const ORDER_STATUS_MAP: Record<string, { label: string; cls: string }> = {
+    paid: { label: 'Betaald', cls: 'bg-emerald-100 text-emerald-700' },
+    pending: { label: 'In afwachting', cls: 'bg-amber-100 text-amber-700' },
+    failed: { label: 'Mislukt', cls: 'bg-red-100 text-red-700' },
+    expired: { label: 'Verlopen', cls: 'bg-slate-100 text-slate-600' },
+    cancelled: { label: 'Geannuleerd', cls: 'bg-slate-100 text-slate-600' },
+  };
+
+  const INV_STATUS_MAP: Record<string, { label: string; cls: string }> = {
+    paid: { label: 'Betaald', cls: 'bg-emerald-100 text-emerald-700' },
+    open: { label: 'Open', cls: 'bg-amber-100 text-amber-700' },
+    credit_note: { label: 'Creditnota', cls: 'bg-blue-100 text-blue-700' },
+  };
+
+  return (
+    <>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm" onClick={onClose} />
+      <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
+        transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+        className="fixed inset-y-0 right-0 z-[60] flex w-full max-w-lg flex-col bg-white shadow-2xl">
+
+        {/* Header bar */}
+        <div className="shrink-0 border-b border-slate-100">
+          <div className="h-[3px] bg-warmeleads-gradient" />
+          <div className="flex items-center justify-between px-5 py-4">
+            <div>
+              <h2 className="text-lg font-bold text-slate-900">Batch details</h2>
+              {batch && (
+                <p className="mt-0.5 text-xs text-slate-500">{batch.customers?.name || 'Onbekend'} &middot; {getBranch(batch.branch).name}</p>
+              )}
+            </div>
+            <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100">
+              <XMarkIcon className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-5 space-y-5">
+          {loading ? (
+            <div className="space-y-4">
+              {[1, 2, 3, 4].map(i => (
+                <div key={i} className="space-y-2">
+                  <div className="h-3 w-24 animate-pulse rounded bg-slate-100" />
+                  <div className="h-16 animate-pulse rounded-lg bg-slate-100" />
+                </div>
+              ))}
+            </div>
+          ) : !batch ? (
+            <div className="rounded-xl border border-dashed border-slate-300 py-12 text-center">
+              <ExclamationCircleIcon className="mx-auto mb-2 h-8 w-8 text-slate-300" />
+              <p className="text-sm font-medium text-slate-500">Batch niet gevonden</p>
+            </div>
+          ) : (() => {
+            const pct = batch.batch_size > 0 ? Math.min(100, Math.round((batch.leads_delivered / batch.batch_size) * 100)) : 0;
+            const br = getBranch(batch.branch);
+            const c = COLOR_MAP[br.color] || COLOR_MAP.slate;
+            const compensations: Compensation[] = Array.isArray(batch.compensations) ? batch.compensations : [];
+            const totalComp = compensations.reduce((s, x) => s + x.amount, 0);
+            const durationDays = batch.completed_at && batch.created_at
+              ? Math.round((new Date(batch.completed_at).getTime() - new Date(batch.created_at).getTime()) / 86400000)
+              : null;
+
+            return (
+              <>
+                {/* Status + meta */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${c.light} ${c.text}`}>{br.name}</span>
+                  <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_COLORS[batch.status] || 'bg-slate-100 text-slate-600'}`}>{STATUS_LABELS[batch.status] || batch.status}</span>
+                  {batch.is_paid ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
+                      <CheckBadgeIcon className="h-3.5 w-3.5" /> Betaald
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-1 text-xs font-medium text-red-600">
+                      <ExclamationCircleIcon className="h-3.5 w-3.5" /> Onbetaald
+                    </span>
+                  )}
+                </div>
+
+                <div className="text-xs text-slate-400">
+                  Aangemaakt op {fmtDate(batch.created_at)}
+                  {batch.completed_at && (
+                    <> &middot; Afgerond op {fmtDate(batch.completed_at)}{durationDays !== null && <> &middot; {durationDays} {durationDays === 1 ? 'dag' : 'dagen'}</>}</>
+                  )}
+                  {batch.starts_at && startsAtInFuture(batch.starts_at) && (
+                    <> &middot; <span className="font-medium text-amber-600">Start {formatStartsAt(batch.starts_at)}</span></>
+                  )}
+                </div>
+
+                {/* Progress */}
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="mb-2 flex items-baseline justify-between">
+                    <div>
+                      <span className="text-lg font-bold text-slate-900">{batch.leads_delivered}</span>
+                      <span className="text-sm text-slate-400"> / {batch.batch_size} geleverd</span>
+                      {totalComp > 0 && (
+                        <span className="ml-2 text-xs font-medium text-emerald-600">+{totalComp} compensatie</span>
+                      )}
+                    </div>
+                    <span className="text-sm font-bold text-slate-600">{pct}%</span>
+                  </div>
+                  <div className="h-3 overflow-hidden rounded-full bg-slate-200">
+                    <div className={`h-full rounded-full transition-all ${pct >= 100 ? 'bg-blue-500' : pct >= 75 ? 'bg-emerald-500' : pct >= 50 ? 'bg-amber-500' : 'bg-brand-purple'}`}
+                      style={{ width: `${pct}%` }} />
+                  </div>
+                  {batch.leads_delivered > batch.batch_size && (
+                    <p className="mt-1.5 text-[11px] font-medium text-amber-600">Overlevering: {batch.leads_delivered - batch.batch_size} extra leads geleverd</p>
+                  )}
+                  {compensations.length > 0 && (
+                    <div className="mt-3 border-t border-slate-200 pt-3">
+                      <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Compensaties</p>
+                      <div className="space-y-1">
+                        {compensations.map((comp, i) => (
+                          <div key={i} className="flex items-center justify-between text-[11px]">
+                            <div className="flex items-center gap-2">
+                              <span className="rounded-full bg-brand-purple/10 px-2 py-0.5 font-bold text-brand-purple">+{comp.amount}</span>
+                              <span className="text-slate-600">{comp.reason || 'Geen reden'}</span>
+                            </div>
+                            <span className="text-slate-400">{new Date(comp.date).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Financial */}
+                <div>
+                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Financieel</p>
+                  <div className="rounded-xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-4">
+                    {batch.price_per_lead ? (
+                      <div className="space-y-3">
+                        <div className="flex items-baseline justify-between">
+                          <span className="text-sm text-slate-500">Orderbedrag</span>
+                          <span className="text-xl font-bold text-slate-900">{fmtCurrency(Number(batch.total_price) || (batch.batch_size * batch.price_per_lead))}</span>
+                        </div>
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-slate-400">{batch.batch_size} leads &times; {fmtCurrency(batch.price_per_lead)}</span>
+                          <span className="text-[11px] text-slate-400">excl. BTW</span>
+                        </div>
+                        <div className="border-t border-slate-100 pt-3">
+                          {batch.is_paid ? (
+                            <div className="flex items-center gap-2">
+                              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-100">
+                                <CheckBadgeIcon className="h-4 w-4 text-emerald-600" />
+                              </div>
+                              <div>
+                                <p className="text-sm font-medium text-emerald-700">Betaald</p>
+                                {orders.find(o => o.status === 'paid')?.paid_at && (
+                                  <p className="text-[11px] text-slate-400">op {fmtDateTime(orders.find(o => o.status === 'paid')!.paid_at!)}</p>
+                                )}
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-red-100">
+                                <ExclamationCircleIcon className="h-4 w-4 text-red-500" />
+                              </div>
+                              <div>
+                                <p className="text-sm font-medium text-red-600">Onbetaald</p>
+                                <p className="text-[11px] text-slate-400">Klant kan via portaal betalen</p>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 text-sm text-slate-400">
+                        <InformationCircleIcon className="h-4 w-4" />
+                        <span>Geen prijs ingesteld voor deze batch</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Orders */}
+                <div>
+                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    Bestellingen {orders.length > 0 && <span className="normal-case text-slate-300">({orders.length})</span>}
+                  </p>
+                  {orders.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 px-4 py-6 text-center">
+                      <ShoppingCartIcon className="mx-auto mb-1.5 h-6 w-6 text-slate-300" />
+                      <p className="text-xs text-slate-400">Geen bestellingen — batch is handmatig aangemaakt</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {orders.map(o => {
+                        const os = ORDER_STATUS_MAP[o.status] || { label: o.status, cls: 'bg-slate-100 text-slate-600' };
+                        return (
+                          <div key={o.id} className="rounded-xl border border-slate-200 bg-white p-3">
+                            <div className="flex items-start justify-between">
+                              <div>
+                                <p className="text-sm font-medium text-slate-800">{fmtCurrency(Number(o.total_price))}</p>
+                                <p className="text-[11px] text-slate-400">{fmtDateTime(o.created_at)}</p>
+                              </div>
+                              <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${os.cls}`}>{os.label}</span>
+                            </div>
+                            {o.paid_at && (
+                              <p className="mt-1 text-[11px] text-emerald-600">Betaald op {fmtDateTime(o.paid_at)}</p>
+                            )}
+                            {o.mollie_payment_id && (
+                              <button onClick={() => copyToClipboard(o.mollie_payment_id!, o.id)}
+                                className="mt-1.5 inline-flex items-center gap-1 rounded bg-slate-50 px-2 py-0.5 text-[10px] font-mono text-slate-500 transition hover:bg-slate-100">
+                                <DocumentDuplicateIcon className="h-3 w-3" />
+                                {copied === o.id ? 'Gekopieerd!' : o.mollie_payment_id}
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Invoices */}
+                <div>
+                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    Facturen {invoices.length > 0 && <span className="normal-case text-slate-300">({invoices.length})</span>}
+                  </p>
+                  {invoices.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 px-4 py-6 text-center">
+                      <DocumentTextIcon className="mx-auto mb-1.5 h-6 w-6 text-slate-300" />
+                      <p className="text-xs text-slate-400">Geen facturen gekoppeld aan deze batch</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {invoices.map(inv => {
+                        const is = INV_STATUS_MAP[inv.status] || { label: inv.status, cls: 'bg-slate-100 text-slate-600' };
+                        return (
+                          <div key={inv.id} className="rounded-xl border border-slate-200 bg-white p-3">
+                            <div className="flex items-start justify-between">
+                              <div>
+                                <p className="text-sm font-medium text-slate-800">
+                                  {inv.invoice_number || 'Geen nummer'}
+                                </p>
+                                <p className="text-[11px] text-slate-400">{fmtDate(inv.created_at)}</p>
+                              </div>
+                              <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${is.cls}`}>{is.label}</span>
+                            </div>
+                            <div className="mt-2 flex items-center gap-3 text-[11px] text-slate-500">
+                              <span>Subtotaal {fmtCurrency(Number(inv.subtotal))}</span>
+                              <span className="text-slate-300">&middot;</span>
+                              <span>BTW {inv.btw_percentage}% {fmtCurrency(Number(inv.btw_amount))}</span>
+                              <span className="text-slate-300">&middot;</span>
+                              <span className="font-semibold text-slate-700">Totaal {fmtCurrency(Number(inv.total_incl_btw))}</span>
+                            </div>
+                            {inv.paid_at && (
+                              <p className="mt-1 text-[11px] text-emerald-600">Betaald op {fmtDateTime(inv.paid_at)}</p>
+                            )}
+                            <div className="mt-2">
+                              <a href={`/api/invoices/${inv.id}/pdf`} target="_blank" rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 hover:text-brand-purple">
+                                <ArrowDownTrayIcon className="h-3.5 w-3.5" /> Download PDF
+                              </a>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Settings */}
+                <div>
+                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Instellingen</p>
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <p className="text-[11px] font-medium text-slate-400">Max per dag</p>
+                        <p className="font-medium text-slate-700">{batch.leads_per_day || '∞'}</p>
+                      </div>
+                      <div>
+                        <p className="text-[11px] font-medium text-slate-400">Max per week</p>
+                        <p className="font-medium text-slate-700">{batch.leads_per_week || '∞'}</p>
+                      </div>
+                      {batch.lookback_days !== null && batch.lookback_days !== undefined && (
+                        <div>
+                          <p className="text-[11px] font-medium text-slate-400">Lookback</p>
+                          <p className="font-medium text-slate-700">{batch.lookback_days === 0 ? 'Geen' : `${batch.lookback_days} dagen`}</p>
+                        </div>
+                      )}
+                      <div>
+                        <p className="text-[11px] font-medium text-slate-400">Startdatum</p>
+                        <p className="font-medium text-slate-700">{batch.starts_at ? formatStartsAt(batch.starts_at) : 'Direct gestart'}</p>
+                      </div>
+                    </div>
+                    {batch.lead_filters && batch.lead_filters.length > 0 && (
+                      <div className="mt-3 border-t border-slate-200 pt-3">
+                        <p className="mb-1.5 text-[11px] font-medium text-slate-400">Lead filters</p>
+                        <div className="flex flex-wrap gap-1">
+                          {batch.lead_filters.map((f, i) => (
+                            <span key={i} className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                              {f.field}: {f.values?.length || 0} waarden
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {batch.notes && (
+                      <div className="mt-3 border-t border-slate-200 pt-3">
+                        <p className="mb-1 text-[11px] font-medium text-slate-400">Notities</p>
+                        <p className="text-sm text-slate-600">{batch.notes}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </>
+            );
+          })()}
+        </div>
+
+        {/* Action bar */}
+        {batch && (
+          <div className="shrink-0 border-t border-slate-100 px-5 py-4">
+            <button onClick={() => onEdit(batch)}
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-button-gradient py-2.5 text-sm font-bold text-white">
+              <PencilSquareIcon className="h-4 w-4" /> Bewerken
+            </button>
+          </div>
+        )}
+      </motion.div>
+    </>
   );
 }
 
