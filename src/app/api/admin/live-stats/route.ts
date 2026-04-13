@@ -2,40 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 
-function periodStart(period: string): Date {
+function todayMidnight(): Date {
   const now = new Date();
-  switch (period) {
-    case 'day': return new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    case '3days': return new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
-    case 'week': {
-      const d = new Date(now);
-      d.setDate(d.getDate() - d.getDay() + (d.getDay() === 0 ? -6 : 1));
-      d.setHours(0, 0, 0, 0);
-      return d;
-    }
-    case 'month': return new Date(now.getFullYear(), now.getMonth(), 1);
-    case 'quarter': return new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1);
-    case 'year': return new Date(now.getFullYear(), 0, 1);
-    default: return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-  }
-}
-
-function prevPeriodStart(period: string): Date {
-  const now = new Date();
-  switch (period) {
-    case 'day': return new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
-    case '3days': return new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000);
-    case 'week': {
-      const d = new Date(now);
-      d.setDate(d.getDate() - d.getDay() + (d.getDay() === 0 ? -6 : 1) - 7);
-      d.setHours(0, 0, 0, 0);
-      return d;
-    }
-    case 'month': return new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    case 'quarter': return new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3 - 3, 1);
-    case 'year': return new Date(now.getFullYear() - 1, 0, 1);
-    default: return new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
-  }
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate());
 }
 
 export async function GET(request: NextRequest) {
@@ -44,7 +13,7 @@ export async function GET(request: NextRequest) {
 
   const supabase = createServerClient();
 
-  const todayStart = periodStart('day').toISOString();
+  const todayStart = todayMidnight().toISOString();
 
   const [
     totalLeadsRes,
@@ -244,44 +213,27 @@ export async function GET(request: NextRequest) {
     })).sort((a, b) => b.revenue - a.revenue);
   }
 
-  const periods = ['day', '3days', 'week', 'month', 'quarter', 'year'] as const;
+  // All period stats (leads, assignments, revenue, ad spend, profit) from a single RPC
+  // to ensure consistent timestamps and eliminate timezone mismatches
   const periodStats: Record<string, { leads: number; prevLeads: number; assigned: number; prevAssigned: number; revenue: number; prevRevenue: number; adSpend: number; prevAdSpend: number; profit: number; prevProfit: number }> = {};
 
-  // Fetch period profit stats in parallel with period lead/assignment counts
-  const periodProfitPromise = supabase.rpc('period_profit_stats');
-
-  for (const p of periods) {
-    const start = periodStart(p).toISOString();
-    const prev = prevPeriodStart(p).toISOString();
-
-    const [leadsNow, leadsPrev, assignNow, assignPrev] = await Promise.all([
-      supabase.from('leads').select('id', { count: 'exact', head: true }).neq('bron', 'excel_import').gte('created_at', start),
-      supabase.from('leads').select('id', { count: 'exact', head: true }).neq('bron', 'excel_import').gte('created_at', prev).lt('created_at', start),
-      supabase.from('lead_assignments').select('id', { count: 'exact', head: true }).gte('assigned_at', start),
-      supabase.from('lead_assignments').select('id', { count: 'exact', head: true }).gte('assigned_at', prev).lt('assigned_at', start),
-    ]);
-
-    periodStats[p] = {
-      leads: leadsNow.count || 0,
-      prevLeads: leadsPrev.count || 0,
-      assigned: assignNow.count || 0,
-      prevAssigned: assignPrev.count || 0,
-      revenue: 0, prevRevenue: 0, adSpend: 0, prevAdSpend: 0, profit: 0, prevProfit: 0,
-    };
-  }
-
-  // Merge profit data into period stats
-  const { data: profitData } = await periodProfitPromise;
+  const { data: profitData } = await supabase.rpc('period_profit_stats');
   if (profitData) {
     for (const key of Object.keys(profitData)) {
       const pp = profitData[key];
-      if (periodStats[key] && pp) {
-        periodStats[key].revenue = Math.round((Number(pp.revenue) || 0) * 100) / 100;
-        periodStats[key].prevRevenue = Math.round((Number(pp.prev_revenue) || 0) * 100) / 100;
-        periodStats[key].adSpend = Math.round((Number(pp.ad_spend) || 0) * 100) / 100;
-        periodStats[key].prevAdSpend = Math.round((Number(pp.prev_ad_spend) || 0) * 100) / 100;
-        periodStats[key].profit = Math.round((Number(pp.profit) || 0) * 100) / 100;
-        periodStats[key].prevProfit = Math.round((Number(pp.prev_profit) || 0) * 100) / 100;
+      if (pp) {
+        periodStats[key] = {
+          leads: Number(pp.leads) || 0,
+          prevLeads: Number(pp.prev_leads) || 0,
+          assigned: Number(pp.assigned) || 0,
+          prevAssigned: Number(pp.prev_assigned) || 0,
+          revenue: Math.round((Number(pp.revenue) || 0) * 100) / 100,
+          prevRevenue: Math.round((Number(pp.prev_revenue) || 0) * 100) / 100,
+          adSpend: Math.round((Number(pp.ad_spend) || 0) * 100) / 100,
+          prevAdSpend: Math.round((Number(pp.prev_ad_spend) || 0) * 100) / 100,
+          profit: Math.round((Number(pp.profit) || 0) * 100) / 100,
+          prevProfit: Math.round((Number(pp.prev_profit) || 0) * 100) / 100,
+        };
       }
     }
   }
