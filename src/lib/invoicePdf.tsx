@@ -1,5 +1,5 @@
 import React from 'react';
-import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
+import { Document, Page, Text, View, Image, StyleSheet } from '@react-pdf/renderer';
 
 const BRAND = '#7C3AED';
 const BRAND_LIGHT = '#F5F3FF';
@@ -7,7 +7,8 @@ const BRAND_LIGHT = '#F5F3FF';
 const s = StyleSheet.create({
   page: { padding: 40, fontSize: 9, fontFamily: 'Helvetica', color: '#1E293B' },
   header: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 30 },
-  logo: { fontSize: 22, fontWeight: 700, color: BRAND, fontFamily: 'Helvetica-Bold' },
+  logoImage: { width: 130, height: 'auto' as unknown as number },
+  logoFallback: { fontSize: 22, fontWeight: 700, color: BRAND, fontFamily: 'Helvetica-Bold' },
   invoiceTitle: { fontSize: 24, fontWeight: 700, color: '#0F172A', textAlign: 'right', fontFamily: 'Helvetica-Bold' },
   invoiceMeta: { textAlign: 'right', marginTop: 4, fontSize: 9, color: '#64748B' },
 
@@ -49,6 +50,7 @@ export interface InvoiceData {
   created_at: string;
   paid_at: string | null;
 
+  logo_url?: string;
   company_name: string;
   company_address: string;
   company_postcode: string;
@@ -89,7 +91,11 @@ export function InvoicePdf({ data }: { data: InvoiceData }) {
         {/* Header */}
         <View style={s.header}>
           <View>
-            <Text style={s.logo}>{data.company_name}</Text>
+            {data.logo_url ? (
+              <Image src={data.logo_url} style={s.logoImage} />
+            ) : (
+              <Text style={s.logoFallback}>{data.company_name}</Text>
+            )}
             <Text style={{ ...s.value, marginTop: 4, color: '#64748B', fontSize: 8 }}>
               {[data.company_address, `${data.company_postcode} ${data.company_city}`.trim()].filter(Boolean).join('\n')}
             </Text>

@@ -55,11 +55,14 @@ export async function GET(
   const map: Record<string, string> = {};
   (settings || []).forEach(r => { map[r.key] = r.value || ''; });
 
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.warmeleads.eu';
+
   const invoiceData: InvoiceData = {
     invoice_number: invoice.invoice_number,
     created_at: invoice.created_at,
     paid_at: invoice.paid_at,
 
+    logo_url: `${siteUrl}/warmeleads-logo-2026.png`,
     company_name: map.company_name || 'WarmeLeads',
     company_address: map.company_address || '',
     company_postcode: map.company_postcode || '',
