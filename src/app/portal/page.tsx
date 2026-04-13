@@ -110,6 +110,7 @@ interface Lead {
   received_at?: string;
   created_at: string;
   bron: string;
+  distance_km?: number | null;
   custom_fields?: Record<string, string>;
   [key: string]: unknown;
 }
@@ -145,7 +146,7 @@ function TableSkeleton() {
         <table className="w-full">
           <thead>
             <tr className="border-b border-slate-100 bg-slate-50/50">
-              {['Naam', 'Plaats', 'Branche', 'Status', 'Datum', 'Contact'].map(h => (
+              {['Naam', 'Plaats', 'Afstand', 'Branche', 'Status', 'Datum', 'Contact'].map(h => (
                 <th key={h} className="px-4 py-3 text-left text-xs font-medium text-slate-400">{h}</th>
               ))}
             </tr>
@@ -155,6 +156,7 @@ function TableSkeleton() {
               <tr key={i}>
                 <td className="px-4 py-3"><div className="space-y-1"><div className="h-4 w-28 animate-pulse rounded bg-slate-100" /><div className="h-3 w-20 animate-pulse rounded bg-slate-50" /></div></td>
                 <td className="px-4 py-3"><div className="h-4 w-20 animate-pulse rounded bg-slate-100" /></td>
+                <td className="px-4 py-3"><div className="h-4 w-14 animate-pulse rounded bg-slate-100" /></td>
                 <td className="px-4 py-3"><div className="h-5 w-20 animate-pulse rounded-full bg-slate-100" /></td>
                 <td className="px-4 py-3"><div className="h-5 w-24 animate-pulse rounded-full bg-slate-100" /></td>
                 <td className="px-4 py-3"><div className="h-4 w-24 animate-pulse rounded bg-slate-100" /></td>
@@ -188,6 +190,13 @@ function TableSkeleton() {
       </div>
     </>
   );
+}
+
+function formatDistance(km: number | null | undefined): string {
+  if (km == null || km <= 0) return '';
+  return km < 10
+    ? `${km.toLocaleString('nl-NL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} km`
+    : `${Math.round(km)} km`;
 }
 
 function formatDate(d: string) {
@@ -1072,6 +1081,7 @@ export default function PortalPage() {
                     {[
                       { key: 'naam_klant', label: 'Naam' },
                       { key: 'plaatsnaam', label: 'Plaats' },
+                      { key: 'distance_km', label: 'Afstand' },
                       { key: 'branch', label: 'Branche' },
                       { key: 'status', label: 'Status' },
                       { key: 'wervingsdatum', label: 'Datum' },
@@ -1106,6 +1116,9 @@ export default function PortalPage() {
                         </div>
                       </td>
                       <td className="px-4 py-3 text-slate-600">{lead.plaatsnaam || '-'}</td>
+                      <td className="px-4 py-3 text-slate-400 tabular-nums">
+                        {formatDistance(lead.distance_km) || <span className="text-slate-300">&ndash;</span>}
+                      </td>
                       <td className="px-4 py-3">
                         {(() => { const b = getBranch(lead.branch); return (
                           <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${b.light} ${b.text}`}>{b.name}</span>
@@ -1183,6 +1196,9 @@ export default function PortalPage() {
                         <MapPinIcon className="h-3 w-3" />
                         {[lead.postcode, lead.huisnummer, lead.plaatsnaam].filter(Boolean).join(', ')}
                         {lead.provincie ? ` (${lead.provincie})` : ''}
+                        {formatDistance(lead.distance_km) && (
+                          <span className="text-slate-400">&middot; {formatDistance(lead.distance_km)}</span>
+                        )}
                       </p>
                     )}
                   </div>
@@ -1479,10 +1495,14 @@ function LeadDetailPanel({
                 )}
                 {(lead.postcode || lead.plaatsnaam) && (() => {
                   const adres = [lead.postcode, lead.huisnummer, lead.plaatsnaam, lead.provincie].filter(Boolean).join(', ');
+                  const dist = formatDistance(lead.distance_km);
                   return (
                     <div className="flex items-center gap-3 px-4 py-3">
                       <MapPinIcon className="h-4 w-4 shrink-0 text-slate-400" />
-                      <span className="min-w-0 flex-1 truncate text-sm text-slate-700">{adres}</span>
+                      <div className="min-w-0 flex-1">
+                        <span className="block truncate text-sm text-slate-700">{adres}</span>
+                        {dist && <span className="text-xs text-slate-400">{dist} van uw targetplaats</span>}
+                      </div>
                       <button onClick={() => copyField(adres, 'adres')}
                         className={`shrink-0 rounded-md p-1.5 transition ${copiedField === 'adres' ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600'}`}
                         title="Kopieer adres">

@@ -23,9 +23,10 @@ async function getCustomerLeadData(
   supabase: ReturnType<typeof createServerClient>,
   customerId: string,
   leadSource: 'all' | 'fresh' | 'bulk' = 'all',
-): Promise<{ ids: string[]; assignedAtMap: Record<string, string>; bulkCount: number }> {
+): Promise<{ ids: string[]; assignedAtMap: Record<string, string>; distanceMap: Record<string, number | null>; bulkCount: number }> {
   const ids = new Set<string>();
   const assignedAtMap: Record<string, string> = {};
+  const distanceMap: Record<string, number | null> = {};
 
   if (leadSource !== 'bulk') {
     const directLeads = await paginateQuery<{ id: string }>(
@@ -35,23 +36,25 @@ async function getCustomerLeadData(
   }
 
   if (leadSource === 'bulk') {
-    const bulkLeads = await paginateQuery<{ lead_id: string; assigned_at: string }>(
-      supabase.from('lead_assignments').select('lead_id, assigned_at').eq('customer_id', customerId).eq('source', 'bulk_export'),
+    const bulkLeads = await paginateQuery<{ lead_id: string; assigned_at: string; distance_km: number | null }>(
+      supabase.from('lead_assignments').select('lead_id, assigned_at, distance_km').eq('customer_id', customerId).eq('source', 'bulk_export'),
     );
     bulkLeads.forEach(a => {
       ids.add(a.lead_id);
       assignedAtMap[a.lead_id] = a.assigned_at;
+      distanceMap[a.lead_id] = a.distance_km;
     });
   } else {
     let assignQuery = supabase
       .from('lead_assignments')
-      .select('lead_id, assigned_at')
+      .select('lead_id, assigned_at, distance_km')
       .eq('customer_id', customerId);
     if (leadSource === 'fresh') assignQuery = assignQuery.neq('source', 'bulk_export');
-    const assignedLeads = await paginateQuery<{ lead_id: string; assigned_at: string }>(assignQuery);
+    const assignedLeads = await paginateQuery<{ lead_id: string; assigned_at: string; distance_km: number | null }>(assignQuery);
     assignedLeads.forEach(a => {
       ids.add(a.lead_id);
       assignedAtMap[a.lead_id] = a.assigned_at;
+      distanceMap[a.lead_id] = a.distance_km;
     });
   }
 
@@ -61,7 +64,7 @@ async function getCustomerLeadData(
     .eq('customer_id', customerId)
     .eq('source', 'bulk_export');
 
-  return { ids: Array.from(ids), assignedAtMap, bulkCount: bulkCount || 0 };
+  return { ids: Array.from(ids), assignedAtMap, distanceMap, bulkCount: bulkCount || 0 };
 }
 
 export async function GET(request: NextRequest) {
@@ -82,12 +85,12 @@ export async function GET(request: NextRequest) {
   const branch = url.searchParams.get('branch');
   const leadSource = (url.searchParams.get('lead_source') || 'all') as 'all' | 'fresh' | 'bulk';
 
-  const { ids: leadIds, assignedAtMap, bulkCount } = await getCustomerLeadData(supabase, customer.id, leadSource);
+  const { ids: leadIds, assignedAtMap, distanceMap, bulkCount } = await getCustomerLeadData(supabase, customer.id, leadSource);
   if (leadIds.length === 0) {
     return NextResponse.json({ leads: [], total: 0, page, totalPages: 0, bulkCount });
   }
 
-  const allowedSorts = ['created_at', 'naam_klant', 'email', 'status', 'wervingsdatum', 'plaatsnaam', 'provincie', 'branch'];
+  const allowedSorts = ['created_at', 'naam_klant', 'email', 'status', 'wervingsdatum', 'plaatsnaam', 'provincie', 'branch', 'distance_km'];
   const col = allowedSorts.includes(sort) ? sort : 'created_at';
   const asc = order === 'asc';
 
@@ -118,20 +121,27 @@ export async function GET(request: NextRequest) {
     if (batchData) allMatching.push(...batchData);
   }
 
-  allMatching.sort((a, b) => {
-    const va = (a[col] as string) ?? '';
-    const vb = (b[col] as string) ?? '';
+  const enrichedAll = allMatching.map(lead => ({
+    ...lead,
+    received_at: assignedAtMap[lead.id as string] || lead.created_at,
+    distance_km: distanceMap[lead.id as string] ?? null,
+  }));
+
+  enrichedAll.sort((a, b) => {
+    if (col === 'distance_km') {
+      const va = (a.distance_km as number | null) ?? Infinity;
+      const vb = (b.distance_km as number | null) ?? Infinity;
+      const cmp = va - vb;
+      return asc ? cmp : -cmp;
+    }
+    const va = ((a as Record<string, unknown>)[col] as string) ?? '';
+    const vb = ((b as Record<string, unknown>)[col] as string) ?? '';
     const cmp = va < vb ? -1 : va > vb ? 1 : 0;
     return asc ? cmp : -cmp;
   });
 
   const startIdx = (page - 1) * limit;
-  const pageData = allMatching.slice(startIdx, startIdx + limit);
-
-  const enrichedLeads = pageData.map(lead => ({
-    ...lead,
-    received_at: assignedAtMap[lead.id as string] || lead.created_at,
-  }));
+  const enrichedLeads = enrichedAll.slice(startIdx, startIdx + limit);
 
   return NextResponse.json({
     leads: enrichedLeads,
