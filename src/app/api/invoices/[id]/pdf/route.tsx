@@ -75,6 +75,7 @@ export async function GET(
     customer_name: invoice.customer_name,
     customer_email: invoice.customer_email,
     customer_address: invoice.customer_address,
+    customer_kvk: invoice.customer_kvk || null,
     customer_vat_id: invoice.customer_vat_id,
 
     description: invoice.description,

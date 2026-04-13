@@ -63,6 +63,7 @@ export interface InvoiceData {
   customer_name: string;
   customer_email: string;
   customer_address: string | null;
+  customer_kvk: string | null;
   customer_vat_id: string | null;
 
   description: string;
@@ -125,6 +126,7 @@ export function InvoicePdf({ data }: { data: InvoiceData }) {
             <Text style={s.value}>{data.customer_name}</Text>
             {data.customer_address ? <Text style={s.value}>{data.customer_address}</Text> : null}
             <Text style={s.value}>{data.customer_email}</Text>
+            {data.customer_kvk ? <Text style={s.value}>KvK: {data.customer_kvk}</Text> : null}
             {data.customer_vat_id ? <Text style={s.value}>BTW: {data.customer_vat_id}</Text> : null}
           </View>
         </View>

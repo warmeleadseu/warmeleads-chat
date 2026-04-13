@@ -50,7 +50,7 @@ export async function createInvoice(params: CreateInvoiceParams) {
 
   const { data: customer, error: custErr } = await supabase
     .from('customers')
-    .select('id, name, email, contact_person, address, vat_id')
+    .select('id, name, email, contact_person, address, vat_id, kvk_nummer')
     .eq('id', params.customer_id)
     .single();
 
@@ -86,6 +86,7 @@ export async function createInvoice(params: CreateInvoiceParams) {
       customer_name: customer.name,
       customer_email: customer.email,
       customer_address: customer.address || null,
+      customer_kvk: customer.kvk_nummer || null,
       customer_vat_id: customer.vat_id || null,
       description: `${params.batch_size} ${params.branch_name} leads`,
       line_items: lineItems,
