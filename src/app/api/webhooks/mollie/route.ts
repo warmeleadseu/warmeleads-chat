@@ -62,6 +62,7 @@ async function insertCelebrationEvent(
   branch: string,
   amount: number,
   customerId: string,
+  batchAmId?: string | null,
 ) {
   try {
     const { data: custRow } = await supabase
@@ -70,12 +71,14 @@ async function insertCelebrationEvent(
       .eq('id', customerId)
       .single();
 
+    const resolvedAmId = batchAmId || custRow?.account_manager_id;
+
     let amPayload: Record<string, unknown> = {};
-    if (custRow?.account_manager_id) {
+    if (resolvedAmId) {
       const { data: am } = await supabase
         .from('admin_users')
         .select('id, name, avatar_url, celebration_video_url, celebration_video_start, celebration_video_end')
-        .eq('id', custRow.account_manager_id)
+        .eq('id', resolvedAmId)
         .single();
       if (am) {
         amPayload = {
@@ -155,9 +158,13 @@ export async function POST(request: NextRequest) {
 
         const { data: cust } = await supabase
           .from('customers')
-          .select('id, name, email, contact_person')
+          .select('id, name, email, contact_person, account_manager_id')
           .eq('id', claimed.customer_id)
           .single();
+
+        if (cust?.account_manager_id) {
+          await supabase.from('customer_batches').update({ account_manager_id: cust.account_manager_id }).eq('id', batchId).is('account_manager_id', null);
+        }
 
         const { data: branchRow } = await supabase.from('branches').select('name').eq('slug', claimed.branch).single();
         const branchName = branchRow?.name || claimed.branch;
@@ -251,6 +258,7 @@ export async function POST(request: NextRequest) {
           claimed.branch,
           Number(claimed.total_price || 0),
           claimed.customer_id,
+          cust?.account_manager_id || null,
         ).catch(() => {});
 
         const startsInFuture = claimed.starts_at && new Date(claimed.starts_at) > new Date();
@@ -281,6 +289,9 @@ export async function POST(request: NextRequest) {
       }
 
       const order = claimedOrder;
+
+      const { data: orderCust } = await supabase.from('customers').select('account_manager_id').eq('id', order.customer_id).single();
+
       const { data: newBatch, error: batchError } = await supabase
         .from('customer_batches')
         .insert({
@@ -296,6 +307,7 @@ export async function POST(request: NextRequest) {
           status: 'active',
           leads_delivered: 0,
           is_paid: true,
+          account_manager_id: orderCust?.account_manager_id || null,
         })
         .select()
         .single();
@@ -396,6 +408,7 @@ export async function POST(request: NextRequest) {
         order.branch,
         Number(order.total_price || 0),
         order.customer_id,
+        newBatch.account_manager_id,
       ).catch(() => {});
 
       backfillBatch(newBatch.id, 3).catch(() => {});

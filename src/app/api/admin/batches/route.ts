@@ -60,9 +60,11 @@ export async function POST(request: NextRequest) {
 
   const startsAtValue = starts_at ? new Date(starts_at).toISOString() : null;
 
+  const { data: custAM } = await supabase.from('customers').select('account_manager_id').eq('id', customer_id).single();
+
   const { data, error } = await supabase
     .from('customer_batches')
-    .insert({ customer_id, branch, batch_size, price_per_lead, total_price, leads_per_week: leads_per_week || null, leads_per_day: leads_per_day || null, notes, lead_filters: sanitizedFilters, is_paid: is_paid !== false, lookback_days: lookback, starts_at: startsAtValue })
+    .insert({ customer_id, branch, batch_size, price_per_lead, total_price, leads_per_week: leads_per_week || null, leads_per_day: leads_per_day || null, notes, lead_filters: sanitizedFilters, is_paid: is_paid !== false, lookback_days: lookback, starts_at: startsAtValue, account_manager_id: custAM?.account_manager_id || null })
     .select()
     .single();
 
@@ -193,7 +195,7 @@ export async function PUT(request: NextRequest) {
     'batch_size', 'leads_delivered', 'leads_delivered_external', 'is_paid',
     'price_per_lead', 'total_price', 'leads_per_day', 'leads_per_week',
     'notes', 'lead_filters', 'status', 'completed_at', 'lookback_days',
-    'compensations', 'starts_at',
+    'compensations', 'starts_at', 'account_manager_id',
   ];
   const safeUpdates: Record<string, unknown> = {};
   for (const key of allowedFields) {

@@ -27,6 +27,7 @@ import {
   ShoppingCartIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
+import { useAdmin } from '../adminContext';
 import { mergeCustomTiers } from '@/lib/pricing';
 
 interface LeadFilter { field: string; operator: string; value: string; values?: string[] }
@@ -39,6 +40,7 @@ interface Batch {
   is_paid: boolean; lookback_days: number | null; notes: string | null; lead_filters: LeadFilter[];
   compensations: Compensation[];
   starts_at: string | null;
+  account_manager_id: string | null;
   created_at: string; completed_at: string | null;
   customers?: { name: string } | null;
 }
@@ -558,15 +560,20 @@ export default function BatchesPage() {
 interface OrderInfo { id: string; branch: string; batch_size: number; price_per_lead: number; total_price: number; status: string; mollie_payment_id: string | null; created_at: string; paid_at: string | null }
 interface InvoiceInfo { id: string; invoice_number: string | null; description: string | null; subtotal: number; btw_percentage: number; btw_amount: number; total_incl_btw: number; status: string; paid_at: string | null; created_at: string; uploaded_pdf_path: string | null }
 
+interface AMOption { id: string; name: string; avatar_url?: string | null }
+
 function BatchDetailPanel({ batchId, branches, onClose, onEdit }: {
   batchId: string; branches: BranchOption[];
   onClose: () => void; onEdit: (b: Batch) => void;
 }) {
+  const { user: currentUser } = useAdmin();
   const [batch, setBatch] = useState<Batch | null>(null);
   const [orders, setOrders] = useState<OrderInfo[]>([]);
   const [invoices, setInvoices] = useState<InvoiceInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState<string | null>(null);
+  const [amOptions, setAmOptions] = useState<AMOption[]>([]);
+  const [savingAM, setSavingAM] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -582,6 +589,29 @@ function BatchDetailPanel({ batchId, branches, onClose, onEdit }: {
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [batchId]);
+
+  useEffect(() => {
+    if (currentUser.role === 'accountmanager') return;
+    adminFetch('/api/admin/users').then(r => r.ok ? r.json() : null).then(d => {
+      if (d?.users) setAmOptions(d.users.filter((u: any) => u.is_account_manager && u.is_active));
+    }).catch(() => {});
+  }, [currentUser.role]);
+
+  const changeAM = async (newAmId: string) => {
+    if (!batch) return;
+    setSavingAM(true);
+    try {
+      const res = await adminFetch('/api/admin/batches', {
+        method: 'PUT',
+        body: JSON.stringify({ id: batch.id, account_manager_id: newAmId || null }),
+      });
+      if (res.ok) {
+        setBatch(prev => prev ? { ...prev, account_manager_id: newAmId || null } : prev);
+      }
+    } catch { /* silent */ } finally {
+      setSavingAM(false);
+    }
+  };
 
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
@@ -784,6 +814,27 @@ function BatchDetailPanel({ batchId, branches, onClose, onEdit }: {
                     )}
                   </div>
                 </div>
+
+                {/* Account Manager */}
+                {currentUser.role !== 'accountmanager' && (
+                  <div>
+                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Accountmanager</p>
+                    <div className="rounded-xl border border-slate-200 bg-white p-3">
+                      <select
+                        value={batch.account_manager_id || ''}
+                        onChange={e => changeAM(e.target.value)}
+                        disabled={savingAM}
+                        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50 disabled:opacity-60"
+                      >
+                        <option value="">Geen accountmanager</option>
+                        {amOptions.map(am => (
+                          <option key={am.id} value={am.id}>{am.name}</option>
+                        ))}
+                      </select>
+                      {savingAM && <p className="mt-1.5 text-[11px] text-slate-400">Opslaan...</p>}
+                    </div>
+                  </div>
+                )}
 
                 {/* Orders */}
                 <div>

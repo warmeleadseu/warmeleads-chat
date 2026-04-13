@@ -133,7 +133,7 @@ export async function GET(request: NextRequest) {
   const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
   const { data: recentPaidOrders } = await supabase
     .from('batch_orders')
-    .select('id, batch_id, amount, paid_at, customer_batches(customer_id, branch, customers(name, account_manager_id))')
+    .select('id, batch_id, amount, paid_at, customer_batches(account_manager_id, customer_id, branch, customers(name, account_manager_id))')
     .eq('status', 'paid')
     .gte('paid_at', tenMinAgo)
     .order('paid_at', { ascending: false })
@@ -145,7 +145,8 @@ export async function GET(request: NextRequest) {
     const amIds = new Set<string>();
     for (const o of recentPaidOrders) {
       const cb = o.customer_batches as any;
-      if (cb?.customers?.account_manager_id) amIds.add(cb.customers.account_manager_id);
+      const resolvedAmId = cb?.account_manager_id || cb?.customers?.account_manager_id;
+      if (resolvedAmId) amIds.add(resolvedAmId);
     }
 
     let amMap = new Map<string, { name: string; celebration_video_url: string | null; celebration_video_start: number | null; celebration_video_end: number | null }>();
@@ -161,7 +162,7 @@ export async function GET(request: NextRequest) {
 
     for (const o of recentPaidOrders) {
       const cb = o.customer_batches as any;
-      const amId = cb?.customers?.account_manager_id || null;
+      const amId = cb?.account_manager_id || cb?.customers?.account_manager_id || null;
       const am = amId ? amMap.get(amId) : null;
       recentPaidBatches.push({
         id: o.id,
@@ -183,7 +184,7 @@ export async function GET(request: NextRequest) {
   const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
   const { data: monthlyOrders } = await supabase
     .from('batch_orders')
-    .select('amount, customer_batches(customer_id, customers(account_manager_id))')
+    .select('amount, customer_batches(account_manager_id, customer_id, customers(account_manager_id))')
     .eq('status', 'paid')
     .gte('paid_at', monthStart);
 
@@ -191,7 +192,7 @@ export async function GET(request: NextRequest) {
   const amBatchCount = new Map<string, number>();
   for (const o of monthlyOrders || []) {
     const cb = o.customer_batches as any;
-    const amId = cb?.customers?.account_manager_id;
+    const amId = cb?.account_manager_id || cb?.customers?.account_manager_id;
     if (!amId) continue;
     amRevenue.set(amId, (amRevenue.get(amId) || 0) + (Number(o.amount) || 0));
     amBatchCount.set(amId, (amBatchCount.get(amId) || 0) + 1);

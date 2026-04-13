@@ -9,13 +9,6 @@ async function calculateProgress(
   periodStart: string,
   periodEnd: string,
 ) {
-  const { data: custRows } = await supabase
-    .from('customers')
-    .select('id')
-    .eq('account_manager_id', adminUserId);
-  const custIds = (custRows || []).map((c: any) => c.id);
-  if (custIds.length === 0) return 0;
-
   const endPlusOne = new Date(periodEnd);
   endPlusOne.setDate(endPlusOne.getDate() + 1);
   const endISO = endPlusOne.toISOString();
@@ -25,7 +18,7 @@ async function calculateProgress(
       const { data } = await supabase
         .from('customer_batches')
         .select('total_price')
-        .in('customer_id', custIds)
+        .eq('account_manager_id', adminUserId)
         .gte('created_at', periodStart)
         .lt('created_at', endISO);
       return (data || []).reduce((sum: number, b: any) => sum + (Number(b.total_price) || 0), 0);
@@ -34,7 +27,7 @@ async function calculateProgress(
       const { count } = await supabase
         .from('customer_batches')
         .select('id', { count: 'exact', head: true })
-        .in('customer_id', custIds)
+        .eq('account_manager_id', adminUserId)
         .gte('created_at', periodStart)
         .lt('created_at', endISO);
       return count || 0;
@@ -49,6 +42,12 @@ async function calculateProgress(
       return count || 0;
     }
     case 'leads_delivered': {
+      const { data: custRows } = await supabase
+        .from('customers')
+        .select('id')
+        .eq('account_manager_id', adminUserId);
+      const custIds = (custRows || []).map((c: any) => c.id);
+      if (custIds.length === 0) return 0;
       const { count } = await supabase
         .from('lead_assignments')
         .select('id', { count: 'exact', head: true })
