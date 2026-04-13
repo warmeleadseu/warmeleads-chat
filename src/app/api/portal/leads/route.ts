@@ -152,6 +152,8 @@ export async function GET(request: NextRequest) {
   });
 }
 
+const VALID_STATUSES = ['nieuw', 'gecontacteerd', 'geen_gehoor', 'offerte', 'verkocht', 'afgewezen'];
+
 export async function PUT(request: NextRequest) {
   const customer = await verifyCustomer(request);
   if (!customer) return portalUnauthorized();
@@ -163,10 +165,30 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Lead ID is verplicht' }, { status: 400 });
     }
 
+    if (status !== undefined && !VALID_STATUSES.includes(status)) {
+      return NextResponse.json({ error: `Ongeldige status: ${status}` }, { status: 400 });
+    }
+
     const supabase = createServerClient();
 
-    const { ids: leadIds } = await getCustomerLeadData(supabase, customer.id, 'all');
-    if (!leadIds.includes(id)) {
+    const { data: directLead } = await supabase
+      .from('leads')
+      .select('id')
+      .eq('id', id)
+      .eq('customer_id', customer.id)
+      .maybeSingle();
+
+    let hasAccess = !!directLead;
+    if (!hasAccess) {
+      const { count } = await supabase
+        .from('lead_assignments')
+        .select('id', { count: 'exact', head: true })
+        .eq('lead_id', id)
+        .eq('customer_id', customer.id);
+      hasAccess = (count || 0) > 0;
+    }
+
+    if (!hasAccess) {
       return NextResponse.json({ error: 'Lead niet gevonden' }, { status: 404 });
     }
 
@@ -186,11 +208,13 @@ export async function PUT(request: NextRequest) {
       .single();
 
     if (error) {
+      console.error('[portal/leads PUT] update failed:', error.message, { leadId: id, customerId: customer.id, updates });
       return NextResponse.json({ error: 'Kon lead niet bijwerken' }, { status: 500 });
     }
 
     return NextResponse.json({ lead: data });
-  } catch {
+  } catch (err) {
+    console.error('[portal/leads PUT] unexpected error:', err);
     return NextResponse.json({ error: 'Er ging iets mis' }, { status: 500 });
   }
 }

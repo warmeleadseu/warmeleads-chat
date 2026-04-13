@@ -377,21 +377,24 @@ export default function PortalPage() {
     if (selectedLead?.id === lead.id) {
       setSelectedLead({ ...lead, status: newStatus });
     }
-    showToast('Status bijgewerkt');
 
     try {
       const res = await portalFetch('/api/portal/leads', {
         method: 'PUT',
         body: JSON.stringify({ id: lead.id, status: newStatus }),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || 'Status bijwerken mislukt');
+      }
+      showToast('Status bijgewerkt');
       fetchStats(true);
-    } catch {
+    } catch (err) {
       setLeads(prev => prev.map(l => l.id === lead.id ? { ...l, status: oldStatus } : l));
       if (selectedLead?.id === lead.id) {
         setSelectedLead({ ...lead, status: oldStatus });
       }
-      showToast('Fout bij bijwerken status');
+      showToast(err instanceof Error ? err.message : 'Fout bij bijwerken status', 'error');
     }
   };
 
@@ -402,20 +405,23 @@ export default function PortalPage() {
     if (selectedLead?.id === lead.id) {
       setSelectedLead({ ...lead, notities: newNotes });
     }
-    showToast('Notities opgeslagen');
 
     try {
       const res = await portalFetch('/api/portal/leads', {
         method: 'PUT',
         body: JSON.stringify({ id: lead.id, notities: newNotes }),
       });
-      if (!res.ok) throw new Error();
-    } catch {
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || 'Notities opslaan mislukt');
+      }
+      showToast('Notities opgeslagen');
+    } catch (err) {
       setLeads(prev => prev.map(l => l.id === lead.id ? { ...l, notities: oldNotes } : l));
       if (selectedLead?.id === lead.id) {
         setSelectedLead({ ...lead, notities: oldNotes });
       }
-      showToast('Fout bij opslaan notities');
+      showToast(err instanceof Error ? err.message : 'Fout bij opslaan notities', 'error');
     }
   };
 
