@@ -59,7 +59,8 @@ async function search(q: string) {
 
   const data = await withTimeout(kvkFetch(url), TIMEOUT_MS);
   const results = (data.resultaten || []).map((r: Record<string, unknown>) => {
-    const adres = r.adres as Record<string, unknown> | undefined;
+    const adresWrapper = r.adres as Record<string, unknown> | undefined;
+    const adres = (adresWrapper?.binnenlandsAdres || adresWrapper?.buitenlandsAdres || adresWrapper) as Record<string, unknown> | undefined;
     return {
       kvkNummer: r.kvkNummer,
       vestigingsnummer: r.vestigingsnummer,
@@ -80,9 +81,11 @@ async function getDetail(kvkNummer: string) {
   const basisUrl = `${BASE}/v1/basisprofielen/${kvkNummer}`;
   const basisData = await withTimeout(kvkFetch(basisUrl), TIMEOUT_MS);
 
+  const hoofdvestiging = basisData?._embedded?.hoofdvestiging || basisData?.hoofdvestiging;
+
   const vestigingsnummer =
-    basisData?.hoofdvestiging?.vestigingsnummer ||
-    basisData?.vestigingen?.vestigingen?.[0]?.vestigingsnummer;
+    hoofdvestiging?.vestigingsnummer ||
+    basisData?._embedded?.vestigingen?.[0]?.vestigingsnummer;
 
   let vestigingData: Record<string, unknown> | null = null;
   if (vestigingsnummer) {
@@ -94,14 +97,14 @@ async function getDetail(kvkNummer: string) {
     }
   }
 
-  const bezoekAdres = findBezoekadres(vestigingData) || findBezoekadres(basisData?.hoofdvestiging) || findBezoekadres(basisData);
+  const bezoekAdres = findBezoekadres(vestigingData) || findBezoekadres(hoofdvestiging) || findBezoekadres(basisData);
 
   const naam =
-    basisData?.hoofdvestiging?.eersteHandelsnaam ||
+    hoofdvestiging?.eersteHandelsnaam ||
     basisData?.naam ||
     '';
 
-  const rsin = basisData?.rsin || basisData?.hoofdvestiging?.rsin || '';
+  const rsin = basisData?.rsin || hoofdvestiging?.rsin || '';
 
   return NextResponse.json({
     kvkNummer,
