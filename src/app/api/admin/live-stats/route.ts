@@ -95,11 +95,24 @@ export async function GET(request: NextRequest) {
   const activeCustomers = (customersRes.data || []).filter(c => c.is_active);
 
   // Cost metrics: use RPC to avoid PostgREST 1000-row default limit
-  const [revenueStatsRes, relevantAdsRes, batchStartRes] = await Promise.all([
+  const [revenueStatsRes, batchStartRes] = await Promise.all([
     supabase.rpc('live_revenue_stats'),
-    supabase.from('leads').select('meta_campaign_id, branch').neq('bron', 'excel_import').not('meta_campaign_id', 'is', null),
     supabase.from('customer_batches').select('branch, created_at').in('status', ['active', 'completed']),
   ]);
+
+  // Paginate leads with campaign IDs to avoid 1000-row cap
+  let relevantAdsData: { meta_campaign_id: string; branch: string }[] = [];
+  {
+    const PAGE = 1000;
+    let offset = 0;
+    while (true) {
+      const { data } = await supabase.from('leads').select('meta_campaign_id, branch').neq('bron', 'excel_import').not('meta_campaign_id', 'is', null).range(offset, offset + PAGE - 1);
+      if (!data || data.length === 0) break;
+      relevantAdsData = relevantAdsData.concat(data as { meta_campaign_id: string; branch: string }[]);
+      if (data.length < PAGE) break;
+      offset += PAGE;
+    }
+  }
 
   const revenueStats = (revenueStatsRes.data as {
     batch_revenue: number; bulk_revenue: number;
@@ -116,11 +129,11 @@ export async function GET(request: NextRequest) {
   const globalStart = branchStart.size > 0 ? [...branchStart.values()].sort()[0] : new Date().toISOString().split('T')[0];
 
   const campaignBranch = new Map<string, string>();
-  for (const l of relevantAdsRes.data || []) {
+  for (const l of relevantAdsData) {
     if (l.meta_campaign_id && l.branch) campaignBranch.set(l.meta_campaign_id, l.branch);
   }
   const relevantCampaignIds = [...campaignBranch.keys()];
-  const totalOurLeads = (relevantAdsRes.data || []).length;
+  const totalOurLeads = relevantAdsData.length;
 
   let monthAdSpend = 0;
   if (relevantCampaignIds.length > 0) {

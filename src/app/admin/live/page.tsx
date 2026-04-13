@@ -2203,20 +2203,22 @@ export default function LiveDashboard() {
                     </span>
                   )}
                 </div>
-                {/* Profit line */}
-                <div className="mt-2 border-t border-white/[0.04] pt-2">
-                  <div className="flex items-baseline gap-1.5">
-                    <span className={`text-sm font-black tabular-nums ${profitPositive ? 'text-emerald-400/90' : 'text-red-400/90'}`}>
-                      {profitPositive ? '+' : ''}&euro;{Math.round(stat.profit).toLocaleString('nl-NL')}
-                    </span>
-                    <TrendArrow current={stat.profit} previous={stat.prevProfit} />
+                {/* Profit line — only show when there is revenue or spend */}
+                {(stat.revenue > 0 || stat.adSpend > 0) && (
+                  <div className="mt-2 border-t border-white/[0.04] pt-2">
+                    <div className="flex items-baseline gap-1.5">
+                      <span className={`text-sm font-black tabular-nums ${profitPositive ? 'text-emerald-400/90' : 'text-red-400/90'}`}>
+                        {profitPositive ? '+' : ''}&euro;{Math.round(stat.profit).toLocaleString('nl-NL')}
+                      </span>
+                      <TrendArrow current={stat.profit} previous={stat.prevProfit} />
+                    </div>
+                    <div className="mt-0.5 flex items-center gap-1 text-[9px] text-white/20">
+                      <span>omzet &euro;{Math.round(stat.revenue).toLocaleString('nl-NL')}</span>
+                      <span className="text-white/10">&middot;</span>
+                      <span>kosten &euro;{Math.round(stat.adSpend).toLocaleString('nl-NL')}</span>
+                    </div>
                   </div>
-                  <div className="mt-0.5 flex items-center gap-1 text-[9px] text-white/20">
-                    <span>&euro;{Math.round(stat.revenue).toLocaleString('nl-NL')}</span>
-                    <span className="text-white/10">-</span>
-                    <span>&euro;{Math.round(stat.adSpend).toLocaleString('nl-NL')}</span>
-                  </div>
-                </div>
+                )}
               </motion.div>
             );
           })}
