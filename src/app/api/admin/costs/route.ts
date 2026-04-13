@@ -209,11 +209,10 @@ export async function GET(request: NextRequest) {
     if (!b.price_per_lead) continue;
     const cust = b.customers as unknown as { name: string } | { name: string }[] | null;
     const custName = Array.isArray(cust) ? cust[0]?.name : cust?.name || 'Onbekend';
-    const ba = batchAssignments.get(b.id);
-    const assignedCount = ba ? ba.lead_ids.length : 0;
-    const revenue = assignedCount * b.price_per_lead;
+    const revenue = Number(b.total_price) || (b.batch_size * b.price_per_lead);
     const startDate = b.created_at ? b.created_at.split('T')[0] : today;
 
+    const ba = batchAssignments.get(b.id);
     let cost = 0;
     let leadsWithCost = 0;
     if (ba) {
@@ -234,7 +233,7 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  // ── Customer margins (assignment-based, consistent with live_revenue_stats) ──
+  // ── Customer margins (order-based: revenue = total_price per batch) ──
   const customerMargins: Record<string, { name: string; revenue: number; cost: number; margin: number; leads: number; marginPct: number }> = {};
 
   for (const b of allBatches) {
@@ -245,10 +244,8 @@ export async function GET(request: NextRequest) {
       customerMargins[b.customer_id] = { name: custName, revenue: 0, cost: 0, margin: 0, leads: 0, marginPct: 0 };
     }
     const cm = customerMargins[b.customer_id];
-    const ba = batchAssignments.get(b.id);
-    const assignedCount = ba ? ba.lead_ids.length : 0;
-    cm.revenue += assignedCount * b.price_per_lead;
-    cm.leads += assignedCount;
+    cm.revenue += Number(b.total_price) || (b.batch_size * b.price_per_lead);
+    cm.leads += b.batch_size;
   }
 
   // Add cost from assignments (only batch-linked for ad-cost attribution)
