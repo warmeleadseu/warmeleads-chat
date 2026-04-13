@@ -1254,7 +1254,7 @@ function TargetsPanel({ customer, onClose }: { customer: Customer; onClose: () =
     setSelectedProvinces(prev => prev.includes(prov) ? prev.filter(p => p !== prov) : [...prev, prov]);
   };
 
-  const existingProvs = new Set(targets.flatMap(t => t.provinces || []));
+  const existingProvs = new Set(targets.filter(t => t.is_active).flatMap(t => t.provinces || []));
 
   return (
     <>

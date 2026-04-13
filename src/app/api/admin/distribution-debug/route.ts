@@ -198,15 +198,24 @@ export async function GET(request: NextRequest) {
           distance_km: closestTarget.distance,
           target_label: closestTarget.label,
         });
-      } else if (!hasCoords && !provinceMatch) {
+      } else {
         const provTargets = custTargets.filter(t => (t.target_type || 'radius') === 'province');
+        const radiusTargets = custTargets.filter(t => (t.target_type || 'radius') === 'radius');
+        let reason: string;
+        if (provTargets.length > 0 && radiusTargets.length > 0) {
+          reason = hasCoords
+            ? `Buiten bereik radius-targets en provincie "${leadProv || '(leeg)'}" niet in provincie-targets`
+            : `Geen coördinaten voor radius-targets en provincie "${leadProv || '(leeg)'}" niet in provincie-targets`;
+        } else if (provTargets.length > 0) {
+          reason = `Provincie "${leadProv || '(leeg)'}" niet in targets`;
+        } else {
+          reason = 'Lead heeft geen coördinaten voor radius-targets';
+        }
         potentialMatches.push({
           customer_id: custId,
           customer_name: cust.name,
           assigned: false,
-          reason_not_assigned: provTargets.length > 0
-            ? `Provincie "${leadProv || '(leeg)'}" niet in targets`
-            : 'Lead heeft geen coördinaten voor radius-targets',
+          reason_not_assigned: reason,
         });
       }
     }

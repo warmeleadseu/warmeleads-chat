@@ -29,7 +29,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Kon doelgebieden niet ophalen' }, { status: 500 });
   }
 
-  const hasRadiusTargets = (targets || []).some(t => (t.target_type || 'radius') === 'radius');
   const hasProvinceTargets = (targets || []).some(t => t.target_type === 'province');
 
   const { data: assignments } = await supabase
