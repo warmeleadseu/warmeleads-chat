@@ -1032,6 +1032,12 @@ function CustomerForm({ customer, branchOptions, allCustomers, accountManagers, 
     setKvkOpen(false);
     setKvkLoading(true);
     setKvkError('');
+
+    const searchAdres = [
+      [r.straatnaam, r.huisnummer].filter(Boolean).join(' '),
+      [r.postcode, r.plaats].filter(Boolean).join(' '),
+    ].filter(Boolean).join(', ');
+
     try {
       const res = await adminFetch(`/api/admin/kvk?kvk=${r.kvkNummer}`);
       if (!res.ok) throw new Error('Detail ophalen mislukt');
@@ -1040,12 +1046,20 @@ function CustomerForm({ customer, branchOptions, allCustomers, accountManagers, 
         ...f,
         name: detail.naam || f.name,
         kvk_nummer: detail.kvkNummer,
-        address: detail.adres || f.address,
+        address: detail.adres || searchAdres || f.address,
       }));
       setKvkLinked(true);
       setKvkQuery('');
     } catch {
-      setKvkError('Bedrijfsgegevens ophalen mislukt');
+      setForm(f => ({
+        ...f,
+        name: r.naam || f.name,
+        kvk_nummer: r.kvkNummer,
+        address: searchAdres || f.address,
+      }));
+      setKvkLinked(true);
+      setKvkQuery('');
+      setKvkError('Detail ophalen mislukt, basisgegevens overgenomen');
     } finally {
       setKvkLoading(false);
     }

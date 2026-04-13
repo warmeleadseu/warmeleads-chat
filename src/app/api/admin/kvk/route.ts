@@ -94,7 +94,7 @@ async function getDetail(kvkNummer: string) {
     }
   }
 
-  const bezoekAdres = findBezoekadres(vestigingData) || findBezoekadres(basisData?.hoofdvestiging);
+  const bezoekAdres = findBezoekadres(vestigingData) || findBezoekadres(basisData?.hoofdvestiging) || findBezoekadres(basisData);
 
   const naam =
     basisData?.hoofdvestiging?.eersteHandelsnaam ||
