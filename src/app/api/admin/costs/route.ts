@@ -14,8 +14,40 @@ export async function GET(request: NextRequest) {
   const now = new Date();
   const today = now.toISOString().split('T')[0];
 
-  /* ── Wave 1: fetch batches + leads + assignments + lastSync in parallel ── */
-  const [batchesRes, leadsRes, assignRes, lastSyncRes] = await Promise.all([
+  interface LeadRow { id: string; branch: string; meta_campaign_id: string | null; wervingsdatum: string | null; lead_cost: number | null }
+  interface AssignRow { id: string; lead_id: string; customer_id: string; batch_id: string | null }
+
+  // Paginated fetch to avoid PostgREST 1000-row default limit
+  async function fetchAllLeads(): Promise<LeadRow[]> {
+    const PAGE = 1000;
+    let all: LeadRow[] = [];
+    let offset = 0;
+    while (true) {
+      const { data } = await supabase.from('leads').select('id, branch, meta_campaign_id, wervingsdatum, lead_cost').neq('bron', 'excel_import').range(offset, offset + PAGE - 1);
+      if (!data || data.length === 0) break;
+      all = all.concat(data as LeadRow[]);
+      if (data.length < PAGE) break;
+      offset += PAGE;
+    }
+    return all;
+  }
+
+  async function fetchAllAssignments(): Promise<AssignRow[]> {
+    const PAGE = 1000;
+    let all: AssignRow[] = [];
+    let offset = 0;
+    while (true) {
+      const { data } = await supabase.from('lead_assignments').select('id, lead_id, customer_id, batch_id').range(offset, offset + PAGE - 1);
+      if (!data || data.length === 0) break;
+      all = all.concat(data as AssignRow[]);
+      if (data.length < PAGE) break;
+      offset += PAGE;
+    }
+    return all;
+  }
+
+  /* ── Wave 1: fetch batches + lastSync (small) + paginated leads & assignments ── */
+  const [batchesRes, lastSyncRes, allLeads, allAssignments] = await Promise.all([
     supabase
       .from('customer_batches')
       .select('id, customer_id, branch, batch_size, leads_delivered, price_per_lead, total_price, status, leads_per_week, created_at, is_paid, customers(name)')
@@ -23,23 +55,16 @@ export async function GET(request: NextRequest) {
       .neq('is_paid', false)
       .order('created_at', { ascending: false }),
     supabase
-      .from('leads')
-      .select('id, branch, meta_campaign_id, wervingsdatum, lead_cost')
-      .neq('bron', 'excel_import'),
-    supabase
-      .from('lead_assignments')
-      .select('id, lead_id, customer_id, batch_id'),
-    supabase
       .from('meta_ad_spend')
       .select('synced_at')
       .order('synced_at', { ascending: false })
       .limit(1)
       .single(),
+    fetchAllLeads(),
+    fetchAllAssignments(),
   ]);
 
   const allBatches = batchesRes.data || [];
-  const allLeads = leadsRes.data || [];
-  const allAssignments = assignRes.data || [];
   const lastSync = lastSyncRes.data;
 
   // ── Batch start dates per branch ──
@@ -52,7 +77,7 @@ export async function GET(request: NextRequest) {
   const globalStartDate = branchStartDate.size > 0 ? [...branchStartDate.values()].sort()[0] : today;
 
   // ── Campaign mapping from leads ──
-  const leadsWithCampaign = allLeads.filter(l => l.meta_campaign_id);
+  const leadsWithCampaign = allLeads.filter((l): l is LeadRow & { meta_campaign_id: string } => !!l.meta_campaign_id);
   const campaignBranchMap = new Map<string, string>();
   for (const l of leadsWithCampaign) {
     if (!campaignBranchMap.has(l.meta_campaign_id)) {
