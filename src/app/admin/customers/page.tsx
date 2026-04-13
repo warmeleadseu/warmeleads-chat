@@ -1033,10 +1033,11 @@ function CustomerForm({ customer, branchOptions, allCustomers, accountManagers, 
     setKvkLoading(true);
     setKvkError('');
 
+    const fmtPc = (pc: string) => { const raw = pc.replace(/\s/g, ''); return /^\d{4}[A-Za-z]{2}$/.test(raw) ? `${raw.slice(0, 4)} ${raw.slice(4).toUpperCase()}` : pc; };
     const searchAdres = [
       [r.straatnaam, r.huisnummer].filter(Boolean).join(' '),
-      [r.postcode, r.plaats].filter(Boolean).join(' '),
-    ].filter(Boolean).join(', ');
+      [r.postcode ? fmtPc(r.postcode) : '', r.plaats].filter(Boolean).join('  '),
+    ].filter(Boolean).join('\n');
 
     try {
       const res = await adminFetch(`/api/admin/kvk?kvk=${r.kvkNummer}`);
@@ -1223,9 +1224,10 @@ function CustomerForm({ customer, branchOptions, allCustomers, accountManagers, 
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-slate-500">Adres</label>
-            <input value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))}
-              placeholder="Straatnaam 123, 1234 AB Plaats"
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
+            <textarea value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))}
+              placeholder={"Straatnaam 123\n1234 AB Plaats"}
+              rows={2}
+              className="w-full resize-none rounded-lg border border-slate-200 px-3 py-2 text-sm leading-relaxed text-slate-900 outline-none focus:border-brand-purple/50" />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>

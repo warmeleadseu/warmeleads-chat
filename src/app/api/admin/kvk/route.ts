@@ -128,17 +128,25 @@ function findBezoekadres(obj: Record<string, unknown> | null | undefined): Recor
   return null;
 }
 
+function formatPostcode(pc: string): string {
+  const raw = String(pc).replace(/\s/g, '');
+  if (/^\d{4}[A-Za-z]{2}$/.test(raw)) {
+    return `${raw.slice(0, 4)} ${raw.slice(4).toUpperCase()}`;
+  }
+  return pc;
+}
+
 function formatAdres(a: Record<string, unknown>): string {
   if (a.volledigAdres) return String(a.volledigAdres);
   const straat = a.straatnaam || '';
   const nr = a.huisnummer || '';
   const letter = a.huisletter || '';
   const toev = a.huisnummerToevoeging || '';
-  const pc = a.postcode || '';
+  const pc = a.postcode ? formatPostcode(String(a.postcode)) : '';
   const plaats = a.plaats || '';
 
   const streetPart = `${straat} ${nr}${letter}${toev ? `-${toev}` : ''}`.trim();
-  const cityPart = `${pc} ${plaats}`.trim();
+  const cityPart = [pc, plaats].filter(Boolean).join('  ');
 
-  return [streetPart, cityPart].filter(Boolean).join(', ');
+  return [streetPart, cityPart].filter(Boolean).join('\n');
 }
