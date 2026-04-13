@@ -1076,19 +1076,19 @@ export default function LiveDashboard() {
   useEffect(() => {
     if (!celebrationVideo?.celebrationVideoUrl) return;
 
+    let closed = false;
+    const close = () => { if (!closed) { closed = true; setTimeout(() => setCelebrationVideo(null), 2000); } };
+
     const handleMessage = (e: MessageEvent) => {
       if (!e.origin.includes('youtube.com')) return;
       try {
         const data = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
-        if (data.event === 'onStateChange' && data.info === 0) {
-          setTimeout(() => setCelebrationVideo(null), 1500);
-        }
+        if (data.event === 'onStateChange' && data.info === 0) close();
       } catch { /* not a YouTube message */ }
     };
 
     window.addEventListener('message', handleMessage);
 
-    // Tell YouTube iframe we want state change events
     const sendListening = setInterval(() => {
       if (celebrationIframeRef.current?.contentWindow) {
         celebrationIframeRef.current.contentWindow.postMessage(
@@ -1098,12 +1098,21 @@ export default function LiveDashboard() {
       }
     }, 800);
 
-    // Safety fallback: close after 3 minutes max if YouTube messaging fails
-    const safety = setTimeout(() => setCelebrationVideo(null), 180000);
+    // Duration-based fallback: close 2s after the clip should have ended
+    const start = celebrationVideo.videoStart || 0;
+    const end = celebrationVideo.videoEnd;
+    const durationMs = end ? (end - start) * 1000 : null;
+    const durationTimer = durationMs
+      ? setTimeout(close, durationMs + 2000)
+      : null;
+
+    // Safety fallback: close after 3 minutes max
+    const safety = setTimeout(close, 180000);
 
     return () => {
       window.removeEventListener('message', handleMessage);
       clearInterval(sendListening);
+      if (durationTimer) clearTimeout(durationTimer);
       clearTimeout(safety);
     };
   }, [celebrationVideo]);
