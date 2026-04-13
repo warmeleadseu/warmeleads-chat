@@ -172,10 +172,14 @@ function fireCelebration(canvas: HTMLCanvasElement, variant: CelebrationVariant 
   if (typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
-  const W = canvas.width;
-  const H = canvas.height;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = window.innerWidth * dpr;
+  canvas.height = window.innerHeight * dpr;
+  canvas.style.width = window.innerWidth + 'px';
+  canvas.style.height = window.innerHeight + 'px';
+  ctx.scale(dpr, dpr);
+  const W = window.innerWidth;
+  const H = window.innerHeight;
 
   const defaultColors = ['#a855f7', '#ec4899', '#34d399', '#facc15', '#38bdf8', '#f97316', '#f43f5e', '#ffffff'];
   const branchColors = branch ? BRANCH_CONFETTI[branch] : null;
@@ -184,102 +188,372 @@ function fireCelebration(canvas: HTMLCanvasElement, variant: CelebrationVariant 
     : defaultColors;
   const goldColors = ['#fbbf24', '#f59e0b', '#d97706', '#fcd34d', '#fffbeb', '#b45309'];
 
-  type PShape = 'rect' | 'circle' | 'streamer';
+  type PShape = 'rect' | 'circle' | 'streamer' | 'star' | 'heart' | 'diamond';
   interface CParticle {
     x: number; y: number; vx: number; vy: number;
     size: number; color: string; rotation: number; rotSpeed: number;
-    life: number; shape: PShape; flickerPhase: number; flickerSpeed: number;
+    life: number; maxLife: number; shape: PShape;
+    flickerPhase: number; flickerSpeed: number;
+    trail: { x: number; y: number }[];
+    glowSize: number;
+    gravity: number;
+    drag: number;
+    sparkle: boolean;
+  }
+
+  interface Firework {
+    x: number; y: number; targetY: number; vy: number;
+    color: string; exploded: boolean; trail: { x: number; y: number; alpha: number }[];
+    particles: CParticle[];
+  }
+
+  interface Shockwave {
+    x: number; y: number; radius: number; maxRadius: number;
+    life: number; color: string;
+  }
+
+  interface ScreenFlash {
+    life: number; color: string; intensity: number;
   }
 
   const particles: CParticle[] = [];
-  const shapes: PShape[] = ['rect', 'rect', 'circle', 'streamer'];
+  const fireworks: Firework[] = [];
+  const shockwaves: Shockwave[] = [];
+  const flashes: ScreenFlash[] = [];
+  const shapes: PShape[] = ['rect', 'rect', 'circle', 'streamer', 'star', 'heart', 'diamond'];
+  let shakeX = 0, shakeY = 0, shakeDecay = 0;
+
+  function drawStar(c: CanvasRenderingContext2D, cx: number, cy: number, r: number, points: number) {
+    c.beginPath();
+    for (let i = 0; i < points * 2; i++) {
+      const radius = i % 2 === 0 ? r : r * 0.4;
+      const angle = (i * Math.PI) / points - Math.PI / 2;
+      const x = cx + Math.cos(angle) * radius;
+      const y = cy + Math.sin(angle) * radius;
+      i === 0 ? c.moveTo(x, y) : c.lineTo(x, y);
+    }
+    c.closePath();
+    c.fill();
+  }
+
+  function drawHeart(c: CanvasRenderingContext2D, cx: number, cy: number, r: number) {
+    c.beginPath();
+    c.moveTo(cx, cy + r * 0.3);
+    c.bezierCurveTo(cx, cy - r * 0.5, cx - r, cy - r * 0.5, cx - r, cy + r * 0.1);
+    c.bezierCurveTo(cx - r, cy + r * 0.6, cx, cy + r, cx, cy + r * 1.1);
+    c.bezierCurveTo(cx, cy + r, cx + r, cy + r * 0.6, cx + r, cy + r * 0.1);
+    c.bezierCurveTo(cx + r, cy - r * 0.5, cx, cy - r * 0.5, cx, cy + r * 0.3);
+    c.closePath();
+    c.fill();
+  }
+
+  function drawDiamond(c: CanvasRenderingContext2D, cx: number, cy: number, r: number) {
+    c.beginPath();
+    c.moveTo(cx, cy - r);
+    c.lineTo(cx + r * 0.6, cy);
+    c.lineTo(cx, cy + r);
+    c.lineTo(cx - r * 0.6, cy);
+    c.closePath();
+    c.fill();
+  }
+
+  function makeParticle(x: number, y: number, vx: number, vy: number, color: string, opts?: Partial<CParticle>): CParticle {
+    const shape = opts?.shape || shapes[Math.floor(Math.random() * shapes.length)];
+    return {
+      x, y, vx, vy,
+      size: opts?.size ?? (Math.random() * 10 + 3),
+      color,
+      rotation: Math.random() * 360,
+      rotSpeed: (Math.random() - 0.5) * 18,
+      life: 1,
+      maxLife: opts?.maxLife ?? 1,
+      shape,
+      flickerPhase: Math.random() * Math.PI * 2,
+      flickerSpeed: 2 + Math.random() * 5,
+      trail: [],
+      glowSize: opts?.glowSize ?? (shape === 'star' || shape === 'diamond' ? 12 : 0),
+      gravity: opts?.gravity ?? 0.35,
+      drag: opts?.drag ?? 0.995,
+      sparkle: opts?.sparkle ?? (shape === 'star' || shape === 'diamond'),
+    };
+  }
 
   function makeCannon(originX: number, dirX: number, count: number, colors: string[]) {
     for (let i = 0; i < count; i++) {
-      particles.push({
-        x: originX + (Math.random() - 0.5) * 40,
-        y: H * 0.9,
-        vx: dirX * (Math.random() * 14 + 4),
-        vy: -Math.random() * 24 - 10,
-        size: Math.random() * 9 + 3,
-        color: colors[Math.floor(Math.random() * colors.length)],
-        rotation: Math.random() * 360,
-        rotSpeed: (Math.random() - 0.5) * 15,
-        life: 1,
-        shape: shapes[Math.floor(Math.random() * shapes.length)],
-        flickerPhase: Math.random() * Math.PI * 2,
-        flickerSpeed: 2 + Math.random() * 4,
-      });
+      particles.push(makeParticle(
+        originX + (Math.random() - 0.5) * 60,
+        H * 0.92,
+        dirX * (Math.random() * 16 + 5),
+        -Math.random() * 26 - 12,
+        colors[Math.floor(Math.random() * colors.length)],
+        { size: Math.random() * 11 + 3, glowSize: Math.random() > 0.7 ? 10 : 0 },
+      ));
     }
   }
 
+  function spawnFirework(x: number, targetY: number, color: string) {
+    fireworks.push({ x, y: H, targetY, vy: -12 - Math.random() * 6, color, exploded: false, trail: [], particles: [] });
+  }
+
+  function explodeFirework(fw: Firework) {
+    fw.exploded = true;
+    const count = 50 + Math.floor(Math.random() * 40);
+    shockwaves.push({ x: fw.x, y: fw.y, radius: 0, maxRadius: 120 + Math.random() * 80, life: 1, color: fw.color });
+    flashes.push({ life: 1, color: fw.color, intensity: 0.15 });
+    shakeDecay = 12;
+    for (let i = 0; i < count; i++) {
+      const angle = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.3;
+      const speed = 2 + Math.random() * 6;
+      fw.particles.push(makeParticle(
+        fw.x, fw.y,
+        Math.cos(angle) * speed,
+        Math.sin(angle) * speed,
+        fw.color,
+        { size: Math.random() * 4 + 2, gravity: 0.04, drag: 0.975, glowSize: 8, maxLife: 0.6 + Math.random() * 0.4, sparkle: true },
+      ));
+    }
+  }
+
+  // Initial setup per variant
   if (variant === 'confetti' || variant === 'megaBurst') {
-    const n = variant === 'megaBurst' ? 250 : 180;
-    makeCannon(W * 0.05, 1, n, confettiColors);
-    makeCannon(W * 0.95, -1, n, confettiColors);
+    const n = variant === 'megaBurst' ? 300 : 200;
+    makeCannon(W * 0.04, 1, n, confettiColors);
+    makeCannon(W * 0.96, -1, n, confettiColors);
+    flashes.push({ life: 1, color: '#ffffff', intensity: variant === 'megaBurst' ? 0.25 : 0.12 });
+    shakeDecay = variant === 'megaBurst' ? 18 : 8;
+    shockwaves.push({ x: W * 0.04, y: H * 0.92, radius: 0, maxRadius: 200, life: 1, color: confettiColors[0] });
+    shockwaves.push({ x: W * 0.96, y: H * 0.92, radius: 0, maxRadius: 200, life: 1, color: confettiColors[1] });
   }
 
   if (variant === 'goldenRain' || variant === 'megaBurst') {
-    const count = variant === 'megaBurst' ? 200 : 150;
+    const count = variant === 'megaBurst' ? 250 : 180;
     for (let i = 0; i < count; i++) {
-      particles.push({
-        x: Math.random() * W,
-        y: -Math.random() * H * 0.5,
-        vx: (Math.random() - 0.5) * 2,
-        vy: Math.random() * 3 + 1.5,
-        size: Math.random() * 5 + 2,
-        color: goldColors[Math.floor(Math.random() * goldColors.length)],
-        rotation: Math.random() * 360,
-        rotSpeed: (Math.random() - 0.5) * 6,
-        life: 1,
-        shape: 'circle',
-        flickerPhase: Math.random() * Math.PI * 2,
-        flickerSpeed: 3 + Math.random() * 5,
-      });
+      particles.push(makeParticle(
+        Math.random() * W,
+        -Math.random() * H * 0.5,
+        (Math.random() - 0.5) * 2,
+        Math.random() * 3 + 1.5,
+        goldColors[Math.floor(Math.random() * goldColors.length)],
+        { size: Math.random() * 5 + 2, shape: Math.random() > 0.5 ? 'star' : 'circle', gravity: 0.08, glowSize: 6, sparkle: true },
+      ));
+    }
+  }
+
+  if (variant === 'megaBurst') {
+    const fwColors = [...confettiColors, ...goldColors];
+    for (let i = 0; i < 8; i++) {
+      setTimeout(() => {
+        spawnFirework(
+          W * 0.15 + Math.random() * W * 0.7,
+          H * 0.1 + Math.random() * H * 0.35,
+          fwColors[Math.floor(Math.random() * fwColors.length)],
+        );
+      }, i * 200);
+    }
+  } else if (variant === 'confetti') {
+    const fwColors = confettiColors;
+    for (let i = 0; i < 3; i++) {
+      setTimeout(() => {
+        spawnFirework(
+          W * 0.2 + Math.random() * W * 0.6,
+          H * 0.15 + Math.random() * H * 0.3,
+          fwColors[Math.floor(Math.random() * fwColors.length)],
+        );
+      }, 300 + i * 350);
     }
   }
 
   let frame = 0;
-  const maxFrames = variant === 'megaBurst' ? 300 : variant === 'goldenRain' ? 200 : 250;
+  const maxFrames = variant === 'megaBurst' ? 360 : variant === 'goldenRain' ? 240 : 280;
+  let running = true;
+
+  function drawParticle(p: CParticle, alpha: number) {
+    // Glow trail
+    if (p.glowSize > 0 && p.trail.length > 1) {
+      ctx!.save();
+      ctx!.globalAlpha = alpha * 0.3;
+      ctx!.strokeStyle = p.color;
+      ctx!.lineWidth = p.size * 0.4;
+      ctx!.lineCap = 'round';
+      ctx!.shadowColor = p.color;
+      ctx!.shadowBlur = p.glowSize;
+      ctx!.beginPath();
+      ctx!.moveTo(p.trail[0].x, p.trail[0].y);
+      for (let t = 1; t < p.trail.length; t++) {
+        ctx!.lineTo(p.trail[t].x, p.trail[t].y);
+      }
+      ctx!.stroke();
+      ctx!.restore();
+    }
+
+    ctx!.save();
+    ctx!.translate(p.x, p.y);
+    ctx!.rotate((p.rotation * Math.PI) / 180);
+    ctx!.globalAlpha = alpha;
+    ctx!.fillStyle = p.color;
+
+    if (p.glowSize > 0) {
+      ctx!.shadowColor = p.color;
+      ctx!.shadowBlur = p.glowSize;
+    }
+
+    switch (p.shape) {
+      case 'rect':
+        ctx!.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.6);
+        break;
+      case 'circle':
+        ctx!.beginPath();
+        ctx!.arc(0, 0, p.size / 2, 0, Math.PI * 2);
+        ctx!.fill();
+        if (p.sparkle) {
+          ctx!.globalAlpha = alpha * 0.6;
+          ctx!.fillStyle = '#fff';
+          ctx!.beginPath();
+          ctx!.arc(-p.size * 0.15, -p.size * 0.15, p.size * 0.2, 0, Math.PI * 2);
+          ctx!.fill();
+        }
+        break;
+      case 'star':
+        drawStar(ctx!, 0, 0, p.size / 2, 5);
+        break;
+      case 'heart':
+        drawHeart(ctx!, 0, 0, p.size * 0.4);
+        break;
+      case 'diamond':
+        drawDiamond(ctx!, 0, 0, p.size / 2);
+        break;
+      case 'streamer':
+        ctx!.fillRect(-p.size * 0.15, -p.size * 1.5, p.size * 0.3, p.size * 3);
+        break;
+    }
+    ctx!.restore();
+  }
 
   function animate() {
-    if (frame >= maxFrames) { ctx!.clearRect(0, 0, W, H); return; }
+    if (!running) return;
+    if (frame >= maxFrames) { ctx!.clearRect(0, 0, W * dpr, H * dpr); canvas.style.transform = ''; return; }
+
+    // Screen shake
+    if (shakeDecay > 0) {
+      shakeX = (Math.random() - 0.5) * shakeDecay * 1.5;
+      shakeY = (Math.random() - 0.5) * shakeDecay * 1.5;
+      shakeDecay *= 0.88;
+      if (shakeDecay < 0.3) shakeDecay = 0;
+      canvas.style.transform = `translate(${shakeX}px, ${shakeY}px)`;
+    } else if (shakeX !== 0 || shakeY !== 0) {
+      shakeX = 0; shakeY = 0;
+      canvas.style.transform = '';
+    }
+
     ctx!.clearRect(0, 0, W, H);
 
+    // Screen flash
+    for (let i = flashes.length - 1; i >= 0; i--) {
+      const f = flashes[i];
+      if (f.life > 0) {
+        ctx!.save();
+        ctx!.globalAlpha = f.life * f.intensity;
+        ctx!.fillStyle = f.color;
+        ctx!.fillRect(0, 0, W, H);
+        ctx!.restore();
+        f.life -= 0.04;
+      } else {
+        flashes.splice(i, 1);
+      }
+    }
+
+    // Shockwaves
+    for (let i = shockwaves.length - 1; i >= 0; i--) {
+      const sw = shockwaves[i];
+      sw.radius += (sw.maxRadius - sw.radius) * 0.08;
+      sw.life -= 0.025;
+      if (sw.life <= 0) { shockwaves.splice(i, 1); continue; }
+      ctx!.save();
+      ctx!.globalAlpha = sw.life * 0.4;
+      ctx!.strokeStyle = sw.color;
+      ctx!.lineWidth = 3 * sw.life;
+      ctx!.shadowColor = sw.color;
+      ctx!.shadowBlur = 20 * sw.life;
+      ctx!.beginPath();
+      ctx!.arc(sw.x, sw.y, sw.radius, 0, Math.PI * 2);
+      ctx!.stroke();
+      ctx!.restore();
+    }
+
+    // Fireworks (rising trail)
+    for (const fw of fireworks) {
+      if (!fw.exploded) {
+        fw.y += fw.vy;
+        fw.vy *= 0.985;
+        fw.trail.push({ x: fw.x + (Math.random() - 0.5) * 2, y: fw.y, alpha: 1 });
+        if (fw.trail.length > 20) fw.trail.shift();
+
+        // Draw trail
+        for (let t = 0; t < fw.trail.length; t++) {
+          const tp = fw.trail[t];
+          tp.alpha *= 0.92;
+          ctx!.save();
+          ctx!.globalAlpha = tp.alpha * 0.8;
+          ctx!.fillStyle = fw.color;
+          ctx!.shadowColor = fw.color;
+          ctx!.shadowBlur = 8;
+          ctx!.beginPath();
+          ctx!.arc(tp.x, tp.y, 2.5 * tp.alpha, 0, Math.PI * 2);
+          ctx!.fill();
+          ctx!.restore();
+        }
+
+        // Draw head
+        ctx!.save();
+        ctx!.fillStyle = '#ffffff';
+        ctx!.shadowColor = fw.color;
+        ctx!.shadowBlur = 15;
+        ctx!.beginPath();
+        ctx!.arc(fw.x, fw.y, 3.5, 0, Math.PI * 2);
+        ctx!.fill();
+        ctx!.restore();
+
+        if (fw.y <= fw.targetY || fw.vy > -2) {
+          explodeFirework(fw);
+        }
+      } else {
+        // Exploded particles
+        for (let pi = fw.particles.length - 1; pi >= 0; pi--) {
+          const p = fw.particles[pi];
+          p.trail.push({ x: p.x, y: p.y });
+          if (p.trail.length > 6) p.trail.shift();
+          p.x += p.vx;
+          p.vy += p.gravity;
+          p.y += p.vy;
+          p.vx *= p.drag;
+          p.rotation += p.rotSpeed;
+          p.life -= 0.012;
+
+          if (p.life <= 0) { fw.particles.splice(pi, 1); continue; }
+          const flicker = 0.5 + 0.5 * Math.sin(frame * p.flickerSpeed * 0.15 + p.flickerPhase);
+          drawParticle(p, p.life * (0.6 + flicker * 0.4));
+        }
+      }
+    }
+
+    // Main particles
+    const lifeFraction = frame / maxFrames;
     for (const p of particles) {
+      p.trail.push({ x: p.x, y: p.y });
+      if (p.trail.length > 5) p.trail.shift();
       p.x += p.vx;
-      p.vy += p.shape === 'circle' && (variant === 'goldenRain' || variant === 'megaBurst') ? 0.08 : 0.35;
+      p.vy += p.gravity;
       p.y += p.vy;
-      p.vx *= 0.995;
+      p.vx *= p.drag;
       p.rotation += p.rotSpeed;
-      p.life = Math.max(0, 1 - frame / maxFrames);
+      p.life = Math.max(0, 1 - lifeFraction / p.maxLife);
 
       const flicker = 0.5 + 0.5 * Math.sin(frame * p.flickerSpeed * 0.1 + p.flickerPhase);
       const alpha = p.life * (0.6 + flicker * 0.4);
 
-      ctx!.save();
-      ctx!.translate(p.x, p.y);
-      ctx!.rotate((p.rotation * Math.PI) / 180);
-      ctx!.globalAlpha = alpha;
-      ctx!.fillStyle = p.color;
-
-      if (p.shape === 'rect') {
-        ctx!.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.6);
-      } else if (p.shape === 'circle') {
-        ctx!.beginPath();
-        ctx!.arc(0, 0, p.size / 2, 0, Math.PI * 2);
-        ctx!.fill();
-        ctx!.globalAlpha = alpha * flicker * 0.8;
-        ctx!.fillStyle = '#fff';
-        ctx!.beginPath();
-        ctx!.arc(-p.size * 0.15, -p.size * 0.15, p.size * 0.15, 0, Math.PI * 2);
-        ctx!.fill();
-      } else {
-        ctx!.fillRect(-p.size * 0.15, -p.size * 1.5, p.size * 0.3, p.size * 3);
-      }
-
-      ctx!.restore();
+      drawParticle(p, alpha);
     }
+
     frame++;
     requestAnimationFrame(animate);
   }
@@ -340,7 +614,7 @@ function AnimatedNumber({ value, prefix = '', suffix = '', className = '' }: { v
   return <span className={className}>{prefix}{display.toLocaleString('nl-NL')}{suffix}</span>;
 }
 
-function CountUpAmount({ value, className = '' }: { value: number; className?: string }) {
+function CountUpAmount({ value, className = '', style }: { value: number; className?: string; style?: React.CSSProperties }) {
   const [display, setDisplay] = useState(0);
   useEffect(() => {
     let f = 0;
@@ -353,7 +627,7 @@ function CountUpAmount({ value, className = '' }: { value: number; className?: s
     }, 25);
     return () => clearInterval(iv);
   }, [value]);
-  return <span className={className}>&euro;{display.toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>;
+  return <span className={className} style={style}>&euro;{display.toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>;
 }
 
 function TrendArrow({ current, previous }: { current: number; previous: number }) {
@@ -904,34 +1178,60 @@ export default function LiveDashboard() {
             exit={{ opacity: 0 }}
             className="pointer-events-none fixed inset-0 z-[90] flex items-center justify-center"
           >
+            {/* Multi-layer pulsing aurora */}
             <motion.div
-              animate={{ scale: [1, 1.15, 1], opacity: [0.3, 0.6, 0.3] }}
-              transition={{ repeat: Infinity, duration: 2.5, ease: 'easeInOut' }}
-              className="absolute h-[600px] w-[600px] rounded-full bg-emerald-500/20 blur-[120px]"
+              animate={{ scale: [1, 1.2, 1], opacity: [0.2, 0.5, 0.2] }}
+              transition={{ repeat: Infinity, duration: 2, ease: 'easeInOut' }}
+              className="absolute h-[700px] w-[700px] rounded-full bg-emerald-500/20 blur-[150px]"
+            />
+            <motion.div
+              animate={{ scale: [1.1, 0.9, 1.1], opacity: [0.15, 0.35, 0.15] }}
+              transition={{ repeat: Infinity, duration: 3, ease: 'easeInOut' }}
+              className="absolute h-[500px] w-[500px] rounded-full bg-teal-400/15 blur-[120px]"
             />
             <div className="relative flex flex-col items-center">
-              <div className="relative mb-6 flex items-center justify-center" style={{ width: 120, height: 120 }}>
+              <div className="relative mb-6 flex items-center justify-center" style={{ width: 140, height: 140 }}>
+                {/* Triple expanding shockwave rings */}
+                {[0, 0.15, 0.3].map((delay, ri) => (
+                  <motion.div
+                    key={ri}
+                    initial={{ scale: 0, opacity: 0.7 }}
+                    animate={{ scale: 3 + ri * 0.5, opacity: 0 }}
+                    transition={{ duration: 1.8, ease: 'easeOut', delay }}
+                    className="absolute rounded-full"
+                    style={{ width: 140, height: 140, border: `${2 - ri * 0.5}px solid rgba(52,211,153,${0.6 - ri * 0.15})` }}
+                  />
+                ))}
+                {/* Rotating particle ring */}
                 <motion.div
-                  initial={{ scale: 0, opacity: 0.8 }}
-                  animate={{ scale: 2.5, opacity: 0 }}
-                  transition={{ duration: 1.5, ease: 'easeOut' }}
-                  className="absolute rounded-full border-2 border-emerald-400"
-                  style={{ width: 120, height: 120 }}
-                />
-                <motion.div
-                  initial={{ scale: 0, opacity: 0.5 }}
-                  animate={{ scale: 3.2, opacity: 0 }}
-                  transition={{ duration: 2, ease: 'easeOut', delay: 0.2 }}
-                  className="absolute rounded-full border border-emerald-400/50"
-                  style={{ width: 120, height: 120 }}
-                />
-                <motion.div
-                  initial={{ scale: 0 }}
-                  animate={{ scale: [0, 1.3, 1] }}
-                  transition={{ duration: 0.6, ease: [0.175, 0.885, 0.32, 1.275] }}
-                  className="relative flex h-[100px] w-[100px] items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-2xl shadow-emerald-500/40"
+                  animate={{ rotate: 360 }}
+                  transition={{ repeat: Infinity, duration: 8, ease: 'linear' }}
+                  className="absolute"
+                  style={{ width: 200, height: 200 }}
                 >
-                  <svg className="h-14 w-14 text-white" viewBox="0 0 24 24" fill="none">
+                  {Array.from({ length: 12 }).map((_, si) => (
+                    <motion.div
+                      key={si}
+                      animate={{ opacity: [0.3, 1, 0.3], scale: [0.5, 1.2, 0.5] }}
+                      transition={{ repeat: Infinity, duration: 1.5, delay: si * 0.12 }}
+                      className="absolute h-2 w-2 rounded-full bg-emerald-400"
+                      style={{
+                        left: 100 + Math.cos((si / 12) * Math.PI * 2) * 90,
+                        top: 100 + Math.sin((si / 12) * Math.PI * 2) * 90,
+                        boxShadow: '0 0 10px rgba(52,211,153,0.6)',
+                      }}
+                    />
+                  ))}
+                </motion.div>
+                {/* Icon with bounce */}
+                <motion.div
+                  initial={{ scale: 0, rotate: -180 }}
+                  animate={{ scale: [0, 1.4, 1], rotate: 0 }}
+                  transition={{ duration: 0.7, ease: [0.175, 0.885, 0.32, 1.275] }}
+                  className="relative flex h-[110px] w-[110px] items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 via-emerald-500 to-teal-600"
+                  style={{ boxShadow: '0 0 40px rgba(52,211,153,0.5), 0 0 80px rgba(52,211,153,0.2), 0 20px 60px rgba(52,211,153,0.3)' }}
+                >
+                  <svg className="h-16 w-16 text-white" viewBox="0 0 24 24" fill="none">
                     <motion.path
                       d="M5 13l4 4L19 7"
                       stroke="currentColor"
@@ -940,28 +1240,38 @@ export default function LiveDashboard() {
                       strokeLinejoin="round"
                       initial={{ pathLength: 0 }}
                       animate={{ pathLength: 1 }}
-                      transition={{ duration: 0.5, delay: 0.4, ease: 'easeOut' }}
+                      transition={{ duration: 0.5, delay: 0.5, ease: 'easeOut' }}
                     />
                   </svg>
                 </motion.div>
               </div>
               <motion.h2
-                initial={{ opacity: 0, y: 20, letterSpacing: '0.3em' }}
-                animate={{ opacity: 1, y: 0, letterSpacing: '0.15em' }}
-                transition={{ delay: 0.5, duration: 0.8 }}
-                className="text-4xl font-black text-emerald-400 lg:text-5xl"
-                style={{ textShadow: '0 0 40px rgba(52,211,153,0.5), 0 0 80px rgba(52,211,153,0.2)' }}
+                initial={{ opacity: 0, y: 30, letterSpacing: '0.4em', scale: 0.8 }}
+                animate={{ opacity: 1, y: 0, letterSpacing: '0.15em', scale: 1 }}
+                transition={{ delay: 0.5, duration: 0.9, type: 'spring', damping: 15 }}
+                className="text-5xl font-black text-emerald-400 lg:text-6xl"
+                style={{ textShadow: '0 0 40px rgba(52,211,153,0.6), 0 0 80px rgba(52,211,153,0.3), 0 4px 20px rgba(0,0,0,0.5)' }}
               >
                 BATCH VOLTOOID
               </motion.h2>
               {celebratingBatch.customer ? (
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.8 }} className="mt-3 flex flex-col items-center gap-1">
-                  <p className="text-lg font-bold text-white/70">{celebratingBatch.customer}</p>
-                  {celebratingBatch.branch && <span className={`rounded-full px-3 py-1 text-xs font-bold ${(BRANCH_COLORS[celebratingBatch.branch] || DEFAULT_BRANCH).badge}`}>{celebratingBatch.branch}</span>}
-                  {celebratingBatch.batchSize && <p className="mt-1 text-sm text-white/40">{celebratingBatch.batchSize} leads succesvol uitgeleverd</p>}
+                <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.9, type: 'spring' }} className="mt-4 flex flex-col items-center gap-2">
+                  <p className="text-xl font-bold text-white/80">{celebratingBatch.customer}</p>
+                  {celebratingBatch.branch && (
+                    <motion.span
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      transition={{ delay: 1.1, type: 'spring', damping: 12 }}
+                      className={`rounded-full px-4 py-1.5 text-sm font-bold ${(BRANCH_COLORS[celebratingBatch.branch] || DEFAULT_BRANCH).badge}`}
+                      style={{ boxShadow: `0 0 20px ${(BRANCH_COLORS[celebratingBatch.branch] || DEFAULT_BRANCH).fill}30` }}
+                    >
+                      {celebratingBatch.branch}
+                    </motion.span>
+                  )}
+                  {celebratingBatch.batchSize && <p className="mt-1 text-base text-white/40">{celebratingBatch.batchSize} leads succesvol uitgeleverd</p>}
                 </motion.div>
               ) : (
-                <motion.p initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.8 }} className="mt-3 text-lg font-medium text-white/50">
+                <motion.p initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.9 }} className="mt-4 text-lg font-medium text-white/50">
                   Alle leads zijn succesvol uitgeleverd
                 </motion.p>
               )}
@@ -1072,45 +1382,115 @@ export default function LiveDashboard() {
             className="fixed inset-0 z-[92] flex items-center justify-center"
             onClick={() => setTargetHitOverlay(null)}
           >
+            {/* Layered radial glow */}
             <motion.div
-              animate={reducedMotion ? undefined : { scale: [1, 1.15, 1], opacity: [0.3, 0.6, 0.3] }}
-              transition={{ repeat: Infinity, duration: 2.5, ease: 'easeInOut' }}
-              className="absolute h-[600px] w-[600px] rounded-full bg-amber-500/20 blur-[120px]"
+              animate={reducedMotion ? undefined : { scale: [1, 1.2, 1], opacity: [0.2, 0.55, 0.2] }}
+              transition={{ repeat: Infinity, duration: 2, ease: 'easeInOut' }}
+              className="absolute h-[700px] w-[700px] rounded-full bg-amber-500/20 blur-[150px]"
             />
-            <div className="relative flex flex-col items-center">
+            <motion.div
+              animate={reducedMotion ? undefined : { scale: [1.1, 0.85, 1.1], opacity: [0.1, 0.3, 0.1] }}
+              transition={{ repeat: Infinity, duration: 3.5, ease: 'easeInOut' }}
+              className="absolute h-[400px] w-[400px] rounded-full bg-orange-400/15 blur-[100px]"
+            />
+            {/* Rotating light rays */}
+            {!reducedMotion && (
               <motion.div
-                initial={reducedMotion ? undefined : { scale: 0 }}
-                animate={reducedMotion ? undefined : { scale: [0, 1.3, 1] }}
-                transition={{ duration: 0.6, ease: [0.175, 0.885, 0.32, 1.275] }}
-                className="relative mb-6 flex h-[100px] w-[100px] items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-amber-600 shadow-2xl shadow-amber-500/40"
-              >
-                <svg className="h-14 w-14 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M6 9H4.5a2.5 2.5 0 010-5C7 4 7 7 7 7M18 9h1.5a2.5 2.5 0 000-5C17 4 17 7 17 7" />
-                  <path d="M4 22h16" /><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20 7 22" />
-                  <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20 17 22" />
-                  <path d="M18 2H6v7a6 6 0 1012 0V2z" />
-                </svg>
-              </motion.div>
+                animate={{ rotate: 360 }}
+                transition={{ repeat: Infinity, duration: 15, ease: 'linear' }}
+                className="pointer-events-none absolute opacity-[0.06]"
+                style={{
+                  width: 800, height: 800,
+                  background: 'conic-gradient(from 0deg, transparent, rgba(251,191,36,0.5), transparent, rgba(251,191,36,0.5), transparent, rgba(251,191,36,0.5), transparent)',
+                }}
+              />
+            )}
+            <div className="relative flex flex-col items-center">
+              <div className="relative mb-6 flex items-center justify-center" style={{ width: 140, height: 140 }}>
+                {/* Trophy shockwave rings */}
+                {!reducedMotion && [0, 0.2, 0.4].map((delay, ri) => (
+                  <motion.div
+                    key={ri}
+                    initial={{ scale: 0, opacity: 0.8 }}
+                    animate={{ scale: 3.5 + ri * 0.5, opacity: 0 }}
+                    transition={{ duration: 2, ease: 'easeOut', delay }}
+                    className="absolute rounded-full"
+                    style={{ width: 140, height: 140, border: `${2 - ri * 0.5}px solid rgba(251,191,36,${0.6 - ri * 0.15})` }}
+                  />
+                ))}
+                {/* Orbiting stars */}
+                {!reducedMotion && (
+                  <motion.div
+                    animate={{ rotate: -360 }}
+                    transition={{ repeat: Infinity, duration: 6, ease: 'linear' }}
+                    className="absolute"
+                    style={{ width: 220, height: 220 }}
+                  >
+                    {Array.from({ length: 8 }).map((_, si) => (
+                      <motion.div
+                        key={si}
+                        animate={{ opacity: [0.4, 1, 0.4], scale: [0.8, 1.4, 0.8] }}
+                        transition={{ repeat: Infinity, duration: 1.2, delay: si * 0.15 }}
+                        className="absolute text-amber-300"
+                        style={{
+                          left: 110 + Math.cos((si / 8) * Math.PI * 2) * 100 - 6,
+                          top: 110 + Math.sin((si / 8) * Math.PI * 2) * 100 - 6,
+                          fontSize: 12,
+                          filter: 'drop-shadow(0 0 6px rgba(251,191,36,0.8))',
+                        }}
+                      >
+                        ★
+                      </motion.div>
+                    ))}
+                  </motion.div>
+                )}
+                <motion.div
+                  initial={reducedMotion ? undefined : { scale: 0, rotate: -180 }}
+                  animate={reducedMotion ? undefined : { scale: [0, 1.4, 1], rotate: 0 }}
+                  transition={{ duration: 0.7, ease: [0.175, 0.885, 0.32, 1.275] }}
+                  className="relative flex h-[110px] w-[110px] items-center justify-center rounded-full bg-gradient-to-br from-amber-400 via-amber-500 to-orange-600"
+                  style={{ boxShadow: '0 0 40px rgba(251,191,36,0.5), 0 0 80px rgba(251,191,36,0.25), 0 20px 60px rgba(251,191,36,0.3)' }}
+                >
+                  <svg className="h-16 w-16 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M6 9H4.5a2.5 2.5 0 010-5C7 4 7 7 7 7M18 9h1.5a2.5 2.5 0 000-5C17 4 17 7 17 7" />
+                    <path d="M4 22h16" /><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20 7 22" />
+                    <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20 17 22" />
+                    <path d="M18 2H6v7a6 6 0 1012 0V2z" />
+                  </svg>
+                </motion.div>
+              </div>
               <motion.h2
-                initial={reducedMotion ? undefined : { opacity: 0, y: 20, letterSpacing: '0.3em' }}
-                animate={{ opacity: 1, y: 0, letterSpacing: '0.15em' }}
-                transition={{ delay: 0.5, duration: 0.8 }}
-                className="text-4xl font-black text-amber-400 lg:text-5xl"
-                style={{ textShadow: '0 0 40px rgba(251,191,36,0.5), 0 0 80px rgba(251,191,36,0.2)' }}
+                initial={reducedMotion ? undefined : { opacity: 0, y: 30, letterSpacing: '0.4em', scale: 0.8 }}
+                animate={{ opacity: 1, y: 0, letterSpacing: '0.15em', scale: 1 }}
+                transition={{ delay: 0.5, duration: 0.9, type: 'spring', damping: 15 }}
+                className="text-5xl font-black text-amber-400 lg:text-6xl"
+                style={{ textShadow: '0 0 40px rgba(251,191,36,0.6), 0 0 80px rgba(251,191,36,0.3), 0 4px 20px rgba(0,0,0,0.5)' }}
               >
                 TARGET GEHAALD!
               </motion.h2>
-              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.8 }} className="mt-3 flex flex-col items-center gap-2">
+              <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.9, type: 'spring' }} className="mt-4 flex flex-col items-center gap-2">
                 <p className="text-xl font-bold text-white/80">{targetHitOverlay.payload.amName}</p>
                 <p className="text-base text-white/50">{targetHitOverlay.payload.targetLabel}</p>
-                <div className="flex items-center gap-4 mt-2">
-                  <span className="rounded-full bg-amber-500/20 px-4 py-1.5 text-sm font-bold text-amber-300">
+                <div className="mt-2 flex items-center gap-4">
+                  <motion.span
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    transition={{ delay: 1.1, type: 'spring', damping: 12 }}
+                    className="rounded-full bg-amber-500/20 px-4 py-1.5 text-sm font-bold text-amber-300"
+                    style={{ boxShadow: '0 0 15px rgba(251,191,36,0.2)' }}
+                  >
                     {targetHitOverlay.payload.targetType}: {targetHitOverlay.payload.targetValue?.toLocaleString('nl-NL')}
-                  </span>
+                  </motion.span>
                   {targetHitOverlay.payload.bonusAmount > 0 && (
-                    <span className="rounded-full bg-emerald-500/20 px-4 py-1.5 text-sm font-bold text-emerald-300">
+                    <motion.span
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      transition={{ delay: 1.3, type: 'spring', damping: 12 }}
+                      className="rounded-full bg-emerald-500/20 px-4 py-1.5 text-sm font-bold text-emerald-300"
+                      style={{ boxShadow: '0 0 15px rgba(52,211,153,0.2)' }}
+                    >
                       +&euro;{targetHitOverlay.payload.bonusAmount.toLocaleString('nl-NL')} bonus
-                    </span>
+                    </motion.span>
                   )}
                 </div>
               </motion.div>
@@ -1123,20 +1503,35 @@ export default function LiveDashboard() {
       <AnimatePresence>
         {milestoneToast && (
           <motion.div
-            initial={{ opacity: 0, y: -40, scale: 0.9 }}
+            initial={{ opacity: 0, y: -60, scale: 0.7 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -40, scale: 0.9 }}
-            transition={reducedMotion ? { duration: 0 } : { type: 'spring', damping: 20 }}
+            exit={{ opacity: 0, y: -60, scale: 0.7 }}
+            transition={reducedMotion ? { duration: 0 } : { type: 'spring', damping: 14, stiffness: 200 }}
             className="fixed left-1/2 top-6 z-[88] -translate-x-1/2"
           >
-            <div className="flex items-center gap-3 rounded-2xl bg-[#1a1d2e]/95 px-6 py-4 backdrop-blur-xl"
-              style={{ border: '2px solid rgba(168,85,247,0.4)', boxShadow: '0 0 30px rgba(168,85,247,0.2), 0 20px 40px -10px rgba(0,0,0,0.4)' }}
+            <div className="relative flex items-center gap-4 rounded-2xl bg-[#1a1d2e]/95 px-7 py-5 backdrop-blur-xl"
+              style={{ border: '2px solid rgba(168,85,247,0.5)', boxShadow: '0 0 40px rgba(168,85,247,0.25), 0 0 80px rgba(168,85,247,0.1), 0 20px 40px -10px rgba(0,0,0,0.5)' }}
             >
-              <span className="text-2xl">🏆</span>
+              {!reducedMotion && (
+                <motion.div
+                  animate={{ boxShadow: ['0 0 15px rgba(168,85,247,0.15)', '0 0 35px rgba(168,85,247,0.35)', '0 0 15px rgba(168,85,247,0.15)'] }}
+                  transition={{ repeat: Infinity, duration: 1.5 }}
+                  className="pointer-events-none absolute inset-0 rounded-2xl"
+                />
+              )}
+              <motion.span
+                className="text-3xl"
+                animate={reducedMotion ? undefined : { scale: [1, 1.3, 1], rotate: [0, -15, 15, 0] }}
+                transition={{ repeat: Infinity, duration: 2, ease: 'easeInOut' }}
+              >
+                🏆
+              </motion.span>
               <div>
-                <p className="text-base font-black text-brand-purple">{milestoneToast.payload.milestoneText || 'Milestone!'}</p>
+                <p className="text-lg font-black text-brand-purple" style={{ textShadow: '0 0 20px rgba(168,85,247,0.4)' }}>
+                  {milestoneToast.payload.milestoneText || 'Milestone!'}
+                </p>
                 {milestoneToast.payload.count && (
-                  <p className="text-xs text-white/40">{milestoneToast.payload.count} verkopen vandaag</p>
+                  <p className="text-sm text-white/50">{milestoneToast.payload.count} verkopen vandaag</p>
                 )}
               </div>
             </div>
@@ -1153,37 +1548,62 @@ export default function LiveDashboard() {
             return (
             <motion.div
               key={toast.id}
-              initial={{ opacity: 0, x: 120, scale: 0.85 }}
-              animate={{ opacity: 1, x: 0, scale: reducedMotion ? 1 : [0.85, 1.03, 1] }}
-              exit={{ opacity: 0, x: 120, scale: 0.85 }}
-              transition={reducedMotion ? { duration: 0.15 } : { type: 'spring', damping: 18, stiffness: 200 }}
-              className="relative min-w-[320px] overflow-hidden rounded-2xl bg-[#1a1d2e]/95 px-5 py-4 backdrop-blur-xl"
+              initial={{ opacity: 0, x: 140, scale: 0.8, rotateY: -15 }}
+              animate={{ opacity: 1, x: 0, scale: reducedMotion ? 1 : [0.8, 1.05, 1], rotateY: 0 }}
+              exit={{ opacity: 0, x: 140, scale: 0.8 }}
+              transition={reducedMotion ? { duration: 0.15 } : { type: 'spring', damping: 16, stiffness: 220 }}
+              className="relative min-w-[340px] overflow-hidden rounded-2xl bg-[#1a1d2e]/95 px-5 py-4 backdrop-blur-xl"
               style={{
-                border: `2px solid ${borderColor}40`,
-                boxShadow: `0 0 20px ${borderColor}25, 0 20px 40px -10px rgba(0,0,0,0.4)`,
+                border: `2px solid ${borderColor}50`,
+                boxShadow: `0 0 25px ${borderColor}30, 0 20px 40px -10px rgba(0,0,0,0.5)`,
               }}
             >
               {!reducedMotion && (
-              <motion.div
-                animate={{
-                  boxShadow: [
-                    `0 0 10px ${borderColor}15, inset 0 0 10px ${borderColor}00`,
-                    `0 0 25px ${borderColor}35, inset 0 0 15px ${borderColor}08`,
-                    `0 0 10px ${borderColor}15, inset 0 0 10px ${borderColor}00`,
-                  ],
-                }}
-                transition={{ repeat: Infinity, duration: 2 }}
-                className="pointer-events-none absolute inset-0 rounded-2xl"
-              />
+              <>
+                <motion.div
+                  animate={{
+                    boxShadow: [
+                      `0 0 10px ${borderColor}15, inset 0 0 10px ${borderColor}00`,
+                      `0 0 30px ${borderColor}40, inset 0 0 20px ${borderColor}0a`,
+                      `0 0 10px ${borderColor}15, inset 0 0 10px ${borderColor}00`,
+                    ],
+                  }}
+                  transition={{ repeat: Infinity, duration: 1.8 }}
+                  className="pointer-events-none absolute inset-0 rounded-2xl"
+                />
+                {/* Shine sweep */}
+                <motion.div
+                  initial={{ x: '-100%' }}
+                  animate={{ x: '200%' }}
+                  transition={{ duration: 1.2, delay: 0.3, ease: 'easeInOut' }}
+                  className="pointer-events-none absolute inset-y-0 w-[60px]"
+                  style={{ background: `linear-gradient(90deg, transparent, ${borderColor}20, transparent)` }}
+                />
+              </>
               )}
               <div className="flex items-center gap-4">
                 {toast.amAvatarUrl ? (
-                  <Image src={toast.amAvatarUrl} alt={toast.amName || ''} width={48} height={48} className="h-12 w-12 shrink-0 rounded-full object-cover shadow-lg" />
+                  <motion.div
+                    initial={reducedMotion ? undefined : { scale: 0, rotate: -90 }}
+                    animate={reducedMotion ? undefined : { scale: 1, rotate: 0 }}
+                    transition={{ delay: 0.2, type: 'spring', damping: 12 }}
+                    className="relative shrink-0"
+                  >
+                    <Image src={toast.amAvatarUrl} alt={toast.amName || ''} width={48} height={48} className="h-12 w-12 rounded-full object-cover shadow-lg" style={{ boxShadow: `0 0 15px ${borderColor}40` }} />
+                    <motion.div
+                      animate={{ scale: [1, 1.3, 1], opacity: [0.4, 0, 0.4] }}
+                      transition={{ repeat: Infinity, duration: 2 }}
+                      className="absolute inset-0 rounded-full"
+                      style={{ border: `2px solid ${borderColor}60` }}
+                    />
+                  </motion.div>
                 ) : (
                 <motion.div
-                  animate={reducedMotion ? undefined : { rotate: [0, -10, 10, -5, 5, 0] }}
-                  transition={{ duration: 0.6, delay: 0.3 }}
-                  className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-amber-600 shadow-lg shadow-amber-500/30"
+                  initial={reducedMotion ? undefined : { scale: 0, rotate: -90 }}
+                  animate={reducedMotion ? undefined : { scale: 1, rotate: [0, -10, 10, -5, 5, 0] }}
+                  transition={{ duration: 0.7, delay: 0.2, type: 'spring' }}
+                  className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-amber-600"
+                  style={{ boxShadow: `0 0 20px ${borderColor}40` }}
                 >
                   {toast.amName ? (
                     <span className="text-lg font-black text-white">{toast.amName.charAt(0).toUpperCase()}</span>
@@ -1197,14 +1617,27 @@ export default function LiveDashboard() {
                 )}
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <p className="text-base font-black tracking-wide text-amber-400">Ka-Ching!</p>
+                    <motion.p
+                      animate={reducedMotion ? undefined : { scale: [1, 1.08, 1] }}
+                      transition={{ repeat: 2, duration: 0.4, delay: 0.4 }}
+                      className="text-base font-black tracking-wide text-amber-400"
+                      style={{ textShadow: `0 0 12px ${borderColor}60` }}
+                    >
+                      Ka-Ching!
+                    </motion.p>
                     <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold ${bc.badge}`}>{toast.branch}</span>
                   </div>
                   <p className="mt-0.5 truncate text-sm font-medium text-white/70">{toast.customer}</p>
-                  {toast.amName && <p className="text-xs text-white/35">door {toast.amName}</p>}
+                  {toast.amName && <p className="text-xs text-white/40">door {toast.amName}</p>}
                 </div>
                 {toast.amount > 0 && (
-                  <CountUpAmount value={toast.amount} className="text-xl font-black text-emerald-400" />
+                  <motion.div
+                    initial={reducedMotion ? undefined : { scale: 0 }}
+                    animate={reducedMotion ? undefined : { scale: [0, 1.2, 1] }}
+                    transition={{ delay: 0.3, type: 'spring', damping: 12 }}
+                  >
+                    <CountUpAmount value={toast.amount} className="text-xl font-black text-emerald-400" style={{ textShadow: '0 0 15px rgba(52,211,153,0.4)' }} />
+                  </motion.div>
                 )}
               </div>
               <motion.div

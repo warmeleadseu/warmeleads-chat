@@ -3,6 +3,7 @@ const STORAGE_KEY = 'warmeleads-sound-enabled';
 class AudioManager {
   private ctx: AudioContext | null = null;
   private _enabled: boolean;
+  private reverbBuf: AudioBuffer | null = null;
 
   constructor() {
     if (typeof window !== 'undefined') {
@@ -33,325 +34,575 @@ class AudioManager {
     } catch { return null; }
   }
 
-  // ── Small sale: bright 2-note ding ───────────────────────────────────
+  // Algorithmic reverb impulse response
+  private getReverbBuffer(ac: AudioContext): AudioBuffer {
+    if (this.reverbBuf && this.reverbBuf.sampleRate === ac.sampleRate) return this.reverbBuf;
+    const rate = ac.sampleRate;
+    const len = Math.floor(rate * 1.8);
+    const buf = ac.createBuffer(2, len, rate);
+    for (let ch = 0; ch < 2; ch++) {
+      const d = buf.getChannelData(ch);
+      for (let i = 0; i < len; i++) {
+        const t = i / rate;
+        const decay = Math.exp(-t * 3.5);
+        const diffusion = (Math.random() * 2 - 1) * decay;
+        const earlyRef = i < rate * 0.08 ? (Math.random() * 2 - 1) * 0.3 * Math.exp(-t * 15) : 0;
+        d[i] = (diffusion * 0.7 + earlyRef) * 0.4;
+      }
+    }
+    this.reverbBuf = buf;
+    return buf;
+  }
+
+  private createReverb(ac: AudioContext, wetGain = 0.3): { input: GainNode; output: GainNode } {
+    const input = ac.createGain();
+    const output = ac.createGain();
+    const dry = ac.createGain();
+    dry.gain.value = 1;
+    const wet = ac.createGain();
+    wet.gain.value = wetGain;
+    const conv = ac.createConvolver();
+    conv.buffer = this.getReverbBuffer(ac);
+    input.connect(dry);
+    input.connect(conv);
+    conv.connect(wet);
+    dry.connect(output);
+    wet.connect(output);
+    return { input, output };
+  }
+
+  private noise(ac: AudioContext, duration: number): AudioBufferSourceNode {
+    const buf = ac.createBuffer(1, Math.floor(ac.sampleRate * duration), ac.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    const src = ac.createBufferSource();
+    src.buffer = buf;
+    return src;
+  }
+
+  private subBass(ac: AudioContext, dest: AudioNode, time: number, freq = 50, dur = 0.25) {
+    const osc = ac.createOscillator();
+    const g = ac.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(freq, time);
+    osc.frequency.exponentialRampToValueAtTime(30, time + dur);
+    g.gain.setValueAtTime(0.7, time);
+    g.gain.exponentialRampToValueAtTime(0.001, time + dur);
+    osc.connect(g);
+    g.connect(dest);
+    osc.start(time);
+    osc.stop(time + dur + 0.05);
+  }
+
+  // ── Small sale: coin collect with ascending sparkle ─────────────────
   playSmallSale() {
     const ac = this.ensureContext();
     if (!ac) return;
+    const { input: rev, output: revOut } = this.createReverb(ac, 0.25);
     const master = ac.createGain();
-    master.gain.value = 0.25;
+    master.gain.value = 0.3;
+    revOut.connect(master);
     master.connect(ac.destination);
     const now = ac.currentTime;
 
-    // Note 1: A5 (880 Hz)
-    const o1 = ac.createOscillator();
-    const g1 = ac.createGain();
-    o1.type = 'sine';
-    o1.frequency.value = 880;
-    g1.gain.setValueAtTime(0, now);
-    g1.gain.linearRampToValueAtTime(0.7, now + 0.008);
-    g1.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
-    o1.connect(g1); g1.connect(master);
-    o1.start(now); o1.stop(now + 0.4);
+    // 5-note ascending arpeggio with stereo sweep
+    const notes = [880, 1108.73, 1318.51, 1567.98, 2093];
+    notes.forEach((freq, i) => {
+      const t = now + i * 0.055;
+      const pan = ac.createStereoPanner();
+      pan.pan.value = -0.6 + (i / (notes.length - 1)) * 1.2;
 
-    // Note 2: E6 (1318 Hz) slightly delayed
-    const o2 = ac.createOscillator();
-    const g2 = ac.createGain();
-    o2.type = 'sine';
-    o2.frequency.value = 1318.5;
-    const t2 = now + 0.08;
-    g2.gain.setValueAtTime(0, t2);
-    g2.gain.linearRampToValueAtTime(0.6, t2 + 0.008);
-    g2.gain.exponentialRampToValueAtTime(0.001, t2 + 0.4);
-    o2.connect(g2); g2.connect(master);
-    o2.start(t2); o2.stop(t2 + 0.45);
+      const osc = ac.createOscillator();
+      const g = ac.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(0.5, t + 0.006);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+      osc.connect(g);
+      g.connect(pan);
+      pan.connect(rev);
+      osc.start(t);
+      osc.stop(t + 0.45);
 
-    // Shimmer overtone
-    const o3 = ac.createOscillator();
-    const g3 = ac.createGain();
-    o3.type = 'sine';
-    o3.frequency.value = 2637;
-    g3.gain.setValueAtTime(0, t2);
-    g3.gain.linearRampToValueAtTime(0.15, t2 + 0.01);
-    g3.gain.exponentialRampToValueAtTime(0.001, t2 + 0.3);
-    o3.connect(g3); g3.connect(master);
-    o3.start(t2); o3.stop(t2 + 0.35);
+      // Harmonic shimmer
+      const h = ac.createOscillator();
+      const hg = ac.createGain();
+      h.type = 'sine';
+      h.frequency.value = freq * 3;
+      hg.gain.setValueAtTime(0, t);
+      hg.gain.linearRampToValueAtTime(0.08, t + 0.006);
+      hg.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+      h.connect(hg);
+      hg.connect(pan);
+      h.start(t);
+      h.stop(t + 0.25);
+    });
+
+    // Sparkle dust overlay
+    for (let i = 0; i < 8; i++) {
+      const t = now + 0.1 + i * 0.03;
+      const osc = ac.createOscillator();
+      const g = ac.createGain();
+      const pan = ac.createStereoPanner();
+      pan.pan.value = Math.random() * 2 - 1;
+      osc.type = 'sine';
+      osc.frequency.value = 4000 + Math.random() * 8000;
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(0.06, t + 0.003);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+      osc.connect(g);
+      g.connect(pan);
+      pan.connect(rev);
+      osc.start(t);
+      osc.stop(t + 0.1);
+    }
   }
 
-  // ── Big sale: enhanced ka-ching ──────────────────────────────────────
+  // ── Big sale: slot machine jackpot ─────────────────────────────────
   playBigSale() {
     const ac = this.ensureContext();
     if (!ac) return;
+    const { input: rev, output: revOut } = this.createReverb(ac, 0.35);
     const master = ac.createGain();
-    master.gain.value = 0.3;
+    master.gain.value = 0.32;
+    revOut.connect(master);
     master.connect(ac.destination);
     const now = ac.currentTime;
 
-    // Low-end body thump
-    const body = ac.createOscillator();
-    const bg = ac.createGain();
-    body.type = 'sine';
-    body.frequency.setValueAtTime(220, now);
-    body.frequency.exponentialRampToValueAtTime(80, now + 0.15);
-    bg.gain.setValueAtTime(0.6, now);
-    bg.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
-    body.connect(bg); bg.connect(master);
-    body.start(now); body.stop(now + 0.25);
+    // Sub-bass impact
+    this.subBass(ac, rev, now, 60, 0.3);
 
-    // Cash register noise burst (highpass filtered)
-    const bufSize = Math.floor(ac.sampleRate * 0.03);
-    const noiseBuf = ac.createBuffer(1, bufSize, ac.sampleRate);
-    const nd = noiseBuf.getChannelData(0);
-    for (let i = 0; i < bufSize; i++) nd[i] = Math.random() * 2 - 1;
-    const noise = ac.createBufferSource();
-    noise.buffer = noiseBuf;
-    const hp = ac.createBiquadFilter();
-    hp.type = 'highpass'; hp.frequency.value = 2000;
-    const ng = ac.createGain();
-    ng.gain.setValueAtTime(1, now);
-    ng.gain.exponentialRampToValueAtTime(0.01, now + 0.03);
-    noise.connect(hp); hp.connect(ng); ng.connect(master);
-    noise.start(now); noise.stop(now + 0.04);
+    // Cash register slam (layered noise)
+    const slam = this.noise(ac, 0.05);
+    const slamHp = ac.createBiquadFilter();
+    slamHp.type = 'highpass';
+    slamHp.frequency.value = 1500;
+    const slamG = ac.createGain();
+    slamG.gain.setValueAtTime(0.9, now);
+    slamG.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+    slam.connect(slamHp);
+    slamHp.connect(slamG);
+    slamG.connect(rev);
+    slam.start(now);
+    slam.stop(now + 0.06);
 
-    // Metallic ding – stacked oscillators with bandpass
-    const ct = now + 0.08;
-    [3520, 4698, 5274].forEach((freq, i) => {
+    // Metallic ka-ching bell (rich harmonics)
+    const bellT = now + 0.06;
+    [2637, 3520, 4698, 5274, 6645].forEach((freq, i) => {
       const osc = ac.createOscillator();
       const g = ac.createGain();
       const bp = ac.createBiquadFilter();
-      osc.type = i === 0 ? 'sine' : 'triangle';
+      osc.type = i < 2 ? 'sine' : 'triangle';
       osc.frequency.value = freq;
-      bp.type = 'bandpass'; bp.frequency.value = freq; bp.Q.value = 8;
-      g.gain.setValueAtTime(0, ct);
-      g.gain.linearRampToValueAtTime(0.8, ct + 0.005);
-      g.gain.exponentialRampToValueAtTime(0.001, ct + 0.7);
-      osc.connect(bp); bp.connect(g); g.connect(master);
-      osc.start(ct); osc.stop(ct + 0.75);
+      bp.type = 'bandpass';
+      bp.frequency.value = freq;
+      bp.Q.value = 12;
+      g.gain.setValueAtTime(0, bellT);
+      g.gain.linearRampToValueAtTime(0.6 - i * 0.08, bellT + 0.004);
+      g.gain.exponentialRampToValueAtTime(0.001, bellT + 0.8);
+      osc.connect(bp);
+      bp.connect(g);
+      g.connect(rev);
+      osc.start(bellT);
+      osc.stop(bellT + 0.85);
     });
 
-    // Coin sparkle – 4 rapid micro-tones
-    [6000, 7500, 9000, 10500].forEach((freq, i) => {
+    // Rapid coin cascade (20 micro-tones sweeping L to R)
+    for (let i = 0; i < 20; i++) {
+      const t = bellT + 0.05 + i * 0.025;
+      const pan = ac.createStereoPanner();
+      pan.pan.value = -0.8 + (i / 19) * 1.6;
       const osc = ac.createOscillator();
       const g = ac.createGain();
-      const t = ct + i * 0.035;
-      osc.type = 'sine'; osc.frequency.value = freq;
+      osc.type = 'sine';
+      osc.frequency.value = 5000 + Math.random() * 7000;
       g.gain.setValueAtTime(0, t);
-      g.gain.linearRampToValueAtTime(0.3, t + 0.005);
-      g.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
-      osc.connect(g); g.connect(master);
-      osc.start(t); osc.stop(t + 0.12);
-    });
+      g.gain.linearRampToValueAtTime(0.2 + Math.random() * 0.15, t + 0.003);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.06 + Math.random() * 0.04);
+      osc.connect(g);
+      g.connect(pan);
+      pan.connect(rev);
+      osc.start(t);
+      osc.stop(t + 0.12);
+    }
 
-    // Extended shimmer tail
-    const shimmer = ac.createOscillator();
-    const sg = ac.createGain();
-    shimmer.type = 'sine'; shimmer.frequency.value = 8000;
-    shimmer.frequency.linearRampToValueAtTime(12000, ct + 0.8);
-    sg.gain.setValueAtTime(0, ct + 0.2);
-    sg.gain.linearRampToValueAtTime(0.12, ct + 0.3);
-    sg.gain.exponentialRampToValueAtTime(0.001, ct + 1.0);
-    shimmer.connect(sg); sg.connect(master);
-    shimmer.start(ct + 0.2); shimmer.stop(ct + 1.1);
+    // Crowd cheer (filtered noise swell)
+    const cheerT = now + 0.15;
+    const cheer = this.noise(ac, 1.5);
+    const cheerBp = ac.createBiquadFilter();
+    cheerBp.type = 'bandpass';
+    cheerBp.frequency.value = 2000;
+    cheerBp.Q.value = 0.8;
+    const cheerG = ac.createGain();
+    cheerG.gain.setValueAtTime(0, cheerT);
+    cheerG.gain.linearRampToValueAtTime(0.12, cheerT + 0.2);
+    cheerG.gain.setValueAtTime(0.1, cheerT + 0.6);
+    cheerG.gain.exponentialRampToValueAtTime(0.001, cheerT + 1.4);
+    cheer.connect(cheerBp);
+    cheerBp.connect(cheerG);
+    cheerG.connect(rev);
+    cheer.start(cheerT);
+    cheer.stop(cheerT + 1.5);
+
+    // Long shimmer tail with vibrato
+    const shimT = bellT + 0.3;
+    const shim = ac.createOscillator();
+    const shimG = ac.createGain();
+    const lfo = ac.createOscillator();
+    const lfoG = ac.createGain();
+    shim.type = 'sine';
+    shim.frequency.value = 8000;
+    shim.frequency.linearRampToValueAtTime(12000, shimT + 1.5);
+    lfo.type = 'sine';
+    lfo.frequency.value = 6;
+    lfoG.gain.value = 300;
+    lfo.connect(lfoG);
+    lfoG.connect(shim.frequency);
+    shimG.gain.setValueAtTime(0, shimT);
+    shimG.gain.linearRampToValueAtTime(0.08, shimT + 0.1);
+    shimG.gain.exponentialRampToValueAtTime(0.001, shimT + 1.5);
+    shim.connect(shimG);
+    shimG.connect(rev);
+    shim.start(shimT);
+    shim.stop(shimT + 1.6);
+    lfo.start(shimT);
+    lfo.stop(shimT + 1.6);
   }
 
-  // ── Batch complete: triumphant ascending chord ───────────────────────
+  // ── Batch complete: epic orchestral hit ────────────────────────────
   playBatchComplete() {
     const ac = this.ensureContext();
     if (!ac) return;
+    const { input: rev, output: revOut } = this.createReverb(ac, 0.45);
     const master = ac.createGain();
-    master.gain.value = 0.28;
+    master.gain.value = 0.32;
+    revOut.connect(master);
     master.connect(ac.destination);
     const now = ac.currentTime;
 
-    const notes = [
-      { freq: 523.25, start: 0,    dur: 0.6 },  // C5
-      { freq: 659.25, start: 0.12, dur: 0.55 },  // E5
-      { freq: 783.99, start: 0.24, dur: 0.5 },   // G5
-      { freq: 1046.5, start: 0.4,  dur: 0.8 },   // C6 (longer, resolution)
-    ];
+    // Timpani slam
+    this.subBass(ac, rev, now, 55, 0.35);
+    const timpNoise = this.noise(ac, 0.2);
+    const timpLp = ac.createBiquadFilter();
+    timpLp.type = 'lowpass';
+    timpLp.frequency.value = 250;
+    timpLp.Q.value = 4;
+    const timpG = ac.createGain();
+    timpG.gain.setValueAtTime(0.8, now);
+    timpG.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+    timpNoise.connect(timpLp);
+    timpLp.connect(timpG);
+    timpG.connect(rev);
+    timpNoise.start(now);
+    timpNoise.stop(now + 0.4);
 
-    notes.forEach(n => {
-      // Sine base
-      const osc1 = ac.createOscillator();
-      const g1 = ac.createGain();
-      osc1.type = 'sine'; osc1.frequency.value = n.freq;
-      const t = now + n.start;
-      g1.gain.setValueAtTime(0, t);
-      g1.gain.linearRampToValueAtTime(0.6, t + 0.02);
-      g1.gain.setValueAtTime(0.55, t + n.dur * 0.6);
-      g1.gain.exponentialRampToValueAtTime(0.001, t + n.dur);
-      osc1.connect(g1); g1.connect(master);
-      osc1.start(t); osc1.stop(t + n.dur + 0.05);
+    // Full brass chord: C4 E4 G4 C5 (stacked filtered sawtooths)
+    const brassT = now + 0.05;
+    const brassFreqs = [261.63, 329.63, 392, 523.25];
+    brassFreqs.forEach((freq, i) => {
+      const pan = ac.createStereoPanner();
+      pan.pan.value = -0.4 + (i / 3) * 0.8;
 
-      // Triangle warmth layer
-      const osc2 = ac.createOscillator();
-      const g2 = ac.createGain();
-      osc2.type = 'triangle'; osc2.frequency.value = n.freq;
-      g2.gain.setValueAtTime(0, t);
-      g2.gain.linearRampToValueAtTime(0.3, t + 0.02);
-      g2.gain.exponentialRampToValueAtTime(0.001, t + n.dur * 0.8);
-      osc2.connect(g2); g2.connect(master);
-      osc2.start(t); osc2.stop(t + n.dur);
+      [1, 2].forEach(oct => {
+        const osc = ac.createOscillator();
+        const lp = ac.createBiquadFilter();
+        const g = ac.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.value = freq * oct;
+        osc.detune.value = (Math.random() - 0.5) * 10;
+        lp.type = 'lowpass';
+        lp.frequency.setValueAtTime(freq * 4, brassT);
+        lp.frequency.exponentialRampToValueAtTime(freq * 2, brassT + 1.0);
+        lp.Q.value = 1.5;
+        const vol = oct === 1 ? 0.35 : 0.12;
+        g.gain.setValueAtTime(0, brassT);
+        g.gain.linearRampToValueAtTime(vol, brassT + 0.025);
+        g.gain.setValueAtTime(vol * 0.85, brassT + 0.5);
+        g.gain.exponentialRampToValueAtTime(0.001, brassT + 1.2);
+        osc.connect(lp);
+        lp.connect(g);
+        g.connect(pan);
+        pan.connect(rev);
+        osc.start(brassT);
+        osc.stop(brassT + 1.3);
+      });
     });
 
-    // Bright octave ping on the final C6
-    const ping = ac.createOscillator();
-    const pg = ac.createGain();
-    ping.type = 'sine'; ping.frequency.value = 2093;
-    const pt = now + 0.42;
-    pg.gain.setValueAtTime(0, pt);
-    pg.gain.linearRampToValueAtTime(0.2, pt + 0.01);
-    pg.gain.exponentialRampToValueAtTime(0.001, pt + 0.5);
-    ping.connect(pg); pg.connect(master);
-    ping.start(pt); ping.stop(pt + 0.55);
+    // String sustain layer (triangle waves with vibrato)
+    const strT = brassT + 0.1;
+    [523.25, 659.25, 783.99].forEach(freq => {
+      const osc = ac.createOscillator();
+      const g = ac.createGain();
+      const lfo = ac.createOscillator();
+      const lfoG = ac.createGain();
+      osc.type = 'triangle';
+      osc.frequency.value = freq;
+      lfo.type = 'sine';
+      lfo.frequency.value = 5;
+      lfoG.gain.value = freq * 0.008;
+      lfo.connect(lfoG);
+      lfoG.connect(osc.frequency);
+      g.gain.setValueAtTime(0, strT);
+      g.gain.linearRampToValueAtTime(0.15, strT + 0.15);
+      g.gain.setValueAtTime(0.12, strT + 0.8);
+      g.gain.exponentialRampToValueAtTime(0.001, strT + 1.5);
+      osc.connect(g);
+      g.connect(rev);
+      osc.start(strT);
+      osc.stop(strT + 1.6);
+      lfo.start(strT);
+      lfo.stop(strT + 1.6);
+    });
+
+    // Cymbal swell
+    const cymT = now + 0.04;
+    const cym = this.noise(ac, 2);
+    const cymHp = ac.createBiquadFilter();
+    cymHp.type = 'highpass';
+    cymHp.frequency.value = 5000;
+    const cymG = ac.createGain();
+    cymG.gain.setValueAtTime(0.5, cymT);
+    cymG.gain.linearRampToValueAtTime(0.15, cymT + 0.3);
+    cymG.gain.exponentialRampToValueAtTime(0.001, cymT + 1.8);
+    cym.connect(cymHp);
+    cymHp.connect(cymG);
+    cymG.connect(rev);
+    cym.start(cymT);
+    cym.stop(cymT + 2);
+
+    // Resolution sparkle
+    const sparkT = brassT + 0.6;
+    for (let i = 0; i < 6; i++) {
+      const t = sparkT + i * 0.04;
+      const osc = ac.createOscillator();
+      const g = ac.createGain();
+      const pan = ac.createStereoPanner();
+      pan.pan.value = Math.random() * 2 - 1;
+      osc.type = 'sine';
+      osc.frequency.value = 3000 + i * 800;
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(0.1, t + 0.005);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+      osc.connect(g);
+      g.connect(pan);
+      pan.connect(rev);
+      osc.start(t);
+      osc.stop(t + 0.35);
+    }
   }
 
-  // ── Target hit: epic fanfare ─────────────────────────────────────────
+  // ── Target hit: stadium horn triumph ───────────────────────────────
   playTargetHit() {
     const ac = this.ensureContext();
     if (!ac) return;
+    const { input: rev, output: revOut } = this.createReverb(ac, 0.4);
     const master = ac.createGain();
-    master.gain.value = 0.3;
+    master.gain.value = 0.33;
+    revOut.connect(master);
     master.connect(ac.destination);
     const now = ac.currentTime;
 
-    // Timpani hit: low noise burst through lowpass
-    const timpBuf = ac.createBuffer(1, Math.floor(ac.sampleRate * 0.15), ac.sampleRate);
-    const td = timpBuf.getChannelData(0);
-    for (let i = 0; i < td.length; i++) td[i] = Math.random() * 2 - 1;
-    const timp = ac.createBufferSource();
-    timp.buffer = timpBuf;
-    const tlp = ac.createBiquadFilter();
-    tlp.type = 'lowpass'; tlp.frequency.value = 200; tlp.Q.value = 3;
-    const tg = ac.createGain();
-    tg.gain.setValueAtTime(0.8, now);
-    tg.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
-    timp.connect(tlp); tlp.connect(tg); tg.connect(master);
-    timp.start(now); timp.stop(now + 0.5);
+    // Sub-bass thunder
+    this.subBass(ac, rev, now, 45, 0.4);
 
-    // Fanfare melody: Da-da-da-DAAA (Bb4 Bb4 Bb4 Eb5)
-    const melody = [
-      { freq: 466.16, start: 0.05, dur: 0.12 },
-      { freq: 466.16, start: 0.2,  dur: 0.12 },
-      { freq: 466.16, start: 0.35, dur: 0.12 },
-      { freq: 622.25, start: 0.5,  dur: 0.9 },   // resolution – long sustain
-    ];
-
-    melody.forEach(n => {
-      // Brass-like sawtooth through lowpass
-      const osc = ac.createOscillator();
-      const lp = ac.createBiquadFilter();
+    // Snare roll (rapid noise bursts)
+    for (let i = 0; i < 12; i++) {
+      const t = now + i * 0.035;
+      const n = this.noise(ac, 0.04);
+      const bp = ac.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = 3000;
+      bp.Q.value = 1;
       const g = ac.createGain();
-      osc.type = 'sawtooth'; osc.frequency.value = n.freq;
-      lp.type = 'lowpass'; lp.frequency.value = n.freq * 3; lp.Q.value = 1;
-      const t = now + n.start;
-      g.gain.setValueAtTime(0, t);
-      g.gain.linearRampToValueAtTime(0.5, t + 0.015);
-      g.gain.setValueAtTime(0.45, t + n.dur * 0.5);
-      g.gain.exponentialRampToValueAtTime(0.001, t + n.dur);
-      osc.connect(lp); lp.connect(g); g.connect(master);
-      osc.start(t); osc.stop(t + n.dur + 0.05);
+      const vol = 0.15 + (i / 11) * 0.35;
+      g.gain.setValueAtTime(vol, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.035);
+      n.connect(bp);
+      bp.connect(g);
+      g.connect(rev);
+      n.start(t);
+      n.stop(t + 0.04);
+    }
 
-      // Octave doubling for power
-      const o2 = ac.createOscillator();
-      const g2 = ac.createGain();
-      o2.type = 'sawtooth'; o2.frequency.value = n.freq * 2;
-      const lp2 = ac.createBiquadFilter();
-      lp2.type = 'lowpass'; lp2.frequency.value = n.freq * 4;
-      g2.gain.setValueAtTime(0, t);
-      g2.gain.linearRampToValueAtTime(0.15, t + 0.015);
-      g2.gain.exponentialRampToValueAtTime(0.001, t + n.dur * 0.8);
-      o2.connect(lp2); lp2.connect(g2); g2.connect(master);
-      o2.start(t); o2.stop(t + n.dur);
+    // Stadium horn: stacked detuned sawtooths for fat sound
+    const hornT = now + 0.42;
+    const hornFreqs = [233.08, 349.23, 466.16]; // Bb3 F4 Bb4
+
+    hornFreqs.forEach((freq, fi) => {
+      const pan = ac.createStereoPanner();
+      pan.pan.value = -0.3 + fi * 0.3;
+
+      // 3 detuned voices per note for thickness
+      [-8, 0, 8].forEach(detune => {
+        const osc = ac.createOscillator();
+        const lp = ac.createBiquadFilter();
+        const g = ac.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.value = freq;
+        osc.detune.value = detune;
+        lp.type = 'lowpass';
+        lp.frequency.setValueAtTime(freq * 5, hornT);
+        lp.frequency.exponentialRampToValueAtTime(freq * 2.5, hornT + 1.2);
+        lp.Q.value = 2;
+        g.gain.setValueAtTime(0, hornT);
+        g.gain.linearRampToValueAtTime(0.22, hornT + 0.02);
+        g.gain.setValueAtTime(0.2, hornT + 0.7);
+        g.gain.exponentialRampToValueAtTime(0.001, hornT + 1.3);
+        osc.connect(lp);
+        lp.connect(g);
+        g.connect(pan);
+        pan.connect(rev);
+        osc.start(hornT);
+        osc.stop(hornT + 1.35);
+      });
     });
 
-    // Cymbal shimmer: white noise through highpass, long decay
-    const cymBuf = ac.createBuffer(1, Math.floor(ac.sampleRate * 1.5), ac.sampleRate);
-    const cd = cymBuf.getChannelData(0);
-    for (let i = 0; i < cd.length; i++) cd[i] = Math.random() * 2 - 1;
-    const cym = ac.createBufferSource();
-    cym.buffer = cymBuf;
-    const chp = ac.createBiquadFilter();
-    chp.type = 'highpass'; chp.frequency.value = 6000;
-    const cg = ac.createGain();
-    const cymStart = now + 0.5;
-    cg.gain.setValueAtTime(0, cymStart);
-    cg.gain.linearRampToValueAtTime(0.15, cymStart + 0.05);
-    cg.gain.exponentialRampToValueAtTime(0.001, cymStart + 1.5);
-    cym.connect(chp); chp.connect(cg); cg.connect(master);
-    cym.start(cymStart); cym.stop(cymStart + 1.6);
+    // Crowd roar (bandpass filtered noise)
+    const roarT = hornT;
+    const roar = this.noise(ac, 2);
+    const roarBp = ac.createBiquadFilter();
+    roarBp.type = 'bandpass';
+    roarBp.frequency.value = 1500;
+    roarBp.Q.value = 0.5;
+    const roarG = ac.createGain();
+    roarG.gain.setValueAtTime(0, roarT);
+    roarG.gain.linearRampToValueAtTime(0.18, roarT + 0.3);
+    roarG.gain.setValueAtTime(0.15, roarT + 0.8);
+    roarG.gain.exponentialRampToValueAtTime(0.001, roarT + 1.8);
+    roar.connect(roarBp);
+    roarBp.connect(roarG);
+    roarG.connect(rev);
+    roar.start(roarT);
+    roar.stop(roarT + 2);
+
+    // Cymbal crash
+    const cymT = hornT;
+    const cym = this.noise(ac, 2);
+    const cymHp = ac.createBiquadFilter();
+    cymHp.type = 'highpass';
+    cymHp.frequency.value = 6000;
+    const cymG = ac.createGain();
+    cymG.gain.setValueAtTime(0.4, cymT);
+    cymG.gain.exponentialRampToValueAtTime(0.001, cymT + 1.8);
+    cym.connect(cymHp);
+    cymHp.connect(cymG);
+    cymG.connect(rev);
+    cym.start(cymT);
+    cym.stop(cymT + 2);
+
+    // Triumph resolution chord (major triad, wide stereo)
+    const chordT = hornT + 0.5;
+    [466.16, 587.33, 698.46, 932.33].forEach((freq, i) => {
+      const pan = ac.createStereoPanner();
+      pan.pan.value = -0.6 + (i / 3) * 1.2;
+      const osc = ac.createOscillator();
+      const g = ac.createGain();
+      osc.type = 'triangle';
+      osc.frequency.value = freq;
+      g.gain.setValueAtTime(0, chordT);
+      g.gain.linearRampToValueAtTime(0.15, chordT + 0.05);
+      g.gain.exponentialRampToValueAtTime(0.001, chordT + 1.5);
+      osc.connect(g);
+      g.connect(pan);
+      pan.connect(rev);
+      osc.start(chordT);
+      osc.stop(chordT + 1.6);
+    });
   }
 
-  // ── Milestone: crystal bell arpeggio ─────────────────────────────────
+  // ── Milestone: level-up power-up ───────────────────────────────────
   playMilestone() {
     const ac = this.ensureContext();
     if (!ac) return;
+    const { input: rev, output: revOut } = this.createReverb(ac, 0.35);
     const master = ac.createGain();
-    master.gain.value = 0.22;
+    master.gain.value = 0.28;
+    revOut.connect(master);
     master.connect(ac.destination);
     const now = ac.currentTime;
 
-    // Ascending crystal arpeggio: E5 G#5 B5 E6
-    const arp = [
-      { freq: 659.25, start: 0 },
-      { freq: 830.61, start: 0.1 },
-      { freq: 987.77, start: 0.2 },
-      { freq: 1318.5, start: 0.32 },
-    ];
-
-    arp.forEach(n => {
-      const t = now + n.start;
-      // Fundamental sine
-      const o1 = ac.createOscillator();
-      const g1 = ac.createGain();
-      o1.type = 'sine'; o1.frequency.value = n.freq;
-      g1.gain.setValueAtTime(0, t);
-      g1.gain.linearRampToValueAtTime(0.5, t + 0.008);
-      g1.gain.exponentialRampToValueAtTime(0.001, t + 0.8);
-      o1.connect(g1); g1.connect(master);
-      o1.start(t); o1.stop(t + 0.85);
-
-      // 2nd harmonic
-      const o2 = ac.createOscillator();
-      const g2 = ac.createGain();
-      o2.type = 'sine'; o2.frequency.value = n.freq * 2;
-      g2.gain.setValueAtTime(0, t);
-      g2.gain.linearRampToValueAtTime(0.2, t + 0.008);
-      g2.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
-      o2.connect(g2); g2.connect(master);
-      o2.start(t); o2.stop(t + 0.55);
-
-      // 3rd harmonic (bell-like)
-      const o3 = ac.createOscillator();
-      const g3 = ac.createGain();
-      o3.type = 'sine'; o3.frequency.value = n.freq * 3;
-      g3.gain.setValueAtTime(0, t);
-      g3.gain.linearRampToValueAtTime(0.08, t + 0.008);
-      g3.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
-      o3.connect(g3); g3.connect(master);
-      o3.start(t); o3.stop(t + 0.4);
-
-      // 5th harmonic (ethereal shimmer)
-      const o5 = ac.createOscillator();
-      const g5 = ac.createGain();
-      o5.type = 'sine'; o5.frequency.value = n.freq * 5;
-      g5.gain.setValueAtTime(0, t);
-      g5.gain.linearRampToValueAtTime(0.03, t + 0.008);
-      g5.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
-      o5.connect(g5); g5.connect(master);
-      o5.start(t); o5.stop(t + 0.3);
-    });
-
-    // Resolution chord shimmer (E major triad, sustained)
-    const chordT = now + 0.45;
-    [659.25, 830.61, 987.77].forEach(freq => {
+    // Rapid chromatic run (12 notes in 0.3s)
+    const baseFreq = 523.25; // C5
+    for (let i = 0; i < 12; i++) {
+      const t = now + i * 0.025;
+      const freq = baseFreq * Math.pow(2, i / 12);
+      const pan = ac.createStereoPanner();
+      pan.pan.value = -0.5 + (i / 11) * 1.0;
       const osc = ac.createOscillator();
       const g = ac.createGain();
-      osc.type = 'sine'; osc.frequency.value = freq;
-      g.gain.setValueAtTime(0, chordT);
-      g.gain.linearRampToValueAtTime(0.12, chordT + 0.05);
-      g.gain.exponentialRampToValueAtTime(0.001, chordT + 1.2);
-      osc.connect(g); g.connect(master);
-      osc.start(chordT); osc.stop(chordT + 1.3);
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(0.3 + (i / 11) * 0.2, t + 0.005);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.15 + (i / 11) * 0.2);
+      osc.connect(g);
+      g.connect(pan);
+      pan.connect(rev);
+      osc.start(t);
+      osc.stop(t + 0.4);
+    }
+
+    // Bass drop on resolution
+    const dropT = now + 0.3;
+    this.subBass(ac, rev, dropT, 65, 0.3);
+
+    // Achievement "ding" - rich bell
+    const dingT = now + 0.32;
+    [1046.5, 2093, 3139.5, 4186].forEach((freq, i) => {
+      const osc = ac.createOscillator();
+      const g = ac.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      const vol = 0.4 / (i + 1);
+      g.gain.setValueAtTime(0, dingT);
+      g.gain.linearRampToValueAtTime(vol, dingT + 0.005);
+      g.gain.exponentialRampToValueAtTime(0.001, dingT + 1.0 - i * 0.15);
+      osc.connect(g);
+      g.connect(rev);
+      osc.start(dingT);
+      osc.stop(dingT + 1.1);
+    });
+
+    // Sparkle cascade (descending then ascending)
+    for (let i = 0; i < 16; i++) {
+      const t = dingT + 0.05 + i * 0.035;
+      const ascending = i >= 8;
+      const idx = ascending ? i - 8 : 7 - i;
+      const freq = 3000 + idx * 1000;
+      const pan = ac.createStereoPanner();
+      pan.pan.value = Math.sin(i * 0.8) * 0.8;
+      const osc = ac.createOscillator();
+      const g = ac.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(0.08, t + 0.003);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+      osc.connect(g);
+      g.connect(pan);
+      pan.connect(rev);
+      osc.start(t);
+      osc.stop(t + 0.12);
+    }
+
+    // Power chord sustain (E major)
+    const chT = dingT + 0.1;
+    [659.25, 830.61, 987.77, 1318.51].forEach((freq, i) => {
+      const osc = ac.createOscillator();
+      const g = ac.createGain();
+      const pan = ac.createStereoPanner();
+      pan.pan.value = -0.4 + (i / 3) * 0.8;
+      osc.type = i < 2 ? 'triangle' : 'sine';
+      osc.frequency.value = freq;
+      g.gain.setValueAtTime(0, chT);
+      g.gain.linearRampToValueAtTime(0.1, chT + 0.05);
+      g.gain.exponentialRampToValueAtTime(0.001, chT + 1.3);
+      osc.connect(g);
+      g.connect(pan);
+      pan.connect(rev);
+      osc.start(chT);
+      osc.stop(chT + 1.4);
     });
   }
 
