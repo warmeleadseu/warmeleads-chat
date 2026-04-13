@@ -156,7 +156,7 @@ export async function GET(request: NextRequest) {
       if (resolvedAmId) amIds.add(resolvedAmId);
     }
 
-    let amMap = new Map<string, { name: string; celebration_video_url: string | null; celebration_video_start: number | null; celebration_video_end: number | null }>();
+    const amMap = new Map<string, { name: string; celebration_video_url: string | null; celebration_video_start: number | null; celebration_video_end: number | null }>();
     if (amIds.size > 0) {
       const { data: ams } = await supabase
         .from('admin_users')
@@ -308,7 +308,7 @@ export async function GET(request: NextRequest) {
       name: l.naam_klant,
       branch: l.branch,
       city: l.plaatsnaam,
-      province: l.provincie,
+      province: PROVINCE_ALIASES[l.provincie as string] || l.provincie,
       createdAt: l.created_at,
     })),
     periodStats,

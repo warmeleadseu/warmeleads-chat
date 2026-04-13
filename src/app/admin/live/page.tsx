@@ -2169,7 +2169,7 @@ export default function LiveDashboard() {
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className={`truncate text-sm font-bold ${isFirst ? 'text-amber-300' : 'text-white/70'}`}>{am.name}</p>
-                      <div className="flex items-center gap-2 text-[10px]">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px]">
                         <span className="font-bold tabular-nums text-emerald-400">€{(am.revenue + am.bulkRevenue).toLocaleString('nl-NL', { maximumFractionDigits: 0 })}</span>
                         <span className="text-white/20">·</span>
                         <span className="text-white/30">{am.batches} {am.batches === 1 ? 'batch' : 'batches'}</span>
