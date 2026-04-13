@@ -181,20 +181,22 @@ export async function GET(request: NextRequest) {
   }
 
   // ── AM Leaderboard (monthly revenue) ──
+  // Use customer_batches directly (source of truth for is_paid) instead of
+  // batch_orders, which only exist for Mollie payments and miss admin-marked batches.
   const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
-  const { data: monthlyOrders } = await supabase
-    .from('batch_orders')
-    .select('total_price, customer_batches!batch_orders_batch_id_fkey(account_manager_id, customer_id, customers(account_manager_id))')
-    .eq('status', 'paid')
-    .gte('paid_at', monthStart);
+  const { data: monthlyPaidBatches } = await supabase
+    .from('customer_batches')
+    .select('total_price, account_manager_id, customer_id, customers(account_manager_id)')
+    .eq('is_paid', true)
+    .gte('created_at', monthStart);
 
   const amRevenue = new Map<string, number>();
   const amBatchCount = new Map<string, number>();
-  for (const o of monthlyOrders || []) {
-    const cb = o.customer_batches as any;
-    const amId = cb?.account_manager_id || cb?.customers?.account_manager_id;
+  for (const cb of monthlyPaidBatches || []) {
+    const cust = cb.customers as any;
+    const amId = cb.account_manager_id || cust?.account_manager_id;
     if (!amId) continue;
-    amRevenue.set(amId, (amRevenue.get(amId) || 0) + (Number(o.total_price) || 0));
+    amRevenue.set(amId, (amRevenue.get(amId) || 0) + (Number(cb.total_price) || 0));
     amBatchCount.set(amId, (amBatchCount.get(amId) || 0) + 1);
   }
 
