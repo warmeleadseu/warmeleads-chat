@@ -60,11 +60,11 @@ export async function POST(request: NextRequest) {
 
   const startsAtValue = starts_at ? new Date(starts_at).toISOString() : null;
 
-  const { data: custAM } = await supabase.from('customers').select('account_manager_id').eq('id', customer_id).single();
+  const { data: custRow } = await supabase.from('customers').select('name, account_manager_id').eq('id', customer_id).single();
 
   const { data, error } = await supabase
     .from('customer_batches')
-    .insert({ customer_id, branch, batch_size, price_per_lead, total_price, leads_per_week: leads_per_week || null, leads_per_day: leads_per_day || null, notes, lead_filters: sanitizedFilters, is_paid: is_paid !== false, lookback_days: lookback, starts_at: startsAtValue, account_manager_id: custAM?.account_manager_id || null })
+    .insert({ customer_id, branch, batch_size, price_per_lead, total_price, leads_per_week: leads_per_week || null, leads_per_day: leads_per_day || null, notes, lead_filters: sanitizedFilters, is_paid: is_paid !== false, lookback_days: lookback, starts_at: startsAtValue, account_manager_id: custRow?.account_manager_id || null })
     .select()
     .single();
 
@@ -78,7 +78,6 @@ export async function POST(request: NextRequest) {
 
   // Admin notification email + invoice if paid with pricing
   const batchIsPaid = is_paid !== false;
-  const { data: custRow } = await supabase.from('customers').select('name').eq('id', customer_id).single();
   const { data: brRow } = await supabase.from('branches').select('name').eq('slug', branch).single();
   const brName = brRow?.name || branch;
 

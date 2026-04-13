@@ -290,7 +290,7 @@ export async function POST(request: NextRequest) {
 
       const order = claimedOrder;
 
-      const { data: orderCust } = await supabase.from('customers').select('account_manager_id').eq('id', order.customer_id).single();
+      const { data: orderCust } = await supabase.from('customers').select('id, name, email, contact_person, account_manager_id').eq('id', order.customer_id).single();
 
       const { data: newBatch, error: batchError } = await supabase
         .from('customer_batches')
@@ -339,17 +339,11 @@ export async function POST(request: NextRequest) {
         .update({ batch_id: newBatch.id })
         .eq('id', orderId);
 
-      const { data: customer } = await supabase
-        .from('customers')
-        .select('id, name, email, contact_person')
-        .eq('id', order.customer_id)
-        .single();
-
       const { data: branchRow } = await supabase.from('branches').select('name').eq('slug', order.branch).single();
       const branchName = branchRow?.name || order.branch;
 
-      if (customer) {
-        sendOrderConfirmationEmail(customer, {
+      if (orderCust) {
+        sendOrderConfirmationEmail(orderCust, {
           branch: order.branch,
           branch_name: branchName,
           batch_size: order.batch_size,
@@ -357,7 +351,7 @@ export async function POST(request: NextRequest) {
           price_per_lead: order.price_per_lead,
         }).catch(() => {});
 
-        sendPushToCustomer(customer.id, {
+        sendPushToCustomer(orderCust.id, {
           title: 'Bestelling bevestigd!',
           body: `Uw nieuwe batch ${branchName} (${order.batch_size} leads) is aangemaakt.`,
           url: '/portal',
@@ -383,7 +377,7 @@ export async function POST(request: NextRequest) {
             <p style="margin:0 0 16px">Bestelling is betaald maar de factuur kon niet worden aangemaakt.</p>
             <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;margin-bottom:16px">
               <tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9;width:120px">Order ID</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;font-weight:600;border-bottom:1px solid #f1f5f9;font-family:monospace">${orderId}</td></tr>
-              <tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">Klant</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;border-bottom:1px solid #f1f5f9">${customer?.name || 'Onbekend'}</td></tr>
+              <tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">Klant</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;border-bottom:1px solid #f1f5f9">${orderCust?.name || 'Onbekend'}</td></tr>
               <tr><td style="padding:12px 20px;font-size:14px;color:#64748b">Error</td><td style="padding:12px 20px;font-size:14px;color:#dc2626;font-weight:600">${e?.message || String(e)}</td></tr>
             </table>`),
           { type: 'mollie_error', metadata: { order_id: orderId, error_type: 'invoice_create_failed' } },
@@ -392,7 +386,7 @@ export async function POST(request: NextRequest) {
 
       // Admin notification
       sendNewBatchAdminEmail({
-        customer_name: customer?.name || 'Onbekend',
+        customer_name: orderCust?.name || 'Onbekend',
         branch_name: branchName,
         batch_size: order.batch_size,
         total_price: Number(order.total_price),
@@ -404,7 +398,7 @@ export async function POST(request: NextRequest) {
       // Celebration event for live dashboard
       insertCelebrationEvent(
         supabase,
-        customer?.name || 'Onbekend',
+        orderCust?.name || 'Onbekend',
         order.branch,
         Number(order.total_price || 0),
         order.customer_id,
