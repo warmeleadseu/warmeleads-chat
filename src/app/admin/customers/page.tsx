@@ -1199,6 +1199,17 @@ function TargetsPanel({ customer, onClose }: { customer: Customer; onClose: () =
   const [selectedProvinces, setSelectedProvinces] = useState<string[]>([]);
   const [provLabel, setProvLabel] = useState('');
 
+  // Edit state
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editLabel, setEditLabel] = useState('');
+  const [editRadius, setEditRadius] = useState(25);
+  const [editCityQuery, setEditCityQuery] = useState('');
+  const [editCityResult, setEditCityResult] = useState<{ lat: number; lng: number; naam: string } | null>(null);
+  const [editCitySearching, setEditCitySearching] = useState(false);
+  const [editCityError, setEditCityError] = useState('');
+  const [editProvinces, setEditProvinces] = useState<string[]>([]);
+  const editSearchTimer = useRef<NodeJS.Timeout | null>(null);
+
   const fetchTargets = useCallback(async () => {
     const res = await adminFetch(`/api/admin/targets?customer_id=${customer.id}`);
     if (res.ok) setTargets(await res.json());
@@ -1285,6 +1296,71 @@ function TargetsPanel({ customer, onClose }: { customer: Customer; onClose: () =
 
   const toggleProvince = (prov: string) => {
     setSelectedProvinces(prev => prev.includes(prov) ? prev.filter(p => p !== prov) : [...prev, prov]);
+  };
+
+  const startEdit = (t: Target) => {
+    setEditingId(t.id);
+    setEditLabel(t.label);
+    setEditRadius(t.radius_km);
+    setEditCityQuery('');
+    setEditCityResult(null);
+    setEditCityError('');
+    setEditProvinces([...(t.provinces || [])]);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditCityQuery('');
+    setEditCityResult(null);
+    setEditCityError('');
+  };
+
+  const searchEditCity = (q: string) => {
+    setEditCityQuery(q);
+    setEditCityResult(null);
+    setEditCityError('');
+    if (editSearchTimer.current) clearTimeout(editSearchTimer.current);
+    if (q.trim().length < 2) return;
+    editSearchTimer.current = setTimeout(async () => {
+      setEditCitySearching(true);
+      const res = await adminFetch(`/api/admin/city-lookup?q=${encodeURIComponent(q)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setEditCityResult(data);
+        setEditLabel(data.naam);
+      } else {
+        setEditCityError('Plaats niet gevonden');
+      }
+      setEditCitySearching(false);
+    }, 500);
+  };
+
+  const toggleEditProvince = (prov: string) => {
+    setEditProvinces(prev => prev.includes(prov) ? prev.filter(p => p !== prov) : [...prev, prov]);
+  };
+
+  const saveEdit = async (t: Target) => {
+    setSaving(true);
+    const updates: Record<string, unknown> = { id: t.id, label: editLabel };
+    if ((t.target_type || 'radius') === 'radius') {
+      updates.radius_km = editRadius;
+      if (editCityResult) {
+        updates.lat = editCityResult.lat;
+        updates.lng = editCityResult.lng;
+      }
+    } else {
+      updates.provinces = editProvinces;
+      if (!editLabel || editLabel === t.label) {
+        updates.label = editProvinces.join(', ');
+      }
+    }
+    await adminFetch('/api/admin/targets', {
+      method: 'PUT',
+      body: JSON.stringify(updates),
+    });
+    setSaving(false);
+    cancelEdit();
+    fetchTargets();
   };
 
   const existingProvs = new Set(targets.filter(t => t.is_active).flatMap(t => t.provinces || []));
@@ -1473,7 +1549,119 @@ function TargetsPanel({ customer, onClose }: { customer: Customer; onClose: () =
             </div>
           ) : (
             <div className="space-y-3">
-              {targets.map(t => (
+              {targets.map(t => editingId === t.id ? (
+                <div key={t.id} className="rounded-xl border border-brand-purple/30 bg-brand-purple/5 p-4">
+                  {(t.target_type || 'radius') === 'radius' ? (
+                    <>
+                      <h3 className="mb-3 text-sm font-semibold text-slate-800">Targetgebied bewerken</h3>
+                      <div className="mb-3">
+                        <label className="mb-1 block text-xs font-medium text-slate-500">Zoek nieuwe plaats (optioneel)</label>
+                        <div className="relative">
+                          <input
+                            value={editCityQuery}
+                            onChange={e => searchEditCity(e.target.value)}
+                            placeholder={`Huidige locatie: ${t.label}`}
+                            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 pr-8 text-sm text-slate-900 outline-none focus:border-brand-purple/50"
+                          />
+                          {editCitySearching && (
+                            <div className="absolute right-2.5 top-2.5">
+                              <ArrowPathIcon className="h-4 w-4 animate-spin text-slate-400" />
+                            </div>
+                          )}
+                        </div>
+                        {editCityError && <p className="mt-1 text-xs text-red-500">{editCityError}</p>}
+                        {editCityResult && (
+                          <p className="mt-1.5 text-xs text-emerald-600">
+                            {editCityResult.naam} gevonden ({editCityResult.lat.toFixed(4)}, {editCityResult.lng.toFixed(4)})
+                          </p>
+                        )}
+                        {!editCityResult && !editCityQuery && t.lat != null && t.lng != null && (
+                          <p className="mt-1 text-[11px] text-slate-400">
+                            Huidige coördinaten: {t.lat.toFixed(4)}, {t.lng.toFixed(4)}
+                          </p>
+                        )}
+                      </div>
+                      <div className="mb-3 grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="mb-1 block text-xs font-medium text-slate-500">Label</label>
+                          <input value={editLabel} onChange={e => setEditLabel(e.target.value)}
+                            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs font-medium text-slate-500">Radius (km)</label>
+                          <input type="number" value={editRadius} onChange={e => setEditRadius(Number(e.target.value))} min={1} max={500}
+                            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <h3 className="mb-3 text-sm font-semibold text-slate-800">Provincies bewerken</h3>
+                      <div className="mb-3">
+                        <label className="mb-1.5 block text-xs font-medium text-slate-500">Label (optioneel)</label>
+                        <input value={editLabel} onChange={e => setEditLabel(e.target.value)}
+                          placeholder="Wordt automatisch gegenereerd"
+                          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
+                      </div>
+                      <div className="mb-3">
+                        <label className="mb-1.5 block text-xs font-medium text-slate-500">Nederland</label>
+                        <div className="flex flex-wrap gap-1.5">
+                          {PROVINCES_NL.map(p => {
+                            const selected = editProvinces.includes(p);
+                            const usedByOther = targets.some(ot => ot.id !== t.id && ot.is_active && (ot.provinces || []).includes(p));
+                            return (
+                              <button key={p} onClick={() => toggleEditProvince(p)} disabled={usedByOther}
+                                className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${
+                                  usedByOther
+                                    ? 'border-slate-100 bg-slate-50 text-slate-300 cursor-not-allowed'
+                                    : selected
+                                      ? 'border-brand-purple bg-brand-purple/10 text-brand-purple'
+                                      : 'border-slate-200 bg-white text-slate-600 hover:border-brand-purple/50'
+                                }`}>
+                                {p}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      <div className="mb-3">
+                        <label className="mb-1.5 block text-xs font-medium text-slate-500">België</label>
+                        <div className="flex flex-wrap gap-1.5">
+                          {PROVINCES_BE.map(p => {
+                            const selected = editProvinces.includes(p);
+                            const usedByOther = targets.some(ot => ot.id !== t.id && ot.is_active && (ot.provinces || []).includes(p));
+                            return (
+                              <button key={p} onClick={() => toggleEditProvince(p)} disabled={usedByOther}
+                                className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${
+                                  usedByOther
+                                    ? 'border-slate-100 bg-slate-50 text-slate-300 cursor-not-allowed'
+                                    : selected
+                                      ? 'border-brand-purple bg-brand-purple/10 text-brand-purple'
+                                      : 'border-slate-200 bg-white text-slate-600 hover:border-brand-purple/50'
+                                }`}>
+                                {p}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      {editProvinces.length > 0 && (
+                        <p className="mb-3 text-xs text-brand-purple">
+                          {editProvinces.length} {editProvinces.length === 1 ? 'provincie' : 'provincies'} geselecteerd
+                        </p>
+                      )}
+                    </>
+                  )}
+                  <div className="flex gap-2">
+                    <button onClick={cancelEdit}
+                      className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-500 hover:bg-slate-50">Annuleren</button>
+                    <button onClick={() => saveEdit(t)} disabled={!editLabel || saving || ((t.target_type || 'radius') === 'province' && editProvinces.length === 0)}
+                      className="rounded-lg bg-button-gradient px-4 py-2 text-xs font-bold text-white disabled:opacity-50">
+                      {saving ? 'Opslaan...' : 'Opslaan'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
                 <div key={t.id} className={`rounded-xl border p-4 transition ${t.is_active ? 'border-slate-200 bg-white' : 'border-slate-100 bg-slate-50 opacity-60'}`}>
                   <div className="flex items-start justify-between">
                     <div className="min-w-0 flex-1">
@@ -1500,6 +1688,11 @@ function TargetsPanel({ customer, onClose }: { customer: Customer; onClose: () =
                       )}
                     </div>
                     <div className="flex shrink-0 items-center gap-1 ml-2">
+                      <button onClick={() => startEdit(t)}
+                        className="rounded-lg p-1.5 text-slate-400 transition hover:bg-blue-50 hover:text-blue-500"
+                        title="Bewerken">
+                        <PencilSquareIcon className="h-3.5 w-3.5" />
+                      </button>
                       <button onClick={() => toggleActive(t)}
                         className={`rounded-lg px-2 py-1 text-[11px] font-medium transition ${t.is_active ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
                         {t.is_active ? 'Actief' : 'Inactief'}
