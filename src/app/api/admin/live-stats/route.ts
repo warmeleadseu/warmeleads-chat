@@ -200,6 +200,44 @@ export async function GET(request: NextRequest) {
     amBatchCount.set(amId, (amBatchCount.get(amId) || 0) + 1);
   }
 
+  // ── Bulk revenue per AM (assignments without batch, priced via customer bulk_price_per_lead) ──
+  const { data: bulkCustomers } = await supabase
+    .from('customers')
+    .select('id, bulk_price_per_lead, account_manager_id')
+    .not('bulk_price_per_lead', 'is', null);
+
+  const amBulkRevenue = new Map<string, number>();
+  if (bulkCustomers && bulkCustomers.length > 0) {
+    const bulkMap = new Map<string, { price: number; amId: string | null }>();
+    for (const c of bulkCustomers) {
+      bulkMap.set(c.id, { price: Number(c.bulk_price_per_lead), amId: c.account_manager_id });
+    }
+
+    const bulkCustIds = [...bulkMap.keys()];
+    let bulkAssignments: { customer_id: string }[] = [];
+    const PAGE = 1000;
+    let offset = 0;
+    while (true) {
+      const { data } = await supabase
+        .from('lead_assignments')
+        .select('customer_id')
+        .is('batch_id', null)
+        .in('customer_id', bulkCustIds)
+        .gte('assigned_at', monthStart)
+        .range(offset, offset + PAGE - 1);
+      if (!data || data.length === 0) break;
+      bulkAssignments = bulkAssignments.concat(data);
+      if (data.length < PAGE) break;
+      offset += PAGE;
+    }
+
+    for (const a of bulkAssignments) {
+      const info = bulkMap.get(a.customer_id);
+      if (!info || !info.amId) continue;
+      amBulkRevenue.set(info.amId, (amBulkRevenue.get(info.amId) || 0) + info.price);
+    }
+  }
+
   const { data: allAMs } = await supabase
     .from('admin_users')
     .select('id, name, celebration_video_url, avatar_url')
@@ -210,10 +248,11 @@ export async function GET(request: NextRequest) {
     id: am.id,
     name: am.name,
     revenue: amRevenue.get(am.id) || 0,
+    bulkRevenue: Math.round((amBulkRevenue.get(am.id) || 0) * 100) / 100,
     batches: amBatchCount.get(am.id) || 0,
     celebrationVideoUrl: am.celebration_video_url,
     avatarUrl: am.avatar_url,
-  })).sort((a, b) => b.revenue - a.revenue);
+  })).sort((a, b) => (b.revenue + b.bulkRevenue) - (a.revenue + a.bulkRevenue));
 
   // All period stats (leads, assignments, revenue, ad spend, profit) from a single RPC
   // to ensure consistent timestamps and eliminate timezone mismatches

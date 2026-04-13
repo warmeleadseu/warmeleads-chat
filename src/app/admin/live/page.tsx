@@ -38,7 +38,7 @@ interface BatchInfo { id: string; customer: string; branch: string; batchSize: n
 interface RecentLead { id: string; name: string; branch: string; city: string; province: string; createdAt: string; }
 interface CostMetrics { monthAdSpend: number; brutoCpl: number; effectieveCpl: number; avgAssignments: number; batchRevenue: number; bulkRevenue: number; bulkAssignmentCount: number; totalProfit: number; }
 interface PaidBatch { id: string; batchId: string; customer: string; branch: string; amount: number; paidAt: string; amId: string | null; amName: string | null; amAvatarUrl?: string | null; celebrationVideoUrl: string | null; videoStart?: number | null; videoEnd?: number | null; }
-interface AMLeaderboardEntry { id: string; name: string; revenue: number; batches: number; celebrationVideoUrl: string | null; avatarUrl?: string | null; }
+interface AMLeaderboardEntry { id: string; name: string; revenue: number; bulkRevenue: number; batches: number; celebrationVideoUrl: string | null; avatarUrl?: string | null; }
 
 interface LiveData {
   totalLeads: number;
@@ -2170,9 +2170,13 @@ export default function LiveDashboard() {
                     <div className="min-w-0 flex-1">
                       <p className={`truncate text-sm font-bold ${isFirst ? 'text-amber-300' : 'text-white/70'}`}>{am.name}</p>
                       <div className="flex items-center gap-2 text-[10px]">
-                        <span className="font-bold tabular-nums text-emerald-400">€{am.revenue.toLocaleString('nl-NL', { maximumFractionDigits: 0 })}</span>
+                        <span className="font-bold tabular-nums text-emerald-400">€{(am.revenue + am.bulkRevenue).toLocaleString('nl-NL', { maximumFractionDigits: 0 })}</span>
                         <span className="text-white/20">·</span>
                         <span className="text-white/30">{am.batches} {am.batches === 1 ? 'batch' : 'batches'}</span>
+                        {am.bulkRevenue > 0 && (<>
+                          <span className="text-white/20">·</span>
+                          <span className="text-sky-400/70">€{am.bulkRevenue.toLocaleString('nl-NL', { maximumFractionDigits: 0 })} bulk</span>
+                        </>)}
                       </div>
                     </div>
                     {isFirst && (
@@ -2393,10 +2397,14 @@ export default function LiveDashboard() {
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className={`truncate text-[13px] font-bold ${isFirst ? 'text-amber-300' : 'text-white/70'}`}>{am.name}</p>
-                        <div className="flex items-center gap-2 text-[11px]">
-                          <span className="font-bold tabular-nums text-emerald-400">€{am.revenue.toLocaleString('nl-NL', { maximumFractionDigits: 0 })}</span>
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px]">
+                          <span className="font-bold tabular-nums text-emerald-400">€{(am.revenue + am.bulkRevenue).toLocaleString('nl-NL', { maximumFractionDigits: 0 })}</span>
                           <span className="text-white/20">·</span>
                           <span className="text-white/30">{am.batches} {am.batches === 1 ? 'batch' : 'batches'}</span>
+                          {am.bulkRevenue > 0 && (<>
+                            <span className="text-white/20">·</span>
+                            <span className="text-sky-400/70">€{am.bulkRevenue.toLocaleString('nl-NL', { maximumFractionDigits: 0 })} bulk</span>
+                          </>)}
                         </div>
                       </div>
                       {isFirst && <span className="text-base">👑</span>}
