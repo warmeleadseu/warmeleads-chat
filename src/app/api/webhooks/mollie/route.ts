@@ -146,7 +146,7 @@ export async function POST(request: NextRequest) {
           .update({ is_paid: true, mollie_payment_id: paymentId })
           .eq('id', batchId)
           .eq('is_paid', false)
-          .select('id, customer_id, branch, batch_size, price_per_lead, total_price, starts_at, lookback_days')
+          .select('id, customer_id, branch, batch_size, price_per_lead, total_price, leads_per_week, leads_per_day, lead_filters, starts_at, lookback_days')
           .single();
 
         if (claimErr || !claimed) {
@@ -163,6 +163,14 @@ export async function POST(request: NextRequest) {
         const branchName = branchRow?.name || claimed.branch;
 
         if (cust) {
+          sendOrderConfirmationEmail(cust, {
+            branch: claimed.branch,
+            branch_name: branchName,
+            batch_size: claimed.batch_size,
+            total_price: Number(claimed.total_price),
+            price_per_lead: Number(claimed.price_per_lead),
+          }).catch(() => {});
+
           sendPushToCustomer(cust.id, {
             title: 'Betaling ontvangen!',
             body: `Uw batch ${branchName} (${claimed.batch_size} leads) is betaald.`,
@@ -199,6 +207,30 @@ export async function POST(request: NextRequest) {
               { type: 'mollie_error', metadata: { batch_id: claimed.id, error_type: 'invoice_update_failed' } },
             ).catch(() => {});
           });
+        }
+
+        // Create batch_orders record so the payment is visible in admin & portal
+        const { error: orderInsertErr } = await supabase
+          .from('batch_orders')
+          .insert({
+            customer_id: claimed.customer_id,
+            branch: claimed.branch,
+            batch_size: claimed.batch_size,
+            price_per_lead: claimed.price_per_lead,
+            total_price: claimed.total_price,
+            leads_per_week: claimed.leads_per_week,
+            leads_per_day: claimed.leads_per_day,
+            lead_filters: claimed.lead_filters || [],
+            source_batch_id: claimed.id,
+            batch_id: claimed.id,
+            mollie_payment_id: paymentId,
+            status: 'paid',
+            paid_at: new Date().toISOString(),
+            notes: '[Portal batch betaling]',
+          });
+
+        if (orderInsertErr) {
+          console.error('[mollie-webhook] batch_orders insert failed:', orderInsertErr);
         }
 
         // Admin notification

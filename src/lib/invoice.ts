@@ -48,13 +48,15 @@ async function getNextInvoiceNumber(supabase: ReturnType<typeof createServerClie
 export async function createInvoice(params: CreateInvoiceParams) {
   const supabase = createServerClient();
 
-  const { data: customer } = await supabase
+  const { data: customer, error: custErr } = await supabase
     .from('customers')
     .select('id, name, email, contact_person, address, vat_id')
     .eq('id', params.customer_id)
     .single();
 
-  if (!customer) throw new Error('Customer not found');
+  if (custErr || !customer) {
+    throw new Error(custErr?.message || `Customer not found (id: ${params.customer_id})`);
+  }
 
   const subtotal = Number(params.total_price);
   const btwPercentage = 21;
