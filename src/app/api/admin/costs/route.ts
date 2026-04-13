@@ -128,11 +128,15 @@ export async function GET(request: NextRequest) {
     : null;
 
   const assignmentsByLead = new Map<string, number>();
+  let batchAssignmentCount = 0;
   for (const a of allAssignments) {
-    assignmentsByLead.set(a.lead_id, (assignmentsByLead.get(a.lead_id) || 0) + 1);
+    if (a.batch_id) {
+      assignmentsByLead.set(a.lead_id, (assignmentsByLead.get(a.lead_id) || 0) + 1);
+      batchAssignmentCount++;
+    }
   }
 
-  const totalAssignments = allAssignments.length;
+  const totalAssignments = batchAssignmentCount;
   const uniqueAssignedLeads = assignmentsByLead.size;
   const avgAssignments = uniqueAssignedLeads > 0
     ? Math.round((totalAssignments / uniqueAssignedLeads) * 100) / 100
@@ -229,31 +233,31 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  // ── Customer margins ──
+  // ── Customer margins (based on leads_delivered × price_per_lead) ──
   const customerMargins: Record<string, { name: string; revenue: number; cost: number; margin: number; leads: number; marginPct: number }> = {};
-  const batchPriceMap = new Map<string, number>();
-  const batchCustomerMap = new Map<string, { customerId: string; name: string }>();
 
   for (const b of allBatches) {
     if (!b.price_per_lead) continue;
-    batchPriceMap.set(b.id, b.price_per_lead);
     const cust = b.customers as unknown as { name: string } | { name: string }[] | null;
     const custName = Array.isArray(cust) ? cust[0]?.name : cust?.name || 'Onbekend';
-    batchCustomerMap.set(b.id, { customerId: b.customer_id, name: custName });
     if (!customerMargins[b.customer_id]) {
       customerMargins[b.customer_id] = { name: custName, revenue: 0, cost: 0, margin: 0, leads: 0, marginPct: 0 };
     }
+    const cm = customerMargins[b.customer_id];
+    const delivered = b.leads_delivered || 0;
+    cm.revenue += delivered * b.price_per_lead;
+    cm.leads += delivered;
   }
 
+  // Add cost from assignments (only batch-linked for ad-cost attribution)
+  const batchCustomerMap = new Map<string, string>();
+  for (const b of allBatches) batchCustomerMap.set(b.id, b.customer_id);
   for (const a of allAssignments) {
     if (!a.batch_id) continue;
-    const price = batchPriceMap.get(a.batch_id);
-    const info = batchCustomerMap.get(a.batch_id);
-    if (price === undefined || !info) continue;
-    const cm = customerMargins[info.customerId];
+    const custId = batchCustomerMap.get(a.batch_id);
+    if (!custId) continue;
+    const cm = customerMargins[custId];
     if (!cm) continue;
-    cm.revenue += price;
-    cm.leads++;
     const lc = leadCostMap[a.lead_id];
     if (lc !== undefined) cm.cost += lc;
   }
@@ -263,8 +267,31 @@ export async function GET(request: NextRequest) {
     cm.marginPct = cm.revenue > 0 ? Math.round(((cm.revenue - cm.cost) / cm.revenue) * 100) : 0;
   }
 
+  // ── Bulk revenue (assignments without batch, priced via customer bulk_price_per_lead) ──
+  const { data: bulkCustomers } = await supabase
+    .from('customers')
+    .select('id, name, bulk_price_per_lead')
+    .not('bulk_price_per_lead', 'is', null);
+  const bulkPriceMap = new Map<string, { price: number; name: string }>();
+  for (const c of bulkCustomers || []) {
+    bulkPriceMap.set(c.id, { price: Number(c.bulk_price_per_lead), name: c.name });
+  }
+
+  let bulkRevenue = 0;
+  const bulkByCustomer: Record<string, { name: string; count: number; revenue: number }> = {};
+  for (const a of allAssignments) {
+    if (a.batch_id) continue;
+    const bp = bulkPriceMap.get(a.customer_id);
+    if (!bp) continue;
+    bulkRevenue += bp.price;
+    if (!bulkByCustomer[a.customer_id]) bulkByCustomer[a.customer_id] = { name: bp.name, count: 0, revenue: 0 };
+    bulkByCustomer[a.customer_id].count++;
+    bulkByCustomer[a.customer_id].revenue += bp.price;
+  }
+
   // ── Totals ──
-  const totalRevenue = Object.values(customerMargins).reduce((s, cm) => s + cm.revenue, 0);
+  const batchRevenue = Object.values(customerMargins).reduce((s, cm) => s + cm.revenue, 0);
+  const totalRevenue = batchRevenue + bulkRevenue;
   const totalProfit = totalRevenue - totalAdSpend;
   const roi = totalAdSpend > 0 ? Math.round(((totalRevenue - totalAdSpend) / totalAdSpend) * 100) : 0;
 
@@ -288,6 +315,9 @@ export async function GET(request: NextRequest) {
     monthBrutoCpl: brutoCpl,
     effectieveCpl,
     avgAssignments,
+    batchRevenue: Math.round(batchRevenue * 100) / 100,
+    bulkRevenue: Math.round(bulkRevenue * 100) / 100,
+    bulkByCustomer: Object.values(bulkByCustomer),
     totalRevenue: Math.round(totalRevenue * 100) / 100,
     totalCost: Math.round(totalAdSpend * 100) / 100,
     totalProfit: Math.round(totalProfit * 100) / 100,

@@ -39,6 +39,8 @@ interface Customer {
   id: string; name: string; contact_person: string; email: string; phone: string;
   branches: string[]; is_active: boolean; portal_active: boolean; has_password?: boolean; portal_password?: string | null; notes: string; created_at: string;
   lead_count?: number;
+  bulk_lead_count?: number;
+  bulk_price_per_lead?: number | null;
   last_login_at?: string | null;
   login_count?: number;
   exclude_customers?: string[];
@@ -921,6 +923,7 @@ function CustomerForm({ customer, branchOptions, allCustomers, accountManagers, 
     password: '',
     exclude_customers: customer?.exclude_customers || [] as string[],
     account_manager_id: customer?.account_manager_id || '',
+    bulk_price_per_lead: customer?.bulk_price_per_lead != null ? String(customer.bulk_price_per_lead) : '',
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -951,9 +954,10 @@ function CustomerForm({ customer, branchOptions, allCustomers, accountManagers, 
     setSaving(true);
     setError('');
     try {
-      const { password, ...rest } = form;
+      const { password, bulk_price_per_lead: bulkStr, ...rest } = form;
       const payload: Record<string, unknown> = { ...rest };
       if (password) payload.password = password;
+      payload.bulk_price_per_lead = bulkStr ? parseFloat(bulkStr) : null;
       const body = isEdit ? { id: customer!.id, ...payload } : payload;
       const res = await adminFetch('/api/admin/customers', {
         method: isEdit ? 'PUT' : 'POST',
@@ -1121,6 +1125,35 @@ function CustomerForm({ customer, branchOptions, allCustomers, accountManagers, 
             <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={3}
               className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
           </div>
+
+          {/* Bulk pricing */}
+          {isEdit && (customer?.bulk_lead_count ?? 0) > 0 && (
+            <div className="rounded-lg border border-sky-200 bg-sky-50/50 p-3">
+              <div className="mb-2">
+                <p className="text-sm font-medium text-slate-700">Bulk leads</p>
+                <p className="text-[11px] text-slate-400">
+                  Deze klant heeft {customer?.bulk_lead_count?.toLocaleString('nl-NL')} bulk-uitgedeelde leads (zonder batch). Stel een prijs per lead in om de omzet mee te tellen.
+                </p>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-500">Prijs per bulk lead (&euro;)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={form.bulk_price_per_lead}
+                  onChange={e => setForm(f => ({ ...f, bulk_price_per_lead: e.target.value }))}
+                  placeholder="Bijv. 5.00"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-sky-400/50"
+                />
+                {form.bulk_price_per_lead && (
+                  <p className="mt-1 text-[11px] text-sky-600">
+                    Geschatte bulk omzet: &euro;{((customer?.bulk_lead_count || 0) * parseFloat(form.bulk_price_per_lead || '0')).toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="sticky bottom-0 border-t border-slate-100 bg-white px-5 py-4">

@@ -36,7 +36,7 @@ const DEFAULT_BRANCH = { bar: 'from-purple-400 to-purple-500', glow: 'shadow-pur
 interface PeriodStat { leads: number; prevLeads: number; assigned: number; prevAssigned: number; }
 interface BatchInfo { id: string; customer: string; branch: string; batchSize: number; delivered: number; pricePerLead: number | null; leadsPerWeek: number | null; notes: string | null; }
 interface RecentLead { id: string; name: string; branch: string; city: string; province: string; createdAt: string; }
-interface CostMetrics { monthAdSpend: number; brutoCpl: number; effectieveCpl: number; avgAssignments: number; totalProfit: number; }
+interface CostMetrics { monthAdSpend: number; brutoCpl: number; effectieveCpl: number; avgAssignments: number; batchRevenue: number; bulkRevenue: number; bulkAssignmentCount: number; totalProfit: number; }
 interface PaidBatch { id: string; batchId: string; customer: string; branch: string; amount: number; paidAt: string; amId: string | null; amName: string | null; amAvatarUrl?: string | null; celebrationVideoUrl: string | null; videoStart?: number | null; videoEnd?: number | null; }
 interface AMLeaderboardEntry { id: string; name: string; revenue: number; batches: number; celebrationVideoUrl: string | null; avatarUrl?: string | null; }
 
@@ -1759,7 +1759,7 @@ export default function LiveDashboard() {
           {[
             { label: 'Leads vandaag', value: ps.day?.leads || 0, sub: `${ps.day?.assigned || 0} uitgedeeld`, color: 'from-brand-purple to-brand-pink' },
             { label: 'Leads deze week', value: ps.week?.leads || 0, sub: `${ps.week?.assigned || 0} uitgedeeld`, color: 'from-emerald-500 to-emerald-600', trend: ps.week },
-            { label: 'Omzet', value: Math.round(data.totalRevenue), sub: `winst: €${(data.costMetrics?.totalProfit || 0).toLocaleString('nl-NL', { maximumFractionDigits: 0 })}`, color: 'from-amber-500 to-orange-500', prefix: '€' },
+            { label: 'Omzet', value: Math.round(data.totalRevenue), sub: `winst: €${(data.costMetrics?.totalProfit || 0).toLocaleString('nl-NL', { maximumFractionDigits: 0 })}${data.costMetrics?.bulkRevenue ? ` · bulk: €${data.costMetrics.bulkRevenue.toLocaleString('nl-NL', { maximumFractionDigits: 0 })}` : ''}`, color: 'from-amber-500 to-orange-500', prefix: '€' },
             { label: 'Eff. CPL', value: data.costMetrics?.effectieveCpl || 0, sub: `${data.costMetrics?.avgAssignments || 0}x uitgedeeld · bruto €${(data.costMetrics?.brutoCpl || 0).toFixed(2)}`, color: 'from-teal-400 to-emerald-500', prefix: '€', decimals: 2 },
             { label: 'Totaal leads', value: data.totalLeads, sub: `${data.activeCustomers} klanten actief`, color: 'from-sky-500 to-blue-600' },
           ].map((kpi, i) => (
@@ -1996,6 +1996,9 @@ export default function LiveDashboard() {
               <div className="px-2">
                 <p className="text-[9px] font-bold uppercase tracking-widest text-emerald-400/50">Omzet</p>
                 <p className="mt-0.5 text-lg font-black tabular-nums text-white/80">&euro;{data.totalRevenue.toLocaleString('nl-NL', { maximumFractionDigits: 0 })}</p>
+                {data.costMetrics.bulkRevenue > 0 && (
+                  <p className="text-[9px] text-white/25">&euro;{data.costMetrics.batchRevenue.toLocaleString('nl-NL', { maximumFractionDigits: 0 })} batch + &euro;{data.costMetrics.bulkRevenue.toLocaleString('nl-NL', { maximumFractionDigits: 0 })} bulk</p>
+                )}
               </div>
               <div className="px-2">
                 <p className="text-[9px] font-bold uppercase tracking-widest text-emerald-400/50">Winst</p>

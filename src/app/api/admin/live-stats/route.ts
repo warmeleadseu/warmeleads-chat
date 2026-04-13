@@ -101,8 +101,11 @@ export async function GET(request: NextRequest) {
     supabase.from('customer_batches').select('branch, created_at').in('status', ['active', 'completed']),
   ]);
 
-  const revenueStats = (revenueStatsRes.data as { total_revenue: number; total_assignments: number; unique_assigned_leads: number } | null)
-    || { total_revenue: 0, total_assignments: 0, unique_assigned_leads: 0 };
+  const revenueStats = (revenueStatsRes.data as {
+    batch_revenue: number; bulk_revenue: number;
+    total_assignments: number; unique_assigned_leads: number;
+    bulk_assignment_count: number;
+  } | null) || { batch_revenue: 0, bulk_revenue: 0, total_assignments: 0, unique_assigned_leads: 0, bulk_assignment_count: 0 };
 
   const branchStart = new Map<string, string>();
   for (const b of batchStartRes.data || []) {
@@ -139,7 +142,9 @@ export async function GET(request: NextRequest) {
     ? Math.round((brutoCpl / avgAssignments) * 100) / 100
     : 0;
 
-  const totalRevenue = Number(revenueStats.total_revenue) || 0;
+  const batchRevenue = Number(revenueStats.batch_revenue) || 0;
+  const bulkRevenue = Number(revenueStats.bulk_revenue) || 0;
+  const totalRevenue = batchRevenue + bulkRevenue;
   const totalProfit = totalRevenue - monthAdSpend;
 
   // ── Recently paid batches (last 10 min) for celebration detection ──
@@ -282,6 +287,9 @@ export async function GET(request: NextRequest) {
       brutoCpl: Math.round(brutoCpl * 100) / 100,
       effectieveCpl,
       avgAssignments,
+      batchRevenue: Math.round(batchRevenue * 100) / 100,
+      bulkRevenue: Math.round(bulkRevenue * 100) / 100,
+      bulkAssignmentCount: revenueStats.bulk_assignment_count,
       totalProfit: Math.round(totalProfit * 100) / 100,
     },
     recentPaidBatches,

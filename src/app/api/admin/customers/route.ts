@@ -22,27 +22,32 @@ export async function GET(request: NextRequest) {
   }
 
   const PAGE_SIZE = 1000;
-  const allAssignments: { customer_id: string }[] = [];
+  const allAssignments: { customer_id: string; batch_id: string | null }[] = [];
   let offset = 0;
   while (true) {
     const { data: batch } = await supabase
       .from('lead_assignments')
-      .select('customer_id')
+      .select('customer_id, batch_id')
       .range(offset, offset + PAGE_SIZE - 1);
     if (!batch || batch.length === 0) break;
-    allAssignments.push(...batch);
+    allAssignments.push(...(batch as { customer_id: string; batch_id: string | null }[]));
     if (batch.length < PAGE_SIZE) break;
     offset += batch.length;
   }
 
   const counts: Record<string, number> = {};
-  allAssignments.forEach((a: { customer_id: string }) => {
-    if (a.customer_id) counts[a.customer_id] = (counts[a.customer_id] || 0) + 1;
+  const bulkCounts: Record<string, number> = {};
+  allAssignments.forEach((a: { customer_id: string; batch_id: string | null }) => {
+    if (a.customer_id) {
+      counts[a.customer_id] = (counts[a.customer_id] || 0) + 1;
+      if (!a.batch_id) bulkCounts[a.customer_id] = (bulkCounts[a.customer_id] || 0) + 1;
+    }
   });
 
   const enriched = (customers || []).map(c => ({
     ...c,
     lead_count: counts[c.id] || 0,
+    bulk_lead_count: bulkCounts[c.id] || 0,
     has_password: !!c.password_hash,
     password_hash: undefined,
   }));
