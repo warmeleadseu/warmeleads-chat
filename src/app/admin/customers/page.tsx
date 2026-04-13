@@ -1272,7 +1272,7 @@ function CustomerForm({ customer, branchOptions, allCustomers, accountManagers, 
                 onChange={kvkLinked ? undefined : e => setForm(f => ({ ...f, kvk_nummer: e.target.value }))}
                 readOnly={kvkLinked}
                 maxLength={8}
-                inputMode="numeric"
+                inputMode="numeric" autoComplete="off"
                 placeholder="12345678"
                 className={`w-full rounded-lg border px-3 py-2 text-sm outline-none ${
                   kvkLinked
@@ -1283,7 +1283,7 @@ function CustomerForm({ customer, branchOptions, allCustomers, accountManagers, 
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-500">BTW-nummer</label>
               <input value={form.vat_id} onChange={e => setForm(f => ({ ...f, vat_id: e.target.value }))}
-                placeholder="NL123456789B01"
+                placeholder="NL123456789B01" autoComplete="off"
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
             </div>
           </div>
