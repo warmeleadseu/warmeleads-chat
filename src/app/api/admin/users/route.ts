@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
     const { data, error } = await supabase
       .from('admin_users')
       .insert(insertData)
-      .select('id, email, name, role, is_active, created_at, phone, title')
+      .select('id, email, name, role, is_active, is_account_manager, created_at, phone, title')
       .single();
 
     if (error) {
@@ -96,7 +96,7 @@ export async function PUT(request: NextRequest) {
       .from('admin_users')
       .update(safeUpdates)
       .eq('id', id)
-      .select('id, email, name, role, is_active, last_login, created_at, phone, title')
+      .select('id, email, name, role, is_active, is_account_manager, last_login, created_at, phone, title')
       .single();
 
     if (error) {

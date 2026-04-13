@@ -65,7 +65,7 @@ async function search(q: string) {
       vestigingsnummer: r.vestigingsnummer,
       naam: r.naam,
       type: r.type,
-      actief: r.actief === 'Ja',
+      actief: r.actief !== 'Nee',
       straatnaam: adres?.straatnaam || '',
       huisnummer: adres?.huisnummer || '',
       postcode: adres?.postcode || '',

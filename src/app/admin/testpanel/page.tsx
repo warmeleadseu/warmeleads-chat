@@ -128,7 +128,7 @@ export default function TestPanelPage() {
       const res = await adminFetch('/api/admin/users');
       if (res.ok) {
         const d = await res.json();
-        const ams = (d.users || []).filter((u: any) => u.role === 'accountmanager' && u.is_active);
+        const ams = (d.users || []).filter((u: any) => u.is_account_manager && u.is_active);
         setAmUsers(ams);
       }
     } catch { /* silent */ }
