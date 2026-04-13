@@ -10,12 +10,12 @@ function forbidden() {
 export async function GET(request: NextRequest) {
   const admin = await verifyAdmin(request);
   if (!admin) return unauthorized();
-  if (admin.role !== 'superadmin') return forbidden();
+  if (admin.role === 'accountmanager') return forbidden();
 
   const supabase = createServerClient();
   const { data, error } = await supabase
     .from('admin_users')
-    .select('id, email, name, role, is_active, last_login, created_at, phone, title, avatar_url, celebration_video_url, celebration_video_start, celebration_video_end')
+    .select('id, email, name, role, is_active, is_account_manager, last_login, created_at, phone, title, avatar_url, celebration_video_url, celebration_video_start, celebration_video_end')
     .order('created_at', { ascending: true });
 
   if (error) {
@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
   if (admin.role !== 'superadmin') return forbidden();
 
   try {
-    const { email, password, name, role, phone, title } = await request.json();
+    const { email, password, name, role, phone, title, is_account_manager } = await request.json();
 
     if (!email || !password || !name) {
       return NextResponse.json({ error: 'E-mail, wachtwoord en naam zijn verplicht' }, { status: 400 });
@@ -43,7 +43,8 @@ export async function POST(request: NextRequest) {
     const password_hash = await bcrypt.hash(password, 12);
     const supabase = createServerClient();
 
-    const insertData: Record<string, unknown> = { email, password_hash, name, role };
+    const isAM = role === 'accountmanager' ? true : !!is_account_manager;
+    const insertData: Record<string, unknown> = { email, password_hash, name, role, is_account_manager: isAM };
     if (phone !== undefined) insertData.phone = phone || null;
     if (title !== undefined) insertData.title = title || null;
 
@@ -83,7 +84,8 @@ export async function PUT(request: NextRequest) {
       updates.password_hash = await bcrypt.hash(password, 12);
     }
 
-    const allowed = ['name', 'email', 'role', 'is_active', 'password_hash', 'phone', 'title'];
+    if (updates.role === 'accountmanager') updates.is_account_manager = true;
+    const allowed = ['name', 'email', 'role', 'is_active', 'password_hash', 'phone', 'title', 'is_account_manager'];
     const safeUpdates: Record<string, unknown> = {};
     for (const key of allowed) {
       if (updates[key] !== undefined) safeUpdates[key] = updates[key];

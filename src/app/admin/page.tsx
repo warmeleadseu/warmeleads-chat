@@ -155,9 +155,11 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState<string>('week');
 
+  const isAM = user.role === 'accountmanager' || !!user.is_account_manager;
+
   useEffect(() => {
-    if (user.role === 'accountmanager') {
-      adminFetch('/api/admin/am-targets')
+    if (isAM) {
+      adminFetch(`/api/admin/am-targets${user.role !== 'accountmanager' ? `?user_id=${user.id}` : ''}`)
         .then(r => r.ok ? r.json() : [])
         .then((data: AMTarget[]) => setMyTargets(data.filter(t => t.status === 'active')))
         .catch(() => {});
@@ -253,8 +255,8 @@ export default function AdminDashboard() {
         ))}
       </div>
 
-      {/* My Targets (AM only) */}
-      {user.role === 'accountmanager' && myTargets.length > 0 && (
+      {/* My Targets (anyone with is_account_manager) */}
+      {isAM && myTargets.length > 0 && (
         <div className="mb-6 rounded-xl border border-amber-200 bg-gradient-to-br from-amber-50/60 to-white p-5 shadow-sm">
           <div className="mb-4 flex items-center gap-2">
             <div className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-amber-100">

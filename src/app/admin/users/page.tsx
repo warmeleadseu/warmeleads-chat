@@ -24,6 +24,7 @@ interface AdminUser {
   name: string;
   role: string;
   is_active: boolean;
+  is_account_manager?: boolean;
   last_login: string | null;
   created_at: string;
   phone?: string | null;
@@ -186,10 +187,15 @@ export default function UsersPage() {
                     </td>
                     <td className="whitespace-nowrap px-5 py-3.5 text-sm text-slate-600">{u.email}</td>
                     <td className="whitespace-nowrap px-5 py-3.5">
-                      <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${roleBadge(u.role)}`}>
-                        {u.role === 'superadmin' && <ShieldCheckIcon className="h-3 w-3" />}
-                        {roleLabel(u.role)}
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${roleBadge(u.role)}`}>
+                          {u.role === 'superadmin' && <ShieldCheckIcon className="h-3 w-3" />}
+                          {roleLabel(u.role)}
+                        </span>
+                        {u.is_account_manager && u.role !== 'accountmanager' && (
+                          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">AM</span>
+                        )}
+                      </div>
                     </td>
                     <td className="whitespace-nowrap px-5 py-3.5">
                       <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${statusBadge(u.is_active)}`}>
@@ -307,6 +313,7 @@ function UserFormModal({ user, onClose, onSaved }: { user: AdminUser | null; onC
     password: '',
     phone: user?.phone || '',
     title: user?.title || '',
+    is_account_manager: user?.is_account_manager ?? (user?.role === 'accountmanager'),
   });
   const [showPassword, setShowPassword] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -318,7 +325,7 @@ function UserFormModal({ user, onClose, onSaved }: { user: AdminUser | null; onC
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const isAM = form.role === 'accountmanager';
+  const isAM = form.is_account_manager;
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -388,6 +395,7 @@ function UserFormModal({ user, onClose, onSaved }: { user: AdminUser | null; onC
         name: form.name,
         email: form.email,
         role: form.role,
+        is_account_manager: form.role === 'accountmanager' ? true : form.is_account_manager,
       };
       if (form.password) payload.password = form.password;
       if (isEdit) payload.id = user!.id;
@@ -573,7 +581,14 @@ function UserFormModal({ user, onClose, onSaved }: { user: AdminUser | null; onC
             <label className="mb-1 block text-xs font-medium text-slate-500">Rol *</label>
             <select
               value={form.role}
-              onChange={e => set('role', e.target.value)}
+              onChange={e => {
+                const newRole = e.target.value;
+                setForm(f => ({
+                  ...f,
+                  role: newRole,
+                  is_account_manager: newRole === 'accountmanager' ? true : f.is_account_manager,
+                }));
+              }}
               className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50"
             >
               <option value="admin">Admin</option>
@@ -581,6 +596,22 @@ function UserFormModal({ user, onClose, onSaved }: { user: AdminUser | null; onC
               <option value="accountmanager">Accountmanager</option>
             </select>
           </div>
+
+          {form.role !== 'accountmanager' && (
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="is_am"
+                checked={form.is_account_manager}
+                onChange={e => setForm(f => ({ ...f, is_account_manager: e.target.checked }))}
+                className="rounded border-slate-300 text-brand-purple focus:ring-brand-purple/20"
+              />
+              <label htmlFor="is_am" className="text-sm text-slate-700">
+                Is ook accountmanager
+              </label>
+              <span className="text-[10px] text-slate-400">(verschijnt in leaderboard &amp; kan klanten beheren)</span>
+            </div>
+          )}
 
           {/* AM-specific fields */}
           {isAM && (

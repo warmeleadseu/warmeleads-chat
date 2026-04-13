@@ -171,7 +171,7 @@ export default function CustomersPage() {
 
   useEffect(() => {
     adminFetch('/api/admin/users').then(r => r.ok ? r.json() : null).then(d => {
-      if (d?.users) setAccountManagers(d.users.filter((u: any) => u.is_active && u.role === 'accountmanager'));
+      if (d?.users) setAccountManagers(d.users.filter((u: any) => u.is_active && u.is_account_manager));
     }).catch(() => {});
   }, []);
 

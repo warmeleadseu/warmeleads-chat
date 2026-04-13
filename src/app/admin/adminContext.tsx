@@ -7,6 +7,7 @@ export interface AdminUser {
   email: string;
   name: string;
   role: string;
+  is_account_manager?: boolean;
 }
 
 export interface AdminCtx {
