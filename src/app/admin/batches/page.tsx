@@ -661,6 +661,7 @@ function BatchDetailPanel({ batchId, branches, onClose, onEdit }: {
             const durationDays = batch.completed_at && batch.created_at
               ? Math.round((new Date(batch.completed_at).getTime() - new Date(batch.created_at).getTime()) / 86400000)
               : null;
+            const paidAt = orders.find(o => o.status === 'paid')?.paid_at || invoices.find(inv => inv.paid_at)?.paid_at || null;
 
             return (
               <>
@@ -705,9 +706,18 @@ function BatchDetailPanel({ batchId, branches, onClose, onEdit }: {
                     <div className={`h-full rounded-full transition-all ${pct >= 100 ? 'bg-blue-500' : pct >= 75 ? 'bg-emerald-500' : pct >= 50 ? 'bg-amber-500' : 'bg-brand-purple'}`}
                       style={{ width: `${pct}%` }} />
                   </div>
-                  {batch.leads_delivered > batch.batch_size && (
-                    <p className="mt-1.5 text-[11px] font-medium text-amber-600">Overlevering: {batch.leads_delivered - batch.batch_size} extra leads geleverd</p>
-                  )}
+                  <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5">
+                    {batch.leads_delivered > batch.batch_size && (
+                      <p className="text-[11px] font-medium text-amber-600">Overlevering: {batch.leads_delivered - batch.batch_size} extra</p>
+                    )}
+                    {batch.leads_delivered_external > 0 && (
+                      <p className="text-[11px] text-slate-400">
+                        <span className="font-medium text-slate-500">{batch.leads_delivered - batch.leads_delivered_external}</span> via systeem
+                        {' + '}
+                        <span className="font-medium text-amber-600">{batch.leads_delivered_external}</span> extern
+                      </p>
+                    )}
+                  </div>
                   {compensations.length > 0 && (
                     <div className="mt-3 border-t border-slate-200 pt-3">
                       <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Compensaties</p>
@@ -748,8 +758,8 @@ function BatchDetailPanel({ batchId, branches, onClose, onEdit }: {
                               </div>
                               <div>
                                 <p className="text-sm font-medium text-emerald-700">Betaald</p>
-                                {orders.find(o => o.status === 'paid')?.paid_at && (
-                                  <p className="text-[11px] text-slate-400">op {fmtDateTime(orders.find(o => o.status === 'paid')!.paid_at!)}</p>
+                                {(paidAt) && (
+                                  <p className="text-[11px] text-slate-400">op {fmtDateTime(paidAt)}</p>
                                 )}
                               </div>
                             </div>
@@ -828,7 +838,7 @@ function BatchDetailPanel({ batchId, branches, onClose, onEdit }: {
                   ) : (
                     <div className="space-y-2">
                       {invoices.map(inv => {
-                        const is = INV_STATUS_MAP[inv.status] || { label: inv.status, cls: 'bg-slate-100 text-slate-600' };
+                        const invStatus = INV_STATUS_MAP[inv.status] || { label: inv.status, cls: 'bg-slate-100 text-slate-600' };
                         return (
                           <div key={inv.id} className="rounded-xl border border-slate-200 bg-white p-3">
                             <div className="flex items-start justify-between">
@@ -838,9 +848,9 @@ function BatchDetailPanel({ batchId, branches, onClose, onEdit }: {
                                 </p>
                                 <p className="text-[11px] text-slate-400">{fmtDate(inv.created_at)}</p>
                               </div>
-                              <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${is.cls}`}>{is.label}</span>
+                              <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${invStatus.cls}`}>{invStatus.label}</span>
                             </div>
-                            <div className="mt-2 flex items-center gap-3 text-[11px] text-slate-500">
+                            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-slate-500">
                               <span>Subtotaal {fmtCurrency(Number(inv.subtotal))}</span>
                               <span className="text-slate-300">&middot;</span>
                               <span>BTW {inv.btw_percentage}% {fmtCurrency(Number(inv.btw_amount))}</span>
