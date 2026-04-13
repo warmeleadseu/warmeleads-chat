@@ -989,6 +989,7 @@ function CustomerForm({ customer, branchOptions, allCustomers, accountManagers, 
   const searchKvk = useCallback((q: string) => {
     if (kvkTimer.current) clearTimeout(kvkTimer.current);
     if (kvkAbort.current) kvkAbort.current.abort();
+    setKvkError('');
 
     if (q.length < 2) {
       setKvkResults([]);
@@ -1005,20 +1006,21 @@ function CustomerForm({ customer, branchOptions, allCustomers, accountManagers, 
         const res = await adminFetch(`/api/admin/kvk?q=${encodeURIComponent(q)}`, { signal: ctrl.signal });
         if (ctrl.signal.aborted) return;
         if (!res.ok) {
-          const d = await res.json();
+          const d = await res.json().catch(() => ({}));
           setKvkError(d.error || 'KVK zoeken mislukt');
           setKvkResults([]);
+          setKvkOpen(false);
         } else {
           const data = await res.json();
           setKvkResults(data.resultaten || []);
           setKvkError('');
+          setKvkOpen(true);
         }
-        setKvkOpen(true);
       } catch (e) {
         if ((e as Error).name !== 'AbortError') {
           setKvkError('KVK zoeken niet beschikbaar');
           setKvkResults([]);
-          setKvkOpen(true);
+          setKvkOpen(false);
         }
       } finally {
         setKvkSearching(false);
@@ -1105,7 +1107,7 @@ function CustomerForm({ customer, branchOptions, allCustomers, accountManagers, 
           {error && <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-2.5 text-sm text-red-600">{error}</div>}
 
           {/* KVK Zoeken */}
-          <div ref={kvkRef} className="relative rounded-lg border border-purple-200 bg-purple-50/30 p-3">
+          <div ref={kvkRef} className="rounded-lg border border-purple-200 bg-purple-50/30 p-3">
             {kvkLinked && form.kvk_nummer ? (
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2 min-w-0">
@@ -1124,18 +1126,51 @@ function CustomerForm({ customer, branchOptions, allCustomers, accountManagers, 
               <>
                 <p className="mb-1.5 text-xs font-medium text-purple-700">KVK Zoeken</p>
                 <div className="relative">
-                  <MagnifyingGlassIcon className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-purple-400" />
-                  {kvkSearching && (
-                    <ArrowPathIcon className="absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-purple-400" />
+                  <div className="relative">
+                    <MagnifyingGlassIcon className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-purple-400" />
+                    {kvkSearching && (
+                      <ArrowPathIcon className="absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-purple-400" />
+                    )}
+                    <input
+                      type="text"
+                      value={kvkQuery}
+                      onChange={e => { setKvkQuery(e.target.value); searchKvk(e.target.value); }}
+                      onFocus={() => { if (kvkResults.length > 0) setKvkOpen(true); }}
+                      placeholder="Zoek op bedrijfsnaam of KVK-nummer..."
+                      className="w-full rounded-lg border border-purple-200 bg-white py-2 pl-8 pr-8 text-sm text-slate-900 outline-none focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/20"
+                    />
+                  </div>
+                  {kvkOpen && !kvkLoading && (
+                    <div className="absolute left-0 right-0 z-20 mt-1 max-h-60 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg">
+                      {kvkResults.length > 0 ? kvkResults.map(r => (
+                        <button key={`${r.kvkNummer}-${r.vestigingsnummer}`} type="button"
+                          onClick={() => selectKvkResult(r)}
+                          className="flex w-full flex-col gap-0.5 border-b border-slate-50 px-3 py-2.5 text-left hover:bg-purple-50/50 last:border-0"
+                        >
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-semibold text-slate-800">{r.naam}</span>
+                            {r.type && (
+                              <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                                r.type === 'hoofdvestiging' ? 'bg-brand-purple/10 text-brand-purple' : 'bg-slate-100 text-slate-500'
+                              }`}>
+                                {r.type === 'hoofdvestiging' ? 'Hoofdvestiging' : r.type === 'nevenvestiging' ? 'Nevenvestiging' : r.type}
+                              </span>
+                            )}
+                            {!r.actief && (
+                              <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">Uitgeschreven</span>
+                            )}
+                          </div>
+                          <span className="text-[11px] text-slate-500">
+                            KVK {r.kvkNummer}{r.plaats ? ` · ${r.plaats}` : ''}{r.straatnaam ? ` · ${r.straatnaam} ${r.huisnummer}` : ''}
+                          </span>
+                        </button>
+                      )) : (
+                        <p className="px-3 py-2.5 text-xs text-slate-400">
+                          Geen bedrijven gevonden voor &ldquo;{kvkQuery}&rdquo;
+                        </p>
+                      )}
+                    </div>
                   )}
-                  <input
-                    type="text"
-                    value={kvkQuery}
-                    onChange={e => { setKvkQuery(e.target.value); searchKvk(e.target.value); }}
-                    onFocus={() => { if (kvkResults.length > 0) setKvkOpen(true); }}
-                    placeholder="Zoek op bedrijfsnaam of KVK-nummer..."
-                    className="w-full rounded-lg border border-purple-200 bg-white py-2 pl-8 pr-8 text-sm text-slate-900 outline-none focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/20"
-                  />
                 </div>
                 {kvkLoading && (
                   <div className="mt-2 flex items-center gap-2 text-xs text-purple-600">
@@ -1145,37 +1180,6 @@ function CustomerForm({ customer, branchOptions, allCustomers, accountManagers, 
                 )}
                 {kvkError && (
                   <p className="mt-1.5 text-[11px] text-red-500">{kvkError}</p>
-                )}
-                {kvkOpen && !kvkLoading && (
-                  <div className="absolute left-0 right-0 z-20 mt-1 max-h-60 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg">
-                    {kvkResults.length > 0 ? kvkResults.map(r => (
-                      <button key={`${r.kvkNummer}-${r.vestigingsnummer}`} type="button"
-                        onClick={() => selectKvkResult(r)}
-                        className="flex w-full flex-col gap-0.5 border-b border-slate-50 px-3 py-2.5 text-left hover:bg-purple-50/50 last:border-0"
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-semibold text-slate-800">{r.naam}</span>
-                          {r.type && (
-                            <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
-                              r.type === 'hoofdvestiging' ? 'bg-brand-purple/10 text-brand-purple' : 'bg-slate-100 text-slate-500'
-                            }`}>
-                              {r.type === 'hoofdvestiging' ? 'Hoofdvestiging' : r.type === 'nevenvestiging' ? 'Nevenvestiging' : r.type}
-                            </span>
-                          )}
-                          {!r.actief && (
-                            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">Uitgeschreven</span>
-                          )}
-                        </div>
-                        <span className="text-[11px] text-slate-500">
-                          KVK {r.kvkNummer}{r.plaats ? ` · ${r.plaats}` : ''}{r.straatnaam ? ` · ${r.straatnaam} ${r.huisnummer}` : ''}
-                        </span>
-                      </button>
-                    )) : (
-                      <p className="px-3 py-2.5 text-xs text-slate-400">
-                        Geen bedrijven gevonden voor &ldquo;{kvkQuery}&rdquo;
-                      </p>
-                    )}
-                  </div>
                 )}
               </>
             )}
@@ -1215,6 +1219,8 @@ function CustomerForm({ customer, branchOptions, allCustomers, accountManagers, 
               <input value={form.kvk_nummer}
                 onChange={kvkLinked ? undefined : e => setForm(f => ({ ...f, kvk_nummer: e.target.value }))}
                 readOnly={kvkLinked}
+                maxLength={8}
+                inputMode="numeric"
                 placeholder="12345678"
                 className={`w-full rounded-lg border px-3 py-2 text-sm outline-none ${
                   kvkLinked

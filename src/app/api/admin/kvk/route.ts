@@ -5,14 +5,13 @@ const KVK_API_KEY = process.env.KVK_API_KEY || '';
 const BASE = 'https://api.kvk.nl/api';
 const TIMEOUT_MS = 8000;
 
-async function kvkFetch(url: string, signal?: AbortSignal) {
+async function kvkFetch(url: string) {
   const res = await fetch(url, {
     headers: { apikey: KVK_API_KEY },
-    signal,
   });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
-    throw new Error(`KVK ${res.status}: ${text}`);
+    throw new Error(`KVK ${res.status}: ${text.slice(0, 200)}`);
   }
   return res.json();
 }
