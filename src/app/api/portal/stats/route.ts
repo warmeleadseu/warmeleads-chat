@@ -25,17 +25,18 @@ export async function GET(request: NextRequest) {
 
   const supabase = createServerClient();
 
+  const assignments = await paginateQuery<{ lead_id: string; status: string | null }>(
+    supabase.from('lead_assignments').select('lead_id, status').eq('customer_id', customer.id),
+  );
+
   const directLeads = await paginateQuery<{ id: string }>(
     supabase.from('leads').select('id').eq('customer_id', customer.id),
   );
 
-  const assignedLeads = await paginateQuery<{ lead_id: string }>(
-    supabase.from('lead_assignments').select('lead_id').eq('customer_id', customer.id),
-  );
-
+  const assignmentStatusMap: Record<string, string> = {};
   const leadIds = new Set<string>();
+  assignments.forEach(a => { leadIds.add(a.lead_id); assignmentStatusMap[a.lead_id] = a.status || 'nieuw'; });
   directLeads.forEach(l => leadIds.add(l.id));
-  assignedLeads.forEach(a => leadIds.add(a.lead_id));
 
   const allIds = Array.from(leadIds);
 
@@ -56,19 +57,24 @@ export async function GET(request: NextRequest) {
     if (data) leads.push(...data);
   }
 
+  const enriched = leads.map(l => ({
+    ...l,
+    status: assignmentStatusMap[l.id] ?? l.status,
+  }));
+
   const weekAgo = new Date();
   weekAgo.setDate(weekAgo.getDate() - 7);
 
-  const totalLeads = leads.length;
-  const newThisWeek = leads.filter(l => new Date(l.created_at) >= weekAgo).length;
-  const contacted = leads.filter(l => l.status === 'gecontacteerd').length;
-  const sold = leads.filter(l => l.status === 'verkocht').length;
+  const totalLeads = enriched.length;
+  const newThisWeek = enriched.filter(l => new Date(l.created_at) >= weekAgo).length;
+  const contacted = enriched.filter(l => l.status === 'gecontacteerd').length;
+  const sold = enriched.filter(l => l.status === 'verkocht').length;
 
   const statusCounts: Record<string, number> = {};
-  leads.forEach(l => { statusCounts[l.status] = (statusCounts[l.status] || 0) + 1; });
+  enriched.forEach(l => { statusCounts[l.status] = (statusCounts[l.status] || 0) + 1; });
 
   const branchCounts: Record<string, number> = {};
-  leads.forEach(l => { branchCounts[l.branch] = (branchCounts[l.branch] || 0) + 1; });
+  enriched.forEach(l => { branchCounts[l.branch] = (branchCounts[l.branch] || 0) + 1; });
 
   const { count: bulkLeads } = await supabase
     .from('lead_assignments')

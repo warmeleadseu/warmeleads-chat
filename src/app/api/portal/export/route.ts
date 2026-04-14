@@ -34,13 +34,20 @@ async function paginateQuery<T>(query: any): Promise<T[]> {
   return all;
 }
 
+interface ExportAssignmentMeta {
+  assigned_at: string;
+  status: string | null;
+  notities: string | null;
+}
+
 async function getCustomerLeadData(
   supabase: ReturnType<typeof createServerClient>,
   customerId: string,
   leadSource: 'all' | 'fresh' | 'bulk' = 'all',
-): Promise<{ ids: string[]; assignedAtMap: Record<string, string> }> {
+): Promise<{ ids: string[]; metaMap: Record<string, ExportAssignmentMeta> }> {
   const ids = new Set<string>();
-  const assignedAtMap: Record<string, string> = {};
+  const metaMap: Record<string, ExportAssignmentMeta> = {};
+  const selectFields = 'lead_id, assigned_at, status, notities';
 
   if (leadSource !== 'bulk') {
     const directLeads = await paginateQuery<{ id: string }>(
@@ -50,27 +57,27 @@ async function getCustomerLeadData(
   }
 
   if (leadSource === 'bulk') {
-    const bulkLeads = await paginateQuery<{ lead_id: string; assigned_at: string }>(
-      supabase.from('lead_assignments').select('lead_id, assigned_at').eq('customer_id', customerId).eq('source', 'bulk_export'),
+    const bulkLeads = await paginateQuery<{ lead_id: string; assigned_at: string; status: string | null; notities: string | null }>(
+      supabase.from('lead_assignments').select(selectFields).eq('customer_id', customerId).eq('source', 'bulk_export'),
     );
     bulkLeads.forEach(a => {
       ids.add(a.lead_id);
-      assignedAtMap[a.lead_id] = a.assigned_at;
+      metaMap[a.lead_id] = { assigned_at: a.assigned_at, status: a.status, notities: a.notities };
     });
   } else {
     let assignQuery = supabase
       .from('lead_assignments')
-      .select('lead_id, assigned_at')
+      .select(selectFields)
       .eq('customer_id', customerId);
     if (leadSource === 'fresh') assignQuery = assignQuery.neq('source', 'bulk_export');
-    const assignedLeads = await paginateQuery<{ lead_id: string; assigned_at: string }>(assignQuery);
+    const assignedLeads = await paginateQuery<{ lead_id: string; assigned_at: string; status: string | null; notities: string | null }>(assignQuery);
     assignedLeads.forEach(a => {
       ids.add(a.lead_id);
-      assignedAtMap[a.lead_id] = a.assigned_at;
+      metaMap[a.lead_id] = { assigned_at: a.assigned_at, status: a.status, notities: a.notities };
     });
   }
 
-  return { ids: Array.from(ids), assignedAtMap };
+  return { ids: Array.from(ids), metaMap };
 }
 
 function formatDate(value: string | null): string {
@@ -82,7 +89,7 @@ function formatDate(value: string | null): string {
   }
 }
 
-function leadsToRows(leads: Record<string, unknown>[], assignedAtMap: Record<string, string>) {
+function leadsToRows(leads: Record<string, unknown>[]) {
   return leads.map(l => [
     l.naam_klant || '',
     l.email || '',
@@ -93,7 +100,7 @@ function leadsToRows(leads: Record<string, unknown>[], assignedAtMap: Record<str
     l.provincie || '',
     l.status || '',
     l.branch || '',
-    formatDate(assignedAtMap[l.id as string] || l.wervingsdatum as string | null),
+    formatDate(l._received_at as string | null || l.wervingsdatum as string | null),
     l.notities || '',
   ]);
 }
@@ -112,36 +119,48 @@ export async function GET(request: NextRequest) {
   const to = url.searchParams.get('to');
   const leadSource = (url.searchParams.get('lead_source') || 'all') as 'all' | 'fresh' | 'bulk';
 
-  const { ids: leadIds, assignedAtMap } = await getCustomerLeadData(supabase, customer.id, leadSource);
+  const { ids: leadIds, metaMap } = await getCustomerLeadData(supabase, customer.id, leadSource);
   if (leadIds.length === 0) {
-    return format === 'xlsx'
-      ? buildXlsx([], {})
-      : buildCsv([], {});
+    return format === 'xlsx' ? buildXlsx([]) : buildCsv([]);
   }
 
-  const leads: Record<string, unknown>[] = [];
+  const rawLeads: Record<string, unknown>[] = [];
   for (let i = 0; i < leadIds.length; i += IN_CHUNK) {
     const chunk = leadIds.slice(i, i + IN_CHUNK);
     let q = supabase.from('leads').select('*').in('id', chunk);
-    if (status && status !== 'all') q = q.eq('status', status);
     if (branch && branch !== 'all') q = q.eq('branch', branch);
     if (from) q = q.gte('wervingsdatum', from);
     if (to) q = q.lte('wervingsdatum', to);
     const batch = await paginateQuery<Record<string, unknown>>(q);
-    leads.push(...batch);
+    rawLeads.push(...batch);
   }
-  leads.sort((a, b) => {
+
+  const leads: Record<string, unknown>[] = rawLeads.map(l => {
+    const meta = metaMap[l.id as string];
+    return {
+      ...l,
+      status: meta?.status ?? l.status ?? 'nieuw',
+      notities: meta?.notities ?? l.notities ?? '',
+      _received_at: meta?.assigned_at || null,
+    };
+  });
+
+  const filtered = status && status !== 'all'
+    ? leads.filter(l => l.status === status)
+    : leads;
+
+  filtered.sort((a, b) => {
     const da = (a.wervingsdatum as string) ?? '';
     const db = (b.wervingsdatum as string) ?? '';
     return db < da ? -1 : db > da ? 1 : 0;
   });
 
-  return format === 'xlsx' ? buildXlsx(leads, assignedAtMap) : buildCsv(leads, assignedAtMap);
+  return format === 'xlsx' ? buildXlsx(filtered) : buildCsv(filtered);
 }
 
-function buildCsv(leads: Record<string, unknown>[], assignedAtMap: Record<string, string>): NextResponse {
+function buildCsv(leads: Record<string, unknown>[]): NextResponse {
   const BOM = '\uFEFF';
-  const rows = leadsToRows(leads, assignedAtMap);
+  const rows = leadsToRows(leads);
   const lines = [
     COLUMN_HEADERS.join(';'),
     ...rows.map(row =>
@@ -165,8 +184,8 @@ function buildCsv(leads: Record<string, unknown>[], assignedAtMap: Record<string
   });
 }
 
-function buildXlsx(leads: Record<string, unknown>[], assignedAtMap: Record<string, string>): NextResponse {
-  const rows = leadsToRows(leads, assignedAtMap);
+function buildXlsx(leads: Record<string, unknown>[]): NextResponse {
+  const rows = leadsToRows(leads);
   const sheetData = [COLUMN_HEADERS, ...rows];
 
   const wb = XLSX.utils.book_new();

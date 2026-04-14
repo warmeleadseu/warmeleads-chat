@@ -19,14 +19,20 @@ async function paginateQuery<T>(query: any): Promise<T[]> {
   return all;
 }
 
+interface AssignmentMeta {
+  assigned_at: string;
+  distance_km: number | null;
+  status: string | null;
+  notities: string | null;
+}
+
 async function getCustomerLeadData(
   supabase: ReturnType<typeof createServerClient>,
   customerId: string,
   leadSource: 'all' | 'fresh' | 'bulk' = 'all',
-): Promise<{ ids: string[]; assignedAtMap: Record<string, string>; distanceMap: Record<string, number | null>; bulkCount: number }> {
+): Promise<{ ids: string[]; metaMap: Record<string, AssignmentMeta>; bulkCount: number }> {
   const ids = new Set<string>();
-  const assignedAtMap: Record<string, string> = {};
-  const distanceMap: Record<string, number | null> = {};
+  const metaMap: Record<string, AssignmentMeta> = {};
 
   if (leadSource !== 'bulk') {
     const directLeads = await paginateQuery<{ id: string }>(
@@ -35,26 +41,26 @@ async function getCustomerLeadData(
     directLeads.forEach(l => ids.add(l.id));
   }
 
+  const selectFields = 'lead_id, assigned_at, distance_km, status, notities';
+
   if (leadSource === 'bulk') {
-    const bulkLeads = await paginateQuery<{ lead_id: string; assigned_at: string; distance_km: number | null }>(
-      supabase.from('lead_assignments').select('lead_id, assigned_at, distance_km').eq('customer_id', customerId).eq('source', 'bulk_export'),
+    const bulkLeads = await paginateQuery<{ lead_id: string; assigned_at: string; distance_km: number | null; status: string | null; notities: string | null }>(
+      supabase.from('lead_assignments').select(selectFields).eq('customer_id', customerId).eq('source', 'bulk_export'),
     );
     bulkLeads.forEach(a => {
       ids.add(a.lead_id);
-      assignedAtMap[a.lead_id] = a.assigned_at;
-      distanceMap[a.lead_id] = a.distance_km;
+      metaMap[a.lead_id] = { assigned_at: a.assigned_at, distance_km: a.distance_km, status: a.status, notities: a.notities };
     });
   } else {
     let assignQuery = supabase
       .from('lead_assignments')
-      .select('lead_id, assigned_at, distance_km')
+      .select(selectFields)
       .eq('customer_id', customerId);
     if (leadSource === 'fresh') assignQuery = assignQuery.neq('source', 'bulk_export');
-    const assignedLeads = await paginateQuery<{ lead_id: string; assigned_at: string; distance_km: number | null }>(assignQuery);
+    const assignedLeads = await paginateQuery<{ lead_id: string; assigned_at: string; distance_km: number | null; status: string | null; notities: string | null }>(assignQuery);
     assignedLeads.forEach(a => {
       ids.add(a.lead_id);
-      assignedAtMap[a.lead_id] = a.assigned_at;
-      distanceMap[a.lead_id] = a.distance_km;
+      metaMap[a.lead_id] = { assigned_at: a.assigned_at, distance_km: a.distance_km, status: a.status, notities: a.notities };
     });
   }
 
@@ -64,7 +70,7 @@ async function getCustomerLeadData(
     .eq('customer_id', customerId)
     .eq('source', 'bulk_export');
 
-  return { ids: Array.from(ids), assignedAtMap, distanceMap, bulkCount: bulkCount || 0 };
+  return { ids: Array.from(ids), metaMap, bulkCount: bulkCount || 0 };
 }
 
 export async function GET(request: NextRequest) {
@@ -85,7 +91,7 @@ export async function GET(request: NextRequest) {
   const branch = url.searchParams.get('branch');
   const leadSource = (url.searchParams.get('lead_source') || 'all') as 'all' | 'fresh' | 'bulk';
 
-  const { ids: leadIds, assignedAtMap, distanceMap, bulkCount } = await getCustomerLeadData(supabase, customer.id, leadSource);
+  const { ids: leadIds, metaMap, bulkCount } = await getCustomerLeadData(supabase, customer.id, leadSource);
   if (leadIds.length === 0) {
     return NextResponse.json({ leads: [], total: 0, page, totalPages: 0, bulkCount });
   }
@@ -96,7 +102,6 @@ export async function GET(request: NextRequest) {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function applyFilters(q: any) {
-    if (status && status !== 'all') q = q.eq('status', status);
     if (branch && branch !== 'all') q = q.eq('branch', branch);
     if (search) {
       q = q.or(`naam_klant.ilike.%${search}%,email.ilike.%${search}%,telefoonnummer.ilike.%${search}%,postcode.ilike.%${search}%,plaatsnaam.ilike.%${search}%`);
@@ -106,28 +111,35 @@ export async function GET(request: NextRequest) {
     return q;
   }
 
-  let totalCount = 0;
   const allMatching: Record<string, unknown>[] = [];
 
   for (let i = 0; i < leadIds.length; i += IN_CHUNK) {
     const chunk = leadIds.slice(i, i + IN_CHUNK);
-    let q = supabase.from('leads').select('*', { count: 'exact' }).in('id', chunk);
+    let q = supabase.from('leads').select('*').in('id', chunk);
     q = applyFilters(q);
-    const { data: batchData, count: batchCount, error: batchError } = await q;
+    const { data: batchData, error: batchError } = await q;
     if (batchError) {
       return NextResponse.json({ error: 'Kon leads niet ophalen' }, { status: 500 });
     }
-    totalCount += batchCount || 0;
     if (batchData) allMatching.push(...batchData);
   }
 
-  const enrichedAll = allMatching.map(lead => ({
-    ...lead,
-    received_at: assignedAtMap[lead.id as string] || lead.created_at,
-    distance_km: distanceMap[lead.id as string] ?? null,
-  }));
+  const enrichedAll = allMatching.map(lead => {
+    const meta = metaMap[lead.id as string];
+    return {
+      ...lead,
+      status: meta?.status ?? (lead as Record<string, unknown>).status ?? 'nieuw',
+      notities: meta?.notities ?? (lead as Record<string, unknown>).notities ?? '',
+      received_at: meta?.assigned_at || lead.created_at,
+      distance_km: meta?.distance_km ?? null,
+    };
+  });
 
-  enrichedAll.sort((a, b) => {
+  const filtered = status && status !== 'all'
+    ? enrichedAll.filter(l => (l as Record<string, unknown>).status === status)
+    : enrichedAll;
+
+  filtered.sort((a, b) => {
     if (col === 'distance_km') {
       const va = (a.distance_km as number | null) ?? Infinity;
       const vb = (b.distance_km as number | null) ?? Infinity;
@@ -140,8 +152,9 @@ export async function GET(request: NextRequest) {
     return asc ? cmp : -cmp;
   });
 
+  const totalCount = filtered.length;
   const startIdx = (page - 1) * limit;
-  const enrichedLeads = enrichedAll.slice(startIdx, startIdx + limit);
+  const enrichedLeads = filtered.slice(startIdx, startIdx + limit);
 
   return NextResponse.json({
     leads: enrichedLeads,
@@ -171,25 +184,44 @@ export async function PUT(request: NextRequest) {
 
     const supabase = createServerClient();
 
-    const { data: directLead } = await supabase
-      .from('leads')
+    const { data: assignment } = await supabase
+      .from('lead_assignments')
       .select('id')
-      .eq('id', id)
+      .eq('lead_id', id)
       .eq('customer_id', customer.id)
       .maybeSingle();
 
-    let hasAccess = !!directLead;
-    if (!hasAccess) {
-      const { count } = await supabase
-        .from('lead_assignments')
-        .select('id', { count: 'exact', head: true })
-        .eq('lead_id', id)
-        .eq('customer_id', customer.id);
-      hasAccess = (count || 0) > 0;
-    }
+    if (!assignment) {
+      const { data: directLead } = await supabase
+        .from('leads')
+        .select('id')
+        .eq('id', id)
+        .eq('customer_id', customer.id)
+        .maybeSingle();
 
-    if (!hasAccess) {
-      return NextResponse.json({ error: 'Lead niet gevonden' }, { status: 404 });
+      if (!directLead) {
+        return NextResponse.json({ error: 'Lead niet gevonden' }, { status: 404 });
+      }
+
+      const updates: Record<string, unknown> = {};
+      if (status !== undefined) updates.status = status;
+      if (notities !== undefined) updates.notities = notities;
+      if (Object.keys(updates).length === 0) {
+        return NextResponse.json({ error: 'Geen wijzigingen opgegeven' }, { status: 400 });
+      }
+
+      const { data, error } = await supabase
+        .from('leads')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('[portal/leads PUT] update failed:', error.message, { leadId: id, customerId: customer.id, updates });
+        return NextResponse.json({ error: 'Kon lead niet bijwerken' }, { status: 500 });
+      }
+      return NextResponse.json({ lead: data });
     }
 
     const updates: Record<string, unknown> = {};
@@ -200,19 +232,25 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Geen wijzigingen opgegeven' }, { status: 400 });
     }
 
-    const { data, error } = await supabase
-      .from('leads')
+    const { error: assignError } = await supabase
+      .from('lead_assignments')
       .update(updates)
-      .eq('id', id)
-      .select()
-      .single();
+      .eq('id', assignment.id);
 
-    if (error) {
-      console.error('[portal/leads PUT] update failed:', error.message, { leadId: id, customerId: customer.id, updates });
+    if (assignError) {
+      console.error('[portal/leads PUT] assignment update failed:', assignError.message, { leadId: id, customerId: customer.id, updates });
       return NextResponse.json({ error: 'Kon lead niet bijwerken' }, { status: 500 });
     }
 
-    return NextResponse.json({ lead: data });
+    const { data: leadData } = await supabase
+      .from('leads')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    return NextResponse.json({
+      lead: leadData ? { ...leadData, status: status ?? leadData.status, notities: notities ?? leadData.notities } : null,
+    });
   } catch (err) {
     console.error('[portal/leads PUT] unexpected error:', err);
     return NextResponse.json({ error: 'Er ging iets mis' }, { status: 500 });

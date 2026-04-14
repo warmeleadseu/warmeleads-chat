@@ -15,12 +15,13 @@ export async function GET(request: NextRequest) {
 
   const { data: assignedLeads } = await supabase
     .from('lead_assignments')
-    .select('lead_id')
+    .select('lead_id, status')
     .eq('customer_id', customer.id);
 
   const leadIds = new Set<string>();
+  const assignmentStatusMap: Record<string, string> = {};
   (directLeads || []).forEach(l => leadIds.add(l.id));
-  (assignedLeads || []).forEach(a => leadIds.add(a.lead_id));
+  (assignedLeads || []).forEach(a => { leadIds.add(a.lead_id); assignmentStatusMap[a.lead_id] = a.status || 'nieuw'; });
 
   const allIds = Array.from(leadIds);
 
@@ -42,7 +43,10 @@ export async function GET(request: NextRequest) {
     .select('id, status, branch, plaatsnaam, provincie, quality_score, phone_valid, created_at, updated_at')
     .in('id', allIds);
 
-  const leads = allLeads || [];
+  const leads = (allLeads || []).map(l => ({
+    ...l,
+    status: assignmentStatusMap[l.id] ?? l.status,
+  }));
   const total = leads.length;
 
   // Conversion funnel
