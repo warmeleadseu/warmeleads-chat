@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { name, contact_person, email, phone, password, branches, kvk_nummer, targets } = body;
+    const { name, contact_person, email, phone, password, branches, kvk_nummer, targets, street, house_number, postcode, city } = body;
 
     if (!name || !contact_person || !email || !phone || !password) {
       return NextResponse.json({ error: 'Alle verplichte velden moeten ingevuld zijn' }, { status: 400 });
@@ -70,6 +70,10 @@ export async function POST(request: NextRequest) {
         password_hash: passwordHash,
         branches,
         kvk_nummer: kvk_nummer || null,
+        street: street || null,
+        house_number: house_number || null,
+        postcode: postcode || null,
+        city: city || null,
         is_active: true,
         portal_active: true,
         signup_source: 'website',

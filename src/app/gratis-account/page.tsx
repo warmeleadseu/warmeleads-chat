@@ -93,6 +93,7 @@ export default function GratisAccountPage() {
   const [kvkOpen, setKvkOpen] = useState(false);
   const [kvkLoading, setKvkLoading] = useState(false);
   const [kvkLinked, setKvkLinked] = useState(false);
+  const [kvkAddress, setKvkAddress] = useState<{ street: string; house_number: string; postcode: string; city: string } | null>(null);
   const kvkRef = useRef<HTMLDivElement>(null);
   const kvkTimer = useRef<NodeJS.Timeout | null>(null);
 
@@ -132,6 +133,11 @@ export default function GratisAccountPage() {
     }
   };
 
+  const fmtPc = (pc: string) => {
+    const raw = pc.replace(/\s/g, '');
+    return /^\d{4}[A-Za-z]{2}$/.test(raw) ? `${raw.slice(0, 4)} ${raw.slice(4).toUpperCase()}` : pc;
+  };
+
   const selectKvkResult = useCallback((r: KvkResult) => {
     setName(r.naam);
     setKvkNummer(r.kvkNummer);
@@ -139,11 +145,20 @@ export default function GratisAccountPage() {
     setKvkQuery('');
     setKvkOpen(false);
     setKvkResults([]);
+    if (r.straatnaam || r.postcode || r.plaats) {
+      setKvkAddress({
+        street: String(r.straatnaam || ''),
+        house_number: String(r.huisnummer || ''),
+        postcode: fmtPc(String(r.postcode || '')),
+        city: String(r.plaats || ''),
+      });
+    }
   }, []);
 
   const unlinkKvk = useCallback(() => {
     setKvkLinked(false);
     setKvkNummer('');
+    setKvkAddress(null);
     setKvkQuery(name);
   }, [name]);
 
@@ -243,6 +258,12 @@ export default function GratisAccountPage() {
           branches: selectedBranches,
           kvk_nummer: kvkNummer || undefined,
           targets,
+          ...(kvkAddress ? {
+            street: kvkAddress.street,
+            house_number: kvkAddress.house_number,
+            postcode: kvkAddress.postcode,
+            city: kvkAddress.city,
+          } : {}),
         }),
       });
 
