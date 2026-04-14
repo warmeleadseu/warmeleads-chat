@@ -23,9 +23,10 @@ import {
   BoltIcon,
   SunIcon,
   FireIcon,
-  BanknotesIcon,
+  TruckIcon,
   WrenchScrewdriverIcon,
-  CloudIcon,
+  AdjustmentsVerticalIcon,
+  ServerStackIcon,
 } from '@heroicons/react/24/outline';
 import { CheckCircleIcon as CheckCircleSolid } from '@heroicons/react/24/solid';
 import { Header } from '@/components/Header';
@@ -62,11 +63,11 @@ const BE_PROVINCES = [
 
 const BRANCH_ICONS: Record<string, React.ComponentType<React.SVGProps<SVGSVGElement>>> = {
   thuisbatterij: BoltIcon,
-  zakelijke_batterij: BuildingOfficeIcon,
+  zakelijke_batterij: ServerStackIcon,
   zonnepanelen: SunIcon,
-  airco: CloudIcon,
+  airco: AdjustmentsVerticalIcon,
   warmtepomp: FireIcon,
-  financial_lease: BanknotesIcon,
+  financial_lease: TruckIcon,
   maatwerk: WrenchScrewdriverIcon,
 };
 
