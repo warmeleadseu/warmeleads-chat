@@ -249,13 +249,30 @@ export default function PortalPage() {
     toastTimer.current = setTimeout(() => setToast(null), 3000);
   }, []);
 
+  const [showWelcome, setShowWelcome] = useState(false);
+  const [welcomeOffer, setWelcomeOffer] = useState<{ active: boolean; expiresAt: string | null }>({ active: false, expiresAt: null });
+  const [welcomeDismissed, setWelcomeDismissed] = useState(false);
+
   useEffect(() => {
     const paidParam = searchParams.get('paid');
     if (paidParam) {
       showToast('Betaling verwerkt! Uw batch is nu actief.');
       window.history.replaceState({}, '', '/portal');
     }
+    if (searchParams.get('welcome') === 'true') {
+      setShowWelcome(true);
+      window.history.replaceState({}, '', '/portal');
+    }
   }, [searchParams, showToast]);
+
+  useEffect(() => {
+    portalFetch('/api/portal/welcome-offer')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data) setWelcomeOffer({ active: data.active, expiresAt: data.expires_at });
+      })
+      .catch(() => {});
+  }, []);
 
   const showBranchFilter = customer.branches.length > 1;
   const conversionRate = stats.totalLeads > 0
@@ -519,6 +536,118 @@ export default function PortalPage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Welcome overlay for new signups */}
+      <AnimatePresence>
+        {showWelcome && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[200] flex items-center justify-center bg-brand-navy/80 backdrop-blur-md p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              transition={{ type: 'spring', damping: 22, stiffness: 300 }}
+              className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl"
+            >
+              <div className="h-1 bg-warmeleads-gradient" />
+              <div className="p-6 text-center sm:p-8">
+                <div className="mx-auto mb-4 text-5xl">🎉</div>
+                <h2 className="text-2xl font-bold text-slate-900">
+                  Welkom bij WarmeLeads{customer.name ? `, ${customer.name}` : ''}!
+                </h2>
+                <p className="mt-2 text-sm text-slate-500">
+                  Je account is succesvol aangemaakt. Ontdek je persoonlijke leadportaal.
+                </p>
+
+                {/* Incentive block */}
+                <div className="mt-5 rounded-xl border-2 border-brand-purple/20 bg-gradient-to-br from-brand-purple/5 to-brand-pink/5 p-5">
+                  <p className="text-xl font-bold text-brand-purple">20% welkomstkorting</p>
+                  <p className="mt-1 text-sm text-slate-600">Op je eerste bestelling, automatisch toegepast</p>
+                  {welcomeOffer.expiresAt && (
+                    <p className="mt-1.5 text-xs font-semibold text-brand-orange">
+                      Geldig tot {new Date(welcomeOffer.expiresAt).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' })}
+                    </p>
+                  )}
+                </div>
+
+                {/* Quick start steps */}
+                <div className="mt-5 space-y-2 text-left">
+                  <div className="flex items-center gap-3 rounded-lg bg-emerald-50 p-3">
+                    <CheckCircleIcon className="h-5 w-5 shrink-0 text-emerald-500" />
+                    <span className="text-sm font-medium text-emerald-700">Account aangemaakt</span>
+                  </div>
+                  <div className="flex items-center gap-3 rounded-lg bg-brand-purple/5 p-3 ring-2 ring-brand-purple/20">
+                    <SparklesIcon className="h-5 w-5 shrink-0 text-brand-purple" />
+                    <span className="text-sm font-medium text-brand-purple">Bekijk je portaal</span>
+                  </div>
+                  <div className="flex items-center gap-3 rounded-lg bg-slate-50 p-3">
+                    <ShoppingCartIcon className="h-5 w-5 shrink-0 text-slate-400" />
+                    <span className="text-sm text-slate-500">Bestel je eerste leads</span>
+                  </div>
+                </div>
+
+                {/* Buttons */}
+                <div className="mt-6 flex flex-col gap-2 sm:flex-row">
+                  <button
+                    onClick={() => setShowWelcome(false)}
+                    className="flex-1 rounded-xl bg-brand-purple px-4 py-3 text-sm font-bold text-white transition hover:bg-brand-purple/90"
+                  >
+                    Bekijk mijn portaal
+                  </button>
+                  <Link
+                    href="/portal/bestellen"
+                    onClick={() => setShowWelcome(false)}
+                    className="flex-1 rounded-xl bg-button-gradient px-4 py-3 text-center text-sm font-bold text-white shadow-lg shadow-brand-orange/20 transition hover:shadow-brand-orange/30"
+                  >
+                    Direct bestellen
+                  </Link>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Welcome offer banner */}
+      {welcomeOffer.active && !welcomeDismissed && !showWelcome && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-brand-purple/20 bg-gradient-to-r from-brand-purple/5 via-brand-pink/5 to-brand-orange/5 p-4"
+        >
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">🎁</span>
+            <div>
+              <p className="text-sm font-bold text-slate-900">
+                Je welkomstkorting van 20% is nog{' '}
+                {welcomeOffer.expiresAt
+                  ? `${Math.max(0, Math.ceil((new Date(welcomeOffer.expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))} dagen`
+                  : ''}{' '}
+                geldig
+              </p>
+              <p className="text-xs text-slate-500">Automatisch toegepast bij je eerste bestelling</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/portal/bestellen"
+              className="rounded-lg bg-button-gradient px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:shadow-md"
+            >
+              Bestel nu
+            </Link>
+            <button
+              onClick={() => setWelcomeDismissed(true)}
+              className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+            >
+              <XMarkIcon className="h-4 w-4" />
+            </button>
+          </div>
+        </motion.div>
+      )}
 
       {/* Welcome */}
       <div>

@@ -113,10 +113,10 @@ WarmeLeads genereert exclusieve, verse leads voor jouw bedrijf.
                   <ArrowRightIcon className="h-4 w-4 transition group-hover:translate-x-0.5" />
                 </Link>
                 <Link
-                  href="/hoe-het-werkt"
+                  href="/gratis-account"
                   className="inline-flex items-center justify-center gap-2 rounded-lg border border-white/25 bg-white/10 px-6 py-3.5 text-sm font-semibold text-white backdrop-blur transition hover:bg-white/20"
                 >
-                  Bekijk hoe het werkt
+                  Bekijk gratis ons portaal
                 </Link>
               </motion.div>
 
@@ -293,6 +293,16 @@ WarmeLeads genereert exclusieve, verse leads voor jouw bedrijf.
                     </div>
                   </div>
                 ))}
+              </div>
+
+              <div className="mt-6 md:mt-8">
+                <Link
+                  href="/gratis-account"
+                  className="group inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-brand-purple to-brand-pink px-6 py-3 text-sm font-bold text-white shadow-lg shadow-brand-purple/20 transition hover:shadow-brand-purple/30 hover:brightness-110"
+                >
+                  Maak gratis een account aan
+                  <ArrowRightIcon className="h-4 w-4 transition group-hover:translate-x-0.5" />
+                </Link>
               </div>
             </motion.div>
 
@@ -766,10 +776,10 @@ WarmeLeads genereert exclusieve, verse leads voor jouw bedrijf.
                 <ArrowRightIcon className="h-4 w-4 transition group-hover:translate-x-0.5" />
               </Link>
               <Link
-                href="/hoe-het-werkt"
+                href="/gratis-account"
                 className="inline-flex items-center justify-center rounded-lg border border-white/25 bg-white/10 px-6 py-3.5 text-sm font-semibold text-white backdrop-blur transition hover:bg-white/20"
               >
-                Bekijk hoe het werkt
+                Bekijk gratis ons portaal
               </Link>
             </div>
           </div>

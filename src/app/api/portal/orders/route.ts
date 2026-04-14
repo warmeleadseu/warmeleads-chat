@@ -35,11 +35,16 @@ export async function POST(request: NextRequest) {
 
     const { data: custData } = await supabase
       .from('customers')
-      .select('id, name, email, contact_person')
+      .select('id, name, email, contact_person, welcome_offer_used, welcome_offer_expires_at')
       .eq('id', customer.id)
       .single();
 
     if (!custData) return NextResponse.json({ error: 'Klant niet gevonden' }, { status: 404 });
+
+    const welcomeEligible =
+      custData.welcome_offer_used === false &&
+      custData.welcome_offer_expires_at &&
+      new Date(custData.welcome_offer_expires_at) > new Date();
 
     let branch = body.branch;
     let price_per_lead: number | null = null;
@@ -86,11 +91,16 @@ export async function POST(request: NextRequest) {
       leads_per_day = customerLeadsPerDay > 0 ? customerLeadsPerDay : null;
     }
 
+    if (!branch && body.branch) branch = body.branch;
+    if (!price_per_lead && body.price_per_lead) price_per_lead = Number(body.price_per_lead);
+
     if (!branch || !price_per_lead) {
       return NextResponse.json({ error: 'Geen branche of prijsinformatie beschikbaar. Neem contact op met WarmeLeads.' }, { status: 400 });
     }
 
-    const total_price = Number(price_per_lead) * batch_size;
+    const subtotalBeforeDiscount = Number(price_per_lead) * batch_size;
+    const discountAmount = welcomeEligible ? Math.round(subtotalBeforeDiscount * 0.20 * 100) / 100 : 0;
+    const total_price = subtotalBeforeDiscount - discountAmount;
     const btw_amount = Math.round(total_price * 0.21 * 100) / 100;
     const total_incl_btw = total_price + btw_amount;
 
@@ -112,6 +122,14 @@ export async function POST(request: NextRequest) {
       .select()
       .single();
 
+    if (welcomeEligible && discountAmount > 0) {
+      supabase
+        .from('customers')
+        .update({ welcome_offer_used: true })
+        .eq('id', customer.id)
+        .then(() => {});
+    }
+
     if (orderErr || !order) {
       return NextResponse.json({ error: 'Bestelling aanmaken mislukt' }, { status: 500 });
     }
@@ -123,10 +141,11 @@ export async function POST(request: NextRequest) {
 
     let payment;
     try {
+      const discountLabel = discountAmount > 0 ? ` (incl. 20% welkomstkorting)` : '';
       payment = await createBatchPayment({
         orderId: order.id,
         amount: total_incl_btw,
-        description: `WarmeLeads batch: ${batch_size} ${branchName} leads (incl. 21% BTW)`,
+        description: `WarmeLeads batch: ${batch_size} ${branchName} leads${discountLabel} (incl. 21% BTW)`,
         redirectUrl: `${baseUrl}/portal/bestellen?order=${order.id}&status=redirect`,
         webhookUrl: `${baseUrl}/api/webhooks/mollie`,
         customerEmail: custData.email,

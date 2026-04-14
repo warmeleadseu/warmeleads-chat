@@ -104,6 +104,7 @@ export default function BestellenPage() {
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
   const [showOrders, setShowOrders] = useState(false);
   const [pricingData, setPricingData] = useState<PricingData | null>(null);
+  const [welcomeDiscount, setWelcomeDiscount] = useState<{ active: boolean; expiresAt: string | null }>({ active: false, expiresAt: null });
 
   const [redirectOrder, setRedirectOrder] = useState<Order | null>(null);
   const pollRef = useRef<NodeJS.Timeout | null>(null);
@@ -190,6 +191,15 @@ export default function BestellenPage() {
       .catch(() => {});
   }, [selectedBranch]);
 
+  useEffect(() => {
+    portalFetch('/api/portal/welcome-offer')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data) setWelcomeDiscount({ active: data.active, expiresAt: data.expires_at });
+      })
+      .catch(() => {});
+  }, []);
+
   const allBatches = useMemo(() => [...batches.active, ...batches.completed], [batches]);
 
   const branchGroups = useMemo(() => {
@@ -239,7 +249,9 @@ export default function BestellenPage() {
   }, [pricingData, effectiveSize, sourceBatch]);
 
   const pricePerLead = dynamicPricePerLead;
-  const subtotal = effectiveSize * pricePerLead;
+  const subtotalBeforeDiscount = effectiveSize * pricePerLead;
+  const discountAmount = welcomeDiscount.active ? Math.round(subtotalBeforeDiscount * 0.20 * 100) / 100 : 0;
+  const subtotal = subtotalBeforeDiscount - discountAmount;
   const btwAmount = Math.round(subtotal * BTW_RATE * 100) / 100;
   const totalInclBtw = subtotal + btwAmount;
   const minBatchSize = pricingData?.min_batch_size || 10;
@@ -396,22 +408,15 @@ export default function BestellenPage() {
     );
   }
 
-  /* ── No batches available ── */
+  /* ── No batches: new customer first-order flow ── */
   if (allBatches.length === 0) {
     return (
-      <div className="flex min-h-[50vh] flex-col items-center justify-center px-4 py-16 text-center">
-        <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-slate-100">
-          <CubeIcon className="h-8 w-8 text-slate-400" />
-        </div>
-        <h2 className="text-lg font-bold text-slate-900">Nog geen batches</h2>
-        <p className="mt-2 max-w-sm text-sm text-slate-500">
-          Er zijn nog geen batches beschikbaar om te herbestellen. Neem contact op met WarmeLeads.
-        </p>
-        <a href="mailto:info@warmeleads.eu"
-          className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-brand-purple hover:underline">
-          info@warmeleads.eu <ArrowRightIcon className="h-3.5 w-3.5" />
-        </a>
-      </div>
+      <NewCustomerOrderView
+        customer={customer}
+        welcomeDiscount={welcomeDiscount}
+        showToast={showToast}
+        toast={toast}
+      />
     );
   }
 
@@ -780,12 +785,36 @@ export default function BestellenPage() {
         </div>
 
         {/* Price summary + CTA */}
+        {/* Welcome discount banner */}
+        {welcomeDiscount.active && (
+          <div className="mb-4 flex items-center gap-3 rounded-2xl border border-brand-purple/20 bg-gradient-to-r from-brand-purple/5 to-brand-pink/5 px-5 py-3.5">
+            <span className="text-xl">🎁</span>
+            <div>
+              <p className="text-sm font-bold text-brand-purple">20% welkomstkorting actief</p>
+              <p className="text-xs text-slate-500">
+                Automatisch toegepast op deze bestelling
+                {welcomeDiscount.expiresAt && (
+                  <> &middot; Geldig tot {new Date(welcomeDiscount.expiresAt).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long' })}</>
+                )}
+              </p>
+            </div>
+          </div>
+        )}
+
         <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="space-y-0 divide-y divide-slate-100 px-5 py-4">
             <div className="flex items-center justify-between pb-3">
               <span className="text-sm text-slate-500">{effectiveSize} leads &times; &euro;{pricePerLead.toFixed(2)}</span>
-              <span className="text-sm font-medium text-slate-800">&euro;{subtotal.toFixed(2)}</span>
+              <span className={`text-sm font-medium ${welcomeDiscount.active ? 'text-slate-400 line-through' : 'text-slate-800'}`}>
+                &euro;{subtotalBeforeDiscount.toFixed(2)}
+              </span>
             </div>
+            {welcomeDiscount.active && (
+              <div className="flex items-center justify-between py-3">
+                <span className="text-sm font-medium text-emerald-600">Welkomstkorting -20%</span>
+                <span className="text-sm font-medium text-emerald-600">-&euro;{discountAmount.toFixed(2)}</span>
+              </div>
+            )}
             <div className="flex items-center justify-between py-3">
               <span className="text-sm text-slate-500">BTW 21%</span>
               <span className="text-sm font-medium text-slate-800">&euro;{btwAmount.toFixed(2)}</span>
@@ -837,6 +866,325 @@ export default function BestellenPage() {
             <CheckCircleSolid className="h-3.5 w-3.5 text-emerald-400" />
             {paidOrders.length} eerdere {paidOrders.length === 1 ? 'bestelling' : 'bestellingen'} &middot;
             &euro;{(paidOrders.reduce((s, o) => s + Number(o.total_price) * 1.21, 0)).toFixed(2)} totaal incl. BTW
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── New customer ordering view (no existing batches) ── */
+function NewCustomerOrderView({
+  customer,
+  welcomeDiscount,
+  showToast,
+  toast,
+}: {
+  customer: { id: string; name: string; email: string; contact_person: string; branches: string[] };
+  welcomeDiscount: { active: boolean; expiresAt: string | null };
+  showToast: (msg: string, type?: 'success' | 'error') => void;
+  toast: { msg: string; type: 'success' | 'error' } | null;
+}) {
+  const router = useRouter();
+  const [availableBranches, setAvailableBranches] = useState<{ slug: string; name: string }[]>([]);
+  const [selectedBranch, setSelectedBranch] = useState<string | null>(null);
+  const [pricingData, setPricingData] = useState<PricingData | null>(null);
+  const [batchSize, setBatchSize] = useState(100);
+  const [customSize, setCustomSize] = useState('');
+  const [useCustom, setUseCustom] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [notes, setNotes] = useState('');
+
+  useEffect(() => {
+    fetch('/api/branches')
+      .then(r => r.json())
+      .then(data => {
+        if (!Array.isArray(data)) return;
+        const customerBranches = customer.branches || [];
+        const filtered = customerBranches.length > 0
+          ? data.filter((b: { slug: string }) => customerBranches.includes(b.slug))
+          : data;
+        setAvailableBranches(filtered.length > 0 ? filtered : data);
+        if (filtered.length > 0) setSelectedBranch(filtered[0].slug);
+        else if (data.length > 0) setSelectedBranch(data[0].slug);
+      })
+      .catch(() => {});
+  }, [customer.branches]);
+
+  useEffect(() => {
+    if (!selectedBranch) return;
+    portalFetch(`/api/portal/pricing?branch=${selectedBranch}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data) setPricingData(data); })
+      .catch(() => {});
+  }, [selectedBranch]);
+
+  const effectiveSize = useCustom ? (parseInt(customSize) || 0) : batchSize;
+  const minBatchSize = pricingData?.min_batch_size || 10;
+
+  const dynamicPrice = useMemo(() => {
+    if (!pricingData?.tiers?.length) return 0;
+    const sorted = [...pricingData.tiers].sort((a, b) => b.min_leads - a.min_leads);
+    const tier = sorted.find(t => effectiveSize >= t.min_leads);
+    return tier ? tier.price_per_lead : 0;
+  }, [pricingData, effectiveSize]);
+
+  const subtotalBefore = effectiveSize * dynamicPrice;
+  const discount = welcomeDiscount.active ? Math.round(subtotalBefore * 0.20 * 100) / 100 : 0;
+  const subtotal = subtotalBefore - discount;
+  const btw = Math.round(subtotal * 0.21 * 100) / 100;
+  const total = subtotal + btw;
+
+  const QUICK_SIZES = useMemo(() => {
+    const min = minBatchSize;
+    const defaults = [50, 100, 200, 500].filter(s => s >= min);
+    if (defaults.length === 0) return [min];
+    if (!defaults.includes(min) && min < defaults[0]) defaults.unshift(min);
+    return defaults.slice(0, 4);
+  }, [minBatchSize]);
+
+  const handleOrder = async () => {
+    if (!selectedBranch || effectiveSize < minBatchSize || dynamicPrice <= 0) return;
+    setSubmitting(true);
+    try {
+      const res = await portalFetch('/api/portal/orders', {
+        method: 'POST',
+        body: JSON.stringify({
+          batch_size: effectiveSize,
+          branch: selectedBranch,
+          price_per_lead: dynamicPrice,
+          notes: notes || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || 'Bestelling mislukt', 'error');
+        return;
+      }
+      if (data.checkoutUrl) {
+        window.location.href = data.checkoutUrl;
+      }
+    } catch {
+      showToast('Er is iets misgegaan', 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const branchName = availableBranches.find(b => b.slug === selectedBranch)?.name || selectedBranch;
+
+  return (
+    <div className="space-y-0">
+      <AnimatePresence>
+        {toast && (
+          <motion.div initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 50 }}
+            className={`fixed bottom-6 left-1/2 z-[100] -translate-x-1/2 rounded-xl px-5 py-3 text-sm font-medium text-white shadow-xl ${
+              toast.type === 'error' ? 'bg-red-600' : 'bg-slate-900'
+            }`}>
+            <div className="flex items-center gap-2">
+              {toast.type === 'error' ? <XCircleIcon className="h-4 w-4 text-red-200" /> : <CheckCircleIcon className="h-4 w-4 text-emerald-400" />}
+              {toast.msg}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div className="border-b border-slate-100 bg-white px-4 pb-5 pt-1 sm:px-6">
+        <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">Eerste batch bestellen</h1>
+        <p className="mt-0.5 text-sm text-slate-500">Kies een branche en het aantal leads om te starten</p>
+      </div>
+
+      <div className="px-4 py-5 sm:px-6 sm:py-6">
+        {/* Welcome discount */}
+        {welcomeDiscount.active && (
+          <div className="mb-6 flex items-center gap-3 rounded-2xl border border-brand-purple/20 bg-gradient-to-r from-brand-purple/5 to-brand-pink/5 px-5 py-4">
+            <span className="text-2xl">🎁</span>
+            <div>
+              <p className="text-sm font-bold text-brand-purple">20% welkomstkorting op je eerste bestelling!</p>
+              <p className="text-xs text-slate-500">
+                Automatisch toegepast
+                {welcomeDiscount.expiresAt && (
+                  <> &middot; Geldig tot {new Date(welcomeDiscount.expiresAt).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long' })}</>
+                )}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Branch selector */}
+        {availableBranches.length > 1 && (
+          <div className="mb-6">
+            <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-slate-400">Branche</label>
+            <div className="flex flex-wrap gap-2">
+              {availableBranches.map(b => (
+                <button key={b.slug} onClick={() => setSelectedBranch(b.slug)}
+                  className={`shrink-0 rounded-xl border-2 px-4 py-2.5 text-sm font-semibold transition ${
+                    selectedBranch === b.slug
+                      ? 'border-brand-purple bg-brand-purple/5 text-brand-purple'
+                      : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                  }`}>
+                  {b.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {availableBranches.length === 1 && selectedBranch && (
+          <div className="mb-6 flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-brand-purple to-brand-pink">
+              <BoltIcon className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-slate-900">{branchName}</p>
+              {dynamicPrice > 0 && <p className="text-xs text-slate-400">&euro;{dynamicPrice.toFixed(2)} per lead excl. BTW</p>}
+            </div>
+          </div>
+        )}
+
+        {/* Batch size */}
+        {dynamicPrice > 0 && (
+          <div className="mb-6">
+            <label className="mb-3 block text-sm font-semibold text-slate-800">Hoeveel leads wilt u bestellen?</label>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {QUICK_SIZES.map(size => {
+                const isActive = !useCustom && batchSize === size;
+                let sizePrice = dynamicPrice;
+                if (pricingData?.tiers?.length) {
+                  const sorted = [...pricingData.tiers].sort((a, b) => b.min_leads - a.min_leads);
+                  const tier = sorted.find(t => size >= t.min_leads);
+                  if (tier) sizePrice = tier.price_per_lead;
+                }
+                const raw = size * sizePrice;
+                const disc = welcomeDiscount.active ? raw * 0.20 : 0;
+                const price = Math.round((raw - disc) * 1.21 * 100) / 100;
+                return (
+                  <button key={size} onClick={() => { setBatchSize(size); setUseCustom(false); }}
+                    className={`relative rounded-2xl border-2 p-3 text-left transition ${
+                      isActive ? 'border-brand-purple bg-brand-purple/5 shadow-sm' : 'border-slate-200 bg-white hover:border-slate-300'
+                    }`}>
+                    {isActive && <CheckCircleSolid className="absolute right-2 top-2 h-5 w-5 text-brand-purple" />}
+                    <p className={`text-2xl font-bold ${isActive ? 'text-brand-purple' : 'text-slate-900'}`}>{size}</p>
+                    <p className="text-[11px] text-slate-400">leads</p>
+                    <p className={`mt-1 text-xs font-semibold ${isActive ? 'text-brand-purple' : 'text-slate-500'}`}>
+                      &euro;{price.toFixed(2)} <span className="font-normal text-slate-400">incl.</span>
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="mt-3">
+              <button onClick={() => { setUseCustom(true); if (!customSize) setCustomSize(String(batchSize || 75)); }}
+                className={`w-full rounded-2xl border-2 p-3 text-left transition ${
+                  useCustom ? 'border-brand-purple bg-brand-purple/5' : 'border-dashed border-slate-200 hover:border-slate-300'
+                }`}>
+                {useCustom ? (
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-1.5">
+                      <button onClick={(e) => { e.stopPropagation(); setCustomSize(String(Math.max(minBatchSize, (parseInt(customSize) || 0) - 10))); }}
+                        className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-50">
+                        <MinusIcon className="h-4 w-4" />
+                      </button>
+                      <input type="number" min={minBatchSize} value={customSize}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => setCustomSize(e.target.value)}
+                        className="h-9 w-20 rounded-xl border border-slate-200 bg-white px-2 text-center text-sm font-bold text-slate-900 outline-none focus:border-brand-purple focus:ring-1 focus:ring-brand-purple/20" />
+                      <button onClick={(e) => { e.stopPropagation(); setCustomSize(String((parseInt(customSize) || 0) + 10)); }}
+                        className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-50">
+                        <PlusIcon className="h-4 w-4" />
+                      </button>
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-brand-purple">{effectiveSize} leads</p>
+                      <p className="text-[11px] text-slate-400">&euro;{total.toFixed(2)} incl. BTW</p>
+                    </div>
+                    <CheckCircleSolid className="h-5 w-5 shrink-0 text-brand-purple" />
+                  </div>
+                ) : (
+                  <p className="text-center text-sm font-medium text-slate-400">Ander aantal kiezen...</p>
+                )}
+              </button>
+            </div>
+
+            {effectiveSize > 0 && effectiveSize < minBatchSize && (
+              <p className="mt-2 text-center text-xs text-red-500">Minimaal {minBatchSize} leads per batch</p>
+            )}
+
+            {pricingData?.tiers && pricingData.tiers.length > 0 && (
+              <div className="mt-3 rounded-xl border border-slate-100 bg-slate-50/50 p-3">
+                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Staffelprijzen</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {[...pricingData.tiers].sort((a, b) => a.min_leads - b.min_leads).map((t, i) => {
+                    const sorted = [...pricingData.tiers].sort((a, b) => a.min_leads - b.min_leads);
+                    const isActiveTier = effectiveSize >= t.min_leads && (i === sorted.length - 1 || effectiveSize < sorted[i + 1]?.min_leads);
+                    return (
+                      <span key={i} className={`rounded-lg border px-2 py-1 text-[11px] font-medium ${
+                        isActiveTier ? 'border-brand-purple bg-brand-purple/10 text-brand-purple' : 'border-slate-200 bg-white text-slate-500'
+                      }`}>
+                        {t.min_leads}+ leads &rarr; &euro;{Number(t.price_per_lead).toFixed(2)}
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Notes */}
+        <div className="mb-6">
+          <label className="mb-1.5 block text-sm font-medium text-slate-700">Opmerkingen <span className="text-slate-400">(optioneel)</span></label>
+          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2}
+            placeholder="Bijv. voorkeur regio, specifieke wensen..."
+            className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-brand-purple focus:ring-2 focus:ring-brand-purple/20" />
+        </div>
+
+        {/* Price summary */}
+        {dynamicPrice > 0 && effectiveSize >= minBatchSize && (
+          <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="space-y-0 divide-y divide-slate-100 px-5 py-4">
+              <div className="flex items-center justify-between pb-3">
+                <span className="text-sm text-slate-500">{effectiveSize} leads &times; &euro;{dynamicPrice.toFixed(2)}</span>
+                <span className={`text-sm font-medium ${welcomeDiscount.active ? 'text-slate-400 line-through' : 'text-slate-800'}`}>
+                  &euro;{subtotalBefore.toFixed(2)}
+                </span>
+              </div>
+              {welcomeDiscount.active && (
+                <div className="flex items-center justify-between py-3">
+                  <span className="text-sm font-medium text-emerald-600">Welkomstkorting -20%</span>
+                  <span className="text-sm font-medium text-emerald-600">-&euro;{discount.toFixed(2)}</span>
+                </div>
+              )}
+              <div className="flex items-center justify-between py-3">
+                <span className="text-sm text-slate-500">BTW 21%</span>
+                <span className="text-sm font-medium text-slate-800">&euro;{btw.toFixed(2)}</span>
+              </div>
+              <div className="flex items-center justify-between pt-3">
+                <span className="text-sm font-bold text-slate-900">Totaal</span>
+                <span className="text-lg font-bold text-brand-purple">&euro;{total.toFixed(2)}</span>
+              </div>
+            </div>
+            <div className="border-t border-slate-100 p-4">
+              <button onClick={handleOrder} disabled={submitting || effectiveSize < minBatchSize}
+                className="flex w-full items-center justify-center gap-2.5 rounded-xl bg-gradient-to-r from-brand-purple to-brand-pink px-6 py-3.5 text-[15px] font-bold text-white shadow-lg transition hover:shadow-xl active:scale-[0.99] disabled:opacity-50 disabled:shadow-none">
+                {submitting ? (
+                  <><ArrowPathIcon className="h-5 w-5 animate-spin" /> Wordt verwerkt...</>
+                ) : (
+                  <><CreditCardIcon className="h-5 w-5" /> Afrekenen &middot; &euro;{total.toFixed(2)}</>
+                )}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {dynamicPrice <= 0 && selectedBranch && (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-center">
+            <p className="text-sm font-semibold text-amber-800">Neem contact op met WarmeLeads voor prijsinformatie</p>
+            <p className="mt-1 text-xs text-amber-600">Wij stellen een pakket samen op maat voor je branche.</p>
+            <a href="mailto:info@warmeleads.eu" className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-brand-purple hover:underline">
+              info@warmeleads.eu <ArrowRightIcon className="h-3.5 w-3.5" />
+            </a>
           </div>
         )}
       </div>

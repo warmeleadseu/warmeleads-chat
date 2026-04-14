@@ -72,6 +72,12 @@ export function Header() {
               Klant login
             </Link>
             <Link
+              href="/gratis-account"
+              className="hidden items-center gap-1.5 rounded-lg border border-brand-purple/30 px-3.5 py-2 text-[13px] font-semibold text-brand-purple transition hover:bg-brand-purple/5 lg:inline-flex"
+            >
+              Gratis account
+            </Link>
+            <Link
               href="/plan-gesprek"
               className="group hidden items-center gap-2 rounded-lg bg-button-gradient px-4 py-2.5 text-[13px] font-semibold text-white shadow-lg shadow-brand-orange/20 transition hover:shadow-brand-orange/30 sm:inline-flex"
             >
@@ -173,7 +179,14 @@ export function Header() {
                   </a>
                 </div>
 
-                {/* CTA */}
+                {/* CTAs */}
+                <Link
+                  href="/gratis-account"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="flex items-center justify-center gap-2 rounded-xl border-2 border-brand-purple/30 px-4 py-3 text-[14px] font-bold text-brand-purple transition active:scale-[0.98] hover:bg-brand-purple/5"
+                >
+                  Gratis account aanmaken
+                </Link>
                 <Link
                   href="/plan-gesprek"
                   onClick={() => setMobileMenuOpen(false)}

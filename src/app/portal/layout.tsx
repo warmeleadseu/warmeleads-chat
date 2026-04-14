@@ -109,7 +109,14 @@ function LoginScreen({ onLogin }: { onLogin: (c: PortalCustomer, t: string) => v
           </p>
         </form>
 
-        <p className="mt-6 text-center text-xs text-white/25">
+        <p className="mt-5 text-center text-sm text-white/40">
+          Nog geen account?{' '}
+          <Link href="/gratis-account" className="font-semibold text-brand-purple hover:text-brand-purple/80 transition">
+            Gratis aanmaken
+          </Link>
+        </p>
+
+        <p className="mt-3 text-center text-xs text-white/25">
           <Link href="/" className="hover:text-white/40 transition">
             <ArrowLeftIcon className="mr-1 inline h-3 w-3" />
             Terug naar warmeleads.eu

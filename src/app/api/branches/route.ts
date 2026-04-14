@@ -1,0 +1,17 @@
+import { NextResponse } from 'next/server';
+import { createServerClient } from '@/lib/supabase';
+
+export async function GET() {
+  const supabase = createServerClient();
+  const { data, error } = await supabase
+    .from('branches')
+    .select('slug, name, color, description')
+    .eq('is_active', true)
+    .order('sort_order', { ascending: true });
+
+  if (error) {
+    return NextResponse.json({ error: 'Kon branches niet ophalen' }, { status: 500 });
+  }
+
+  return NextResponse.json(data || []);
+}
