@@ -19,6 +19,7 @@ import {
   GlobeEuropeAfricaIcon,
   MapIcon,
   SparklesIcon,
+  MagnifyingGlassIcon,
 } from '@heroicons/react/24/outline';
 import { CheckCircleIcon as CheckCircleSolid } from '@heroicons/react/24/solid';
 import { Header } from '@/components/Header';
@@ -29,6 +30,18 @@ interface Branch {
   name: string;
   color: string;
   description: string;
+}
+
+interface KvkResult {
+  kvkNummer: string;
+  vestigingsnummer: string;
+  naam: string;
+  type: string;
+  actief: boolean;
+  straatnaam: string;
+  huisnummer: string;
+  postcode: string;
+  plaats: string;
 }
 
 const NL_PROVINCES = [
@@ -74,6 +87,65 @@ export default function GratisAccountPage() {
   const [emailAvailable, setEmailAvailable] = useState<boolean | null>(null);
   const [emailChecking, setEmailChecking] = useState(false);
   const emailCheckTimer = useRef<NodeJS.Timeout | null>(null);
+
+  const [kvkQuery, setKvkQuery] = useState('');
+  const [kvkResults, setKvkResults] = useState<KvkResult[]>([]);
+  const [kvkOpen, setKvkOpen] = useState(false);
+  const [kvkLoading, setKvkLoading] = useState(false);
+  const [kvkLinked, setKvkLinked] = useState(false);
+  const kvkRef = useRef<HTMLDivElement>(null);
+  const kvkTimer = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (kvkRef.current && !kvkRef.current.contains(e.target as Node)) {
+        setKvkOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const searchKvk = useCallback((q: string) => {
+    if (kvkTimer.current) clearTimeout(kvkTimer.current);
+    setKvkResults([]);
+    if (q.length < 2) { setKvkOpen(false); return; }
+    setKvkLoading(true);
+    setKvkOpen(true);
+    kvkTimer.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/kvk?q=${encodeURIComponent(q)}`);
+        if (res.ok) {
+          const data = await res.json();
+          setKvkResults(data.resultaten || []);
+        }
+      } catch { /* ignore */ }
+      setKvkLoading(false);
+    }, 500);
+  }, []);
+
+  const handleKvkQueryChange = (val: string) => {
+    setKvkQuery(val);
+    if (!kvkLinked) {
+      setName(val);
+      searchKvk(val);
+    }
+  };
+
+  const selectKvkResult = useCallback((r: KvkResult) => {
+    setName(r.naam);
+    setKvkNummer(r.kvkNummer);
+    setKvkLinked(true);
+    setKvkQuery('');
+    setKvkOpen(false);
+    setKvkResults([]);
+  }, []);
+
+  const unlinkKvk = useCallback(() => {
+    setKvkLinked(false);
+    setKvkNummer('');
+    setKvkQuery(name);
+  }, [name]);
 
   useEffect(() => {
     fetch('/api/branches')
@@ -295,10 +367,94 @@ export default function GratisAccountPage() {
                     <p className="mb-6 text-sm text-slate-500">Vertel ons over je bedrijf zodat we je account kunnen aanmaken.</p>
 
                     <div className="space-y-4">
-                      <div>
-                        <label className="mb-1.5 block text-xs font-semibold text-slate-600">Bedrijfsnaam *</label>
-                        <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Bijv. Zonnekracht BV" className={inputClass} />
+                      {/* Bedrijfsnaam + KVK zoeken */}
+                      <div ref={kvkRef} className="relative">
+                        {kvkLinked ? (
+                          <div>
+                            <label className="mb-1.5 block text-xs font-semibold text-slate-600">Bedrijfsnaam *</label>
+                            <div className="flex items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50/50 px-3.5 py-2.5">
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-sm font-semibold text-slate-900">{name}</p>
+                                <p className="text-[11px] text-slate-500">KVK {kvkNummer}</p>
+                              </div>
+                              <div className="flex shrink-0 items-center gap-2">
+                                <CheckCircleSolid className="h-5 w-5 text-emerald-500" />
+                                <button
+                                  type="button"
+                                  onClick={unlinkKvk}
+                                  className="rounded-md px-2 py-1 text-[11px] font-medium text-slate-400 transition hover:bg-white hover:text-slate-600"
+                                >
+                                  Wijzig
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div>
+                            <label className="mb-1.5 block text-xs font-semibold text-slate-600">Bedrijfsnaam *</label>
+                            <div className="relative">
+                              <MagnifyingGlassIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                              <input
+                                type="text"
+                                value={kvkQuery || name}
+                                onChange={(e) => handleKvkQueryChange(e.target.value)}
+                                placeholder="Zoek op bedrijfsnaam of KVK-nummer..."
+                                autoComplete="off"
+                                className={`${inputClass} pl-9 pr-10`}
+                              />
+                              {kvkLoading && (
+                                <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-200 border-t-brand-purple" />
+                                </div>
+                              )}
+                            </div>
+                            {kvkOpen && !kvkLoading && (
+                              <div className="absolute left-0 right-0 z-20 mt-1 max-h-60 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg">
+                                {kvkResults.length > 0 ? kvkResults.map((r) => (
+                                  <button
+                                    key={`${r.kvkNummer}-${r.vestigingsnummer}`}
+                                    type="button"
+                                    onClick={() => selectKvkResult(r)}
+                                    className="flex w-full flex-col gap-0.5 border-b border-slate-50 px-3.5 py-2.5 text-left transition last:border-0 hover:bg-slate-50"
+                                  >
+                                    <span className="flex items-center gap-2">
+                                      <span className="text-sm font-semibold text-slate-800">{r.naam}</span>
+                                      {r.type === 'hoofdvestiging' && (
+                                        <span className="rounded-full bg-brand-purple/10 px-1.5 py-0.5 text-[10px] font-medium text-brand-purple">Hoofdvestiging</span>
+                                      )}
+                                      {r.type === 'nevenvestiging' && (
+                                        <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">Nevenvestiging</span>
+                                      )}
+                                      {!r.actief && (
+                                        <span className="rounded-full bg-red-50 px-1.5 py-0.5 text-[10px] font-medium text-red-500">Uitgeschreven</span>
+                                      )}
+                                    </span>
+                                    <span className="text-[11px] text-slate-500">
+                                      KVK {r.kvkNummer}{r.plaats ? ` · ${r.plaats}` : ''}{r.straatnaam ? ` · ${r.straatnaam} ${r.huisnummer}` : ''}
+                                    </span>
+                                  </button>
+                                )) : (
+                                  <p className="px-3.5 py-2.5 text-xs text-slate-400">
+                                    Geen bedrijven gevonden voor &ldquo;{kvkQuery || name}&rdquo;
+                                  </p>
+                                )}
+                              </div>
+                            )}
+                            <p className="mt-1 text-[11px] text-slate-400">
+                              Typ je bedrijfsnaam om automatisch KVK-gegevens op te halen, of vul handmatig in.
+                            </p>
+                          </div>
+                        )}
                       </div>
+
+                      {/* KVK-nummer (handmatig, alleen zichtbaar als niet gekoppeld) */}
+                      {!kvkLinked && (
+                        <div>
+                          <label className="mb-1.5 block text-xs font-semibold text-slate-600">KVK-nummer <span className="font-normal text-slate-400">(optioneel)</span></label>
+                          <input type="text" value={kvkNummer} onChange={(e) => setKvkNummer(e.target.value)} placeholder="12345678" autoComplete="off" className={inputClass} />
+                        </div>
+                      )}
+
                       <div>
                         <label className="mb-1.5 block text-xs font-semibold text-slate-600">Contactpersoon *</label>
                         <input type="text" value={contactPerson} onChange={(e) => setContactPerson(e.target.value)} placeholder="Volledige naam" className={inputClass} />
@@ -326,10 +482,6 @@ export default function GratisAccountPage() {
                       <div>
                         <label className="mb-1.5 block text-xs font-semibold text-slate-600">Telefoonnummer *</label>
                         <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="06 12345678" className={inputClass} />
-                      </div>
-                      <div>
-                        <label className="mb-1.5 block text-xs font-semibold text-slate-600">KVK-nummer <span className="font-normal text-slate-400">(optioneel)</span></label>
-                        <input type="text" value={kvkNummer} onChange={(e) => setKvkNummer(e.target.value)} placeholder="12345678" autoComplete="off" className={inputClass} />
                       </div>
                     </div>
                   </div>
@@ -537,6 +689,9 @@ export default function GratisAccountPage() {
                       <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Samenvatting</p>
                       <div className="space-y-1.5 text-sm">
                         <p><span className="text-slate-400">Bedrijf:</span> <span className="font-medium text-slate-900">{name}</span></p>
+                        {kvkNummer && (
+                          <p><span className="text-slate-400">KVK:</span> <span className="font-medium text-slate-900">{kvkNummer}</span></p>
+                        )}
                         <p><span className="text-slate-400">Contact:</span> <span className="font-medium text-slate-900">{contactPerson}</span></p>
                         <p><span className="text-slate-400">E-mail:</span> <span className="font-medium text-slate-900">{email}</span></p>
                         <p>
