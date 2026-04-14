@@ -1648,11 +1648,11 @@ function TargetsPanel({ customer, onClose }: { customer: Customer; onClose: () =
   };
 
   const addRadiusTarget = async () => {
-    if (!cityResult || !newLabel) return;
+    if (!cityResult) return;
     setSaving(true);
     await adminFetch('/api/admin/targets', {
       method: 'POST',
-      body: JSON.stringify({ customer_id: customer.id, label: newLabel, target_type: 'radius', lat: cityResult.lat, lng: cityResult.lng, radius_km: newRadius }),
+      body: JSON.stringify({ customer_id: customer.id, label: cityResult.naam, target_type: 'radius', lat: cityResult.lat, lng: cityResult.lng, radius_km: newRadius }),
     });
     setSaving(false);
     resetAddForm();
@@ -1744,17 +1744,19 @@ function TargetsPanel({ customer, onClose }: { customer: Customer; onClose: () =
 
   const saveEdit = async (t: Target) => {
     setSaving(true);
-    const label = editLabel.trim() || (
-      (t.target_type || 'radius') === 'province' ? editProvinces.join(', ') : t.label
-    );
-    const updates: Record<string, unknown> = { id: t.id, label };
-    if ((t.target_type || 'radius') === 'radius') {
+    const isRadius = (t.target_type || 'radius') === 'radius';
+    const updates: Record<string, unknown> = { id: t.id };
+    if (isRadius) {
       updates.radius_km = editRadius;
       if (editCityResult) {
+        updates.label = editCityResult.naam;
         updates.lat = editCityResult.lat;
         updates.lng = editCityResult.lng;
+      } else {
+        updates.label = editLabel.trim() || t.label;
       }
     } else {
+      updates.label = editLabel.trim() || editProvinces.join(', ');
       updates.provinces = editProvinces;
     }
     await adminFetch('/api/admin/targets', {
@@ -1840,22 +1842,25 @@ function TargetsPanel({ customer, onClose }: { customer: Customer; onClose: () =
                   </p>
                 )}
               </div>
-              <div className="mb-3 grid grid-cols-2 gap-3">
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-slate-500">Label</label>
-                  <input value={newLabel} onChange={e => setNewLabel(e.target.value)}
-                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
+              {cityResult && (
+                <div className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
+                  <p className="text-xs font-medium text-emerald-700">
+                    Plaats: {cityResult.naam}
+                  </p>
+                  <p className="text-[11px] text-emerald-600">
+                    Coördinaten: {cityResult.lat.toFixed(5)}, {cityResult.lng.toFixed(5)}
+                  </p>
                 </div>
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-slate-500">Radius (km)</label>
-                  <input type="number" value={newRadius} onChange={e => setNewRadius(Number(e.target.value))} min={1} max={200}
-                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
-                </div>
+              )}
+              <div className="mb-3">
+                <label className="mb-1 block text-xs font-medium text-slate-500">Radius (km)</label>
+                <input type="number" value={newRadius} onChange={e => setNewRadius(Number(e.target.value))} min={1} max={200}
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
               </div>
               <div className="flex gap-2">
                 <button onClick={resetAddForm}
                   className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-500 hover:bg-slate-50">Annuleren</button>
-                <button onClick={addRadiusTarget} disabled={!cityResult || !newLabel || saving}
+                <button onClick={addRadiusTarget} disabled={!cityResult || saving}
                   className="rounded-lg bg-button-gradient px-4 py-2 text-xs font-bold text-white disabled:opacity-50">
                   {saving ? 'Opslaan...' : 'Toevoegen'}
                 </button>
@@ -1984,17 +1989,20 @@ function TargetsPanel({ customer, onClose }: { customer: Customer; onClose: () =
                           </p>
                         )}
                       </div>
-                      <div className="mb-3 grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="mb-1 block text-xs font-medium text-slate-500">Label</label>
-                          <input value={editLabel} onChange={e => setEditLabel(e.target.value)}
-                            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
+                      {editCityResult && (
+                        <div className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
+                          <p className="text-xs font-medium text-emerald-700">
+                            Nieuwe plaats: {editCityResult.naam}
+                          </p>
+                          <p className="text-[11px] text-emerald-600">
+                            Coördinaten: {editCityResult.lat.toFixed(5)}, {editCityResult.lng.toFixed(5)}
+                          </p>
                         </div>
-                        <div>
-                          <label className="mb-1 block text-xs font-medium text-slate-500">Radius (km)</label>
-                          <input type="number" value={editRadius} onChange={e => setEditRadius(Number(e.target.value))} min={1} max={500}
-                            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
-                        </div>
+                      )}
+                      <div className="mb-3">
+                        <label className="mb-1 block text-xs font-medium text-slate-500">Radius (km)</label>
+                        <input type="number" value={editRadius} onChange={e => setEditRadius(Number(e.target.value))} min={1} max={500}
+                          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
                       </div>
                     </>
                   ) : (
@@ -2058,7 +2066,7 @@ function TargetsPanel({ customer, onClose }: { customer: Customer; onClose: () =
                   <div className="flex gap-2">
                     <button onClick={cancelEdit}
                       className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-500 hover:bg-slate-50">Annuleren</button>
-                    <button onClick={() => saveEdit(t)} disabled={!editLabel || saving || ((t.target_type || 'radius') === 'province' && editProvinces.length === 0)}
+                    <button onClick={() => saveEdit(t)} disabled={saving || ((t.target_type || 'radius') === 'province' && editProvinces.length === 0)}
                       className="rounded-lg bg-button-gradient px-4 py-2 text-xs font-bold text-white disabled:opacity-50">
                       {saving ? 'Opslaan...' : 'Opslaan'}
                     </button>

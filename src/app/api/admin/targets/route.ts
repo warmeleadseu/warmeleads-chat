@@ -2,6 +2,42 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
 import { distributeUnassignedLeads } from '@/lib/distribution';
+import { resolveCity } from '@/lib/pdok';
+
+const KNOWN_PRESETS = ['Heel Nederland', 'Heel België'];
+
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+async function verifyAndResolveCoords(
+  label: string,
+  clientLat: number,
+  clientLng: number
+): Promise<{ lat: number; lng: number; resolvedLabel: string }> {
+  if (KNOWN_PRESETS.includes(label)) {
+    return { lat: clientLat, lng: clientLng, resolvedLabel: label };
+  }
+
+  const resolved = await resolveCity(label);
+  if (!resolved) {
+    return { lat: clientLat, lng: clientLng, resolvedLabel: label };
+  }
+
+  const drift = haversineKm(clientLat, clientLng, resolved.lat, resolved.lng);
+  if (drift > 5) {
+    return { lat: resolved.lat, lng: resolved.lng, resolvedLabel: resolved.naam };
+  }
+
+  return { lat: clientLat, lng: clientLng, resolvedLabel: label };
+}
 
 export async function GET(request: NextRequest) {
   const admin = await verifyAdmin(request);
@@ -54,9 +90,18 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Lat/lng is verplicht voor radius-targets' }, { status: 400 });
   }
 
+  const verified = await verifyAndResolveCoords(label, lat, lng);
+
   const { data, error } = await supabase
     .from('customer_targets')
-    .insert({ customer_id, label, target_type: 'radius', lat, lng, radius_km: radius_km || 25 })
+    .insert({
+      customer_id,
+      label: verified.resolvedLabel,
+      target_type: 'radius',
+      lat: verified.lat,
+      lng: verified.lng,
+      radius_km: radius_km || 25,
+    })
     .select()
     .single();
 
@@ -76,6 +121,25 @@ export async function PUT(request: NextRequest) {
   const { id, ...updates } = body;
 
   if (!id) return NextResponse.json({ error: 'ID ontbreekt' }, { status: 400 });
+
+  if ('label' in updates && 'lat' in updates && 'lng' in updates) {
+    const verified = await verifyAndResolveCoords(updates.label, updates.lat, updates.lng);
+    updates.label = verified.resolvedLabel;
+    updates.lat = verified.lat;
+    updates.lng = verified.lng;
+  } else if ('label' in updates && !('lat' in updates)) {
+    const { data: existing } = await supabase
+      .from('customer_targets')
+      .select('target_type, lat, lng')
+      .eq('id', id)
+      .single();
+    if (existing && (existing.target_type || 'radius') === 'radius' && existing.lat != null) {
+      const verified = await verifyAndResolveCoords(updates.label, existing.lat, existing.lng);
+      updates.label = verified.resolvedLabel;
+      updates.lat = verified.lat;
+      updates.lng = verified.lng;
+    }
+  }
 
   const { data, error } = await supabase
     .from('customer_targets')
