@@ -52,6 +52,9 @@ interface Customer {
   postcode?: string | null;
   city?: string | null;
   vat_id?: string | null;
+  signup_source?: string | null;
+  welcome_offer_used?: boolean | null;
+  welcome_offer_expires_at?: string | null;
 }
 
 interface KvkResult {
@@ -75,6 +78,13 @@ interface KvkDetail {
   huisnummer: string;
   postcode: string;
   plaats: string;
+}
+
+function getWelcomeOfferStatus(c: Customer): { label: string; className: string } | null {
+  if (!c.welcome_offer_expires_at) return null;
+  if (c.welcome_offer_used) return { label: 'Korting gebruikt', className: 'bg-slate-100 text-slate-500' };
+  if (new Date(c.welcome_offer_expires_at) <= new Date()) return { label: 'Korting verlopen', className: 'bg-slate-100 text-slate-400' };
+  return { label: 'Welkomstkorting', className: 'bg-brand-orange/10 text-brand-orange' };
 }
 
 function getActivityStatus(c: Customer): { label: string; color: string; dotColor: string; sort: number } {
@@ -439,6 +449,7 @@ export default function CustomersPage() {
                       </span>
                       {isNew && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-600">Nieuwe klant</span>}
                       {!neverLogged && isChurning && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-600">Dreigt af te haken</span>}
+                      {(() => { const wo = getWelcomeOfferStatus(c); return wo ? <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${wo.className}`}>{wo.label}</span> : null; })()}
                     </div>
                   </div>
 
@@ -467,6 +478,9 @@ export default function CustomersPage() {
                         </span>
                       );
                     })}
+                    {c.signup_source === 'website' && (
+                      <span className="rounded-full bg-brand-purple/10 px-2 py-0.5 text-[11px] font-medium text-brand-purple">Website</span>
+                    )}
                     {typeof c.lead_count === 'number' && (
                       <span className="flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
                         <UserGroupIcon className="h-3 w-3" /> {c.lead_count} leads
@@ -1431,6 +1445,11 @@ function CustomerForm({ customer, branchOptions, allCustomers, accountManagers, 
               </div>
             </div>
           )}
+
+          {/* Welkomstkorting beheer */}
+          {isEdit && (
+            <WelcomeOfferBlock customer={customer!} onUpdated={onSaved} />
+          )}
         </div>
 
         <div className="sticky bottom-0 border-t border-slate-100 bg-white px-5 py-4">
@@ -1443,6 +1462,112 @@ function CustomerForm({ customer, branchOptions, allCustomers, accountManagers, 
         </div>
       </motion.div>
     </>
+  );
+}
+
+/* ============================================================
+   WELCOME OFFER BLOCK (inside customer form)
+   ============================================================ */
+function WelcomeOfferBlock({ customer, onUpdated }: { customer: Customer; onUpdated: () => void }) {
+  const [saving, setSaving] = useState(false);
+
+  const hasOffer = !!customer.welcome_offer_expires_at;
+  const isUsed = customer.welcome_offer_used === true;
+  const isExpired = hasOffer && !isUsed && new Date(customer.welcome_offer_expires_at!) <= new Date();
+  const isActive = hasOffer && !isUsed && !isExpired;
+
+  const daysLeft = isActive
+    ? Math.max(0, Math.ceil((new Date(customer.welcome_offer_expires_at!).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+    : 0;
+
+  const statusLabel = isActive ? 'Actief' : isUsed ? 'Gebruikt' : isExpired ? 'Verlopen' : 'Geen';
+  const statusClass = isActive
+    ? 'bg-brand-orange/10 text-brand-orange'
+    : isUsed
+    ? 'bg-emerald-100 text-emerald-700'
+    : isExpired
+    ? 'bg-slate-100 text-slate-500'
+    : 'bg-slate-100 text-slate-400';
+
+  const handleAction = async (action: 'grant' | 'reset' | 'revoke') => {
+    setSaving(true);
+    try {
+      const updates: Record<string, unknown> = {};
+      if (action === 'grant' || action === 'reset') {
+        updates.welcome_offer_used = false;
+        updates.welcome_offer_expires_at = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
+      } else if (action === 'revoke') {
+        updates.welcome_offer_used = true;
+      }
+      await adminFetch('/api/admin/customers', {
+        method: 'PUT',
+        body: JSON.stringify({ id: customer.id, ...updates }),
+      });
+      onUpdated();
+    } catch { /* ignore */ } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="rounded-lg border border-brand-orange/20 bg-brand-orange/5 p-3">
+      <div className="mb-2 flex items-center justify-between">
+        <p className="text-sm font-medium text-slate-700">Welkomstkorting (20%)</p>
+        <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${statusClass}`}>{statusLabel}</span>
+      </div>
+
+      {hasOffer ? (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-slate-500">Vervaldatum</span>
+            <span className="font-medium text-slate-700">
+              {new Date(customer.welcome_offer_expires_at!).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' })}
+              {isActive && <span className="ml-1 text-brand-orange">({daysLeft}d)</span>}
+            </span>
+          </div>
+          {customer.signup_source && (
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-slate-500">Herkomst</span>
+              <span className="font-medium text-slate-700">{customer.signup_source === 'website' ? 'Website (self-service)' : 'Admin'}</span>
+            </div>
+          )}
+          <div className="flex gap-2 pt-1">
+            {(isUsed || isExpired) && (
+              <button
+                type="button"
+                onClick={() => handleAction('reset')}
+                disabled={saving}
+                className="flex-1 rounded-lg border border-brand-orange/30 bg-white px-3 py-1.5 text-xs font-semibold text-brand-orange transition hover:bg-brand-orange/5 disabled:opacity-50"
+              >
+                {saving ? '...' : 'Opnieuw toekennen'}
+              </button>
+            )}
+            {isActive && (
+              <button
+                type="button"
+                onClick={() => handleAction('revoke')}
+                disabled={saving}
+                className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-500 transition hover:bg-slate-50 disabled:opacity-50"
+              >
+                {saving ? '...' : 'Intrekken'}
+              </button>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div>
+          <p className="mb-2 text-xs text-slate-500">Deze klant heeft geen welkomstkorting. Je kunt er handmatig een toekennen (14 dagen geldig, 20% op de eerste bestelling).</p>
+          <button
+            type="button"
+            onClick={() => handleAction('grant')}
+            disabled={saving}
+            className="w-full rounded-lg border border-brand-orange/30 bg-white px-3 py-1.5 text-xs font-semibold text-brand-orange transition hover:bg-brand-orange/5 disabled:opacity-50"
+          >
+            {saving ? '...' : 'Welkomstkorting toekennen'}
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 

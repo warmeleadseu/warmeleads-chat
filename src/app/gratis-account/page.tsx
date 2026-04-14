@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   BuildingOfficeIcon,
@@ -19,6 +18,7 @@ import {
   XMarkIcon,
   GlobeEuropeAfricaIcon,
   MapIcon,
+  SparklesIcon,
 } from '@heroicons/react/24/outline';
 import { CheckCircleIcon as CheckCircleSolid } from '@heroicons/react/24/solid';
 import { Header } from '@/components/Header';
@@ -193,83 +193,67 @@ export default function GratisAccountPage() {
   };
 
   const strength = passwordStrength();
+  const inputClass = 'w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-brand-purple/50 focus:ring-2 focus:ring-brand-purple/20';
 
   return (
     <>
       <Header />
-      <main className="relative min-h-screen bg-brand-navy">
-        <div className="pointer-events-none absolute inset-0 overflow-hidden">
-          <div className="absolute -left-40 top-1/4 h-[500px] w-[500px] rounded-full bg-brand-purple/15 blur-[150px]" />
-          <div className="absolute -right-40 bottom-1/4 h-[400px] w-[400px] rounded-full bg-brand-pink/10 blur-[120px]" />
-          <div className="absolute left-1/3 top-0 h-[300px] w-[300px] rounded-full bg-brand-orange/8 blur-[100px]" />
-        </div>
-
-        <div className="relative z-10 mx-auto max-w-2xl px-4 pb-20 pt-8 sm:px-6 sm:pt-12">
-          {/* Logo + title */}
-          <div className="mb-8 text-center">
-            <Link href="/">
-              <Image src="/logo-wit.png" alt="WarmeLeads" width={160} height={48} className="mx-auto h-9 w-auto" />
-            </Link>
-            <h1 className="mt-4 text-2xl font-bold text-white sm:text-3xl">Gratis account aanmaken</h1>
-            <p className="mt-2 text-sm text-white/50">
+      <main className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
+        {/* Hero */}
+        <section className="relative overflow-hidden bg-brand-navy">
+          <div className="pointer-events-none absolute inset-0">
+            <div className="absolute -left-20 bottom-0 h-[300px] w-[300px] rounded-full bg-brand-purple/20 blur-[100px]" />
+            <div className="absolute right-0 top-0 h-[250px] w-[250px] rounded-full bg-brand-pink/10 blur-[80px]" />
+          </div>
+          <div className="relative z-10 mx-auto max-w-4xl px-5 py-12 text-center md:py-16 lg:px-8">
+            <h1 className="text-2xl font-extrabold tracking-tight text-white md:text-4xl">
+              Gratis account aanmaken
+            </h1>
+            <p className="mx-auto mt-3 max-w-lg text-[15px] leading-relaxed text-white/60 md:text-lg">
               Ontdek ons leadportaal en ontvang <span className="font-semibold text-brand-orange">20% welkomstkorting</span> op je eerste batch
             </p>
           </div>
+        </section>
 
-          {/* Step indicator */}
-          <div className="mb-8">
-            <div className="flex items-center justify-between">
-              {STEPS.map((s, i) => {
-                const isActive = step === s.num;
-                const isDone = step > s.num;
-                return (
-                  <div key={s.num} className="flex flex-1 items-center">
-                    <div className="flex flex-col items-center">
-                      <div
-                        className={`flex h-10 w-10 items-center justify-center rounded-full border-2 transition-all duration-300 ${
-                          isDone
-                            ? 'border-emerald-500 bg-emerald-500'
-                            : isActive
-                            ? 'border-brand-orange bg-brand-orange/20'
-                            : 'border-white/15 bg-white/5'
-                        }`}
-                      >
-                        {isDone ? (
-                          <CheckCircleSolid className="h-5 w-5 text-white" />
-                        ) : (
-                          <s.icon className={`h-5 w-5 ${isActive ? 'text-brand-orange' : 'text-white/30'}`} />
-                        )}
-                      </div>
-                      <span
-                        className={`mt-1.5 hidden text-[10px] font-semibold uppercase tracking-wider min-[375px]:block ${
-                          isDone ? 'text-emerald-400' : isActive ? 'text-white' : 'text-white/25'
-                        }`}
-                      >
-                        {s.label}
-                      </span>
-                    </div>
-                    {i < STEPS.length - 1 && (
-                      <div className="mx-2 h-px flex-1 bg-white/10">
-                        <div
-                          className="h-full bg-emerald-500 transition-all duration-500"
-                          style={{ width: isDone ? '100%' : '0%' }}
-                        />
-                      </div>
+        {/* Step indicator */}
+        <div className="mx-auto max-w-2xl px-5 py-6 md:py-8 lg:px-8">
+          <div className="flex items-center justify-between">
+            {STEPS.map((s, i) => (
+              <div key={s.num} className="flex items-center">
+                <div className="flex flex-col items-center">
+                  <div
+                    className={`flex h-10 w-10 items-center justify-center rounded-full border-2 transition-all duration-300 md:h-11 md:w-11 ${
+                      step > s.num
+                        ? 'border-brand-purple bg-brand-purple/10 text-brand-purple'
+                        : step === s.num
+                          ? 'border-brand-purple bg-brand-purple text-white shadow-lg shadow-brand-purple/25'
+                          : 'border-slate-200 bg-white text-slate-400'
+                    }`}
+                  >
+                    {step > s.num ? (
+                      <CheckCircleIcon className="h-5 w-5" />
+                    ) : (
+                      <s.icon className="h-4 w-4 md:h-5 md:w-5" />
                     )}
                   </div>
-                );
-              })}
-            </div>
-            {/* Progress bar */}
-            <div className="mt-4 h-1 overflow-hidden rounded-full bg-white/10">
-              <motion.div
-                className="h-full bg-gradient-to-r from-brand-purple via-brand-pink to-brand-orange"
-                animate={{ width: `${((step - 1) / (STEPS.length - 1)) * 100}%` }}
-                transition={{ duration: 0.4 }}
-              />
-            </div>
+                  <span
+                    className={`mt-1.5 hidden text-[10px] font-semibold min-[375px]:block md:text-[11px] ${
+                      step >= s.num ? 'text-brand-purple' : 'text-slate-400'
+                    }`}
+                  >
+                    {s.label}
+                  </span>
+                </div>
+                {i < STEPS.length - 1 && (
+                  <div className={`mx-2 h-0.5 w-8 rounded-full transition-colors duration-300 md:mx-4 md:w-16 ${step > s.num ? 'bg-brand-purple' : 'bg-slate-200'}`} />
+                )}
+              </div>
+            ))}
           </div>
+        </div>
 
+        {/* Content */}
+        <div className="mx-auto max-w-2xl px-5 pb-20 sm:pb-16 md:pb-24 lg:px-8">
           {/* Error */}
           <AnimatePresence>
             {error && (
@@ -277,18 +261,17 @@ export default function GratisAccountPage() {
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
-                className="mb-4 flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300"
+                className="mb-4 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600"
               >
                 <ExclamationCircleIcon className="h-5 w-5 shrink-0" />
                 {error}
-                <button onClick={() => setError('')} className="ml-auto">
+                <button onClick={() => setError('')} className="ml-auto text-red-400 hover:text-red-600">
                   <XMarkIcon className="h-4 w-4" />
                 </button>
               </motion.div>
             )}
           </AnimatePresence>
 
-          {/* Steps */}
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -296,380 +279,348 @@ export default function GratisAccountPage() {
               if (step < 4) { setStep(step + 1); setError(''); }
               else handleSubmit();
             }}
-            className="rounded-2xl border border-white/10 bg-white/[0.04] p-6 backdrop-blur-xl sm:p-8"
           >
             <AnimatePresence mode="wait">
-              {/* ── Step 1: Bedrijfsgegevens ── */}
+              {/* Step 1: Bedrijfsgegevens */}
               {step === 1 && (
                 <motion.div
                   key="step1"
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -20 }}
-                  transition={{ duration: 0.25 }}
-                  className="space-y-5"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ duration: 0.3 }}
                 >
-                  <div>
-                    <h2 className="text-lg font-bold text-white">Bedrijfsgegevens</h2>
-                    <p className="mt-1 text-sm text-white/40">Vertel ons over je bedrijf zodat we je account kunnen aanmaken.</p>
-                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-8">
+                    <h2 className="mb-1 text-lg font-bold text-slate-900 md:text-xl">Bedrijfsgegevens</h2>
+                    <p className="mb-6 text-sm text-slate-500">Vertel ons over je bedrijf zodat we je account kunnen aanmaken.</p>
 
-                  <div className="space-y-4">
-                    <div>
-                      <label className="mb-1.5 block text-xs font-medium text-white/50">Bedrijfsnaam *</label>
-                      <input
-                        type="text"
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        placeholder="Bijv. Zonnekracht BV"
-                        className="w-full rounded-lg border border-white/10 bg-white/[0.06] px-3.5 py-2.5 text-sm text-white placeholder-white/25 outline-none transition focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/30"
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1.5 block text-xs font-medium text-white/50">Contactpersoon *</label>
-                      <input
-                        type="text"
-                        value={contactPerson}
-                        onChange={(e) => setContactPerson(e.target.value)}
-                        placeholder="Volledige naam"
-                        className="w-full rounded-lg border border-white/10 bg-white/[0.06] px-3.5 py-2.5 text-sm text-white placeholder-white/25 outline-none transition focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/30"
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1.5 block text-xs font-medium text-white/50">E-mailadres *</label>
-                      <div className="relative">
-                        <input
-                          type="email"
-                          value={email}
-                          onChange={(e) => handleEmailChange(e.target.value)}
-                          placeholder="uw@bedrijf.nl"
-                          className="w-full rounded-lg border border-white/10 bg-white/[0.06] px-3.5 py-2.5 pr-10 text-sm text-white placeholder-white/25 outline-none transition focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/30"
-                        />
-                        {email && (
-                          <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                            {emailChecking ? (
-                              <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/20 border-t-brand-purple" />
-                            ) : emailAvailable === true ? (
-                              <CheckCircleIcon className="h-5 w-5 text-emerald-400" />
-                            ) : emailAvailable === false ? (
-                              <ExclamationCircleIcon className="h-5 w-5 text-red-400" />
-                            ) : null}
-                          </div>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="mb-1.5 block text-xs font-semibold text-slate-600">Bedrijfsnaam *</label>
+                        <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Bijv. Zonnekracht BV" className={inputClass} />
+                      </div>
+                      <div>
+                        <label className="mb-1.5 block text-xs font-semibold text-slate-600">Contactpersoon *</label>
+                        <input type="text" value={contactPerson} onChange={(e) => setContactPerson(e.target.value)} placeholder="Volledige naam" className={inputClass} />
+                      </div>
+                      <div>
+                        <label className="mb-1.5 block text-xs font-semibold text-slate-600">E-mailadres *</label>
+                        <div className="relative">
+                          <input type="email" value={email} onChange={(e) => handleEmailChange(e.target.value)} placeholder="uw@bedrijf.nl" className={`${inputClass} pr-10`} />
+                          {email && (
+                            <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                              {emailChecking ? (
+                                <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-200 border-t-brand-purple" />
+                              ) : emailAvailable === true ? (
+                                <CheckCircleIcon className="h-5 w-5 text-emerald-500" />
+                              ) : emailAvailable === false ? (
+                                <ExclamationCircleIcon className="h-5 w-5 text-red-500" />
+                              ) : null}
+                            </div>
+                          )}
+                        </div>
+                        {emailAvailable === false && (
+                          <p className="mt-1 text-xs text-red-500">Dit e-mailadres is al in gebruik. <Link href="/portal" className="font-medium text-brand-purple underline">Inloggen?</Link></p>
                         )}
                       </div>
-                      {emailAvailable === false && (
-                        <p className="mt-1 text-xs text-red-400">Dit e-mailadres is al in gebruik. <Link href="/portal" className="underline">Inloggen?</Link></p>
-                      )}
-                    </div>
-                    <div>
-                      <label className="mb-1.5 block text-xs font-medium text-white/50">Telefoonnummer *</label>
-                      <input
-                        type="tel"
-                        value={phone}
-                        onChange={(e) => setPhone(e.target.value)}
-                        placeholder="06 12345678"
-                        className="w-full rounded-lg border border-white/10 bg-white/[0.06] px-3.5 py-2.5 text-sm text-white placeholder-white/25 outline-none transition focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/30"
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1.5 block text-xs font-medium text-white/50">KVK-nummer <span className="text-white/25">(optioneel)</span></label>
-                      <input
-                        type="text"
-                        value={kvkNummer}
-                        onChange={(e) => setKvkNummer(e.target.value)}
-                        placeholder="12345678"
-                        autoComplete="off"
-                        className="w-full rounded-lg border border-white/10 bg-white/[0.06] px-3.5 py-2.5 text-sm text-white placeholder-white/25 outline-none transition focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/30"
-                      />
+                      <div>
+                        <label className="mb-1.5 block text-xs font-semibold text-slate-600">Telefoonnummer *</label>
+                        <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="06 12345678" className={inputClass} />
+                      </div>
+                      <div>
+                        <label className="mb-1.5 block text-xs font-semibold text-slate-600">KVK-nummer <span className="font-normal text-slate-400">(optioneel)</span></label>
+                        <input type="text" value={kvkNummer} onChange={(e) => setKvkNummer(e.target.value)} placeholder="12345678" autoComplete="off" className={inputClass} />
+                      </div>
                     </div>
                   </div>
                 </motion.div>
               )}
 
-              {/* ── Step 2: Branche selectie ── */}
+              {/* Step 2: Branche selectie */}
               {step === 2 && (
                 <motion.div
                   key="step2"
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -20 }}
-                  transition={{ duration: 0.25 }}
-                  className="space-y-5"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ duration: 0.3 }}
                 >
-                  <div>
-                    <h2 className="text-lg font-bold text-white">In welke branche(s) ben je actief?</h2>
-                    <p className="mt-1 text-sm text-white/40">Selecteer één of meer branches. Je kunt dit later altijd aanpassen.</p>
-                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-8">
+                    <h2 className="mb-1 text-lg font-bold text-slate-900 md:text-xl">In welke branche(s) ben je actief?</h2>
+                    <p className="mb-6 text-sm text-slate-500">Selecteer een of meer branches. Je kunt dit later altijd aanpassen.</p>
 
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                    {branches.map((b) => {
-                      const selected = selectedBranches.includes(b.slug);
-                      return (
-                        <button
-                          key={b.slug}
-                          onClick={() => toggleBranch(b.slug)}
-                          className={`group relative overflow-hidden rounded-xl border-2 p-4 text-left transition-all ${
-                            selected
-                              ? 'border-brand-purple bg-brand-purple/10 shadow-lg shadow-brand-purple/10'
-                              : 'border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.06]'
-                          }`}
-                        >
-                          {selected && (
-                            <CheckCircleSolid className="absolute right-2 top-2 h-5 w-5 text-brand-purple" />
-                          )}
-                          <div
-                            className="mb-2 h-2 w-8 rounded-full"
-                            style={{ backgroundColor: b.color || '#6366f1' }}
-                          />
-                          <p className={`text-sm font-semibold ${selected ? 'text-white' : 'text-white/70'}`}>
-                            {b.name}
-                          </p>
-                          {b.description && (
-                            <p className="mt-0.5 text-[11px] leading-snug text-white/30">{b.description}</p>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                      {branches.map((b) => {
+                        const selected = selectedBranches.includes(b.slug);
+                        return (
+                          <button
+                            type="button"
+                            key={b.slug}
+                            onClick={() => toggleBranch(b.slug)}
+                            className={`group relative overflow-hidden rounded-xl border-2 p-4 text-left transition-all ${
+                              selected
+                                ? 'border-brand-purple bg-brand-purple/5 shadow-sm shadow-brand-purple/10'
+                                : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
+                            }`}
+                          >
+                            {selected && (
+                              <CheckCircleSolid className="absolute right-2 top-2 h-5 w-5 text-brand-purple" />
+                            )}
+                            <div
+                              className="mb-2 h-2 w-8 rounded-full"
+                              style={{ backgroundColor: b.color || '#6366f1' }}
+                            />
+                            <p className={`text-sm font-semibold ${selected ? 'text-brand-purple' : 'text-slate-700'}`}>
+                              {b.name}
+                            </p>
+                            {b.description && (
+                              <p className="mt-0.5 text-[11px] leading-snug text-slate-400">{b.description}</p>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
 
-                  {selectedBranches.length > 0 && (
-                    <p className="text-center text-xs text-emerald-400">
-                      <CheckCircleIcon className="mr-1 inline h-3.5 w-3.5" />
-                      {selectedBranches.length} {selectedBranches.length === 1 ? 'branche' : 'branches'} geselecteerd
-                    </p>
-                  )}
+                    {selectedBranches.length > 0 && (
+                      <p className="mt-5 text-center text-xs font-medium text-brand-purple">
+                        <CheckCircleIcon className="mr-1 inline h-3.5 w-3.5" />
+                        {selectedBranches.length} {selectedBranches.length === 1 ? 'branche' : 'branches'} geselecteerd
+                      </p>
+                    )}
+                  </div>
                 </motion.div>
               )}
 
-              {/* ── Step 3: Doelgebieden ── */}
+              {/* Step 3: Doelgebieden */}
               {step === 3 && (
                 <motion.div
                   key="step3"
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -20 }}
-                  transition={{ duration: 0.25 }}
-                  className="space-y-5"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ duration: 0.3 }}
                 >
-                  <div>
-                    <h2 className="text-lg font-bold text-white">Waar wil je leads ontvangen?</h2>
-                    <p className="mt-1 text-sm text-white/40">Kies je dekking. Je kunt dit later altijd aanpassen in je portaal.</p>
-                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-8">
+                    <h2 className="mb-1 text-lg font-bold text-slate-900 md:text-xl">Waar wil je leads ontvangen?</h2>
+                    <p className="mb-6 text-sm text-slate-500">Kies je dekking. Je kunt dit later altijd aanpassen in je portaal.</p>
 
-                  {/* Quick selection cards */}
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                    <button
-                      onClick={() => handleRegionType('nl')}
-                      className={`group relative overflow-hidden rounded-xl border-2 p-4 text-left transition-all ${
-                        regionType === 'nl'
-                          ? 'border-brand-orange bg-brand-orange/10'
-                          : 'border-white/10 bg-white/[0.03] hover:border-white/20'
-                      }`}
-                    >
-                      {regionType === 'nl' && <CheckCircleSolid className="absolute right-2 top-2 h-5 w-5 text-brand-orange" />}
-                      <GlobeEuropeAfricaIcon className={`mb-2 h-6 w-6 ${regionType === 'nl' ? 'text-brand-orange' : 'text-white/40'}`} />
-                      <p className={`text-sm font-semibold ${regionType === 'nl' ? 'text-white' : 'text-white/70'}`}>Heel Nederland</p>
-                      <p className="mt-0.5 text-[11px] text-white/30">Alle 12 provincies</p>
-                    </button>
-                    <button
-                      onClick={() => handleRegionType('be')}
-                      className={`group relative overflow-hidden rounded-xl border-2 p-4 text-left transition-all ${
-                        regionType === 'be'
-                          ? 'border-brand-orange bg-brand-orange/10'
-                          : 'border-white/10 bg-white/[0.03] hover:border-white/20'
-                      }`}
-                    >
-                      {regionType === 'be' && <CheckCircleSolid className="absolute right-2 top-2 h-5 w-5 text-brand-orange" />}
-                      <GlobeEuropeAfricaIcon className={`mb-2 h-6 w-6 ${regionType === 'be' ? 'text-brand-orange' : 'text-white/40'}`} />
-                      <p className={`text-sm font-semibold ${regionType === 'be' ? 'text-white' : 'text-white/70'}`}>Heel Vlaanderen</p>
-                      <p className="mt-0.5 text-[11px] text-white/30">5 Vlaamse provincies</p>
-                    </button>
-                    <button
-                      onClick={() => handleRegionType('specific')}
-                      className={`group relative overflow-hidden rounded-xl border-2 p-4 text-left transition-all ${
-                        regionType === 'specific'
-                          ? 'border-brand-orange bg-brand-orange/10'
-                          : 'border-white/10 bg-white/[0.03] hover:border-white/20'
-                      }`}
-                    >
-                      {regionType === 'specific' && <CheckCircleSolid className="absolute right-2 top-2 h-5 w-5 text-brand-orange" />}
-                      <MapIcon className={`mb-2 h-6 w-6 ${regionType === 'specific' ? 'text-brand-orange' : 'text-white/40'}`} />
-                      <p className={`text-sm font-semibold ${regionType === 'specific' ? 'text-white' : 'text-white/70'}`}>Specifieke regio&apos;s</p>
-                      <p className="mt-0.5 text-[11px] text-white/30">Kies provincies</p>
-                    </button>
-                  </div>
-
-                  {/* Province grid (for specific selection) */}
-                  <AnimatePresence>
-                    {regionType === 'specific' && (
-                      <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: 'auto' }}
-                        exit={{ opacity: 0, height: 0 }}
-                        className="overflow-hidden"
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                      <button
+                        type="button"
+                        onClick={() => handleRegionType('nl')}
+                        className={`group relative overflow-hidden rounded-xl border-2 p-4 text-left transition-all ${
+                          regionType === 'nl'
+                            ? 'border-brand-purple bg-brand-purple/5'
+                            : 'border-slate-200 bg-white hover:border-slate-300'
+                        }`}
                       >
-                        <div className="space-y-4 pt-2">
-                          <div>
-                            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-white/40">Nederland</p>
-                            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                              {NL_PROVINCES.map((p) => {
-                                const selected = selectedProvinces.includes(p);
-                                return (
-                                  <button
-                                    key={p}
-                                    onClick={() => toggleProvince(p)}
-                                    className={`rounded-lg border px-3 py-2 text-left text-sm transition ${
-                                      selected
-                                        ? 'border-brand-purple bg-brand-purple/15 font-semibold text-white'
-                                        : 'border-white/10 bg-white/[0.03] text-white/60 hover:border-white/20'
-                                    }`}
-                                  >
-                                    {selected && <CheckCircleSolid className="mr-1.5 inline h-3.5 w-3.5 text-brand-purple" />}
-                                    {p}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </div>
-                          <div>
-                            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-white/40">Vlaanderen</p>
-                            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                              {BE_PROVINCES.map((p) => {
-                                const selected = selectedProvinces.includes(p);
-                                return (
-                                  <button
-                                    key={p}
-                                    onClick={() => toggleProvince(p)}
-                                    className={`rounded-lg border px-3 py-2 text-left text-sm transition ${
-                                      selected
-                                        ? 'border-brand-purple bg-brand-purple/15 font-semibold text-white'
-                                        : 'border-white/10 bg-white/[0.03] text-white/60 hover:border-white/20'
-                                    }`}
-                                  >
-                                    {selected && <CheckCircleSolid className="mr-1.5 inline h-3.5 w-3.5 text-brand-purple" />}
-                                    {p}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
+                        {regionType === 'nl' && <CheckCircleSolid className="absolute right-2 top-2 h-5 w-5 text-brand-purple" />}
+                        <GlobeEuropeAfricaIcon className={`mb-2 h-6 w-6 ${regionType === 'nl' ? 'text-brand-purple' : 'text-slate-400'}`} />
+                        <p className={`text-sm font-semibold ${regionType === 'nl' ? 'text-brand-purple' : 'text-slate-700'}`}>Heel Nederland</p>
+                        <p className="mt-0.5 text-[11px] text-slate-400">Alle 12 provincies</p>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleRegionType('be')}
+                        className={`group relative overflow-hidden rounded-xl border-2 p-4 text-left transition-all ${
+                          regionType === 'be'
+                            ? 'border-brand-purple bg-brand-purple/5'
+                            : 'border-slate-200 bg-white hover:border-slate-300'
+                        }`}
+                      >
+                        {regionType === 'be' && <CheckCircleSolid className="absolute right-2 top-2 h-5 w-5 text-brand-purple" />}
+                        <GlobeEuropeAfricaIcon className={`mb-2 h-6 w-6 ${regionType === 'be' ? 'text-brand-purple' : 'text-slate-400'}`} />
+                        <p className={`text-sm font-semibold ${regionType === 'be' ? 'text-brand-purple' : 'text-slate-700'}`}>Heel Vlaanderen</p>
+                        <p className="mt-0.5 text-[11px] text-slate-400">5 Vlaamse provincies</p>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleRegionType('specific')}
+                        className={`group relative overflow-hidden rounded-xl border-2 p-4 text-left transition-all ${
+                          regionType === 'specific'
+                            ? 'border-brand-purple bg-brand-purple/5'
+                            : 'border-slate-200 bg-white hover:border-slate-300'
+                        }`}
+                      >
+                        {regionType === 'specific' && <CheckCircleSolid className="absolute right-2 top-2 h-5 w-5 text-brand-purple" />}
+                        <MapIcon className={`mb-2 h-6 w-6 ${regionType === 'specific' ? 'text-brand-purple' : 'text-slate-400'}`} />
+                        <p className={`text-sm font-semibold ${regionType === 'specific' ? 'text-brand-purple' : 'text-slate-700'}`}>Specifieke regio&apos;s</p>
+                        <p className="mt-0.5 text-[11px] text-slate-400">Kies provincies</p>
+                      </button>
+                    </div>
 
-                  {selectedProvinces.length > 0 && (
-                    <p className="text-center text-xs text-emerald-400">
-                      <CheckCircleIcon className="mr-1 inline h-3.5 w-3.5" />
-                      {selectedProvinces.length} {selectedProvinces.length === 1 ? 'provincie' : 'provincies'} geselecteerd
-                    </p>
-                  )}
+                    <AnimatePresence>
+                      {regionType === 'specific' && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: 'auto' }}
+                          exit={{ opacity: 0, height: 0 }}
+                          className="overflow-hidden"
+                        >
+                          <div className="mt-5 space-y-4 border-t border-slate-100 pt-5">
+                            <div>
+                              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Nederland</p>
+                              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                                {NL_PROVINCES.map((p) => {
+                                  const selected = selectedProvinces.includes(p);
+                                  return (
+                                    <button
+                                      type="button"
+                                      key={p}
+                                      onClick={() => toggleProvince(p)}
+                                      className={`rounded-lg border px-3 py-2 text-left text-sm transition ${
+                                        selected
+                                          ? 'border-brand-purple bg-brand-purple/5 font-semibold text-brand-purple'
+                                          : 'border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50'
+                                      }`}
+                                    >
+                                      {selected && <CheckCircleSolid className="mr-1.5 inline h-3.5 w-3.5 text-brand-purple" />}
+                                      {p}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                            <div>
+                              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Vlaanderen</p>
+                              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                                {BE_PROVINCES.map((p) => {
+                                  const selected = selectedProvinces.includes(p);
+                                  return (
+                                    <button
+                                      type="button"
+                                      key={p}
+                                      onClick={() => toggleProvince(p)}
+                                      className={`rounded-lg border px-3 py-2 text-left text-sm transition ${
+                                        selected
+                                          ? 'border-brand-purple bg-brand-purple/5 font-semibold text-brand-purple'
+                                          : 'border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50'
+                                      }`}
+                                    >
+                                      {selected && <CheckCircleSolid className="mr-1.5 inline h-3.5 w-3.5 text-brand-purple" />}
+                                      {p}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+
+                    {selectedProvinces.length > 0 && (
+                      <p className="mt-5 text-center text-xs font-medium text-brand-purple">
+                        <CheckCircleIcon className="mr-1 inline h-3.5 w-3.5" />
+                        {selectedProvinces.length} {selectedProvinces.length === 1 ? 'provincie' : 'provincies'} geselecteerd
+                      </p>
+                    )}
+                  </div>
                 </motion.div>
               )}
 
-              {/* ── Step 4: Account aanmaken ── */}
+              {/* Step 4: Account aanmaken */}
               {step === 4 && (
                 <motion.div
                   key="step4"
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -20 }}
-                  transition={{ duration: 0.25 }}
-                  className="space-y-5"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ duration: 0.3 }}
                 >
-                  <div>
-                    <h2 className="text-lg font-bold text-white">Maak je account aan</h2>
-                    <p className="mt-1 text-sm text-white/40">Kies een wachtwoord om je portaal te beveiligen.</p>
-                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-8">
+                    <h2 className="mb-1 text-lg font-bold text-slate-900 md:text-xl">Maak je account aan</h2>
+                    <p className="mb-6 text-sm text-slate-500">Kies een wachtwoord om je portaal te beveiligen.</p>
 
-                  {/* Summary */}
-                  <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-white/30">Samenvatting</p>
-                    <div className="space-y-1.5 text-sm text-white/60">
-                      <p><span className="text-white/30">Bedrijf:</span> <span className="text-white">{name}</span></p>
-                      <p><span className="text-white/30">Contact:</span> <span className="text-white">{contactPerson}</span></p>
-                      <p><span className="text-white/30">E-mail:</span> <span className="text-white">{email}</span></p>
-                      <p>
-                        <span className="text-white/30">Branches:</span>{' '}
-                        <span className="text-white">
-                          {selectedBranches.map((s) => branches.find((b) => b.slug === s)?.name || s).join(', ')}
-                        </span>
-                      </p>
-                      <p><span className="text-white/30">Regio:</span> <span className="text-white">{selectedProvinces.length} provincies</span></p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    <div>
-                      <label className="mb-1.5 block text-xs font-medium text-white/50">Wachtwoord *</label>
-                      <div className="relative">
-                        <input
-                          type={showPassword ? 'text' : 'password'}
-                          value={password}
-                          onChange={(e) => setPassword(e.target.value)}
-                          placeholder="Minimaal 8 tekens"
-                          className="w-full rounded-lg border border-white/10 bg-white/[0.06] px-3.5 py-2.5 pr-10 text-sm text-white placeholder-white/25 outline-none transition focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/30"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowPassword(!showPassword)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60"
-                        >
-                          {showPassword ? <EyeSlashIcon className="h-4 w-4" /> : <EyeIcon className="h-4 w-4" />}
-                        </button>
+                    {/* Summary */}
+                    <div className="mb-6 rounded-xl bg-slate-50 p-4">
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Samenvatting</p>
+                      <div className="space-y-1.5 text-sm">
+                        <p><span className="text-slate-400">Bedrijf:</span> <span className="font-medium text-slate-900">{name}</span></p>
+                        <p><span className="text-slate-400">Contact:</span> <span className="font-medium text-slate-900">{contactPerson}</span></p>
+                        <p><span className="text-slate-400">E-mail:</span> <span className="font-medium text-slate-900">{email}</span></p>
+                        <p>
+                          <span className="text-slate-400">Branches:</span>{' '}
+                          <span className="font-medium text-slate-900">
+                            {selectedBranches.map((s) => branches.find((b) => b.slug === s)?.name || s).join(', ')}
+                          </span>
+                        </p>
+                        <p><span className="text-slate-400">Regio:</span> <span className="font-medium text-slate-900">{selectedProvinces.length} provincies</span></p>
                       </div>
-                      {password.length > 0 && (
-                        <div className="mt-2">
-                          <div className="flex items-center gap-2">
-                            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10">
-                              <div className={`h-full ${strength.color} transition-all duration-300`} style={{ width: strength.width }} />
-                            </div>
-                            <span className="text-[11px] text-white/40">{strength.label}</span>
-                          </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div>
+                        <label className="mb-1.5 block text-xs font-semibold text-slate-600">Wachtwoord *</label>
+                        <div className="relative">
+                          <input
+                            type={showPassword ? 'text' : 'password'}
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            placeholder="Minimaal 8 tekens"
+                            className={`${inputClass} pr-10`}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowPassword(!showPassword)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                          >
+                            {showPassword ? <EyeSlashIcon className="h-4 w-4" /> : <EyeIcon className="h-4 w-4" />}
+                          </button>
                         </div>
-                      )}
-                    </div>
-                    <div>
-                      <label className="mb-1.5 block text-xs font-medium text-white/50">Bevestig wachtwoord *</label>
-                      <input
-                        type={showPassword ? 'text' : 'password'}
-                        value={passwordConfirm}
-                        onChange={(e) => setPasswordConfirm(e.target.value)}
-                        placeholder="Herhaal wachtwoord"
-                        className="w-full rounded-lg border border-white/10 bg-white/[0.06] px-3.5 py-2.5 text-sm text-white placeholder-white/25 outline-none transition focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/30"
-                      />
-                      {passwordConfirm && password !== passwordConfirm && (
-                        <p className="mt-1 text-xs text-red-400">Wachtwoorden komen niet overeen</p>
-                      )}
-                    </div>
-                  </div>
-
-                  <label className="flex cursor-pointer items-start gap-3">
-                    <input
-                      type="checkbox"
-                      checked={agreedToTerms}
-                      onChange={(e) => setAgreedToTerms(e.target.checked)}
-                      className="mt-1 h-4 w-4 rounded border-white/20 bg-white/5 text-brand-purple focus:ring-brand-purple/30"
-                    />
-                    <span className="text-sm text-white/50">
-                      Ik ga akkoord met de{' '}
-                      <Link href="/voorwaarden" target="_blank" className="text-brand-purple underline decoration-brand-purple/30 hover:text-brand-purple/80">
-                        algemene voorwaarden
-                      </Link>
-                    </span>
-                  </label>
-
-                  {/* Incentive reminder */}
-                  <div className="rounded-xl border border-brand-orange/20 bg-brand-orange/5 p-4">
-                    <div className="flex items-start gap-3">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-orange/20">
-                        <span className="text-lg">🎉</span>
+                        {password.length > 0 && (
+                          <div className="mt-2">
+                            <div className="flex items-center gap-2">
+                              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100">
+                                <div className={`h-full ${strength.color} transition-all duration-300`} style={{ width: strength.width }} />
+                              </div>
+                              <span className="text-[11px] text-slate-500">{strength.label}</span>
+                            </div>
+                          </div>
+                        )}
                       </div>
                       <div>
-                        <p className="text-sm font-bold text-white">20% welkomstkorting</p>
-                        <p className="mt-0.5 text-xs text-white/50">
-                          Automatisch toegepast op je eerste bestelling. 14 dagen geldig na registratie.
-                        </p>
+                        <label className="mb-1.5 block text-xs font-semibold text-slate-600">Bevestig wachtwoord *</label>
+                        <input
+                          type={showPassword ? 'text' : 'password'}
+                          value={passwordConfirm}
+                          onChange={(e) => setPasswordConfirm(e.target.value)}
+                          placeholder="Herhaal wachtwoord"
+                          className={inputClass}
+                        />
+                        {passwordConfirm && password !== passwordConfirm && (
+                          <p className="mt-1 text-xs text-red-500">Wachtwoorden komen niet overeen</p>
+                        )}
+                      </div>
+                    </div>
+
+                    <label className="mt-5 flex cursor-pointer items-start gap-3">
+                      <input
+                        type="checkbox"
+                        checked={agreedToTerms}
+                        onChange={(e) => setAgreedToTerms(e.target.checked)}
+                        className="mt-1 h-4 w-4 rounded border-slate-300 text-brand-purple focus:ring-brand-purple/30"
+                      />
+                      <span className="text-sm text-slate-600">
+                        Ik ga akkoord met de{' '}
+                        <Link href="/voorwaarden" target="_blank" className="font-medium text-brand-purple underline decoration-brand-purple/30 hover:text-brand-purple/80">
+                          algemene voorwaarden
+                        </Link>
+                      </span>
+                    </label>
+
+                    {/* Incentive reminder */}
+                    <div className="mt-5 rounded-xl border border-brand-purple/20 bg-gradient-to-r from-brand-purple/5 to-brand-pink/5 p-4">
+                      <div className="flex items-start gap-3">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-purple/10">
+                          <SparklesIcon className="h-5 w-5 text-brand-purple" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-bold text-slate-900">20% welkomstkorting</p>
+                          <p className="mt-0.5 text-xs text-slate-500">
+                            Automatisch toegepast op je eerste bestelling. 14 dagen geldig na registratie.
+                          </p>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -678,12 +629,12 @@ export default function GratisAccountPage() {
             </AnimatePresence>
 
             {/* Navigation */}
-            <div className="mt-8 flex items-center justify-between gap-3">
+            <div className="mt-6 flex items-center justify-between gap-3">
               {step > 1 ? (
                 <button
                   type="button"
                   onClick={() => { setStep(step - 1); setError(''); }}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-medium text-white/60 transition hover:bg-white/[0.08]"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-600 shadow-sm transition hover:bg-slate-50"
                 >
                   <ArrowLeftIcon className="h-4 w-4" />
                   Vorige
@@ -691,7 +642,7 @@ export default function GratisAccountPage() {
               ) : (
                 <Link
                   href="/"
-                  className="inline-flex items-center gap-1.5 text-sm text-white/30 transition hover:text-white/50"
+                  className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-400 transition hover:text-slate-600"
                 >
                   <ArrowLeftIcon className="h-4 w-4" />
                   Terug
@@ -702,7 +653,7 @@ export default function GratisAccountPage() {
                 <button
                   type="submit"
                   disabled={!canNext()}
-                  className="group inline-flex items-center gap-2 rounded-lg bg-button-gradient px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-brand-orange/20 transition hover:shadow-brand-orange/30 disabled:opacity-40 disabled:shadow-none"
+                  className="group inline-flex items-center gap-2 rounded-lg bg-button-gradient px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-brand-orange/20 transition hover:shadow-brand-orange/30 hover:brightness-110 disabled:opacity-40 disabled:shadow-none"
                 >
                   Volgende
                   <ArrowRightIcon className="h-4 w-4 transition group-hover:translate-x-0.5" />
@@ -711,7 +662,7 @@ export default function GratisAccountPage() {
                 <button
                   type="submit"
                   disabled={!canNext() || submitting}
-                  className="group inline-flex items-center gap-2 rounded-lg bg-button-gradient px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-brand-orange/20 transition hover:shadow-brand-orange/30 disabled:opacity-40 disabled:shadow-none"
+                  className="group inline-flex items-center gap-2 rounded-lg bg-button-gradient px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-brand-orange/20 transition hover:shadow-brand-orange/30 hover:brightness-110 disabled:opacity-40 disabled:shadow-none"
                 >
                   {submitting ? (
                     <>
@@ -730,7 +681,7 @@ export default function GratisAccountPage() {
           </form>
 
           {/* Already have an account */}
-          <p className="mt-6 text-center text-sm text-white/30">
+          <p className="mt-6 text-center text-sm text-slate-400">
             Al een account?{' '}
             <Link href="/portal" className="font-medium text-brand-purple hover:text-brand-purple/80">
               Inloggen

@@ -410,9 +410,9 @@ function AccountTab({
           <button
             onClick={() => saveNotifPrefs(!emailEnabled, frequency)}
             disabled={notifSaving}
-            className={`relative h-6 w-11 rounded-full transition-colors ${emailEnabled ? 'bg-brand-purple' : 'bg-slate-200'}`}
+            className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors ${emailEnabled ? 'bg-brand-purple' : 'bg-slate-200'}`}
           >
-            <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${emailEnabled ? 'translate-x-[22px]' : 'translate-x-0.5'}`} />
+            <span className={`inline-block h-5 w-5 rounded-full bg-white shadow-md transition-transform ${emailEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
           </button>
         </div>
         <AnimatePresence>
@@ -536,9 +536,9 @@ function AccountPushToggle({ showToast }: { showToast: (msg: string, type?: 'suc
           <button
             onClick={handleToggle}
             disabled={toggling}
-            className={`relative h-6 w-11 rounded-full transition-colors disabled:opacity-50 ${isEnabled ? 'bg-brand-purple' : 'bg-slate-200'}`}
+            className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${isEnabled ? 'bg-brand-purple' : 'bg-slate-200'}`}
           >
-            <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${isEnabled ? 'translate-x-[22px]' : 'translate-x-0.5'}`} />
+            <span className={`inline-block h-5 w-5 rounded-full bg-white shadow-md transition-transform ${isEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
           </button>
         )}
       </div>

@@ -339,6 +339,13 @@ export async function POST(request: NextRequest) {
         .update({ batch_id: newBatch.id })
         .eq('id', orderId);
 
+      if (order.welcome_discount_applied) {
+        await supabase
+          .from('customers')
+          .update({ welcome_offer_used: true })
+          .eq('id', order.customer_id);
+      }
+
       const { data: branchRow } = await supabase.from('branches').select('name').eq('slug', order.branch).single();
       const branchName = branchRow?.name || order.branch;
 

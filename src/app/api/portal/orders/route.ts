@@ -41,10 +41,20 @@ export async function POST(request: NextRequest) {
 
     if (!custData) return NextResponse.json({ error: 'Klant niet gevonden' }, { status: 404 });
 
-    const welcomeEligible =
+    let welcomeEligible =
       custData.welcome_offer_used === false &&
       custData.welcome_offer_expires_at &&
       new Date(custData.welcome_offer_expires_at) > new Date();
+
+    if (welcomeEligible) {
+      const { count } = await supabase
+        .from('batch_orders')
+        .select('id', { count: 'exact', head: true })
+        .eq('customer_id', customer.id)
+        .eq('welcome_discount_applied', true)
+        .in('status', ['pending', 'open']);
+      if ((count ?? 0) > 0) welcomeEligible = false;
+    }
 
     let branch = body.branch;
     let price_per_lead: number | null = null;
@@ -118,20 +128,13 @@ export async function POST(request: NextRequest) {
         notes: notes || null,
         source_batch_id: source_batch_id || null,
         status: 'pending',
+        welcome_discount_applied: welcomeEligible && discountAmount > 0,
       })
       .select()
       .single();
 
     if (orderErr || !order) {
       return NextResponse.json({ error: 'Bestelling aanmaken mislukt' }, { status: 500 });
-    }
-
-    if (welcomeEligible && discountAmount > 0) {
-      supabase
-        .from('customers')
-        .update({ welcome_offer_used: true })
-        .eq('id', customer.id)
-        .then(() => {});
     }
 
     const { data: branchRow } = await supabase.from('branches').select('name').eq('slug', branch).single();
