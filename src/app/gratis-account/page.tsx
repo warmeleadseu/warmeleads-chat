@@ -23,7 +23,6 @@ import {
   BoltIcon,
   SunIcon,
   FireIcon,
-  TruckIcon,
   WrenchScrewdriverIcon,
   AdjustmentsVerticalIcon,
   ServerStackIcon,
@@ -61,13 +60,22 @@ const BE_PROVINCES = [
   'Antwerpen', 'Limburg (BE)', 'Oost-Vlaanderen', 'Vlaams-Brabant', 'West-Vlaanderen',
 ];
 
+function CarIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M6.5 17a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Zm11 0a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4 15.5V13a1 1 0 0 1 1-1h1.25L8 8.5h8l1.75 3.5H19a1 1 0 0 1 1 1v2.5M8 15.5h8M3 15.5h1.5m12 0H21" />
+    </svg>
+  );
+}
+
 const BRANCH_ICONS: Record<string, React.ComponentType<React.SVGProps<SVGSVGElement>>> = {
   thuisbatterij: BoltIcon,
   zakelijke_batterij: ServerStackIcon,
   zonnepanelen: SunIcon,
   airco: AdjustmentsVerticalIcon,
   warmtepomp: FireIcon,
-  financial_lease: TruckIcon,
+  financial_lease: CarIcon,
   maatwerk: WrenchScrewdriverIcon,
 };
 
