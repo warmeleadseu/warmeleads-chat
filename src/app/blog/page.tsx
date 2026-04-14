@@ -2,12 +2,12 @@ import type { Metadata } from "next";
 import BlogPageClient from "@/components/BlogPageClient";
 
 export const metadata: Metadata = {
-  title: "Leadgeneratie Blog Nederland | 40+ Expert Artikelen | WarmeLeads",
-  description: "Ontdek 40+ diepgaande artikelen over leadgeneratie in Nederland. Van SEO tot AI, van B2B tot conversie optimalisatie. Dagelijks nieuwe inzichten van WarmeLeads experts.",
+  title: "Leadgeneratie Blog Nederland | 80+ Expert Artikelen | WarmeLeads",
+  description: "Ontdek 80+ diepgaande artikelen over leadgeneratie in Nederland. Van SEO tot AI, van B2B tot conversie optimalisatie. Dagelijks nieuwe inzichten van WarmeLeads experts.",
   keywords: "leadgeneratie blog, lead generation Nederland, marketing strategie, B2B leadgeneratie, conversie optimalisatie, digital marketing tips",
   openGraph: {
-    title: "Leadgeneratie Blog | 40+ Expert Artikelen | WarmeLeads",
-    description: "De meest complete leadgeneratie kennisbank van Nederland met 40+ expert artikelen",
+    title: "Leadgeneratie Blog | 80+ Expert Artikelen | WarmeLeads",
+    description: "De meest complete leadgeneratie kennisbank van Nederland met 80+ expert artikelen",
     url: "https://www.warmeleads.eu/blog",
     siteName: "WarmeLeads",
     images: [{
@@ -21,7 +21,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Leadgeneratie Blog | 40+ Expert Artikelen",
+    title: "Leadgeneratie Blog | 80+ Expert Artikelen",
     description: "De meest complete leadgeneratie kennisbank van Nederland",
     images: ["https://www.warmeleads.eu/logo-1200x1200.png"],
   }

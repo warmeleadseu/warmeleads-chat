@@ -1,132 +1,265 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Header } from "@/components/Header";
+import { Footer } from "@/components/Footer";
+import {
+  CheckCircleIcon,
+  ArrowRightIcon,
+  RocketLaunchIcon,
+  BoltIcon,
+  CpuChipIcon,
+  FireIcon,
+  CurrencyEuroIcon,
+  ChartBarIcon,
+  LightBulbIcon,
+} from "@heroicons/react/24/outline";
 
 export const metadata: Metadata = {
-  title: "Thuisbatterij Trends Oktober 2025: AI Marktanalyse | WarmeLeads Blog",
-  description: "AI-gegenereerde marktanalyse van thuisbatterij trends in oktober 2025. Actuele inzichten voor installateurs over subsidies, prijzen en kansen in Nederland.",
-  keywords: "thuisbatterij trends oktober 2025, AI marktanalyse, battery storage Nederland, thuisbatterij installateur, energie opslag markt",
+  title:
+    "Thuisbatterij Trends Oktober 2026: AI Marktanalyse | WarmeLeads Blog",
+  description:
+    "AI-gegenereerde marktanalyse van thuisbatterij trends in oktober 2026. Actuele inzichten voor installateurs over subsidies, prijzen en kansen in Nederland.",
+  keywords:
+    "thuisbatterij trends oktober 2026, AI marktanalyse, battery storage Nederland, thuisbatterij installateur, energie opslag markt",
 };
 
 export default function AITestThuisbatterijTrendsPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-brand-navy via-brand-purple to-brand-pink">
-      <div className="relative py-20 overflow-hidden">
-        <div className="fixed inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute -top-40 -right-40 w-80 h-80 bg-white/10 rounded-full blur-3xl animate-pulse" />
-          <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-white/10 rounded-full blur-3xl animate-pulse" />
-        </div>
-
-        <div className="relative z-10 max-w-4xl mx-auto px-4 text-white">
-          <div className="text-center mb-12">
-            <div className="text-6xl mb-6">🔋</div>
-            <h1 className="text-4xl md:text-5xl font-bold mb-6 bg-gradient-to-r from-white to-white/80 bg-clip-text text-transparent">
-              Thuisbatterij Trends Oktober 2025
+    <>
+      <Header />
+      <main className="min-h-screen bg-white text-slate-900">
+        {/* Hero */}
+        <section className="relative overflow-hidden bg-brand-navy py-16 md:py-24">
+          <div className="pointer-events-none absolute inset-0">
+            <div className="absolute -left-20 bottom-0 h-[400px] w-[400px] rounded-full bg-brand-purple/20 blur-[120px]" />
+            <div className="absolute -right-20 top-0 h-[300px] w-[300px] rounded-full bg-brand-pink/15 blur-[100px]" />
+          </div>
+          <div className="relative z-10 mx-auto max-w-4xl px-5 text-center text-white lg:px-8">
+            <p className="mb-3 text-[11px] font-bold uppercase tracking-widest text-brand-orange md:text-[12px]">
+              AI Gegenereerd • Marktanalyse
+            </p>
+            <h1 className="mb-4 text-3xl font-bold leading-tight md:text-5xl">
+              Thuisbatterij Trends Oktober 2026
             </h1>
-            <p className="text-xl text-white/90 mb-4">AI-gegenereerde marktanalyse voor installateurs</p>
-            <div className="text-sm text-white/70">
-              26 september 2025 • 6 min leestijd • AI Gegenereerd • Marktanalyse
+            <p className="text-lg text-white/80 md:text-xl">
+              AI-gegenereerde marktanalyse voor installateurs
+            </p>
+            <div className="mt-4 text-sm text-white/60">
+              26 september 2026 • 6 min leestijd
             </div>
-            <div className="mt-2 px-4 py-2 bg-gradient-to-r from-blue-500/20 to-purple-500/20 rounded-full text-xs border border-blue-400/30 inline-block">
-              🤖 Automatisch gegenereerd met actuele marktdata
+            <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-xs text-white/80">
+              <CpuChipIcon className="h-4 w-4" />
+              Automatisch gegenereerd met actuele marktdata
             </div>
           </div>
+        </section>
 
-          <div className="bg-white/10 backdrop-blur-sm rounded-3xl p-8 border border-white/20 mb-12">
-            <div className="prose prose-lg max-w-none text-white">
-              <h2 className="text-2xl font-bold mb-4 text-white">Explosieve Groei in Oktober</h2>
-              <p className="text-white/90 mb-6">
-                De thuisbatterij markt in Nederland laat in oktober 2025 ongekende groei zien. Met nieuwe subsidies, 
-                dalende prijzen en toenemende energie-onafhankelijkheidswens van consumenten, ontstaan er unieke 
-                kansen voor installateurs.
-              </p>
+        {/* Content */}
+        <section className="py-12 md:py-16">
+          <div className="mx-auto max-w-3xl px-5 lg:px-8">
+            <h2 className="mb-4 mt-8 text-2xl font-bold text-slate-900">
+              Explosieve Groei in Oktober
+            </h2>
+            <p className="mb-4 leading-relaxed text-slate-600">
+              De thuisbatterij markt in Nederland laat in oktober 2026 ongekende
+              groei zien. Met nieuwe subsidies, dalende prijzen en toenemende
+              energie-onafhankelijkheidswens van consumenten, ontstaan er unieke
+              kansen voor installateurs.
+            </p>
 
-              <h3 className="text-xl font-bold mb-3 text-white">🔥 Actuele Ontwikkelingen Oktober</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                <div className="bg-green-500/20 rounded-xl p-4 border border-green-400/30">
-                  <h4 className="font-bold mb-3 text-green-300">💰 Subsidie Updates</h4>
-                  <ul className="space-y-2 text-white/90 text-sm">
-                    <li>• ISDE subsidie verhoogd naar €2.500</li>
-                    <li>• Gemeente Utrecht extra €1.000 bonus</li>
-                    <li>• BTW verlaging naar 9% overwogen</li>
-                    <li>• Energieleverancier cashback acties</li>
-                  </ul>
-                </div>
-                <div className="bg-blue-500/20 rounded-xl p-4 border border-blue-400/30">
-                  <h4 className="font-bold mb-3 text-blue-300">📉 Prijsontwikkelingen</h4>
-                  <ul className="space-y-2 text-white/90 text-sm">
-                    <li>• Tesla Powerwall 3: €9.500 (-12%)</li>
-                    <li>• LFP batterijen: €450/kWh (-18%)</li>
-                    <li>• Installatie kosten stabiel</li>
-                    <li>• Omvormer prijzen gedaald 8%</li>
-                  </ul>
-                </div>
-              </div>
-
-              <h3 className="text-xl font-bold mb-3 text-white">📊 Marktcijfers Oktober 2025</h3>
-              <div className="bg-white/10 rounded-xl p-6 mb-6">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
-                  <div>
-                    <div className="text-3xl font-bold text-green-300">+340%</div>
-                    <div className="text-sm text-white/70">Groei t.o.v. oktober 2024</div>
-                  </div>
-                  <div>
-                    <div className="text-3xl font-bold text-blue-300">12.500</div>
-                    <div className="text-sm text-white/70">Verkochte batterijen in oktober</div>
-                  </div>
-                  <div>
-                    <div className="text-3xl font-bold text-purple-300">6,8 jaar</div>
-                    <div className="text-sm text-white/70">Gemiddelde terugverdientijd</div>
-                  </div>
-                </div>
-              </div>
-
-              <h3 className="text-xl font-bold mb-3 text-white">🎯 Kansen voor Installateurs</h3>
-              <p className="text-white/90 mb-4">
-                Deze ontwikkelingen creëren ongekende mogelijkheden voor thuisbatterij installateurs. 
-                De combinatie van subsidies, prijsdalingen en groeiende consumentenvraag zorgt voor 
-                een perfecte storm van kansen.
-              </p>
-
-              <div className="bg-white/10 rounded-xl p-6 mb-6">
-                <h4 className="font-bold mb-3 text-yellow-300">💡 Actieplan Oktober</h4>
-                <ul className="space-y-2 text-white/90">
-                  <li>• <strong>Marketing focus:</strong> Energie-onafhankelijkheid messaging</li>
-                  <li>• <strong>Subsidie communicatie:</strong> €2.500 besparing benadrukken</li>
-                  <li>• <strong>Seizoen targeting:</strong> Winter voorbereidingen</li>
-                  <li>• <strong>Cross-selling:</strong> Zonnepanelen + batterij combo's</li>
+            {/* Actuele Ontwikkelingen */}
+            <h3 className="mb-3 mt-6 flex items-center gap-2 text-xl font-bold text-slate-900">
+              <FireIcon className="h-6 w-6 text-brand-orange" />
+              Actuele Ontwikkelingen Oktober
+            </h3>
+            <div className="mb-6 grid grid-cols-1 gap-6 md:grid-cols-2">
+              <div className="rounded-xl border border-green-200 bg-green-50 p-4">
+                <h4 className="mb-3 flex items-center gap-2 font-bold text-green-700">
+                  <CurrencyEuroIcon className="h-5 w-5" />
+                  Subsidie Updates
+                </h4>
+                <ul className="space-y-2 text-sm text-slate-600">
+                  <li className="flex items-start gap-2">
+                    <CheckCircleIcon className="mt-0.5 h-4 w-4 shrink-0 text-green-500" />
+                    ISDE subsidie verhoogd naar €2.500
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircleIcon className="mt-0.5 h-4 w-4 shrink-0 text-green-500" />
+                    Gemeente Utrecht extra €1.000 bonus
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircleIcon className="mt-0.5 h-4 w-4 shrink-0 text-green-500" />
+                    BTW verlaging naar 9% overwogen
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircleIcon className="mt-0.5 h-4 w-4 shrink-0 text-green-500" />
+                    Energieleverancier cashback acties
+                  </li>
                 </ul>
               </div>
-
-              <h3 className="text-xl font-bold mb-3 text-white">🚀 WarmeLeads Thuisbatterij Leads</h3>
-              <p className="text-white/90 mb-4">
-                Onze thuisbatterij campagnes zijn geoptimaliseerd voor deze markttrends. We targeten 
-                specifiek op huiseigenaren met zonnepanelen die nu klaar zijn voor de volgende stap: 
-                energie-onafhankelijkheid met thuisbatterijen.
-              </p>
-
-              <div className="bg-gradient-to-r from-green-500/20 to-blue-500/20 rounded-xl p-6 border border-green-400/30">
-                <h4 className="font-bold mb-3 text-green-300">🎯 Conversie Tip</h4>
-                <p className="text-white/90">
-                  Oktober is de perfecte maand voor thuisbatterij verkoop. Energie rekeningen stijgen, 
-                  subsidies zijn beschikbaar, en consumenten bereiden zich voor op de winter. 
-                  Onze leads hebben nu 25% hogere conversiekans dan in de zomer.
-                </p>
+              <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
+                <h4 className="mb-3 flex items-center gap-2 font-bold text-blue-700">
+                  <ChartBarIcon className="h-5 w-5" />
+                  Prijsontwikkelingen
+                </h4>
+                <ul className="space-y-2 text-sm text-slate-600">
+                  <li className="flex items-start gap-2">
+                    <CheckCircleIcon className="mt-0.5 h-4 w-4 shrink-0 text-blue-500" />
+                    Tesla Powerwall 3: €9.500 (-12%)
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircleIcon className="mt-0.5 h-4 w-4 shrink-0 text-blue-500" />
+                    LFP batterijen: €450/kWh (-18%)
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircleIcon className="mt-0.5 h-4 w-4 shrink-0 text-blue-500" />
+                    Installatie kosten stabiel
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircleIcon className="mt-0.5 h-4 w-4 shrink-0 text-blue-500" />
+                    Omvormer prijzen gedaald 8%
+                  </li>
+                </ul>
               </div>
             </div>
-          </div>
 
-          <div className="text-center">
-            <h2 className="text-2xl font-bold mb-4">Profiteer van de Thuisbatterij Boom</h2>
-            <p className="text-white/80 mb-6">Nederlandse huiseigenaren zijn klaar voor energie-onafhankelijkheid</p>
-            <Link href="/leads-thuisbatterijen" className="inline-block bg-white text-brand-purple px-8 py-4 rounded-xl font-semibold hover:scale-105 transition-transform mr-4">
-              🔋 Thuisbatterij Leads
-            </Link>
-            <Link href="/blog" className="inline-block bg-white/20 text-white px-8 py-4 rounded-xl font-semibold hover:bg-white/30 transition-colors">
-              ← Alle Artikelen
-            </Link>
+            {/* Marktcijfers */}
+            <h3 className="mb-3 mt-6 flex items-center gap-2 text-xl font-bold text-slate-900">
+              <ChartBarIcon className="h-6 w-6 text-brand-orange" />
+              Marktcijfers Oktober 2026
+            </h3>
+            <div className="mb-6 rounded-xl border border-slate-200 bg-slate-50 p-6">
+              <div className="grid grid-cols-1 gap-4 text-center md:grid-cols-3">
+                <div className="rounded-xl border border-slate-200 bg-white p-4">
+                  <div className="text-3xl font-bold text-green-700">+340%</div>
+                  <div className="text-sm text-slate-500">
+                    Groei t.o.v. oktober 2025
+                  </div>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-white p-4">
+                  <div className="text-3xl font-bold text-blue-700">12.500</div>
+                  <div className="text-sm text-slate-500">
+                    Verkochte batterijen in oktober
+                  </div>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-white p-4">
+                  <div className="text-3xl font-bold text-purple-700">
+                    6,8 jaar
+                  </div>
+                  <div className="text-sm text-slate-500">
+                    Gemiddelde terugverdientijd
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Kansen voor Installateurs */}
+            <h3 className="mb-3 mt-6 flex items-center gap-2 text-xl font-bold text-slate-900">
+              <ArrowRightIcon className="h-6 w-6 text-brand-orange" />
+              Kansen voor Installateurs
+            </h3>
+            <p className="mb-4 leading-relaxed text-slate-600">
+              Deze ontwikkelingen creëren ongekende mogelijkheden voor
+              thuisbatterij installateurs. De combinatie van subsidies,
+              prijsdalingen en groeiende consumentenvraag zorgt voor een perfecte
+              storm van kansen.
+            </p>
+
+            {/* Actieplan */}
+            <div className="mb-6 rounded-xl border border-slate-200 bg-slate-50 p-6">
+              <h4 className="mb-3 flex items-center gap-2 font-bold text-slate-900">
+                <LightBulbIcon className="h-5 w-5 text-brand-orange" />
+                Actieplan Oktober
+              </h4>
+              <ul className="space-y-2 text-slate-600">
+                <li className="flex items-start gap-2">
+                  <CheckCircleIcon className="mt-0.5 h-5 w-5 shrink-0 text-brand-orange" />
+                  <span>
+                    <strong>Marketing focus:</strong>{" "}
+                    Energie-onafhankelijkheid messaging
+                  </span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircleIcon className="mt-0.5 h-5 w-5 shrink-0 text-brand-orange" />
+                  <span>
+                    <strong>Subsidie communicatie:</strong> €2.500 besparing
+                    benadrukken
+                  </span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircleIcon className="mt-0.5 h-5 w-5 shrink-0 text-brand-orange" />
+                  <span>
+                    <strong>Seizoen targeting:</strong> Winter voorbereidingen
+                  </span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircleIcon className="mt-0.5 h-5 w-5 shrink-0 text-brand-orange" />
+                  <span>
+                    <strong>Cross-selling:</strong> Zonnepanelen + batterij
+                    combo&apos;s
+                  </span>
+                </li>
+              </ul>
+            </div>
+
+            {/* WarmeLeads Thuisbatterij Leads */}
+            <h3 className="mb-3 mt-6 flex items-center gap-2 text-xl font-bold text-slate-900">
+              <RocketLaunchIcon className="h-6 w-6 text-brand-orange" />
+              WarmeLeads Thuisbatterij Leads
+            </h3>
+            <p className="mb-4 leading-relaxed text-slate-600">
+              Onze thuisbatterij campagnes zijn geoptimaliseerd voor deze
+              markttrends. We targeten specifiek op huiseigenaren met
+              zonnepanelen die nu klaar zijn voor de volgende stap:
+              energie-onafhankelijkheid met thuisbatterijen.
+            </p>
+
+            {/* Conversie Tip */}
+            <div className="mb-6 rounded-xl border border-slate-200 bg-slate-50 p-6">
+              <h4 className="mb-3 flex items-center gap-2 font-bold text-slate-900">
+                <ArrowRightIcon className="h-5 w-5 text-brand-orange" />
+                Conversie Tip
+              </h4>
+              <p className="text-slate-600">
+                Oktober is de perfecte maand voor thuisbatterij verkoop. Energie
+                rekeningen stijgen, subsidies zijn beschikbaar, en consumenten
+                bereiden zich voor op de winter. Onze leads hebben nu 25% hogere
+                conversiekans dan in de zomer.
+              </p>
+            </div>
           </div>
-        </div>
-      </div>
-    </div>
+        </section>
+
+        {/* CTA */}
+        <section className="bg-slate-50 py-12 md:py-16">
+          <div className="mx-auto max-w-3xl px-5 text-center lg:px-8">
+            <h2 className="mb-3 text-2xl font-bold text-slate-900">
+              Profiteer van de Thuisbatterij Boom
+            </h2>
+            <p className="mb-6 text-slate-600">
+              Nederlandse huiseigenaren zijn klaar voor
+              energie-onafhankelijkheid
+            </p>
+            <div className="flex flex-col items-center justify-center gap-3 sm:flex-row">
+              <Link
+                href="/gratis-account"
+                className="group inline-flex items-center justify-center gap-2 rounded-lg bg-button-gradient px-6 py-3.5 text-sm font-bold text-white shadow-lg shadow-brand-orange/30 transition hover:brightness-110"
+              >
+                <BoltIcon className="h-5 w-5" />
+                Thuisbatterij Leads
+                <ArrowRightIcon className="h-4 w-4 transition group-hover:translate-x-0.5" />
+              </Link>
+              <Link
+                href="/blog"
+                className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-6 py-3.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                Alle artikelen
+              </Link>
+            </div>
+          </div>
+        </section>
+      </main>
+      <Footer />
+    </>
   );
 }

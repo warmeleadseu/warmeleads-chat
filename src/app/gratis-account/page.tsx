@@ -63,23 +63,37 @@ const BE_PROVINCES = [
 function CarIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
-      {/* Body: SUV silhouette — long hood, sloped roof, muscular rear */}
-      <path strokeLinecap="round" strokeLinejoin="round" d="M1.5 15.8v-2.6c0-.5.25-.9.65-1.1L4 11l1.8-.6L7.5 6.2A1.1 1.1 0 0 1 8.5 5.5h7a1.1 1.1 0 0 1 1 .7l1.7 4.2 1.8.6 1.85 1.1c.4.2.65.6.65 1.1v2.6" />
-      {/* Floor line with wheel-arch gaps */}
-      <path strokeLinecap="round" d="M1.5 15.8h1.7m2.2 0H4m8.6 0H8.4m2.2 0h2m2.2 0h-2m4.4 0h-2.2m4.4 0h-2.2" />
-      {/* Front wheel — large alloy style */}
-      <circle cx="5.8" cy="15.8" r="2.3" />
-      <circle cx="5.8" cy="15.8" r="1.4" />
-      <circle cx="5.8" cy="15.8" r="0.5" />
-      {/* Rear wheel */}
-      <circle cx="18.2" cy="15.8" r="2.3" />
-      <circle cx="18.2" cy="15.8" r="1.4" />
-      <circle cx="18.2" cy="15.8" r="0.5" />
-      {/* Windows — split by B-pillar */}
-      <path strokeLinecap="round" strokeLinejoin="round" d="M8.8 6 7 10.4h4.5V6H8.8Z" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12.5 6v4.4h4.5L15.2 6h-2.7Z" />
-      {/* Kidney grille hint */}
-      <path strokeLinecap="round" d="M3 12.5h1.5" />
+      {/* Upper body — flowing BMW X5 SUV silhouette with smooth curves */}
+      <path strokeLinecap="round" strokeLinejoin="round"
+        d="M1.5 14.8c0-.5.1-.8.4-1l1.8-1.1.4-.2 2.2-5.3c.3-.6.8-1 1.5-1h8.4c.7 0 1.2.4 1.5 1l2.2 5.3.4.2 1.8 1.1c.3.2.4.5.4 1" />
+      {/* Lower body — sill with wheel-arch cutouts */}
+      <path strokeLinecap="round" d="M1.5 14.8h1.3M8.3 14.8h7.4M21.2 14.8h1.3" />
+      {/* Front wheel — outer tyre */}
+      <circle cx="5.8" cy="14.8" r="2.5" />
+      {/* Front wheel — inner rim */}
+      <circle cx="5.8" cy="14.8" r="1.4" />
+      {/* Front 5-spoke star */}
+      <line x1="5.8" y1="13.4" x2="5.8" y2="12.3" />
+      <line x1="7.13" y1="14.23" x2="7.97" y2="13.62" />
+      <line x1="6.62" y1="15.9" x2="7.35" y2="16.57" />
+      <line x1="4.98" y1="15.9" x2="4.25" y2="16.57" />
+      <line x1="4.47" y1="14.23" x2="3.63" y2="13.62" />
+      {/* Rear wheel — outer tyre */}
+      <circle cx="18.2" cy="14.8" r="2.5" />
+      {/* Rear wheel — inner rim */}
+      <circle cx="18.2" cy="14.8" r="1.4" />
+      {/* Rear 5-spoke star */}
+      <line x1="18.2" y1="13.4" x2="18.2" y2="12.3" />
+      <line x1="19.53" y1="14.23" x2="20.37" y2="13.62" />
+      <line x1="19.02" y1="15.9" x2="19.75" y2="16.57" />
+      <line x1="17.38" y1="15.9" x2="16.65" y2="16.57" />
+      <line x1="16.87" y1="14.23" x2="16.03" y2="13.62" />
+      {/* Front window (windshield + side) */}
+      <path strokeLinejoin="round" d="M8.5 6.5 6.8 11h4.4V6.5H8.5Z" />
+      {/* Rear side window */}
+      <path strokeLinejoin="round" d="M12.2 6.5v4.5h5L15.4 6.5h-3.2Z" />
+      {/* Rear spoiler hint */}
+      <path strokeLinecap="round" d="M19 8.5l1.5.5" />
     </svg>
   );
 }

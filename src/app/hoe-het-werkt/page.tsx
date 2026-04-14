@@ -209,6 +209,9 @@ export default function HoeHetWerktPage() {
             </h2>
             <p className="mx-auto mt-3 max-w-lg text-[14px] leading-relaxed text-slate-500 md:mt-4 md:text-[16px]">
               Een modern, overzichtelijk portaal dat je ook als app op je telefoon kunt installeren.
+              <Link href="/gratis-account" className="mt-1 block font-semibold text-brand-purple hover:text-brand-orange transition-colors">
+                Maak gratis een account aan en ontdek het zelf &rarr;
+              </Link>
             </p>
           </div>
 
@@ -521,14 +524,14 @@ export default function HoeHetWerktPage() {
                 <ArrowRightIcon className="h-4 w-4 transition group-hover:translate-x-0.5" />
               </Link>
               <Link
-                href="/maatwerk-leads"
+                href="/gratis-account"
                 className="inline-flex items-center justify-center rounded-lg border border-white/25 bg-white/10 px-6 py-3.5 text-sm font-semibold text-white backdrop-blur transition hover:bg-white/20"
               >
-                Bekijk maatwerk leads
+                Bekijk gratis ons portaal
               </Link>
             </div>
             <p className="mt-5 text-[12px] font-medium text-white/40 md:mt-6">
-              Geen abonnement &bull; Geen lock-in &bull; 100% exclusief
+              Geen abonnement &bull; Geen lock-in &bull; 20% welkomstkorting op eerste batch
             </p>
           </div>
         </div>

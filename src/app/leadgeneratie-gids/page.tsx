@@ -13,16 +13,16 @@ import {
   AdjustmentsHorizontalIcon,
   SparklesIcon,
   ArrowRightIcon,
-  ClockIcon,
-  UserGroupIcon,
   ChartBarIcon,
-  ShieldCheckIcon,
   RocketLaunchIcon,
+  ServerStackIcon,
+  WrenchScrewdriverIcon,
+  GiftIcon,
 } from "@heroicons/react/24/outline";
 
 export const metadata: Metadata = {
-  title: "Leadgeneratie Gids 2025 | Leads Kopen vs Zelf Genereren | WarmeLeads",
-  description: "Complete gids voor leadgeneratie in Nederland 2025. Vergelijk leads kopen vs zelf genereren voor thuisbatterijen, zonnepanelen, warmtepompen en meer. Expert tips van WarmeLeads.",
+  title: "Leadgeneratie Gids 2026 | Leads Kopen vs Zelf Genereren | WarmeLeads",
+  description: "Complete gids voor leadgeneratie in Nederland 2026. Vergelijk leads kopen vs zelf genereren voor thuisbatterijen, zonnepanelen, warmtepompen en meer. Expert tips van WarmeLeads.",
   keywords: "leadgeneratie gids, leads kopen, leadgeneratie strategie, Nederlandse leadgeneratie, B2B leadgeneratie, lead generation Nederland",
 };
 
@@ -30,15 +30,14 @@ export default function LeadgeneratieGidsPage() {
   return (
     <>
       <Header />
-      <div className="min-h-screen bg-white text-slate-900">
+      <main className="min-h-screen bg-white text-slate-900">
 
-      {/* SEO Hidden Content */}
       <div className="sr-only">
-        <h1>Leadgeneratie Gids Nederland 2025 - Complete Strategie voor Leads Kopen</h1>
+        <h1>Leadgeneratie Gids Nederland 2026 - Complete Strategie voor Leads Kopen</h1>
         <p>Complete gids voor leadgeneratie in Nederland. Vergelijk leads kopen vs zelf genereren voor thuisbatterijen, zonnepanelen, warmtepompen en meer.</p>
       </div>
 
-      {/* Hero Section */}
+      {/* Hero */}
       <section className="relative overflow-hidden bg-brand-navy py-20 md:py-28">
         <div className="pointer-events-none absolute inset-0">
           <div className="absolute -left-20 bottom-0 h-[400px] w-[400px] rounded-full bg-brand-purple/20 blur-[120px]" />
@@ -53,7 +52,7 @@ export default function LeadgeneratieGidsPage() {
             Leadgeneratie Gids
           </h1>
           <p className="mb-4 text-xl text-white/90 md:text-2xl">
-            Complete strategie voor leads kopen in Nederland 2025
+            Complete strategie voor leads kopen in Nederland 2026
           </p>
           <p className="mx-auto max-w-3xl text-base text-white/70 md:text-lg">
             Ontdek waarom leads kopen effectiever is dan zelf genereren, en hoe u maximale ROI
@@ -62,14 +61,13 @@ export default function LeadgeneratieGidsPage() {
         </div>
       </section>
 
-      {/* Comparison Section */}
+      {/* Comparison */}
       <section className="bg-white py-16 md:py-20">
         <div className="mx-auto max-w-5xl px-5 lg:px-8">
           <h2 className="mb-12 text-center text-3xl font-bold text-slate-900">
             Leads Kopen vs Zelf Genereren
           </h2>
           <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
-            {/* Leads Kopen */}
             <div className="rounded-xl border border-slate-200 bg-white p-8 shadow-sm">
               <div className="mb-6 text-center">
                 <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-brand-orange/10">
@@ -101,7 +99,6 @@ export default function LeadgeneratieGidsPage() {
               </ul>
             </div>
 
-            {/* Zelf Genereren */}
             <div className="rounded-xl border border-slate-200 bg-white p-8 shadow-sm">
               <div className="mb-6 text-center">
                 <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-brand-purple/10">
@@ -145,7 +142,7 @@ export default function LeadgeneratieGidsPage() {
           <p className="mx-auto mb-12 max-w-2xl text-center text-slate-500">
             Gespecialiseerde campagnes voor elke sector
           </p>
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
             <div className="rounded-xl border border-slate-200 bg-white p-6 text-center shadow-sm">
               <BoltIcon className="mx-auto mb-4 h-10 w-10 text-brand-orange" />
               <h4 className="mb-2 font-bold text-slate-900">Thuisbatterijen</h4>
@@ -167,12 +164,17 @@ export default function LeadgeneratieGidsPage() {
               <p className="text-sm text-slate-500">Comfort en klimaatbeheersing voor Nederlandse huishoudens</p>
             </div>
             <div className="rounded-xl border border-slate-200 bg-white p-6 text-center shadow-sm">
+              <ServerStackIcon className="mx-auto mb-4 h-10 w-10 text-brand-orange" />
+              <h4 className="mb-2 font-bold text-slate-900">Zakelijke Batterij</h4>
+              <p className="text-sm text-slate-500">Grootschalige energieopslag voor bedrijven en commercieel vastgoed</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-6 text-center shadow-sm">
               <BriefcaseIcon className="mx-auto mb-4 h-10 w-10 text-brand-orange" />
               <h4 className="mb-2 font-bold text-slate-900">Financial Lease</h4>
               <p className="text-sm text-slate-500">MKB bedrijven die financiering zoeken voor investeringen</p>
             </div>
             <div className="rounded-xl border border-slate-200 bg-white p-6 text-center shadow-sm">
-              <AdjustmentsHorizontalIcon className="mx-auto mb-4 h-10 w-10 text-brand-purple" />
+              <WrenchScrewdriverIcon className="mx-auto mb-4 h-10 w-10 text-brand-purple" />
               <h4 className="mb-2 font-bold text-slate-900">Maatwerk</h4>
               <p className="text-sm text-slate-500">Custom campagnes voor uw specifieke branche</p>
             </div>
@@ -180,7 +182,7 @@ export default function LeadgeneratieGidsPage() {
         </div>
       </section>
 
-      {/* Why WarmeLeads Section */}
+      {/* Why WarmeLeads */}
       <section className="bg-white py-16 md:py-20">
         <div className="mx-auto max-w-5xl px-5 lg:px-8">
           <h2 className="mb-12 text-center text-3xl font-bold text-slate-900">
@@ -247,7 +249,34 @@ export default function LeadgeneratieGidsPage() {
         </div>
       </section>
 
-      {/* CTA Section */}
+      {/* Gratis Account CTA */}
+      <section className="bg-slate-50 py-16 md:py-20">
+        <div className="mx-auto max-w-4xl px-5 text-center lg:px-8">
+          <div className="rounded-2xl border border-brand-orange/20 bg-white p-8 shadow-lg md:p-12">
+            <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-brand-orange/10">
+              <GiftIcon className="h-7 w-7 text-brand-orange" />
+            </div>
+            <h2 className="mb-3 text-2xl font-bold text-slate-900 md:text-3xl">
+              Probeer ons portaal gratis
+            </h2>
+            <p className="mx-auto mb-6 max-w-xl text-slate-600">
+              Maak een gratis account aan en ontdek hoe ons klantportaal werkt. Als welkomstcadeau
+              ontvangt u <strong className="text-brand-orange">20% korting</strong> op uw eerste batch leads.
+            </p>
+            <Link
+              href="/gratis-account"
+              className="group inline-flex items-center justify-center gap-2 rounded-lg bg-button-gradient px-8 py-4 text-base font-bold text-white shadow-lg shadow-brand-orange/30 transition hover:shadow-brand-orange/40 hover:brightness-110"
+            >
+              <RocketLaunchIcon className="h-5 w-5" />
+              Maak gratis een account aan
+              <ArrowRightIcon className="h-4 w-4 transition group-hover:translate-x-0.5" />
+            </Link>
+            <p className="mt-4 text-sm text-slate-400">Geen verplichtingen &bull; Direct toegang &bull; 20% welkomstkorting</p>
+          </div>
+        </div>
+      </section>
+
+      {/* CTA */}
       <section className="relative overflow-hidden bg-brand-navy py-16 md:py-20">
         <div className="pointer-events-none absolute inset-0">
           <div className="absolute -right-20 top-0 h-[300px] w-[300px] rounded-full bg-brand-purple/20 blur-[120px]" />
@@ -257,18 +286,26 @@ export default function LeadgeneratieGidsPage() {
           <p className="mb-8 text-lg text-white/70">
             Begin vandaag nog met verse Nederlandse prospects uit onze campagnes
           </p>
-          <a
-            href="/"
-            className="group inline-flex items-center justify-center gap-2 rounded-lg bg-button-gradient px-8 py-4 text-base font-bold text-white shadow-lg shadow-brand-orange/30 transition hover:shadow-brand-orange/40 hover:brightness-110"
-          >
-            <RocketLaunchIcon className="h-5 w-5" />
-            Start met Verse Leads
-            <ArrowRightIcon className="h-4 w-4 transition group-hover:translate-x-0.5" />
-          </a>
+          <div className="flex flex-col items-center justify-center gap-3 sm:flex-row">
+            <Link
+              href="/gratis-account"
+              className="group inline-flex items-center justify-center gap-2 rounded-lg bg-button-gradient px-8 py-4 text-base font-bold text-white shadow-lg shadow-brand-orange/30 transition hover:shadow-brand-orange/40 hover:brightness-110"
+            >
+              <RocketLaunchIcon className="h-5 w-5" />
+              Start met Verse Leads
+              <ArrowRightIcon className="h-4 w-4 transition group-hover:translate-x-0.5" />
+            </Link>
+            <Link
+              href="/plan-gesprek"
+              className="inline-flex items-center justify-center rounded-lg border border-white/25 bg-white/10 px-6 py-4 text-base font-semibold text-white backdrop-blur transition hover:bg-white/20"
+            >
+              Plan een gesprek
+            </Link>
+          </div>
         </div>
       </section>
 
-      {/* Internal Links for SEO */}
+      {/* Internal Links */}
       <section className="bg-slate-50 py-16 md:py-20">
         <div className="mx-auto max-w-6xl px-5 lg:px-8">
           <h2 className="mb-3 text-center text-3xl font-bold text-slate-900">
@@ -302,11 +339,35 @@ export default function LeadgeneratieGidsPage() {
               <h3 className="mb-2 font-bold text-slate-900 group-hover:text-brand-purple">Warmtepomp Leads</h3>
               <p className="text-sm text-slate-500">HVAC leads voor warmtepomp installateurs</p>
             </Link>
+            <Link
+              href="/leads-airco"
+              className="group rounded-xl border border-slate-200 bg-white p-6 text-center shadow-sm transition hover:shadow-md"
+            >
+              <CloudIcon className="mx-auto mb-3 h-8 w-8 text-brand-purple" />
+              <h3 className="mb-2 font-bold text-slate-900 group-hover:text-brand-purple">Airco Leads</h3>
+              <p className="text-sm text-slate-500">Prospects voor airconditioning installateurs</p>
+            </Link>
+            <Link
+              href="/leads-financial-lease"
+              className="group rounded-xl border border-slate-200 bg-white p-6 text-center shadow-sm transition hover:shadow-md"
+            >
+              <BriefcaseIcon className="mx-auto mb-3 h-8 w-8 text-brand-orange" />
+              <h3 className="mb-2 font-bold text-slate-900 group-hover:text-brand-purple">Financial Lease Leads</h3>
+              <p className="text-sm text-slate-500">B2B leads voor financial lease</p>
+            </Link>
+            <Link
+              href="/maatwerk-leads"
+              className="group rounded-xl border border-slate-200 bg-white p-6 text-center shadow-sm transition hover:shadow-md"
+            >
+              <AdjustmentsHorizontalIcon className="mx-auto mb-3 h-8 w-8 text-brand-purple" />
+              <h3 className="mb-2 font-bold text-slate-900 group-hover:text-brand-purple">Maatwerk Leads</h3>
+              <p className="text-sm text-slate-500">Custom campagnes voor uw specifieke branche</p>
+            </Link>
           </div>
         </div>
       </section>
 
-      </div>
+      </main>
       <Footer />
     </>
   );

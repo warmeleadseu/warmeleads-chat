@@ -4,6 +4,7 @@
  */
 
 import Link from 'next/link';
+import { ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline';
 
 interface InternalLink {
   text: string;
@@ -103,7 +104,7 @@ export function InternalLinksGrid({
             className="group bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl p-4 transition-all duration-300 hover:scale-105"
           >
             <div className="flex items-start space-x-3">
-              <span className="text-2xl group-hover:scale-110 transition-transform">🔗</span>
+              <ArrowTopRightOnSquareIcon className="h-6 w-6 shrink-0 text-white/70 group-hover:scale-110 group-hover:text-brand-orange transition-all" />
               <div className="flex-1">
                 <h4 className="text-white font-semibold mb-1 group-hover:text-brand-orange transition-colors">
                   {link.text} →

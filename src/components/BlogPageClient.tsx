@@ -68,6 +68,23 @@ const categoryMapping: Record<string, string> = {
   'Mobile Strategy': 'Marketing',
   'Psychologie': 'Marketing',
   'Growth Hacking': 'Marketing',
+  'Markttrends': 'Analytics',
+  'Subsidies': 'B2B',
+  'ROI & Rendement': 'Analytics',
+  'Besparen': 'Conversie',
+  'Sales & Conversie': 'Conversie',
+  'Belasting & Regelgeving': 'B2B',
+  'Product Reviews': 'Analytics',
+  'Lokale Marketing': 'SEO',
+  'Reputatiemanagement': 'Marketing',
+  'Beleid & Regelgeving': 'B2B',
+  'Digitale Tools': 'AI',
+  'Software & Tools': 'Analytics',
+  'Prijzen & Kosten': 'Analytics',
+  'Installatie Tips': 'Marketing',
+  'Marketing Strategie': 'Marketing',
+  'Productvergelijking': 'Analytics',
+  'Klantacquisitie': 'Marketing',
 };
 
 const categoryColors: Record<string, string> = {
@@ -404,7 +421,7 @@ export default function BlogPageClient() {
         </div>
       </div>
 
-      {/* Newsletter CTA */}
+      {/* Gratis Account CTA */}
       <div className="bg-brand-navy">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
           <motion.div
@@ -414,21 +431,22 @@ export default function BlogPageClient() {
             className="text-center"
           >
             <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-white/10">
-              <EnvelopeIcon className="h-7 w-7 text-brand-orange" />
+              <SparklesIcon className="h-7 w-7 text-brand-orange" />
             </div>
             <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
-              Mis geen enkel artikel
+              Zelf ervaren hoe het werkt?
             </h2>
             <p className="text-white/80 text-lg mb-6 max-w-2xl mx-auto">
-              Ontvang wekelijks de nieuwste leadgeneratie tips, strategieën en case studies direct in je inbox
+              Maak gratis een account aan op ons klantportaal en ontvang <strong className="text-brand-orange">20% welkomstkorting</strong> op uw eerste batch leads.
             </p>
             <Link
-              href="/#contact"
-              className="inline-flex items-center gap-2 bg-white text-brand-navy px-8 py-4 rounded-xl font-bold text-lg hover:scale-105 transition-transform shadow-lg"
+              href="/gratis-account"
+              className="inline-flex items-center gap-2 bg-button-gradient text-white px-8 py-4 rounded-xl font-bold text-lg hover:scale-105 transition-transform shadow-lg shadow-brand-orange/30"
             >
-              Blijf op de hoogte
+              Maak gratis een account aan
               <ArrowRightIcon className="h-[18px] w-[18px]" />
             </Link>
+            <p className="mt-4 text-sm text-white/40">Geen verplichtingen &bull; Direct toegang &bull; 20% welkomstkorting</p>
           </motion.div>
         </div>
       </div>
