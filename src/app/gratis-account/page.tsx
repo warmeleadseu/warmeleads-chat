@@ -20,6 +20,12 @@ import {
   MapIcon,
   SparklesIcon,
   MagnifyingGlassIcon,
+  BoltIcon,
+  SunIcon,
+  FireIcon,
+  BanknotesIcon,
+  WrenchScrewdriverIcon,
+  CloudIcon,
 } from '@heroicons/react/24/outline';
 import { CheckCircleIcon as CheckCircleSolid } from '@heroicons/react/24/solid';
 import { Header } from '@/components/Header';
@@ -53,6 +59,16 @@ const NL_PROVINCES = [
 const BE_PROVINCES = [
   'Antwerpen', 'Limburg (BE)', 'Oost-Vlaanderen', 'Vlaams-Brabant', 'West-Vlaanderen',
 ];
+
+const BRANCH_ICONS: Record<string, React.ComponentType<React.SVGProps<SVGSVGElement>>> = {
+  thuisbatterij: BoltIcon,
+  zakelijke_batterij: BuildingOfficeIcon,
+  zonnepanelen: SunIcon,
+  airco: CloudIcon,
+  warmtepomp: FireIcon,
+  financial_lease: BanknotesIcon,
+  maatwerk: WrenchScrewdriverIcon,
+};
 
 const STEPS = [
   { num: 1, label: 'Bedrijf', icon: BuildingOfficeIcon },
@@ -525,6 +541,7 @@ export default function GratisAccountPage() {
                     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                       {branches.map((b) => {
                         const selected = selectedBranches.includes(b.slug);
+                        const BranchIcon = BRANCH_ICONS[b.slug] || BoltIcon;
                         return (
                           <button
                             type="button"
@@ -539,10 +556,7 @@ export default function GratisAccountPage() {
                             {selected && (
                               <CheckCircleSolid className="absolute right-2 top-2 h-5 w-5 text-brand-purple" />
                             )}
-                            <div
-                              className="mb-2 h-2 w-8 rounded-full"
-                              style={{ backgroundColor: b.color || '#6366f1' }}
-                            />
+                            <BranchIcon className={`mb-2 h-6 w-6 ${selected ? 'text-brand-purple' : 'text-slate-400'}`} />
                             <p className={`text-sm font-semibold ${selected ? 'text-brand-purple' : 'text-slate-700'}`}>
                               {b.name}
                             </p>
