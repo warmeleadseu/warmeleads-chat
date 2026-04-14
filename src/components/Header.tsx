@@ -183,7 +183,7 @@ export function Header() {
                 <Link
                   href="/gratis-account"
                   onClick={() => setMobileMenuOpen(false)}
-                  className="flex items-center justify-center gap-2 rounded-xl border-2 border-brand-purple/30 px-4 py-3 text-[14px] font-bold text-brand-purple transition active:scale-[0.98] hover:bg-brand-purple/5"
+                  className="mb-2 flex items-center justify-center gap-2 rounded-xl border-2 border-brand-purple/30 px-4 py-3 text-[14px] font-bold text-brand-purple transition active:scale-[0.98] hover:bg-brand-purple/5"
                 >
                   Gratis account aanmaken
                 </Link>
@@ -200,8 +200,8 @@ export function Header() {
           </>
         )}
       </AnimatePresence>
-      {/* Sticky mobile CTA bar (hidden on /plan-gesprek) */}
-      {pathname !== '/plan-gesprek' && (
+      {/* Sticky mobile CTA bar (hidden on /plan-gesprek and /gratis-account) */}
+      {pathname !== '/plan-gesprek' && pathname !== '/gratis-account' && (
       <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-slate-200 bg-white/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-lg sm:hidden">
         <Link
           href="/plan-gesprek"

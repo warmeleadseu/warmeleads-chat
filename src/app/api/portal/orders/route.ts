@@ -122,16 +122,16 @@ export async function POST(request: NextRequest) {
       .select()
       .single();
 
+    if (orderErr || !order) {
+      return NextResponse.json({ error: 'Bestelling aanmaken mislukt' }, { status: 500 });
+    }
+
     if (welcomeEligible && discountAmount > 0) {
       supabase
         .from('customers')
         .update({ welcome_offer_used: true })
         .eq('id', customer.id)
         .then(() => {});
-    }
-
-    if (orderErr || !order) {
-      return NextResponse.json({ error: 'Bestelling aanmaken mislukt' }, { status: 500 });
     }
 
     const { data: branchRow } = await supabase.from('branches').select('name').eq('slug', branch).single();

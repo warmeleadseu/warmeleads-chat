@@ -129,7 +129,7 @@ export default function GratisAccountPage() {
   };
 
   const canNext = (): boolean => {
-    if (step === 1) return !!name && !!contactPerson && !!email && !!phone && emailAvailable !== false;
+    if (step === 1) return !!name && !!contactPerson && !!email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && !!phone && emailAvailable !== false;
     if (step === 2) return selectedBranches.length > 0;
     if (step === 3) return selectedProvinces.length > 0;
     if (step === 4) return password.length >= 8 && password === passwordConfirm && agreedToTerms;
@@ -197,7 +197,7 @@ export default function GratisAccountPage() {
   return (
     <>
       <Header />
-      <main className="min-h-screen bg-brand-navy">
+      <main className="relative min-h-screen bg-brand-navy">
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
           <div className="absolute -left-40 top-1/4 h-[500px] w-[500px] rounded-full bg-brand-purple/15 blur-[150px]" />
           <div className="absolute -right-40 bottom-1/4 h-[400px] w-[400px] rounded-full bg-brand-pink/10 blur-[120px]" />
@@ -241,7 +241,7 @@ export default function GratisAccountPage() {
                         )}
                       </div>
                       <span
-                        className={`mt-1.5 text-[10px] font-semibold uppercase tracking-wider ${
+                        className={`mt-1.5 hidden text-[10px] font-semibold uppercase tracking-wider min-[375px]:block ${
                           isDone ? 'text-emerald-400' : isActive ? 'text-white' : 'text-white/25'
                         }`}
                       >
@@ -289,7 +289,15 @@ export default function GratisAccountPage() {
           </AnimatePresence>
 
           {/* Steps */}
-          <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-6 backdrop-blur-xl sm:p-8">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!canNext()) return;
+              if (step < 4) { setStep(step + 1); setError(''); }
+              else handleSubmit();
+            }}
+            className="rounded-2xl border border-white/10 bg-white/[0.04] p-6 backdrop-blur-xl sm:p-8"
+          >
             <AnimatePresence mode="wait">
               {/* ── Step 1: Bedrijfsgegevens ── */}
               {step === 1 && (
@@ -673,6 +681,7 @@ export default function GratisAccountPage() {
             <div className="mt-8 flex items-center justify-between gap-3">
               {step > 1 ? (
                 <button
+                  type="button"
                   onClick={() => { setStep(step - 1); setError(''); }}
                   className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-medium text-white/60 transition hover:bg-white/[0.08]"
                 >
@@ -691,7 +700,7 @@ export default function GratisAccountPage() {
 
               {step < 4 ? (
                 <button
-                  onClick={() => { if (canNext()) { setStep(step + 1); setError(''); } }}
+                  type="submit"
                   disabled={!canNext()}
                   className="group inline-flex items-center gap-2 rounded-lg bg-button-gradient px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-brand-orange/20 transition hover:shadow-brand-orange/30 disabled:opacity-40 disabled:shadow-none"
                 >
@@ -700,7 +709,7 @@ export default function GratisAccountPage() {
                 </button>
               ) : (
                 <button
-                  onClick={handleSubmit}
+                  type="submit"
                   disabled={!canNext() || submitting}
                   className="group inline-flex items-center gap-2 rounded-lg bg-button-gradient px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-brand-orange/20 transition hover:shadow-brand-orange/30 disabled:opacity-40 disabled:shadow-none"
                 >
@@ -718,7 +727,7 @@ export default function GratisAccountPage() {
                 </button>
               )}
             </div>
-          </div>
+          </form>
 
           {/* Already have an account */}
           <p className="mt-6 text-center text-sm text-white/30">

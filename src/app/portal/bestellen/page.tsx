@@ -885,7 +885,6 @@ function NewCustomerOrderView({
   showToast: (msg: string, type?: 'success' | 'error') => void;
   toast: { msg: string; type: 'success' | 'error' } | null;
 }) {
-  const router = useRouter();
   const [availableBranches, setAvailableBranches] = useState<{ slug: string; name: string }[]>([]);
   const [selectedBranch, setSelectedBranch] = useState<string | null>(null);
   const [pricingData, setPricingData] = useState<PricingData | null>(null);
