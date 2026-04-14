@@ -58,22 +58,27 @@ async function getCustomerLeadData(
 
   if (leadSource === 'bulk') {
     const bulkLeads = await paginateQuery<{ lead_id: string; assigned_at: string; status: string | null; notities: string | null }>(
-      supabase.from('lead_assignments').select(selectFields).eq('customer_id', customerId).eq('source', 'bulk_export'),
+      supabase.from('lead_assignments').select(selectFields).eq('customer_id', customerId).eq('source', 'bulk_export').order('assigned_at', { ascending: false }),
     );
     bulkLeads.forEach(a => {
       ids.add(a.lead_id);
-      metaMap[a.lead_id] = { assigned_at: a.assigned_at, status: a.status, notities: a.notities };
+      if (!metaMap[a.lead_id]) {
+        metaMap[a.lead_id] = { assigned_at: a.assigned_at, status: a.status, notities: a.notities };
+      }
     });
   } else {
     let assignQuery = supabase
       .from('lead_assignments')
       .select(selectFields)
-      .eq('customer_id', customerId);
+      .eq('customer_id', customerId)
+      .order('assigned_at', { ascending: false });
     if (leadSource === 'fresh') assignQuery = assignQuery.neq('source', 'bulk_export');
     const assignedLeads = await paginateQuery<{ lead_id: string; assigned_at: string; status: string | null; notities: string | null }>(assignQuery);
     assignedLeads.forEach(a => {
       ids.add(a.lead_id);
-      metaMap[a.lead_id] = { assigned_at: a.assigned_at, status: a.status, notities: a.notities };
+      if (!metaMap[a.lead_id]) {
+        metaMap[a.lead_id] = { assigned_at: a.assigned_at, status: a.status, notities: a.notities };
+      }
     });
   }
 
@@ -100,7 +105,7 @@ function leadsToRows(leads: Record<string, unknown>[]) {
     l.provincie || '',
     l.status || '',
     l.branch || '',
-    formatDate(l._received_at as string | null || l.wervingsdatum as string | null),
+    formatDate((l._received_at as string | null) || (l.wervingsdatum as string | null)),
     l.notities || '',
   ]);
 }

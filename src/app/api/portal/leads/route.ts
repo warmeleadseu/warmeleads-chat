@@ -45,22 +45,27 @@ async function getCustomerLeadData(
 
   if (leadSource === 'bulk') {
     const bulkLeads = await paginateQuery<{ lead_id: string; assigned_at: string; distance_km: number | null; status: string | null; notities: string | null }>(
-      supabase.from('lead_assignments').select(selectFields).eq('customer_id', customerId).eq('source', 'bulk_export'),
+      supabase.from('lead_assignments').select(selectFields).eq('customer_id', customerId).eq('source', 'bulk_export').order('assigned_at', { ascending: false }),
     );
     bulkLeads.forEach(a => {
       ids.add(a.lead_id);
-      metaMap[a.lead_id] = { assigned_at: a.assigned_at, distance_km: a.distance_km, status: a.status, notities: a.notities };
+      if (!metaMap[a.lead_id]) {
+        metaMap[a.lead_id] = { assigned_at: a.assigned_at, distance_km: a.distance_km, status: a.status, notities: a.notities };
+      }
     });
   } else {
     let assignQuery = supabase
       .from('lead_assignments')
       .select(selectFields)
-      .eq('customer_id', customerId);
+      .eq('customer_id', customerId)
+      .order('assigned_at', { ascending: false });
     if (leadSource === 'fresh') assignQuery = assignQuery.neq('source', 'bulk_export');
     const assignedLeads = await paginateQuery<{ lead_id: string; assigned_at: string; distance_km: number | null; status: string | null; notities: string | null }>(assignQuery);
     assignedLeads.forEach(a => {
       ids.add(a.lead_id);
-      metaMap[a.lead_id] = { assigned_at: a.assigned_at, distance_km: a.distance_km, status: a.status, notities: a.notities };
+      if (!metaMap[a.lead_id]) {
+        metaMap[a.lead_id] = { assigned_at: a.assigned_at, distance_km: a.distance_km, status: a.status, notities: a.notities };
+      }
     });
   }
 
@@ -189,6 +194,8 @@ export async function PUT(request: NextRequest) {
       .select('id')
       .eq('lead_id', id)
       .eq('customer_id', customer.id)
+      .order('assigned_at', { ascending: false })
+      .limit(1)
       .maybeSingle();
 
     if (!assignment) {
@@ -242,6 +249,12 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Kon lead niet bijwerken' }, { status: 500 });
     }
 
+    const { data: updatedAssignment } = await supabase
+      .from('lead_assignments')
+      .select('status, notities')
+      .eq('id', assignment.id)
+      .single();
+
     const { data: leadData } = await supabase
       .from('leads')
       .select('*')
@@ -249,7 +262,11 @@ export async function PUT(request: NextRequest) {
       .single();
 
     return NextResponse.json({
-      lead: leadData ? { ...leadData, status: status ?? leadData.status, notities: notities ?? leadData.notities } : null,
+      lead: leadData ? {
+        ...leadData,
+        status: updatedAssignment?.status ?? leadData.status,
+        notities: updatedAssignment?.notities ?? leadData.notities,
+      } : null,
     });
   } catch (err) {
     console.error('[portal/leads PUT] unexpected error:', err);

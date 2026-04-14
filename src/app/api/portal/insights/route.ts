@@ -16,12 +16,18 @@ export async function GET(request: NextRequest) {
   const { data: assignedLeads } = await supabase
     .from('lead_assignments')
     .select('lead_id, status')
-    .eq('customer_id', customer.id);
+    .eq('customer_id', customer.id)
+    .order('assigned_at', { ascending: false });
 
   const leadIds = new Set<string>();
   const assignmentStatusMap: Record<string, string> = {};
   (directLeads || []).forEach(l => leadIds.add(l.id));
-  (assignedLeads || []).forEach(a => { leadIds.add(a.lead_id); assignmentStatusMap[a.lead_id] = a.status || 'nieuw'; });
+  (assignedLeads || []).forEach(a => {
+    leadIds.add(a.lead_id);
+    if (!assignmentStatusMap[a.lead_id]) {
+      assignmentStatusMap[a.lead_id] = a.status || 'nieuw';
+    }
+  });
 
   const allIds = Array.from(leadIds);
 

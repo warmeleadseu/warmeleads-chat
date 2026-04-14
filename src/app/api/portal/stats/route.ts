@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
   const supabase = createServerClient();
 
   const assignments = await paginateQuery<{ lead_id: string; status: string | null }>(
-    supabase.from('lead_assignments').select('lead_id, status').eq('customer_id', customer.id),
+    supabase.from('lead_assignments').select('lead_id, status').eq('customer_id', customer.id).order('assigned_at', { ascending: false }),
   );
 
   const directLeads = await paginateQuery<{ id: string }>(
@@ -35,7 +35,12 @@ export async function GET(request: NextRequest) {
 
   const assignmentStatusMap: Record<string, string> = {};
   const leadIds = new Set<string>();
-  assignments.forEach(a => { leadIds.add(a.lead_id); assignmentStatusMap[a.lead_id] = a.status || 'nieuw'; });
+  assignments.forEach(a => {
+    leadIds.add(a.lead_id);
+    if (!assignmentStatusMap[a.lead_id]) {
+      assignmentStatusMap[a.lead_id] = a.status || 'nieuw';
+    }
+  });
   directLeads.forEach(l => leadIds.add(l.id));
 
   const allIds = Array.from(leadIds);
