@@ -63,8 +63,23 @@ const BE_PROVINCES = [
 function CarIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M6.5 17a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Zm11 0a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M4 15.5V13a1 1 0 0 1 1-1h1.25L8 8.5h8l1.75 3.5H19a1 1 0 0 1 1 1v2.5M8 15.5h8M3 15.5h1.5m12 0H21" />
+      {/* Body: SUV silhouette — long hood, sloped roof, muscular rear */}
+      <path strokeLinecap="round" strokeLinejoin="round" d="M1.5 15.8v-2.6c0-.5.25-.9.65-1.1L4 11l1.8-.6L7.5 6.2A1.1 1.1 0 0 1 8.5 5.5h7a1.1 1.1 0 0 1 1 .7l1.7 4.2 1.8.6 1.85 1.1c.4.2.65.6.65 1.1v2.6" />
+      {/* Floor line with wheel-arch gaps */}
+      <path strokeLinecap="round" d="M1.5 15.8h1.7m2.2 0H4m8.6 0H8.4m2.2 0h2m2.2 0h-2m4.4 0h-2.2m4.4 0h-2.2" />
+      {/* Front wheel — large alloy style */}
+      <circle cx="5.8" cy="15.8" r="2.3" />
+      <circle cx="5.8" cy="15.8" r="1.4" />
+      <circle cx="5.8" cy="15.8" r="0.5" />
+      {/* Rear wheel */}
+      <circle cx="18.2" cy="15.8" r="2.3" />
+      <circle cx="18.2" cy="15.8" r="1.4" />
+      <circle cx="18.2" cy="15.8" r="0.5" />
+      {/* Windows — split by B-pillar */}
+      <path strokeLinecap="round" strokeLinejoin="round" d="M8.8 6 7 10.4h4.5V6H8.8Z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12.5 6v4.4h4.5L15.2 6h-2.7Z" />
+      {/* Kidney grille hint */}
+      <path strokeLinecap="round" d="M3 12.5h1.5" />
     </svg>
   );
 }
