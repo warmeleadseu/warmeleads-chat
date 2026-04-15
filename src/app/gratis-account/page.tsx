@@ -559,15 +559,11 @@ export default function GratisAccountPage() {
                             )}
                             {isFinancialLease ? (
                               <Image
-                                src="/images/bmw-x5-icon.png"
+                                src={selected ? '/images/bmw-x5-icon-purple.png' : '/images/bmw-x5-icon.png'}
                                 alt="Financial Lease"
-                                width={28}
-                                height={28}
-                                className={`mb-2 h-7 w-7 object-contain mix-blend-multiply transition-all ${
-                                  selected
-                                    ? '[filter:brightness(0)_saturate(100%)_invert(14%)_sepia(60%)_saturate(3000%)_hue-rotate(234deg)_brightness(70%)_contrast(110%)]'
-                                    : '[filter:brightness(0)_saturate(100%)_invert(71%)_sepia(8%)_saturate(500%)_hue-rotate(176deg)_brightness(92%)_contrast(87%)]'
-                                }`}
+                                width={24}
+                                height={24}
+                                className="mb-2 h-6 w-6 object-contain"
                               />
                             ) : (
                               <BranchIcon className={`mb-2 h-6 w-6 ${selected ? 'text-brand-purple' : 'text-slate-400'}`} />
