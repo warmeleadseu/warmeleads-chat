@@ -19,7 +19,7 @@ import {
   WrenchScrewdriverIcon,
   GiftIcon,
 } from "@heroicons/react/24/outline";
-import { CarFront } from "lucide-react";
+import { Car } from "@phosphor-icons/react";
 
 export const metadata: Metadata = {
   title: "Leadgeneratie Gids 2026 | Leads Kopen vs Zelf Genereren | WarmeLeads",
@@ -170,7 +170,7 @@ export default function LeadgeneratieGidsPage() {
               <p className="text-sm text-slate-500">Grootschalige energieopslag voor bedrijven en commercieel vastgoed</p>
             </div>
             <div className="rounded-xl border border-slate-200 bg-white p-6 text-center shadow-sm">
-              <CarFront className="mx-auto mb-4 h-10 w-10 text-brand-orange" />
+              <Car className="mx-auto mb-4 h-10 w-10 text-brand-orange" />
               <h4 className="mb-2 font-bold text-slate-900">Financial Lease</h4>
               <p className="text-sm text-slate-500">MKB bedrijven die financiering zoeken voor investeringen</p>
             </div>

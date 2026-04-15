@@ -28,7 +28,7 @@ import {
   ServerStackIcon,
 } from '@heroicons/react/24/outline';
 import { CheckCircleIcon as CheckCircleSolid } from '@heroicons/react/24/solid';
-import { CarFront } from 'lucide-react';
+import { Car } from '@phosphor-icons/react';
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
 
@@ -67,7 +67,7 @@ const BRANCH_ICONS: Record<string, React.ComponentType<{ className?: string }>> 
   zonnepanelen: SunIcon,
   airco: AdjustmentsVerticalIcon,
   warmtepomp: FireIcon,
-  financial_lease: CarFront,
+  financial_lease: Car,
   maatwerk: WrenchScrewdriverIcon,
 };
 
