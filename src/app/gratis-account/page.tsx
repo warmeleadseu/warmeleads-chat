@@ -561,9 +561,11 @@ export default function GratisAccountPage() {
                               <Image
                                 src="/images/bmw-x5-icon.png"
                                 alt="Financial Lease"
-                                width={24}
-                                height={24}
-                                className={`mb-2 h-6 w-6 object-contain ${selected ? 'opacity-100' : 'opacity-40'}`}
+                                width={56}
+                                height={28}
+                                className={`mb-2 h-8 w-auto object-contain mix-blend-multiply ${
+                                  selected ? 'opacity-90' : 'opacity-[0.32]'
+                                }`}
                               />
                             ) : (
                               <BranchIcon className={`mb-2 h-6 w-6 ${selected ? 'text-brand-purple' : 'text-slate-400'}`} />
