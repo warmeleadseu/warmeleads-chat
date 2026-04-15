@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   BuildingOfficeIcon,
@@ -60,51 +61,12 @@ const BE_PROVINCES = [
   'Antwerpen', 'Limburg (BE)', 'Oost-Vlaanderen', 'Vlaams-Brabant', 'West-Vlaanderen',
 ];
 
-function CarIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
-      {/* Upper body — flowing BMW X5 SUV silhouette with smooth curves */}
-      <path strokeLinecap="round" strokeLinejoin="round"
-        d="M1.5 14.8c0-.5.1-.8.4-1l1.8-1.1.4-.2 2.2-5.3c.3-.6.8-1 1.5-1h8.4c.7 0 1.2.4 1.5 1l2.2 5.3.4.2 1.8 1.1c.3.2.4.5.4 1" />
-      {/* Lower body — sill with wheel-arch cutouts */}
-      <path strokeLinecap="round" d="M1.5 14.8h1.3M8.3 14.8h7.4M21.2 14.8h1.3" />
-      {/* Front wheel — outer tyre */}
-      <circle cx="5.8" cy="14.8" r="2.5" />
-      {/* Front wheel — inner rim */}
-      <circle cx="5.8" cy="14.8" r="1.4" />
-      {/* Front 5-spoke star */}
-      <line x1="5.8" y1="13.4" x2="5.8" y2="12.3" />
-      <line x1="7.13" y1="14.23" x2="7.97" y2="13.62" />
-      <line x1="6.62" y1="15.9" x2="7.35" y2="16.57" />
-      <line x1="4.98" y1="15.9" x2="4.25" y2="16.57" />
-      <line x1="4.47" y1="14.23" x2="3.63" y2="13.62" />
-      {/* Rear wheel — outer tyre */}
-      <circle cx="18.2" cy="14.8" r="2.5" />
-      {/* Rear wheel — inner rim */}
-      <circle cx="18.2" cy="14.8" r="1.4" />
-      {/* Rear 5-spoke star */}
-      <line x1="18.2" y1="13.4" x2="18.2" y2="12.3" />
-      <line x1="19.53" y1="14.23" x2="20.37" y2="13.62" />
-      <line x1="19.02" y1="15.9" x2="19.75" y2="16.57" />
-      <line x1="17.38" y1="15.9" x2="16.65" y2="16.57" />
-      <line x1="16.87" y1="14.23" x2="16.03" y2="13.62" />
-      {/* Front window (windshield + side) */}
-      <path strokeLinejoin="round" d="M8.5 6.5 6.8 11h4.4V6.5H8.5Z" />
-      {/* Rear side window */}
-      <path strokeLinejoin="round" d="M12.2 6.5v4.5h5L15.4 6.5h-3.2Z" />
-      {/* Rear spoiler hint */}
-      <path strokeLinecap="round" d="M19 8.5l1.5.5" />
-    </svg>
-  );
-}
-
 const BRANCH_ICONS: Record<string, React.ComponentType<React.SVGProps<SVGSVGElement>>> = {
   thuisbatterij: BoltIcon,
   zakelijke_batterij: ServerStackIcon,
   zonnepanelen: SunIcon,
   airco: AdjustmentsVerticalIcon,
   warmtepomp: FireIcon,
-  financial_lease: CarIcon,
   maatwerk: WrenchScrewdriverIcon,
 };
 
@@ -580,6 +542,7 @@ export default function GratisAccountPage() {
                       {branches.map((b) => {
                         const selected = selectedBranches.includes(b.slug);
                         const BranchIcon = BRANCH_ICONS[b.slug] || BoltIcon;
+                        const isFinancialLease = b.slug === 'financial_lease';
                         return (
                           <button
                             type="button"
@@ -594,7 +557,17 @@ export default function GratisAccountPage() {
                             {selected && (
                               <CheckCircleSolid className="absolute right-2 top-2 h-5 w-5 text-brand-purple" />
                             )}
-                            <BranchIcon className={`mb-2 h-6 w-6 ${selected ? 'text-brand-purple' : 'text-slate-400'}`} />
+                            {isFinancialLease ? (
+                              <Image
+                                src="/images/bmw-x5-icon.png"
+                                alt="Financial Lease"
+                                width={24}
+                                height={24}
+                                className={`mb-2 h-6 w-6 object-contain ${selected ? 'opacity-100' : 'opacity-40'}`}
+                              />
+                            ) : (
+                              <BranchIcon className={`mb-2 h-6 w-6 ${selected ? 'text-brand-purple' : 'text-slate-400'}`} />
+                            )}
                             <p className={`text-sm font-semibold ${selected ? 'text-brand-purple' : 'text-slate-700'}`}>
                               {b.name}
                             </p>

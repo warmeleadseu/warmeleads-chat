@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import Image from "next/image";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import {
@@ -169,7 +170,7 @@ export default function LeadgeneratieGidsPage() {
               <p className="text-sm text-slate-500">Grootschalige energieopslag voor bedrijven en commercieel vastgoed</p>
             </div>
             <div className="rounded-xl border border-slate-200 bg-white p-6 text-center shadow-sm">
-              <BriefcaseIcon className="mx-auto mb-4 h-10 w-10 text-brand-orange" />
+              <Image src="/images/bmw-x5-icon.png" alt="Financial Lease" width={40} height={40} className="mx-auto mb-4 h-10 w-10 object-contain" />
               <h4 className="mb-2 font-bold text-slate-900">Financial Lease</h4>
               <p className="text-sm text-slate-500">MKB bedrijven die financiering zoeken voor investeringen</p>
             </div>
