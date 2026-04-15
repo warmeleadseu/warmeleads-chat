@@ -19,7 +19,7 @@ import {
   WrenchScrewdriverIcon,
   GiftIcon,
 } from "@heroicons/react/24/outline";
-import { Car } from "@phosphor-icons/react";
+import { Car } from "@phosphor-icons/react/ssr";
 
 export const metadata: Metadata = {
   title: "Leadgeneratie Gids 2026 | Leads Kopen vs Zelf Genereren | WarmeLeads",
