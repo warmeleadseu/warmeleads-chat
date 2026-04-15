@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import Image from "next/image";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import {
@@ -20,6 +19,17 @@ import {
   WrenchScrewdriverIcon,
   GiftIcon,
 } from "@heroicons/react/24/outline";
+
+function SuvIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 15.5h1m16 0h1M7.5 10l1.5-3.5h6L16.5 10" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.5c0-1 .2-1.5.7-2l1-1.2L7.5 10h9l1.3 2.3 1 1.2c.5.5.7 1 .7 2v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-.5H6.5v.5a.5.5 0 0 1-.5.5H5a.5.5 0 0 1-.5-.5v-1Z" />
+      <circle cx="7.5" cy="15.5" r="1.5" />
+      <circle cx="16.5" cy="15.5" r="1.5" />
+    </svg>
+  );
+}
 
 export const metadata: Metadata = {
   title: "Leadgeneratie Gids 2026 | Leads Kopen vs Zelf Genereren | WarmeLeads",
@@ -170,7 +180,7 @@ export default function LeadgeneratieGidsPage() {
               <p className="text-sm text-slate-500">Grootschalige energieopslag voor bedrijven en commercieel vastgoed</p>
             </div>
             <div className="rounded-xl border border-slate-200 bg-white p-6 text-center shadow-sm">
-              <Image src="/images/bmw-x5-icon.png" alt="Financial Lease" width={80} height={40} className="mx-auto mb-4 h-10 w-auto object-contain mix-blend-multiply" />
+              <SuvIcon className="mx-auto mb-4 h-10 w-10 text-brand-orange" />
               <h4 className="mb-2 font-bold text-slate-900">Financial Lease</h4>
               <p className="text-sm text-slate-500">MKB bedrijven die financiering zoeken voor investeringen</p>
             </div>

@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   BuildingOfficeIcon,
@@ -61,12 +60,24 @@ const BE_PROVINCES = [
   'Antwerpen', 'Limburg (BE)', 'Oost-Vlaanderen', 'Vlaams-Brabant', 'West-Vlaanderen',
 ];
 
+function SuvIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 15.5h1m16 0h1M7.5 10l1.5-3.5h6L16.5 10" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.5c0-1 .2-1.5.7-2l1-1.2L7.5 10h9l1.3 2.3 1 1.2c.5.5.7 1 .7 2v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-.5H6.5v.5a.5.5 0 0 1-.5.5H5a.5.5 0 0 1-.5-.5v-1Z" />
+      <circle cx="7.5" cy="15.5" r="1.5" />
+      <circle cx="16.5" cy="15.5" r="1.5" />
+    </svg>
+  );
+}
+
 const BRANCH_ICONS: Record<string, React.ComponentType<React.SVGProps<SVGSVGElement>>> = {
   thuisbatterij: BoltIcon,
   zakelijke_batterij: ServerStackIcon,
   zonnepanelen: SunIcon,
   airco: AdjustmentsVerticalIcon,
   warmtepomp: FireIcon,
+  financial_lease: SuvIcon,
   maatwerk: WrenchScrewdriverIcon,
 };
 
@@ -542,7 +553,6 @@ export default function GratisAccountPage() {
                       {branches.map((b) => {
                         const selected = selectedBranches.includes(b.slug);
                         const BranchIcon = BRANCH_ICONS[b.slug] || BoltIcon;
-                        const isFinancialLease = b.slug === 'financial_lease';
                         return (
                           <button
                             type="button"
@@ -557,19 +567,7 @@ export default function GratisAccountPage() {
                             {selected && (
                               <CheckCircleSolid className="absolute right-2 top-2 h-5 w-5 text-brand-purple" />
                             )}
-                            {isFinancialLease ? (
-                              <Image
-                                src="/images/bmw-x5-icon.png"
-                                alt="Financial Lease"
-                                width={56}
-                                height={28}
-                                className={`mb-2 h-8 w-auto object-contain mix-blend-multiply ${
-                                  selected ? 'opacity-90' : 'opacity-[0.32]'
-                                }`}
-                              />
-                            ) : (
-                              <BranchIcon className={`mb-2 h-6 w-6 ${selected ? 'text-brand-purple' : 'text-slate-400'}`} />
-                            )}
+                            <BranchIcon className={`mb-2 h-6 w-6 ${selected ? 'text-brand-purple' : 'text-slate-400'}`} />
                             <p className={`text-sm font-semibold ${selected ? 'text-brand-purple' : 'text-slate-700'}`}>
                               {b.name}
                             </p>
