@@ -560,7 +560,9 @@ export default function PortalPage() {
                   Welkom bij WarmeLeads{customer.name ? `, ${customer.name}` : ''}!
                 </h2>
                 <p className="mt-2 text-sm text-slate-500">
-                  Je account is succesvol aangemaakt. Ontdek je persoonlijke leadportaal.
+                  {customer.demo_mode
+                    ? 'Je account is aangemaakt! Je zit nu in demo modus met voorbeeldleads zodat je het portaal kunt ervaren.'
+                    : 'Je account is succesvol aangemaakt. Ontdek je persoonlijke leadportaal.'}
                 </p>
 
                 {/* Incentive block */}
@@ -582,11 +584,15 @@ export default function PortalPage() {
                   </div>
                   <div className="flex items-center gap-3 rounded-lg bg-brand-purple/5 p-3 ring-2 ring-brand-purple/20">
                     <SparklesIcon className="h-5 w-5 shrink-0 text-brand-purple" />
-                    <span className="text-sm font-medium text-brand-purple">Bekijk je portaal</span>
+                    <span className="text-sm font-medium text-brand-purple">
+                      {customer.demo_mode ? 'Bekijk demo leads' : 'Bekijk je portaal'}
+                    </span>
                   </div>
                   <div className="flex items-center gap-3 rounded-lg bg-slate-50 p-3">
                     <ShoppingCartIcon className="h-5 w-5 shrink-0 text-slate-400" />
-                    <span className="text-sm text-slate-500">Bestel je eerste leads</span>
+                    <span className="text-sm text-slate-500">
+                      {customer.demo_mode ? 'Bestel je eerste batch voor echte leads' : 'Bestel je eerste leads'}
+                    </span>
                   </div>
                 </div>
 
@@ -596,7 +602,7 @@ export default function PortalPage() {
                     onClick={() => setShowWelcome(false)}
                     className="flex-1 rounded-xl bg-brand-purple px-4 py-3 text-sm font-bold text-white transition hover:bg-brand-purple/90"
                   >
-                    Bekijk mijn portaal
+                    {customer.demo_mode ? 'Bekijk demo portaal' : 'Bekijk mijn portaal'}
                   </button>
                   <Link
                     href="/portal/bestellen"
@@ -672,6 +678,25 @@ export default function PortalPage() {
               <div className="h-3 w-32 animate-pulse rounded bg-slate-50" />
             </div>
           ))}
+        </div>
+      ) : customer.demo_mode ? (
+        <div className="rounded-xl border border-dashed border-brand-purple/30 bg-brand-purple/[0.03] p-5">
+          <div className="flex flex-col items-center gap-3 text-center sm:flex-row sm:text-left">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-purple/10">
+              <ShoppingCartIcon className="h-5 w-5 text-brand-purple" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-slate-800">Nog geen actieve batches</p>
+              <p className="mt-0.5 text-xs text-slate-500">Bestel je eerste batch om echte leads te ontvangen. De demo leads verdwijnen automatisch.</p>
+            </div>
+            <Link
+              href="/portal/bestellen"
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-button-gradient px-4 py-2.5 text-xs font-bold text-white shadow-lg shadow-brand-orange/20 transition hover:shadow-brand-orange/30"
+            >
+              <SparklesIcon className="h-3.5 w-3.5" />
+              Bestel je eerste batch
+            </Link>
+          </div>
         </div>
       ) : (batches.active.length > 0 || batches.completed.length > 0) && (
         <div className="space-y-3">

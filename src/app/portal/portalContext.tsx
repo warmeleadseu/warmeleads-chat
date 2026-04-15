@@ -8,6 +8,7 @@ export interface PortalCustomer {
   email: string;
   contact_person: string;
   branches: string[];
+  demo_mode: boolean;
 }
 
 export interface PortalCtx {

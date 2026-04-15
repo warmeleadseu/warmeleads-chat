@@ -44,10 +44,24 @@ async function getCustomerLeadData(
   supabase: ReturnType<typeof createServerClient>,
   customerId: string,
   leadSource: 'all' | 'fresh' | 'bulk' = 'all',
+  demoMode = false,
 ): Promise<{ ids: string[]; metaMap: Record<string, ExportAssignmentMeta> }> {
   const ids = new Set<string>();
   const metaMap: Record<string, ExportAssignmentMeta> = {};
   const selectFields = 'lead_id, assigned_at, status, notities';
+
+  if (demoMode) {
+    const demoLeads = await paginateQuery<{ lead_id: string; assigned_at: string; status: string | null; notities: string | null }>(
+      supabase.from('lead_assignments').select(selectFields).eq('customer_id', customerId).eq('source', 'demo').order('assigned_at', { ascending: false }),
+    );
+    demoLeads.forEach(a => {
+      ids.add(a.lead_id);
+      if (!metaMap[a.lead_id]) {
+        metaMap[a.lead_id] = { assigned_at: a.assigned_at, status: a.status, notities: a.notities };
+      }
+    });
+    return { ids: Array.from(ids), metaMap };
+  }
 
   if (leadSource !== 'bulk') {
     const directLeads = await paginateQuery<{ id: string }>(
@@ -71,6 +85,7 @@ async function getCustomerLeadData(
       .from('lead_assignments')
       .select(selectFields)
       .eq('customer_id', customerId)
+      .neq('source', 'demo')
       .order('assigned_at', { ascending: false });
     if (leadSource === 'fresh') assignQuery = assignQuery.neq('source', 'bulk_export');
     const assignedLeads = await paginateQuery<{ lead_id: string; assigned_at: string; status: string | null; notities: string | null }>(assignQuery);
@@ -124,7 +139,14 @@ export async function GET(request: NextRequest) {
   const to = url.searchParams.get('to');
   const leadSource = (url.searchParams.get('lead_source') || 'all') as 'all' | 'fresh' | 'bulk';
 
-  const { ids: leadIds, metaMap } = await getCustomerLeadData(supabase, customer.id, leadSource);
+  const { data: custData } = await supabase
+    .from('customers')
+    .select('demo_mode')
+    .eq('id', customer.id)
+    .single();
+  const demoMode = custData?.demo_mode ?? false;
+
+  const { ids: leadIds, metaMap } = await getCustomerLeadData(supabase, customer.id, leadSource, demoMode);
   if (leadIds.length === 0) {
     return format === 'xlsx' ? buildXlsx([]) : buildCsv([]);
   }

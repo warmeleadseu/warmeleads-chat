@@ -25,13 +25,26 @@ export async function GET(request: NextRequest) {
 
   const supabase = createServerClient();
 
-  const assignments = await paginateQuery<{ lead_id: string; status: string | null }>(
-    supabase.from('lead_assignments').select('lead_id, status').eq('customer_id', customer.id).order('assigned_at', { ascending: false }),
-  );
+  const { data: custData } = await supabase
+    .from('customers')
+    .select('demo_mode')
+    .eq('id', customer.id)
+    .single();
+  const demoMode = custData?.demo_mode ?? false;
 
-  const directLeads = await paginateQuery<{ id: string }>(
-    supabase.from('leads').select('id').eq('customer_id', customer.id),
-  );
+  let assignQuery = supabase.from('lead_assignments').select('lead_id, status').eq('customer_id', customer.id).order('assigned_at', { ascending: false });
+  if (demoMode) {
+    assignQuery = assignQuery.eq('source', 'demo');
+  } else {
+    assignQuery = assignQuery.neq('source', 'demo');
+  }
+  const assignments = await paginateQuery<{ lead_id: string; status: string | null }>(assignQuery);
+
+  const directLeads = demoMode
+    ? []
+    : await paginateQuery<{ id: string }>(
+        supabase.from('leads').select('id').eq('customer_id', customer.id),
+      );
 
   const assignmentStatusMap: Record<string, string> = {};
   const leadIds = new Set<string>();
@@ -81,11 +94,11 @@ export async function GET(request: NextRequest) {
   const branchCounts: Record<string, number> = {};
   enriched.forEach(l => { branchCounts[l.branch] = (branchCounts[l.branch] || 0) + 1; });
 
-  const { count: bulkLeads } = await supabase
+  const bulkLeads = demoMode ? 0 : (await supabase
     .from('lead_assignments')
     .select('id', { count: 'exact', head: true })
     .eq('customer_id', customer.id)
-    .eq('source', 'bulk_export');
+    .eq('source', 'bulk_export')).count || 0;
 
   return NextResponse.json({
     totalLeads,

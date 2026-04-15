@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
 
     const { data: customer, error } = await supabase
       .from('customers')
-      .select('id, name, email, contact_person, branches, is_active, portal_active, password_hash, login_count')
+      .select('id, name, email, contact_person, branches, is_active, portal_active, password_hash, login_count, demo_mode')
       .eq('email', email.toLowerCase().trim())
       .single();
 

@@ -26,13 +26,40 @@ interface AssignmentMeta {
   notities: string | null;
 }
 
+async function getCustomerDemoMode(
+  supabase: ReturnType<typeof createServerClient>,
+  customerId: string,
+): Promise<boolean> {
+  const { data } = await supabase
+    .from('customers')
+    .select('demo_mode')
+    .eq('id', customerId)
+    .single();
+  return data?.demo_mode ?? false;
+}
+
 async function getCustomerLeadData(
   supabase: ReturnType<typeof createServerClient>,
   customerId: string,
   leadSource: 'all' | 'fresh' | 'bulk' = 'all',
+  demoMode = false,
 ): Promise<{ ids: string[]; metaMap: Record<string, AssignmentMeta>; bulkCount: number }> {
   const ids = new Set<string>();
   const metaMap: Record<string, AssignmentMeta> = {};
+
+  if (demoMode) {
+    const selectFields = 'lead_id, assigned_at, distance_km, status, notities';
+    const demoLeads = await paginateQuery<{ lead_id: string; assigned_at: string; distance_km: number | null; status: string | null; notities: string | null }>(
+      supabase.from('lead_assignments').select(selectFields).eq('customer_id', customerId).eq('source', 'demo').order('assigned_at', { ascending: false }),
+    );
+    demoLeads.forEach(a => {
+      ids.add(a.lead_id);
+      if (!metaMap[a.lead_id]) {
+        metaMap[a.lead_id] = { assigned_at: a.assigned_at, distance_km: a.distance_km, status: a.status, notities: a.notities };
+      }
+    });
+    return { ids: Array.from(ids), metaMap, bulkCount: 0 };
+  }
 
   if (leadSource !== 'bulk') {
     const directLeads = await paginateQuery<{ id: string }>(
@@ -58,6 +85,7 @@ async function getCustomerLeadData(
       .from('lead_assignments')
       .select(selectFields)
       .eq('customer_id', customerId)
+      .neq('source', 'demo')
       .order('assigned_at', { ascending: false });
     if (leadSource === 'fresh') assignQuery = assignQuery.neq('source', 'bulk_export');
     const assignedLeads = await paginateQuery<{ lead_id: string; assigned_at: string; distance_km: number | null; status: string | null; notities: string | null }>(assignQuery);
@@ -96,7 +124,8 @@ export async function GET(request: NextRequest) {
   const branch = url.searchParams.get('branch');
   const leadSource = (url.searchParams.get('lead_source') || 'all') as 'all' | 'fresh' | 'bulk';
 
-  const { ids: leadIds, metaMap, bulkCount } = await getCustomerLeadData(supabase, customer.id, leadSource);
+  const demoMode = await getCustomerDemoMode(supabase, customer.id);
+  const { ids: leadIds, metaMap, bulkCount } = await getCustomerLeadData(supabase, customer.id, leadSource, demoMode);
   if (leadIds.length === 0) {
     return NextResponse.json({ leads: [], total: 0, page, totalPages: 0, bulkCount });
   }

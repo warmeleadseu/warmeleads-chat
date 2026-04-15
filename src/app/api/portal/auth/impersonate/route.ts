@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
     const supabase = createServerClient();
     const { data: customer, error } = await supabase
       .from('customers')
-      .select('id, name, email, contact_person, branches, portal_active')
+      .select('id, name, email, contact_person, branches, portal_active, demo_mode')
       .eq('id', payload.customer_id as string)
       .single();
 

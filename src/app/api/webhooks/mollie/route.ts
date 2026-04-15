@@ -261,6 +261,26 @@ export async function POST(request: NextRequest) {
           cust?.account_manager_id || null,
         ).catch(() => {});
 
+        // Transition from demo to production mode
+        const { data: demoBatchCust } = await supabase
+          .from('customers')
+          .select('demo_mode')
+          .eq('id', claimed.customer_id)
+          .single();
+
+        if (demoBatchCust?.demo_mode) {
+          await supabase
+            .from('customers')
+            .update({ demo_mode: false })
+            .eq('id', claimed.customer_id);
+
+          await supabase
+            .from('lead_assignments')
+            .delete()
+            .eq('customer_id', claimed.customer_id)
+            .eq('source', 'demo');
+        }
+
         const startsInFuture = claimed.starts_at && new Date(claimed.starts_at) > new Date();
         if (!startsInFuture) {
           const lookback = claimed.lookback_days ?? 3;
@@ -344,6 +364,26 @@ export async function POST(request: NextRequest) {
           .from('customers')
           .update({ welcome_offer_used: true })
           .eq('id', order.customer_id);
+      }
+
+      // Transition from demo to production mode
+      const { data: demoCust } = await supabase
+        .from('customers')
+        .select('demo_mode')
+        .eq('id', order.customer_id)
+        .single();
+
+      if (demoCust?.demo_mode) {
+        await supabase
+          .from('customers')
+          .update({ demo_mode: false })
+          .eq('id', order.customer_id);
+
+        await supabase
+          .from('lead_assignments')
+          .delete()
+          .eq('customer_id', order.customer_id)
+          .eq('source', 'demo');
       }
 
       const { data: branchRow } = await supabase.from('branches').select('name').eq('slug', order.branch).single();

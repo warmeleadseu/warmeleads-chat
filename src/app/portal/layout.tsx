@@ -16,6 +16,8 @@ import {
   ArrowUpOnSquareIcon,
   EyeIcon,
   ShieldCheckIcon,
+  BeakerIcon,
+  SparklesIcon,
 } from '@heroicons/react/24/outline';
 import { PortalContext, type PortalCustomer } from './portalContext';
 
@@ -325,6 +327,35 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
 }
 
+function DemoBanner() {
+  return (
+    <div className="bg-gradient-to-r from-brand-purple via-brand-pink to-brand-orange">
+      <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-2.5 sm:px-6 lg:px-8">
+        <div className="flex items-center gap-2 text-sm text-white">
+          <BeakerIcon className="h-4 w-4 shrink-0" />
+          <span className="font-medium">
+            <span className="hidden sm:inline">Demo Modus</span>
+            <span className="sm:hidden">Demo</span>
+            {' — '}
+          </span>
+          <span className="truncate text-white/90">
+            <span className="hidden sm:inline">Je bekijkt voorbeeldleads om het portaal te ervaren</span>
+            <span className="sm:hidden">Voorbeeldleads</span>
+          </span>
+        </div>
+        <Link
+          href="/portal/bestellen"
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-white/20 px-3 py-1.5 text-xs font-bold text-white backdrop-blur-sm transition hover:bg-white/30"
+        >
+          <SparklesIcon className="h-3.5 w-3.5" />
+          <span className="hidden sm:inline">Bestel je eerste batch</span>
+          <span className="sm:hidden">Bestellen</span>
+        </Link>
+      </div>
+    </div>
+  );
+}
+
 function AdminViewBanner({ customerName, adminName, onStop }: { customerName: string; adminName: string; onStop: () => void }) {
   return (
     <div className="bg-gradient-to-r from-amber-500 to-orange-500 text-white">
@@ -478,6 +509,7 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
     <PortalContext.Provider value={{ customer, logout: handleLogout }}>
       <div className="flex min-h-screen flex-col bg-slate-50">
         <div className="sticky top-0 z-40">
+          {customer.demo_mode && !isAdminView && <DemoBanner />}
           {isAdminView && (
             <AdminViewBanner
               customerName={customer.name}

@@ -8,20 +8,28 @@ export async function GET(request: NextRequest) {
 
   const supabase = createServerClient();
 
-  const { data: directLeads } = await supabase
-    .from('leads')
-    .select('id')
-    .eq('customer_id', customer.id);
+  const { data: custData } = await supabase
+    .from('customers')
+    .select('demo_mode')
+    .eq('id', customer.id)
+    .single();
+  const demoMode = custData?.demo_mode ?? false;
 
-  const { data: assignedLeads } = await supabase
-    .from('lead_assignments')
-    .select('lead_id, status')
-    .eq('customer_id', customer.id)
-    .order('assigned_at', { ascending: false });
+  const directLeads = demoMode
+    ? []
+    : ((await supabase.from('leads').select('id').eq('customer_id', customer.id)).data || []);
+
+  let assignQuery = supabase.from('lead_assignments').select('lead_id, status').eq('customer_id', customer.id).order('assigned_at', { ascending: false });
+  if (demoMode) {
+    assignQuery = assignQuery.eq('source', 'demo');
+  } else {
+    assignQuery = assignQuery.neq('source', 'demo');
+  }
+  const { data: assignedLeads } = await assignQuery;
 
   const leadIds = new Set<string>();
   const assignmentStatusMap: Record<string, string> = {};
-  (directLeads || []).forEach(l => leadIds.add(l.id));
+  (directLeads || []).forEach((l: { id: string }) => leadIds.add(l.id));
   (assignedLeads || []).forEach(a => {
     leadIds.add(a.lead_id);
     if (!assignmentStatusMap[a.lead_id]) {
