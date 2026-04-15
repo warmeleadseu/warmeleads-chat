@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   BuildingOfficeIcon,
@@ -29,6 +28,7 @@ import {
   ServerStackIcon,
 } from '@heroicons/react/24/outline';
 import { CheckCircleIcon as CheckCircleSolid } from '@heroicons/react/24/solid';
+import { CarFront } from 'lucide-react';
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
 
@@ -61,12 +61,13 @@ const BE_PROVINCES = [
   'Antwerpen', 'Limburg (BE)', 'Oost-Vlaanderen', 'Vlaams-Brabant', 'West-Vlaanderen',
 ];
 
-const BRANCH_ICONS: Record<string, React.ComponentType<React.SVGProps<SVGSVGElement>>> = {
+const BRANCH_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   thuisbatterij: BoltIcon,
   zakelijke_batterij: ServerStackIcon,
   zonnepanelen: SunIcon,
   airco: AdjustmentsVerticalIcon,
   warmtepomp: FireIcon,
+  financial_lease: CarFront,
   maatwerk: WrenchScrewdriverIcon,
 };
 
@@ -541,8 +542,7 @@ export default function GratisAccountPage() {
                     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                       {branches.map((b) => {
                         const selected = selectedBranches.includes(b.slug);
-                        const BranchIcon = BRANCH_ICONS[b.slug];
-                        const isFinancialLease = b.slug === 'financial_lease';
+                        const BranchIcon = BRANCH_ICONS[b.slug] || BoltIcon;
                         return (
                           <button
                             type="button"
@@ -557,17 +557,7 @@ export default function GratisAccountPage() {
                             {selected && (
                               <CheckCircleSolid className="absolute right-2 top-2 h-5 w-5 text-brand-purple" />
                             )}
-                            {isFinancialLease ? (
-                              <Image
-                                src={selected ? '/images/bmw-x5-icon-purple.png' : '/images/bmw-x5-icon.png'}
-                                alt="Financial Lease"
-                                width={40}
-                                height={24}
-                                className="mb-2 h-6 w-auto object-contain"
-                              />
-                            ) : (
-                              <BranchIcon className={`mb-2 h-6 w-6 ${selected ? 'text-brand-purple' : 'text-slate-400'}`} />
-                            )}
+                            <BranchIcon className={`mb-2 h-6 w-6 ${selected ? 'text-brand-purple' : 'text-slate-400'}`} />
                             <p className={`text-sm font-semibold ${selected ? 'text-brand-purple' : 'text-slate-700'}`}>
                               {b.name}
                             </p>
