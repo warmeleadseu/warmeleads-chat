@@ -20,6 +20,7 @@ import {
   SparklesIcon,
 } from '@heroicons/react/24/outline';
 import { PortalContext, type PortalCustomer } from './portalContext';
+import { portalFetch } from '@/lib/portalAuth';
 
 function LoginScreen({ onLogin }: { onLogin: (c: PortalCustomer, t: string) => void }) {
   const [email, setEmail] = useState('');
@@ -472,6 +473,33 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
       })();
     }
   }, [customer, isAdminView]);
+
+  // Sync demo_mode from server: check on initial load and after payment redirects
+  useEffect(() => {
+    if (!customer?.demo_mode || isAdminView) return;
+
+    const syncDemoMode = () => {
+      portalFetch('/api/portal/account')
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (!data?.customer || data.customer.demo_mode !== false) return;
+          setCustomer(prev => prev ? { ...prev, demo_mode: false } : prev);
+          try {
+            const raw = localStorage.getItem('warmeleads-portal-auth');
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              parsed.customer = { ...parsed.customer, demo_mode: false };
+              localStorage.setItem('warmeleads-portal-auth', JSON.stringify(parsed));
+            }
+          } catch { /* ignore */ }
+        })
+        .catch(() => {});
+    };
+
+    syncDemoMode();
+    const interval = setInterval(syncDemoMode, 30_000);
+    return () => clearInterval(interval);
+  }, [customer?.demo_mode, isAdminView]);
 
   const handleLogin = useCallback((c: PortalCustomer, token: string) => {
     setCustomer(c);

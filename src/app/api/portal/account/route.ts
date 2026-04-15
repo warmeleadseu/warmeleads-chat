@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
 
   const { data, error } = await supabase
     .from('customers')
-    .select('name, contact_person, email, phone, branches, email_notifications, notification_frequency, created_at, account_manager_id')
+    .select('name, contact_person, email, phone, branches, email_notifications, notification_frequency, created_at, account_manager_id, demo_mode')
     .eq('id', customer.id)
     .single();
 
@@ -88,7 +88,7 @@ export async function PUT(request: NextRequest) {
 
     const { data: updated } = await supabase
       .from('customers')
-      .select('name, contact_person, email, phone, branches, email_notifications, notification_frequency, created_at')
+      .select('name, contact_person, email, phone, branches, email_notifications, notification_frequency, created_at, demo_mode')
       .eq('id', customer.id)
       .single();
 
