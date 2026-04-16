@@ -32,7 +32,6 @@ import {
   StarIcon,
   HandThumbUpIcon,
   HandThumbDownIcon,
-  TableCellsIcon,
   ShoppingCartIcon,
   DevicePhoneMobileIcon,
   ExclamationTriangleIcon,
@@ -44,6 +43,7 @@ import {
   ClockIcon,
 } from '@heroicons/react/24/outline';
 import { usePushNotifications, type PushState } from './usePushNotifications';
+import ExportWizard, { type ExportFilters } from './ExportWizard';
 
 function WhatsAppIcon({ className }: { className?: string }) {
   return (
@@ -237,6 +237,7 @@ export default function PortalPage() {
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showExportWizard, setShowExportWizard] = useState(false);
   const [emailNotifications, setEmailNotifications] = useState(false);
   const [notificationFrequency, setNotificationFrequency] = useState('instant');
 
@@ -458,31 +459,28 @@ export default function PortalPage() {
     }
   };
 
-  const exportData = useCallback(async (format: 'csv' | 'xlsx') => {
-    showToast(`${format.toUpperCase()} wordt gedownload...`);
-    try {
-      const params = new URLSearchParams();
-      params.set('format', format);
-      if (statusFilter !== 'all') params.set('status', statusFilter);
-      if (branchFilter !== 'all') params.set('branch', branchFilter);
-      if (dateFrom) params.set('from', dateFrom);
-      if (dateTo) params.set('to', dateTo);
-      if (leadSource !== 'all') params.set('lead_source', leadSource);
-      if (search) params.set('search', search);
-      const res = await portalFetch(`/api/portal/export?${params}`);
-      if (!res.ok) throw new Error();
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      const ext = format === 'xlsx' ? 'xlsx' : 'csv';
-      a.download = `leads-${customer.name.replace(/\s+/g, '-').toLowerCase()}-${new Date().toISOString().slice(0, 10)}.${ext}`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch {
-      showToast('Export mislukt');
-    }
-  }, [statusFilter, branchFilter, dateFrom, dateTo, leadSource, search, customer.name, showToast]);
+  const exportFilters = useMemo<ExportFilters>(() => ({
+    statusFilter,
+    branchFilter,
+    dateFrom,
+    dateTo,
+    leadSource,
+    search,
+  }), [statusFilter, branchFilter, dateFrom, dateTo, leadSource, search]);
+
+  const branchFieldsForExport = useMemo(() => {
+    const allFields: { key: string; label: string }[] = [];
+    const seen = new Set<string>();
+    branchConfigs.forEach(b => {
+      (b.branch_fields || []).forEach(f => {
+        if (!seen.has(f.key)) {
+          seen.add(f.key);
+          allFields.push({ key: f.key, label: f.label });
+        }
+      });
+    });
+    return allFields;
+  }, [branchConfigs]);
 
   const activeFilters = useMemo(() => {
     let count = 0;
@@ -1120,20 +1118,12 @@ export default function PortalPage() {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => exportData('csv')}
+            onClick={() => setShowExportWizard(true)}
             disabled={total === 0}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50 disabled:opacity-40"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-brand-purple/30 bg-brand-purple/5 px-3 py-2 text-sm font-medium text-brand-purple transition hover:bg-brand-purple/10 disabled:opacity-40"
           >
             <ArrowDownTrayIcon className="h-4 w-4" />
-            <span className="hidden sm:inline">CSV</span>
-          </button>
-          <button
-            onClick={() => exportData('xlsx')}
-            disabled={total === 0}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50 disabled:opacity-40"
-          >
-            <TableCellsIcon className="h-4 w-4" />
-            <span className="hidden sm:inline">Excel</span>
+            <span className="hidden sm:inline">Exporteer</span>
           </button>
           <button
             onClick={() => setShowSettings(true)}
@@ -1498,6 +1488,16 @@ export default function PortalPage() {
         </AnimatePresence>,
         document.body,
       )}
+
+      {/* Export wizard */}
+      <ExportWizard
+        open={showExportWizard}
+        onClose={() => setShowExportWizard(false)}
+        filters={exportFilters}
+        totalLeads={total}
+        customerName={customer.name}
+        branchFields={branchFieldsForExport}
+      />
 
       {/* Settings slide-over (portalled to body) */}
       {typeof document !== 'undefined' && createPortal(

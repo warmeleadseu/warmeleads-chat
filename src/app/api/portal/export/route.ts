@@ -3,19 +3,44 @@ import { verifyCustomer, portalUnauthorized } from '@/lib/portalAuth';
 import { createServerClient } from '@/lib/supabase';
 import * as XLSX from 'xlsx';
 
-const COLUMN_HEADERS = [
-  'Naam',
-  'E-mail',
-  'Telefoon',
-  'Postcode',
-  'Huisnummer',
-  'Plaats',
-  'Provincie',
-  'Status',
-  'Branche',
-  'Datum',
-  'Notities',
+/* ─── column registry ─── */
+
+export interface ExportColumn {
+  key: string;
+  label: string;
+  group: 'basis' | 'adres' | 'lead' | 'branche' | 'meta';
+}
+
+const CORE_COLUMNS: ExportColumn[] = [
+  { key: 'naam_klant', label: 'Naam', group: 'basis' },
+  { key: 'email', label: 'E-mail', group: 'basis' },
+  { key: 'telefoonnummer', label: 'Telefoon', group: 'basis' },
+
+  { key: 'postcode', label: 'Postcode', group: 'adres' },
+  { key: 'huisnummer', label: 'Huisnummer', group: 'adres' },
+  { key: 'plaatsnaam', label: 'Plaats', group: 'adres' },
+  { key: 'provincie', label: 'Provincie', group: 'adres' },
+  { key: 'land', label: 'Land', group: 'adres' },
+
+  { key: 'branch', label: 'Branche', group: 'lead' },
+  { key: 'bron', label: 'Bron', group: 'lead' },
+  { key: 'status', label: 'Status', group: 'lead' },
+  { key: 'wervingsdatum', label: 'Wervingsdatum', group: 'lead' },
+  { key: 'received_at', label: 'Ontvangstdatum', group: 'lead' },
+  { key: 'quality_score', label: 'Kwaliteitsscore', group: 'lead' },
+  { key: 'phone_valid', label: 'Telefoon geldig', group: 'lead' },
+
+  { key: 'notities', label: 'Notities', group: 'meta' },
+  { key: 'distance_km', label: 'Afstand (km)', group: 'meta' },
+  { key: 'batch_name', label: 'Batch', group: 'meta' },
 ];
+
+const DEFAULT_COLUMNS = [
+  'naam_klant', 'email', 'telefoonnummer', 'postcode', 'huisnummer',
+  'plaatsnaam', 'provincie', 'status', 'branch', 'wervingsdatum', 'notities',
+];
+
+/* ─── helpers ─── */
 
 const PAGE_SIZE = 1000;
 const IN_CHUNK = 500;
@@ -34,10 +59,12 @@ async function paginateQuery<T>(query: any): Promise<T[]> {
   return all;
 }
 
-interface ExportAssignmentMeta {
+interface AssignmentMeta {
   assigned_at: string;
   status: string | null;
   notities: string | null;
+  batch_id: string | null;
+  distance_km: number | null;
 }
 
 async function getCustomerLeadData(
@@ -45,19 +72,19 @@ async function getCustomerLeadData(
   customerId: string,
   leadSource: 'all' | 'fresh' | 'bulk' = 'all',
   demoMode = false,
-): Promise<{ ids: string[]; metaMap: Record<string, ExportAssignmentMeta> }> {
+): Promise<{ ids: string[]; metaMap: Record<string, AssignmentMeta> }> {
   const ids = new Set<string>();
-  const metaMap: Record<string, ExportAssignmentMeta> = {};
-  const selectFields = 'lead_id, assigned_at, status, notities';
+  const metaMap: Record<string, AssignmentMeta> = {};
+  const selectFields = 'lead_id, assigned_at, status, notities, batch_id, distance_km';
 
   if (demoMode) {
-    const demoLeads = await paginateQuery<{ lead_id: string; assigned_at: string; status: string | null; notities: string | null }>(
+    const demoLeads = await paginateQuery<{ lead_id: string; assigned_at: string; status: string | null; notities: string | null; batch_id: string | null; distance_km: number | null }>(
       supabase.from('lead_assignments').select(selectFields).eq('customer_id', customerId).eq('source', 'demo').order('assigned_at', { ascending: false }),
     );
     demoLeads.forEach(a => {
       ids.add(a.lead_id);
       if (!metaMap[a.lead_id]) {
-        metaMap[a.lead_id] = { assigned_at: a.assigned_at, status: a.status, notities: a.notities };
+        metaMap[a.lead_id] = { assigned_at: a.assigned_at, status: a.status, notities: a.notities, batch_id: a.batch_id, distance_km: a.distance_km };
       }
     });
     return { ids: Array.from(ids), metaMap };
@@ -71,13 +98,13 @@ async function getCustomerLeadData(
   }
 
   if (leadSource === 'bulk') {
-    const bulkLeads = await paginateQuery<{ lead_id: string; assigned_at: string; status: string | null; notities: string | null }>(
+    const bulkLeads = await paginateQuery<{ lead_id: string; assigned_at: string; status: string | null; notities: string | null; batch_id: string | null; distance_km: number | null }>(
       supabase.from('lead_assignments').select(selectFields).eq('customer_id', customerId).eq('source', 'bulk_export').order('assigned_at', { ascending: false }),
     );
     bulkLeads.forEach(a => {
       ids.add(a.lead_id);
       if (!metaMap[a.lead_id]) {
-        metaMap[a.lead_id] = { assigned_at: a.assigned_at, status: a.status, notities: a.notities };
+        metaMap[a.lead_id] = { assigned_at: a.assigned_at, status: a.status, notities: a.notities, batch_id: a.batch_id, distance_km: a.distance_km };
       }
     });
   } else {
@@ -88,11 +115,11 @@ async function getCustomerLeadData(
       .neq('source', 'demo')
       .order('assigned_at', { ascending: false });
     if (leadSource === 'fresh') assignQuery = assignQuery.neq('source', 'bulk_export');
-    const assignedLeads = await paginateQuery<{ lead_id: string; assigned_at: string; status: string | null; notities: string | null }>(assignQuery);
+    const assignedLeads = await paginateQuery<{ lead_id: string; assigned_at: string; status: string | null; notities: string | null; batch_id: string | null; distance_km: number | null }>(assignQuery);
     assignedLeads.forEach(a => {
       ids.add(a.lead_id);
       if (!metaMap[a.lead_id]) {
-        metaMap[a.lead_id] = { assigned_at: a.assigned_at, status: a.status, notities: a.notities };
+        metaMap[a.lead_id] = { assigned_at: a.assigned_at, status: a.status, notities: a.notities, batch_id: a.batch_id, distance_km: a.distance_km };
       }
     });
   }
@@ -100,30 +127,54 @@ async function getCustomerLeadData(
   return { ids: Array.from(ids), metaMap };
 }
 
-function formatDate(value: string | null): string {
+function fmtDate(value: string | null, dateFormat: string): string {
   if (!value) return '';
   try {
-    return new Date(value).toLocaleDateString('nl-NL');
+    const d = new Date(value);
+    if (isNaN(d.getTime())) return value;
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const yyyy = d.getFullYear();
+    return dateFormat === 'iso' ? `${yyyy}-${mm}-${dd}` : `${dd}-${mm}-${yyyy}`;
   } catch {
     return value;
   }
 }
 
-function leadsToRows(leads: Record<string, unknown>[]) {
-  return leads.map(l => [
-    l.naam_klant || '',
-    l.email || '',
-    l.telefoonnummer || '',
-    l.postcode || '',
-    l.huisnummer || '',
-    l.plaatsnaam || '',
-    l.provincie || '',
-    l.status || '',
-    l.branch || '',
-    formatDate((l._received_at as string | null) || (l.wervingsdatum as string | null)),
-    l.notities || '',
-  ]);
+function getCellValue(
+  lead: Record<string, unknown>,
+  col: string,
+  dateFormat: string,
+  batchMap: Record<string, string>,
+): string {
+  if (col === 'wervingsdatum' || col === 'received_at') {
+    return fmtDate((lead[col] as string | null) ?? null, dateFormat);
+  }
+  if (col === 'distance_km') {
+    const km = lead.distance_km as number | null;
+    return km != null && km > 0 ? km.toFixed(1) : '';
+  }
+  if (col === 'phone_valid') {
+    const v = lead.phone_valid;
+    return v === true ? 'Ja' : v === false ? 'Nee' : '';
+  }
+  if (col === 'quality_score') {
+    const s = lead.quality_score as number | null;
+    return s != null ? String(s) : '';
+  }
+  if (col === 'batch_name') {
+    const bid = lead._batch_id as string | null;
+    return bid ? (batchMap[bid] || '') : '';
+  }
+  if (col.startsWith('cf_')) {
+    const cfKey = col.slice(3);
+    const cf = lead.custom_fields as Record<string, string> | null;
+    return cf?.[cfKey] ?? '';
+  }
+  return String(lead[col] ?? '');
 }
+
+/* ─── route ─── */
 
 export async function GET(request: NextRequest) {
   const customer = await verifyCustomer(request);
@@ -138,7 +189,16 @@ export async function GET(request: NextRequest) {
   const from = url.searchParams.get('from');
   const to = url.searchParams.get('to');
   const leadSource = (url.searchParams.get('lead_source') || 'all') as 'all' | 'fresh' | 'bulk';
-  const search = url.searchParams.get('search')?.trim().toLowerCase() || '';
+  const searchParam = url.searchParams.get('search')?.trim().toLowerCase() || '';
+  const separator = url.searchParams.get('separator') || ';';
+  const dateFormat = url.searchParams.get('date_format') || 'nl';
+  const includeHeaders = url.searchParams.get('include_headers') !== 'false';
+  const feedbackFilter = url.searchParams.get('feedback_filter');
+
+  const columnsParam = url.searchParams.get('columns');
+  const selectedColumns = columnsParam
+    ? columnsParam.split(',').map(c => c.trim()).filter(Boolean)
+    : DEFAULT_COLUMNS;
 
   const { data: custData } = await supabase
     .from('customers')
@@ -149,7 +209,21 @@ export async function GET(request: NextRequest) {
 
   const { ids: leadIds, metaMap } = await getCustomerLeadData(supabase, customer.id, leadSource, demoMode);
   if (leadIds.length === 0) {
-    return format === 'xlsx' ? buildXlsx([]) : buildCsv([]);
+    if (format === 'vcf') return buildVcf([]);
+    if (format === 'xlsx') return buildXlsx([], [], includeHeaders);
+    return buildCsv([], [], separator, includeHeaders);
+  }
+
+  const batchIds = new Set<string>();
+  Object.values(metaMap).forEach(m => { if (m.batch_id) batchIds.add(m.batch_id); });
+  const batchMap: Record<string, string> = {};
+  if (batchIds.size > 0 && selectedColumns.includes('batch_name')) {
+    const bids = Array.from(batchIds);
+    for (let i = 0; i < bids.length; i += IN_CHUNK) {
+      const chunk = bids.slice(i, i + IN_CHUNK);
+      const { data: batchData } = await supabase.from('customer_batches').select('id, batch_name').in('id', chunk);
+      (batchData || []).forEach((b: { id: string; batch_name: string }) => { batchMap[b.id] = b.batch_name || `Batch`; });
+    }
   }
 
   const rawLeads: Record<string, unknown>[] = [];
@@ -169,7 +243,9 @@ export async function GET(request: NextRequest) {
       ...l,
       status: meta?.status ?? l.status ?? 'nieuw',
       notities: meta?.notities ?? l.notities ?? '',
-      _received_at: meta?.assigned_at || null,
+      received_at: meta?.assigned_at || null,
+      distance_km: meta?.distance_km ?? l.distance_km ?? null,
+      _batch_id: meta?.batch_id || null,
     };
   });
 
@@ -177,12 +253,26 @@ export async function GET(request: NextRequest) {
     ? leads.filter(l => l.status === status)
     : leads;
 
-  if (search) {
+  if (searchParam) {
     filtered = filtered.filter(l => {
       const hay = [l.naam_klant, l.email, l.telefoonnummer, l.postcode, l.plaatsnaam]
         .filter(Boolean).join(' ').toLowerCase();
-      return hay.includes(search);
+      return hay.includes(searchParam);
     });
+  }
+
+  if (feedbackFilter === 'unrated') {
+    const ratedLeadIds = new Set<string>();
+    for (let i = 0; i < leadIds.length; i += IN_CHUNK) {
+      const chunk = leadIds.slice(i, i + IN_CHUNK);
+      const { data: reclamations } = await supabase
+        .from('lead_reclamations')
+        .select('lead_id')
+        .eq('customer_id', customer.id)
+        .in('lead_id', chunk);
+      (reclamations || []).forEach(r => ratedLeadIds.add(r.lead_id));
+    }
+    filtered = filtered.filter(l => !ratedLeadIds.has(l.id as string));
   }
 
   filtered.sort((a, b) => {
@@ -191,23 +281,45 @@ export async function GET(request: NextRequest) {
     return db < da ? -1 : db > da ? 1 : 0;
   });
 
-  return format === 'xlsx' ? buildXlsx(filtered) : buildCsv(filtered);
+  const allCoreKeys = new Set(CORE_COLUMNS.map(c => c.key));
+  const columnLabels = selectedColumns.map(col => {
+    const core = CORE_COLUMNS.find(c => c.key === col);
+    if (core) return core.label;
+    if (col.startsWith('cf_')) return col.slice(3).replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    return col;
+  });
+
+  const rows = filtered.map(l =>
+    selectedColumns.map(col => getCellValue(l, col, dateFormat, batchMap)),
+  );
+
+  if (format === 'vcf') return buildVcf(filtered);
+  if (format === 'xlsx') return buildXlsx(columnLabels, rows, includeHeaders);
+  return buildCsv(columnLabels, rows, separator, includeHeaders);
 }
 
-function buildCsv(leads: Record<string, unknown>[]): NextResponse {
+/* ─── output builders ─── */
+
+function buildCsv(
+  headers: string[],
+  rows: string[][],
+  separator: string,
+  includeHeaders: boolean,
+): NextResponse {
   const BOM = '\uFEFF';
-  const rows = leadsToRows(leads);
-  const lines = [
-    COLUMN_HEADERS.join(';'),
-    ...rows.map(row =>
-      row.map(cell => {
-        const str = String(cell);
-        return str.includes(';') || str.includes('"') || str.includes('\n')
-          ? `"${str.replace(/"/g, '""')}"`
-          : str;
-      }).join(';'),
-    ),
-  ];
+  const sep = separator === ',' ? ',' : ';';
+  const needsQuote = (s: string) => s.includes(sep) || s.includes('"') || s.includes('\n');
+
+  const escapeCell = (cell: string) => {
+    const str = String(cell);
+    return needsQuote(str) ? `"${str.replace(/"/g, '""')}"` : str;
+  };
+
+  const lines: string[] = [];
+  if (includeHeaders && headers.length > 0) {
+    lines.push(headers.map(escapeCell).join(sep));
+  }
+  rows.forEach(row => lines.push(row.map(escapeCell).join(sep)));
 
   const csv = BOM + lines.join('\r\n');
 
@@ -220,21 +332,24 @@ function buildCsv(leads: Record<string, unknown>[]): NextResponse {
   });
 }
 
-function buildXlsx(leads: Record<string, unknown>[]): NextResponse {
-  const rows = leadsToRows(leads);
-  const sheetData = [COLUMN_HEADERS, ...rows];
+function buildXlsx(
+  headers: string[],
+  rows: string[][],
+  includeHeaders: boolean,
+): NextResponse {
+  const sheetData = includeHeaders ? [headers, ...rows] : rows;
 
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.aoa_to_sheet(sheetData);
 
-  const colWidths = COLUMN_HEADERS.map((h, i) => {
-    const maxLen = Math.max(h.length, ...rows.map(r => String(r[i]).length));
-    return { wch: Math.min(maxLen + 2, 40) };
-  });
-  ws['!cols'] = colWidths;
+  if (includeHeaders && headers.length > 0) {
+    ws['!cols'] = headers.map((h, i) => {
+      const maxLen = Math.max(h.length, ...rows.map(r => String(r[i] || '').length));
+      return { wch: Math.min(maxLen + 2, 40) };
+    });
+  }
 
   XLSX.utils.book_append_sheet(wb, ws, 'Leads');
-
   const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
 
   return new NextResponse(buffer, {
@@ -242,6 +357,39 @@ function buildXlsx(leads: Record<string, unknown>[]): NextResponse {
     headers: {
       'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       'Content-Disposition': 'attachment; filename="leads-export.xlsx"',
+    },
+  });
+}
+
+function buildVcf(leads: Record<string, unknown>[]): NextResponse {
+  const cards = leads.map(l => {
+    const naam = String(l.naam_klant || '');
+    const parts = naam.split(/\s+/);
+    const fn = parts[0] || '';
+    const ln = parts.slice(1).join(' ');
+    const lines = [
+      'BEGIN:VCARD',
+      'VERSION:3.0',
+      `FN:${naam}`,
+      `N:${ln};${fn};;;`,
+    ];
+    if (l.telefoonnummer) lines.push(`TEL;TYPE=CELL:${l.telefoonnummer}`);
+    if (l.email) lines.push(`EMAIL:${l.email}`);
+    const adr = [l.postcode, l.plaatsnaam, l.provincie].filter(Boolean).join(', ');
+    if (adr) lines.push(`ADR;TYPE=HOME:;;${l.huisnummer || ''};${l.plaatsnaam || ''};${l.provincie || ''};${l.postcode || ''};${l.land || 'NL'}`);
+    const note = [l.branch ? `Branche: ${l.branch}` : '', l.notities ? String(l.notities) : ''].filter(Boolean).join(' | ');
+    if (note) lines.push(`NOTE:${note.replace(/\n/g, '\\n')}`);
+    lines.push('END:VCARD');
+    return lines.join('\r\n');
+  });
+
+  const vcf = cards.join('\r\n');
+
+  return new NextResponse(vcf, {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/vcard; charset=utf-8',
+      'Content-Disposition': 'attachment; filename="leads-export.vcf"',
     },
   });
 }
