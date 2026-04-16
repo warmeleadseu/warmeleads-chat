@@ -310,6 +310,19 @@ function MobileHeader({ user, onLogout, pendingReclamations }: { user: AdminUser
   );
 }
 
+function RouteBlocked() {
+  return (
+    <div className="flex min-h-[50vh] flex-col items-center justify-center text-center">
+      <ShieldCheckIcon className="mb-4 h-16 w-16 text-slate-300" />
+      <h1 className="text-2xl font-bold text-slate-800">Geen toegang</h1>
+      <p className="mt-2 text-slate-500">Je hebt geen rechten om deze pagina te bekijken.</p>
+      <Link href="/admin" className="mt-6 rounded-lg bg-brand-purple px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-purple/90">
+        Terug naar dashboard
+      </Link>
+    </div>
+  );
+}
+
 export default function AdminLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [user, setUser] = useState<AdminUser | null>(null);
@@ -368,11 +381,16 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   if (!user) return <LoginScreen onLogin={handleLogin} />;
 
   const isLive = pathname === '/admin/live';
+  const userRole = user.role as NavRole;
+  const matchedNav = NAV.find(item =>
+    item.href === '/admin' ? pathname === '/admin' : pathname.startsWith(item.href),
+  );
+  const routeAllowed = !matchedNav || matchedNav.roles.includes(userRole);
 
   if (isLive) {
     return (
       <AdminContext.Provider value={{ user, logout: handleLogout }}>
-        {children}
+        {routeAllowed ? children : <RouteBlocked />}
       </AdminContext.Provider>
     );
   }
@@ -383,7 +401,9 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         <Sidebar user={user} onLogout={handleLogout} pendingReclamations={pendingReclamations} />
         <MobileHeader user={user} onLogout={handleLogout} pendingReclamations={pendingReclamations} />
         <main className="lg:pl-60">
-          <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">{children}</div>
+          <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+            {routeAllowed ? children : <RouteBlocked />}
+          </div>
         </main>
       </div>
     </AdminContext.Provider>

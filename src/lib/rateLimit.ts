@@ -1,71 +1,71 @@
-import { createServerClient } from './supabase';
+import { NextResponse } from 'next/server';
 
-export interface RateLimitResult {
-  allowed: boolean;
-  remaining: number;
-  resetAt: Date;
+interface RateLimitEntry {
+  count: number;
+  reset: number;
 }
 
+const buckets = new Map<string, Map<string, RateLimitEntry>>();
+
+const CLEANUP_INTERVAL = 5 * 60 * 1000;
+let lastCleanup = Date.now();
+
+function cleanup() {
+  const now = Date.now();
+  if (now - lastCleanup < CLEANUP_INTERVAL) return;
+  lastCleanup = now;
+  for (const [, bucket] of buckets) {
+    for (const [key, entry] of bucket) {
+      if (now > entry.reset) bucket.delete(key);
+    }
+  }
+}
+
+export function rateLimit(
+  key: string,
+  bucketName: string,
+  maxRequests: number,
+  windowMs: number,
+): { limited: boolean; response?: NextResponse } {
+  cleanup();
+
+  if (!buckets.has(bucketName)) buckets.set(bucketName, new Map());
+  const bucket = buckets.get(bucketName)!;
+
+  const now = Date.now();
+  const entry = bucket.get(key);
+
+  if (!entry || now > entry.reset) {
+    bucket.set(key, { count: 1, reset: now + windowMs });
+    return { limited: false };
+  }
+
+  entry.count++;
+  if (entry.count > maxRequests) {
+    const retryAfter = Math.ceil((entry.reset - now) / 1000);
+    return {
+      limited: true,
+      response: NextResponse.json(
+        { error: 'Te veel verzoeken. Probeer het later opnieuw.' },
+        { status: 429, headers: { 'Retry-After': String(retryAfter) } },
+      ),
+    };
+  }
+
+  return { limited: false };
+}
+
+/** Backward-compatible check for webhook routes */
 export async function checkRateLimit(
   key: string,
   maxRequests: number,
   windowMs: number,
-): Promise<RateLimitResult> {
-  const supabase = createServerClient();
-  const now = new Date();
+): Promise<{ allowed: boolean }> {
+  const { limited } = rateLimit(key, 'webhook', maxRequests, windowMs);
+  return { allowed: !limited };
+}
 
-  const { data: existing } = await supabase
-    .from('rate_limits')
-    .select('count, window_start')
-    .eq('key', key)
-    .single();
-
-  if (!existing) {
-    const windowStart = now;
-    const resetAt = new Date(windowStart.getTime() + windowMs);
-
-    await supabase.from('rate_limits').upsert({
-      key,
-      count: 1,
-      window_start: windowStart.toISOString(),
-    });
-
-    return { allowed: true, remaining: maxRequests - 1, resetAt };
-  }
-
-  const windowStart = new Date(existing.window_start);
-  const windowEnd = new Date(windowStart.getTime() + windowMs);
-
-  if (now >= windowEnd) {
-    const newWindowStart = now;
-    const resetAt = new Date(newWindowStart.getTime() + windowMs);
-
-    await supabase
-      .from('rate_limits')
-      .update({ count: 1, window_start: newWindowStart.toISOString() })
-      .eq('key', key);
-
-    return { allowed: true, remaining: maxRequests - 1, resetAt };
-  }
-
-  const newCount = existing.count + 1;
-
-  if (newCount > maxRequests) {
-    return {
-      allowed: false,
-      remaining: 0,
-      resetAt: windowEnd,
-    };
-  }
-
-  await supabase
-    .from('rate_limits')
-    .update({ count: newCount })
-    .eq('key', key);
-
-  return {
-    allowed: true,
-    remaining: maxRequests - newCount,
-    resetAt: windowEnd,
-  };
+export function getClientIp(request: Request): string {
+  const forwarded = (request.headers.get('x-forwarded-for') || '').split(',')[0]?.trim();
+  return forwarded || 'unknown';
 }

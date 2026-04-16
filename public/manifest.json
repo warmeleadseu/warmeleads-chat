@@ -1,7 +1,8 @@
 {
   "name": "WarmeLeads - Leadportaal",
   "short_name": "WarmeLeads",
-  "description": "Beheer en ontvang uw leads in real-time. Klantportaal voor installatiebedrijven.",
+  "description": "Beheer en ontvang je leads in real-time. Klantportaal voor installatiebedrijven.",
+  "id": "/portal",
   "start_url": "/portal",
   "display": "standalone",
   "background_color": "#1A1A2E",
@@ -45,8 +46,22 @@
     {
       "name": "Mijn Leads",
       "short_name": "Leads",
-      "description": "Bekijk uw leads",
+      "description": "Bekijk je leads",
       "url": "/portal",
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Bestellen",
+      "short_name": "Bestellen",
+      "description": "Nieuwe leads bestellen",
+      "url": "/portal/bestellen",
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Account",
+      "short_name": "Account",
+      "description": "Accountinstellingen",
+      "url": "/portal/account",
       "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
     }
   ],

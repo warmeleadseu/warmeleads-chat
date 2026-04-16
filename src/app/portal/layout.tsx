@@ -27,6 +27,11 @@ function LoginScreen({ onLogin }: { onLogin: (c: PortalCustomer, t: string) => v
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [forgotMode, setForgotMode] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotSent, setForgotSent] = useState(false);
+  const [forgotError, setForgotError] = useState('');
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,6 +53,26 @@ function LoginScreen({ onLogin }: { onLogin: (c: PortalCustomer, t: string) => v
     }
   };
 
+  const submitForgot = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setForgotLoading(true);
+    setForgotError('');
+    try {
+      const res = await fetch('/api/portal/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: forgotEmail }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Er ging iets mis');
+      setForgotSent(true);
+    } catch (err: unknown) {
+      setForgotError(err instanceof Error ? err.message : 'Er ging iets mis');
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-brand-navy px-4">
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
@@ -65,52 +90,129 @@ function LoginScreen({ onLogin }: { onLogin: (c: PortalCustomer, t: string) => v
           <p className="mt-3 text-sm text-white/40">Klantportaal</p>
         </div>
 
-        <form onSubmit={submit} autoComplete="off" className="rounded-2xl border border-white/10 bg-white/[0.05] p-6 backdrop-blur-xl">
-          {error && (
-            <div className="mb-4 rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-2.5 text-sm text-red-300">{error}</div>
+        <AnimatePresence mode="wait">
+          {forgotMode ? (
+            <motion.div
+              key="forgot"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ duration: 0.2 }}
+            >
+              {forgotSent ? (
+                <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-6 text-center backdrop-blur-xl">
+                  <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/20">
+                    <svg className="h-6 w-6 text-emerald-400" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" />
+                    </svg>
+                  </div>
+                  <h2 className="text-lg font-semibold text-white">E-mail verstuurd</h2>
+                  <p className="mt-2 text-sm text-white/60">
+                    Als dit e-mailadres bij ons bekend is, ontvang je binnen enkele minuten een e-mail met een link om je wachtwoord te resetten.
+                  </p>
+                  <button
+                    onClick={() => { setForgotMode(false); setForgotSent(false); setForgotEmail(''); }}
+                    className="mt-6 w-full rounded-lg border border-white/10 py-2.5 text-sm font-medium text-white/70 transition hover:bg-white/[0.06]"
+                  >
+                    Terug naar inloggen
+                  </button>
+                </div>
+              ) : (
+                <form onSubmit={submitForgot} className="rounded-2xl border border-white/10 bg-white/[0.05] p-6 backdrop-blur-xl">
+                  <h2 className="mb-1 text-base font-semibold text-white">Wachtwoord vergeten?</h2>
+                  <p className="mb-5 text-sm text-white/40">Vul je e-mailadres in en we sturen je een link om je wachtwoord te resetten.</p>
+                  {forgotError && (
+                    <div className="mb-4 rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-2.5 text-sm text-red-300">{forgotError}</div>
+                  )}
+                  <div>
+                    <label className="mb-1.5 block text-xs font-medium text-white/50">E-mail</label>
+                    <input
+                      type="email"
+                      required
+                      autoFocus
+                      value={forgotEmail}
+                      onChange={(e) => setForgotEmail(e.target.value)}
+                      className="w-full rounded-lg border border-white/10 bg-white/[0.06] px-3.5 py-2.5 text-sm text-white placeholder-white/25 outline-none transition focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/30"
+                      placeholder="je@bedrijf.nl"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={forgotLoading}
+                    className="mt-5 w-full rounded-lg bg-button-gradient py-2.5 text-sm font-bold text-white shadow-lg shadow-brand-orange/20 transition hover:shadow-brand-orange/30 disabled:opacity-60"
+                  >
+                    {forgotLoading ? 'Versturen...' : 'Verstuur reset-link'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setForgotMode(false); setForgotError(''); }}
+                    className="mt-3 w-full rounded-lg py-2 text-sm text-white/40 transition hover:text-white/60"
+                  >
+                    Terug naar inloggen
+                  </button>
+                </form>
+              )}
+            </motion.div>
+          ) : (
+            <motion.div
+              key="login"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              transition={{ duration: 0.2 }}
+            >
+              <form onSubmit={submit} autoComplete="off" className="rounded-2xl border border-white/10 bg-white/[0.05] p-6 backdrop-blur-xl">
+                {error && (
+                  <div className="mb-4 rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-2.5 text-sm text-red-300">{error}</div>
+                )}
+                <div className="space-y-4">
+                  <div>
+                    <label className="mb-1.5 block text-xs font-medium text-white/50">E-mail</label>
+                    <input
+                      type="email"
+                      name="wl-portal-email"
+                      autoComplete="username"
+                      required
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="w-full rounded-lg border border-white/10 bg-white/[0.06] px-3.5 py-2.5 text-sm text-white placeholder-white/25 outline-none transition focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/30"
+                      placeholder="je@bedrijf.nl"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs font-medium text-white/50">Wachtwoord</label>
+                    <input
+                      type="password"
+                      name="wl-portal-password"
+                      autoComplete="current-password"
+                      required
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="w-full rounded-lg border border-white/10 bg-white/[0.06] px-3.5 py-2.5 text-sm text-white placeholder-white/25 outline-none transition focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/30"
+                      placeholder="••••••••"
+                    />
+                  </div>
+                </div>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="mt-6 w-full rounded-lg bg-button-gradient py-2.5 text-sm font-bold text-white shadow-lg shadow-brand-orange/20 transition hover:shadow-brand-orange/30 disabled:opacity-60"
+                >
+                  {loading ? 'Inloggen...' : 'Inloggen'}
+                </button>
+                <p className="mt-4 text-center">
+                  <button
+                    type="button"
+                    onClick={() => setForgotMode(true)}
+                    className="text-[12px] text-white/40 transition hover:text-white/60"
+                  >
+                    Wachtwoord vergeten?
+                  </button>
+                </p>
+              </form>
+            </motion.div>
           )}
-          <div className="space-y-4">
-            <div>
-              <label className="mb-1.5 block text-xs font-medium text-white/50">E-mail</label>
-              <input
-                type="email"
-                name="wl-portal-email"
-                autoComplete="username"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full rounded-lg border border-white/10 bg-white/[0.06] px-3.5 py-2.5 text-sm text-white placeholder-white/25 outline-none transition focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/30"
-                placeholder="uw@bedrijf.nl"
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-xs font-medium text-white/50">Wachtwoord</label>
-              <input
-                type="password"
-                name="wl-portal-password"
-                autoComplete="current-password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full rounded-lg border border-white/10 bg-white/[0.06] px-3.5 py-2.5 text-sm text-white placeholder-white/25 outline-none transition focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/30"
-                placeholder="••••••••"
-              />
-            </div>
-          </div>
-          <button
-            type="submit"
-            disabled={loading}
-            className="mt-6 w-full rounded-lg bg-button-gradient py-2.5 text-sm font-bold text-white shadow-lg shadow-brand-orange/20 transition hover:shadow-brand-orange/30 disabled:opacity-60"
-          >
-            {loading ? 'Inloggen...' : 'Inloggen'}
-          </button>
-          <p className="mt-4 text-center text-[11px] text-white/30">
-            Wachtwoord vergeten? Neem contact op via{' '}
-            <a href="mailto:info@warmeleads.eu" className="text-white/50 underline decoration-white/20 hover:text-white/70">
-              info@warmeleads.eu
-            </a>
-          </p>
-        </form>
+        </AnimatePresence>
 
         <p className="mt-5 text-center text-sm text-white/40">
           Nog geen account?{' '}

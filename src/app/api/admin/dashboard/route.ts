@@ -59,9 +59,19 @@ async function fetchAllLight<T>(
 
 const STATUSES = ['nieuw', 'gecontacteerd', 'geen_gehoor', 'offerte', 'verkocht', 'afgewezen'];
 
+interface CacheEntry { data: any; expires: number }
+const dashboardCache = new Map<string, CacheEntry>();
+const CACHE_TTL = 60_000;
+
 export async function GET(request: NextRequest) {
   const admin = await verifyAdmin(request);
   if (!admin) return unauthorized();
+
+  const cacheKey = `${admin.role}:${admin.id}`;
+  const cached = dashboardCache.get(cacheKey);
+  if (cached && Date.now() < cached.expires) {
+    return NextResponse.json(cached.data);
+  }
 
   const supabase = createServerClient();
   const now = new Date();
@@ -190,7 +200,7 @@ export async function GET(request: NextRequest) {
   const branchMeta: Record<string, { slug: string; name: string; color: string }> = {};
   branches.forEach(b => { branchMeta[b.slug] = b; });
 
-  return NextResponse.json({
+  const payload = {
     total: totalRes.count || 0,
     thisWeek: weekRes.count || 0,
     thisMonth: monthRes.count || 0,
@@ -202,5 +212,17 @@ export async function GET(request: NextRequest) {
     recentLeads: recentRes.data || [],
     periodStats,
     branchMeta,
-  });
+  };
+
+  dashboardCache.set(cacheKey, { data: payload, expires: Date.now() + CACHE_TTL });
+
+  // Evict stale entries periodically
+  if (dashboardCache.size > 50) {
+    const now = Date.now();
+    for (const [k, v] of dashboardCache) {
+      if (now > v.expires) dashboardCache.delete(k);
+    }
+  }
+
+  return NextResponse.json(payload);
 }

@@ -1,9 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import bcrypt from 'bcryptjs';
+import { rateLimit, getClientIp } from '@/lib/rateLimit';
+
+const MAX_ATTEMPTS = 10;
+const WINDOW_MS = 15 * 60 * 1000;
 
 export async function POST(request: NextRequest) {
   try {
+    const ip = getClientIp(request);
+    const { limited, response } = rateLimit(ip, 'portal-login', MAX_ATTEMPTS, WINDOW_MS);
+    if (limited) return response!;
+
     const { email, password } = await request.json();
 
     if (!email || !password) {

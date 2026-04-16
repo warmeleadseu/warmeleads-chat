@@ -3,8 +3,8 @@ import { createServerClient } from '@/lib/supabase';
 import { requireSuperAdmin } from '@/lib/adminAuth';
 
 export async function GET(request: NextRequest) {
-  const { error } = await requireSuperAdmin(request);
-  if (error) return error;
+  const { error: authError } = await requireSuperAdmin(request);
+  if (authError) return authError;
 
   const url = request.nextUrl.searchParams;
   const page = Math.max(1, parseInt(url.get('page') || '1'));

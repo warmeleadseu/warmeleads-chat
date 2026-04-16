@@ -3,11 +3,26 @@ import { NextRequest } from 'next/server';
 
 export const runtime = 'edge';
 
+const CATEGORY_COLORS: Record<string, { bg: string; accent: string }> = {
+  'markttrends': { bg: 'linear-gradient(135deg, #1e3a5f 0%, #2563eb 100%)', accent: '#60a5fa' },
+  'subsidies': { bg: 'linear-gradient(135deg, #065f46 0%, #059669 100%)', accent: '#6ee7b7' },
+  'tips & strategie': { bg: 'linear-gradient(135deg, #6B21A8 0%, #a855f7 100%)', accent: '#c4b5fd' },
+  'cases & inspiratie': { bg: 'linear-gradient(135deg, #92400e 0%, #d97706 100%)', accent: '#fcd34d' },
+  'technologie': { bg: 'linear-gradient(135deg, #0f172a 0%, #334155 100%)', accent: '#94a3b8' },
+  'duurzaamheid': { bg: 'linear-gradient(135deg, #14532d 0%, #16a34a 100%)', accent: '#86efac' },
+};
+
+const DEFAULT_COLORS = { bg: 'linear-gradient(135deg, #6B21A8 0%, #DB2777 50%, #F97316 100%)', accent: '#fbbf24' };
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const title = searchParams.get('title') || 'WarmeLeads';
-    const description = searchParams.get('description') || 'Dé specialist in hoogwaardige leadgeneratie';
+    const category = searchParams.get('category') || '';
+    const description = searchParams.get('description') || '';
+    const colors = CATEGORY_COLORS[category.toLowerCase()] || DEFAULT_COLORS;
+
+    const titleSize = title.length > 60 ? 44 : title.length > 40 ? 52 : 60;
 
     return new ImageResponse(
       (
@@ -17,101 +32,66 @@ export async function GET(request: NextRequest) {
             width: '100%',
             display: 'flex',
             flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            backgroundColor: '#6B21A8',
-            background: 'linear-gradient(135deg, #6B21A8 0%, #DB2777 50%, #F97316 100%)',
-            padding: '80px',
+            justifyContent: 'space-between',
+            background: colors.bg,
+            padding: '60px 80px',
           }}
         >
-          {/* Logo/Brand */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              marginBottom: '40px',
-            }}
-          >
-            <div
-              style={{
-                fontSize: '120px',
-                fontWeight: 900,
-                color: 'white',
-                textAlign: 'center',
-                textShadow: '0 4px 20px rgba(0,0,0,0.3)',
-                letterSpacing: '-0.05em',
-              }}
-            >
-              🔥 WarmeLeads
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ fontSize: 36, fontWeight: 900, color: 'white', letterSpacing: '-0.03em' }}>
+              WarmeLeads
             </div>
+            {category && (
+              <div
+                style={{
+                  fontSize: 20,
+                  color: colors.accent,
+                  backgroundColor: 'rgba(255,255,255,0.12)',
+                  padding: '8px 24px',
+                  borderRadius: 30,
+                  fontWeight: 600,
+                }}
+              >
+                {category}
+              </div>
+            )}
           </div>
 
-          {/* Title */}
-          <div
-            style={{
-              fontSize: '60px',
-              fontWeight: 700,
-              color: 'white',
-              textAlign: 'center',
-              marginBottom: '20px',
-              maxWidth: '1000px',
-              lineHeight: 1.2,
-              textShadow: '0 2px 10px rgba(0,0,0,0.2)',
-            }}
-          >
-            {title}
-          </div>
-
-          {/* Description */}
-          <div
-            style={{
-              fontSize: '32px',
-              color: 'rgba(255,255,255,0.9)',
-              textAlign: 'center',
-              maxWidth: '900px',
-              lineHeight: 1.4,
-            }}
-          >
-            {description}
-          </div>
-
-          {/* Bottom Badge */}
-          <div
-            style={{
-              position: 'absolute',
-              bottom: '60px',
-              display: 'flex',
-              alignItems: 'center',
-              backgroundColor: 'rgba(255,255,255,0.2)',
-              padding: '20px 40px',
-              borderRadius: '50px',
-              backdropFilter: 'blur(10px)',
-            }}
-          >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20, flex: 1, justifyContent: 'center' }}>
             <div
               style={{
-                fontSize: '28px',
+                fontSize: titleSize,
+                fontWeight: 800,
                 color: 'white',
-                fontWeight: 600,
+                lineHeight: 1.15,
+                maxWidth: 1000,
+                letterSpacing: '-0.03em',
               }}
             >
-              ✅ Verse Leads • 🎯 Exclusief & Gedeeld • 🚀 Direct Leverbaar
+              {title}
+            </div>
+            {description && (
+              <div style={{ fontSize: 26, color: 'rgba(255,255,255,0.75)', maxWidth: 900, lineHeight: 1.4 }}>
+                {description}
+              </div>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
+            <div style={{ fontSize: 18, color: 'rgba(255,255,255,0.5)', fontWeight: 500 }}>
+              warmeleads.eu/blog
+            </div>
+            <div style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.3)' }} />
+            <div style={{ fontSize: 18, color: 'rgba(255,255,255,0.5)', fontWeight: 500 }}>
+              Leadgeneratie voor installateurs
             </div>
           </div>
         </div>
       ),
-      {
-        width: 1200,
-        height: 630,
-      }
+      { width: 1200, height: 630 },
     );
   } catch (e: any) {
-    console.log(`${e.message}`);
-    return new Response(`Failed to generate the image`, {
-      status: 500,
-    });
+    console.log(e.message);
+    return new Response('Failed to generate the image', { status: 500 });
   }
 }
-
-

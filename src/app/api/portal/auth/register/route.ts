@@ -2,28 +2,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import bcrypt from 'bcryptjs';
 import { sendEmail } from '@/lib/email';
+import { rateLimit, getClientIp } from '@/lib/rateLimit';
 
-const rateLimitMap = new Map<string, { count: number; reset: number }>();
-const RATE_LIMIT = 5;
-const RATE_WINDOW_MS = 60 * 60 * 1000;
-
-function isRateLimited(ip: string): boolean {
-  const now = Date.now();
-  const entry = rateLimitMap.get(ip);
-  if (!entry || now > entry.reset) {
-    rateLimitMap.set(ip, { count: 1, reset: now + RATE_WINDOW_MS });
-    return false;
-  }
-  entry.count++;
-  return entry.count > RATE_LIMIT;
-}
+const MAX_ATTEMPTS = 5;
+const WINDOW_MS = 60 * 60 * 1000;
 
 export async function POST(request: NextRequest) {
   try {
-    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
-    if (isRateLimited(ip)) {
-      return NextResponse.json({ error: 'Te veel registraties. Probeer het later opnieuw.' }, { status: 429 });
-    }
+    const ip = getClientIp(request);
+    const { limited, response } = rateLimit(ip, 'portal-register', MAX_ATTEMPTS, WINDOW_MS);
+    if (limited) return response!;
 
     const body = await request.json();
     const { name, contact_person, email, phone, password, branches, kvk_nummer, targets, street, house_number, postcode, city } = body;

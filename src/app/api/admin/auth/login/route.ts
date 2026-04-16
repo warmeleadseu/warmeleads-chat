@@ -2,9 +2,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { createServerClient } from '@/lib/supabase';
 import { logAudit } from '@/lib/audit';
+import { rateLimit, getClientIp } from '@/lib/rateLimit';
+
+const MAX_ATTEMPTS = 5;
+const WINDOW_MS = 15 * 60 * 1000;
 
 export async function POST(request: NextRequest) {
   try {
+    const ip = getClientIp(request);
+    const { limited, response } = rateLimit(ip, 'admin-login', MAX_ATTEMPTS, WINDOW_MS);
+    if (limited) return response!;
+
     const { email, password } = await request.json();
     if (!email || !password) {
       return NextResponse.json({ error: 'Email en wachtwoord zijn verplicht' }, { status: 400 });
