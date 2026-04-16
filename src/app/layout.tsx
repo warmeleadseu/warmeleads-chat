@@ -80,10 +80,6 @@ export const metadata: Metadata = {
   },
   verification: {
     google: "google03b6b9ca45bfab2e",
-    yandex: "yandex-verification-code",
-    other: {
-      "facebook-domain-verification": "facebook-domain-verification-code",
-    },
   },
   category: "Lead Generation",
   classification: "Business Services",

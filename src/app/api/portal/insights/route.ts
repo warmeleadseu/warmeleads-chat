@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyCustomer, portalUnauthorized } from '@/lib/portalAuth';
 import { createServerClient } from '@/lib/supabase';
 
+const IN_CHUNK = 500;
+
 export async function GET(request: NextRequest) {
   const customer = await verifyCustomer(request);
   if (!customer) return portalUnauthorized();
@@ -52,12 +54,18 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  const { data: allLeads } = await supabase
-    .from('leads')
-    .select('id, status, branch, plaatsnaam, provincie, quality_score, phone_valid, created_at, updated_at')
-    .in('id', allIds);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const allLeads: any[] = [];
+  for (let i = 0; i < allIds.length; i += IN_CHUNK) {
+    const chunk = allIds.slice(i, i + IN_CHUNK);
+    const { data } = await supabase
+      .from('leads')
+      .select('id, status, branch, plaatsnaam, provincie, quality_score, phone_valid, created_at, updated_at')
+      .in('id', chunk);
+    if (data) allLeads.push(...data);
+  }
 
-  const leads = (allLeads || []).map(l => ({
+  const leads = allLeads.map(l => ({
     ...l,
     status: assignmentStatusMap[l.id] ?? l.status,
   }));

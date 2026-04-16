@@ -179,7 +179,7 @@ WarmeLeads genereert exclusieve, verse leads voor jouw bedrijf.
         <div className="mx-auto max-w-7xl px-5 py-5 lg:px-8">
           <div className="grid grid-cols-2 gap-2 md:flex md:items-center md:justify-center md:gap-0">
             {[
-              { label: '750+ klanten', first: true },
+              { label: '750+ batches geleverd', first: true },
               { label: 'NL & BE dekking' },
               { label: 'Actief in 25+ niches' },
               { label: 'Geen lock-in', last: true },

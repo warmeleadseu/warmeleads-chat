@@ -43,15 +43,16 @@ async function getCustomerLeadData(
   customerId: string,
   leadSource: 'all' | 'fresh' | 'bulk' = 'all',
   demoMode = false,
+  statusFilter?: string | null,
 ): Promise<{ ids: string[]; metaMap: Record<string, AssignmentMeta>; bulkCount: number }> {
   const ids = new Set<string>();
   const metaMap: Record<string, AssignmentMeta> = {};
 
   if (demoMode) {
     const selectFields = 'lead_id, assigned_at, distance_km, status, notities';
-    const demoLeads = await paginateQuery<{ lead_id: string; assigned_at: string; distance_km: number | null; status: string | null; notities: string | null }>(
-      supabase.from('lead_assignments').select(selectFields).eq('customer_id', customerId).eq('source', 'demo').order('assigned_at', { ascending: false }),
-    );
+    let q = supabase.from('lead_assignments').select(selectFields).eq('customer_id', customerId).eq('source', 'demo').order('assigned_at', { ascending: false });
+    if (statusFilter && statusFilter !== 'all') q = q.eq('status', statusFilter);
+    const demoLeads = await paginateQuery<{ lead_id: string; assigned_at: string; distance_km: number | null; status: string | null; notities: string | null }>(q);
     demoLeads.forEach(a => {
       ids.add(a.lead_id);
       if (!metaMap[a.lead_id]) {
@@ -62,18 +63,18 @@ async function getCustomerLeadData(
   }
 
   if (leadSource !== 'bulk') {
-    const directLeads = await paginateQuery<{ id: string }>(
-      supabase.from('leads').select('id').eq('customer_id', customerId),
-    );
+    let directQuery = supabase.from('leads').select('id').eq('customer_id', customerId);
+    if (statusFilter && statusFilter !== 'all') directQuery = directQuery.eq('status', statusFilter);
+    const directLeads = await paginateQuery<{ id: string }>(directQuery);
     directLeads.forEach(l => ids.add(l.id));
   }
 
   const selectFields = 'lead_id, assigned_at, distance_km, status, notities';
 
   if (leadSource === 'bulk') {
-    const bulkLeads = await paginateQuery<{ lead_id: string; assigned_at: string; distance_km: number | null; status: string | null; notities: string | null }>(
-      supabase.from('lead_assignments').select(selectFields).eq('customer_id', customerId).eq('source', 'bulk_export').order('assigned_at', { ascending: false }),
-    );
+    let q = supabase.from('lead_assignments').select(selectFields).eq('customer_id', customerId).eq('source', 'bulk_export').order('assigned_at', { ascending: false });
+    if (statusFilter && statusFilter !== 'all') q = q.eq('status', statusFilter);
+    const bulkLeads = await paginateQuery<{ lead_id: string; assigned_at: string; distance_km: number | null; status: string | null; notities: string | null }>(q);
     bulkLeads.forEach(a => {
       ids.add(a.lead_id);
       if (!metaMap[a.lead_id]) {
@@ -88,6 +89,7 @@ async function getCustomerLeadData(
       .neq('source', 'demo')
       .order('assigned_at', { ascending: false });
     if (leadSource === 'fresh') assignQuery = assignQuery.neq('source', 'bulk_export');
+    if (statusFilter && statusFilter !== 'all') assignQuery = assignQuery.eq('status', statusFilter);
     const assignedLeads = await paginateQuery<{ lead_id: string; assigned_at: string; distance_km: number | null; status: string | null; notities: string | null }>(assignQuery);
     assignedLeads.forEach(a => {
       ids.add(a.lead_id);
@@ -125,7 +127,7 @@ export async function GET(request: NextRequest) {
   const leadSource = (url.searchParams.get('lead_source') || 'all') as 'all' | 'fresh' | 'bulk';
 
   const demoMode = await getCustomerDemoMode(supabase, customer.id);
-  const { ids: leadIds, metaMap, bulkCount } = await getCustomerLeadData(supabase, customer.id, leadSource, demoMode);
+  const { ids: leadIds, metaMap, bulkCount } = await getCustomerLeadData(supabase, customer.id, leadSource, demoMode, status);
   if (leadIds.length === 0) {
     return NextResponse.json({ leads: [], total: 0, page, totalPages: 0, bulkCount });
   }
@@ -133,6 +135,7 @@ export async function GET(request: NextRequest) {
   const allowedSorts = ['created_at', 'naam_klant', 'email', 'status', 'wervingsdatum', 'plaatsnaam', 'provincie', 'branch', 'distance_km'];
   const col = allowedSorts.includes(sort) ? sort : 'created_at';
   const asc = order === 'asc';
+  const dbSortable = col !== 'distance_km' && col !== 'status';
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function applyFilters(q: any) {
@@ -145,6 +148,43 @@ export async function GET(request: NextRequest) {
     return q;
   }
 
+  // Fast path: single chunk allows DB-level sort + pagination
+  if (leadIds.length <= IN_CHUNK && dbSortable) {
+    let countQ = supabase.from('leads').select('id', { count: 'exact', head: true }).in('id', leadIds);
+    countQ = applyFilters(countQ);
+    const { count: totalCount } = await countQ;
+    const total = totalCount || 0;
+
+    const startIdx = (page - 1) * limit;
+    let q = supabase.from('leads').select('*').in('id', leadIds);
+    q = applyFilters(q);
+    q = q.order(col, { ascending: asc }).range(startIdx, startIdx + limit - 1);
+    const { data, error: fetchError } = await q;
+    if (fetchError) {
+      return NextResponse.json({ error: 'Kon leads niet ophalen' }, { status: 500 });
+    }
+
+    const enrichedLeads = (data || []).map(lead => {
+      const meta = metaMap[lead.id as string];
+      return {
+        ...lead,
+        status: meta?.status ?? (lead as Record<string, unknown>).status ?? 'nieuw',
+        notities: meta?.notities ?? (lead as Record<string, unknown>).notities ?? '',
+        received_at: meta?.assigned_at || lead.created_at,
+        distance_km: meta?.distance_km ?? null,
+      };
+    });
+
+    return NextResponse.json({
+      leads: enrichedLeads,
+      total,
+      page,
+      totalPages: Math.ceil(total / limit),
+      bulkCount,
+    });
+  }
+
+  // Multi-chunk path: fetch all matching, enrich, sort, paginate in memory
   const allMatching: Record<string, unknown>[] = [];
 
   for (let i = 0; i < leadIds.length; i += IN_CHUNK) {
@@ -169,11 +209,7 @@ export async function GET(request: NextRequest) {
     };
   });
 
-  const filtered = status && status !== 'all'
-    ? enrichedAll.filter(l => (l as Record<string, unknown>).status === status)
-    : enrichedAll;
-
-  filtered.sort((a, b) => {
+  enrichedAll.sort((a, b) => {
     if (col === 'distance_km') {
       const va = (a.distance_km as number | null) ?? Infinity;
       const vb = (b.distance_km as number | null) ?? Infinity;
@@ -186,9 +222,9 @@ export async function GET(request: NextRequest) {
     return asc ? cmp : -cmp;
   });
 
-  const totalCount = filtered.length;
+  const totalCount = enrichedAll.length;
   const startIdx = (page - 1) * limit;
-  const enrichedLeads = filtered.slice(startIdx, startIdx + limit);
+  const enrichedLeads = enrichedAll.slice(startIdx, startIdx + limit);
 
   return NextResponse.json({
     leads: enrichedLeads,

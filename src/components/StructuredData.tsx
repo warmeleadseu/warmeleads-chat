@@ -44,12 +44,7 @@ export function StructuredData() {
         "name": "WarmeLeads - Leadgeneratie Nederland & België",
         "description": "Verse, kwalitatieve leads voor installatiebedrijven in duurzame energie",
         "publisher": { "@id": "https://www.warmeleads.eu/#organization" },
-        "inLanguage": "nl-NL",
-        "potentialAction": {
-          "@type": "SearchAction",
-          "target": "https://www.warmeleads.eu/?q={search_term_string}",
-          "query-input": "required name=search_term_string"
-        }
+        "inLanguage": "nl-NL"
       },
       {
         "@type": "ProfessionalService",

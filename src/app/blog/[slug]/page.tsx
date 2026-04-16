@@ -3,6 +3,21 @@ import { notFound } from "next/navigation";
 import { blogArticles } from "@/data/blogArticles";
 import BlogPostClient from "@/components/BlogPostClient";
 
+const NL_MONTHS: Record<string, string> = {
+  januari: '01', februari: '02', maart: '03', april: '04',
+  mei: '05', juni: '06', juli: '07', augustus: '08',
+  september: '09', oktober: '10', november: '11', december: '12',
+};
+
+function toISO(nlDate: string): string {
+  const parts = nlDate.toLowerCase().trim().split(/\s+/);
+  if (parts.length !== 3) return nlDate;
+  const [day, month, year] = parts;
+  const mm = NL_MONTHS[month];
+  if (!mm) return nlDate;
+  return `${year}-${mm}-${day.padStart(2, '0')}T00:00:00Z`;
+}
+
 interface BlogPostPageProps {
   params: {
     slug: string;
@@ -53,8 +68,8 @@ export async function generateMetadata({ params }: BlogPostPageProps): Promise<M
       siteName: "WarmeLeads",
       locale: "nl_NL",
       type: "article",
-      publishedTime: article.date,
-      modifiedTime: article.date,
+      publishedTime: toISO(article.date),
+      modifiedTime: toISO(article.date),
       authors: [article.author],
       tags: article.keywords,
       section: article.category,
@@ -134,8 +149,8 @@ export default function BlogPostPage({ params }: BlogPostPageProps) {
                 "availableLanguage": "Dutch"
               }
             },
-            "datePublished": article.date,
-            "dateModified": article.date,
+            "datePublished": toISO(article.date),
+            "dateModified": toISO(article.date),
             "keywords": article.keywords.join(", "),
             "articleSection": article.category,
             "inLanguage": "nl-NL",

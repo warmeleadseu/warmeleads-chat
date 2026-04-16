@@ -34,7 +34,6 @@ export default function LeadgeneratieGidsPage() {
       <main className="min-h-screen bg-white text-slate-900">
 
       <div className="sr-only">
-        <h1>Leadgeneratie Gids Nederland 2026 - Complete Strategie voor Leads Kopen</h1>
         <p>Complete gids voor leadgeneratie in Nederland. Vergelijk leads kopen vs zelf genereren voor thuisbatterijen, zonnepanelen, warmtepompen en meer.</p>
       </div>
 
@@ -51,6 +50,7 @@ export default function LeadgeneratieGidsPage() {
           </p>
           <h1 className="mb-4 text-4xl font-bold leading-tight md:text-5xl lg:text-6xl">
             Leadgeneratie Gids
+            <span className="sr-only"> Nederland 2026 - Complete Strategie voor Leads Kopen</span>
           </h1>
           <p className="mb-4 text-xl text-white/90 md:text-2xl">
             Complete strategie voor leads kopen in Nederland 2026

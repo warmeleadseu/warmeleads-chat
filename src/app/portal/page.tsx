@@ -562,18 +562,36 @@ export default function PortalPage() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-[200] flex items-center justify-center bg-brand-navy/80 backdrop-blur-md p-4"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="welcome-dialog-title"
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') setShowWelcome(false);
+              if (e.key === 'Tab') {
+                const dialog = e.currentTarget.querySelector<HTMLElement>('[data-welcome-panel]');
+                if (!dialog) return;
+                const focusable = dialog.querySelectorAll<HTMLElement>('button, a[href], [tabindex]:not([tabindex="-1"])');
+                if (focusable.length === 0) return;
+                const first = focusable[0];
+                const last = focusable[focusable.length - 1];
+                if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+                else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+              }
+            }}
           >
             <motion.div
+              data-welcome-panel
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
               transition={{ type: 'spring', damping: 22, stiffness: 300 }}
               className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl"
+              ref={(el) => { if (el) { const btn = el.querySelector<HTMLElement>('button'); btn?.focus(); } }}
             >
               <div className="h-1 bg-warmeleads-gradient" />
               <div className="p-6 text-center sm:p-8">
-                <div className="mx-auto mb-4 text-5xl">🎉</div>
-                <h2 className="text-2xl font-bold text-slate-900">
+                <div className="mx-auto mb-4 text-5xl" aria-hidden="true">🎉</div>
+                <h2 id="welcome-dialog-title" className="text-2xl font-bold text-slate-900">
                   Welkom bij WarmeLeads{customer.name ? `, ${customer.name}` : ''}!
                 </h2>
                 <p className="mt-2 text-sm text-slate-500">
@@ -1868,6 +1886,7 @@ function LeadFeedback({ leadId, showToast }: { leadId: string; showToast: (m: st
   }, [leadId]);
 
   const submit = async (value: string) => {
+    const prevRating = rating;
     setRating(value);
     setSaved(true);
     try {
@@ -1879,7 +1898,8 @@ function LeadFeedback({ leadId, showToast }: { leadId: string; showToast: (m: st
       else throw new Error();
     } catch {
       showToast('Fout bij opslaan feedback');
-      setSaved(false);
+      setRating(prevRating);
+      setSaved(!!prevRating);
     }
   };
 
@@ -2087,9 +2107,10 @@ function PushToggleSection({ pushState, pushToggling, onToggle, showToast, lastE
   lastError?: string | null;
 }) {
   const handleToggle = async () => {
+    const wasEnabled = pushState === 'enabled';
     const success = await onToggle();
     if (success) {
-      showToast(pushState === 'enabled' ? 'Push notificaties uitgeschakeld' : 'Push notificaties ingeschakeld');
+      showToast(wasEnabled ? 'Push notificaties uitgeschakeld' : 'Push notificaties ingeschakeld');
     } else if (pushState !== 'denied') {
       showToast(lastError || 'Kon push notificaties niet wijzigen', 'error');
     }

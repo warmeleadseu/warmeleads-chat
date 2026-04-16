@@ -3,8 +3,8 @@ import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
 
 export const metadata = {
-  title: 'Privacyverklaring | Warmeleads.eu',
-  description: 'Privacyverklaring van Warmeleads.eu over de verwerking van persoonsgegevens conform de AVG.',
+  title: 'Privacyverklaring | WarmeLeads',
+  description: 'Privacyverklaring van WarmeLeads over de verwerking van persoonsgegevens conform de AVG.',
 };
 
 export default function PrivacyverklaringPage() {
@@ -17,7 +17,7 @@ export default function PrivacyverklaringPage() {
       <section className="bg-brand-navy py-16 sm:py-20">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h1 className="text-3xl sm:text-4xl font-bold text-white">Privacyverklaring</h1>
-          <p className="mt-3 text-base text-white/70">Laatst gewijzigd op 13 oktober 2025</p>
+          <p className="mt-3 text-base text-white/70">Laatst gewijzigd op 11 april 2026</p>
         </div>
       </section>
 
