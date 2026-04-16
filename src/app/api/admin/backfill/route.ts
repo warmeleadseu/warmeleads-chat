@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
+import { requireSuperAdmin } from '@/lib/adminAuth';
 import { getMetaCredentials } from '@/lib/meta';
 import { createServerClient } from '@/lib/supabase';
 import { enrichLeadAddress } from '@/lib/pdok';
@@ -170,8 +170,8 @@ const STANDARD_CRM_FIELDS = [
 /* ═══════════════════════════════════════════════════════════════════════ */
 
 export async function POST(request: NextRequest) {
-  const admin = await verifyAdmin(request);
-  if (!admin) return unauthorized();
+  const { error } = await requireSuperAdmin(request);
+  if (error) return error;
 
   const body = await request.json();
   const { form_id, branch, webhook_key_id, field_mapping, preview } = body;
@@ -405,8 +405,8 @@ export async function POST(request: NextRequest) {
 /* ─── GET: Backfill history ────────────────────────────────────────────── */
 
 export async function GET(request: NextRequest) {
-  const admin = await verifyAdmin(request);
-  if (!admin) return unauthorized();
+  const { error } = await requireSuperAdmin(request);
+  if (error) return error;
 
   const webhookKeyId = request.nextUrl.searchParams.get('webhook_key_id') || '';
   const branch = request.nextUrl.searchParams.get('branch') || '';
@@ -430,8 +430,8 @@ export async function GET(request: NextRequest) {
 /* ─── DELETE: Undo a backfill run ──────────────────────────────────────── */
 
 export async function DELETE(request: NextRequest) {
-  const admin = await verifyAdmin(request);
-  if (!admin) return unauthorized();
+  const { error } = await requireSuperAdmin(request);
+  if (error) return error;
 
   const { run_id } = await request.json();
   if (!run_id) return NextResponse.json({ error: 'run_id is verplicht' }, { status: 400 });

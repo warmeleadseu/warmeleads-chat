@@ -38,5 +38,13 @@ export function portalHeaders(): Record<string, string> {
 
 export async function portalFetch(url: string, options: RequestInit = {}) {
   const headers = { ...portalHeaders(), ...(options.headers || {}) };
-  return fetch(url, { ...options, headers });
+  const res = await fetch(url, { ...options, headers });
+
+  if (res.status === 401 && typeof window !== 'undefined') {
+    localStorage.removeItem('warmeleads-portal-auth');
+    localStorage.removeItem('warmeleads-portal-customer');
+    window.location.href = '/portal';
+  }
+
+  return res;
 }

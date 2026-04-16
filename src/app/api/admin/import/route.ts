@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
+import { requireSuperAdmin } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
 import { enrichLeadAddress } from '@/lib/pdok';
 import { isPhoneValid } from '@/lib/phoneValidation';
@@ -47,8 +47,8 @@ function parseDateValue(raw: string): string {
 }
 
 export async function POST(request: NextRequest) {
-  const admin = await verifyAdmin(request);
-  if (!admin) return unauthorized();
+  const { admin, error } = await requireSuperAdmin(request);
+  if (error || !admin) return error!;
 
   try {
     const { branch, leads } = await request.json();
@@ -228,8 +228,8 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
-  const admin = await verifyAdmin(request);
-  if (!admin) return unauthorized();
+  const { error } = await requireSuperAdmin(request);
+  if (error) return error;
 
   const supabase = createServerClient();
   const { data: rows } = await supabase
@@ -249,8 +249,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const admin = await verifyAdmin(request);
-  if (!admin) return unauthorized();
+  const { error } = await requireSuperAdmin(request);
+  if (error) return error;
 
   const { run_id } = await request.json();
   if (!run_id) return NextResponse.json({ error: 'run_id is verplicht' }, { status: 400 });

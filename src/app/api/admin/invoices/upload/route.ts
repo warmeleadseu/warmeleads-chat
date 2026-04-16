@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
+import { verifyAdmin, unauthorized, forbidden } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
 
 export async function POST(request: NextRequest) {
@@ -26,12 +26,17 @@ export async function POST(request: NextRequest) {
 
   const { data: invoice } = await supabase
     .from('invoices')
-    .select('id, invoice_number, uploaded_pdf_path')
+    .select('id, invoice_number, uploaded_pdf_path, customer_id')
     .eq('id', invoiceId)
     .single();
 
   if (!invoice) {
     return NextResponse.json({ error: 'Factuur niet gevonden' }, { status: 404 });
+  }
+
+  if (admin.role === 'accountmanager' && invoice.customer_id) {
+    const { data: cust } = await supabase.from('customers').select('id').eq('id', invoice.customer_id).eq('account_manager_id', admin.id).single();
+    if (!cust) return forbidden();
   }
 
   // Remove old file if exists
@@ -79,12 +84,17 @@ export async function DELETE(request: NextRequest) {
 
   const { data: invoice } = await supabase
     .from('invoices')
-    .select('uploaded_pdf_path')
+    .select('uploaded_pdf_path, customer_id')
     .eq('id', invoice_id)
     .single();
 
   if (!invoice?.uploaded_pdf_path) {
     return NextResponse.json({ error: 'Geen geüpload bestand gevonden' }, { status: 404 });
+  }
+
+  if (admin.role === 'accountmanager' && invoice.customer_id) {
+    const { data: cust } = await supabase.from('customers').select('id').eq('id', invoice.customer_id).eq('account_manager_id', admin.id).single();
+    if (!cust) return forbidden();
   }
 
   await supabase.storage.from('invoices').remove([invoice.uploaded_pdf_path]);

@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
+import { requireSuperAdmin } from '@/lib/adminAuth';
 import { distributeUnassignedLeads } from '@/lib/distribution';
 
 export async function POST(request: NextRequest) {
-  const admin = await verifyAdmin(request);
-  if (!admin) return unauthorized();
+  const { error } = await requireSuperAdmin(request);
+  if (error) return error;
 
   try {
     const result = await distributeUnassignedLeads();

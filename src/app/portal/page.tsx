@@ -286,11 +286,15 @@ export default function PortalPage() {
       if (res.ok) {
         const data = await res.json();
         setStats(data);
+      } else if (!silent) {
+        showToast('Statistieken konden niet geladen worden', 'error');
       }
+    } catch {
+      if (!silent) showToast('Statistieken konden niet geladen worden', 'error');
     } finally {
       if (!silent) setStatsLoading(false);
     }
-  }, []);
+  }, [showToast]);
 
   const fetchLeads = useCallback(async () => {
     setLoading(true);
@@ -306,20 +310,28 @@ export default function PortalPage() {
     if (dateTo) params.set('to', dateTo);
     if (leadSource !== 'all') params.set('lead_source', leadSource);
 
-    const res = await portalFetch(`/api/portal/leads?${params}`);
-    if (res.ok) {
-      const data = await res.json();
-      setLeads(data.leads || []);
-      setTotal(data.total || 0);
-      setTotalPages(data.totalPages || 1);
-      if (data.bulkCount !== undefined) setBulkCount(data.bulkCount);
+    try {
+      const res = await portalFetch(`/api/portal/leads?${params}`);
+      if (res.ok) {
+        const data = await res.json();
+        setLeads(data.leads || []);
+        setTotal(data.total || 0);
+        setTotalPages(data.totalPages || 1);
+        if (data.bulkCount !== undefined) setBulkCount(data.bulkCount);
+      } else {
+        showToast('Leads konden niet geladen worden', 'error');
+      }
+    } catch {
+      showToast('Leads konden niet geladen worden', 'error');
     }
     setLoading(false);
   }, [page, sort, order, statusFilter, branchFilter, search, dateFrom, dateTo, leadSource]);
 
   const fetchBranches = useCallback(async () => {
-    const res = await portalFetch('/api/portal/branches');
-    if (res.ok) { const d = await res.json(); setBranchConfigs(d.branches || []); }
+    try {
+      const res = await portalFetch('/api/portal/branches');
+      if (res.ok) { const d = await res.json(); setBranchConfigs(d.branches || []); }
+    } catch { /* non-critical */ }
   }, []);
 
   const fetchBatches = useCallback(async () => {
@@ -329,10 +341,14 @@ export default function PortalPage() {
       if (res.ok) {
         const d = await res.json();
         setBatches({ active: d.active || [], completed: d.completed || [] });
+      } else {
+        showToast('Batches konden niet geladen worden', 'error');
       }
-    } catch { /* ignore */ }
+    } catch {
+      showToast('Batches konden niet geladen worden', 'error');
+    }
     setBatchesLoading(false);
-  }, []);
+  }, [showToast]);
 
   const fetchNotifPrefs = useCallback(async () => {
     try {
@@ -452,6 +468,7 @@ export default function PortalPage() {
       if (dateFrom) params.set('from', dateFrom);
       if (dateTo) params.set('to', dateTo);
       if (leadSource !== 'all') params.set('lead_source', leadSource);
+      if (search) params.set('search', search);
       const res = await portalFetch(`/api/portal/export?${params}`);
       if (!res.ok) throw new Error();
       const blob = await res.blob();
@@ -465,7 +482,7 @@ export default function PortalPage() {
     } catch {
       showToast('Export mislukt');
     }
-  }, [statusFilter, branchFilter, dateFrom, dateTo, leadSource, customer.name, showToast]);
+  }, [statusFilter, branchFilter, dateFrom, dateTo, leadSource, search, customer.name, showToast]);
 
   const activeFilters = useMemo(() => {
     let count = 0;

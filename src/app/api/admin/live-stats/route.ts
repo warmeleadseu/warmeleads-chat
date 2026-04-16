@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
-import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
+import { requireSuperAdmin } from '@/lib/adminAuth';
 
 function todayMidnight(): Date {
   const now = new Date();
@@ -8,8 +8,8 @@ function todayMidnight(): Date {
 }
 
 export async function GET(request: NextRequest) {
-  const admin = await verifyAdmin(request);
-  if (!admin) return unauthorized();
+  const { error } = await requireSuperAdmin(request);
+  if (error) return error;
 
   const supabase = createServerClient();
 

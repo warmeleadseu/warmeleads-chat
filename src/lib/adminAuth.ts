@@ -22,6 +22,17 @@ export function unauthorized() {
   return NextResponse.json({ error: 'Niet geautoriseerd' }, { status: 401 });
 }
 
+export function forbidden() {
+  return NextResponse.json({ error: 'Onvoldoende rechten' }, { status: 403 });
+}
+
+export async function requireSuperAdmin(request: NextRequest) {
+  const admin = await verifyAdmin(request);
+  if (!admin) return { admin: null, error: unauthorized() };
+  if (admin.role !== 'superadmin') return { admin: null, error: forbidden() };
+  return { admin, error: null };
+}
+
 export function adminHeaders(skipContentType = false): Record<string, string> {
   if (typeof window === 'undefined') return {};
   try {

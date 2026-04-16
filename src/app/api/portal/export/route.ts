@@ -138,6 +138,7 @@ export async function GET(request: NextRequest) {
   const from = url.searchParams.get('from');
   const to = url.searchParams.get('to');
   const leadSource = (url.searchParams.get('lead_source') || 'all') as 'all' | 'fresh' | 'bulk';
+  const search = url.searchParams.get('search')?.trim().toLowerCase() || '';
 
   const { data: custData } = await supabase
     .from('customers')
@@ -172,9 +173,17 @@ export async function GET(request: NextRequest) {
     };
   });
 
-  const filtered = status && status !== 'all'
+  let filtered = status && status !== 'all'
     ? leads.filter(l => l.status === status)
     : leads;
+
+  if (search) {
+    filtered = filtered.filter(l => {
+      const hay = [l.naam_klant, l.email, l.telefoonnummer, l.postcode, l.plaatsnaam]
+        .filter(Boolean).join(' ').toLowerCase();
+      return hay.includes(search);
+    });
+  }
 
   filtered.sort((a, b) => {
     const da = (a.wervingsdatum as string) ?? '';

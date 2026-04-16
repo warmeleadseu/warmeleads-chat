@@ -29,7 +29,7 @@ export const metadata: Metadata = {
     address: false,
     telephone: false,
   },
-  metadataBase: new URL("https://warmeleads.eu"),
+  metadataBase: new URL("https://www.warmeleads.eu"),
   alternates: {
     canonical: "/",
   },

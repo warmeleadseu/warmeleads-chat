@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
-import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
+import { requireSuperAdmin } from '@/lib/adminAuth';
 
 function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371;
@@ -14,8 +14,8 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
 }
 
 export async function GET(request: NextRequest) {
-  const admin = await verifyAdmin(request);
-  if (!admin) return unauthorized();
+  const { error } = await requireSuperAdmin(request);
+  if (error) return error;
 
   const supabase = createServerClient();
 

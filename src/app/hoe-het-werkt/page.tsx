@@ -365,13 +365,13 @@ export default function HoeHetWerktPage() {
                 Nieuwe branches
               </p>
               <h2 className="text-2xl font-bold tracking-tight md:text-3xl">
-                Werkt u in een niche waar we<br className="hidden md:block" />
+                Werk je in een niche waar we<br className="hidden md:block" />
                 <span className="text-slate-500">nog niet actief zijn?</span>
               </h2>
               <p className="mt-3 text-[14px] leading-relaxed text-slate-600 md:mt-4 md:text-[15px]">
                 We zijn gespecialiseerd in verduurzaming (zonnepanelen, warmtepompen, thuisbatterijen,
                 airco, financial lease), maar genereren leads in vrijwel elke branche.
-                Werkt u in een niche waarin we nog geen ervaring hebben? We investeren graag
+                Werk je in een niche waarin we nog geen ervaring hebben? We investeren graag
                 in onderzoek.
               </p>
 

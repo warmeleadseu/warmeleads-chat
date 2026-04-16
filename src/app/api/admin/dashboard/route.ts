@@ -145,7 +145,7 @@ export async function GET(request: NextRequest) {
   const branches = (branchRes.data || []) as { slug: string; name: string; color: string }[];
   const branchCountResults = await Promise.all(
     branches.map(b =>
-      supabase.from('leads').select('id', { count: 'exact', head: true }).eq('branch', b.slug),
+      scopeLeads(supabase.from('leads').select('id', { count: 'exact', head: true }).eq('branch', b.slug)),
     ),
   );
 

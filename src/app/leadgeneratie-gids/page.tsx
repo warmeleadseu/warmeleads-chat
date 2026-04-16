@@ -56,8 +56,8 @@ export default function LeadgeneratieGidsPage() {
             Complete strategie voor leads kopen in Nederland 2026
           </p>
           <p className="mx-auto max-w-3xl text-base text-white/70 md:text-lg">
-            Ontdek waarom leads kopen effectiever is dan zelf genereren, en hoe u maximale ROI
-            behaalt uit uw leadgeneratie investering.
+            Ontdek waarom leads kopen effectiever is dan zelf genereren, en hoe je maximale ROI
+            behaalt uit je leadgeneratie investering.
           </p>
         </div>
       </section>
@@ -177,7 +177,7 @@ export default function LeadgeneratieGidsPage() {
             <div className="rounded-xl border border-slate-200 bg-white p-6 text-center shadow-sm">
               <WrenchScrewdriverIcon className="mx-auto mb-4 h-10 w-10 text-brand-purple" />
               <h4 className="mb-2 font-bold text-slate-900">Maatwerk</h4>
-              <p className="text-sm text-slate-500">Custom campagnes voor uw specifieke branche</p>
+              <p className="text-sm text-slate-500">Custom campagnes voor jouw specifieke branche</p>
             </div>
           </div>
         </div>
@@ -221,7 +221,7 @@ export default function LeadgeneratieGidsPage() {
             <div className="rounded-xl border border-slate-200 bg-white p-8 shadow-sm">
               <h4 className="mb-5 flex items-center gap-2 text-xl font-bold text-slate-900">
                 <ChartBarIcon className="h-5 w-5 text-brand-purple" />
-                Uw Resultaat
+                Jouw Resultaat
               </h4>
               <ul className="space-y-3">
                 <li className="flex items-center gap-2">
@@ -262,7 +262,7 @@ export default function LeadgeneratieGidsPage() {
             </h2>
             <p className="mx-auto mb-6 max-w-xl text-slate-600">
               Maak een gratis account aan en ontdek hoe ons klantportaal werkt. Als welkomstcadeau
-              ontvangt u <strong className="text-brand-orange">20% korting</strong> op uw eerste batch leads.
+              ontvang je <strong className="text-brand-orange">20% korting</strong> op je eerste batch leads.
             </p>
             <Link
               href="/gratis-account"
@@ -362,7 +362,7 @@ export default function LeadgeneratieGidsPage() {
             >
               <AdjustmentsHorizontalIcon className="mx-auto mb-3 h-8 w-8 text-brand-purple" />
               <h3 className="mb-2 font-bold text-slate-900 group-hover:text-brand-purple">Maatwerk Leads</h3>
-              <p className="text-sm text-slate-500">Custom campagnes voor uw specifieke branche</p>
+              <p className="text-sm text-slate-500">Custom campagnes voor jouw specifieke branche</p>
             </Link>
           </div>
         </div>

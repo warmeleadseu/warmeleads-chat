@@ -116,14 +116,22 @@ export default function BestellenPage() {
 
   const fetchData = useCallback(async () => {
     if (!customer) return;
-    const [batchRes, orderRes] = await Promise.all([
-      portalFetch('/api/portal/batches').then(r => r.json()),
-      portalFetch('/api/portal/orders').then(r => r.json()),
-    ]);
-    setBatches({ active: batchRes.active || [], completed: batchRes.completed || [] });
-    setOrders(Array.isArray(orderRes) ? orderRes : []);
-    return { batches: batchRes, orders: Array.isArray(orderRes) ? orderRes : [] };
-  }, [customer]);
+    try {
+      const [batchRaw, orderRaw] = await Promise.all([
+        portalFetch('/api/portal/batches'),
+        portalFetch('/api/portal/orders'),
+      ]);
+      const batchRes = batchRaw.ok ? await batchRaw.json() : { active: [], completed: [] };
+      const orderRes = orderRaw.ok ? await orderRaw.json() : [];
+      if (!batchRaw.ok || !orderRaw.ok) showToast('Gegevens konden niet volledig geladen worden', 'error');
+      setBatches({ active: batchRes.active || [], completed: batchRes.completed || [] });
+      setOrders(Array.isArray(orderRes) ? orderRes : []);
+      return { batches: batchRes, orders: Array.isArray(orderRes) ? orderRes : [] };
+    } catch {
+      showToast('Gegevens konden niet geladen worden', 'error');
+      return undefined;
+    }
+  }, [customer, showToast]);
 
   useEffect(() => {
     if (!customer) return;
@@ -264,7 +272,7 @@ export default function BestellenPage() {
   }, [minBatchSize]);
 
   const handleCancelOrder = async (orderId: string) => {
-    if (!confirm('Weet u zeker dat u deze bestelling wilt verwijderen?')) return;
+    if (!confirm('Weet je zeker dat je deze bestelling wilt verwijderen?')) return;
     try {
       const res = await portalFetch('/api/portal/orders', {
         method: 'DELETE',
@@ -446,7 +454,7 @@ export default function BestellenPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">Bestellen</h1>
-            <p className="mt-0.5 text-sm text-slate-500">Bestel een nieuwe batch leads voor uw bedrijf</p>
+            <p className="mt-0.5 text-sm text-slate-500">Bestel een nieuwe batch leads voor je bedrijf</p>
           </div>
           {orders.length > 0 && (
             <button onClick={() => setShowOrders(!showOrders)}
@@ -561,7 +569,7 @@ export default function BestellenPage() {
             {sourceBatch.leads_delivered >= sourceBatch.batch_size * 0.8 && (
               <p className="mt-2 text-xs font-medium text-amber-600">
                 <SparklesIcon className="mr-1 inline h-3.5 w-3.5" />
-                Bijna vol! Bestel nu een vervolg batch zodat u geen leads mist.
+                Bijna vol! Bestel nu een vervolg batch zodat je geen leads mist.
               </p>
             )}
           </div>
@@ -576,7 +584,7 @@ export default function BestellenPage() {
             <div className="mb-6 flex items-start gap-3 rounded-2xl border border-emerald-100 bg-emerald-50/50 p-4">
               <CheckCircleSolid className="mt-0.5 h-5 w-5 shrink-0 text-emerald-500" />
               <div>
-                <p className="text-sm font-semibold text-slate-800">Herbestelling op basis van uw vorige batch</p>
+                <p className="text-sm font-semibold text-slate-800">Herbestelling op basis van je vorige batch</p>
                 <p className="mt-0.5 text-xs text-slate-500">
                   {sourceBatch.branch_name || sourceBatch.branch} &middot; {origSize} leads &middot; Voltooid
                 </p>
@@ -587,7 +595,7 @@ export default function BestellenPage() {
 
         {/* Batch size selector */}
         <div className="mb-6">
-          <label className="mb-3 block text-sm font-semibold text-slate-800">Hoeveel leads wilt u bestellen?</label>
+          <label className="mb-3 block text-sm font-semibold text-slate-800">Hoeveel leads wil je bestellen?</label>
 
           {/* Quick selection */}
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -680,7 +688,7 @@ export default function BestellenPage() {
                 })}
               </div>
               {pricingData.is_custom && (
-                <p className="mt-1.5 text-[10px] text-amber-600 font-medium">Speciaal tarief voor uw bedrijf</p>
+                <p className="mt-1.5 text-[10px] text-amber-600 font-medium">Speciaal tarief voor je bedrijf</p>
               )}
             </div>
           )}
@@ -837,7 +845,7 @@ export default function BestellenPage() {
             <div className="mt-3 flex items-start gap-2 px-1">
               <SparklesIcon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
               <p className="text-[11px] leading-relaxed text-slate-400">
-                Na betaling wordt uw batch direct aangemaakt. Leads worden automatisch toegewezen met dezelfde instellingen als uw {sourceBatch?.status === 'completed' ? 'vorige' : 'huidige'} batch.
+                Na betaling wordt je batch direct aangemaakt. Leads worden automatisch toegewezen met dezelfde instellingen als je {sourceBatch?.status === 'completed' ? 'vorige' : 'huidige'} batch.
               </p>
             </div>
           </div>
@@ -1044,7 +1052,7 @@ function NewCustomerOrderView({
         {/* Batch size */}
         {dynamicPrice > 0 && (
           <div className="mb-6">
-            <label className="mb-3 block text-sm font-semibold text-slate-800">Hoeveel leads wilt u bestellen?</label>
+            <label className="mb-3 block text-sm font-semibold text-slate-800">Hoeveel leads wil je bestellen?</label>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {QUICK_SIZES.map(size => {
                 const isActive = !useCustom && batchSize === size;

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
+import { requireSuperAdmin } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
 import { SignJWT } from 'jose';
 
@@ -8,8 +8,8 @@ const ISSUER = 'warmeleads-admin';
 const EXPIRY = '1h';
 
 export async function POST(request: NextRequest) {
-  const admin = await verifyAdmin(request);
-  if (!admin) return unauthorized();
+  const { error } = await requireSuperAdmin(request);
+  if (error) return error;
 
   const { customer_id } = await request.json();
   if (!customer_id) {

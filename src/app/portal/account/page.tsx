@@ -1186,10 +1186,14 @@ export default function AccountPage() {
         const d = await res.json();
         setAccountData(d.customer || d);
         if (d.account_manager) setAccountManager(d.account_manager);
+      } else {
+        showToast('Accountgegevens konden niet geladen worden', 'error');
       }
-    } catch { /* ignore */ }
+    } catch {
+      showToast('Accountgegevens konden niet geladen worden', 'error');
+    }
     finally { setAccountLoading(false); }
-  }, []);
+  }, [showToast]);
 
   const fetchInsights = useCallback(async () => {
     setInsightsLoading(true);
@@ -1198,10 +1202,14 @@ export default function AccountPage() {
       if (res.ok) {
         const d = await res.json();
         setInsightsData(d);
+      } else {
+        showToast('Inzichten konden niet geladen worden', 'error');
       }
-    } catch { /* ignore */ }
+    } catch {
+      showToast('Inzichten konden niet geladen worden', 'error');
+    }
     finally { setInsightsLoading(false); }
-  }, []);
+  }, [showToast]);
 
   const fetchAreas = useCallback(async () => {
     setAreasLoading(true);
@@ -1211,7 +1219,7 @@ export default function AccountPage() {
         const d = await res.json();
         setAreasData(d.targets || d || []);
       }
-    } catch { /* ignore */ }
+    } catch { /* non-critical */ }
     finally { setAreasLoading(false); }
   }, []);
 
@@ -1222,10 +1230,14 @@ export default function AccountPage() {
       if (res.ok) {
         const d = await res.json();
         setOrdersData(Array.isArray(d) ? d : []);
+      } else {
+        showToast('Bestellingen konden niet geladen worden', 'error');
       }
-    } catch { /* ignore */ }
+    } catch {
+      showToast('Bestellingen konden niet geladen worden', 'error');
+    }
     finally { setOrdersLoading(false); }
-  }, []);
+  }, [showToast]);
 
   const fetchInvoices = useCallback(async () => {
     setInvoicesLoading(true);
@@ -1234,10 +1246,14 @@ export default function AccountPage() {
       if (res.ok) {
         const d = await res.json();
         setInvoicesData(Array.isArray(d) ? d : []);
+      } else {
+        showToast('Facturen konden niet geladen worden', 'error');
       }
-    } catch { /* ignore */ }
+    } catch {
+      showToast('Facturen konden niet geladen worden', 'error');
+    }
     finally { setInvoicesLoading(false); }
-  }, []);
+  }, [showToast]);
 
   const downloadInvoicePdf = useCallback(async (inv: { id: string; invoice_number: string }) => {
     try {

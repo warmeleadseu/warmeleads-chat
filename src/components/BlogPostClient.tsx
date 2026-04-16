@@ -257,28 +257,35 @@ export default function BlogPostClient({ article, relatedArticles }: BlogPostCli
             className="bg-white rounded-3xl p-6 md:p-12 shadow-lg border border-slate-100 mb-12"
           >
             <div className="prose prose-lg max-w-none">
+              {article.content ? (
+                <div
+                  className="blog-content [&_h2]:text-2xl [&_h2]:md:text-3xl [&_h2]:font-bold [&_h2]:text-slate-900 [&_h2]:mb-6 [&_h2]:mt-10 [&_p]:text-slate-700 [&_p]:leading-relaxed [&_p]:mb-4 [&_p]:text-lg [&_ul]:space-y-2 [&_ul]:mb-6 [&_ul]:list-disc [&_ul]:pl-5 [&_li]:text-slate-700 [&_li]:text-lg [&_ol]:space-y-2 [&_ol]:mb-6 [&_ol]:list-decimal [&_ol]:pl-5 [&_strong]:font-semibold [&_strong]:text-slate-900"
+                  dangerouslySetInnerHTML={{ __html: article.content }}
+                />
+              ) : (
+                <>
               <section className="mb-8">
                 <h2 className="text-2xl md:text-3xl font-bold text-slate-900 mb-6">Inleiding</h2>
                 <p className="text-slate-700 leading-relaxed mb-4 text-lg">
                   In de snel veranderende wereld van leadgeneratie is het cruciaal om bij te blijven met de laatste
-                  trends en strategieën. Dit artikel biedt u diepgaande inzichten en praktische tips om uw
+                  trends en strategieën. Dit artikel biedt je diepgaande inzichten en praktische tips om je
                   leadgeneratie naar een hoger niveau te tillen.
                 </p>
                 <p className="text-slate-700 leading-relaxed text-lg">
-                  Of u nu net begint met leadgeneratie of een ervaren marketeer bent, deze gids biedt waardevolle
-                  kennis die direct toepasbaar is in uw dagelijkse praktijk.
+                  Of je nu net begint met leadgeneratie of een ervaren marketeer bent, deze gids biedt waardevolle
+                  kennis die direct toepasbaar is in je dagelijkse praktijk.
                 </p>
               </section>
 
               <section className="mb-8">
                 <h2 className="text-2xl md:text-3xl font-bold text-slate-900 mb-6">Waarom dit belangrijk is</h2>
                 <p className="text-slate-700 leading-relaxed mb-4 text-lg">
-                  De Nederlandse markt kent unieke uitdagingen en kansen. Met de juiste strategie en tools kunt u
+                  De Nederlandse markt kent unieke uitdagingen en kansen. Met de juiste strategie en tools kun je
                   significante resultaten behalen. Uit recent onderzoek blijkt dat bedrijven die gestructureerd
                   werken aan leadgeneratie tot 50% meer gekwalificeerde leads genereren.
                 </p>
                 <ul className="space-y-3 mb-6">
-                  {['Verhoogde naamsbekendheid in uw doelgroep', 'Lagere kosten per acquisitie (CPA)', 'Betere kwaliteit van inkomende leads', 'Hogere conversieratio\'s in uw verkoopproces'].map((item, i) => (
+                  {['Verhoogde naamsbekendheid in je doelgroep', 'Lagere kosten per acquisitie (CPA)', 'Betere kwaliteit van inkomende leads', 'Hogere conversieratio\'s in je verkoopproces'].map((item, i) => (
                     <li key={i} className="flex items-start gap-3 text-slate-700 text-lg">
                       <CheckCircleIcon className="h-5 w-5 shrink-0 text-brand-orange mt-0.5" />
                       <span>{item}</span>
@@ -291,13 +298,13 @@ export default function BlogPostClient({ article, relatedArticles }: BlogPostCli
                 <h2 className="text-2xl md:text-3xl font-bold text-slate-900 mb-6">Praktische Implementatie</h2>
                 <p className="text-slate-700 leading-relaxed mb-6 text-lg">
                   De implementatie van deze strategieën vereist een gestructureerde aanpak. Begin met een grondige
-                  analyse van uw huidige situatie en stel duidelijke, meetbare doelen. Volg deze stappen:
+                  analyse van je huidige situatie en stel duidelijke, meetbare doelen. Volg deze stappen:
                 </p>
                 <div className="space-y-4">
                   {[
-                    { title: 'Analyseer uw huidige leadgeneratie', desc: 'Waar komen uw leads vandaan en wat is de kwaliteit?' },
-                    { title: 'Definieer uw ideale klantprofiel', desc: 'Wie wilt u bereiken en waarom?' },
-                    { title: 'Kies de juiste kanalen', desc: 'Focus op wat het beste werkt voor uw doelgroep' },
+                    { title: 'Analyseer je huidige leadgeneratie', desc: 'Waar komen je leads vandaan en wat is de kwaliteit?' },
+                    { title: 'Definieer je ideale klantprofiel', desc: 'Wie wil je bereiken en waarom?' },
+                    { title: 'Kies de juiste kanalen', desc: 'Focus op wat het beste werkt voor je doelgroep' },
                     { title: 'Test en optimaliseer', desc: 'Continue verbetering is de sleutel tot succes' },
                     { title: 'Meet en rapporteer', desc: 'Data-driven beslissingen leiden tot betere resultaten' }
                   ].map((step, i) => (
@@ -353,16 +360,18 @@ export default function BlogPostClient({ article, relatedArticles }: BlogPostCli
                 <h2 className="text-2xl md:text-3xl font-bold text-slate-900 mb-6">Conclusie en Volgende Stappen</h2>
                 <p className="text-slate-700 leading-relaxed mb-4 text-lg">
                   De wereld van leadgeneratie blijft evolueren, maar de fundamentele principes blijven hetzelfde:
-                  begrijp uw doelgroep, bied waarde, en optimaliseer continu. Door de strategieën uit dit artikel
-                  toe te passen, legt u een solide basis voor succesvolle leadgeneratie.
+                  begrijp je doelgroep, bied waarde, en optimaliseer continu. Door de strategieën uit dit artikel
+                  toe te passen, leg je een solide basis voor succesvolle leadgeneratie.
                 </p>
                 <p className="text-slate-700 leading-relaxed text-lg">
-                  Wilt u direct aan de slag met professionele leadgeneratie?
+                  Wil je direct aan de slag met professionele leadgeneratie?
                   <Link href="/" className="text-brand-orange underline hover:text-brand-purple ml-1 font-semibold">
                     Ontdek onze diensten
-                  </Link> en zie hoe WarmeLeads u kan helpen uw doelen te bereiken.
+                  </Link> en zie hoe WarmeLeads je kan helpen je doelen te bereiken.
                 </p>
               </section>
+                </>
+              )}
 
               {/* Keywords */}
               <section className="mt-12 pt-8 border-t border-slate-200">
