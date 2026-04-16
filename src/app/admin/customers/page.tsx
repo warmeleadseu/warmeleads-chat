@@ -42,6 +42,7 @@ interface Customer {
   bulk_lead_count?: number;
   bulk_price_per_lead?: number | null;
   last_login_at?: string | null;
+  last_seen_at?: string | null;
   login_count?: number;
   exclude_customers?: string[];
   account_manager_id?: string | null;
@@ -90,10 +91,16 @@ function getWelcomeOfferStatus(c: Customer): { label: string; className: string 
 function getActivityStatus(c: Customer): { label: string; color: string; dotColor: string; sort: number } {
   if (!c.portal_active || !c.has_password) return { label: 'Portaal niet actief', color: 'text-slate-400', dotColor: 'bg-slate-300', sort: 5 };
   if (!c.last_login_at || !c.login_count) return { label: 'Nooit ingelogd', color: 'text-red-500', dotColor: 'bg-red-400', sort: 4 };
-  const diff = Date.now() - new Date(c.last_login_at).getTime();
+  const lastActive = c.last_seen_at && c.last_login_at
+    ? (new Date(c.last_seen_at) > new Date(c.last_login_at) ? c.last_seen_at : c.last_login_at)
+    : c.last_seen_at || c.last_login_at;
+  if (!lastActive) return { label: 'Nooit ingelogd', color: 'text-red-500', dotColor: 'bg-red-400', sort: 4 };
+  const diff = Date.now() - new Date(lastActive).getTime();
+  const minutes = diff / (1000 * 60);
   const hours = diff / (1000 * 60 * 60);
   const days = diff / (1000 * 60 * 60 * 24);
-  if (hours < 1) return { label: 'Online', color: 'text-emerald-600', dotColor: 'bg-emerald-500', sort: 0 };
+  if (minutes < 5) return { label: 'Online', color: 'text-emerald-600', dotColor: 'bg-emerald-500', sort: 0 };
+  if (hours < 1) return { label: `${Math.floor(minutes)}m geleden`, color: 'text-emerald-600', dotColor: 'bg-emerald-500', sort: 0 };
   if (days < 1) return { label: `${Math.floor(hours)}u geleden`, color: 'text-emerald-600', dotColor: 'bg-emerald-500', sort: 0 };
   if (days < 7) return { label: `${Math.floor(days)}d geleden`, color: 'text-emerald-600', dotColor: 'bg-emerald-500', sort: 1 };
   if (days < 30) return { label: `${Math.floor(days)}d geleden`, color: 'text-amber-600', dotColor: 'bg-amber-400', sort: 2 };
@@ -261,14 +268,21 @@ export default function CustomersPage() {
   };
 
   const portalUsers = customers.filter(c => c.portal_active && c.has_password);
+  const getLastActive = (c: Customer) => {
+    const seen = c.last_seen_at ? new Date(c.last_seen_at).getTime() : 0;
+    const login = c.last_login_at ? new Date(c.last_login_at).getTime() : 0;
+    return Math.max(seen, login);
+  };
   const activePortalUsers = portalUsers.filter(c => {
-    if (!c.last_login_at) return false;
-    return Date.now() - new Date(c.last_login_at).getTime() < 7 * 24 * 60 * 60 * 1000;
+    const t = getLastActive(c);
+    if (!t) return false;
+    return Date.now() - t < 7 * 24 * 60 * 60 * 1000;
   });
   const neverLoggedIn = portalUsers.filter(c => !c.last_login_at || !c.login_count);
   const churning = portalUsers.filter(c => {
-    if (!c.last_login_at) return false;
-    return Date.now() - new Date(c.last_login_at).getTime() > 30 * 24 * 60 * 60 * 1000;
+    const t = getLastActive(c);
+    if (!t) return false;
+    return Date.now() - t > 30 * 24 * 60 * 60 * 1000;
   });
 
   const filtered = useMemo(() => {
@@ -284,17 +298,17 @@ export default function CustomersPage() {
     }
 
     if (activityFilter === 'active') {
-      list = list.filter(c => c.last_login_at && Date.now() - new Date(c.last_login_at).getTime() < 7 * 24 * 60 * 60 * 1000);
+      list = list.filter(c => { const t = getLastActive(c); return t && Date.now() - t < 7 * 24 * 60 * 60 * 1000; });
     } else if (activityFilter === 'never') {
       list = list.filter(c => c.portal_active && c.has_password && (!c.last_login_at || !c.login_count));
     } else if (activityFilter === 'inactive') {
-      list = list.filter(c => c.last_login_at && Date.now() - new Date(c.last_login_at).getTime() > 30 * 24 * 60 * 60 * 1000);
+      list = list.filter(c => { const t = getLastActive(c); return t && Date.now() - t > 30 * 24 * 60 * 60 * 1000; });
     }
 
     list.sort((a, b) => {
       if (sortBy === 'last_login') {
-        const aTime = a.last_login_at ? new Date(a.last_login_at).getTime() : 0;
-        const bTime = b.last_login_at ? new Date(b.last_login_at).getTime() : 0;
+        const aTime = getLastActive(a);
+        const bTime = getLastActive(b);
         return bTime - aTime;
       }
       if (sortBy === 'login_count') {
@@ -425,7 +439,8 @@ export default function CustomersPage() {
             const activity = getActivityStatus(c);
             const isNew = Date.now() - new Date(c.created_at).getTime() < 7 * 24 * 60 * 60 * 1000;
             const neverLogged = c.portal_active && c.has_password && (!c.last_login_at || !c.login_count);
-            const isChurning = c.last_login_at && Date.now() - new Date(c.last_login_at).getTime() > 30 * 24 * 60 * 60 * 1000;
+            const lastActiveTime = getLastActive(c);
+            const isChurning = lastActiveTime && Date.now() - lastActiveTime > 30 * 24 * 60 * 60 * 1000;
             return (
               <div key={c.id} className="rounded-xl border border-slate-200 bg-white shadow-sm transition hover:shadow-md">
                 <div className="p-5">
@@ -435,7 +450,7 @@ export default function CustomersPage() {
                       <div className="flex items-center gap-2">
                         <h3 className="font-semibold text-slate-900">{c.name}</h3>
                         {portalReady && (
-                          <span className={`flex items-center gap-1 text-[11px] font-medium ${activity.color}`} title={c.last_login_at ? `Laatste login: ${new Date(c.last_login_at).toLocaleString('nl-NL')}` : 'Nooit ingelogd'}>
+                          <span className={`flex items-center gap-1 text-[11px] font-medium ${activity.color}`} title={lastActiveTime ? `Laatst actief: ${new Date(lastActiveTime).toLocaleString('nl-NL')}` : 'Nooit ingelogd'}>
                             <span className={`inline-block h-1.5 w-1.5 rounded-full ${activity.dotColor} ${activity.sort === 0 ? 'animate-pulse' : ''}`} />
                             {activity.label}
                           </span>

@@ -47,11 +47,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Ongeldige inloggegevens' }, { status: 401 });
     }
 
-    // Track login activity (non-blocking)
+    const now = new Date().toISOString();
     supabase
       .from('customers')
       .update({
-        last_login_at: new Date().toISOString(),
+        last_login_at: now,
+        last_seen_at: now,
         login_count: (customer.login_count || 0) + 1,
       })
       .eq('id', customer.id)

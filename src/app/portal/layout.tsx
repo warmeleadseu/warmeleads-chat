@@ -603,6 +603,28 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
     return () => clearInterval(interval);
   }, [customer?.demo_mode, isAdminView]);
 
+  // Heartbeat: update last_seen_at every 2 minutes so admin sees "online" status
+  useEffect(() => {
+    if (!customer || isAdminView) return;
+
+    const sendHeartbeat = () => {
+      portalFetch('/api/portal/heartbeat', { method: 'POST' }).catch(() => {});
+    };
+
+    sendHeartbeat();
+    const interval = setInterval(sendHeartbeat, 2 * 60 * 1000);
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') sendHeartbeat();
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [customer, isAdminView]);
+
   const handleLogin = useCallback((c: PortalCustomer, token: string) => {
     setCustomer(c);
     setIsAdminView(false);
