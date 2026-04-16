@@ -14,7 +14,7 @@ export const metadata: Metadata = {
   title:
     "Conversie Optimalisatie: Van Lead naar Klant | Proven Technieken | WarmeLeads Blog",
   description:
-    "Leer hoe u leadconversie maximaliseert met proven technieken. Tips voor follow-up, kwalificatie en closing van leads voor maximale ROI.",
+    "Leer hoe je leadconversie maximaliseert met proven technieken. Tips voor follow-up, kwalificatie en closing van leads voor maximale ROI.",
   keywords:
     "lead conversie optimalisatie, leadconversie verhogen, sales funnel optimalisatie, lead nurturing, conversie tips",
 };
@@ -149,8 +149,8 @@ export default function ConversieOptimalisatiePage() {
               </h4>
               <p className="text-slate-600">
                 Onze leads komen met interesse-niveau en beste contact tijden,
-                waardoor uw eerste contact al geoptimaliseerd is voor maximale
-                conversiekans. Dit geeft u een voorsprong op de concurrentie.
+                waardoor je eerste contact al geoptimaliseerd is voor maximale
+                conversiekans. Dit geeft je een voorsprong op de concurrentie.
               </p>
             </div>
           </div>
@@ -160,7 +160,7 @@ export default function ConversieOptimalisatiePage() {
         <section className="bg-slate-50 py-12 md:py-16">
           <div className="mx-auto max-w-3xl px-5 text-center lg:px-8">
             <h2 className="mb-3 text-2xl font-bold text-slate-900">
-              Optimaliseer Uw Conversie
+              Optimaliseer Je Conversie
             </h2>
             <p className="mb-6 text-slate-600">
               Start met kwaliteitsleads die klaar zijn om te converteren

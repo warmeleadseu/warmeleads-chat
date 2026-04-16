@@ -90,7 +90,7 @@ export function IPhoneMockup() {
 
               <div>
                 <p className="text-[11px] font-bold text-slate-900">Welkom, Mark</p>
-                <p className="text-[7px] text-slate-500">Uw leadoverzicht voor SolarTech BV</p>
+                <p className="text-[7px] text-slate-500">Je leadoverzicht voor SolarTech BV</p>
               </div>
 
               <div className="rounded-lg border border-slate-200 bg-white p-2 shadow-sm">

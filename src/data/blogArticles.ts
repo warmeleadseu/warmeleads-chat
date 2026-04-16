@@ -247,7 +247,7 @@ export const blogArticles: BlogArticle[] = [
     image: "👥",
     keywords: ["meer klanten nodig", "klanten werven installateur", "nieuwe opdrachten", "klantacquisitie installateur", "installateur marketing"],
     author: "WarmeLeads Expert Team",
-    content: `<h2>De uitdaging: volle agenda, lege pipeline</h2><p>Veel installatiebedrijven kennen het probleem: je bent druk met lopende projecten, maar als die klaar zijn, gaapt er een gat. De fout die de meeste installateurs maken, is pas naar nieuwe klanten zoeken als het rustig wordt. Succesvolle bedrijven hebben een constante instroom van leads, ongeacht hoe druk ze zijn.</p><h2>7 strategieën die vandaag nog werken</h2><ol><li><strong>Gekwalificeerde leads inkopen</strong> — De snelste route naar nieuwe klanten. Bij WarmeLeads krijg je exclusieve leads in jouw regio, inclusief contactgegevens en interesse. Geen gedeelde leads, geen concurrentie.</li><li><strong>Google Mijn Bedrijf optimaliseren</strong> — Gratis en enorm effectief. Een volledig ingevuld profiel met 50+ reviews en wekelijkse foto's levert structureel lokale klanten op.</li><li><strong>Bestaande klanten activeren</strong> — Je beste bron voor nieuwe klanten zijn tevreden klanten. Bied €50-100 referralbonus voor elke doorverwijzing die tot een opdracht leidt.</li><li><strong>Buurtreclame bij oplevering</strong> — Deel flyers bij de buren na een installatie. "Uw buurman koos voor zonnepanelen — interesse?" werkt verrassend goed.</li><li><strong>Lokale Facebook groepen</strong> — Word actief in gemeentegroepen. Beantwoord vragen over energie en verduurzaming. Niet verkopen, maar helpen. De opdrachten volgen vanzelf.</li><li><strong>Samenwerking met makelaars en hypotheekadviseurs</strong> — Nieuwe huiseigenaren investeren vaak in verduurzaming. Bied makelaars een kickback of een gratis energieadvies voor hun klanten.</li><li><strong>Content marketing</strong> — Een blogartikel over "Wat kosten zonnepanelen in [jouw stad]?" trekt maandelijks zoekverkeer aan. Eenmalige investering, structureel rendement.</li></ol><h2>De sleutel: consistentie</h2><p>Geen van deze strategieën werkt als je ze één keer probeert. De installateurs die groeien, combineren 2-3 kanalen en doen het elke week. Start met leads inkopen voor directe resultaten en bouw tegelijk je organische kanalen op voor de lange termijn.</p>`
+    content: `<h2>De uitdaging: volle agenda, lege pipeline</h2><p>Veel installatiebedrijven kennen het probleem: je bent druk met lopende projecten, maar als die klaar zijn, gaapt er een gat. De fout die de meeste installateurs maken, is pas naar nieuwe klanten zoeken als het rustig wordt. Succesvolle bedrijven hebben een constante instroom van leads, ongeacht hoe druk ze zijn.</p><h2>7 strategieën die vandaag nog werken</h2><ol><li><strong>Gekwalificeerde leads inkopen</strong> — De snelste route naar nieuwe klanten. Bij WarmeLeads krijg je exclusieve leads in jouw regio, inclusief contactgegevens en interesse. Geen gedeelde leads, geen concurrentie.</li><li><strong>Google Mijn Bedrijf optimaliseren</strong> — Gratis en enorm effectief. Een volledig ingevuld profiel met 50+ reviews en wekelijkse foto's levert structureel lokale klanten op.</li><li><strong>Bestaande klanten activeren</strong> — Je beste bron voor nieuwe klanten zijn tevreden klanten. Bied €50-100 referralbonus voor elke doorverwijzing die tot een opdracht leidt.</li><li><strong>Buurtreclame bij oplevering</strong> — Deel flyers bij de buren na een installatie. "Je buurman koos voor zonnepanelen — interesse?" werkt verrassend goed.</li><li><strong>Lokale Facebook groepen</strong> — Word actief in gemeentegroepen. Beantwoord vragen over energie en verduurzaming. Niet verkopen, maar helpen. De opdrachten volgen vanzelf.</li><li><strong>Samenwerking met makelaars en hypotheekadviseurs</strong> — Nieuwe huiseigenaren investeren vaak in verduurzaming. Bied makelaars een kickback of een gratis energieadvies voor hun klanten.</li><li><strong>Content marketing</strong> — Een blogartikel over "Wat kosten zonnepanelen in [jouw stad]?" trekt maandelijks zoekverkeer aan. Eenmalige investering, structureel rendement.</li></ol><h2>De sleutel: consistentie</h2><p>Geen van deze strategieën werkt als je ze één keer probeert. De installateurs die groeien, combineren 2-3 kanalen en doen het elke week. Start met leads inkopen voor directe resultaten en bouw tegelijk je organische kanalen op voor de lange termijn.</p>`
   },
   {
     slug: "klanten-werven-duurzame-energie-2025",
@@ -271,12 +271,12 @@ export const blogArticles: BlogArticle[] = [
     image: "💰",
     keywords: ["nieuwe klanten krijgen", "klanten zonder marketing", "goedkope klantacquisitie", "lead kopen vs marketing", "installateur zonder budget"],
     author: "WarmeLeads Expert Team",
-    content: `<h2>Marketing hoeft geen fortuin te kosten</h2><p>Veel kleine installatiebedrijven denken dat je duizenden euro's per maand moet uitgeven aan marketing om nieuwe klanten te krijgen. Dat is een misverstand. De meest effectieve manieren om klanten te werven kosten weinig of geen geld — ze kosten wel tijd en consistentie. Als je bereid bent om elke week een paar uur te investeren in je zichtbaarheid, kun je een stabiele stroom van nieuwe klanten opbouwen zonder groot marketingbudget.</p><h2>Gratis methoden die echt werken</h2><ul><li><strong>Google Mijn Bedrijf:</strong> Volledig gratis en de #1 bron van lokale leads. Vul je profiel 100% in, upload wekelijks foto's van projecten en vraag elke tevreden klant om een review. Bedrijven met 50+ reviews krijgen 3x meer aanvragen dan bedrijven met 10 reviews.</li><li><strong>Referral-programma:</strong> Bied bestaande klanten een bedankje (€50 cadeaubon, gratis onderhoudsbeurt) voor elke doorverwijzing die tot een opdracht leidt. Persoonlijke aanbevelingen hebben de hoogste conversie van alle marketingkanalen.</li><li><strong>Buurtmarketing bij oplevering:</strong> Na elke installatie deel je flyers bij de directe buren. "Uw buurman op nummer 23 bespaart nu €1.200 per jaar met zonnepanelen — wilt u weten wat het voor uw woning oplevert?" Dit is hyper-lokaal en enorm effectief.</li><li><strong>Lokale Facebook- en buurtgroepen:</strong> Word actief in Nextdoor en lokale Facebook-groepen. Beantwoord vragen over energie, deel tips en wees behulpzaam. Niet verkopen, maar helpen. De opdrachten komen vanzelf.</li></ul><h2>Wanneer toch investeren in leads?</h2><p>Gratis methoden zijn krachtig maar bouwen langzaam op. Als je sneller wilt groeien of een gat in je planning moet opvullen, is het slim om gericht te investeren. Geen dure advertentiecampagnes die je zelf moet beheren, maar directe toegang tot mensen die nu op zoek zijn naar een installateur. WarmeLeads levert je exclusieve, gekwalificeerde leads in jouw regio — je betaalt alleen voor echte aanvragen, niet voor klikken of vertoningen. Zo combineer je gratis organische groei met betaalbare directe resultaten.</p>`
+    content: `<h2>Marketing hoeft geen fortuin te kosten</h2><p>Veel kleine installatiebedrijven denken dat je duizenden euro's per maand moet uitgeven aan marketing om nieuwe klanten te krijgen. Dat is een misverstand. De meest effectieve manieren om klanten te werven kosten weinig of geen geld — ze kosten wel tijd en consistentie. Als je bereid bent om elke week een paar uur te investeren in je zichtbaarheid, kun je een stabiele stroom van nieuwe klanten opbouwen zonder groot marketingbudget.</p><h2>Gratis methoden die echt werken</h2><ul><li><strong>Google Mijn Bedrijf:</strong> Volledig gratis en de #1 bron van lokale leads. Vul je profiel 100% in, upload wekelijks foto's van projecten en vraag elke tevreden klant om een review. Bedrijven met 50+ reviews krijgen 3x meer aanvragen dan bedrijven met 10 reviews.</li><li><strong>Referral-programma:</strong> Bied bestaande klanten een bedankje (€50 cadeaubon, gratis onderhoudsbeurt) voor elke doorverwijzing die tot een opdracht leidt. Persoonlijke aanbevelingen hebben de hoogste conversie van alle marketingkanalen.</li><li><strong>Buurtmarketing bij oplevering:</strong> Na elke installatie deel je flyers bij de directe buren. "Je buurman op nummer 23 bespaart nu €1.200 per jaar met zonnepanelen — wil je weten wat het voor jouw woning oplevert?" Dit is hyper-lokaal en enorm effectief.</li><li><strong>Lokale Facebook- en buurtgroepen:</strong> Word actief in Nextdoor en lokale Facebook-groepen. Beantwoord vragen over energie, deel tips en wees behulpzaam. Niet verkopen, maar helpen. De opdrachten komen vanzelf.</li></ul><h2>Wanneer toch investeren in leads?</h2><p>Gratis methoden zijn krachtig maar bouwen langzaam op. Als je sneller wilt groeien of een gat in je planning moet opvullen, is het slim om gericht te investeren. Geen dure advertentiecampagnes die je zelf moet beheren, maar directe toegang tot mensen die nu op zoek zijn naar een installateur. WarmeLeads levert je exclusieve, gekwalificeerde leads in jouw regio — je betaalt alleen voor echte aanvragen, niet voor klikken of vertoningen. Zo combineer je gratis organische groei met betaalbare directe resultaten.</p>`
   },
   {
     slug: "ai-chatbots-leadgeneratie-2025",
     title: "AI Chatbots voor Leadgeneratie: Complete Gids 2026",
-    excerpt: "Ontdek hoe AI chatbots uw leadgeneratie kunnen revolutioneren. Van implementatie tot conversie-optimalisatie, alles wat u moet weten.",
+    excerpt: "Ontdek hoe AI chatbots je leadgeneratie kunnen revolutioneren. Van implementatie tot conversie-optimalisatie, alles wat je moet weten.",
     date: "13 oktober 2026",
     category: "AI & Technologie",
     readTime: "12 min",
@@ -288,7 +288,7 @@ export const blogArticles: BlogArticle[] = [
   {
     slug: "b2b-leadgeneratie-linkedin-strategie",
     title: "B2B Leadgeneratie via LinkedIn: Proven Strategieën",
-    excerpt: "LinkedIn is dé plek voor B2B leads. Leer hoe u hoogwaardige prospects bereikt en converteert met proven tactieken.",
+    excerpt: "LinkedIn is dé plek voor B2B leads. Leer hoe je hoogwaardige prospects bereikt en converteert met proven tactieken.",
     date: "12 oktober 2026",
     category: "B2B Marketing",
     readTime: "10 min",
@@ -314,7 +314,7 @@ export const blogArticles: BlogArticle[] = [
   {
     slug: "google-ads-leadgeneratie-2025",
     title: "Google Ads voor Leadgeneratie: Complete Campagne Gids",
-    excerpt: "Maximaliseer uw ROI met Google Ads. Van keyword research tot conversie tracking, alles voor succesvolle lead campagnes.",
+    excerpt: "Maximaliseer je ROI met Google Ads. Van keyword research tot conversie tracking, alles voor succesvolle lead campagnes.",
     date: "8 oktober 2026",
     category: "Paid Advertising",
     readTime: "11 min",
@@ -326,7 +326,7 @@ export const blogArticles: BlogArticle[] = [
   {
     slug: "content-marketing-lead-generatie",
     title: "Content Marketing Strategie voor Meer Leads",
-    excerpt: "Kwalitatieve content trekt kwalitatieve leads. Leer hoe u content creëert die uw ideale klanten aantrekt en converteert.",
+    excerpt: "Kwalitatieve content trekt kwalitatieve leads. Leer hoe je content creëert die je ideale klanten aantrekt en converteert.",
     date: "6 oktober 2026",
     category: "Content Marketing",
     readTime: "10 min",
@@ -338,7 +338,7 @@ export const blogArticles: BlogArticle[] = [
   {
     slug: "landing-page-optimalisatie-conversie",
     title: "Landing Page Optimalisatie: 15+ Proven Tactieken",
-    excerpt: "Uw landing page is cruciaal voor conversie. Ontdek 15+ proven tactieken om uw conversion rate te verdubbelen.",
+    excerpt: "Je landing page is cruciaal voor conversie. Ontdek 15+ proven tactieken om je conversion rate te verdubbelen.",
     date: "4 oktober 2026",
     category: "Conversie Optimalisatie",
     readTime: "13 min",
@@ -350,7 +350,7 @@ export const blogArticles: BlogArticle[] = [
   {
     slug: "crm-systemen-leadbeheer-2025",
     title: "Beste CRM Systemen voor Leadbeheer in 2026",
-    excerpt: "De juiste CRM software maakt het verschil. Vergelijk de beste CRM systemen en kies wat past bij uw bedrijf.",
+    excerpt: "De juiste CRM software maakt het verschil. Vergelijk de beste CRM systemen en kies wat past bij je bedrijf.",
     date: "2 oktober 2026",
     category: "Tools & Software",
     readTime: "14 min",
@@ -375,7 +375,7 @@ export const blogArticles: BlogArticle[] = [
   },
   {
     slug: "meer-opdrachten-installatiebedrijf",
-    title: "Meer Opdrachten voor Uw Installatiebedrijf: 5 Directe Tactieken",
+    title: "Meer Opdrachten voor Je Installatiebedrijf: 5 Directe Tactieken",
     excerpt: "Wil je direct meer opdrachten? Deze 5 tactieken zorgen voor nieuwe klanten binnen 48 uur. Perfect voor installateurs in zonnepanelen, warmtepompen en thuisbatterijen.",
     date: "30 september 2026",
     category: "Klantacquisitie",
@@ -388,7 +388,7 @@ export const blogArticles: BlogArticle[] = [
   {
     slug: "video-marketing-leadgeneratie",
     title: "Video Marketing voor Meer Leads: Complete Gids",
-    excerpt: "Video content converteert 80% beter. Leer hoe u video marketing inzet voor explosieve leadgroei.",
+    excerpt: "Video content converteert 80% beter. Leer hoe je video marketing inzet voor explosieve leadgroei.",
     date: "29 september 2026",
     category: "Video Marketing",
     readTime: "11 min",
@@ -400,7 +400,7 @@ export const blogArticles: BlogArticle[] = [
   {
     slug: "webinar-leadgeneratie-strategie",
     title: "Webinars als Leadgeneratie Tool: 10x Meer Leads",
-    excerpt: "Webinars zijn leadmagneten. Ontdek hoe u webinars inzet om hoogwaardige leads te genereren en te converteren.",
+    excerpt: "Webinars zijn leadmagneten. Ontdek hoe je webinars inzet om hoogwaardige leads te genereren en te converteren.",
     date: "28 september 2026",
     category: "Webinars",
     readTime: "10 min",
@@ -448,7 +448,7 @@ export const blogArticles: BlogArticle[] = [
   {
     slug: "warmtepomp-subsidies-2025",
     title: "Warmtepomp Subsidies 2026: Impact op Leadgeneratie",
-    excerpt: "Nieuwe subsidies maken warmtepompen aantrekkelijker. Ontdek hoe dit de leadgeneratie beïnvloedt en hoe u hierop kunt inspelen.",
+    excerpt: "Nieuwe subsidies maken warmtepompen aantrekkelijker. Ontdek hoe dit de leadgeneratie beïnvloedt en hoe je hierop kunt inspelen.",
     date: "23 september 2026",
     category: "Trends",
     readTime: "6 min", 
@@ -460,7 +460,7 @@ export const blogArticles: BlogArticle[] = [
   {
     slug: "roi-berekenen-leadgeneratie",
     title: "ROI Berekenen van Leadgeneratie: Complete Gids",
-    excerpt: "Leer hoe u de ROI van uw leadgeneratie correct berekent. Inclusief formules, voorbeelden en tips voor optimalisatie.",
+    excerpt: "Leer hoe je de ROI van je leadgeneratie correct berekent. Inclusief formules, voorbeelden en tips voor optimalisatie.",
     date: "22 september 2026",
     category: "Strategie",
     readTime: "8 min",
@@ -472,7 +472,7 @@ export const blogArticles: BlogArticle[] = [
   {
     slug: "financial-lease-trends",
     title: "Financial Lease Trends: Nieuwe Kansen in 2026",
-    excerpt: "De financial lease markt evolueert snel. Ontdek nieuwe trends en hoe u uw leadgeneratie kunt aanpassen voor maximaal succes.",
+    excerpt: "De financial lease markt evolueert snel. Ontdek nieuwe trends en hoe je jouw leadgeneratie kunt aanpassen voor maximaal succes.",
     date: "21 september 2026",
     category: "B2B",
     readTime: "6 min",
@@ -484,7 +484,7 @@ export const blogArticles: BlogArticle[] = [
   {
     slug: "conversie-optimalisatie-leads",
     title: "Conversie Optimalisatie: Van Lead naar Klant",
-    excerpt: "Krijgen is één ding, converteren is een ander. Leer hoe u uw leadconversie kunt maximaliseren met proven technieken.",
+    excerpt: "Krijgen is één ding, converteren is een ander. Leer hoe je jouw leadconversie kunt maximaliseren met proven technieken.",
     date: "20 september 2026",
     category: "Conversie",
     readTime: "9 min",
@@ -498,7 +498,7 @@ export const blogArticles: BlogArticle[] = [
   {
     slug: "social-media-advertising-leads",
     title: "Social Media Advertising voor Leadgeneratie 2026",
-    excerpt: "Meta, LinkedIn, TikTok - welk platform werkt het beste voor uw leads? Complete vergelijking en strategieën.",
+    excerpt: "Meta, LinkedIn, TikTok - welk platform werkt het beste voor jouw leads? Complete vergelijking en strategieën.",
     date: "18 september 2026",
     category: "Social Media",
     readTime: "12 min",
@@ -510,7 +510,7 @@ export const blogArticles: BlogArticle[] = [
   {
     slug: "marketing-automation-leadgeneratie",
     title: "Marketing Automation voor Efficiënte Leadgeneratie",
-    excerpt: "Automatiseer uw leadgeneratie en focus op wat echt belangrijk is. De beste tools en workflows voor 2026.",
+    excerpt: "Automatiseer je leadgeneratie en focus op wat echt belangrijk is. De beste tools en workflows voor 2026.",
     date: "16 september 2026",
     category: "Automatisering",
     readTime: "11 min",
@@ -522,7 +522,7 @@ export const blogArticles: BlogArticle[] = [
   {
     slug: "seo-voor-leadgeneratie-2025",
     title: "SEO voor Leadgeneratie: Organische Traffic = Gratis Leads",
-    excerpt: "SEO is de langetermijn investering die blijft renderen. Leer hoe u organische leads genereert via zoekmachines.",
+    excerpt: "SEO is de langetermijn investering die blijft renderen. Leer hoe je organische leads genereert via zoekmachines.",
     date: "14 september 2026",
     category: "SEO Marketing",
     readTime: "13 min",
@@ -534,7 +534,7 @@ export const blogArticles: BlogArticle[] = [
   {
     slug: "lead-scoring-systeem-opzetten",
     title: "Lead Scoring Systeem Opzetten: Prioriteer Slim",
-    excerpt: "Niet alle leads zijn even waardevol. Leer hoe u een effectief lead scoring systeem opzet voor betere conversies.",
+    excerpt: "Niet alle leads zijn even waardevol. Leer hoe je een effectief lead scoring systeem opzet voor betere conversies.",
     date: "12 september 2026",
     category: "Lead Management",
     readTime: "10 min",
@@ -546,7 +546,7 @@ export const blogArticles: BlogArticle[] = [
   {
     slug: "referral-marketing-programma",
     title: "Referral Marketing: Klanten Werven Klanten",
-    excerpt: "Uw beste klanten zijn uw beste marketeers. Ontdek hoe u een succesvol referral programma opzet.",
+    excerpt: "Je beste klanten zijn je beste marketeers. Ontdek hoe je een succesvol referral programma opzet.",
     date: "10 september 2026",
     category: "Referral Marketing",
     readTime: "9 min",
@@ -560,7 +560,7 @@ export const blogArticles: BlogArticle[] = [
   {
     slug: "account-based-marketing-b2b",
     title: "Account-Based Marketing: B2B Leadgeneratie op Sterkte",
-    excerpt: "ABM is dé strategie voor high-value B2B deals. Leer hoe u specifieke accounts target en converteert.",
+    excerpt: "ABM is dé strategie voor high-value B2B deals. Leer hoe je specifieke accounts target en converteert.",
     date: "8 september 2026",
     category: "B2B Strategy",
     readTime: "11 min",
@@ -572,7 +572,7 @@ export const blogArticles: BlogArticle[] = [
   {
     slug: "influencer-marketing-leads",
     title: "Influencer Marketing voor Leadgeneratie in Nederland",
-    excerpt: "Influencers hebben vertrouwen en bereik. Ontdek hoe u influencers inzet voor effectieve leadgeneratie.",
+    excerpt: "Influencers hebben vertrouwen en bereik. Ontdek hoe je influencers inzet voor effectieve leadgeneratie.",
     date: "6 september 2026",
     category: "Influencer Marketing",
     readTime: "10 min",
@@ -584,7 +584,7 @@ export const blogArticles: BlogArticle[] = [
   {
     slug: "chatbot-conversational-marketing",
     title: "Conversational Marketing: Chatbots die Converteren",
-    excerpt: "Chatbots zijn meer dan FAQ beantwoorders. Leer hoe conversational marketing uw leadgeneratie transform",
+    excerpt: "Chatbots zijn meer dan FAQ beantwoorders. Leer hoe conversational marketing je leadgeneratie transform",
     date: "4 september 2026",
     category: "Chatbots",
     readTime: "9 min",
@@ -596,7 +596,7 @@ export const blogArticles: BlogArticle[] = [
   {
     slug: "retargeting-campagnes-leads",
     title: "Retargeting Campagnes: Tweede Kans voor Conversie",
-    excerpt: "95% van bezoekers converteert niet meteen. Leer hoe u retargeting inzet om ze terug te halen.",
+    excerpt: "95% van bezoekers converteert niet meteen. Leer hoe je retargeting inzet om ze terug te halen.",
     date: "2 september 2026",
     category: "Retargeting",
     readTime: "10 min",
@@ -610,7 +610,7 @@ export const blogArticles: BlogArticle[] = [
   {
     slug: "voice-search-optimization-2025",
     title: "Voice Search Optimization voor Lokale Leads",
-    excerpt: "Spraakzoeken nemen toe. Optimaliseer uw content voor voice search en capture lokale leads.",
+    excerpt: "Spraakzoeken nemen toe. Optimaliseer je content voor voice search en capture lokale leads.",
     date: "31 augustus 2026",
     category: "Voice SEO",
     readTime: "8 min",
@@ -622,7 +622,7 @@ export const blogArticles: BlogArticle[] = [
   {
     slug: "personalisatie-leadgeneratie",
     title: "Personalisatie in Leadgeneratie: 3x Meer Conversie",
-    excerpt: "Personalisatie is geen nice-to-have meer, het is essentieel. Leer hoe u experiences personaliseert voor betere conversies.",
+    excerpt: "Personalisatie is geen nice-to-have meer, het is essentieel. Leer hoe je experiences personaliseert voor betere conversies.",
     date: "29 augustus 2026",
     category: "Personalisatie",
     readTime: "11 min",
@@ -633,8 +633,8 @@ export const blogArticles: BlogArticle[] = [
   },
   {
     slug: "podcast-marketing-leads",
-    title: "Podcast Marketing: Bereik Uw Ideale Klant via Audio",
-    excerpt: "Podcasts bouwen vertrouwen en autoriteit. Ontdek hoe u podcast marketing inzet voor leadgeneratie.",
+    title: "Podcast Marketing: Bereik Je Ideale Klant via Audio",
+    excerpt: "Podcasts bouwen vertrouwen en autoriteit. Ontdek hoe je podcast marketing inzet voor leadgeneratie.",
     date: "27 augustus 2026",
     category: "Audio Marketing",
     readTime: "9 min",
@@ -646,7 +646,7 @@ export const blogArticles: BlogArticle[] = [
   {
     slug: "mobile-first-leadgeneratie",
     title: "Mobile-First Leadgeneratie: Optimaliseer voor Smartphone",
-    excerpt: "70% van leads komt via mobile. Leer hoe u uw leadgeneratie optimaliseert voor smartphone gebruikers.",
+    excerpt: "70% van leads komt via mobile. Leer hoe je jouw leadgeneratie optimaliseert voor smartphone gebruikers.",
     date: "25 augustus 2026",
     category: "Mobile Marketing",
     readTime: "10 min",
@@ -660,7 +660,7 @@ export const blogArticles: BlogArticle[] = [
   {
     slug: "interactive-content-leadgeneratie",
     title: "Interactive Content: Quizzes, Calculators & Meer Leads",
-    excerpt: "Interactive content genereert 2x meer conversies. Ontdek welke formaten het beste werken voor uw business.",
+    excerpt: "Interactive content genereert 2x meer conversies. Ontdek welke formaten het beste werken voor jouw business.",
     date: "23 augustus 2026",
     category: "Content Formats",
     readTime: "11 min",
@@ -672,7 +672,7 @@ export const blogArticles: BlogArticle[] = [
   {
     slug: "community-building-leads",
     title: "Community Building: Van Leden naar Loyale Klanten",
-    excerpt: "Communities genereren organische leads en verhogen lifetime value. Leer hoe u een bloeiende community bouwt.",
+    excerpt: "Communities genereren organische leads en verhogen lifetime value. Leer hoe je een bloeiende community bouwt.",
     date: "21 augustus 2026",
     category: "Community",
     readTime: "12 min",
@@ -684,7 +684,7 @@ export const blogArticles: BlogArticle[] = [
   {
     slug: "user-generated-content-leads",
     title: "User Generated Content als Leadgeneratie Motor",
-    excerpt: "UGC is authentiek en effectief. Ontdek hoe u klanten transformeert in uw beste content creators.",
+    excerpt: "UGC is authentiek en effectief. Ontdek hoe je klanten transformeert in je beste content creators.",
     date: "19 augustus 2026",
     category: "UGC Marketing",
     readTime: "9 min",
@@ -696,7 +696,7 @@ export const blogArticles: BlogArticle[] = [
   {
     slug: "partnership-marketing-leads",
     title: "Partnership Marketing: Win-Win voor Leadgeneratie",
-    excerpt: "Strategische partnerships verdubbelen uw bereik. Leer hoe u de juiste partners vindt en samenwerkingen opzet.",
+    excerpt: "Strategische partnerships verdubbelen je bereik. Leer hoe je de juiste partners vindt en samenwerkingen opzet.",
     date: "17 augustus 2026",
     category: "Partnerships",
     readTime: "10 min",
@@ -710,7 +710,7 @@ export const blogArticles: BlogArticle[] = [
   {
     slug: "data-driven-leadgeneratie",
     title: "Data-Driven Leadgeneratie: Beslissingen op Basis van Data",
-    excerpt: "Data is de nieuwe olie. Leer hoe u data analytics inzet voor slimmere leadgeneratie beslissingen.",
+    excerpt: "Data is de nieuwe olie. Leer hoe je data analytics inzet voor slimmere leadgeneratie beslissingen.",
     date: "15 augustus 2026",
     category: "Data Analytics",
     readTime: "13 min",
@@ -722,7 +722,7 @@ export const blogArticles: BlogArticle[] = [
   {
     slug: "omnichannel-marketing-strategie",
     title: "Omnichannel Marketing: Consistente Leadgeneratie Overal",
-    excerpt: "Klanten verwachten een naadloze ervaring. Ontdek hoe u een omnichannel strategie implementeert.",
+    excerpt: "Klanten verwachten een naadloze ervaring. Ontdek hoe je een omnichannel strategie implementeert.",
     date: "13 augustus 2026",
     category: "Omnichannel",
     readTime: "11 min",
@@ -734,7 +734,7 @@ export const blogArticles: BlogArticle[] = [
   {
     slug: "gdpr-compliance-leadgeneratie",
     title: "GDPR & AVG Compliant Leadgeneratie in Nederland",
-    excerpt: "Privacy is cruciaal. Leer hoe u leads genereert terwijl u volledig GDPR/AVG compliant blijft.",
+    excerpt: "Privacy is cruciaal. Leer hoe je leads genereert terwijl je volledig GDPR/AVG compliant blijft.",
     date: "11 augustus 2026",
     category: "Compliance",
     readTime: "10 min",
@@ -746,7 +746,7 @@ export const blogArticles: BlogArticle[] = [
   {
     slug: "customer-journey-mapping-leads",
     title: "Customer Journey Mapping voor Betere Leadgeneratie",
-    excerpt: "Begrijp uw klant's reis en optimaliseer elk touchpoint. Complete gids voor journey mapping.",
+    excerpt: "Begrijp de reis van je klant en optimaliseer elk touchpoint. Complete gids voor journey mapping.",
     date: "9 augustus 2026",
     category: "Customer Journey",
     readTime: "12 min",
@@ -760,7 +760,7 @@ export const blogArticles: BlogArticle[] = [
   {
     slug: "storytelling-marketing-leads",
     title: "Storytelling in Marketing: Emotie Genereert Leads",
-    excerpt: "Mensen kopen op emotie en rationaliseren met logica. Leer hoe storytelling uw leadgeneratie boost.",
+    excerpt: "Mensen kopen op emotie en rationaliseren met logica. Leer hoe storytelling je leadgeneratie boost.",
     date: "7 augustus 2026",
     category: "Brand Storytelling",
     readTime: "9 min",
@@ -772,7 +772,7 @@ export const blogArticles: BlogArticle[] = [
   {
     slug: "micro-moments-marketing",
     title: "Micro-Moments Marketing: Be There When It Matters",
-    excerpt: "Consumenten maken beslissingen in micro-moments. Leer hoe u aanwezig bent op het juiste moment.",
+    excerpt: "Consumenten maken beslissingen in micro-moments. Leer hoe je aanwezig bent op het juiste moment.",
     date: "5 augustus 2026",
     category: "Mobile Strategy",
     readTime: "8 min",

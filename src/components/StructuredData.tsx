@@ -105,7 +105,7 @@ export function StructuredData() {
             "name": "Hoe snel ontvang ik mijn eerste leads?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "De meeste klanten ontvangen hun eerste leads binnen 24 uur na het activeren van hun campagne. Leads worden direct doorgestuurd naar uw portaal zodra ze binnenkomen."
+              "text": "De meeste klanten ontvangen hun eerste leads binnen 24 uur na het activeren van hun campagne. Leads worden direct doorgestuurd naar je portaal zodra ze binnenkomen."
             }
           },
           {
@@ -121,7 +121,7 @@ export function StructuredData() {
             "name": "Kan ik leads ontvangen voor een specifiek gebied?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Ja, u kunt targetgebieden instellen op basis van postcode, stad, provincie of zelfs heel Nederland of België. U ontvangt alleen leads uit uw gekozen werkgebied."
+              "text": "Ja, je kunt targetgebieden instellen op basis van postcode, stad, provincie of zelfs heel Nederland of België. Je ontvangt alleen leads uit je gekozen werkgebied."
             }
           },
           {
@@ -129,7 +129,7 @@ export function StructuredData() {
             "name": "Zit ik vast aan een abonnement?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Nee, er is geen abonnement nodig. U koopt leads per batch en bepaalt zelf hoeveel leads u wilt ontvangen en in welk tempo."
+              "text": "Nee, er is geen abonnement nodig. Je koopt leads per batch en bepaalt zelf hoeveel leads je wilt ontvangen en in welk tempo."
             }
           }
         ]

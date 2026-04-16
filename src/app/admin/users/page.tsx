@@ -81,7 +81,7 @@ export default function UsersPage() {
       <div className="flex flex-col items-center justify-center py-24">
         <ExclamationTriangleIcon className="mb-4 h-12 w-12 text-amber-400" />
         <h2 className="text-lg font-bold text-slate-800">Geen toegang</h2>
-        <p className="mt-1 text-sm text-slate-500">U heeft geen toegang tot deze pagina</p>
+        <p className="mt-1 text-sm text-slate-500">Je hebt geen toegang tot deze pagina</p>
       </div>
     );
   }
@@ -339,7 +339,7 @@ export default function UsersPage() {
                   </div>
                 </div>
                 <p className="mb-5 text-xs text-slate-500">
-                  De gebruiker kan dan niet meer inloggen. U kunt dit later ongedaan maken.
+                  De gebruiker kan dan niet meer inloggen. Je kunt dit later ongedaan maken.
                 </p>
                 <div className="flex gap-3">
                   <button

@@ -157,7 +157,7 @@ export default function FinancialLeaseTrendsPage() {
                 </h4>
                 <p className="text-slate-600">
                   Financial lease leads hebben de hoogste waarde maar vereisen
-                  professionele follow-up. Investeer in een goede CRM en train uw
+                  professionele follow-up. Investeer in een goede CRM en train je
                   sales team in B2B verkoop voor maximale conversie.
                 </p>
               </div>

@@ -44,7 +44,7 @@ export const internalLinks: Record<string, InternalLink[]> = {
     {
       text: 'ROI Berekenen',
       url: '/blog/roi-berekenen-leadgeneratie',
-      description: 'Leer hoe u ROI correct berekent',
+      description: 'Leer hoe je ROI correct berekent',
     },
     {
       text: 'Conversie Optimalisatie',
@@ -68,7 +68,7 @@ export const internalLinks: Record<string, InternalLink[]> = {
     {
       text: 'Marketing Automation',
       url: '/blog/marketing-automation-leadgeneratie',
-      description: 'Automatiseer uw leadgeneratie',
+      description: 'Automatiseer je leadgeneratie',
     },
     {
       text: 'AI Chatbots',

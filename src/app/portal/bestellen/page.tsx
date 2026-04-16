@@ -375,7 +375,7 @@ export default function BestellenPage() {
             ? 'Je nieuwe batch is aangemaakt en leads worden automatisch toegewezen. Je ontvangt een bevestiging per e-mail.'
             : isPending
             ? 'De betaling wordt verwerkt. Dit duurt meestal een paar seconden.'
-            : 'De betaling is helaas niet gelukt. U kunt het opnieuw proberen.'}
+            : 'De betaling is helaas niet gelukt. Je kunt het opnieuw proberen.'}
         </motion.p>
 
         {isPending && (
@@ -858,7 +858,7 @@ export default function BestellenPage() {
               <ClockIcon className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
               <div>
                 <p className="text-xs font-semibold text-amber-800">
-                  U heeft {pendingOrders.length} openstaande {pendingOrders.length === 1 ? 'bestelling' : 'bestellingen'}
+                  Je hebt {pendingOrders.length} openstaande {pendingOrders.length === 1 ? 'bestelling' : 'bestellingen'}
                 </p>
                 <p className="mt-0.5 text-[11px] text-amber-600">
                   Klik op &apos;Bestellingen&apos; bovenaan om ze te bekijken of te verwijderen.

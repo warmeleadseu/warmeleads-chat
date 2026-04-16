@@ -2289,9 +2289,9 @@ function SettingsPanel({
                     ))}
                   </div>
                   <p className="mt-2 text-[11px] text-slate-400">
-                    {freq === 'instant' && 'U ontvangt direct een e-mail bij elke nieuwe lead.'}
-                    {freq === 'daily' && 'U ontvangt elke ochtend een overzicht van nieuwe leads.'}
-                    {freq === 'weekly' && 'U ontvangt elke maandag een overzicht van de afgelopen week.'}
+                    {freq === 'instant' && 'Je ontvangt direct een e-mail bij elke nieuwe lead.'}
+                    {freq === 'daily' && 'Je ontvangt elke ochtend een overzicht van nieuwe leads.'}
+                    {freq === 'weekly' && 'Je ontvangt elke maandag een overzicht van de afgelopen week.'}
                   </p>
                 </div>
               )}

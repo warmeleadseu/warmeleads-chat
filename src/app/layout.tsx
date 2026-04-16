@@ -19,7 +19,7 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: "Meer Klanten Nodig? | Verse Leads voor Duurzame Energie | WarmeLeads",
-  description: "Meer klanten nodig voor uw installatiebedrijf? Krijg exclusieve, gekwalificeerde leads voor thuisbatterijen, zonnepanelen, warmtepompen en airco's. Realtime in jouw portaal. Geen abonnement, betaal per lead.",
+  description: "Meer klanten nodig voor je installatiebedrijf? Krijg exclusieve, gekwalificeerde leads voor thuisbatterijen, zonnepanelen, warmtepompen en airco's. Realtime in jouw portaal. Geen abonnement, betaal per lead.",
   keywords: "meer klanten nodig, klanten werven, nieuwe klanten krijgen, klantacquisitie, klantenwerving, leads kopen, installateur leads, duurzame energie leads, thuisbatterijen leads, zonnepanelen leads, warmtepomp leads, exclusieve klanten, klanten vinden, meer opdrachten, lead generatie Nederland",
   authors: [{ name: "WarmeLeads" }],
   creator: "WarmeLeads",

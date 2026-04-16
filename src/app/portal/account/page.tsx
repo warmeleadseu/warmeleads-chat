@@ -282,7 +282,7 @@ function AccountTab({
         </div>
       </div>
 
-      {/* Uw Accountmanager */}
+      {/* Je Accountmanager */}
       {accountManager && (
         <div className="overflow-hidden rounded-xl border border-brand-purple/15 bg-gradient-to-br from-brand-purple/[0.03] to-white shadow-sm">
           <div className="flex items-center gap-2 border-b border-brand-purple/10 bg-brand-purple/[0.04] px-5 py-3">
@@ -1057,7 +1057,7 @@ function OrdersTab({ data, loading, onDelete }: { data: OrderData[]; loading: bo
           <ShoppingCartIcon className="h-7 w-7 text-slate-400" />
         </div>
         <p className="text-sm font-semibold text-slate-700">Geen bestellingen</p>
-        <p className="mt-1 text-xs text-slate-400">U heeft nog geen batches besteld via het portaal.</p>
+        <p className="mt-1 text-xs text-slate-400">Je hebt nog geen batches besteld via het portaal.</p>
         <a
           href="/portal/bestellen"
           className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-purple/10 px-3.5 py-2 text-xs font-semibold text-brand-purple transition hover:bg-brand-purple/20"
@@ -1381,7 +1381,7 @@ export default function AccountPage() {
               data={ordersData}
               loading={ordersLoading}
               onDelete={async (id) => {
-                if (!confirm('Weet u zeker dat u deze bestelling wilt verwijderen?')) return;
+                if (!confirm('Weet je zeker dat je deze bestelling wilt verwijderen?')) return;
                 try {
                   const res = await portalFetch('/api/portal/orders', {
                     method: 'DELETE',

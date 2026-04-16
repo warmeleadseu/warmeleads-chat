@@ -140,12 +140,12 @@ function buildTemplates(): Template[] {
     label: 'Batch 80% voltooid',
     description: 'Wordt gestuurd als een batch voor 80% geleverd is.',
     category: 'klant',
-    subject: 'Uw batch Zonnepanelen is voor 80% voltooid',
-    html: tplLayout('Uw batch Zonnepanelen is voor 80% voltooid', `
+    subject: 'Je batch Zonnepanelen is voor 80% voltooid',
+    html: tplLayout('Je batch Zonnepanelen is voor 80% voltooid', `
       ${statusBadge('80% VOLTOOID', 'orange')}
       <p style="margin:0 0 16px;font-size:16px;font-weight:600;color:#0f172a">Hallo Pieter van Dijk,</p>
-      <p style="margin:0 0 8px">Uw batch <strong style="color:#0f172a">Zonnepanelen</strong> is al voor <strong style="color:#3B2F75">80%</strong> voltooid (200 van 250 leads geleverd).</p>
-      <p style="margin:0">Bestel nu een vervolg batch zodat u geen leads mist zodra deze batch vol is.</p>
+      <p style="margin:0 0 8px">Je batch <strong style="color:#0f172a">Zonnepanelen</strong> is al voor <strong style="color:#3B2F75">80%</strong> voltooid (200 van 250 leads geleverd).</p>
+      <p style="margin:0">Bestel nu een vervolg batch zodat je geen leads mist zodra deze batch vol is.</p>
       ${ctaBtn('Nieuwe batch bestellen &rarr;', `${BASE_URL}/portal/bestellen`)}`),
   });
 
@@ -155,12 +155,12 @@ function buildTemplates(): Template[] {
     label: 'Batch voltooid',
     description: 'Wordt gestuurd als alle leads van een batch geleverd zijn.',
     category: 'klant',
-    subject: 'Uw batch Zonnepanelen is voltooid!',
-    html: tplLayout('Uw batch Zonnepanelen is voltooid!', `
+    subject: 'Je batch Zonnepanelen is voltooid!',
+    html: tplLayout('Je batch Zonnepanelen is voltooid!', `
       ${statusBadge('&#10003; VOLTOOID', 'green')}
       <p style="margin:0 0 16px;font-size:16px;font-weight:600;color:#0f172a">Hallo Pieter van Dijk,</p>
-      <p style="margin:0 0 8px">Uw batch <strong style="color:#0f172a">Zonnepanelen</strong> is volledig voltooid! Alle <strong style="color:#3B2F75">250</strong> leads zijn geleverd.</p>
-      <p style="margin:0">Wilt u blijven groeien? Bestel direct een nieuwe batch en ontvang weer verse leads.</p>
+      <p style="margin:0 0 8px">Je batch <strong style="color:#0f172a">Zonnepanelen</strong> is volledig voltooid! Alle <strong style="color:#3B2F75">250</strong> leads zijn geleverd.</p>
+      <p style="margin:0">Wil je blijven groeien? Bestel direct een nieuwe batch en ontvang weer verse leads.</p>
       ${ctaBtn('Nieuwe batch bestellen &rarr;', `${BASE_URL}/portal/bestellen`)}`),
   });
 
@@ -170,11 +170,11 @@ function buildTemplates(): Template[] {
     label: 'Batch herinnering',
     description: 'Wordt enkele dagen na batch-voltooiing gestuurd als herinnering.',
     category: 'klant',
-    subject: 'U mist momenteel leads in Zonnepanelen',
-    html: tplLayout('U mist momenteel leads in Zonnepanelen', `
+    subject: 'Je mist momenteel leads in Zonnepanelen',
+    html: tplLayout('Je mist momenteel leads in Zonnepanelen', `
       ${statusBadge('GEEN ACTIEVE BATCH', 'red')}
       <p style="margin:0 0 16px;font-size:16px;font-weight:600;color:#0f172a">Hallo Pieter van Dijk,</p>
-      <p style="margin:0 0 8px">Het is nu een paar dagen geleden dat uw batch <strong style="color:#0f172a">Zonnepanelen</strong> is voltooid. Momenteel ontvangt u geen nieuwe leads in dit segment.</p>
+      <p style="margin:0 0 8px">Het is nu een paar dagen geleden dat je batch <strong style="color:#0f172a">Zonnepanelen</strong> is voltooid. Momenteel ontvang je geen nieuwe leads in dit segment.</p>
       <p style="margin:0">Bestel een nieuwe batch om weer leads te ontvangen.</p>
       ${ctaBtn('Nieuwe batch bestellen &rarr;', `${BASE_URL}/portal/bestellen`)}`),
   });

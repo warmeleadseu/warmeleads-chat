@@ -408,9 +408,9 @@ export async function sendBatchMilestoneEmail(
   const orderUrl = `${BASE_URL}/portal/bestellen?batch=${batch.id}`;
 
   const titles: Record<string, string> = {
-    '80pct': `Uw batch ${branchLabel} is voor ${pct}% voltooid`,
-    completed: `Uw batch ${branchLabel} is voltooid!`,
-    reminder: `U mist momenteel leads in ${branchLabel}`,
+    '80pct': `Je batch ${branchLabel} is voor ${pct}% voltooid`,
+    completed: `Je batch ${branchLabel} is voltooid!`,
+    reminder: `Je mist momenteel leads in ${branchLabel}`,
   };
 
   const milestoneBadges: Record<string, string> = {
@@ -422,15 +422,15 @@ export async function sendBatchMilestoneEmail(
   const bodies: Record<string, string> = {
     '80pct': `
       <p style="margin:0 0 16px;font-size:16px;font-weight:600;color:#0f172a">Hallo ${greeting},</p>
-      <p style="margin:0 0 8px">Uw batch <strong style="color:#0f172a">${branchLabel}</strong> is al voor <strong style="color:#3B2F75">${pct}%</strong> voltooid (${batch.leads_delivered} van ${batch.batch_size} leads geleverd).</p>
-      <p style="margin:0">Bestel nu een vervolg batch zodat u geen leads mist zodra deze batch vol is.</p>`,
+      <p style="margin:0 0 8px">Je batch <strong style="color:#0f172a">${branchLabel}</strong> is al voor <strong style="color:#3B2F75">${pct}%</strong> voltooid (${batch.leads_delivered} van ${batch.batch_size} leads geleverd).</p>
+      <p style="margin:0">Bestel nu een vervolg batch zodat je geen leads mist zodra deze batch vol is.</p>`,
     completed: `
       <p style="margin:0 0 16px;font-size:16px;font-weight:600;color:#0f172a">Hallo ${greeting},</p>
-      <p style="margin:0 0 8px">Uw batch <strong style="color:#0f172a">${branchLabel}</strong> is volledig voltooid! Alle <strong style="color:#3B2F75">${batch.batch_size}</strong> leads zijn geleverd.</p>
-      <p style="margin:0">Wilt u blijven groeien? Bestel direct een nieuwe batch en ontvang weer verse leads.</p>`,
+      <p style="margin:0 0 8px">Je batch <strong style="color:#0f172a">${branchLabel}</strong> is volledig voltooid! Alle <strong style="color:#3B2F75">${batch.batch_size}</strong> leads zijn geleverd.</p>
+      <p style="margin:0">Wil je blijven groeien? Bestel direct een nieuwe batch en ontvang weer verse leads.</p>`,
     reminder: `
       <p style="margin:0 0 16px;font-size:16px;font-weight:600;color:#0f172a">Hallo ${greeting},</p>
-      <p style="margin:0 0 8px">Het is nu een paar dagen geleden dat uw batch <strong style="color:#0f172a">${branchLabel}</strong> is voltooid. Momenteel ontvangt u geen nieuwe leads in dit segment.</p>
+      <p style="margin:0 0 8px">Het is nu een paar dagen geleden dat je batch <strong style="color:#0f172a">${branchLabel}</strong> is voltooid. Momenteel ontvang je geen nieuwe leads in dit segment.</p>
       <p style="margin:0">Bestel een nieuwe batch om weer leads te ontvangen.</p>`,
   };
 

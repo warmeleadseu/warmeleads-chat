@@ -437,7 +437,7 @@ export default function BlogPageClient() {
               Zelf ervaren hoe het werkt?
             </h2>
             <p className="text-white/80 text-lg mb-6 max-w-2xl mx-auto">
-              Maak gratis een account aan op ons klantportaal en ontvang <strong className="text-brand-orange">20% welkomstkorting</strong> op uw eerste batch leads.
+              Maak gratis een account aan op ons klantportaal en ontvang <strong className="text-brand-orange">20% welkomstkorting</strong> op je eerste batch leads.
             </p>
             <Link
               href="/gratis-account"

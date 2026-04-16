@@ -21,7 +21,7 @@ import { Footer } from '@/components/Footer';
 export const metadata = {
   title: 'Maatwerk Leadgeneratie | Custom Lead Campaigns | Warmeleads.eu',
   description:
-    'Op maat gemaakte leadgeneratie campagnes voor uw specifieke branche. Van niche markten tot grootschalige B2B campagnes. Exclusieve leads op basis van uw wensen.',
+    'Op maat gemaakte leadgeneratie campagnes voor jouw specifieke branche. Van niche markten tot grootschalige B2B campagnes. Exclusieve leads op basis van jouw wensen.',
 };
 
 export default function MaatwerkLeadsPage() {
@@ -46,12 +46,12 @@ export default function MaatwerkLeadsPage() {
 
             <h1 className="text-[2rem] font-extrabold leading-[1.1] tracking-tight text-white sm:text-[2.5rem] md:text-[3.75rem]">
               Maatwerk leadgeneratie{' '}
-              <span className="gradient-text">voor uw branche.</span>
+              <span className="gradient-text">voor jouw branche.</span>
             </h1>
 
             <p className="mt-4 max-w-xl text-[15px] leading-relaxed text-white/70 md:mt-6 md:text-lg">
-              Werkt u in een niche markt? Heeft u specifieke targeting wensen? Wij
-              ontwikkelen custom leadgeneratie campagnes volledig afgestemd op uw
+              Werk je in een niche markt? Heb je specifieke targeting wensen? Wij
+              ontwikkelen custom leadgeneratie campagnes volledig afgestemd op jouw
               bedrijf, doelgroep en regio.
             </p>
 
@@ -60,7 +60,7 @@ export default function MaatwerkLeadsPage() {
                 href="/plan-gesprek"
                 className="group inline-flex items-center justify-center gap-2 rounded-lg bg-button-gradient px-6 py-3.5 text-sm font-bold text-white shadow-lg shadow-brand-orange/30 transition hover:shadow-brand-orange/40 hover:brightness-110"
               >
-                Bespreek uw maatwerk campagne
+                Bespreek je maatwerk campagne
                 <ArrowRightIcon className="h-4 w-4 transition group-hover:translate-x-0.5" />
               </Link>
             </div>
@@ -103,7 +103,7 @@ export default function MaatwerkLeadsPage() {
             </h2>
             <p className="mt-3 text-[14px] leading-relaxed text-slate-500 md:mt-4 md:text-[16px]">
               Elke branche is anders. Daarom bouwen we elke campagne vanaf de grond
-              op, afgestemd op uw doelgroep, propositie en markt.
+              op, afgestemd op jouw doelgroep, propositie en markt.
             </p>
           </div>
 
@@ -112,7 +112,7 @@ export default function MaatwerkLeadsPage() {
               {
                 title: '100% Op Maat',
                 description:
-                  'Elke campagne wordt speciaal voor u ontwikkeld. Van messaging tot targeting, alles afgestemd op uw doelgroep en markt.',
+                  'Elke campagne wordt speciaal voor jou ontwikkeld. Van messaging tot targeting, alles afgestemd op jouw doelgroep en markt.',
                 icon: AdjustmentsHorizontalIcon,
                 accent: 'bg-brand-purple',
               },
@@ -126,7 +126,7 @@ export default function MaatwerkLeadsPage() {
               {
                 title: 'Data-Driven',
                 description:
-                  'Continue optimalisatie op basis van real-time data en performance metrics. Uw ROI staat centraal.',
+                  'Continue optimalisatie op basis van real-time data en performance metrics. Jouw ROI staat centraal.',
                 icon: ChartBarIcon,
                 accent: 'bg-brand-orange',
               },
@@ -230,7 +230,7 @@ export default function MaatwerkLeadsPage() {
         <div className="mx-auto max-w-7xl px-5 py-14 md:py-20 lg:px-8">
           <div className="mb-8 max-w-2xl md:mb-12">
             <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-brand-purple md:mb-3 md:text-[12px]">
-              Wat u krijgt
+              Wat je krijgt
             </p>
             <h2 className="text-2xl font-bold tracking-tight md:text-4xl">
               Compleet pakket.{' '}
@@ -248,7 +248,7 @@ export default function MaatwerkLeadsPage() {
               </h3>
               <ul className="mt-4 space-y-2.5">
                 {[
-                  'Marktanalyse voor uw sector',
+                  'Marktanalyse voor jouw sector',
                   'Campagne strategie ontwikkeling',
                   'Targeting optimalisatie',
                   'ROI maximalisatie',
@@ -310,13 +310,13 @@ export default function MaatwerkLeadsPage() {
               {
                 step: '01',
                 title: 'Intake',
-                description: 'Analyse van uw doelgroep, markt en gewenst volume. U krijgt een helder plan.',
+                description: 'Analyse van je doelgroep, markt en gewenst volume. Je krijgt een helder plan.',
                 icon: ClipboardDocumentListIcon,
               },
               {
                 step: '02',
                 title: 'Campagne Design',
-                description: 'Custom creatives, messaging en targeting op basis van uw propositie.',
+                description: 'Custom creatives, messaging en targeting op basis van jouw propositie.',
                 icon: AdjustmentsHorizontalIcon,
               },
               {
@@ -328,7 +328,7 @@ export default function MaatwerkLeadsPage() {
               {
                 step: '04',
                 title: 'Optimalisatie',
-                description: 'Continue verbetering op data, kwaliteit en conversie. U stuurt mee.',
+                description: 'Continue verbetering op data, kwaliteit en conversie. Je stuurt mee.',
                 icon: ChartBarIcon,
               },
             ].map((item) => (
@@ -369,10 +369,10 @@ export default function MaatwerkLeadsPage() {
               Aan de slag
             </p>
             <h2 className="text-2xl font-bold tracking-tight md:text-4xl lg:text-5xl">
-              Laten we uw campagne bespreken
+              Laten we je campagne bespreken
             </h2>
             <p className="mt-3 text-[15px] leading-relaxed text-white/70 md:mt-4 md:text-lg">
-              Vertel ons over uw branche en wij maken de perfecte leadgeneratie
+              Vertel ons over jouw branche en wij maken de perfecte leadgeneratie
               strategie. Volledig op maat, zonder verplichtingen.
             </p>
             <div className="mt-6 flex flex-col gap-3 sm:flex-row md:mt-8">

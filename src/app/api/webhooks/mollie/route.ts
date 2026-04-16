@@ -180,7 +180,7 @@ export async function POST(request: NextRequest) {
 
           sendPushToCustomer(cust.id, {
             title: 'Betaling ontvangen!',
-            body: `Uw batch ${branchName} (${claimed.batch_size} leads) is betaald.`,
+            body: `Je batch ${branchName} (${claimed.batch_size} leads) is betaald.`,
             url: '/portal',
             tag: 'batch-paid',
           }).catch(() => {});
@@ -400,7 +400,7 @@ export async function POST(request: NextRequest) {
 
         sendPushToCustomer(orderCust.id, {
           title: 'Bestelling bevestigd!',
-          body: `Uw nieuwe batch ${branchName} (${order.batch_size} leads) is aangemaakt.`,
+          body: `Je nieuwe batch ${branchName} (${order.batch_size} leads) is aangemaakt.`,
           url: '/portal',
           tag: 'order-confirmed',
         }).catch(() => {});

@@ -14,7 +14,7 @@ export const metadata: Metadata = {
   title:
     "ROI Berekenen van Leadgeneratie: Complete Formule Gids | WarmeLeads Blog",
   description:
-    "Leer hoe u de ROI van leadgeneratie correct berekent. Complete gids met formules, voorbeelden en tips voor optimalisatie van uw marketing investeringen.",
+    "Leer hoe je de ROI van leadgeneratie correct berekent. Complete gids met formules, voorbeelden en tips voor optimalisatie van je marketing investeringen.",
   keywords:
     "ROI leadgeneratie berekenen, lead generation ROI, marketing ROI formule, leadgeneratie rendement, ROI optimalisatie",
 };
@@ -140,7 +140,7 @@ export default function ROIBerekeningPage() {
                   2. Optimaliseer Lead Kosten
                 </h4>
                 <p className="text-sm text-slate-600">
-                  Kies de juiste mix van exclusieve en gedeelde leads voor uw
+                  Kies de juiste mix van exclusieve en gedeelde leads voor je
                   situatie en budget.
                 </p>
               </div>
@@ -164,7 +164,7 @@ export default function ROIBerekeningPage() {
               <p className="text-slate-600">
                 Onze klanten behalen gemiddeld 300-500% ROI op hun leadgeneratie
                 investering. Door onze kwaliteitsgarantie en verse leads uit
-                campagnes minimaliseren we uw risico en maximaliseren uw return.
+                campagnes minimaliseren we je risico en maximaliseren je return.
               </p>
             </div>
           </div>
@@ -174,10 +174,10 @@ export default function ROIBerekeningPage() {
         <section className="bg-slate-50 py-12 md:py-16">
           <div className="mx-auto max-w-3xl px-5 text-center lg:px-8">
             <h2 className="mb-3 text-2xl font-bold text-slate-900">
-              Bereken Uw ROI met Onze Leads
+              Bereken Je ROI met Onze Leads
             </h2>
             <p className="mb-6 text-slate-600">
-              Start vandaag en zie uw ROI groeien
+              Start vandaag en zie je ROI groeien
             </p>
             <div className="flex flex-col items-center justify-center gap-3 sm:flex-row">
               <Link

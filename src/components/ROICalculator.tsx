@@ -61,7 +61,7 @@ export function ROICalculator({ onComplete, industry }: ROICalculatorProps) {
         </div>
         <div>
           <h3 className="text-xl font-bold text-brand-navy">ROI Calculator</h3>
-          <p className="text-gray-600 text-sm">Bereken uw return on investment</p>
+          <p className="text-gray-600 text-sm">Bereken je return on investment</p>
         </div>
       </div>
 
@@ -195,7 +195,7 @@ export function ROICalculator({ onComplete, industry }: ROICalculatorProps) {
 
       {/* Disclaimer */}
       <div className="text-center text-xs text-gray-500 mt-4">
-        * Resultaten zijn indicatief en gebaseerd op uw instellingen
+        * Resultaten zijn indicatief en gebaseerd op je instellingen
       </div>
     </motion.div>
   );

@@ -113,7 +113,7 @@ export default function WarmtepompSubsidiesPage() {
               </h3>
               <p>
                 Slimme HVAC bedrijven spelen in op deze subsidie trends. Door
-                subsidie-gerichte messaging in uw leadgeneratie campagnes kunt u
+                subsidie-gerichte messaging in je leadgeneratie campagnes kun je
                 de conversiekans significant verhogen.
               </p>
 
@@ -123,7 +123,7 @@ export default function WarmtepompSubsidiesPage() {
                   Pro Tip
                 </h4>
                 <p className="text-slate-600">
-                  Gebruik &quot;€4.000 subsidie nog beschikbaar&quot; in uw advertenties.
+                  Gebruik &quot;€4.000 subsidie nog beschikbaar&quot; in je advertenties.
                   Dit creëert urgentie en verhoogt de klik-through rate met
                   gemiddeld 35%. Timing is alles in de subsidie periode.
                 </p>

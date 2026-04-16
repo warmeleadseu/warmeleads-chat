@@ -26,15 +26,15 @@ const faqData = [
     questions: [
       {
         q: 'Wat maakt WarmeLeads anders dan andere leadgenerators?',
-        a: 'Wij leveren verse leads met bewezen koopintentie uit eigen campagnes. Voor exclusieve en gedeelde verse leads starten we binnen 24u campagnes - leads komen real-time of binnen 24u binnen. Bulk leads zijn direct beschikbaar. Plus: bij exclusieve leads krijgt u een persoonlijk CRM portal!'
+        a: 'Wij leveren verse leads met bewezen koopintentie uit eigen campagnes. Voor exclusieve en gedeelde verse leads starten we binnen 24u campagnes - leads komen real-time of binnen 24u binnen. Bulk leads zijn direct beschikbaar. Plus: bij exclusieve leads krijg je een persoonlijk CRM portal!'
       },
       {
         q: 'Leveren jullie in Nederland én België?',
-        a: 'Ja! Wij genereren leads in zowel Nederland 🇳🇱 als België 🇧🇪. U kunt kiezen voor alleen Nederlandse, alleen Belgische, of leads uit beide landen. Alle contactgegevens zijn compleet en geverifieerd.'
+        a: 'Ja! Wij genereren leads in zowel Nederland 🇳🇱 als België 🇧🇪. Je kunt kiezen voor alleen Nederlandse, alleen Belgische, of leads uit beide landen. Alle contactgegevens zijn compleet en geverifieerd.'
       },
       {
         q: 'Wat als ik niet tevreden ben met de leads?',
-        a: 'Wij bieden 100% tevredenheidsgarantie. Slechte leads worden gratis vervangen. Exclusieve leads die niet voldoen aan kwaliteitseisen krijgt u gratis nieuw. Bij gedeelde verse en bulk leads krijgt u compensatie. Ons doel: 100% tevreden klanten!'
+        a: 'Wij bieden 100% tevredenheidsgarantie. Slechte leads worden gratis vervangen. Exclusieve leads die niet voldoen aan kwaliteitseisen krijg je gratis nieuw. Bij gedeelde verse en bulk leads krijg je compensatie. Ons doel: 100% tevreden klanten!'
       },
       {
         q: 'Voor welke branches leveren jullie leads?',
@@ -51,11 +51,11 @@ const faqData = [
       },
       {
         q: 'Zijn er setup kosten of verborgen kosten?',
-        a: 'Nee! Geen setup kosten, geen maandelijkse abonnementen, geen verborgen kosten. U betaalt alleen voor de leads die u ontvangt. Volledige transparantie.'
+        a: 'Nee! Geen setup kosten, geen maandelijkse abonnementen, geen verborgen kosten. Je betaalt alleen voor de leads die je ontvangt. Volledige transparantie.'
       },
       {
         q: 'Kan ik bestellen zonder account?',
-        a: 'Ja! Guest checkout is mogelijk - u hoeft geen account aan te maken. Na betaling ontvangt u uw leads per email (gedeeld vers & bulk) of krijgt u toegang tot een persoonlijk portal (exclusief). U kunt later altijd een account aanmaken.'
+        a: 'Ja! Guest checkout is mogelijk - je hoeft geen account aan te maken. Na betaling ontvang je je leads per email (gedeeld vers & bulk) of krijg je toegang tot een persoonlijk portal (exclusief). Je kunt later altijd een account aanmaken.'
       },
       {
         q: 'Welke betalingsmethoden accepteren jullie?',
@@ -63,7 +63,7 @@ const faqData = [
       },
       {
         q: 'Wat zijn de minimum aantallen per type?',
-        a: 'Verse Exclusieve leads: minimum 30 stuks. Gedeelde Verse leads: minimum 250 stuks. Bulk leads: minimum 100 stuks. Bij exclusieve en bulk leads krijgt u volumekorting bij grotere aantallen!'
+        a: 'Verse Exclusieve leads: minimum 30 stuks. Gedeelde Verse leads: minimum 250 stuks. Bulk leads: minimum 100 stuks. Bij exclusieve en bulk leads krijg je volumekorting bij grotere aantallen!'
       }
     ]
   },
@@ -72,7 +72,7 @@ const faqData = [
     questions: [
       {
         q: 'Wanneer ontvang ik mijn leads?',
-        a: 'EXCLUSIEF: We starten binnen 24u campagnes. Leads komen real-time binnen in uw portal zodra ze gegenereerd worden. GEDEELD VERS: Campagnes binnen 24u, Excel bestand binnen 24u per email. BULK: Excel bestand binnen 24u op uw email. U ontvangt automatisch een bevestiging na bestelling!'
+        a: 'EXCLUSIEF: We starten binnen 24u campagnes. Leads komen real-time binnen in je portal zodra ze gegenereerd worden. GEDEELD VERS: Campagnes binnen 24u, Excel bestand binnen 24u per email. BULK: Excel bestand binnen 24u op je email. Je ontvangt automatisch een bevestiging na bestelling!'
       },
       {
         q: 'Wat gebeurt er na mijn bestelling?',
@@ -80,7 +80,7 @@ const faqData = [
       },
       {
         q: 'Krijg ik toegang tot een CRM of portal?',
-        a: 'Alleen bij VERSE EXCLUSIEVE leads krijgt u toegang tot uw persoonlijk portal met: real-time lead overview, conversie tracking, ROI analytics, Google Sheets integratie, en mobiele app. Gedeelde verse en bulk leads komen als Excel bestand dat u in uw eigen CRM kunt importeren.'
+        a: 'Alleen bij VERSE EXCLUSIEVE leads krijg je toegang tot je persoonlijk portal met: real-time lead overview, conversie tracking, ROI analytics, Google Sheets integratie, en mobiele app. Gedeelde verse en bulk leads komen als Excel bestand dat je in je eigen CRM kunt importeren.'
       },
       {
         q: 'Hoe worden de leads gegenereerd?',
@@ -97,19 +97,19 @@ const faqData = [
     questions: [
       {
         q: 'Hoe integreer ik de leads met mijn systeem?',
-        a: 'EXCLUSIEVE leads: Automatische sync met Google Sheets (bidirectioneel). Export naar CSV/Excel mogelijk. Via portal direct bellen, mailen of exporteren. GEDEELDE VERS & BULK: Excel bestand dat u direct kunt importeren in elk CRM systeem (Salesforce, HubSpot, Pipedrive, etc.).'
+        a: 'EXCLUSIEVE leads: Automatische sync met Google Sheets (bidirectioneel). Export naar CSV/Excel mogelijk. Via portal direct bellen, mailen of exporteren. GEDEELDE VERS & BULK: Excel bestand dat je direct kunt importeren in elk CRM systeem (Salesforce, HubSpot, Pipedrive, etc.).'
       },
       {
         q: 'Welke data krijg ik per lead?',
-        a: 'Per lead ontvangt u: Volledige naam, telefoonnummer, email, postcode/stad, land (NL/BE), specifieke interesse (bijv. "10 zonnepanelen"), gewenste contact moment, en aanvullende opmerkingen. Alles wat u nodig heeft voor een sterk eerste contact!'
+        a: 'Per lead ontvangt u: Volledige naam, telefoonnummer, email, postcode/stad, land (NL/BE), specifieke interesse (bijv. "10 zonnepanelen"), gewenste contact moment, en aanvullende opmerkingen. Alles wat je nodig hebt voor een sterk eerste contact!'
       },
       {
         q: 'Is mijn data veilig en AVG-compliant?',
-        a: 'Absoluut! Wij zijn 100% AVG-compliant. Alle data wordt versleuteld opgeslagen op Nederlandse servers. Leads hebben toestemming gegeven voor contact. U bent verwerkingsverantwoordelijke voor uw eigen leads. Privacy garantie!'
+        a: 'Absoluut! Wij zijn 100% AVG-compliant. Alle data wordt versleuteld opgeslagen op Nederlandse servers. Leads hebben toestemming gegeven voor contact. Je bent verwerkingsverantwoordelijke voor je eigen leads. Privacy garantie!'
       },
       {
         q: 'Kan ik het portal op mobiel gebruiken?',
-        a: 'Ja! Het portal (bij exclusieve leads) is volledig responsive en werkt perfect op mobiel, tablet en desktop. Ontvang push notificaties bij nieuwe leads (opt-in). Bel direct vanuit de app. Alles wat u nodig heeft, altijd bij de hand!'
+        a: 'Ja! Het portal (bij exclusieve leads) is volledig responsive en werkt perfect op mobiel, tablet en desktop. Ontvang push notificaties bij nieuwe leads (opt-in). Bel direct vanuit de app. Alles wat je nodig hebt, altijd bij de hand!'
       }
     ]
   },
@@ -136,7 +136,7 @@ const faqData = [
       },
       {
         q: 'Hoeveel leads heb ik nodig per maand?',
-        a: 'Dat hangt af van uw doelen! Voorbeeld: Bij 20% conversie en doel van 10 nieuwe klanten/maand heeft u 50 leads nodig. Start conservatief met bulk of gedeeld vers om uw persoonlijke conversieratio te bepalen, dan kunt u opschalen met exclusief.',
+        a: 'Dat hangt af van je doelen! Voorbeeld: Bij 20% conversie en doel van 10 nieuwe klanten/maand heb je 50 leads nodig. Start conservatief met bulk of gedeeld vers om je persoonlijke conversieratio te bepalen, dan kun je opschalen met exclusief.',
         chatPrompt: 'Help me mijn behoeften bepalen',
         context: 'roi' as ChatContext
       }
@@ -357,7 +357,7 @@ export function SmartFAQ({ onBackToHome, onStartChat, onDirectOrder }: SmartFAQP
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
             >
-              💬 Stel uw vraag aan Lisa
+              💬 Stel je vraag aan Lisa
             </motion.button>
           </motion.div>
         )}
@@ -370,10 +370,10 @@ export function SmartFAQ({ onBackToHome, onStartChat, onDirectOrder }: SmartFAQP
           transition={{ delay: 0.3 }}
         >
           <h3 className="text-white font-semibold mb-2 text-lg">
-            Uw vraag er niet tussen?
+            Je vraag er niet tussen?
           </h3>
           <p className="text-white/80 mb-4 text-sm md:text-base">
-            Lisa beantwoordt al uw vragen persoonlijk en kan direct een offerte maken!
+            Lisa beantwoordt al je vragen persoonlijk en kan direct een offerte maken!
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <motion.button

@@ -474,10 +474,10 @@ export default function BlogPostClient({ article, relatedArticles }: BlogPostCli
               <SparklesIcon className="h-7 w-7 text-brand-orange" />
             </div>
             <h3 className="text-3xl md:text-4xl font-bold text-white mb-4">
-              Klaar om uw leadgeneratie te transformeren?
+              Klaar om je leadgeneratie te transformeren?
             </h3>
             <p className="text-white/90 text-lg mb-8 max-w-2xl mx-auto leading-relaxed">
-              WarmeLeads levert dagelijks verse, hoogwaardige leads voor uw bedrijf.
+              WarmeLeads levert dagelijks verse, hoogwaardige leads voor je bedrijf.
               Van zonnepanelen tot thuisbatterijen, van warmtepompen tot financial lease.
             </p>
             <Link

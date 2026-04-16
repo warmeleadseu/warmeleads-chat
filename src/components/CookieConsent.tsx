@@ -56,7 +56,7 @@ export function CookieConsent() {
 
               <div className="flex-1 min-w-0">
                 <p className="text-sm leading-relaxed text-slate-700">
-                  Wij gebruiken cookies om uw ervaring te verbeteren en onze
+                  Wij gebruiken cookies om je ervaring te verbeteren en onze
                   website te analyseren.{' '}
                   <Link
                     href="/privacyverklaring"

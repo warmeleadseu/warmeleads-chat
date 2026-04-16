@@ -500,7 +500,7 @@ export default function GratisAccountPage() {
                       <div>
                         <label className="mb-1.5 block text-xs font-semibold text-slate-600">E-mailadres *</label>
                         <div className="relative">
-                          <input type="email" value={email} onChange={(e) => handleEmailChange(e.target.value)} placeholder="uw@bedrijf.nl" className={`${inputClass} pr-10`} />
+                          <input type="email" value={email} onChange={(e) => handleEmailChange(e.target.value)} placeholder="naam@bedrijf.nl" className={`${inputClass} pr-10`} />
                           {email && (
                             <div className="absolute right-3 top-1/2 -translate-y-1/2">
                               {emailChecking ? (

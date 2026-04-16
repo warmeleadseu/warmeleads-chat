@@ -128,7 +128,7 @@ export default function ThuisbatterijMarktBlogPage() {
                 </h4>
                 <p className="text-slate-600">
                   De beste tijd voor thuisbatterij leads is oktober-maart, wanneer
-                  energierekeningen het hoogst zijn. Plan uw leadgeneratie budget
+                  energierekeningen het hoogst zijn. Plan je leadgeneratie budget
                   strategisch rond deze periode voor maximale ROI.
                 </p>
               </div>

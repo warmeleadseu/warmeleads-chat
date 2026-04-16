@@ -34,11 +34,11 @@ export function SimpleValueCard({ onStartROIChat }: SimpleValueCardProps) {
         </div>
         
         <h3 className="text-xl font-bold text-white mb-2 group-hover:text-white">
-          Bereken uw potentiële winst
+          Bereken je potentiële winst
         </h3>
         
         <p className="text-white/80 group-hover:text-white/90 transition-colors mb-4">
-          Ontdek hoeveel omzet u kunt genereren met onze leads
+          Ontdek hoeveel omzet je kunt genereren met onze leads
         </p>
 
         {/* Quick Preview */}

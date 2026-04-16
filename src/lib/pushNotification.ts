@@ -76,7 +76,7 @@ export async function sendNewLeadPush(
   lead: { naam_klant?: string; plaatsnaam?: string; branch?: string },
 ): Promise<void> {
   const parts = [lead.naam_klant, lead.plaatsnaam].filter(Boolean);
-  const body = parts.length > 0 ? parts.join(' uit ') : 'Bekijk de details in uw portaal';
+  const body = parts.length > 0 ? parts.join(' uit ') : 'Bekijk de details in je portaal';
 
   try {
     await sendPushToCustomer(customerId, {
@@ -102,15 +102,15 @@ export async function sendBatchMilestonePush(
   const messages: Record<string, { title: string; body: string }> = {
     '80pct': {
       title: 'Batch bijna vol!',
-      body: `Uw batch ${branchName} is bijna voltooid. Bestel nu een vervolg batch.`,
+      body: `Je batch ${branchName} is bijna voltooid. Bestel nu een vervolg batch.`,
     },
     completed: {
       title: 'Batch voltooid!',
-      body: `Uw batch ${branchName} is volledig geleverd. Bestel een nieuwe batch om leads te blijven ontvangen.`,
+      body: `Je batch ${branchName} is volledig geleverd. Bestel een nieuwe batch om leads te blijven ontvangen.`,
     },
     reminder: {
-      title: `U mist leads in ${branchName}`,
-      body: 'Uw batch is al een paar dagen voltooid. Bestel een nieuwe batch om weer leads te ontvangen.',
+      title: `Je mist leads in ${branchName}`,
+      body: 'Je batch is al een paar dagen voltooid. Bestel een nieuwe batch om weer leads te ontvangen.',
     },
   };
 

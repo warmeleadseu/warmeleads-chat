@@ -122,7 +122,7 @@ export async function DELETE(request: NextRequest) {
     if (!id) return NextResponse.json({ error: 'ID is verplicht' }, { status: 400 });
 
     if (id === admin.id) {
-      return NextResponse.json({ error: 'U kunt uzelf niet deactiveren' }, { status: 400 });
+      return NextResponse.json({ error: 'Je kunt jezelf niet deactiveren' }, { status: 400 });
     }
 
     const supabase = createServerClient();
