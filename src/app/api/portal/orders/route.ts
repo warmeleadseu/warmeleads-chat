@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyCustomer, portalUnauthorized } from '@/lib/portalAuth';
 import { createServerClient } from '@/lib/supabase';
 import { createBatchPayment } from '@/lib/mollie';
+import { calculatePricePerLead, mergeCustomTiers } from '@/lib/pricing';
 
 export async function GET(request: NextRequest) {
   const customer = await verifyCustomer(request);
@@ -102,7 +103,45 @@ export async function POST(request: NextRequest) {
     }
 
     if (!branch && body.branch) branch = body.branch;
-    if (!price_per_lead && body.price_per_lead) price_per_lead = Number(body.price_per_lead);
+
+    if (!price_per_lead && branch) {
+      const [{ data: branchData }, { data: customPricing }] = await Promise.all([
+        supabase
+          .from('branches')
+          .select('pricing_tiers, nationwide_discount')
+          .eq('slug', branch)
+          .single(),
+        supabase
+          .from('customer_pricing')
+          .select('pricing_tiers, nationwide_discount')
+          .eq('customer_id', customer.id)
+          .eq('branch_slug', branch)
+          .maybeSingle(),
+      ]);
+
+      if (branchData) {
+        const branchTiers = branchData.pricing_tiers || [];
+        const hasCustom = !!(customPricing?.pricing_tiers?.length);
+        const customTiers = hasCustom ? customPricing!.pricing_tiers : [];
+        const tiers = customTiers.length > 0
+          ? mergeCustomTiers(branchTiers, customTiers)
+          : branchTiers;
+
+        const nationwideDiscount = hasCustom && customPricing!.nationwide_discount != null
+          ? customPricing!.nationwide_discount
+          : (branchData.nationwide_discount || 0);
+
+        const result = calculatePricePerLead(tiers, batch_size, {
+          nationwideDiscount: Number(nationwideDiscount),
+          isNationwide: false,
+          isCustom: hasCustom,
+        });
+
+        if (result) {
+          price_per_lead = result.price_per_lead;
+        }
+      }
+    }
 
     if (!branch || !price_per_lead) {
       return NextResponse.json({ error: 'Geen branche of prijsinformatie beschikbaar. Neem contact op met WarmeLeads.' }, { status: 400 });

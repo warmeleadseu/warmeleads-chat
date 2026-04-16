@@ -1,8 +1,32 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import Script from 'next/script';
 
+const STORAGE_KEY = 'warmeleads-cookie-consent';
+
 export function GoogleAnalytics() {
+  const [consented, setConsented] = useState(false);
+
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(STORAGE_KEY) === 'accepted') {
+        setConsented(true);
+      }
+    } catch {}
+
+    function onConsentUpdate(e: Event) {
+      if ((e as CustomEvent).detail === 'accepted') {
+        setConsented(true);
+      }
+    }
+
+    window.addEventListener('cookie-consent-update', onConsentUpdate);
+    return () => window.removeEventListener('cookie-consent-update', onConsentUpdate);
+  }, []);
+
+  if (!consented) return null;
+
   return (
     <>
       <Script
@@ -20,9 +44,3 @@ export function GoogleAnalytics() {
     </>
   );
 }
-
-
-
-
-
-

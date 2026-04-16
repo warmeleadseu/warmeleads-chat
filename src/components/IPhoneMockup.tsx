@@ -31,7 +31,7 @@ const DEMO_LEADS = [
 
 export function IPhoneMockup() {
   return (
-    <div className="relative w-[240px] lg:w-[280px]">
+    <div className="relative w-[240px] lg:w-[280px]" aria-hidden="true">
       <div className="pointer-events-none absolute -inset-10 rounded-[60px] bg-gradient-to-br from-brand-purple/30 via-brand-pink/15 to-brand-orange/20 blur-[60px]" />
 
       <div

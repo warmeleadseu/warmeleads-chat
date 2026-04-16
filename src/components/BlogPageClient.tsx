@@ -184,7 +184,7 @@ export default function BlogPageClient() {
                 </div>
                 <div className="flex items-center gap-2">
                   <ArrowUpCircleIcon className="h-4 w-4 text-brand-orange" />
-                  <span>Dagelijks updates</span>
+                  <span>Wekelijks nieuwe artikelen</span>
                 </div>
               </div>
             </motion.div>
@@ -198,9 +198,10 @@ export default function BlogPageClient() {
             className="max-w-2xl mx-auto mb-8"
           >
             <div className="relative">
-              <MagnifyingGlassIcon className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-white/40" />
+              <MagnifyingGlassIcon className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-white/40" aria-hidden="true" />
               <input
-                type="text"
+                type="search"
+                aria-label="Zoek artikelen"
                 placeholder="Zoek artikelen over leadgeneratie, SEO, marketing..."
                 value={searchQuery}
                 onChange={(e) => {
@@ -213,9 +214,10 @@ export default function BlogPageClient() {
               {searchQuery && (
                 <button
                   onClick={() => setSearchQuery('')}
+                  aria-label="Zoekopdracht wissen"
                   className="absolute right-4 top-1/2 -translate-y-1/2 text-white/60 hover:text-white/90 transition-colors"
                 >
-                  <XMarkIcon className="h-5 w-5" />
+                  <XMarkIcon className="h-5 w-5" aria-hidden="true" />
                 </button>
               )}
             </div>
@@ -232,6 +234,7 @@ export default function BlogPageClient() {
                 <button
                   key={category}
                   onClick={() => handleCategoryChange(category)}
+                  aria-pressed={selectedCategory === category}
                   className={`
                     px-6 py-3 rounded-xl font-semibold text-sm transition-all duration-300
                     ${selectedCategory === category

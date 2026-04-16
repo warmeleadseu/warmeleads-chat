@@ -88,13 +88,6 @@ export function StructuredData() {
               }
             }
           ]
-        },
-        "aggregateRating": {
-          "@type": "AggregateRating",
-          "ratingValue": "4.8",
-          "reviewCount": "40",
-          "bestRating": "5",
-          "worstRating": "1"
         }
       },
       {

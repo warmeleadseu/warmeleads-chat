@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Dit e-mailadres is al in gebruik' }, { status: 409 });
     }
 
-    const passwordHash = await bcrypt.hash(password, 10);
+    const passwordHash = await bcrypt.hash(password, 12);
     const welcomeExpiry = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
 
     const { data: customer, error: insertErr } = await supabase

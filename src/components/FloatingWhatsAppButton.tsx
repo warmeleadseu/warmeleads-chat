@@ -48,9 +48,12 @@ export function FloatingWhatsAppButton() {
         href={whatsappUrl}
         target="_blank"
         rel="noopener noreferrer"
+        aria-label="Chat met ons via WhatsApp"
         className="flex items-center bg-[#25D366] hover:bg-[#20BD5A] text-white rounded-full shadow-2xl group overflow-hidden"
         onHoverStart={() => setIsHovered(true)}
         onHoverEnd={() => setIsHovered(false)}
+        onFocus={() => setIsHovered(true)}
+        onBlur={() => setIsHovered(false)}
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
         animate={{ width: isHovered ? 200 : 64 }}

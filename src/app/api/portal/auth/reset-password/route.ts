@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
 
     const { error: updateError } = await supabase
       .from('customers')
-      .update({ password_hash: passwordHash })
+      .update({ password_hash: passwordHash, portal_password: passwordHash })
       .eq('id', resetToken.customer_id);
 
     if (updateError) {

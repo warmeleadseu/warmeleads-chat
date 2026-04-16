@@ -24,6 +24,7 @@ export function CookieConsent() {
     try {
       localStorage.setItem(STORAGE_KEY, value);
     } catch { /* localStorage unavailable */ }
+    window.dispatchEvent(new CustomEvent('cookie-consent-update', { detail: value }));
     setVisible(false);
   }
 
