@@ -13,7 +13,6 @@ import {
   UserGroupIcon,
   ClipboardDocumentIcon,
   CheckIcon,
-  ArrowTopRightOnSquareIcon,
   KeyIcon,
   ShieldCheckIcon,
   ShieldExclamationIcon,
@@ -28,8 +27,6 @@ import {
   CheckCircleIcon,
   ExclamationTriangleIcon,
   EnvelopeIcon,
-  ClockIcon,
-  FunnelIcon,
   ChevronUpDownIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
@@ -146,46 +143,106 @@ interface BranchField {
 
 interface AccountManager { id: string; name: string; role: string }
 
+interface Kpis {
+  totalCustomers: number;
+  activeCustomers: number;
+  portalUsers: number;
+  active7d: number;
+  neverLoggedIn: number;
+  churning: number;
+}
+
+interface CustomerWithExtra extends Customer {
+  active_batch_count?: number;
+}
+
+const BRANCH_COLOR_MAP: Record<string, string> = {
+  emerald: 'bg-emerald-50 text-emerald-600', sky: 'bg-sky-50 text-sky-600', amber: 'bg-amber-50 text-amber-600',
+  purple: 'bg-purple-50 text-purple-600', rose: 'bg-rose-50 text-rose-600', cyan: 'bg-cyan-50 text-cyan-600',
+  lime: 'bg-lime-50 text-lime-600', indigo: 'bg-indigo-50 text-indigo-600', teal: 'bg-teal-50 text-teal-600',
+  slate: 'bg-slate-50 text-slate-600',
+};
+
+type SortKey = 'name' | 'created' | 'last_login' | 'login_count';
+
+function SortHeader({ label, field, current, order, onSort }: { label: string; field: SortKey; current: SortKey; order: 'asc' | 'desc'; onSort: (f: SortKey) => void }) {
+  const isActive = current === field;
+  return (
+    <button onClick={() => onSort(field)} className="group inline-flex items-center gap-1 text-left">
+      <span>{label}</span>
+      <ChevronUpDownIcon className={`h-3.5 w-3.5 transition ${isActive ? 'text-brand-purple' : 'text-slate-300 group-hover:text-slate-400'}`} />
+      {isActive && (
+        <span className="text-[10px] text-brand-purple">{order === 'asc' ? '↑' : '↓'}</span>
+      )}
+    </button>
+  );
+}
+
 export default function CustomersPage() {
-  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [customers, setCustomers] = useState<CustomerWithExtra[]>([]);
   const [branchOptions, setBranchOptions] = useState<BranchOption[]>([]);
   const [accountManagers, setAccountManagers] = useState<AccountManager[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<Customer | null>(null);
   const [showNew, setShowNew] = useState(false);
-  const [copied, setCopied] = useState<string | null>(null);
-  const [resettingPw, setResettingPw] = useState<string | null>(null);
-  const [newPw, setNewPw] = useState('');
-  const [pwSaving, setPwSaving] = useState(false);
-  const [togglingPortal, setTogglingPortal] = useState<string | null>(null);
-  const [showPw, setShowPw] = useState<string | null>(null);
-  const [targetsFor, setTargetsFor] = useState<Customer | null>(null);
-  const [batchesFor, setBatchesFor] = useState<Customer | null>(null);
-  const [leadsFor, setLeadsFor] = useState<Customer | null>(null);
-  const [pricingFor, setPricingFor] = useState<Customer | null>(null);
-  const [allBatches, setAllBatches] = useState<Batch[]>([]);
-  const [search, setSearch] = useState('');
-  const [activityFilter, setActivityFilter] = useState('all');
-  const [sortBy, setSortBy] = useState('name');
+  const [selectedCustomer, setSelectedCustomer] = useState<CustomerWithExtra | null>(null);
+  const [previewReminder, setPreviewReminder] = useState<Customer | null>(null);
   const [sendingReminder, setSendingReminder] = useState<string | null>(null);
   const [reminderSent, setReminderSent] = useState<Set<string>>(new Set());
-  const [previewReminder, setPreviewReminder] = useState<Customer | null>(null);
-  const [impersonating, setImpersonating] = useState<string | null>(null);
 
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [kpis, setKpis] = useState<Kpis | null>(null);
+
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [sortBy, setSortBy] = useState<SortKey>('name');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const portalUrl = typeof window !== 'undefined' ? `${window.location.origin}/portal` : 'https://www.warmeleads.eu/portal';
 
-  const fetch_ = useCallback(async () => {
-    setLoading(true);
-    const [custRes, batchRes] = await Promise.all([
-      adminFetch('/api/admin/customers'),
-      adminFetch('/api/admin/batches'),
-    ]);
-    if (custRes.ok) { const d = await custRes.json(); setCustomers(d.customers || []); }
-    if (batchRes.ok) { const d = await batchRes.json(); setAllBatches(d || []); }
-    setLoading(false);
-  }, []);
+  useEffect(() => {
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(() => {
+      setDebouncedSearch(search);
+      setPage(1);
+    }, 300);
+    return () => { if (searchTimer.current) clearTimeout(searchTimer.current); };
+  }, [search]);
 
-  useEffect(() => { fetch_(); }, [fetch_]);
+  const fetchCustomers = useCallback(async () => {
+    setLoading(true);
+    const params = new URLSearchParams({
+      page: String(page),
+      limit: '25',
+      sort: sortBy,
+      order: sortOrder,
+    });
+    if (debouncedSearch) params.set('search', debouncedSearch);
+    if (statusFilter !== 'all') params.set('status', statusFilter);
+
+    try {
+      const res = await adminFetch(`/api/admin/customers?${params}`);
+      if (res.ok) {
+        const d = await res.json();
+        const newCustomers: CustomerWithExtra[] = d.customers || [];
+        setCustomers(newCustomers);
+        setTotal(d.total || 0);
+        setTotalPages(d.totalPages || 1);
+        if (d.kpis) setKpis(d.kpis);
+        setSelectedCustomer(prev => {
+          if (!prev) return null;
+          return newCustomers.find(c => c.id === prev.id) || null;
+        });
+      }
+    } catch { /* ignore */ }
+    setLoading(false);
+  }, [page, debouncedSearch, statusFilter, sortBy, sortOrder]);
+
+  useEffect(() => { fetchCustomers(); }, [fetchCustomers]);
 
   const fetchBranches = useCallback(async () => {
     const res = await adminFetch('/api/admin/branches');
@@ -199,40 +256,19 @@ export default function CustomersPage() {
     }).catch(() => {});
   }, []);
 
-  const handleDelete = async (id: string, name: string) => {
-    if (!confirm(`${name} verwijderen? Leads van deze klant worden niet verwijderd.`)) return;
-    await adminFetch('/api/admin/customers', { method: 'DELETE', body: JSON.stringify({ id }) });
-    fetch_();
+  const handleSort = (field: SortKey) => {
+    if (sortBy === field) {
+      setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(field);
+      setSortOrder('asc');
+    }
+    setPage(1);
   };
 
-  const copyCredentials = (c: Customer) => {
-    const text = `Portaal login voor ${c.name}:\nURL: ${portalUrl}\nE-mail: ${c.email}\n\n(Wachtwoord is eerder door jullie gedeeld)`;
-    navigator.clipboard.writeText(text);
-    setCopied(c.id);
-    setTimeout(() => setCopied(null), 2000);
-  };
-
-  const resetPassword = async (customerId: string) => {
-    if (!newPw || newPw.length < 6) return;
-    setPwSaving(true);
-    await adminFetch('/api/admin/customers', {
-      method: 'PUT',
-      body: JSON.stringify({ id: customerId, password: newPw }),
-    });
-    setPwSaving(false);
-    setResettingPw(null);
-    setNewPw('');
-    fetch_();
-  };
-
-  const togglePortal = async (c: Customer) => {
-    setTogglingPortal(c.id);
-    await adminFetch('/api/admin/customers', {
-      method: 'PUT',
-      body: JSON.stringify({ id: c.id, portal_active: !c.portal_active }),
-    });
-    setTogglingPortal(null);
-    fetch_();
+  const handleFilterChange = (newFilter: string) => {
+    setStatusFilter(newFilter);
+    setPage(1);
   };
 
   const sendReminder = async (c: Customer) => {
@@ -253,81 +289,9 @@ export default function CustomersPage() {
     setSendingReminder(null);
   };
 
-  const impersonateCustomer = async (customerId: string) => {
-    setImpersonating(customerId);
-    try {
-      const res = await adminFetch('/api/admin/impersonate', {
-        method: 'POST',
-        body: JSON.stringify({ customer_id: customerId }),
-      });
-      if (!res.ok) { const d = await res.json(); alert(d.error || 'Impersonatie mislukt'); return; }
-      const { token } = await res.json();
-      window.open(`/portal?impersonate=${token}`, '_blank');
-    } catch { alert('Er ging iets mis'); }
-    setImpersonating(null);
-  };
-
-  const portalUsers = customers.filter(c => c.portal_active && c.has_password);
-  const getLastActive = (c: Customer) => {
-    const seen = c.last_seen_at ? new Date(c.last_seen_at).getTime() : 0;
-    const login = c.last_login_at ? new Date(c.last_login_at).getTime() : 0;
-    return Math.max(seen, login);
-  };
-  const activePortalUsers = portalUsers.filter(c => {
-    const t = getLastActive(c);
-    if (!t) return false;
-    return Date.now() - t < 7 * 24 * 60 * 60 * 1000;
-  });
-  const neverLoggedIn = portalUsers.filter(c => !c.last_login_at || !c.login_count);
-  const churning = portalUsers.filter(c => {
-    const t = getLastActive(c);
-    if (!t) return false;
-    return Date.now() - t > 30 * 24 * 60 * 60 * 1000;
-  });
-
-  const filtered = useMemo(() => {
-    let list = [...customers];
-
-    if (search) {
-      const s = search.toLowerCase();
-      list = list.filter(c =>
-        c.name.toLowerCase().includes(s) ||
-        (c.contact_person || '').toLowerCase().includes(s) ||
-        (c.email || '').toLowerCase().includes(s)
-      );
-    }
-
-    if (activityFilter === 'active') {
-      list = list.filter(c => { const t = getLastActive(c); return t && Date.now() - t < 7 * 24 * 60 * 60 * 1000; });
-    } else if (activityFilter === 'never') {
-      list = list.filter(c => c.portal_active && c.has_password && (!c.last_login_at || !c.login_count));
-    } else if (activityFilter === 'inactive') {
-      list = list.filter(c => { const t = getLastActive(c); return t && Date.now() - t > 30 * 24 * 60 * 60 * 1000; });
-    }
-
-    list.sort((a, b) => {
-      if (sortBy === 'last_login') {
-        const aTime = getLastActive(a);
-        const bTime = getLastActive(b);
-        return bTime - aTime;
-      }
-      if (sortBy === 'login_count') {
-        return (b.login_count || 0) - (a.login_count || 0);
-      }
-      if (sortBy === 'activity') {
-        return getActivityStatus(a).sort - getActivityStatus(b).sort;
-      }
-      if (sortBy === 'created') {
-        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-      }
-      return a.name.localeCompare(b.name);
-    });
-
-    return list;
-  }, [customers, search, activityFilter, sortBy]);
-
   return (
     <div>
+      {/* Header */}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">Klanten</h1>
@@ -338,426 +302,349 @@ export default function CustomersPage() {
         </button>
       </div>
 
-      {/* Activity KPIs */}
-      {!loading && customers.length > 0 && (
-        <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      {/* KPI bar */}
+      {kpis && (
+        <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
+          <button onClick={() => handleFilterChange('all')} className={`rounded-xl border bg-white p-4 shadow-sm text-left transition hover:shadow-md ${statusFilter === 'all' ? 'border-brand-purple ring-1 ring-brand-purple/30' : 'border-slate-200'}`}>
+            <p className="text-[11px] font-medium uppercase tracking-wider text-slate-400">Totaal</p>
+            <p className="mt-1 text-2xl font-bold text-brand-purple">{kpis.totalCustomers}</p>
+            <p className="mt-0.5 text-[11px] text-slate-400">{kpis.activeCustomers} actief</p>
+          </button>
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <p className="text-[11px] font-medium uppercase tracking-wider text-slate-400">Portaalgebruikers</p>
+            <p className="mt-1 text-2xl font-bold text-blue-600">{kpis.portalUsers}</p>
+          </div>
+          <button onClick={() => handleFilterChange(statusFilter === 'active' ? 'all' : 'active')} className={`rounded-xl border bg-white p-4 shadow-sm text-left transition hover:shadow-md ${statusFilter === 'active' ? 'border-emerald-400 ring-1 ring-emerald-300/30' : 'border-slate-200'}`}>
             <p className="text-[11px] font-medium uppercase tracking-wider text-slate-400">Actief (7d)</p>
-            <p className="mt-1 text-2xl font-bold text-emerald-600">{activePortalUsers.length}</p>
-            <p className="mt-0.5 text-[11px] text-slate-400">van {portalUsers.length} portaalgebruikers</p>
-          </div>
-          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <p className="mt-1 text-2xl font-bold text-emerald-600">{kpis.active7d}</p>
+          </button>
+          <button onClick={() => handleFilterChange(statusFilter === 'never' ? 'all' : 'never')} className={`rounded-xl border bg-white p-4 shadow-sm text-left transition hover:shadow-md ${statusFilter === 'never' ? 'border-red-400 ring-1 ring-red-300/30' : 'border-slate-200'}`}>
             <p className="text-[11px] font-medium uppercase tracking-wider text-slate-400">Nooit ingelogd</p>
-            <p className="mt-1 text-2xl font-bold text-red-500">{neverLoggedIn.length}</p>
-            <p className="mt-0.5 text-[11px] text-slate-400">portaal gereed maar ongebruikt</p>
-          </div>
-          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <p className="mt-1 text-2xl font-bold text-red-500">{kpis.neverLoggedIn}</p>
+          </button>
+          <button onClick={() => handleFilterChange(statusFilter === 'inactive' ? 'all' : 'inactive')} className={`rounded-xl border bg-white p-4 shadow-sm text-left transition hover:shadow-md ${statusFilter === 'inactive' ? 'border-amber-400 ring-1 ring-amber-300/30' : 'border-slate-200'}`}>
             <p className="text-[11px] font-medium uppercase tracking-wider text-slate-400">Dreigt af te haken</p>
-            <p className="mt-1 text-2xl font-bold text-amber-600">{churning.length}</p>
-            <p className="mt-0.5 text-[11px] text-slate-400">&gt;30 dagen geen login</p>
-          </div>
+            <p className="mt-1 text-2xl font-bold text-amber-600">{kpis.churning}</p>
+          </button>
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-[11px] font-medium uppercase tracking-wider text-slate-400">Totaal klanten</p>
-            <p className="mt-1 text-2xl font-bold text-brand-purple">{customers.length}</p>
-            <p className="mt-0.5 text-[11px] text-slate-400">{customers.filter(c => c.is_active).length} actief</p>
+            <p className="text-[11px] font-medium uppercase tracking-wider text-slate-400">Resultaten</p>
+            <p className="mt-1 text-2xl font-bold text-slate-700">{total}</p>
+            <p className="mt-0.5 text-[11px] text-slate-400">huidige filter</p>
           </div>
         </div>
       )}
 
-      {/* Search + filter + sort bar */}
-      {!loading && customers.length > 0 && (
-        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="relative flex-1 sm:max-w-xs">
-            <MagnifyingGlassIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Zoek op naam, contact, e-mail..."
-              className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm text-slate-800 outline-none focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/30" />
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5">
-              <FunnelIcon className="h-4 w-4 text-slate-400" />
-              <select value={activityFilter} onChange={e => setActivityFilter(e.target.value)}
-                className="bg-transparent text-sm text-slate-700 outline-none">
-                <option value="all">Alle klanten</option>
-                <option value="active">Actief (7d)</option>
-                <option value="never">Nooit ingelogd</option>
-                <option value="inactive">Inactief (30d+)</option>
-              </select>
-            </div>
-            <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5">
-              <ChevronUpDownIcon className="h-4 w-4 text-slate-400" />
-              <select value={sortBy} onChange={e => setSortBy(e.target.value)}
-                className="bg-transparent text-sm text-slate-700 outline-none">
-                <option value="name">Naam</option>
-                <option value="last_login">Laatst ingelogd</option>
-                <option value="login_count">Aantal logins</option>
-                <option value="activity">Activiteitsstatus</option>
-                <option value="created">Aangemaakt</option>
-              </select>
-            </div>
-            {(search || activityFilter !== 'all') && (
-              <button onClick={() => { setSearch(''); setActivityFilter('all'); }}
-                className="text-xs font-medium text-red-500 hover:text-red-600">Filters wissen</button>
-            )}
-          </div>
+      {/* Search bar */}
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="relative flex-1 sm:max-w-sm">
+          <MagnifyingGlassIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input
+            type="search"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Zoek op naam, contact, e-mail, plaats..."
+            className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm text-slate-800 outline-none focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/30"
+          />
         </div>
-      )}
+        {(search || statusFilter !== 'all') && (
+          <button onClick={() => { setSearch(''); setStatusFilter('all'); setPage(1); }}
+            className="text-xs font-medium text-red-500 hover:text-red-600">Filters wissen</button>
+        )}
+      </div>
 
-      {loading ? (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {[...Array(3)].map((_, i) => (
-            <div key={i} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="mb-3 flex items-start justify-between">
-                <div>
-                  <div className="h-5 w-32 animate-pulse rounded bg-slate-100" />
-                  <div className="mt-1.5 h-3 w-20 animate-pulse rounded bg-slate-50" />
-                </div>
-                <div className="h-5 w-14 animate-pulse rounded-full bg-slate-100" />
+      {/* Table */}
+      {loading && customers.length === 0 ? (
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="animate-pulse p-6">
+            {[...Array(8)].map((_, i) => (
+              <div key={i} className="flex gap-4 py-3">
+                <div className="h-4 w-40 rounded bg-slate-100" />
+                <div className="h-4 w-32 rounded bg-slate-50" />
+                <div className="h-4 w-24 rounded bg-slate-50" />
+                <div className="h-4 w-20 rounded bg-slate-100" />
+                <div className="h-4 w-16 rounded bg-slate-50" />
               </div>
-              <div className="mb-4 space-y-1">
-                <div className="h-3 w-40 animate-pulse rounded bg-slate-50" />
-                <div className="h-3 w-28 animate-pulse rounded bg-slate-50" />
-              </div>
-              <div className="h-36 w-full animate-pulse rounded-lg bg-slate-100" />
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
-      ) : customers.length === 0 ? (
+      ) : total === 0 && !loading ? (
         <div className="rounded-xl border border-slate-200 bg-white py-16 text-center shadow-sm">
           <BuildingOfficeIcon className="mx-auto mb-3 h-10 w-10 text-slate-300" />
-          <p className="text-sm text-slate-500">Nog geen klanten. Voeg je eerste klant toe.</p>
-        </div>
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {filtered.length === 0 ? (
-            <div className="col-span-full rounded-xl border border-dashed border-slate-300 bg-white py-12 text-center">
-              <MagnifyingGlassIcon className="mx-auto mb-2 h-8 w-8 text-slate-300" />
+          {debouncedSearch || statusFilter !== 'all' ? (
+            <>
               <p className="text-sm font-medium text-slate-500">Geen klanten gevonden</p>
               <p className="mt-0.5 text-xs text-slate-400">Pas je zoekterm of filters aan</p>
-            </div>
-          ) : filtered.map(c => {
-            const portalReady = c.portal_active && c.has_password && c.email;
-            const activity = getActivityStatus(c);
-            const isNew = Date.now() - new Date(c.created_at).getTime() < 7 * 24 * 60 * 60 * 1000;
-            const neverLogged = c.portal_active && c.has_password && (!c.last_login_at || !c.login_count);
-            const lastActiveTime = getLastActive(c);
-            const isChurning = lastActiveTime && Date.now() - lastActiveTime > 30 * 24 * 60 * 60 * 1000;
-            return (
-              <div key={c.id} className="rounded-xl border border-slate-200 bg-white shadow-sm transition hover:shadow-md">
-                <div className="p-5">
-                  {/* Header */}
-                  <div className="mb-3 flex items-start justify-between">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-semibold text-slate-900">{c.name}</h3>
-                        {portalReady && (
-                          <span className={`flex items-center gap-1 text-[11px] font-medium ${activity.color}`} title={lastActiveTime ? `Laatst actief: ${new Date(lastActiveTime).toLocaleString('nl-NL')}` : 'Nooit ingelogd'}>
-                            <span className={`inline-block h-1.5 w-1.5 rounded-full ${activity.dotColor} ${activity.sort === 0 ? 'animate-pulse' : ''}`} />
+            </>
+          ) : (
+            <p className="text-sm text-slate-500">Nog geen klanten. Voeg je eerste klant toe.</p>
+          )}
+        </div>
+      ) : (
+        <>
+          {/* Desktop table */}
+          <div className="relative hidden overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm md:block">
+            {loading && (
+              <div className="absolute inset-x-0 top-0 z-10 h-0.5">
+                <div className="h-full animate-pulse bg-brand-purple/60" />
+              </div>
+            )}
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-100 bg-slate-50/80">
+                    <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                      <SortHeader label="Naam" field="name" current={sortBy} order={sortOrder} onSort={handleSort} />
+                    </th>
+                    <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Contact</th>
+                    <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Branches</th>
+                    <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Status</th>
+                    <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Online</th>
+                    <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-500">Leads</th>
+                    <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-500">Batches</th>
+                    <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">AM</th>
+                    <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                      <SortHeader label="Aangemaakt" field="created" current={sortBy} order={sortOrder} onSort={handleSort} />
+                    </th>
+                    <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-500">Acties</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {customers.map(c => {
+                    const activity = getActivityStatus(c);
+                    const am = accountManagers.find(a => a.id === c.account_manager_id);
+                    return (
+                      <tr
+                        key={c.id}
+                        onClick={() => setSelectedCustomer(c)}
+                        className={`cursor-pointer transition hover:bg-slate-50/80 ${selectedCustomer?.id === c.id ? 'bg-brand-purple/5' : ''} ${loading ? 'opacity-60' : ''}`}
+                      >
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <div className="min-w-0">
+                              <p className="truncate font-semibold text-slate-900">{c.name}</p>
+                              {c.contact_person && <p className="truncate text-xs text-slate-500">{c.contact_person}</p>}
+                            </div>
+                            {Date.now() - new Date(c.created_at).getTime() < 7 * 24 * 60 * 60 * 1000 && (
+                              <span className="shrink-0 rounded-full bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-600">Nieuw</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <p className="truncate text-xs text-slate-600">{c.email}</p>
+                          {c.phone && <p className="truncate text-xs text-slate-400">{c.phone}</p>}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex flex-wrap gap-1">
+                            {c.branches?.slice(0, 3).map(bSlug => {
+                              const bo = branchOptions.find(x => x.slug === bSlug);
+                              return (
+                                <span key={bSlug} className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${BRANCH_COLOR_MAP[bo?.color || 'slate'] || BRANCH_COLOR_MAP.slate}`}>
+                                  {bo?.name || bSlug}
+                                </span>
+                              );
+                            })}
+                            {(c.branches?.length || 0) > 3 && (
+                              <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">+{c.branches!.length - 3}</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${c.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                            {c.is_active ? 'Actief' : 'Inactief'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`flex items-center gap-1.5 text-xs font-medium ${activity.color}`}>
+                            <span className={`inline-block h-2 w-2 rounded-full ${activity.dotColor} ${activity.sort === 0 ? 'animate-pulse' : ''}`} />
                             {activity.label}
                           </span>
-                        )}
-                      </div>
-                      {c.contact_person && <p className="text-xs text-slate-500">{c.contact_person}</p>}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <span className="text-xs font-semibold text-slate-700">{c.lead_count || 0}</span>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <span className="text-xs font-semibold text-slate-700">{c.active_batch_count || 0}</span>
+                        </td>
+                        <td className="px-4 py-3">
+                          {am ? (
+                            <span className="truncate text-xs font-medium text-slate-600">{am.name}</span>
+                          ) : (
+                            <span className="text-xs text-slate-300">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="text-xs text-slate-500">{timeAgo(c.created_at)}</span>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="flex items-center justify-end gap-1" onClick={e => e.stopPropagation()}>
+                            {c.portal_active && c.has_password && c.email && (
+                              <button
+                                onClick={() => {
+                                  (async () => {
+                                    const res = await adminFetch('/api/admin/impersonate', {
+                                      method: 'POST',
+                                      body: JSON.stringify({ customer_id: c.id }),
+                                    });
+                                    if (res.ok) { const { token } = await res.json(); window.open(`/portal?impersonate=${token}`, '_blank'); }
+                                  })();
+                                }}
+                                className="rounded-lg p-1.5 text-slate-400 transition hover:bg-amber-50 hover:text-amber-600"
+                                title="Bekijk portaal"
+                              >
+                                <EyeIcon className="h-4 w-4" />
+                              </button>
+                            )}
+                            <button
+                              onClick={() => setEditing(c)}
+                              className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-brand-purple"
+                              title="Bewerken"
+                            >
+                              <PencilSquareIcon className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Mobile card list */}
+          <div className="space-y-2 md:hidden">
+            {customers.map(c => {
+              const activity = getActivityStatus(c);
+              return (
+                <button
+                  key={c.id}
+                  onClick={() => setSelectedCustomer(c)}
+                  className={`w-full rounded-xl border bg-white p-4 text-left shadow-sm transition hover:shadow-md ${selectedCustomer?.id === c.id ? 'border-brand-purple ring-1 ring-brand-purple/30' : 'border-slate-200'}`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-semibold text-slate-900">{c.name}</p>
+                      {c.contact_person && <p className="truncate text-xs text-slate-500">{c.contact_person}</p>}
                     </div>
-                    <div className="ml-2 flex shrink-0 flex-col items-end gap-1">
-                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${c.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                    <div className="flex items-center gap-2">
+                      <span className={`flex items-center gap-1 text-[11px] font-medium ${activity.color}`}>
+                        <span className={`inline-block h-1.5 w-1.5 rounded-full ${activity.dotColor} ${activity.sort === 0 ? 'animate-pulse' : ''}`} />
+                        {activity.label}
+                      </span>
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${c.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
                         {c.is_active ? 'Actief' : 'Inactief'}
                       </span>
-                      {isNew && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-600">Nieuwe klant</span>}
-                      {!neverLogged && isChurning && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-600">Dreigt af te haken</span>}
-                      {(() => { const wo = getWelcomeOfferStatus(c); return wo ? <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${wo.className}`}>{wo.label}</span> : null; })()}
                     </div>
                   </div>
-
-                  {/* Contact */}
-                  {c.email && <p className="mb-0.5 text-xs text-slate-500">{c.email}</p>}
-                  {c.phone && <p className="mb-0.5 text-xs text-slate-500">{c.phone}</p>}
-                  {c.account_manager_id && (() => {
-                    const am = accountManagers.find(a => a.id === c.account_manager_id);
-                    return am ? <p className="mb-0.5 text-xs text-amber-600 font-medium">AM: {am.name}</p> : null;
-                  })()}
-                  <div className="mb-2" />
-
-                  {/* Branches + leads + login count */}
-                  <div className="mb-4 flex flex-wrap items-center gap-1.5">
-                    {c.branches?.map(bSlug => {
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    {c.branches?.slice(0, 2).map(bSlug => {
                       const bo = branchOptions.find(x => x.slug === bSlug);
-                      const colorMap: Record<string, string> = {
-                        emerald: 'bg-emerald-50 text-emerald-600', sky: 'bg-sky-50 text-sky-600', amber: 'bg-amber-50 text-amber-600',
-                        purple: 'bg-purple-50 text-purple-600', rose: 'bg-rose-50 text-rose-600', cyan: 'bg-cyan-50 text-cyan-600',
-                        lime: 'bg-lime-50 text-lime-600', indigo: 'bg-indigo-50 text-indigo-600', teal: 'bg-teal-50 text-teal-600',
-                        slate: 'bg-slate-50 text-slate-600',
-                      };
                       return (
-                        <span key={bSlug} className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${colorMap[bo?.color || 'slate'] || colorMap.slate}`}>
+                        <span key={bSlug} className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${BRANCH_COLOR_MAP[bo?.color || 'slate'] || BRANCH_COLOR_MAP.slate}`}>
                           {bo?.name || bSlug}
                         </span>
                       );
                     })}
-                    {c.signup_source === 'website' && (
-                      <span className="rounded-full bg-brand-purple/10 px-2 py-0.5 text-[11px] font-medium text-brand-purple">Website</span>
+                    {(c.branches?.length || 0) > 2 && (
+                      <span className="text-[10px] text-slate-400">+{c.branches!.length - 2}</span>
                     )}
-                    {typeof c.lead_count === 'number' && (
-                      <span className="flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
-                        <UserGroupIcon className="h-3 w-3" /> {c.lead_count} leads
-                      </span>
-                    )}
-                    {(c.login_count || 0) > 0 && (
-                      <span className="flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
-                        <ClockIcon className="h-3 w-3" /> {c.login_count}x ingelogd
-                      </span>
-                    )}
+                    <span className="ml-auto text-xs font-medium text-slate-500">{c.lead_count || 0} leads</span>
                   </div>
+                </button>
+              );
+            })}
+          </div>
 
-                  {/* Portal section */}
-                  <div className="rounded-lg border border-slate-100 bg-slate-50/70 p-3.5">
-                    <div className="mb-2.5 flex items-center justify-between">
-                      <div className="flex items-center gap-1.5">
-                        {portalReady ? (
-                          <ShieldCheckIcon className="h-4 w-4 text-emerald-500" />
-                        ) : (
-                          <ShieldExclamationIcon className="h-4 w-4 text-amber-500" />
-                        )}
-                        <span className="text-xs font-semibold text-slate-700">Klantportaal</span>
-                      </div>
-                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
-                        portalReady ? 'bg-emerald-100 text-emerald-700' : c.portal_active ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'
-                      }`}>
-                        {portalReady ? 'Gereed' : c.portal_active ? 'Incompleet' : 'Uit'}
-                      </span>
-                    </div>
-
-                    {/* Login info */}
-                    <div className="mb-3 space-y-1.5 text-xs">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-slate-400">URL</span>
-                        <span className="truncate font-mono text-slate-600">{portalUrl.replace('https://', '')}</span>
-                      </div>
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-slate-400">E-mail</span>
-                        <span className="truncate font-medium text-slate-600">{c.email || <span className="italic text-amber-500">niet ingesteld</span>}</span>
-                      </div>
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-slate-400">Wachtwoord</span>
-                        {c.has_password ? (
-                          c.portal_password ? (
-                            <button
-                              onClick={() => setShowPw(showPw === c.id ? null : c.id)}
-                              className="inline-flex items-center gap-1 rounded px-1 py-0.5 text-slate-600 transition hover:bg-white hover:text-brand-purple"
-                            >
-                              <span className="font-medium">{showPw === c.id ? c.portal_password : '••••••••'}</span>
-                              <EyeIcon className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-                            </button>
-                          ) : (
-                            <span className="text-[11px] text-slate-400">reset om te zien</span>
-                          )
-                        ) : (
-                          <span className="italic text-amber-500">niet ingesteld</span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Password reset inline */}
-                    <AnimatePresence>
-                      {resettingPw === c.id && (
-                        <motion.div
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: 'auto', opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          className="mb-3 overflow-hidden"
-                        >
-                          <div className="flex gap-1.5">
-                            <input
-                              type="text"
-                              value={newPw}
-                              onChange={e => setNewPw(e.target.value)}
-                              placeholder="Nieuw wachtwoord (min. 6)"
-                              className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50"
-                              autoFocus
-                            />
-                            <button
-                              onClick={() => resetPassword(c.id)}
-                              disabled={pwSaving || newPw.length < 6}
-                              className="rounded-lg bg-brand-purple px-3 py-2 text-xs font-medium text-white disabled:opacity-50"
-                            >
-                              {pwSaving ? '...' : 'Opslaan'}
-                            </button>
-                            <button
-                              onClick={() => { setResettingPw(null); setNewPw(''); }}
-                              className="rounded-lg px-2 py-2 text-slate-400 hover:text-slate-600"
-                            >
-                              <XMarkIcon className="h-4 w-4" />
-                            </button>
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-
-                    {/* Portal actions */}
-                    <div className="flex flex-wrap gap-1.5">
-                      <button
-                        onClick={() => copyCredentials(c)}
-                        disabled={!c.email}
-                        className="inline-flex min-h-[32px] items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50 disabled:opacity-40"
-                      >
-                        {copied === c.id ? <CheckIcon className="h-3.5 w-3.5 text-emerald-500" /> : <ClipboardDocumentIcon className="h-3.5 w-3.5" />}
-                        {copied === c.id ? 'Gekopieerd!' : 'Kopieer'}
-                      </button>
-                      <button
-                        onClick={() => { setResettingPw(resettingPw === c.id ? null : c.id); setNewPw(''); }}
-                        className="inline-flex min-h-[32px] items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50"
-                      >
-                        <KeyIcon className="h-3.5 w-3.5" />
-                        {c.has_password ? 'Reset ww' : 'Stel ww in'}
-                      </button>
-                      <button
-                        onClick={() => togglePortal(c)}
-                        disabled={togglingPortal === c.id}
-                        className={`inline-flex min-h-[32px] items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${
-                          c.portal_active
-                            ? 'border-red-200 bg-white text-red-500 hover:bg-red-50'
-                            : 'border-emerald-200 bg-white text-emerald-600 hover:bg-emerald-50'
-                        } disabled:opacity-50`}
-                      >
-                        {togglingPortal === c.id ? (
-                          <ArrowPathIcon className="h-3.5 w-3.5 animate-spin" />
-                        ) : c.portal_active ? (
-                          <ShieldExclamationIcon className="h-3.5 w-3.5" />
-                        ) : (
-                          <ShieldCheckIcon className="h-3.5 w-3.5" />
-                        )}
-                        {c.portal_active ? 'Uit' : 'Aan'}
-                      </button>
-                      {portalReady && (
-                        <button
-                          onClick={() => impersonateCustomer(c.id)}
-                          disabled={impersonating === c.id}
-                          className="inline-flex min-h-[32px] items-center gap-1 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-700 transition hover:bg-amber-100 disabled:opacity-50"
-                        >
-                          {impersonating === c.id ? (
-                            <ArrowPathIcon className="h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <EyeIcon className="h-3.5 w-3.5" />
-                          )}
-                          Bekijk portaal
-                        </button>
-                      )}
-                      {neverLogged && c.email && (
-                        <button
-                          onClick={() => setPreviewReminder(c)}
-                          disabled={reminderSent.has(c.id)}
-                          className={`inline-flex min-h-[32px] items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition disabled:opacity-50 ${
-                            reminderSent.has(c.id)
-                              ? 'border-emerald-200 bg-emerald-50 text-emerald-600'
-                              : 'border-brand-purple/30 bg-brand-purple/5 text-brand-purple hover:bg-brand-purple/10'
-                          }`}
-                        >
-                          {reminderSent.has(c.id) ? (
-                            <CheckIcon className="h-3.5 w-3.5" />
-                          ) : (
-                            <EnvelopeIcon className="h-3.5 w-3.5" />
-                          )}
-                          {reminderSent.has(c.id) ? 'Verstuurd!' : 'Reminder'}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Lead exclusies (bidirectioneel) */}
-                {(() => {
-                  const direct = c.exclude_customers || [];
-                  const reverse = customers.filter(
-                    other => other.id !== c.id && (other.exclude_customers || []).includes(c.id)
-                  ).map(o => o.id);
-                  const allExIds = [...new Set([...direct, ...reverse])];
-                  if (allExIds.length === 0) return null;
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="mt-4 flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+              <p className="text-xs text-slate-500">
+                Pagina <span className="font-semibold text-slate-700">{page}</span> van <span className="font-semibold text-slate-700">{totalPages}</span>
+                <span className="ml-2 text-slate-400">({total} klanten)</span>
+              </p>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setPage(1)}
+                  disabled={page <= 1}
+                  className="rounded-lg px-2 py-1.5 text-xs font-medium text-slate-500 transition hover:bg-slate-100 disabled:opacity-30"
+                >
+                  Eerste
+                </button>
+                <button
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={page <= 1}
+                  className="rounded-lg p-1.5 text-slate-500 transition hover:bg-slate-100 disabled:opacity-30"
+                >
+                  <ChevronDownIcon className="h-4 w-4 rotate-90" />
+                </button>
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  let pageNum: number;
+                  if (totalPages <= 5) {
+                    pageNum = i + 1;
+                  } else if (page <= 3) {
+                    pageNum = i + 1;
+                  } else if (page >= totalPages - 2) {
+                    pageNum = totalPages - 4 + i;
+                  } else {
+                    pageNum = page - 2 + i;
+                  }
                   return (
-                    <div className="border-t border-slate-100 px-5 py-3">
-                      <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-red-400">Lead exclusies</p>
-                      <div className="flex flex-wrap gap-1">
-                        {allExIds.map(exId => {
-                          const exCust = customers.find(x => x.id === exId);
-                          return (
-                            <span key={exId} className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-600">
-                              <LinkSlashIcon className="h-3 w-3" />
-                              {exCust?.name || 'Onbekend'}
-                            </span>
-                          );
-                        })}
-                      </div>
-                    </div>
+                    <button
+                      key={pageNum}
+                      onClick={() => setPage(pageNum)}
+                      className={`min-w-[32px] rounded-lg px-2 py-1.5 text-xs font-medium transition ${
+                        pageNum === page
+                          ? 'bg-brand-purple text-white'
+                          : 'text-slate-600 hover:bg-slate-100'
+                      }`}
+                    >
+                      {pageNum}
+                    </button>
                   );
-                })()}
-
-                {/* Inline batch progress */}
-                {(() => {
-                  const custBatches = allBatches.filter(b => b.customer_id === c.id && b.status === 'active');
-                  if (custBatches.length === 0) return null;
-                  const colorMap: Record<string, string> = {
-                    emerald: 'bg-emerald-500', sky: 'bg-sky-500', amber: 'bg-amber-500', purple: 'bg-purple-500',
-                    rose: 'bg-rose-500', cyan: 'bg-cyan-500', lime: 'bg-lime-500', indigo: 'bg-indigo-500',
-                    teal: 'bg-teal-500', slate: 'bg-slate-500',
-                  };
-                  return (
-                    <div className="border-t border-slate-100 px-5 py-3">
-                      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Actieve batches</p>
-                      <div className="space-y-2">
-                        {custBatches.map(b => {
-                          const pct = b.batch_size > 0 ? Math.min(100, Math.round((b.leads_delivered / b.batch_size) * 100)) : 0;
-                          const bo = branchOptions.find(x => x.slug === b.branch);
-                          const barColor = colorMap[bo?.color || 'slate'] || 'bg-slate-500';
-                          return (
-                            <div key={b.id}>
-                              <div className="mb-0.5 flex items-center justify-between">
-                                <span className="text-xs font-medium text-slate-600">{bo?.name || b.branch}</span>
-                                <span className="text-[11px] font-semibold text-slate-500">{b.leads_delivered}/{b.batch_size} <span className="text-slate-400">({pct}%)</span></span>
-                              </div>
-                              <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
-                                <div className={`h-full rounded-full transition-all duration-500 ${pct >= 100 ? 'bg-blue-500' : barColor}`} style={{ width: `${pct}%` }} />
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })()}
-
-                {/* Middle actions - Targets, Pricing, Batches & Lead Manager */}
-                <div className="grid grid-cols-2 border-t border-slate-100 sm:grid-cols-4">
-                  <button onClick={() => setTargetsFor(c)} className="flex items-center justify-center gap-1.5 border-b border-r border-slate-100 py-2.5 text-xs font-medium text-slate-500 transition hover:bg-slate-50 hover:text-brand-purple sm:border-b-0">
-                    <MapPinIcon className="h-3.5 w-3.5" /> Targets
-                  </button>
-                  <button onClick={() => setPricingFor(c)} className="flex items-center justify-center gap-1.5 border-b border-slate-100 py-2.5 text-xs font-medium text-slate-500 transition hover:bg-slate-50 hover:text-amber-600 sm:border-b-0 sm:border-r">
-                    <CurrencyEuroIcon className="h-3.5 w-3.5" /> Prijzen
-                  </button>
-                  <button onClick={() => setBatchesFor(c)} className="flex items-center justify-center gap-1.5 border-r border-slate-100 py-2.5 text-xs font-medium text-slate-500 transition hover:bg-slate-50 hover:text-brand-purple">
-                    <ChartBarIcon className="h-3.5 w-3.5" /> Batches
-                  </button>
-                  <button onClick={() => setLeadsFor(c)} className="flex items-center justify-center gap-1.5 py-2.5 text-xs font-medium text-slate-500 transition hover:bg-slate-50 hover:text-red-500">
-                    <LinkSlashIcon className="h-3.5 w-3.5" /> Leads
-                  </button>
-                </div>
-
-                {/* Bottom actions */}
-                <div className="flex items-center border-t border-slate-100">
-                  <button onClick={() => setEditing(c)} className="flex flex-1 items-center justify-center gap-1.5 py-3.5 text-sm font-medium text-slate-500 transition hover:bg-slate-50 hover:text-brand-purple">
-                    <PencilSquareIcon className="h-4 w-4" /> Bewerken
-                  </button>
-                  <div className="h-8 w-px bg-slate-100" />
-                  <a href={`/admin/leads?customer_id=${c.id}`} className="flex flex-1 items-center justify-center gap-1.5 py-3.5 text-sm font-medium text-slate-500 transition hover:bg-slate-50 hover:text-brand-purple">
-                    <EyeIcon className="h-4 w-4" /> Leads
-                  </a>
-                  <div className="h-8 w-px bg-slate-100" />
-                  <button onClick={() => handleDelete(c.id, c.name)} className="flex items-center justify-center px-5 py-3.5 text-slate-400 transition hover:bg-red-50 hover:text-red-500">
-                    <TrashIcon className="h-4 w-4" />
-                  </button>
-                </div>
+                })}
+                <button
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  disabled={page >= totalPages}
+                  className="rounded-lg p-1.5 text-slate-500 transition hover:bg-slate-100 disabled:opacity-30"
+                >
+                  <ChevronDownIcon className="h-4 w-4 -rotate-90" />
+                </button>
+                <button
+                  onClick={() => setPage(totalPages)}
+                  disabled={page >= totalPages}
+                  className="rounded-lg px-2 py-1.5 text-xs font-medium text-slate-500 transition hover:bg-slate-100 disabled:opacity-30"
+                >
+                  Laatste
+                </button>
               </div>
-            );
-          })}
-        </div>
+            </div>
+          )}
+        </>
       )}
+
+      {/* Customer Detail Panel */}
+      <AnimatePresence>
+        {selectedCustomer && (
+          <CustomerDetailPanel
+            customer={selectedCustomer}
+            customers={customers}
+            branchOptions={branchOptions}
+            accountManagers={accountManagers}
+            portalUrl={portalUrl}
+            reminderSent={reminderSent}
+            onClose={() => setSelectedCustomer(null)}
+            onEdit={(c) => { setSelectedCustomer(null); setEditing(c); }}
+            onDelete={async (id, name) => {
+              if (!confirm(`${name} verwijderen? Leads van deze klant worden niet verwijderd.`)) return;
+              await adminFetch('/api/admin/customers', { method: 'DELETE', body: JSON.stringify({ id }) });
+              setSelectedCustomer(null);
+              fetchCustomers();
+            }}
+            onReminder={(c) => setPreviewReminder(c)}
+            onRefresh={fetchCustomers}
+          />
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {(editing || showNew) && (
@@ -767,50 +654,11 @@ export default function CustomersPage() {
             allCustomers={customers}
             accountManagers={accountManagers}
             onClose={() => { setEditing(null); setShowNew(false); }}
-            onSaved={() => { setEditing(null); setShowNew(false); fetch_(); }}
+            onSaved={() => { setEditing(null); setShowNew(false); fetchCustomers(); }}
           />
         )}
       </AnimatePresence>
 
-      <AnimatePresence>
-        {targetsFor && (
-          <TargetsPanel
-            customer={targetsFor}
-            onClose={() => setTargetsFor(null)}
-          />
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {batchesFor && (
-          <BatchesPanel
-            customer={batchesFor}
-            branchOptions={branchOptions}
-            onClose={() => setBatchesFor(null)}
-          />
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {pricingFor && (
-          <CustomerPricingPanel
-            customer={pricingFor}
-            branchOptions={branchOptions}
-            onClose={() => setPricingFor(null)}
-          />
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {leadsFor && (
-          <LeadManagerPanel
-            customer={leadsFor}
-            onClose={() => { setLeadsFor(null); fetch_(); }}
-          />
-        )}
-      </AnimatePresence>
-
-      {/* Reminder email preview modal (portalled to body for correct fixed positioning) */}
       {typeof document !== 'undefined' && createPortal(
         <AnimatePresence>
           {previewReminder && (
@@ -826,6 +674,397 @@ export default function CustomersPage() {
         document.body,
       )}
     </div>
+  );
+}
+
+/* ─── Customer Detail Slide-over Panel ──────────────────────── */
+type DetailTab = 'overview' | 'batches' | 'targets' | 'pricing' | 'leads';
+
+function CustomerDetailPanel({
+  customer, customers, branchOptions, accountManagers, portalUrl, reminderSent,
+  onClose, onEdit, onDelete, onReminder, onRefresh,
+}: {
+  customer: CustomerWithExtra;
+  customers: CustomerWithExtra[];
+  branchOptions: BranchOption[];
+  accountManagers: AccountManager[];
+  portalUrl: string;
+  reminderSent: Set<string>;
+  onClose: () => void;
+  onEdit: (c: Customer) => void;
+  onDelete: (id: string, name: string) => void;
+  onReminder: (c: Customer) => void;
+  onRefresh: () => void;
+}) {
+  const [tab, setTab] = useState<DetailTab>('overview');
+  const [copied, setCopied] = useState(false);
+  const [showPw, setShowPw] = useState(false);
+  const [resettingPw, setResettingPw] = useState(false);
+  const [newPw, setNewPw] = useState('');
+  const [pwSaving, setPwSaving] = useState(false);
+  const [togglingPortal, setTogglingPortal] = useState(false);
+  const [impersonating, setImpersonating] = useState(false);
+  const [allBatches, setAllBatches] = useState<Batch[]>([]);
+
+  const c = customer;
+
+  useEffect(() => {
+    setTab('overview');
+    setCopied(false);
+    setShowPw(false);
+    setResettingPw(false);
+    setNewPw('');
+  }, [c.id]);
+  const portalReady = c.portal_active && c.has_password && c.email;
+  const activity = getActivityStatus(c);
+  const neverLogged = c.portal_active && c.has_password && (!c.last_login_at || !c.login_count);
+  const am = accountManagers.find(a => a.id === c.account_manager_id);
+
+  useEffect(() => {
+    adminFetch(`/api/admin/batches?customer_id=${c.id}`).then(r => r.ok ? r.json() : []).then(d => setAllBatches(d || [])).catch(() => {});
+  }, [c.id]);
+
+  const copyCredentials = () => {
+    navigator.clipboard.writeText(`Portaal login voor ${c.name}:\nURL: ${portalUrl}\nE-mail: ${c.email}\n\n(Wachtwoord is eerder door jullie gedeeld)`);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const resetPassword = async () => {
+    if (!newPw || newPw.length < 6) return;
+    setPwSaving(true);
+    await adminFetch('/api/admin/customers', { method: 'PUT', body: JSON.stringify({ id: c.id, password: newPw }) });
+    setPwSaving(false);
+    setResettingPw(false);
+    setNewPw('');
+    onRefresh();
+  };
+
+  const togglePortal = async () => {
+    setTogglingPortal(true);
+    await adminFetch('/api/admin/customers', { method: 'PUT', body: JSON.stringify({ id: c.id, portal_active: !c.portal_active }) });
+    setTogglingPortal(false);
+    onRefresh();
+  };
+
+  const impersonate = async () => {
+    setImpersonating(true);
+    try {
+      const res = await adminFetch('/api/admin/impersonate', { method: 'POST', body: JSON.stringify({ customer_id: c.id }) });
+      if (res.ok) { const { token } = await res.json(); window.open(`/portal?impersonate=${token}`, '_blank'); }
+    } catch { /* ignore */ }
+    setImpersonating(false);
+  };
+
+  const tabs: { key: DetailTab; label: string; icon: typeof MapPinIcon }[] = [
+    { key: 'overview', label: 'Overzicht', icon: BuildingOfficeIcon },
+    { key: 'batches', label: 'Batches', icon: ChartBarIcon },
+    { key: 'targets', label: 'Targets', icon: MapPinIcon },
+    { key: 'pricing', label: 'Prijzen', icon: CurrencyEuroIcon },
+    { key: 'leads', label: 'Leads', icon: UserGroupIcon },
+  ];
+
+  const activeBatches = allBatches.filter(b => b.status === 'active');
+
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', handleEsc);
+    return () => document.removeEventListener('keydown', handleEsc);
+  }, [onClose]);
+
+  return (
+    <>
+      <motion.div
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm"
+        onClick={onClose}
+      />
+      <motion.div
+        initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
+        transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+        className="fixed inset-y-0 right-0 z-50 flex w-full max-w-2xl flex-col bg-white shadow-2xl"
+      >
+        {/* Header */}
+        <div className="shrink-0 border-b border-slate-100">
+          <div className="h-[3px] bg-warmeleads-gradient" />
+          <div className="flex items-center justify-between px-5 py-4">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-3">
+                <h2 className="truncate text-lg font-bold text-slate-900">{c.name}</h2>
+                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${c.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                  {c.is_active ? 'Actief' : 'Inactief'}
+                </span>
+                <span className={`flex shrink-0 items-center gap-1 text-[11px] font-medium ${activity.color}`}>
+                  <span className={`inline-block h-1.5 w-1.5 rounded-full ${activity.dotColor} ${activity.sort === 0 ? 'animate-pulse' : ''}`} />
+                  {activity.label}
+                </span>
+              </div>
+              <div className="mt-0.5 flex items-center gap-3 text-xs text-slate-500">
+                {c.contact_person && <span>{c.contact_person}</span>}
+                {c.email && <span>{c.email}</span>}
+                {am && <span className="font-medium text-amber-600">AM: {am.name}</span>}
+              </div>
+            </div>
+            <div className="ml-3 flex items-center gap-1">
+              <button onClick={() => onEdit(c)} className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-brand-purple" title="Bewerken">
+                <PencilSquareIcon className="h-5 w-5" />
+              </button>
+              <button onClick={onClose} className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100">
+                <XMarkIcon className="h-5 w-5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Tabs */}
+          <div className="flex gap-0 overflow-x-auto px-5">
+            {tabs.map(t => (
+              <button
+                key={t.key}
+                onClick={() => setTab(t.key)}
+                className={`relative flex items-center gap-1.5 whitespace-nowrap px-4 py-2.5 text-xs font-medium transition ${
+                  tab === t.key ? 'text-brand-purple' : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                <t.icon className="h-3.5 w-3.5" />
+                {t.label}
+                {tab === t.key && (
+                  <motion.div layoutId="detail-tab" className="absolute inset-x-0 -bottom-px h-0.5 bg-brand-purple" />
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Tab content */}
+        <div className="flex-1 overflow-y-auto">
+          {tab === 'overview' && (
+            <div className="p-5 space-y-5">
+              {/* Branches */}
+              <div>
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Branches</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {c.branches?.map(bSlug => {
+                    const bo = branchOptions.find(x => x.slug === bSlug);
+                    return (
+                      <span key={bSlug} className={`rounded-full px-2.5 py-1 text-xs font-medium ${BRANCH_COLOR_MAP[bo?.color || 'slate'] || BRANCH_COLOR_MAP.slate}`}>
+                        {bo?.name || bSlug}
+                      </span>
+                    );
+                  })}
+                  {c.signup_source === 'website' && (
+                    <span className="rounded-full bg-brand-purple/10 px-2.5 py-1 text-xs font-medium text-brand-purple">Website</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Stats */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="rounded-lg border border-slate-100 bg-slate-50/70 p-3 text-center">
+                  <p className="text-lg font-bold text-slate-800">{c.lead_count || 0}</p>
+                  <p className="text-[11px] text-slate-500">Leads</p>
+                </div>
+                <div className="rounded-lg border border-slate-100 bg-slate-50/70 p-3 text-center">
+                  <p className="text-lg font-bold text-slate-800">{activeBatches.length}</p>
+                  <p className="text-[11px] text-slate-500">Actieve batches</p>
+                </div>
+                <div className="rounded-lg border border-slate-100 bg-slate-50/70 p-3 text-center">
+                  <p className="text-lg font-bold text-slate-800">{c.login_count || 0}</p>
+                  <p className="text-[11px] text-slate-500">Logins</p>
+                </div>
+              </div>
+
+              {/* Active batch progress */}
+              {activeBatches.length > 0 && (
+                <div>
+                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Actieve batches</p>
+                  <div className="space-y-2">
+                    {activeBatches.map(b => {
+                      const pct = b.batch_size > 0 ? Math.min(100, Math.round((b.leads_delivered / b.batch_size) * 100)) : 0;
+                      const bo = branchOptions.find(x => x.slug === b.branch);
+                      const barColorMap: Record<string, string> = {
+                        emerald: 'bg-emerald-500', sky: 'bg-sky-500', amber: 'bg-amber-500', purple: 'bg-purple-500',
+                        rose: 'bg-rose-500', cyan: 'bg-cyan-500', lime: 'bg-lime-500', indigo: 'bg-indigo-500',
+                        teal: 'bg-teal-500', slate: 'bg-slate-500',
+                      };
+                      const barColor = barColorMap[bo?.color || 'slate'] || 'bg-slate-500';
+                      return (
+                        <div key={b.id} className="rounded-lg border border-slate-100 bg-slate-50/70 p-3">
+                          <div className="mb-1 flex items-center justify-between">
+                            <span className="text-xs font-medium text-slate-600">{bo?.name || b.branch}</span>
+                            <span className="text-[11px] font-semibold text-slate-500">{b.leads_delivered}/{b.batch_size} ({pct}%)</span>
+                          </div>
+                          <div className="h-1.5 overflow-hidden rounded-full bg-slate-200">
+                            <div className={`h-full rounded-full transition-all duration-500 ${pct >= 100 ? 'bg-blue-500' : barColor}`} style={{ width: `${pct}%` }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Portal section */}
+              <div className="rounded-lg border border-slate-100 bg-slate-50/70 p-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    {portalReady ? <ShieldCheckIcon className="h-4 w-4 text-emerald-500" /> : <ShieldExclamationIcon className="h-4 w-4 text-amber-500" />}
+                    <span className="text-sm font-semibold text-slate-700">Klantportaal</span>
+                  </div>
+                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${portalReady ? 'bg-emerald-100 text-emerald-700' : c.portal_active ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>
+                    {portalReady ? 'Gereed' : c.portal_active ? 'Incompleet' : 'Uit'}
+                  </span>
+                </div>
+
+                <div className="mb-3 space-y-1.5 text-xs">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-slate-400">URL</span>
+                    <span className="truncate font-mono text-slate-600">{portalUrl.replace('https://', '')}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-slate-400">E-mail</span>
+                    <span className="truncate font-medium text-slate-600">{c.email || <span className="italic text-amber-500">niet ingesteld</span>}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-slate-400">Wachtwoord</span>
+                    {c.has_password ? (
+                      c.portal_password ? (
+                        <button onClick={() => setShowPw(!showPw)} className="inline-flex items-center gap-1 rounded px-1 py-0.5 text-slate-600 transition hover:bg-white hover:text-brand-purple">
+                          <span className="font-medium">{showPw ? c.portal_password : '••••••••'}</span>
+                          <EyeIcon className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                        </button>
+                      ) : (
+                        <span className="text-[11px] text-slate-400">reset om te zien</span>
+                      )
+                    ) : (
+                      <span className="italic text-amber-500">niet ingesteld</span>
+                    )}
+                  </div>
+                </div>
+
+                <AnimatePresence>
+                  {resettingPw && (
+                    <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="mb-3 overflow-hidden">
+                      <div className="flex gap-1.5">
+                        <input type="text" value={newPw} onChange={e => setNewPw(e.target.value)} placeholder="Nieuw wachtwoord (min. 6)"
+                          className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" autoFocus />
+                        <button onClick={resetPassword} disabled={pwSaving || newPw.length < 6} className="rounded-lg bg-brand-purple px-3 py-2 text-xs font-medium text-white disabled:opacity-50">
+                          {pwSaving ? '...' : 'Opslaan'}
+                        </button>
+                        <button onClick={() => { setResettingPw(false); setNewPw(''); }} className="rounded-lg px-2 py-2 text-slate-400 hover:text-slate-600">
+                          <XMarkIcon className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                <div className="flex flex-wrap gap-1.5">
+                  <button onClick={copyCredentials} disabled={!c.email}
+                    className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50 disabled:opacity-40">
+                    {copied ? <CheckIcon className="h-3.5 w-3.5 text-emerald-500" /> : <ClipboardDocumentIcon className="h-3.5 w-3.5" />}
+                    {copied ? 'Gekopieerd!' : 'Kopieer'}
+                  </button>
+                  <button onClick={() => { setResettingPw(!resettingPw); setNewPw(''); }}
+                    className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50">
+                    <KeyIcon className="h-3.5 w-3.5" />
+                    {c.has_password ? 'Reset ww' : 'Stel ww in'}
+                  </button>
+                  <button onClick={togglePortal} disabled={togglingPortal}
+                    className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition disabled:opacity-50 ${c.portal_active ? 'border-red-200 bg-white text-red-500 hover:bg-red-50' : 'border-emerald-200 bg-white text-emerald-600 hover:bg-emerald-50'}`}>
+                    {togglingPortal ? <ArrowPathIcon className="h-3.5 w-3.5 animate-spin" /> : c.portal_active ? <ShieldExclamationIcon className="h-3.5 w-3.5" /> : <ShieldCheckIcon className="h-3.5 w-3.5" />}
+                    {c.portal_active ? 'Uit' : 'Aan'}
+                  </button>
+                  {portalReady && (
+                    <button onClick={impersonate} disabled={impersonating}
+                      className="inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-700 transition hover:bg-amber-100 disabled:opacity-50">
+                      {impersonating ? <ArrowPathIcon className="h-3.5 w-3.5 animate-spin" /> : <EyeIcon className="h-3.5 w-3.5" />}
+                      Bekijk portaal
+                    </button>
+                  )}
+                  {neverLogged && c.email && (
+                    <button onClick={() => onReminder(c)} disabled={reminderSent.has(c.id)}
+                      className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition disabled:opacity-50 ${reminderSent.has(c.id) ? 'border-emerald-200 bg-emerald-50 text-emerald-600' : 'border-brand-purple/30 bg-brand-purple/5 text-brand-purple hover:bg-brand-purple/10'}`}>
+                      {reminderSent.has(c.id) ? <CheckIcon className="h-3.5 w-3.5" /> : <EnvelopeIcon className="h-3.5 w-3.5" />}
+                      {reminderSent.has(c.id) ? 'Verstuurd!' : 'Reminder'}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Welcome offer */}
+              <WelcomeOfferBlock customer={c} onUpdated={onRefresh} />
+
+              {/* Lead exclusions */}
+              {(() => {
+                const direct = c.exclude_customers || [];
+                const reverse = customers.filter(other => other.id !== c.id && (other.exclude_customers || []).includes(c.id)).map(o => o.id);
+                const allExIds = [...new Set([...direct, ...reverse])];
+                if (allExIds.length === 0) return null;
+                return (
+                  <div>
+                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-red-400">Lead exclusies</p>
+                    <div className="flex flex-wrap gap-1">
+                      {allExIds.map(exId => {
+                        const exCust = customers.find(x => x.id === exId);
+                        return (
+                          <span key={exId} className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-600">
+                            <LinkSlashIcon className="h-3 w-3" />
+                            {exCust?.name || 'Onbekend'}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Additional info */}
+              <div className="space-y-1.5 text-xs">
+                {c.kvk_nummer && (
+                  <div className="flex justify-between"><span className="text-slate-400">KVK</span><span className="font-medium text-slate-600">{c.kvk_nummer}</span></div>
+                )}
+                {c.city && (
+                  <div className="flex justify-between"><span className="text-slate-400">Locatie</span><span className="font-medium text-slate-600">{[c.street, c.house_number, c.postcode, c.city].filter(Boolean).join(', ')}</span></div>
+                )}
+                <div className="flex justify-between"><span className="text-slate-400">Aangemaakt</span><span className="font-medium text-slate-600">{new Date(c.created_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' })}</span></div>
+                {c.notes && (
+                  <div className="mt-2 rounded-lg border border-slate-100 bg-slate-50 p-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Notities</p>
+                    <p className="text-xs text-slate-600 whitespace-pre-wrap">{c.notes}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Bottom actions */}
+              <div className="flex gap-2 border-t border-slate-100 pt-4">
+                <button onClick={() => onEdit(c)} className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white py-2.5 text-sm font-medium text-slate-600 transition hover:bg-slate-50 hover:text-brand-purple">
+                  <PencilSquareIcon className="h-4 w-4" /> Bewerken
+                </button>
+                <a href={`/admin/leads?customer_id=${c.id}`} className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white py-2.5 text-sm font-medium text-slate-600 transition hover:bg-slate-50 hover:text-brand-purple">
+                  <EyeIcon className="h-4 w-4" /> Alle leads
+                </a>
+                <button onClick={() => onDelete(c.id, c.name)} className="rounded-lg border border-red-200 bg-white px-4 py-2.5 text-sm font-medium text-red-500 transition hover:bg-red-50">
+                  <TrashIcon className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {tab === 'batches' && (
+            <BatchesPanelContent customer={c} branchOptions={branchOptions} />
+          )}
+          {tab === 'targets' && (
+            <TargetsPanelContent customer={c} />
+          )}
+          {tab === 'pricing' && (
+            <CustomerPricingPanelContent customer={c} branchOptions={branchOptions} />
+          )}
+          {tab === 'leads' && (
+            <LeadManagerPanelContent customer={c} />
+          )}
+        </div>
+      </motion.div>
+    </>
   );
 }
 
@@ -1597,7 +1836,23 @@ const COUNTRY_PRESETS = [
 const PROVINCES_NL = ['Drenthe', 'Flevoland', 'Friesland', 'Gelderland', 'Groningen', 'Limburg', 'Noord-Brabant', 'Noord-Holland', 'Overijssel', 'Utrecht', 'Zeeland', 'Zuid-Holland'];
 const PROVINCES_BE = ['Antwerpen', 'Brussels', 'Henegouwen', 'Luik', 'Luxemburg', 'Namen', 'Oost-Vlaanderen', 'Vlaams-Brabant', 'Waals-Brabant', 'West-Vlaanderen'];
 
-function TargetsPanel({ customer, onClose }: { customer: Customer; onClose: () => void }) {
+function TargetsPanelContent({ customer }: { customer: Customer }) {
+  return <TargetsPanel customer={customer} onClose={() => {}} embedded />;
+}
+
+function BatchesPanelContent({ customer, branchOptions }: { customer: Customer; branchOptions: BranchOption[] }) {
+  return <BatchesPanel customer={customer} branchOptions={branchOptions} onClose={() => {}} embedded />;
+}
+
+function LeadManagerPanelContent({ customer }: { customer: Customer }) {
+  return <LeadManagerPanel customer={customer} onClose={() => {}} embedded />;
+}
+
+function CustomerPricingPanelContent({ customer, branchOptions }: { customer: Customer; branchOptions: BranchOption[] }) {
+  return <CustomerPricingPanel customer={customer} branchOptions={branchOptions} onClose={() => {}} embedded />;
+}
+
+function TargetsPanel({ customer, onClose, embedded }: { customer: Customer; onClose: () => void; embedded?: boolean }) {
   const [targets, setTargets] = useState<Target[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState<false | 'radius' | 'province'>(false);
@@ -1785,23 +2040,8 @@ function TargetsPanel({ customer, onClose }: { customer: Customer; onClose: () =
 
   const existingProvs = new Set(targets.filter(t => t.is_active).flatMap(t => t.provinces || []));
 
-  return (
-    <>
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm" onClick={onClose} />
-      <motion.div
-        initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
-        transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-        className="fixed inset-y-0 right-0 z-[60] flex w-full max-w-lg flex-col bg-white shadow-2xl"
-      >
-        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
-          <div>
-            <h2 className="text-lg font-bold text-slate-900">Targetgebieden</h2>
-            <p className="text-xs text-slate-500">{customer.name}</p>
-          </div>
-          <button onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"><XMarkIcon className="h-5 w-5" /></button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-5">
+  const contentJSX = (
+        <div className={embedded ? 'p-5' : 'flex-1 overflow-y-auto p-5'}>
           {/* Presets */}
           {!showAdd && (
             <div className="mb-4">
@@ -2134,6 +2374,28 @@ function TargetsPanel({ customer, onClose }: { customer: Customer; onClose: () =
             </div>
           )}
         </div>
+  );
+
+  if (embedded) return contentJSX;
+
+  return (
+    <>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm" onClick={onClose} />
+      <motion.div
+        initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
+        transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+        className="fixed inset-y-0 right-0 z-[60] flex w-full max-w-lg flex-col bg-white shadow-2xl"
+      >
+        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+          <div>
+            <h2 className="text-lg font-bold text-slate-900">Targetgebieden</h2>
+            <p className="text-xs text-slate-500">{customer.name}</p>
+          </div>
+          <button onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"><XMarkIcon className="h-5 w-5" /></button>
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          {contentJSX}
+        </div>
       </motion.div>
     </>
   );
@@ -2303,7 +2565,7 @@ function FilterBuilder({ filters, onChange, branchSlug }: { filters: LeadFilter[
   );
 }
 
-function BatchesPanel({ customer, branchOptions, onClose }: { customer: Customer; branchOptions: BranchOption[]; onClose: () => void }) {
+function BatchesPanel({ customer, branchOptions, onClose, embedded }: { customer: Customer; branchOptions: BranchOption[]; onClose: () => void; embedded?: boolean }) {
   const [batches, setBatches] = useState<Batch[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
@@ -2385,23 +2647,8 @@ function BatchesPanel({ customer, branchOptions, onClose }: { customer: Customer
     completed: 'Voltooid',
   };
 
-  return (
-    <>
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm" onClick={onClose} />
-      <motion.div
-        initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
-        transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-        className="fixed inset-y-0 right-0 z-[60] flex w-full max-w-lg flex-col bg-white shadow-2xl"
-      >
-        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
-          <div>
-            <h2 className="text-lg font-bold text-slate-900">Lead batches</h2>
-            <p className="text-xs text-slate-500">{customer.name}</p>
-          </div>
-          <button onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"><XMarkIcon className="h-5 w-5" /></button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-5">
+  const batchContentJSX = (
+        <div className={embedded ? 'p-5' : 'flex-1 overflow-y-auto p-5'}>
           {showAdd ? (
             <div className="mb-5 rounded-xl border border-brand-purple/20 bg-brand-purple/5 p-4">
               <h3 className="mb-3 text-sm font-semibold text-slate-800">Nieuwe batch</h3>
@@ -2581,6 +2828,28 @@ function BatchesPanel({ customer, branchOptions, onClose }: { customer: Customer
             </div>
           )}
         </div>
+  );
+
+  if (embedded) return batchContentJSX;
+
+  return (
+    <>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm" onClick={onClose} />
+      <motion.div
+        initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
+        transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+        className="fixed inset-y-0 right-0 z-[60] flex w-full max-w-lg flex-col bg-white shadow-2xl"
+      >
+        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+          <div>
+            <h2 className="text-lg font-bold text-slate-900">Lead batches</h2>
+            <p className="text-xs text-slate-500">{customer.name}</p>
+          </div>
+          <button onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"><XMarkIcon className="h-5 w-5" /></button>
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          {batchContentJSX}
+        </div>
       </motion.div>
     </>
   );
@@ -2602,9 +2871,10 @@ interface AssignedLead {
   assigned_at: string;
 }
 
-function LeadManagerPanel({ customer, onClose }: {
+function LeadManagerPanel({ customer, onClose, embedded }: {
   customer: Customer;
   onClose: () => void;
+  embedded?: boolean;
 }) {
   const [leads, setLeads] = useState<AssignedLead[]>([]);
   const [batches, setBatches] = useState<{ id: string; branch: string; batch_size: number; leads_delivered: number }[]>([]);
@@ -2794,30 +3064,10 @@ function LeadManagerPanel({ customer, onClose }: {
     setDeleting(false);
   };
 
-  return (
-    <>
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-        className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm" onClick={onClose} />
-      <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
-        transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-        className="fixed inset-y-0 right-0 z-[60] flex w-full max-w-2xl flex-col bg-white shadow-2xl">
-
-        {/* Header */}
-        <div className="shrink-0 border-b border-slate-100">
-          <div className="h-[3px] bg-gradient-to-r from-red-500 to-amber-500" />
-          <div className="flex items-center justify-between px-5 py-4">
-            <div>
-              <h2 className="text-lg font-bold text-slate-900">Leads beheren</h2>
-              <p className="mt-0.5 text-xs text-slate-500">{customer.name} &middot; {leads.length} leads gekoppeld</p>
-            </div>
-            <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100">
-              <XMarkIcon className="h-5 w-5" />
-            </button>
-          </div>
-        </div>
-
+  const leadContentJSX = (
+    <div className={embedded ? '' : 'flex flex-1 flex-col overflow-hidden'}>
         {/* Filters */}
-        <div className="shrink-0 border-b border-slate-100 px-5 py-3 space-y-2">
+        <div className={`${embedded ? '' : 'shrink-0 border-b border-slate-100'} px-5 py-3 space-y-2`}>
           <div className="relative">
             <MagnifyingGlassIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input value={search} onChange={e => setSearch(e.target.value)}
@@ -2936,13 +3186,12 @@ function LeadManagerPanel({ customer, onClose }: {
             )}
           </div>
         </div>
-      </motion.div>
 
       {/* Toast */}
       <AnimatePresence>
         {toast && (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }}
-            className={`fixed bottom-6 right-6 z-[100] flex items-center gap-2 rounded-xl px-5 py-3 text-sm font-medium text-white shadow-lg ${
+            className={`${embedded ? 'absolute' : 'fixed'} bottom-6 right-6 z-[100] flex items-center gap-2 rounded-xl px-5 py-3 text-sm font-medium text-white shadow-lg ${
               toast.type === 'error' ? 'bg-red-600' : 'bg-slate-900'
             }`}>
             {toast.type === 'error' ? <ExclamationTriangleIcon className="h-4 w-4 text-red-200" /> : <CheckCircleIcon className="h-4 w-4 text-emerald-400" />}
@@ -2950,6 +3199,32 @@ function LeadManagerPanel({ customer, onClose }: {
           </motion.div>
         )}
       </AnimatePresence>
+    </div>
+  );
+
+  if (embedded) return leadContentJSX;
+
+  return (
+    <>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm" onClick={onClose} />
+      <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
+        transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+        className="fixed inset-y-0 right-0 z-[60] flex w-full max-w-2xl flex-col bg-white shadow-2xl">
+        <div className="shrink-0 border-b border-slate-100">
+          <div className="h-[3px] bg-gradient-to-r from-red-500 to-amber-500" />
+          <div className="flex items-center justify-between px-5 py-4">
+            <div>
+              <h2 className="text-lg font-bold text-slate-900">Leads beheren</h2>
+              <p className="mt-0.5 text-xs text-slate-500">{customer.name} &middot; {leads.length} leads gekoppeld</p>
+            </div>
+            <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100">
+              <XMarkIcon className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+        {leadContentJSX}
+      </motion.div>
     </>
   );
 }
@@ -2967,8 +3242,8 @@ interface CustomerPricingEntry {
   notes: string | null;
 }
 
-function CustomerPricingPanel({ customer, branchOptions, onClose }: {
-  customer: Customer; branchOptions: BranchOption[]; onClose: () => void;
+function CustomerPricingPanel({ customer, branchOptions, onClose, embedded }: {
+  customer: Customer; branchOptions: BranchOption[]; onClose: () => void; embedded?: boolean;
 }) {
   const [pricing, setPricing] = useState<CustomerPricingEntry[]>([]);
   const [branches, setBranches] = useState<{ slug: string; name: string; pricing_tiers: PricingTierItem[]; nationwide_discount: number }[]>([]);
@@ -3076,26 +3351,8 @@ function CustomerPricingPanel({ customer, branchOptions, onClose }: {
     fetchData();
   };
 
-  return (
-    <>
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-        className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm" onClick={onClose} />
-      <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
-        transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-        className="fixed inset-y-0 right-0 z-[60] flex w-full max-w-lg flex-col bg-white shadow-2xl">
-
-        <div className="shrink-0 border-b border-slate-100">
-          <div className="h-[3px] bg-warmeleads-gradient" />
-          <div className="flex items-center justify-between px-5 py-4">
-            <div>
-              <h2 className="text-lg font-bold text-slate-900">Klantprijzen</h2>
-              <p className="mt-0.5 text-xs text-slate-500">{customer.name} &middot; Afwijkende staffelprijzen per branche</p>
-            </div>
-            <button onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"><XMarkIcon className="h-5 w-5" /></button>
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+  const pricingContentJSX = (
+        <div className={`${embedded ? '' : 'flex-1 overflow-y-auto'} p-5 space-y-4`}>
           {loading ? (
             <div className="space-y-3">
               {[0, 1].map(i => <div key={i} className="h-20 animate-pulse rounded-xl bg-slate-100" />)}
@@ -3252,6 +3509,30 @@ function CustomerPricingPanel({ customer, branchOptions, onClose }: {
               })}
             </>
           )}
+        </div>
+  );
+
+  if (embedded) return pricingContentJSX;
+
+  return (
+    <>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm" onClick={onClose} />
+      <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
+        transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+        className="fixed inset-y-0 right-0 z-[60] flex w-full max-w-lg flex-col bg-white shadow-2xl">
+        <div className="shrink-0 border-b border-slate-100">
+          <div className="h-[3px] bg-warmeleads-gradient" />
+          <div className="flex items-center justify-between px-5 py-4">
+            <div>
+              <h2 className="text-lg font-bold text-slate-900">Klantprijzen</h2>
+              <p className="mt-0.5 text-xs text-slate-500">{customer.name} &middot; Afwijkende staffelprijzen per branche</p>
+            </div>
+            <button onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"><XMarkIcon className="h-5 w-5" /></button>
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          {pricingContentJSX}
         </div>
       </motion.div>
     </>

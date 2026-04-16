@@ -4,55 +4,166 @@ import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import bcrypt from 'bcryptjs';
 import { logAudit } from '@/lib/audit';
 
+const DEFAULT_LIMIT = 25;
+const MAX_LIMIT = 100;
+
 export async function GET(request: NextRequest) {
   const admin = await verifyAdmin(request);
   if (!admin) return unauthorized();
 
   const supabase = createServerClient();
+  const url = request.nextUrl;
 
-  let query = supabase.from('customers').select('*').order('name', { ascending: true });
+  const page = Math.max(1, parseInt(url.searchParams.get('page') || '1'));
+  const limit = Math.min(MAX_LIMIT, Math.max(1, parseInt(url.searchParams.get('limit') || String(DEFAULT_LIMIT))));
+  const search = (url.searchParams.get('search') || '').trim();
+  const status = url.searchParams.get('status') || 'all';
+  const sort = url.searchParams.get('sort') || 'name';
+  const order = url.searchParams.get('order') || 'asc';
+
+  const now = new Date();
+  const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+  let countQuery = supabase.from('customers').select('id', { count: 'exact', head: true });
+  let dataQuery = supabase.from('customers').select('*');
+
   if (admin.role === 'accountmanager') {
-    query = query.eq('account_manager_id', admin.id);
+    countQuery = countQuery.eq('account_manager_id', admin.id);
+    dataQuery = dataQuery.eq('account_manager_id', admin.id);
   }
 
-  const { data: customers, error } = await query;
+  if (search) {
+    const sanitized = search.replace(/[%_\\]/g, c => `\\${c}`);
+    const searchFilter = `name.ilike.%${sanitized}%,contact_person.ilike.%${sanitized}%,email.ilike.%${sanitized}%,city.ilike.%${sanitized}%`;
+    countQuery = countQuery.or(searchFilter);
+    dataQuery = dataQuery.or(searchFilter);
+  }
+
+  if (status === 'active') {
+    countQuery = countQuery.eq('portal_active', true).not('password_hash', 'is', null).or(`last_seen_at.gte.${sevenDaysAgo},last_login_at.gte.${sevenDaysAgo}`);
+    dataQuery = dataQuery.eq('portal_active', true).not('password_hash', 'is', null).or(`last_seen_at.gte.${sevenDaysAgo},last_login_at.gte.${sevenDaysAgo}`);
+  } else if (status === 'never') {
+    countQuery = countQuery.eq('portal_active', true).not('password_hash', 'is', null).is('last_login_at', null);
+    dataQuery = dataQuery.eq('portal_active', true).not('password_hash', 'is', null).is('last_login_at', null);
+  } else if (status === 'inactive') {
+    countQuery = countQuery.not('last_login_at', 'is', null).or(`last_seen_at.lte.${thirtyDaysAgo},and(last_seen_at.is.null,last_login_at.lte.${thirtyDaysAgo})`);
+    dataQuery = dataQuery.not('last_login_at', 'is', null).or(`last_seen_at.lte.${thirtyDaysAgo},and(last_seen_at.is.null,last_login_at.lte.${thirtyDaysAgo})`);
+  }
+
+  const allowedSorts: Record<string, string> = {
+    name: 'name',
+    created: 'created_at',
+    last_login: 'last_seen_at',
+    login_count: 'login_count',
+  };
+  const sortCol = allowedSorts[sort] || 'name';
+  const asc = order !== 'desc';
+
+  dataQuery = dataQuery
+    .order(sortCol, { ascending: asc, nullsFirst: false })
+    .range((page - 1) * limit, page * limit - 1);
+
+  const [{ count: totalCount }, { data: customers, error }] = await Promise.all([
+    countQuery,
+    dataQuery,
+  ]);
 
   if (error) {
     return NextResponse.json({ error: 'Klanten ophalen mislukt' }, { status: 500 });
   }
 
-  const PAGE_SIZE = 1000;
-  const allAssignments: { customer_id: string; batch_id: string | null }[] = [];
-  let offset = 0;
-  while (true) {
-    const { data: batch } = await supabase
-      .from('lead_assignments')
-      .select('customer_id, batch_id')
-      .range(offset, offset + PAGE_SIZE - 1);
-    if (!batch || batch.length === 0) break;
-    allAssignments.push(...(batch as { customer_id: string; batch_id: string | null }[]));
-    if (batch.length < PAGE_SIZE) break;
-    offset += batch.length;
-  }
+  const total = totalCount || 0;
+  const customerIds = (customers || []).map(c => c.id);
 
-  const counts: Record<string, number> = {};
-  const bulkCounts: Record<string, number> = {};
-  allAssignments.forEach((a: { customer_id: string; batch_id: string | null }) => {
-    if (a.customer_id) {
-      counts[a.customer_id] = (counts[a.customer_id] || 0) + 1;
-      if (!a.batch_id) bulkCounts[a.customer_id] = (bulkCounts[a.customer_id] || 0) + 1;
+  let leadCounts: Record<string, number> = {};
+  let bulkCounts: Record<string, number> = {};
+  let batchCounts: Record<string, number> = {};
+
+  if (customerIds.length > 0) {
+    const [assignRes, batchRes] = await Promise.all([
+      supabase.rpc('count_assignments_by_customer', { customer_ids: customerIds }),
+      supabase
+        .from('customer_batches')
+        .select('customer_id, status')
+        .in('customer_id', customerIds)
+        .eq('status', 'active'),
+    ]);
+
+    if (assignRes.data) {
+      for (const row of assignRes.data) {
+        leadCounts[row.customer_id] = row.total_count || 0;
+        bulkCounts[row.customer_id] = row.bulk_count || 0;
+      }
+    } else {
+      const { data: assignments } = await supabase
+        .from('lead_assignments')
+        .select('customer_id, batch_id')
+        .in('customer_id', customerIds);
+      if (assignments) {
+        for (const a of assignments) {
+          leadCounts[a.customer_id] = (leadCounts[a.customer_id] || 0) + 1;
+          if (!a.batch_id) bulkCounts[a.customer_id] = (bulkCounts[a.customer_id] || 0) + 1;
+        }
+      }
     }
-  });
+
+    if (batchRes.data) {
+      for (const b of batchRes.data) {
+        batchCounts[b.customer_id] = (batchCounts[b.customer_id] || 0) + 1;
+      }
+    }
+  }
 
   const enriched = (customers || []).map(c => ({
     ...c,
-    lead_count: counts[c.id] || 0,
+    lead_count: leadCounts[c.id] || 0,
     bulk_lead_count: bulkCounts[c.id] || 0,
+    active_batch_count: batchCounts[c.id] || 0,
     has_password: !!c.password_hash,
     password_hash: undefined,
   }));
 
-  return NextResponse.json({ customers: enriched });
+  let kpis = undefined;
+  if (page === 1) {
+    let kpiBase = supabase.from('customers').select('id, portal_active, password_hash, last_login_at, last_seen_at, login_count, is_active', { count: 'exact' });
+    if (admin.role === 'accountmanager') {
+      kpiBase = kpiBase.eq('account_manager_id', admin.id);
+    }
+    const { data: allForKpi } = await kpiBase;
+    if (allForKpi) {
+      const portalUsers = allForKpi.filter(c => c.portal_active && c.password_hash);
+      const active7d = portalUsers.filter(c => {
+        const seen = c.last_seen_at ? new Date(c.last_seen_at).getTime() : 0;
+        const login = c.last_login_at ? new Date(c.last_login_at).getTime() : 0;
+        return Math.max(seen, login) > Date.now() - 7 * 24 * 60 * 60 * 1000;
+      });
+      const neverLogged = portalUsers.filter(c => !c.last_login_at || !c.login_count);
+      const churning = portalUsers.filter(c => {
+        if (!c.last_login_at) return false;
+        const seen = c.last_seen_at ? new Date(c.last_seen_at).getTime() : 0;
+        const login = c.last_login_at ? new Date(c.last_login_at).getTime() : 0;
+        return Math.max(seen, login) < Date.now() - 30 * 24 * 60 * 60 * 1000;
+      });
+      kpis = {
+        totalCustomers: allForKpi.length,
+        activeCustomers: allForKpi.filter(c => c.is_active).length,
+        portalUsers: portalUsers.length,
+        active7d: active7d.length,
+        neverLoggedIn: neverLogged.length,
+        churning: churning.length,
+      };
+    }
+  }
+
+  return NextResponse.json({
+    customers: enriched,
+    total,
+    page,
+    totalPages: Math.ceil(total / limit),
+    limit,
+    kpis,
+  });
 }
 
 export async function POST(request: NextRequest) {
