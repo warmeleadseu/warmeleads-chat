@@ -5,7 +5,7 @@ import * as XLSX from 'xlsx';
 
 /* ─── column registry ─── */
 
-export interface ExportColumn {
+interface ExportColumn {
   key: string;
   label: string;
   group: 'basis' | 'adres' | 'lead' | 'branche' | 'meta';
@@ -262,9 +262,10 @@ export async function GET(request: NextRequest) {
   }
 
   if (feedbackFilter === 'unrated') {
+    const filteredIds = filtered.map(l => l.id as string);
     const ratedLeadIds = new Set<string>();
-    for (let i = 0; i < leadIds.length; i += IN_CHUNK) {
-      const chunk = leadIds.slice(i, i + IN_CHUNK);
+    for (let i = 0; i < filteredIds.length; i += IN_CHUNK) {
+      const chunk = filteredIds.slice(i, i + IN_CHUNK);
       const { data: reclamations } = await supabase
         .from('lead_reclamations')
         .select('lead_id')
@@ -281,7 +282,6 @@ export async function GET(request: NextRequest) {
     return db < da ? -1 : db > da ? 1 : 0;
   });
 
-  const allCoreKeys = new Set(CORE_COLUMNS.map(c => c.key));
   const columnLabels = selectedColumns.map(col => {
     const core = CORE_COLUMNS.find(c => c.key === col);
     if (core) return core.label;
@@ -361,24 +361,34 @@ function buildXlsx(
   });
 }
 
+function vcfEscape(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
+}
+
 function buildVcf(leads: Record<string, unknown>[]): NextResponse {
   const cards = leads.map(l => {
-    const naam = String(l.naam_klant || '');
-    const parts = naam.split(/\s+/);
-    const fn = parts[0] || '';
-    const ln = parts.slice(1).join(' ');
+    const naam = vcfEscape(String(l.naam_klant || ''));
+    const parts = String(l.naam_klant || '').split(/\s+/);
+    const fn = vcfEscape(parts[0] || '');
+    const ln = vcfEscape(parts.slice(1).join(' '));
     const lines = [
       'BEGIN:VCARD',
       'VERSION:3.0',
       `FN:${naam}`,
       `N:${ln};${fn};;;`,
     ];
-    if (l.telefoonnummer) lines.push(`TEL;TYPE=CELL:${l.telefoonnummer}`);
-    if (l.email) lines.push(`EMAIL:${l.email}`);
-    const adr = [l.postcode, l.plaatsnaam, l.provincie].filter(Boolean).join(', ');
-    if (adr) lines.push(`ADR;TYPE=HOME:;;${l.huisnummer || ''};${l.plaatsnaam || ''};${l.provincie || ''};${l.postcode || ''};${l.land || 'NL'}`);
-    const note = [l.branch ? `Branche: ${l.branch}` : '', l.notities ? String(l.notities) : ''].filter(Boolean).join(' | ');
-    if (note) lines.push(`NOTE:${note.replace(/\n/g, '\\n')}`);
+    if (l.telefoonnummer) lines.push(`TEL;TYPE=CELL:${String(l.telefoonnummer).replace(/[^\d+\-() ]/g, '')}`);
+    if (l.email) lines.push(`EMAIL:${vcfEscape(String(l.email))}`);
+    const hasAddr = l.postcode || l.plaatsnaam || l.provincie || l.huisnummer;
+    if (hasAddr) {
+      lines.push(`ADR;TYPE=HOME:;;${vcfEscape(String(l.huisnummer || ''))};${vcfEscape(String(l.plaatsnaam || ''))};${vcfEscape(String(l.provincie || ''))};${vcfEscape(String(l.postcode || ''))};${vcfEscape(String(l.land || 'NL'))}`);
+    }
+    const noteParts = [
+      l.branch ? `Branche: ${l.branch}` : '',
+      l.status && l.status !== 'nieuw' ? `Status: ${l.status}` : '',
+      l.notities ? String(l.notities) : '',
+    ].filter(Boolean);
+    if (noteParts.length > 0) lines.push(`NOTE:${vcfEscape(noteParts.join(' | '))}`);
     lines.push('END:VCARD');
     return lines.join('\r\n');
   });

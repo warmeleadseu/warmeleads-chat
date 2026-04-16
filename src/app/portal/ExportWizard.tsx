@@ -17,7 +17,7 @@ import { portalFetch } from '@/lib/portalAuth';
 
 /* ─── types ─── */
 
-export interface ExportColumn {
+interface ExportColumn {
   key: string;
   label: string;
   group: 'basis' | 'adres' | 'lead' | 'branche' | 'meta';
@@ -98,7 +98,12 @@ const STORAGE_KEY = 'warmeleads-export-presets';
 function loadPresets(): ExportPreset[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((p: ExportPreset) =>
+      p && p.id && p.name && Array.isArray(p.columns) && p.columns.length > 0,
+    );
   } catch {
     return [];
   }
@@ -157,8 +162,24 @@ export default function ExportWizard({ open, onClose, filters, totalLeads, custo
       setStep(1);
       setSavedPresets(loadPresets());
       setPreview(null);
+      setShowSavePreset(false);
+      setPresetName('');
+      setDownloading(false);
     }
   }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    document.body.style.overflow = 'hidden';
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !downloading) onClose();
+    };
+    document.addEventListener('keydown', handleEsc);
+    return () => {
+      document.body.style.overflow = '';
+      document.removeEventListener('keydown', handleEsc);
+    };
+  }, [open, downloading, onClose]);
 
   const grouped = useMemo(() => {
     const groups: Record<string, ExportColumn[]> = {};
@@ -192,12 +213,13 @@ export default function ExportWizard({ open, onClose, filters, totalLeads, custo
   };
 
   const applyCustomPreset = (preset: ExportPreset) => {
-    setSelectedCols(preset.columns.filter(k => allColumnKeys.has(k)));
-    setFormat(preset.format);
-    setSeparator(preset.separator);
-    setDateFormat(preset.dateFormat);
-    setIncludeHeaders(preset.includeHeaders);
-    setFeedbackFilter(preset.feedbackFilter);
+    const validCols = preset.columns.filter(k => allColumnKeys.has(k));
+    setSelectedCols(validCols.length > 0 ? validCols : PRESET_STANDAARD);
+    setFormat(['csv', 'xlsx', 'vcf'].includes(preset.format) ? preset.format : 'xlsx');
+    setSeparator(preset.separator === ',' ? ',' : ';');
+    setDateFormat(preset.dateFormat === 'iso' ? 'iso' : 'nl');
+    setIncludeHeaders(preset.includeHeaders !== false);
+    setFeedbackFilter(preset.feedbackFilter === 'unrated' ? 'unrated' : '');
   };
 
   const saveCurrentAsPreset = () => {
@@ -323,7 +345,7 @@ export default function ExportWizard({ open, onClose, filters, totalLeads, custo
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 z-[70] bg-black/40 backdrop-blur-sm"
-            onClick={onClose}
+            onClick={() => { if (!downloading) onClose(); }}
           />
           <motion.div
             initial={{ opacity: 0, scale: 0.96, y: 20 }}
@@ -340,7 +362,7 @@ export default function ExportWizard({ open, onClose, filters, totalLeads, custo
                   <h2 className="text-lg font-bold text-slate-900">Leads exporteren</h2>
                   <p className="text-xs text-slate-400">{totalLeads} leads beschikbaar met huidige filters</p>
                 </div>
-                <button onClick={onClose} className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-50 hover:text-slate-600">
+                <button onClick={() => { if (!downloading) onClose(); }} disabled={downloading} className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-50 hover:text-slate-600 disabled:opacity-50">
                   <XMarkIcon className="h-5 w-5" />
                 </button>
               </div>
@@ -354,7 +376,10 @@ export default function ExportWizard({ open, onClose, filters, totalLeads, custo
                 ].map(s => (
                   <button
                     key={s.num}
-                    onClick={() => { if (s.num < step || (s.num === 3 && selectedCols.length > 0)) setStep(s.num); }}
+                    onClick={() => {
+                      const canNavigate = s.num <= step || (s.num <= step + 1 && selectedCols.length > 0);
+                      if (canNavigate) setStep(s.num);
+                    }}
                     className={`flex flex-1 items-center gap-1.5 border-b-2 pb-2 text-xs font-medium transition ${
                       step === s.num
                         ? 'border-brand-purple text-brand-purple'
