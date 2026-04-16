@@ -256,7 +256,7 @@ export default function PortalPage() {
   useEffect(() => {
     const paidParam = searchParams.get('paid');
     if (paidParam) {
-      showToast('Betaling verwerkt! Uw batch is nu actief.');
+      showToast('Betaling verwerkt! Je batch is nu actief.');
       window.history.replaceState({}, '', '/portal');
     }
     if (searchParams.get('welcome') === 'true') {
@@ -678,7 +678,7 @@ export default function PortalPage() {
           Welkom, {customer.contact_person || customer.name}
         </h1>
         <p className="mt-0.5 text-sm text-slate-500">
-          Uw leadoverzicht voor {customer.name}
+          Leadoverzicht voor {customer.name}
         </p>
       </div>
 
@@ -786,7 +786,7 @@ export default function PortalPage() {
                               Deze batch start op {new Date(b.starts_at).toLocaleDateString('nl-NL', { timeZone: 'Europe/Amsterdam', weekday: 'long', day: 'numeric', month: 'long' })} om {new Date(b.starts_at).toLocaleTimeString('nl-NL', { timeZone: 'Europe/Amsterdam', hour: '2-digit', minute: '2-digit' })}
                             </p>
                             <p className="mt-0.5 text-[10px] text-amber-600/70">
-                              Leads worden vanaf dat moment toegewezen aan uw batch.
+                              Leads worden vanaf dat moment toegewezen aan je batch.
                             </p>
                           </div>
                         </div>
@@ -869,7 +869,7 @@ export default function PortalPage() {
                 <div className="mb-4">
                   <h2 className="text-lg font-bold text-slate-800">Klaar voor een nieuwe batch?</h2>
                   <p className="mt-1 text-sm text-slate-500">
-                    Uw vorige batch is succesvol afgerond. Bestel direct een nieuwe batch om door te gaan met het ontvangen van leads.
+                    Je vorige batch is succesvol afgerond. Bestel direct een nieuwe batch om door te gaan met het ontvangen van leads.
                   </p>
                 </div>
 
@@ -1680,7 +1680,7 @@ function LeadDetailPanel({
                       <MapPinIcon className="h-4 w-4 shrink-0 text-slate-400" />
                       <div className="min-w-0 flex-1">
                         <span className="block truncate text-sm text-slate-700">{adres}</span>
-                        {dist && <span className="text-xs text-slate-400">{dist} van uw targetplaats</span>}
+                        {dist && <span className="text-xs text-slate-400">{dist} van je targetplaats</span>}
                       </div>
                       <button onClick={() => copyField(adres, 'adres')}
                         className={`shrink-0 rounded-md p-1.5 transition ${copiedField === 'adres' ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600'}`}
@@ -1726,7 +1726,7 @@ function LeadDetailPanel({
                 value={notes}
                 onChange={(e) => { setNotes(e.target.value); setNotesDirty(true); }}
                 rows={4}
-                placeholder="Voeg hier uw notities toe..."
+                placeholder="Voeg hier je notities toe..."
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 outline-none focus:border-brand-purple/50"
               />
               {notesDirty && (
@@ -2119,8 +2119,8 @@ function PushToggleSection({ pushState, pushToggling, onToggle, showToast, lastE
             <p className="text-sm font-medium text-slate-900">Push notificaties</p>
             <p className="text-xs text-slate-500">
               {isEnabled && 'Actief op dit apparaat'}
-              {pushState === 'disabled' && 'Ontvang direct een melding op uw telefoon'}
-              {isDenied && 'Geblokkeerd in uw browser'}
+              {pushState === 'disabled' && 'Ontvang direct een melding op je telefoon'}
+              {isDenied && 'Geblokkeerd in je browser'}
               {isIosNotInstalled && 'Installeer eerst de app'}
             </p>
           </div>
@@ -2142,7 +2142,7 @@ function PushToggleSection({ pushState, pushToggling, onToggle, showToast, lastE
         <div className="flex items-start gap-2 rounded-lg bg-amber-50 p-3">
           <ExclamationTriangleIcon className="h-4 w-4 shrink-0 text-amber-500 mt-0.5" />
           <p className="text-xs text-amber-700">
-            Notificaties zijn geblokkeerd in uw browser. Ga naar uw browserinstellingen om dit te wijzigen.
+            Notificaties zijn geblokkeerd in je browser. Ga naar je browserinstellingen om dit te wijzigen.
           </p>
         </div>
       )}
@@ -2150,7 +2150,7 @@ function PushToggleSection({ pushState, pushToggling, onToggle, showToast, lastE
         <div className="flex items-start gap-2 rounded-lg bg-blue-50 p-3">
           <DevicePhoneMobileIcon className="h-4 w-4 shrink-0 text-blue-500 mt-0.5" />
           <p className="text-xs text-blue-700">
-            Installeer de app op uw startscherm om push notificaties te ontvangen.
+            Installeer de app op je startscherm om push notificaties te ontvangen.
           </p>
         </div>
       )}
@@ -2288,7 +2288,7 @@ function SettingsPanel({
           </div>
           <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
             <p className="text-xs text-slate-400">
-              Wilt u wijzigingen aanbrengen aan uw account? Neem contact op via{' '}
+              Wil je wijzigingen aanbrengen aan je account? Neem contact op via{' '}
               <a href="mailto:info@warmeleads.eu" className="text-brand-purple hover:underline">info@warmeleads.eu</a>
             </p>
           </div>

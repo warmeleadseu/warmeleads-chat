@@ -287,7 +287,7 @@ function AccountTab({
         <div className="overflow-hidden rounded-xl border border-brand-purple/15 bg-gradient-to-br from-brand-purple/[0.03] to-white shadow-sm">
           <div className="flex items-center gap-2 border-b border-brand-purple/10 bg-brand-purple/[0.04] px-5 py-3">
             <UserCircleIcon className="h-4 w-4 text-brand-purple" />
-            <h3 className="text-sm font-semibold text-slate-900">Uw accountmanager</h3>
+            <h3 className="text-sm font-semibold text-slate-900">Je accountmanager</h3>
           </div>
           <div className="p-5">
             <div className="flex items-start gap-4">
@@ -353,7 +353,7 @@ function AccountTab({
         <h3 className="mb-4 text-sm font-semibold text-slate-900">Wachtwoord wijzigen</h3>
         <form onSubmit={handlePasswordChange} className="space-y-3 sm:max-w-md">
           {[
-            { label: 'Huidig wachtwoord', value: currentPw, set: setCurrentPw, show: showCurrent, toggle: setShowCurrent, placeholder: 'Voer uw huidige wachtwoord in' },
+            { label: 'Huidig wachtwoord', value: currentPw, set: setCurrentPw, show: showCurrent, toggle: setShowCurrent, placeholder: 'Voer je huidige wachtwoord in' },
             { label: 'Nieuw wachtwoord', value: newPw, set: setNewPw, show: showNew, toggle: setShowNew, placeholder: 'Min. 8 tekens' },
             { label: 'Bevestig wachtwoord', value: confirmPw, set: setConfirmPw, show: showConfirm, toggle: setShowConfirm, placeholder: 'Herhaal nieuw wachtwoord' },
           ].map((field) => (
@@ -470,10 +470,10 @@ function AccountTab({
       {/* Contact info */}
       <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
         <p className="text-xs text-slate-500">
-          Wijzigingen aan uw bedrijfsgegevens?{' '}
+          Wijzigingen aan je bedrijfsgegevens?{' '}
           {accountManager ? (
             <>
-              Neem contact op met uw accountmanager{' '}
+              Neem contact op met je accountmanager{' '}
               <a href={`mailto:${accountManager.email}`} className="font-medium text-brand-purple hover:underline">
                 {accountManager.name}
               </a>
@@ -526,8 +526,8 @@ function AccountPushToggle({ showToast }: { showToast: (msg: string, type?: 'suc
             <p className="text-sm font-medium text-slate-900">Meldingen op dit apparaat</p>
             <p className="text-xs text-slate-500">
               {isEnabled && 'Actief'}
-              {state === 'disabled' && 'Ontvang direct een melding op uw telefoon'}
-              {isDenied && 'Geblokkeerd in uw browser'}
+              {state === 'disabled' && 'Ontvang direct een melding op je telefoon'}
+              {isDenied && 'Geblokkeerd in je browser'}
               {isIos && 'Installeer eerst de app'}
             </p>
           </div>
@@ -545,13 +545,13 @@ function AccountPushToggle({ showToast }: { showToast: (msg: string, type?: 'suc
       {isDenied && (
         <div className="mt-3 flex items-start gap-2 rounded-lg bg-amber-50 p-3">
           <ExclamationTriangleIcon className="h-4 w-4 shrink-0 text-amber-500 mt-0.5" />
-          <p className="text-xs text-amber-700">Notificaties zijn geblokkeerd in uw browser. Ga naar uw browserinstellingen om dit te wijzigen.</p>
+          <p className="text-xs text-amber-700">Notificaties zijn geblokkeerd in je browser. Ga naar je browserinstellingen om dit te wijzigen.</p>
         </div>
       )}
       {isIos && (
         <div className="mt-3 flex items-start gap-2 rounded-lg bg-blue-50 p-3">
           <DevicePhoneMobileIcon className="h-4 w-4 shrink-0 text-blue-500 mt-0.5" />
-          <p className="text-xs text-blue-700">Installeer de app op uw startscherm om push notificaties te ontvangen.</p>
+          <p className="text-xs text-blue-700">Installeer de app op je startscherm om push notificaties te ontvangen.</p>
         </div>
       )}
     </div>
@@ -577,7 +577,7 @@ function InsightsTab({
         <ChartBarIcon className="mx-auto mb-3 h-12 w-12 text-slate-300" />
         <p className="font-medium text-slate-600">Nog geen prestaties</p>
         <p className="mx-auto mt-1 max-w-xs text-sm text-slate-400">
-          Zodra u leads ontvangt en bewerkt, verschijnen hier uw statistieken en inzichten.
+          Zodra je leads ontvangt en bewerkt, verschijnen hier je statistieken en inzichten.
         </p>
       </div>
     );
@@ -1331,7 +1331,7 @@ export default function AccountPage() {
       <div>
         <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">Account & Insights</h1>
         <p className="mt-0.5 text-sm text-slate-500">
-          Beheer uw account, bekijk prestaties en targetgebieden
+          Beheer je account, bekijk prestaties en targetgebieden
         </p>
       </div>
 

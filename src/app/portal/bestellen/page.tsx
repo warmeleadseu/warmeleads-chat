@@ -372,7 +372,7 @@ export default function BestellenPage() {
         <motion.p initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}
           className="mt-3 max-w-md text-sm leading-relaxed text-slate-500">
           {isPaid
-            ? 'Uw nieuwe batch is aangemaakt en leads worden automatisch toegewezen. U ontvangt een bevestiging per e-mail.'
+            ? 'Je nieuwe batch is aangemaakt en leads worden automatisch toegewezen. Je ontvangt een bevestiging per e-mail.'
             : isPending
             ? 'De betaling wordt verwerkt. Dit duurt meestal een paar seconden.'
             : 'De betaling is helaas niet gelukt. U kunt het opnieuw proberen.'}
@@ -395,7 +395,7 @@ export default function BestellenPage() {
                 {redirectOrder.batch_size} leads &middot; &euro;{(Number(redirectOrder.total_price) * 1.21).toFixed(2)} incl. BTW
               </p>
             </div>
-            <p className="mt-1 text-xs text-emerald-600">Uw batch is direct actief en leads worden automatisch toegewezen</p>
+            <p className="mt-1 text-xs text-emerald-600">Je batch is direct actief en leads worden automatisch toegewezen</p>
           </motion.div>
         )}
 

@@ -249,8 +249,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const { error } = await requireSuperAdmin(request);
-  if (error) return error;
+  const { admin, error } = await requireSuperAdmin(request);
+  if (error || !admin) return error!;
 
   const { run_id } = await request.json();
   if (!run_id) return NextResponse.json({ error: 'run_id is verplicht' }, { status: 400 });

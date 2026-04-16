@@ -8,8 +8,8 @@ const ISSUER = 'warmeleads-admin';
 const EXPIRY = '1h';
 
 export async function POST(request: NextRequest) {
-  const { error } = await requireSuperAdmin(request);
-  if (error) return error;
+  const { admin, error: authError } = await requireSuperAdmin(request);
+  if (authError || !admin) return authError!;
 
   const { customer_id } = await request.json();
   if (!customer_id) {
@@ -17,13 +17,13 @@ export async function POST(request: NextRequest) {
   }
 
   const supabase = createServerClient();
-  const { data: customer, error } = await supabase
+  const { data: customer, error: custError } = await supabase
     .from('customers')
     .select('id, name, email, contact_person, branches, portal_active')
     .eq('id', customer_id)
     .single();
 
-  if (error || !customer) {
+  if (custError || !customer) {
     return NextResponse.json({ error: 'Klant niet gevonden' }, { status: 404 });
   }
 

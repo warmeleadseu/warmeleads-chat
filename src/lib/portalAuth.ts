@@ -41,9 +41,19 @@ export async function portalFetch(url: string, options: RequestInit = {}) {
   const res = await fetch(url, { ...options, headers });
 
   if (res.status === 401 && typeof window !== 'undefined') {
-    localStorage.removeItem('warmeleads-portal-auth');
-    localStorage.removeItem('warmeleads-portal-customer');
-    window.location.href = '/portal';
+    try {
+      const raw = localStorage.getItem('warmeleads-portal-auth');
+      const isAdmin = raw ? JSON.parse(raw).is_admin_view : false;
+      if (!isAdmin) {
+        localStorage.removeItem('warmeleads-portal-auth');
+        localStorage.removeItem('warmeleads-portal-customer');
+        window.location.href = '/portal';
+      }
+    } catch {
+      localStorage.removeItem('warmeleads-portal-auth');
+      localStorage.removeItem('warmeleads-portal-customer');
+      window.location.href = '/portal';
+    }
   }
 
   return res;

@@ -274,11 +274,11 @@ function InstallBanner() {
                 <p className="text-[15px] font-semibold text-slate-900">WarmeLeads installeren</p>
                 {iosHint ? (
                   <p className="mt-0.5 text-[13px] leading-snug text-slate-500">
-                    Tik op <ArrowUpOnSquareIcon className="inline h-4 w-4 -mt-0.5 text-brand-purple" /> in uw browser en kies <span className="font-medium text-slate-700">&quot;Zet op beginscherm&quot;</span>
+                    Tik op <ArrowUpOnSquareIcon className="inline h-4 w-4 -mt-0.5 text-brand-purple" /> in je browser en kies <span className="font-medium text-slate-700">&quot;Zet op beginscherm&quot;</span>
                   </p>
                 ) : (
                   <p className="mt-0.5 text-[13px] leading-snug text-slate-500">
-                    Snelle toegang vanaf uw startscherm met push notificaties
+                    Snelle toegang vanaf je startscherm met push notificaties
                   </p>
                 )}
               </div>

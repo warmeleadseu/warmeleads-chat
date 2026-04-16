@@ -259,7 +259,7 @@ export default function BlogPostClient({ article, relatedArticles }: BlogPostCli
             <div className="prose prose-lg max-w-none">
               {article.content ? (
                 <div
-                  className="blog-content [&_h2]:text-2xl [&_h2]:md:text-3xl [&_h2]:font-bold [&_h2]:text-slate-900 [&_h2]:mb-6 [&_h2]:mt-10 [&_p]:text-slate-700 [&_p]:leading-relaxed [&_p]:mb-4 [&_p]:text-lg [&_ul]:space-y-2 [&_ul]:mb-6 [&_ul]:list-disc [&_ul]:pl-5 [&_li]:text-slate-700 [&_li]:text-lg [&_ol]:space-y-2 [&_ol]:mb-6 [&_ol]:list-decimal [&_ol]:pl-5 [&_strong]:font-semibold [&_strong]:text-slate-900"
+                  className="blog-content [&_h2]:text-2xl [&_h2]:md:text-3xl [&_h2]:font-bold [&_h2]:text-slate-900 [&_h2]:mb-6 [&_h2]:mt-10 [&>h2:first-child]:mt-0 [&_p]:text-slate-700 [&_p]:leading-relaxed [&_p]:mb-4 [&_p]:text-lg [&_ul]:space-y-2 [&_ul]:mb-6 [&_ul]:list-disc [&_ul]:pl-5 [&_li]:text-slate-700 [&_li]:text-lg [&_ol]:space-y-2 [&_ol]:mb-6 [&_ol]:list-decimal [&_ol]:pl-5 [&_strong]:font-semibold [&_strong]:text-slate-900"
                   dangerouslySetInnerHTML={{ __html: article.content }}
                 />
               ) : (
