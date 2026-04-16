@@ -108,6 +108,7 @@ export default function AdminReclamatiesPage() {
 
   const handleResolve = async (status: 'approved' | 'rejected') => {
     if (!selected) return;
+    if (selected.status === status) return;
     setSaving(status);
     try {
       const res = await adminFetch('/api/admin/reclamations', {
@@ -119,15 +120,19 @@ export default function AdminReclamatiesPage() {
         setReclamations(prev => prev.map(r => r.id === updated.id ? updated : r));
         setSelected(null);
         setAdminNotes('');
+        const wasChange = updated.previous_status && updated.previous_status !== 'pending';
         if (status === 'approved') {
           const msg = updated.batch_reactivated
-            ? 'Reclamatie goedgekeurd — +1 compensatie lead, batch geheractiveerd'
+            ? `Reclamatie ${wasChange ? 'gewijzigd naar ' : ''}goedgekeurd — +1 compensatie lead, batch geheractiveerd`
             : updated.batch_updated
-              ? 'Reclamatie goedgekeurd — +1 compensatie lead toegevoegd aan batch'
-              : 'Reclamatie goedgekeurd (geen batch gevonden)';
+              ? `Reclamatie ${wasChange ? 'gewijzigd naar ' : ''}goedgekeurd — +1 compensatie lead toegevoegd aan batch`
+              : `Reclamatie ${wasChange ? 'gewijzigd naar ' : ''}goedgekeurd (geen batch gevonden)`;
           showToast(msg);
         } else {
-          showToast('Reclamatie afgewezen');
+          const msg = updated.compensation_reverted
+            ? `Reclamatie ${wasChange ? 'gewijzigd naar ' : ''}afgewezen — compensatie lead teruggedraaid`
+            : `Reclamatie ${wasChange ? 'gewijzigd naar ' : ''}afgewezen`;
+          showToast(msg);
         }
       } else {
         const d = await res.json();
@@ -275,6 +280,8 @@ export default function AdminReclamatiesPage() {
                       <td className="px-4 py-3 text-right">
                         {r.status === 'pending' ? (
                           <span className="text-xs font-medium text-brand-purple">Beoordelen &rarr;</span>
+                        ) : canResolve ? (
+                          <span className="text-xs font-medium text-slate-500 hover:text-brand-purple">Bekijken / Wijzigen &rarr;</span>
                         ) : (
                           <span className="text-xs text-slate-400">Bekijken &rarr;</span>
                         )}
@@ -342,9 +349,7 @@ export default function AdminReclamatiesPage() {
                 <div className="h-[3px] bg-warmeleads-gradient" />
                 <div className="flex items-center justify-between px-5 py-4">
                   <div>
-                    <h2 className="text-lg font-bold text-slate-900">
-                      {selected.status === 'pending' ? 'Reclamatie beoordelen' : 'Reclamatie details'}
-                    </h2>
+                    <h2 className="text-lg font-bold text-slate-900">Reclamatie {selected.status === 'pending' ? 'beoordelen' : 'details'}</h2>
                     <p className="text-xs text-slate-400">{selected.customers?.name}</p>
                   </div>
                   <button onClick={() => { setSelected(null); setAdminNotes(''); }} className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-50 hover:text-slate-600">
@@ -451,8 +456,8 @@ export default function AdminReclamatiesPage() {
                   <textarea
                     value={adminNotes}
                     onChange={e => setAdminNotes(e.target.value)}
-                    disabled={selected.status !== 'pending'}
-                    placeholder={selected.status === 'pending' ? 'Optioneel: voeg een notitie toe...' : ''}
+                    disabled={!canResolve}
+                    placeholder={canResolve ? 'Optioneel: voeg een notitie toe...' : ''}
                     rows={3}
                     className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-brand-purple/50 focus:ring-2 focus:ring-brand-purple/20 disabled:bg-slate-50 disabled:text-slate-500"
                   />
@@ -460,36 +465,56 @@ export default function AdminReclamatiesPage() {
               </div>
 
               {/* Action buttons */}
-              {selected.status === 'pending' && canResolve && (
+              {canResolve && (
                 <div className="shrink-0 border-t border-slate-100 px-5 py-4 space-y-3">
-                  <div className="flex items-start gap-2 rounded-lg bg-blue-50 border border-blue-100 px-3 py-2">
-                    <CheckCircleIcon className="mt-0.5 h-4 w-4 shrink-0 text-blue-500" />
-                    <p className="text-xs text-blue-700">Bij goedkeuring wordt automatisch +1 compensatie lead toegevoegd aan de bijbehorende batch. Als de batch al voltooid is, wordt deze geheractiveerd.</p>
-                  </div>
+                  {selected.status === 'pending' && (
+                    <div className="flex items-start gap-2 rounded-lg bg-blue-50 border border-blue-100 px-3 py-2">
+                      <CheckCircleIcon className="mt-0.5 h-4 w-4 shrink-0 text-blue-500" />
+                      <p className="text-xs text-blue-700">Bij goedkeuring wordt automatisch +1 compensatie lead toegevoegd aan de bijbehorende batch. Als de batch al voltooid is, wordt deze geheractiveerd.</p>
+                    </div>
+                  )}
+                  {selected.status !== 'pending' && (
+                    <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-100 px-3 py-2">
+                      <ArrowPathIcon className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+                      <p className="text-xs text-amber-700">
+                        {selected.status === 'approved'
+                          ? 'Bij wijziging naar afgewezen wordt de compensatie lead automatisch teruggedraaid uit de batch.'
+                          : 'Bij wijziging naar goedgekeurd wordt alsnog +1 compensatie lead toegevoegd aan de batch.'}
+                      </p>
+                    </div>
+                  )}
                   <div className="grid grid-cols-2 gap-3">
                     <button
                       onClick={() => handleResolve('rejected')}
-                      disabled={saving !== null}
-                      className="flex items-center justify-center gap-2 rounded-lg border-2 border-red-200 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-700 transition hover:bg-red-100 disabled:opacity-50"
+                      disabled={saving !== null || selected.status === 'rejected'}
+                      className={`flex items-center justify-center gap-2 rounded-lg border-2 px-4 py-2.5 text-sm font-semibold transition disabled:opacity-50 ${
+                        selected.status === 'rejected'
+                          ? 'border-red-300 bg-red-100 text-red-400 cursor-not-allowed'
+                          : 'border-red-200 bg-red-50 text-red-700 hover:bg-red-100'
+                      }`}
                     >
                       {saving === 'rejected' ? (
                         <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-red-300 border-t-red-600" />
                       ) : (
                         <XCircleIcon className="h-4 w-4" />
                       )}
-                      Afwijzen
+                      {selected.status === 'approved' ? 'Wijzig naar afgewezen' : 'Afwijzen'}
                     </button>
                     <button
                       onClick={() => handleResolve('approved')}
-                      disabled={saving !== null}
-                      className="flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50"
+                      disabled={saving !== null || selected.status === 'approved'}
+                      className={`flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold shadow-sm transition disabled:opacity-50 ${
+                        selected.status === 'approved'
+                          ? 'bg-emerald-200 text-emerald-400 cursor-not-allowed'
+                          : 'bg-emerald-600 text-white hover:bg-emerald-700'
+                      }`}
                     >
                       {saving === 'approved' ? (
                         <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-emerald-300 border-t-white" />
                       ) : (
                         <CheckCircleIcon className="h-4 w-4" />
                       )}
-                      Goedkeuren
+                      {selected.status === 'rejected' ? 'Wijzig naar goedgekeurd' : 'Goedkeuren'}
                     </button>
                   </div>
                 </div>
