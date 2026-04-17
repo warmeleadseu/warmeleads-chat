@@ -469,18 +469,21 @@ export default function PortalPage() {
   }), [statusFilter, branchFilter, dateFrom, dateTo, leadSource, search]);
 
   const branchFieldsForExport = useMemo(() => {
-    const allFields: { key: string; label: string }[] = [];
+    const customerBranchSlugs = new Set(customer.branches);
+    const fields: { key: string; label: string }[] = [];
     const seen = new Set<string>();
-    branchConfigs.forEach(b => {
-      (b.branch_fields || []).forEach(f => {
-        if (!seen.has(f.key)) {
-          seen.add(f.key);
-          allFields.push({ key: f.key, label: f.label });
-        }
+    branchConfigs
+      .filter(b => customerBranchSlugs.has(b.slug))
+      .forEach(b => {
+        (b.branch_fields || []).forEach(f => {
+          if (!seen.has(f.key)) {
+            seen.add(f.key);
+            fields.push({ key: f.key, label: f.label });
+          }
+        });
       });
-    });
-    return allFields;
-  }, [branchConfigs]);
+    return fields;
+  }, [branchConfigs, customer.branches]);
 
   const activeFilters = useMemo(() => {
     let count = 0;

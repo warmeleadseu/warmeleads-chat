@@ -62,16 +62,10 @@ const CORE_COLUMNS: ExportColumn[] = [
   { key: 'land', label: 'Land', group: 'adres' },
 
   { key: 'branch', label: 'Branche', group: 'lead' },
-  { key: 'bron', label: 'Bron', group: 'lead' },
   { key: 'status', label: 'Status', group: 'lead' },
-  { key: 'wervingsdatum', label: 'Wervingsdatum', group: 'lead' },
   { key: 'received_at', label: 'Ontvangstdatum', group: 'lead' },
-  { key: 'quality_score', label: 'Kwaliteitsscore', group: 'lead' },
-  { key: 'phone_valid', label: 'Telefoon geldig', group: 'lead' },
 
   { key: 'notities', label: 'Notities', group: 'meta' },
-  { key: 'distance_km', label: 'Afstand (km)', group: 'meta' },
-  { key: 'batch_name', label: 'Batch', group: 'meta' },
 ];
 
 const GROUP_LABELS: Record<string, string> = {
@@ -86,7 +80,7 @@ const GROUP_ORDER = ['basis', 'adres', 'lead', 'branche', 'meta'];
 
 const PRESET_STANDAARD: string[] = [
   'naam_klant', 'email', 'telefoonnummer', 'postcode', 'huisnummer',
-  'plaatsnaam', 'provincie', 'status', 'branch', 'wervingsdatum', 'notities',
+  'plaatsnaam', 'provincie', 'status', 'branch', 'received_at', 'notities',
 ];
 
 const PRESET_BELSYSTEEM: string[] = [
