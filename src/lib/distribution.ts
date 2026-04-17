@@ -111,6 +111,9 @@ export async function distributeLead(lead: LeadForDistribution): Promise<Distrib
     if (leadRow) fullLead = { ...leadRow, lat: lead.lat, lng: lead.lng };
   }
 
+  // Never distribute demo leads to real customers
+  if ((fullLead as any).bron === 'demo') return result;
+
   // Never distribute leads with invalid phone numbers
   if (fullLead.phone_valid === false) return result;
 
@@ -451,6 +454,7 @@ export async function backfillBatch(batchId: string, lookbackDays: number): Prom
     .select('*')
     .eq('branch', batch.branch)
     .neq('bron', 'excel_import')
+    .neq('bron', 'demo')
     .neq('phone_valid', false)
     .gte('created_at', cutoff.toISOString())
     .order('created_at', { ascending: false });
@@ -549,6 +553,7 @@ export async function distributeUnassignedLeads(): Promise<{ distributed: number
     .from('leads')
     .select('*')
     .neq('bron', 'excel_import')
+    .neq('bron', 'demo')
     .neq('phone_valid', false)
     .not('lat', 'is', null)
     .not('lng', 'is', null)

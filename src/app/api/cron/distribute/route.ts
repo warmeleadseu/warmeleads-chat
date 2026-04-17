@@ -22,11 +22,12 @@ export async function GET(request: NextRequest) {
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - MAX_LEAD_AGE_DAYS);
 
-  // Phase 1: Enrich recent leads missing coordinates (skip spreadsheet imports)
+  // Phase 1: Enrich recent leads missing coordinates (skip spreadsheet imports and demo leads)
   const { data: leads } = await supabase
     .from('leads')
     .select('id, postcode, huisnummer, plaatsnaam, provincie, lat, lng, land, telefoonnummer')
     .neq('bron', 'excel_import')
+    .neq('bron', 'demo')
     .gte('created_at', cutoff.toISOString())
     .not('postcode', 'is', null)
     .not('postcode', 'eq', '')
@@ -77,6 +78,7 @@ export async function GET(request: NextRequest) {
     .from('leads')
     .select('id, telefoonnummer')
     .neq('bron', 'excel_import')
+    .neq('bron', 'demo')
     .is('phone_valid', null)
     .gte('created_at', cutoff.toISOString())
     .limit(500);
@@ -96,6 +98,7 @@ export async function GET(request: NextRequest) {
     .from('leads')
     .select('id, naam_klant, email, notities, custom_fields')
     .neq('bron', 'excel_import')
+    .neq('bron', 'demo')
     .gte('created_at', cutoff.toISOString())
     .limit(2000);
 
