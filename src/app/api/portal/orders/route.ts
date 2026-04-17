@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyCustomer, portalUnauthorized } from '@/lib/portalAuth';
 import { createServerClient } from '@/lib/supabase';
+import { hasPermission, forbidden, PERMISSIONS } from '@/lib/portalPermissions';
 import { createBatchPayment } from '@/lib/mollie';
 import { calculatePricePerLead, mergeCustomTiers } from '@/lib/pricing';
 
 export async function GET(request: NextRequest) {
-  const customer = await verifyCustomer(request);
-  if (!customer) return portalUnauthorized();
+  const session = await verifyCustomer(request);
+  if (!session) return portalUnauthorized();
+  if (!hasPermission(session, PERMISSIONS.ORDERS_VIEW)) return forbidden();
+
+  const { customer } = session;
 
   const supabase = createServerClient();
   const { data, error } = await supabase
@@ -21,8 +25,11 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const customer = await verifyCustomer(request);
-  if (!customer) return portalUnauthorized();
+  const session = await verifyCustomer(request);
+  if (!session) return portalUnauthorized();
+  if (!hasPermission(session, PERMISSIONS.ORDERS_CREATE)) return forbidden();
+
+  const { customer } = session;
 
   try {
     const body = await request.json();
@@ -215,8 +222,11 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const customer = await verifyCustomer(request);
-  if (!customer) return portalUnauthorized();
+  const session = await verifyCustomer(request);
+  if (!session) return portalUnauthorized();
+  if (!hasPermission(session, PERMISSIONS.ORDERS_CREATE)) return forbidden();
+
+  const { customer } = session;
 
   try {
     const { order_id } = await request.json();

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyCustomer, portalUnauthorized } from '@/lib/portalAuth';
 import { createServerClient } from '@/lib/supabase';
+import { hasPermission, forbidden, PERMISSIONS } from '@/lib/portalPermissions';
 
 const VALID_RATINGS = [
   'goed_contact',
@@ -35,9 +36,11 @@ async function verifyLeadOwnership(
 }
 
 export async function GET(request: NextRequest) {
-  const customer = await verifyCustomer(request);
-  if (!customer) return portalUnauthorized();
+  const session = await verifyCustomer(request);
+  if (!session) return portalUnauthorized();
+  if (!hasPermission(session, PERMISSIONS.LEADS_EDIT)) return forbidden();
 
+  const { customer } = session;
   const leadId = request.nextUrl.searchParams.get('lead_id');
   if (!leadId) {
     return NextResponse.json({ error: 'lead_id is verplicht' }, { status: 400 });
@@ -65,8 +68,11 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const customer = await verifyCustomer(request);
-  if (!customer) return portalUnauthorized();
+  const session = await verifyCustomer(request);
+  if (!session) return portalUnauthorized();
+  if (!hasPermission(session, PERMISSIONS.LEADS_EDIT)) return forbidden();
+
+  const { customer } = session;
 
   try {
     const { lead_id, rating, comment } = await request.json();

@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
 
     const { data: resetToken } = await supabase
       .from('password_reset_tokens')
-      .select('id, customer_id, expires_at, used_at')
+      .select('id, customer_id, portal_user_id, expires_at, used_at')
       .eq('token', token)
       .single();
 
@@ -43,13 +43,24 @@ export async function POST(request: NextRequest) {
 
     const passwordHash = await bcrypt.hash(password, 12);
 
-    const { error: updateError } = await supabase
-      .from('customers')
-      .update({ password_hash: passwordHash, portal_password: passwordHash })
-      .eq('id', resetToken.customer_id);
+    if (resetToken.portal_user_id) {
+      const { error: updateError } = await supabase
+        .from('portal_users')
+        .update({ password_hash: passwordHash, updated_at: new Date().toISOString() })
+        .eq('id', resetToken.portal_user_id);
 
-    if (updateError) {
-      return NextResponse.json({ error: 'Wachtwoord kon niet worden bijgewerkt' }, { status: 500 });
+      if (updateError) {
+        return NextResponse.json({ error: 'Wachtwoord kon niet worden bijgewerkt' }, { status: 500 });
+      }
+    } else {
+      const { error: updateError } = await supabase
+        .from('customers')
+        .update({ password_hash: passwordHash, portal_password: passwordHash })
+        .eq('id', resetToken.customer_id);
+
+      if (updateError) {
+        return NextResponse.json({ error: 'Wachtwoord kon niet worden bijgewerkt' }, { status: 500 });
+      }
     }
 
     await supabase

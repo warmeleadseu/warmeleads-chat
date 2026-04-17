@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyCustomer, portalUnauthorized } from '@/lib/portalAuth';
 import { createServerClient } from '@/lib/supabase';
+import { hasPermission, forbidden, PERMISSIONS } from '@/lib/portalPermissions';
 import { createBatchPayment } from '@/lib/mollie';
 
 export async function POST(request: NextRequest) {
-  const customer = await verifyCustomer(request);
-  if (!customer) return portalUnauthorized();
+  const session = await verifyCustomer(request);
+  if (!session) return portalUnauthorized();
+  if (!hasPermission(session, PERMISSIONS.ORDERS_CREATE)) return forbidden();
+
+  const { customer } = session;
 
   try {
     const { batch_id } = await request.json();

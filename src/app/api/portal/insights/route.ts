@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyCustomer, portalUnauthorized } from '@/lib/portalAuth';
 import { createServerClient } from '@/lib/supabase';
+import { hasPermission, forbidden, PERMISSIONS } from '@/lib/portalPermissions';
 
 const IN_CHUNK = 500;
 
 export async function GET(request: NextRequest) {
-  const customer = await verifyCustomer(request);
-  if (!customer) return portalUnauthorized();
+  const session = await verifyCustomer(request);
+  if (!session) return portalUnauthorized();
+  if (!hasPermission(session, PERMISSIONS.STATISTICS_VIEW)) return forbidden();
+
+  const { customer } = session;
 
   const supabase = createServerClient();
 

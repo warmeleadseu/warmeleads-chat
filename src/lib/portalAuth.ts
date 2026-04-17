@@ -1,14 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from './supabase';
+import type { PortalSession } from './portalPermissions';
 
-export async function verifyCustomer(request: NextRequest) {
+export type { PortalSession };
+
+/**
+ * Verifies the portal bearer token.
+ * Checks customers table first (owner login), then portal_users table (agent login).
+ * Returns a PortalSession with the customer + optional portalUser info.
+ */
+export async function verifyCustomer(request: NextRequest): Promise<PortalSession | null> {
   const header = request.headers.get('Authorization');
   if (!header?.startsWith('Bearer ')) return null;
 
   const token = header.slice(7);
   const supabase = createServerClient();
 
-  const { data, error } = await supabase
+  // 1. Check customers table (owner login — token = customer.id)
+  const { data: customer } = await supabase
     .from('customers')
     .select('id, name, email, contact_person, branches, portal_active')
     .eq('id', token)
@@ -16,8 +25,36 @@ export async function verifyCustomer(request: NextRequest) {
     .eq('portal_active', true)
     .single();
 
-  if (error || !data) return null;
-  return data;
+  if (customer) {
+    return { customer, portalUser: undefined, isOwner: true };
+  }
+
+  // 2. Check portal_users table (agent/manager login — token = portal_user.id)
+  const { data: portalUser } = await supabase
+    .from('portal_users')
+    .select('id, customer_id, name, email, role, is_active, permissions, assignment_rules, last_login_at, last_seen_at, login_count, phone, created_at')
+    .eq('id', token)
+    .eq('is_active', true)
+    .single();
+
+  if (!portalUser) return null;
+
+  // Fetch the parent customer
+  const { data: parentCustomer } = await supabase
+    .from('customers')
+    .select('id, name, email, contact_person, branches, portal_active')
+    .eq('id', portalUser.customer_id)
+    .eq('is_active', true)
+    .eq('portal_active', true)
+    .single();
+
+  if (!parentCustomer) return null;
+
+  return {
+    customer: parentCustomer,
+    portalUser,
+    isOwner: portalUser.role === 'owner',
+  };
 }
 
 export function portalUnauthorized() {

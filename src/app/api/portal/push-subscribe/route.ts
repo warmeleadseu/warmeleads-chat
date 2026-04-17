@@ -3,8 +3,10 @@ import { verifyCustomer, portalUnauthorized } from '@/lib/portalAuth';
 import { createServerClient } from '@/lib/supabase';
 
 export async function POST(request: NextRequest) {
-  const customer = await verifyCustomer(request);
-  if (!customer) return portalUnauthorized();
+  const session = await verifyCustomer(request);
+  if (!session) return portalUnauthorized();
+
+  const { customer } = session;
 
   try {
     const { subscription } = await request.json();
@@ -28,8 +30,10 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const customer = await verifyCustomer(request);
-  if (!customer) return portalUnauthorized();
+  const session = await verifyCustomer(request);
+  if (!session) return portalUnauthorized();
+
+  const { customer } = session;
 
   try {
     const { endpoint } = await request.json();

@@ -11,8 +11,21 @@ export interface PortalCustomer {
   demo_mode: boolean;
 }
 
+export interface ClientPortalUser {
+  id: string;
+  customer_id: string;
+  name: string;
+  email: string;
+  role: 'owner' | 'manager' | 'agent';
+  permissions: string[];
+  phone: string | null;
+}
+
 export interface PortalCtx {
   customer: PortalCustomer;
+  portalUser: ClientPortalUser | null;
+  isOwner: boolean;
+  hasPermission: (perm: string) => boolean;
   logout: () => void;
 }
 

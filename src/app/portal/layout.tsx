@@ -19,10 +19,12 @@ import {
   BeakerIcon,
   SparklesIcon,
 } from '@heroicons/react/24/outline';
-import { PortalContext, type PortalCustomer } from './portalContext';
+import { PortalContext, type PortalCustomer, type ClientPortalUser } from './portalContext';
 import { portalFetch } from '@/lib/portalAuth';
+import { PERMISSIONS } from '@/lib/portalPermissions';
+import { UsersIcon } from '@heroicons/react/24/outline';
 
-function LoginScreen({ onLogin }: { onLogin: (c: PortalCustomer, t: string) => void }) {
+function LoginScreen({ onLogin }: { onLogin: (c: PortalCustomer, t: string, pu: ClientPortalUser | null) => void }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -45,7 +47,7 @@ function LoginScreen({ onLogin }: { onLogin: (c: PortalCustomer, t: string) => v
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Inloggen mislukt');
-      onLogin(data.customer, data.token);
+      onLogin(data.customer, data.token, data.portal_user || null);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Inloggen mislukt');
     } finally {
@@ -232,14 +234,40 @@ function LoginScreen({ onLogin }: { onLogin: (c: PortalCustomer, t: string) => v
   );
 }
 
-const PORTAL_NAV = [
-  { label: 'Leads', href: '/portal', icon: InboxStackIcon },
-  { label: 'Bestellen', href: '/portal/bestellen', icon: ShoppingCartIcon },
+interface NavItem {
+  label: string;
+  href: string;
+  icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
+  permission?: string;
+}
+
+const ALL_PORTAL_NAV: NavItem[] = [
+  { label: 'Leads', href: '/portal', icon: InboxStackIcon, permission: PERMISSIONS.LEADS_VIEW },
+  { label: 'Bestellen', href: '/portal/bestellen', icon: ShoppingCartIcon, permission: PERMISSIONS.ORDERS_CREATE },
+  { label: 'Team', href: '/portal/team', icon: UsersIcon, permission: PERMISSIONS.TEAM_MANAGE },
   { label: 'Account & Insights', href: '/portal/account', icon: UserCircleIcon },
 ];
 
-function PortalHeader({ customer, onLogout }: { customer: PortalCustomer; onLogout: () => void }) {
+function PortalHeader({
+  customer,
+  portalUser,
+  hasPermFn,
+  onLogout,
+}: {
+  customer: PortalCustomer;
+  portalUser: ClientPortalUser | null;
+  hasPermFn: (p: string) => boolean;
+  onLogout: () => void;
+}) {
   const pathname = usePathname();
+
+  const navItems = ALL_PORTAL_NAV.filter(item => {
+    if (!item.permission) return true;
+    return hasPermFn(item.permission);
+  });
+
+  const displayName = portalUser ? portalUser.name : (customer.contact_person || customer.name);
+  const initial = displayName.charAt(0).toUpperCase();
 
   return (
     <header className="bg-white shadow-sm">
@@ -249,13 +277,22 @@ function PortalHeader({ customer, onLogout }: { customer: PortalCustomer; onLogo
           <div className="flex items-center gap-2.5 sm:gap-3">
             <Image src="/warmeleads-logo-2026.png" alt="WarmeLeads" width={120} height={36} className="h-6 w-auto" />
             <div className="hidden h-5 w-px bg-slate-200 sm:block" />
-            <span className="hidden max-w-[160px] truncate text-sm font-medium text-slate-600 sm:inline">{customer.name}</span>
+            <span className="hidden max-w-[160px] truncate text-sm font-medium text-slate-600 sm:inline">
+              {portalUser && portalUser.role !== 'owner'
+                ? `${customer.name}`
+                : customer.name}
+            </span>
           </div>
           <div className="flex items-center gap-2 sm:gap-3">
+            {portalUser && portalUser.role !== 'owner' && (
+              <span className="hidden rounded-md bg-brand-purple/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-brand-purple sm:inline">
+                {portalUser.role === 'manager' ? 'Manager' : 'Agent'}
+              </span>
+            )}
             <div className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-purple/10 text-xs font-bold text-brand-purple">
-              {customer.contact_person?.charAt(0)?.toUpperCase() || customer.name.charAt(0).toUpperCase()}
+              {initial}
             </div>
-            <span className="hidden text-sm text-slate-600 sm:inline">{customer.contact_person || customer.name}</span>
+            <span className="hidden text-sm text-slate-600 sm:inline">{displayName}</span>
             <button
               onClick={onLogout}
               className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs text-slate-500 transition hover:bg-slate-100 hover:text-red-500 sm:px-2.5"
@@ -266,7 +303,7 @@ function PortalHeader({ customer, onLogout }: { customer: PortalCustomer; onLogo
           </div>
         </div>
         <nav className="-mb-px flex gap-1 border-t border-slate-100" style={{ scrollbarWidth: 'none' }}>
-          {PORTAL_NAV.map((item) => {
+          {navItems.map((item) => {
             const active = item.href === '/portal' ? pathname === '/portal' : pathname.startsWith(item.href);
             return (
               <Link
@@ -497,9 +534,18 @@ function AdminViewBanner({ customerName, adminName, onStop }: { customerName: st
 
 export default function PortalLayout({ children }: { children: ReactNode }) {
   const [customer, setCustomer] = useState<PortalCustomer | null>(null);
+  const [portalUser, setPortalUser] = useState<ClientPortalUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [isAdminView, setIsAdminView] = useState(false);
   const [adminName, setAdminName] = useState('');
+
+  const isOwner = !portalUser || portalUser.role === 'owner';
+
+  const hasPermFn = useCallback((perm: string): boolean => {
+    if (isOwner) return true;
+    if (!portalUser) return true;
+    return portalUser.permissions.includes(perm);
+  }, [isOwner, portalUser]);
 
   useEffect(() => {
     const restoreSession = () => {
@@ -511,6 +557,7 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
         const maxAge = parsed.is_admin_view ? 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000;
         if (Date.now() - parsed.timestamp > maxAge) { localStorage.removeItem('warmeleads-portal-auth'); return; }
         setCustomer(parsed.customer);
+        if (parsed.portal_user) setPortalUser(parsed.portal_user);
         if (parsed.is_admin_view) {
           setIsAdminView(true);
           setAdminName(parsed.admin_name || 'Admin');
@@ -533,6 +580,7 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
           const data = await res.json();
 
           setCustomer(data.customer);
+          setPortalUser(null);
           setIsAdminView(true);
           setAdminName(data.impersonation?.admin_name || 'Admin');
 
@@ -625,15 +673,19 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
     };
   }, [customer, isAdminView]);
 
-  const handleLogin = useCallback((c: PortalCustomer, token: string) => {
+  const handleLogin = useCallback((c: PortalCustomer, token: string, pu: ClientPortalUser | null) => {
     setCustomer(c);
+    setPortalUser(pu);
     setIsAdminView(false);
     setAdminName('');
-    localStorage.setItem('warmeleads-portal-auth', JSON.stringify({ customer: c, token, timestamp: Date.now() }));
+    const authData: Record<string, unknown> = { customer: c, token, timestamp: Date.now() };
+    if (pu) authData.portal_user = pu;
+    localStorage.setItem('warmeleads-portal-auth', JSON.stringify(authData));
   }, []);
 
   const handleLogout = useCallback(() => {
     setCustomer(null);
+    setPortalUser(null);
     setIsAdminView(false);
     setAdminName('');
     localStorage.removeItem('warmeleads-portal-auth');
@@ -641,6 +693,7 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
 
   const stopAdminView = useCallback(() => {
     setCustomer(null);
+    setPortalUser(null);
     setIsAdminView(false);
     setAdminName('');
     localStorage.removeItem('warmeleads-portal-auth');
@@ -658,7 +711,7 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
   if (!customer) return <LoginScreen onLogin={handleLogin} />;
 
   return (
-    <PortalContext.Provider value={{ customer, logout: handleLogout }}>
+    <PortalContext.Provider value={{ customer, portalUser, isOwner, hasPermission: hasPermFn, logout: handleLogout }}>
       <div className="flex min-h-screen flex-col bg-slate-50">
         <div className="sticky top-0 z-40">
           {customer.demo_mode && !isAdminView && <DemoBanner />}
@@ -669,7 +722,17 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
               onStop={stopAdminView}
             />
           )}
-          <PortalHeader customer={customer} onLogout={handleLogout} />
+          {portalUser && portalUser.role !== 'owner' && !isAdminView && (
+            <div className="bg-brand-purple/5 border-b border-brand-purple/10">
+              <div className="mx-auto flex max-w-7xl items-center gap-2 px-4 py-1.5 sm:px-6 lg:px-8">
+                <UsersIcon className="h-3.5 w-3.5 text-brand-purple/60" />
+                <span className="text-xs text-brand-purple/70">
+                  Ingelogd als <span className="font-semibold">{portalUser.role === 'manager' ? 'manager' : 'agent'}</span> bij {customer.name}
+                </span>
+              </div>
+            </div>
+          )}
+          <PortalHeader customer={customer} portalUser={portalUser} hasPermFn={hasPermFn} onLogout={handleLogout} />
         </div>
         {!isAdminView && <InstallBanner />}
         <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 lg:px-8">

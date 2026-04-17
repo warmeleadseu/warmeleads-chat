@@ -14,14 +14,14 @@ export async function GET(
 
   // Auth: admin or owning customer
   const admin = await verifyAdmin(request);
-  const customer = !admin ? await verifyCustomer(request) : null;
+  const session = !admin ? await verifyCustomer(request) : null;
 
-  if (!admin && !customer) {
+  if (!admin && !session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   let query = supabase.from('invoices').select('*').eq('id', id);
-  if (customer) query = query.eq('customer_id', customer.id);
+  if (session) query = query.eq('customer_id', session.customer.id);
   const { data: invoice } = await query.single();
 
   if (!invoice) {

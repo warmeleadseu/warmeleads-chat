@@ -29,34 +29,70 @@ export async function POST(request: NextRequest) {
     });
 
     const supabase = createServerClient();
+
+    let targetId: string | null = null;
+    let targetColumn: 'customer_id' | 'portal_user_id' = 'customer_id';
+    let displayName = '';
+    let targetEmail = '';
+
+    // Check customers table first
     const { data: customer } = await supabase
       .from('customers')
       .select('id, name, email, contact_person, is_active, portal_active, password_hash')
       .eq('email', normalizedEmail)
       .single();
 
-    if (!customer || !customer.is_active || !customer.portal_active || !customer.password_hash) {
+    if (customer && customer.is_active && customer.portal_active && customer.password_hash) {
+      targetId = customer.id;
+      targetColumn = 'customer_id';
+      displayName = customer.contact_person || customer.name;
+      targetEmail = customer.email;
+    } else {
+      // Check portal_users table
+      const { data: portalUser } = await supabase
+        .from('portal_users')
+        .select('id, customer_id, name, email, is_active')
+        .eq('email', normalizedEmail)
+        .eq('is_active', true)
+        .single();
+
+      if (portalUser) {
+        const { data: parentCustomer } = await supabase
+          .from('customers')
+          .select('id, is_active, portal_active')
+          .eq('id', portalUser.customer_id)
+          .eq('is_active', true)
+          .eq('portal_active', true)
+          .single();
+
+        if (parentCustomer) {
+          targetId = portalUser.id;
+          targetColumn = 'portal_user_id';
+          displayName = portalUser.name;
+          targetEmail = portalUser.email;
+        }
+      }
+    }
+
+    if (!targetId) {
       return successResponse;
     }
 
-    // Invalidate any existing unused tokens for this customer
+    // Invalidate any existing unused tokens for this user
     await supabase
       .from('password_reset_tokens')
       .update({ used_at: new Date().toISOString() })
-      .eq('customer_id', customer.id)
+      .eq(targetColumn, targetId)
       .is('used_at', null);
 
     const token = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + TOKEN_EXPIRY_MS).toISOString();
 
-    await supabase.from('password_reset_tokens').insert({
-      customer_id: customer.id,
-      token,
-      expires_at: expiresAt,
-    });
+    const insertData: Record<string, string> = { token, expires_at: expiresAt };
+    insertData[targetColumn] = targetId;
+    await supabase.from('password_reset_tokens').insert(insertData);
 
     const resetUrl = `${BASE_URL}/portal/wachtwoord-resetten?token=${token}`;
-    const displayName = customer.contact_person || customer.name;
 
     const html = `<!DOCTYPE html>
 <html lang="nl">
@@ -88,10 +124,10 @@ export async function POST(request: NextRequest) {
 </body>
 </html>`;
 
-    await sendEmail(customer.email, 'Wachtwoord resetten - WarmeLeads', html, {
+    await sendEmail(targetEmail, 'Wachtwoord resetten - WarmeLeads', html, {
       type: 'password_reset',
       toName: displayName,
-      metadata: { customer_id: customer.id },
+      metadata: { [targetColumn]: targetId },
     });
 
     return successResponse;

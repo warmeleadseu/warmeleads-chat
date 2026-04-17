@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyCustomer, portalUnauthorized } from '@/lib/portalAuth';
 import { createServerClient } from '@/lib/supabase';
+import { hasPermission, forbidden, PERMISSIONS } from '@/lib/portalPermissions';
 import bcrypt from 'bcryptjs';
 
 export async function GET(request: NextRequest) {
-  const customer = await verifyCustomer(request);
-  if (!customer) return portalUnauthorized();
+  const session = await verifyCustomer(request);
+  if (!session) return portalUnauthorized();
+
+  const { customer } = session;
 
   const supabase = createServerClient();
 
@@ -35,8 +38,11 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-  const customer = await verifyCustomer(request);
-  if (!customer) return portalUnauthorized();
+  const session = await verifyCustomer(request);
+  if (!session) return portalUnauthorized();
+  if (!hasPermission(session, PERMISSIONS.ACCOUNT_EDIT)) return forbidden();
+
+  const { customer } = session;
 
   try {
     const body = await request.json();
@@ -45,29 +51,58 @@ export async function PUT(request: NextRequest) {
     const supabase = createServerClient();
 
     if (current_password && new_password) {
-      const { data: existing } = await supabase
-        .from('customers')
-        .select('password_hash')
-        .eq('id', customer.id)
-        .single();
+      if (session.portalUser && !session.isOwner) {
+        // Portal user (agent/manager) changing their own password
+        const { data: existing } = await supabase
+          .from('portal_users')
+          .select('password_hash')
+          .eq('id', session.portalUser.id)
+          .single();
 
-      if (!existing?.password_hash) {
-        return NextResponse.json({ error: 'Geen wachtwoord ingesteld' }, { status: 400 });
-      }
+        if (!existing?.password_hash) {
+          return NextResponse.json({ error: 'Geen wachtwoord ingesteld' }, { status: 400 });
+        }
 
-      const valid = await bcrypt.compare(current_password, existing.password_hash);
-      if (!valid) {
-        return NextResponse.json({ error: 'Huidig wachtwoord is onjuist' }, { status: 401 });
-      }
+        const valid = await bcrypt.compare(current_password, existing.password_hash);
+        if (!valid) {
+          return NextResponse.json({ error: 'Huidig wachtwoord is onjuist' }, { status: 401 });
+        }
 
-      const hash = await bcrypt.hash(new_password, 12);
-      const { error: pwError } = await supabase
-        .from('customers')
-        .update({ password_hash: hash, portal_password: hash })
-        .eq('id', customer.id);
+        const hash = await bcrypt.hash(new_password, 12);
+        const { error: pwError } = await supabase
+          .from('portal_users')
+          .update({ password_hash: hash, updated_at: new Date().toISOString() })
+          .eq('id', session.portalUser.id);
 
-      if (pwError) {
-        return NextResponse.json({ error: 'Wachtwoord bijwerken mislukt' }, { status: 500 });
+        if (pwError) {
+          return NextResponse.json({ error: 'Wachtwoord bijwerken mislukt' }, { status: 500 });
+        }
+      } else {
+        // Owner changing their password
+        const { data: existing } = await supabase
+          .from('customers')
+          .select('password_hash')
+          .eq('id', customer.id)
+          .single();
+
+        if (!existing?.password_hash) {
+          return NextResponse.json({ error: 'Geen wachtwoord ingesteld' }, { status: 400 });
+        }
+
+        const valid = await bcrypt.compare(current_password, existing.password_hash);
+        if (!valid) {
+          return NextResponse.json({ error: 'Huidig wachtwoord is onjuist' }, { status: 401 });
+        }
+
+        const hash = await bcrypt.hash(new_password, 12);
+        const { error: pwError } = await supabase
+          .from('customers')
+          .update({ password_hash: hash, portal_password: hash })
+          .eq('id', customer.id);
+
+        if (pwError) {
+          return NextResponse.json({ error: 'Wachtwoord bijwerken mislukt' }, { status: 500 });
+        }
       }
     }
 

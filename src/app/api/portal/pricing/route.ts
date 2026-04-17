@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
-import { verifyCustomer } from '@/lib/portalAuth';
+import { verifyCustomer, portalUnauthorized } from '@/lib/portalAuth';
+import { hasPermission, forbidden, PERMISSIONS } from '@/lib/portalPermissions';
 import { mergeCustomTiers } from '@/lib/pricing';
 
 export async function GET(request: NextRequest) {
-  const customer = await verifyCustomer(request);
-  if (!customer) {
-    return NextResponse.json({ error: 'Niet geautoriseerd' }, { status: 401 });
-  }
+  const session = await verifyCustomer(request);
+  if (!session) return portalUnauthorized();
+  if (!hasPermission(session, PERMISSIONS.ORDERS_VIEW)) return forbidden();
+
+  const { customer } = session;
 
   const branch = request.nextUrl.searchParams.get('branch');
   if (!branch) {

@@ -339,6 +339,9 @@ export async function distributeLead(lead: LeadForDistribution): Promise<Distrib
 
     await syncBatchDelivered(supabase, m.batch_id);
 
+    // Auto-assign to portal user based on assignment rules
+    assignToPortalUser(supabase, m.customer_id, fullLead).catch(() => {});
+
     result.assignments.push({
       customer_id: m.customer_id,
       batch_id: m.batch_id,
@@ -507,6 +510,9 @@ export async function backfillBatch(batchId: string, lookbackDays: number): Prom
       assigned++;
       alreadyAssigned.add(lead.id);
 
+      // Auto-assign to portal user if rules match
+      assignToPortalUser(supabase, batch.customer_id, lead).catch(() => {});
+
       try {
         const { data: custData } = await supabase.from('customers').select('id, name, email, contact_person, email_notifications').eq('id', batch.customer_id).single();
         if (custData) {
@@ -634,4 +640,114 @@ export async function distributeUnassignedLeads(): Promise<{ distributed: number
     : 0;
 
   return { distributed: totalDistributed, assignments: totalAssignments, avgAssignments };
+}
+
+/**
+ * Auto-assign a lead to a portal user within a customer account based on assignment rules.
+ * Uses weighted round-robin among eligible agents.
+ */
+async function assignToPortalUser(
+  supabase: ReturnType<typeof createServerClient>,
+  customerId: string,
+  lead: LeadForDistribution,
+): Promise<void> {
+  const { data: agents } = await supabase
+    .from('portal_users')
+    .select('id, assignment_rules, role')
+    .eq('customer_id', customerId)
+    .eq('is_active', true);
+
+  if (!agents || agents.length === 0) return;
+
+  interface AgentRules {
+    mode?: string;
+    branches?: string[];
+    regions?: { type: string; values: string[] };
+    max_leads_per_day?: number;
+    max_leads_per_week?: number;
+    round_robin_weight?: number;
+  }
+
+  const candidates = agents.filter(a => {
+    const rules: AgentRules = a.assignment_rules || {};
+    if (!rules.mode || rules.mode === 'manual') return false;
+    if (rules.mode === 'all') return true;
+
+    // Branch filter
+    if (rules.branches && rules.branches.length > 0) {
+      if (!rules.branches.includes(lead.branch)) return false;
+    }
+
+    // Region filter
+    if (rules.regions && rules.regions.values && rules.regions.values.length > 0) {
+      const leadProv = (lead as Record<string, unknown>).provincie as string | undefined;
+      if (rules.regions.type === 'provinces') {
+        if (!leadProv || !rules.regions.values.includes(leadProv)) return false;
+      }
+    }
+
+    return true;
+  });
+
+  if (candidates.length === 0) return;
+
+  // Check daily/weekly limits and count existing leads for round-robin
+  const candidateIds = candidates.map(c => c.id);
+  const now = new Date();
+  const dayStart = new Date(now);
+  dayStart.setHours(0, 0, 0, 0);
+  const weekStart = new Date(now);
+  weekStart.setDate(weekStart.getDate() - weekStart.getDay() + (weekStart.getDay() === 0 ? -6 : 1));
+  weekStart.setHours(0, 0, 0, 0);
+
+  const { data: recentAssignments } = await supabase
+    .from('lead_assignments')
+    .select('portal_user_id, assigned_at')
+    .eq('customer_id', customerId)
+    .in('portal_user_id', candidateIds)
+    .gte('assigned_at', weekStart.toISOString());
+
+  const dailyCounts: Record<string, number> = {};
+  const weeklyCounts: Record<string, number> = {};
+  const totalCounts: Record<string, number> = {};
+
+  (recentAssignments || []).forEach(a => {
+    if (!a.portal_user_id) return;
+    weeklyCounts[a.portal_user_id] = (weeklyCounts[a.portal_user_id] || 0) + 1;
+    totalCounts[a.portal_user_id] = (totalCounts[a.portal_user_id] || 0) + 1;
+    if (new Date(a.assigned_at) >= dayStart) {
+      dailyCounts[a.portal_user_id] = (dailyCounts[a.portal_user_id] || 0) + 1;
+    }
+  });
+
+  const eligible = candidates.filter(c => {
+    const rules: AgentRules = c.assignment_rules || {};
+    if (rules.max_leads_per_day && (dailyCounts[c.id] || 0) >= rules.max_leads_per_day) return false;
+    if (rules.max_leads_per_week && (weeklyCounts[c.id] || 0) >= rules.max_leads_per_week) return false;
+    return true;
+  });
+
+  if (eligible.length === 0) return;
+
+  // Weighted round-robin: sort by (total_count / weight), lowest wins
+  eligible.sort((a, b) => {
+    const rulesA: AgentRules = a.assignment_rules || {};
+    const rulesB: AgentRules = b.assignment_rules || {};
+    const wA = rulesA.round_robin_weight || 1;
+    const wB = rulesB.round_robin_weight || 1;
+    const scoreA = (totalCounts[a.id] || 0) / wA;
+    const scoreB = (totalCounts[b.id] || 0) / wB;
+    return scoreA - scoreB;
+  });
+
+  const winner = eligible[0];
+
+  // Update the most recent assignment for this lead+customer to set the portal_user_id
+  await supabase
+    .from('lead_assignments')
+    .update({ portal_user_id: winner.id })
+    .eq('lead_id', lead.id)
+    .eq('customer_id', customerId)
+    .order('assigned_at', { ascending: false })
+    .limit(1);
 }

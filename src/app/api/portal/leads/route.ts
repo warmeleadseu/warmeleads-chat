@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyCustomer, portalUnauthorized } from '@/lib/portalAuth';
 import { createServerClient } from '@/lib/supabase';
+import { hasPermission, forbidden, PERMISSIONS } from '@/lib/portalPermissions';
 
 const PAGE_SIZE = 1000;
 const IN_CHUNK = 500;
@@ -24,6 +25,8 @@ interface AssignmentMeta {
   distance_km: number | null;
   status: string | null;
   notities: string | null;
+  portal_user_id: string | null;
+  portal_user_name: string | null;
 }
 
 async function getCustomerDemoMode(
@@ -44,43 +47,51 @@ async function getCustomerLeadData(
   leadSource: 'all' | 'fresh' | 'bulk' = 'all',
   demoMode = false,
   statusFilter?: string | null,
+  agentFilter?: { portalUserId: string; viewAll: boolean } | null,
 ): Promise<{ ids: string[]; metaMap: Record<string, AssignmentMeta>; bulkCount: number }> {
   const ids = new Set<string>();
   const metaMap: Record<string, AssignmentMeta> = {};
+  const selectFields = 'lead_id, assigned_at, distance_km, status, notities, portal_user_id';
+
+  type AssignRow = { lead_id: string; assigned_at: string; distance_km: number | null; status: string | null; notities: string | null; portal_user_id: string | null };
+  const pushRow = (a: AssignRow) => {
+    ids.add(a.lead_id);
+    if (!metaMap[a.lead_id]) {
+      metaMap[a.lead_id] = { assigned_at: a.assigned_at, distance_km: a.distance_km, status: a.status, notities: a.notities, portal_user_id: a.portal_user_id, portal_user_name: null };
+    }
+  };
+
+  // Agent scope filter: only their leads + unassigned
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const applyAgentScope = (q: any) => {
+    if (agentFilter && !agentFilter.viewAll) {
+      return q.or(`portal_user_id.eq.${agentFilter.portalUserId},portal_user_id.is.null`);
+    }
+    return q;
+  };
 
   if (demoMode) {
-    const selectFields = 'lead_id, assigned_at, distance_km, status, notities';
     let q = supabase.from('lead_assignments').select(selectFields).eq('customer_id', customerId).eq('source', 'demo').order('assigned_at', { ascending: false });
     if (statusFilter && statusFilter !== 'all') q = q.eq('status', statusFilter);
-    const demoLeads = await paginateQuery<{ lead_id: string; assigned_at: string; distance_km: number | null; status: string | null; notities: string | null }>(q);
-    demoLeads.forEach(a => {
-      ids.add(a.lead_id);
-      if (!metaMap[a.lead_id]) {
-        metaMap[a.lead_id] = { assigned_at: a.assigned_at, distance_km: a.distance_km, status: a.status, notities: a.notities };
-      }
-    });
+    q = applyAgentScope(q);
+    const demoLeads = await paginateQuery<AssignRow>(q);
+    demoLeads.forEach(pushRow);
     return { ids: Array.from(ids), metaMap, bulkCount: 0 };
   }
 
-  if (leadSource !== 'bulk') {
+  if (leadSource !== 'bulk' && (!agentFilter || agentFilter.viewAll)) {
     let directQuery = supabase.from('leads').select('id').eq('customer_id', customerId);
     if (statusFilter && statusFilter !== 'all') directQuery = directQuery.eq('status', statusFilter);
     const directLeads = await paginateQuery<{ id: string }>(directQuery);
     directLeads.forEach(l => ids.add(l.id));
   }
 
-  const selectFields = 'lead_id, assigned_at, distance_km, status, notities';
-
   if (leadSource === 'bulk') {
     let q = supabase.from('lead_assignments').select(selectFields).eq('customer_id', customerId).eq('source', 'bulk_export').order('assigned_at', { ascending: false });
     if (statusFilter && statusFilter !== 'all') q = q.eq('status', statusFilter);
-    const bulkLeads = await paginateQuery<{ lead_id: string; assigned_at: string; distance_km: number | null; status: string | null; notities: string | null }>(q);
-    bulkLeads.forEach(a => {
-      ids.add(a.lead_id);
-      if (!metaMap[a.lead_id]) {
-        metaMap[a.lead_id] = { assigned_at: a.assigned_at, distance_km: a.distance_km, status: a.status, notities: a.notities };
-      }
-    });
+    q = applyAgentScope(q);
+    const bulkLeads = await paginateQuery<AssignRow>(q);
+    bulkLeads.forEach(pushRow);
   } else {
     let assignQuery = supabase
       .from('lead_assignments')
@@ -90,13 +101,9 @@ async function getCustomerLeadData(
       .order('assigned_at', { ascending: false });
     if (leadSource === 'fresh') assignQuery = assignQuery.neq('source', 'bulk_export');
     if (statusFilter && statusFilter !== 'all') assignQuery = assignQuery.eq('status', statusFilter);
-    const assignedLeads = await paginateQuery<{ lead_id: string; assigned_at: string; distance_km: number | null; status: string | null; notities: string | null }>(assignQuery);
-    assignedLeads.forEach(a => {
-      ids.add(a.lead_id);
-      if (!metaMap[a.lead_id]) {
-        metaMap[a.lead_id] = { assigned_at: a.assigned_at, distance_km: a.distance_km, status: a.status, notities: a.notities };
-      }
-    });
+    assignQuery = applyAgentScope(assignQuery);
+    const assignedLeads = await paginateQuery<AssignRow>(assignQuery);
+    assignedLeads.forEach(pushRow);
   }
 
   const { count: bulkCount } = await supabase
@@ -109,9 +116,11 @@ async function getCustomerLeadData(
 }
 
 export async function GET(request: NextRequest) {
-  const customer = await verifyCustomer(request);
-  if (!customer) return portalUnauthorized();
+  const session = await verifyCustomer(request);
+  if (!session) return portalUnauthorized();
+  if (!hasPermission(session, PERMISSIONS.LEADS_VIEW)) return forbidden();
 
+  const { customer } = session;
   const supabase = createServerClient();
   const url = request.nextUrl;
 
@@ -127,8 +136,38 @@ export async function GET(request: NextRequest) {
   const leadSource = (url.searchParams.get('lead_source') || 'all') as 'all' | 'fresh' | 'bulk';
 
   const demoMode = await getCustomerDemoMode(supabase, customer.id);
-  const { ids: leadIds, metaMap, bulkCount } = await getCustomerLeadData(supabase, customer.id, leadSource, demoMode, status);
-  if (leadIds.length === 0) {
+
+  // Agent-scoped filtering
+  const agentFilter = session.portalUser && !hasPermission(session, PERMISSIONS.LEADS_VIEW_ALL)
+    ? { portalUserId: session.portalUser.id, viewAll: false }
+    : null;
+
+  const { ids: leadIds, metaMap, bulkCount } = await getCustomerLeadData(supabase, customer.id, leadSource, demoMode, status, agentFilter);
+
+  // Build portal_user name lookup for "Toegewezen aan" column
+  const portalUserIds = new Set<string>();
+  Object.values(metaMap).forEach(m => { if (m.portal_user_id) portalUserIds.add(m.portal_user_id); });
+  const portalUserNameMap: Record<string, string> = {};
+  if (portalUserIds.size > 0) {
+    const puIds = Array.from(portalUserIds);
+    const { data: puRows } = await supabase.from('portal_users').select('id, name').in('id', puIds);
+    (puRows || []).forEach((pu: { id: string; name: string }) => { portalUserNameMap[pu.id] = pu.name; });
+    Object.values(metaMap).forEach(m => {
+      if (m.portal_user_id) m.portal_user_name = portalUserNameMap[m.portal_user_id] || null;
+    });
+  }
+  // Owner/manager can filter by assigned_to agent
+  const assignedToParam = url.searchParams.get('assigned_to');
+  let filteredLeadIds = leadIds;
+  if (assignedToParam && hasPermission(session, PERMISSIONS.LEADS_VIEW_ALL)) {
+    if (assignedToParam === 'unassigned') {
+      filteredLeadIds = leadIds.filter(id => !metaMap[id]?.portal_user_id);
+    } else {
+      filteredLeadIds = leadIds.filter(id => metaMap[id]?.portal_user_id === assignedToParam);
+    }
+  }
+
+  if (filteredLeadIds.length === 0) {
     return NextResponse.json({ leads: [], total: 0, page, totalPages: 0, bulkCount });
   }
 
@@ -149,14 +188,14 @@ export async function GET(request: NextRequest) {
   }
 
   // Fast path: single chunk allows DB-level sort + pagination
-  if (leadIds.length <= IN_CHUNK && dbSortable) {
-    let countQ = supabase.from('leads').select('id', { count: 'exact', head: true }).in('id', leadIds);
+  if (filteredLeadIds.length <= IN_CHUNK && dbSortable) {
+    let countQ = supabase.from('leads').select('id', { count: 'exact', head: true }).in('id', filteredLeadIds);
     countQ = applyFilters(countQ);
     const { count: totalCount } = await countQ;
     const total = totalCount || 0;
 
     const startIdx = (page - 1) * limit;
-    let q = supabase.from('leads').select('*').in('id', leadIds);
+    let q = supabase.from('leads').select('*').in('id', filteredLeadIds);
     q = applyFilters(q);
     q = q.order(col, { ascending: asc }).range(startIdx, startIdx + limit - 1);
     const { data, error: fetchError } = await q;
@@ -172,6 +211,8 @@ export async function GET(request: NextRequest) {
         notities: meta?.notities ?? (lead as Record<string, unknown>).notities ?? '',
         received_at: meta?.assigned_at || lead.created_at,
         distance_km: meta?.distance_km ?? null,
+        portal_user_id: meta?.portal_user_id ?? null,
+        portal_user_name: meta?.portal_user_name ?? null,
       };
     });
 
@@ -187,8 +228,8 @@ export async function GET(request: NextRequest) {
   // Multi-chunk path: fetch all matching, enrich, sort, paginate in memory
   const allMatching: Record<string, unknown>[] = [];
 
-  for (let i = 0; i < leadIds.length; i += IN_CHUNK) {
-    const chunk = leadIds.slice(i, i + IN_CHUNK);
+  for (let i = 0; i < filteredLeadIds.length; i += IN_CHUNK) {
+    const chunk = filteredLeadIds.slice(i, i + IN_CHUNK);
     let q = supabase.from('leads').select('*').in('id', chunk);
     q = applyFilters(q);
     const { data: batchData, error: batchError } = await q;
@@ -206,6 +247,8 @@ export async function GET(request: NextRequest) {
       notities: meta?.notities ?? (lead as Record<string, unknown>).notities ?? '',
       received_at: meta?.assigned_at || lead.created_at,
       distance_km: meta?.distance_km ?? null,
+      portal_user_id: meta?.portal_user_id ?? null,
+      portal_user_name: meta?.portal_user_name ?? null,
     };
   });
 
@@ -238,8 +281,11 @@ export async function GET(request: NextRequest) {
 const VALID_STATUSES = ['nieuw', 'gecontacteerd', 'geen_gehoor', 'offerte', 'verkocht', 'afgewezen'];
 
 export async function PUT(request: NextRequest) {
-  const customer = await verifyCustomer(request);
-  if (!customer) return portalUnauthorized();
+  const session = await verifyCustomer(request);
+  if (!session) return portalUnauthorized();
+  if (!hasPermission(session, PERMISSIONS.LEADS_EDIT)) return forbidden();
+
+  const { customer } = session;
 
   try {
     const { id, status, notities } = await request.json();
