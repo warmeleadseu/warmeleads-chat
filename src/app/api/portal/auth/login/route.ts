@@ -6,6 +6,51 @@ import { rateLimit, getClientIp } from '@/lib/rateLimit';
 const MAX_ATTEMPTS = 10;
 const WINDOW_MS = 15 * 60 * 1000;
 
+const DEMO_STATUS_DISTRIBUTION: { status: string; notities: string | null }[] = [
+  { status: 'nieuw', notities: null },
+  { status: 'nieuw', notities: null },
+  { status: 'gecontacteerd', notities: 'Terugbellen na 17:00' },
+  { status: 'offerte', notities: 'Interesse in 10kWh systeem' },
+];
+
+async function ensureDemoLeads(
+  supabase: ReturnType<typeof createServerClient>,
+  customerId: string,
+  branches: string[],
+) {
+  const { count } = await supabase
+    .from('lead_assignments')
+    .select('id', { count: 'exact', head: true })
+    .eq('customer_id', customerId)
+    .eq('source', 'demo');
+
+  if (count && count > 0) return;
+
+  const { data: demoLeads } = await supabase
+    .from('leads')
+    .select('id, branch')
+    .eq('bron', 'demo')
+    .is('customer_id', null)
+    .in('branch', branches);
+
+  if (!demoLeads || demoLeads.length === 0) return;
+
+  const assignments = demoLeads.map((lead, i) => {
+    const preset = DEMO_STATUS_DISTRIBUTION[i % DEMO_STATUS_DISTRIBUTION.length];
+    return {
+      lead_id: lead.id,
+      customer_id: customerId,
+      batch_id: null,
+      distance_km: Math.round((3 + Math.random() * 25) * 10) / 10,
+      source: 'demo',
+      status: preset.status,
+      notities: preset.notities,
+    };
+  });
+
+  await supabase.from('lead_assignments').insert(assignments);
+}
+
 export async function POST(request: NextRequest) {
   try {
     const ip = getClientIp(request);
@@ -54,6 +99,13 @@ export async function POST(request: NextRequest) {
         })
         .eq('id', customer.id)
         .then(() => {});
+
+      // Re-seed demo leads if customer is in demo mode but has no demo assignments
+      if (customer.demo_mode) {
+        ensureDemoLeads(supabase, customer.id, customer.branches).catch((e) =>
+          console.error('[login] demo re-seed error:', e)
+        );
+      }
 
       const { password_hash: _, ...safeCustomer } = customer;
 

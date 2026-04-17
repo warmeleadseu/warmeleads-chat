@@ -29,16 +29,53 @@ interface AssignmentMeta {
   portal_user_name: string | null;
 }
 
-async function getCustomerDemoMode(
+async function getCustomerDemoInfo(
   supabase: ReturnType<typeof createServerClient>,
   customerId: string,
-): Promise<boolean> {
+): Promise<{ demoMode: boolean; branches: string[] }> {
   const { data } = await supabase
     .from('customers')
-    .select('demo_mode')
+    .select('demo_mode, branches')
     .eq('id', customerId)
     .single();
-  return data?.demo_mode ?? false;
+  return { demoMode: data?.demo_mode ?? false, branches: data?.branches ?? [] };
+}
+
+const DEMO_STATUS_DISTRIBUTION: { status: string; notities: string | null }[] = [
+  { status: 'nieuw', notities: null },
+  { status: 'nieuw', notities: null },
+  { status: 'gecontacteerd', notities: 'Terugbellen na 17:00' },
+  { status: 'offerte', notities: 'Interesse in 10kWh systeem' },
+];
+
+async function ensureDemoLeads(
+  supabase: ReturnType<typeof createServerClient>,
+  customerId: string,
+  branches: string[],
+) {
+  const { data: demoLeads } = await supabase
+    .from('leads')
+    .select('id, branch')
+    .eq('bron', 'demo')
+    .is('customer_id', null)
+    .in('branch', branches);
+
+  if (!demoLeads || demoLeads.length === 0) return;
+
+  const assignments = demoLeads.map((lead, i) => {
+    const preset = DEMO_STATUS_DISTRIBUTION[i % DEMO_STATUS_DISTRIBUTION.length];
+    return {
+      lead_id: lead.id,
+      customer_id: customerId,
+      batch_id: null,
+      distance_km: Math.round((3 + Math.random() * 25) * 10) / 10,
+      source: 'demo',
+      status: preset.status,
+      notities: preset.notities,
+    };
+  });
+
+  await supabase.from('lead_assignments').insert(assignments);
 }
 
 async function getCustomerLeadData(
@@ -48,6 +85,7 @@ async function getCustomerLeadData(
   demoMode = false,
   statusFilter?: string | null,
   agentFilter?: { portalUserId: string; viewAll: boolean } | null,
+  customerBranches: string[] = [],
 ): Promise<{ ids: string[]; metaMap: Record<string, AssignmentMeta>; bulkCount: number }> {
   const ids = new Set<string>();
   const metaMap: Record<string, AssignmentMeta> = {};
@@ -74,7 +112,16 @@ async function getCustomerLeadData(
     let q = supabase.from('lead_assignments').select(selectFields).eq('customer_id', customerId).eq('source', 'demo').order('assigned_at', { ascending: false });
     if (statusFilter && statusFilter !== 'all') q = q.eq('status', statusFilter);
     q = applyAgentScope(q);
-    const demoLeads = await paginateQuery<AssignRow>(q);
+    let demoLeads = await paginateQuery<AssignRow>(q);
+
+    // Re-seed demo leads if none found (recovery for failed initial seeding or deleted assignments)
+    if (demoLeads.length === 0 && (!statusFilter || statusFilter === 'all')) {
+      await ensureDemoLeads(supabase, customerId, customerBranches);
+      let retryQ = supabase.from('lead_assignments').select(selectFields).eq('customer_id', customerId).eq('source', 'demo').order('assigned_at', { ascending: false });
+      retryQ = applyAgentScope(retryQ);
+      demoLeads = await paginateQuery<AssignRow>(retryQ);
+    }
+
     demoLeads.forEach(pushRow);
     return { ids: Array.from(ids), metaMap, bulkCount: 0 };
   }
@@ -135,14 +182,14 @@ export async function GET(request: NextRequest) {
   const branch = url.searchParams.get('branch');
   const leadSource = (url.searchParams.get('lead_source') || 'all') as 'all' | 'fresh' | 'bulk';
 
-  const demoMode = await getCustomerDemoMode(supabase, customer.id);
+  const { demoMode, branches: customerBranches } = await getCustomerDemoInfo(supabase, customer.id);
 
   // Agent-scoped filtering
   const agentFilter = session.portalUser && !hasPermission(session, PERMISSIONS.LEADS_VIEW_ALL)
     ? { portalUserId: session.portalUser.id, viewAll: false }
     : null;
 
-  const { ids: leadIds, metaMap, bulkCount } = await getCustomerLeadData(supabase, customer.id, leadSource, demoMode, status, agentFilter);
+  const { ids: leadIds, metaMap, bulkCount } = await getCustomerLeadData(supabase, customer.id, leadSource, demoMode, status, agentFilter, customerBranches);
 
   // Build portal_user name lookup for "Toegewezen aan" column
   const portalUserIds = new Set<string>();
