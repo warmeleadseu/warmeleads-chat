@@ -26,6 +26,7 @@ interface LeadForDistribution {
   branch: string;
   lat: number;
   lng: number;
+  bron?: string | null;
   custom_fields?: Record<string, string>;
   quality_score?: number | null;
   phone_valid?: boolean | null;
@@ -103,6 +104,9 @@ export async function distributeLead(lead: LeadForDistribution): Promise<Distrib
   const hasProv = !!(lead as any).provincie;
   if (!hasCoords && !hasProv) return result;
 
+  // Never distribute demo leads to real customers (early check before DB fetch)
+  if (lead.bron === 'demo') return result;
+
   const supabase = createServerClient();
 
   let fullLead = lead;
@@ -111,10 +115,9 @@ export async function distributeLead(lead: LeadForDistribution): Promise<Distrib
     if (leadRow) fullLead = { ...leadRow, lat: lead.lat, lng: lead.lng };
   }
 
-  // Never distribute demo leads to real customers
-  if ((fullLead as any).bron === 'demo') return result;
+  // Double-check after DB fetch in case bron wasn't passed by caller
+  if (fullLead.bron === 'demo') return result;
 
-  // Never distribute leads with invalid phone numbers
   if (fullLead.phone_valid === false) return result;
 
   const { data: existingAssignments } = await supabase

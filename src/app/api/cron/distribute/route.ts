@@ -72,7 +72,7 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // Phase 2: Validate phone numbers for leads without phone_valid set (skip spreadsheet imports)
+  // Phase 2: Validate phone numbers for leads without phone_valid set (skip spreadsheet imports and demo leads)
   let phonesValidated = 0;
   const { data: unvalidated } = await supabase
     .from('leads')
@@ -91,7 +91,7 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // Phase 3: Delete profanity leads (recent, skip spreadsheet imports) and sync affected batch counters
+  // Phase 3: Delete profanity leads (recent, skip spreadsheet imports and demo leads) and sync affected batch counters
   let profanityDeleted = 0;
   const affectedBatchIds = new Set<string>();
   const { data: recentLeads } = await supabase
