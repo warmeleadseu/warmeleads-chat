@@ -241,11 +241,11 @@ interface NavItem {
   permission?: string;
 }
 
-const ALL_PORTAL_NAV: NavItem[] = [
+const ALL_PORTAL_NAV: (NavItem & { shortLabel?: string })[] = [
   { label: 'Leads', href: '/portal', icon: InboxStackIcon, permission: PERMISSIONS.LEADS_VIEW },
   { label: 'Bestellen', href: '/portal/bestellen', icon: ShoppingCartIcon, permission: PERMISSIONS.ORDERS_CREATE },
   { label: 'Team', href: '/portal/team', icon: UsersIcon, permission: PERMISSIONS.TEAM_MANAGE },
-  { label: 'Account & Insights', href: '/portal/account', icon: UserCircleIcon },
+  { label: 'Account & Insights', shortLabel: 'Account', href: '/portal/account', icon: UserCircleIcon },
 ];
 
 function PortalHeader({
@@ -302,21 +302,29 @@ function PortalHeader({
             </button>
           </div>
         </div>
-        <nav className="-mb-px flex gap-1 border-t border-slate-100" style={{ scrollbarWidth: 'none' }}>
+        <nav className="-mb-px flex overflow-x-auto border-t border-slate-100 hide-scrollbar">
           {navItems.map((item) => {
             const active = item.href === '/portal' ? pathname === '/portal' : pathname.startsWith(item.href);
+            const short = (item as typeof ALL_PORTAL_NAV[number]).shortLabel;
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`inline-flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2.5 text-[13px] font-medium transition sm:gap-2 sm:text-sm ${
+                className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-2.5 py-2.5 text-[13px] font-medium transition sm:gap-2 sm:px-3 sm:text-sm ${
                   active
                     ? 'border-brand-purple text-brand-purple'
                     : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700'
                 }`}
               >
                 <item.icon className="h-4 w-4" />
-                {item.label}
+                {short ? (
+                  <>
+                    <span className="sm:hidden">{short}</span>
+                    <span className="hidden sm:inline">{item.label}</span>
+                  </>
+                ) : (
+                  item.label
+                )}
               </Link>
             );
           })}

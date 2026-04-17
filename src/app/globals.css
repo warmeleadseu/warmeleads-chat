@@ -165,6 +165,14 @@
   background: linear-gradient(135deg, #FF6B35, #FF4757);
 }
 
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
 /* Loading Animation */
 .loading-spinner {
   width: 20px;

@@ -275,7 +275,7 @@ function AccountTab({
               <label className="mb-1 block text-xs font-medium text-slate-500">{field.label}</label>
               <div className="flex items-center gap-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2.5">
                 <field.icon className="h-4 w-4 shrink-0 text-slate-400" />
-                <span className="text-sm text-slate-700">{field.value}</span>
+                <span className="min-w-0 break-words text-sm text-slate-700">{field.value}</span>
               </div>
             </div>
           ))}
@@ -371,7 +371,7 @@ function AccountTab({
                 <button
                   type="button"
                   onClick={() => field.toggle(!field.show)}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-slate-600"
                 >
                   {field.show ? <EyeSlashIcon className="h-4 w-4" /> : <EyeIcon className="h-4 w-4" />}
                 </button>

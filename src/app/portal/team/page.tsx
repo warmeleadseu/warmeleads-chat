@@ -14,7 +14,6 @@ import {
   PhoneIcon,
   EyeIcon,
   EyeSlashIcon,
-  ArrowPathIcon,
   CheckIcon,
 } from '@heroicons/react/24/outline';
 import { usePortal } from '../portalContext';
@@ -247,7 +246,7 @@ export default function TeamPage() {
                             <>
                               <button
                                 onClick={() => setEditMember(member)}
-                                className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+                                className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
                                 title="Bewerken"
                               >
                                 <PencilSquareIcon className="h-4 w-4" />
@@ -256,7 +255,7 @@ export default function TeamPage() {
                           )}
                           <button
                             onClick={() => setDetailMember(member)}
-                            className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+                            className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
                             title="Details"
                           >
                             <ChevronRightIcon className="h-4 w-4" />
@@ -370,13 +369,13 @@ function AssignmentRulesEditor({
       <label className="mb-1.5 block text-xs font-medium text-slate-500">Lead toewijzing</label>
       <div className="space-y-3 rounded-xl border border-slate-200 p-3">
         {/* Mode selector */}
-        <div className="grid grid-cols-3 gap-1.5">
+        <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-3">
           {MODE_OPTIONS.map(opt => (
             <button
               key={opt.value}
               type="button"
               onClick={() => setMode(opt.value)}
-              className={`rounded-lg border-2 px-2.5 py-2 text-center transition ${
+              className={`rounded-lg border-2 px-3 py-2.5 text-left transition sm:text-center ${
                 mode === opt.value
                   ? 'border-brand-purple bg-brand-purple/5 text-brand-purple'
                   : 'border-slate-200 text-slate-600 hover:border-slate-300'
@@ -423,13 +422,13 @@ function AssignmentRulesEditor({
               <div className="space-y-2">
                 <div>
                   <p className="mb-1 text-[10px] font-medium text-slate-400">Nederland</p>
-                  <div className="flex flex-wrap gap-1">
+                  <div className="flex flex-wrap gap-1.5">
                     {PROVINCES_NL.map(p => (
                       <button
                         key={p}
                         type="button"
                         onClick={() => toggleProvince(p)}
-                        className={`rounded-md border px-2 py-0.5 text-[11px] font-medium transition ${
+                        className={`rounded-lg border px-2.5 py-1 text-xs font-medium transition ${
                           regions.values?.includes(p)
                             ? 'border-brand-purple bg-brand-purple/10 text-brand-purple'
                             : 'border-slate-200 text-slate-500 hover:border-slate-300'
@@ -442,13 +441,13 @@ function AssignmentRulesEditor({
                 </div>
                 <div>
                   <p className="mb-1 text-[10px] font-medium text-slate-400">Belgi&euml;</p>
-                  <div className="flex flex-wrap gap-1">
+                  <div className="flex flex-wrap gap-1.5">
                     {PROVINCES_BE.map(p => (
                       <button
                         key={p}
                         type="button"
                         onClick={() => toggleProvince(p)}
-                        className={`rounded-md border px-2 py-0.5 text-[11px] font-medium transition ${
+                        className={`rounded-lg border px-2.5 py-1 text-xs font-medium transition ${
                           regions.values?.includes(p)
                             ? 'border-brand-purple bg-brand-purple/10 text-brand-purple'
                             : 'border-slate-200 text-slate-500 hover:border-slate-300'
@@ -647,7 +646,7 @@ function AddMemberModal({
         >
           <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
             <h2 className="text-lg font-bold text-slate-900">Teamlid toevoegen</h2>
-            <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600">
+            <button onClick={onClose} className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600">
               <XMarkIcon className="h-5 w-5" />
             </button>
           </div>
@@ -676,7 +675,7 @@ function AddMemberModal({
                 <div className="relative">
                   <input type={showPassword ? 'text' : 'password'} required minLength={8} value={password} onChange={e => setPassword(e.target.value)}
                     className="w-full rounded-lg border border-slate-200 px-3 py-2 pr-10 text-sm outline-none transition focus:border-brand-purple focus:ring-1 focus:ring-brand-purple/30" />
-                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-slate-400 hover:text-slate-600">
+                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-1.5 text-slate-400 hover:text-slate-600">
                     {showPassword ? <EyeSlashIcon className="h-4 w-4" /> : <EyeIcon className="h-4 w-4" />}
                   </button>
                 </div>
@@ -884,9 +883,9 @@ function EditMemberPanel({
           <div className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2.5">
             <span className="text-sm text-slate-700">Account actief</span>
             <button type="button" onClick={() => setIsActive(!isActive)}
-              className={`relative h-6 w-11 rounded-full transition ${isActive ? 'bg-emerald-500' : 'bg-slate-300'}`}
+              className={`relative h-7 w-12 rounded-full transition ${isActive ? 'bg-emerald-500' : 'bg-slate-300'}`}
               role="switch" aria-pressed={isActive}>
-              <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${isActive ? 'translate-x-5' : ''}`} />
+              <span className={`absolute top-0.5 left-0.5 h-6 w-6 rounded-full bg-white shadow-sm transition-transform ${isActive ? 'translate-x-5' : ''}`} />
             </button>
           </div>
 

@@ -15,6 +15,7 @@ import {
   ChevronRightIcon,
   PhoneIcon,
   EnvelopeIcon,
+  UserCircleIcon,
 } from '@heroicons/react/24/outline';
 
 const navLinks = [
@@ -178,6 +179,16 @@ export function Header() {
                     Mail ons
                   </a>
                 </div>
+
+                {/* Portal login */}
+                <Link
+                  href="/portal"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="mb-2 flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-[14px] font-semibold text-slate-700 transition active:scale-[0.98] hover:bg-slate-50"
+                >
+                  <UserCircleIcon className="h-[18px] w-[18px]" />
+                  Inloggen klantportaal
+                </Link>
 
                 {/* CTAs */}
                 <Link

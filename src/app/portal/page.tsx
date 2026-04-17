@@ -683,7 +683,7 @@ export default function PortalPage() {
             </Link>
             <button
               onClick={() => setWelcomeDismissed(true)}
-              className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+              className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
             >
               <XMarkIcon className="h-4 w-4" />
             </button>
@@ -896,7 +896,7 @@ export default function PortalPage() {
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.35, delay: 0.15, ease: 'easeOut' }}
-                  className="mb-5 grid grid-cols-3 gap-2"
+                  className="mb-5 grid grid-cols-3 gap-1.5 sm:gap-2"
                 >
                   <div className="rounded-xl border border-slate-100 bg-white/80 p-2.5 text-center">
                     <div className="mx-auto mb-1.5 flex h-7 w-7 items-center justify-center rounded-lg bg-brand-purple/10">
@@ -1378,16 +1378,15 @@ export default function PortalPage() {
                 onClick={() => setSelectedLead(lead)}
                 className="cursor-pointer rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition active:scale-[0.99]"
               >
-                <div className="mb-2 flex items-start justify-between">
-                  <div>
-                    <p className="font-semibold text-slate-900">{lead.naam_klant || '-'}</p>
+                <div className="mb-2 flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-semibold text-slate-900">{lead.naam_klant || '-'}</p>
                     {(lead.plaatsnaam || lead.postcode) && (
-                      <p className="flex items-center gap-1 text-xs text-slate-500">
-                        <MapPinIcon className="h-3 w-3" />
-                        {[lead.postcode, lead.huisnummer, lead.plaatsnaam].filter(Boolean).join(', ')}
-                        {lead.provincie ? ` (${lead.provincie})` : ''}
+                      <p className="flex flex-wrap items-center gap-1 text-xs text-slate-500">
+                        <MapPinIcon className="h-3 w-3 shrink-0" />
+                        <span className="truncate">{[lead.postcode, lead.huisnummer, lead.plaatsnaam].filter(Boolean).join(', ')}{lead.provincie ? ` (${lead.provincie})` : ''}</span>
                         {formatDistance(lead.distance_km) && (
-                          <span className="text-slate-400">&middot; {formatDistance(lead.distance_km)}</span>
+                          <span className="shrink-0 text-slate-400">&middot; {formatDistance(lead.distance_km)}</span>
                         )}
                       </p>
                     )}
@@ -1396,7 +1395,7 @@ export default function PortalPage() {
                     value={lead.status}
                     onClick={(e) => e.stopPropagation()}
                     onChange={(e) => handleStatusUpdate(lead, e.target.value)}
-                    className={`rounded-full border-0 px-2 py-0.5 text-[10px] font-medium outline-none ${STATUS_COLORS[lead.status] || 'bg-slate-100 text-slate-600'}`}
+                    className={`rounded-full border-0 px-2.5 py-1 text-[11px] font-medium outline-none ${STATUS_COLORS[lead.status] || 'bg-slate-100 text-slate-600'}`}
                   >
                     {STATUS_OPTIONS.filter(o => o.value !== 'all').map(o => (
                       <option key={o.value} value={o.value}>{o.label}</option>
@@ -1417,7 +1416,7 @@ export default function PortalPage() {
                     <a
                       href={`tel:${lead.telefoonnummer}`}
                       onClick={(e) => e.stopPropagation()}
-                      className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-emerald-50 py-2 text-xs font-medium text-emerald-700 transition hover:bg-emerald-100"
+                      className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-emerald-50 py-2.5 text-xs font-medium text-emerald-700 transition active:bg-emerald-100"
                     >
                       <PhoneIcon className="h-3.5 w-3.5" /> Bellen
                     </a>
@@ -1428,7 +1427,7 @@ export default function PortalPage() {
                       onClick={(e) => e.stopPropagation()}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-green-50 py-2 text-xs font-medium text-green-700 transition hover:bg-green-100"
+                      className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-green-50 py-2.5 text-xs font-medium text-green-700 transition active:bg-green-100"
                     >
                       <WhatsAppIcon className="h-3.5 w-3.5" /> WhatsApp
                     </a>
@@ -1437,7 +1436,7 @@ export default function PortalPage() {
                     <a
                       href={`mailto:${lead.email}`}
                       onClick={(e) => e.stopPropagation()}
-                      className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-blue-50 py-2 text-xs font-medium text-blue-700 transition hover:bg-blue-100"
+                      className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-blue-50 py-2.5 text-xs font-medium text-blue-700 transition active:bg-blue-100"
                     >
                       <EnvelopeIcon className="h-3.5 w-3.5" /> E-mail
                     </a>
@@ -1457,14 +1456,14 @@ export default function PortalPage() {
                 <button
                   onClick={() => setPage(p => Math.max(1, p - 1))}
                   disabled={page <= 1}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:bg-slate-50 disabled:opacity-40"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:bg-slate-50 disabled:opacity-40"
                 >
                   <ChevronLeftIcon className="h-4 w-4" />
                 </button>
                 <button
                   onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                   disabled={page >= totalPages}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:bg-slate-50 disabled:opacity-40"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:bg-slate-50 disabled:opacity-40"
                 >
                   <ChevronRightIcon className="h-4 w-4" />
                 </button>
@@ -1621,7 +1620,7 @@ function LeadDetailPanel({
         </div>
 
         {/* Scrollable content */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
           <div className="space-y-5 p-5">
             {/* Status */}
             <div>
@@ -1643,7 +1642,7 @@ function LeadDetailPanel({
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">Contactgegevens</h3>
                 <button
                   onClick={copyContactInfo}
-                  className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+                  className="inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
                 >
                   <ClipboardDocumentIcon className="h-3.5 w-3.5" />
                   Kopieer alles
@@ -1658,13 +1657,13 @@ function LeadDetailPanel({
                     </a>
                     <div className="flex shrink-0 items-center gap-1">
                       <a href={whatsappUrl(lead.telefoonnummer)} target="_blank" rel="noopener noreferrer"
-                        className="rounded-md bg-green-50 p-1.5 text-green-600 transition hover:bg-green-100" title="WhatsApp">
-                        <WhatsAppIcon className="h-3.5 w-3.5" />
+                        className="rounded-md bg-green-50 p-2 text-green-600 transition hover:bg-green-100" title="WhatsApp">
+                        <WhatsAppIcon className="h-4 w-4" />
                       </a>
                       <button onClick={() => copyField(lead.telefoonnummer, 'tel')}
-                        className={`rounded-md p-1.5 transition ${copiedField === 'tel' ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600'}`}
+                        className={`rounded-md p-2 transition ${copiedField === 'tel' ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600'}`}
                         title="Kopieer telefoonnummer">
-                        {copiedField === 'tel' ? <ClipboardDocumentCheckIcon className="h-3.5 w-3.5" /> : <ClipboardDocumentIcon className="h-3.5 w-3.5" />}
+                        {copiedField === 'tel' ? <ClipboardDocumentCheckIcon className="h-4 w-4" /> : <ClipboardDocumentIcon className="h-4 w-4" />}
                       </button>
                     </div>
                   </div>
@@ -1676,9 +1675,9 @@ function LeadDetailPanel({
                       {lead.email}
                     </a>
                     <button onClick={() => copyField(lead.email, 'email')}
-                      className={`shrink-0 rounded-md p-1.5 transition ${copiedField === 'email' ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600'}`}
+                      className={`shrink-0 rounded-md p-2 transition ${copiedField === 'email' ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600'}`}
                       title="Kopieer e-mailadres">
-                      {copiedField === 'email' ? <ClipboardDocumentCheckIcon className="h-3.5 w-3.5" /> : <ClipboardDocumentIcon className="h-3.5 w-3.5" />}
+                      {copiedField === 'email' ? <ClipboardDocumentCheckIcon className="h-4 w-4" /> : <ClipboardDocumentIcon className="h-4 w-4" />}
                     </button>
                   </div>
                 )}
@@ -1687,9 +1686,9 @@ function LeadDetailPanel({
                     <UserGroupIcon className="h-4 w-4 shrink-0 text-slate-400" />
                     <span className="min-w-0 flex-1 truncate text-sm text-slate-700">{lead.naam_klant}</span>
                     <button onClick={() => copyField(lead.naam_klant, 'naam')}
-                      className={`shrink-0 rounded-md p-1.5 transition ${copiedField === 'naam' ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600'}`}
+                      className={`shrink-0 rounded-md p-2 transition ${copiedField === 'naam' ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600'}`}
                       title="Kopieer naam">
-                      {copiedField === 'naam' ? <ClipboardDocumentCheckIcon className="h-3.5 w-3.5" /> : <ClipboardDocumentIcon className="h-3.5 w-3.5" />}
+                      {copiedField === 'naam' ? <ClipboardDocumentCheckIcon className="h-4 w-4" /> : <ClipboardDocumentIcon className="h-4 w-4" />}
                     </button>
                   </div>
                 )}
@@ -1704,9 +1703,9 @@ function LeadDetailPanel({
                         {dist && <span className="text-xs text-slate-400">{dist} van je targetplaats</span>}
                       </div>
                       <button onClick={() => copyField(adres, 'adres')}
-                        className={`shrink-0 rounded-md p-1.5 transition ${copiedField === 'adres' ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600'}`}
+                        className={`shrink-0 rounded-md p-2 transition ${copiedField === 'adres' ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600'}`}
                         title="Kopieer adres">
-                        {copiedField === 'adres' ? <ClipboardDocumentCheckIcon className="h-3.5 w-3.5" /> : <ClipboardDocumentIcon className="h-3.5 w-3.5" />}
+                        {copiedField === 'adres' ? <ClipboardDocumentCheckIcon className="h-4 w-4" /> : <ClipboardDocumentIcon className="h-4 w-4" />}
                       </button>
                     </div>
                   );
@@ -1722,9 +1721,9 @@ function LeadDetailPanel({
                 </h3>
                 <div className="space-y-1.5 rounded-xl border border-slate-100 bg-slate-50 p-4">
                   {branchFields.map(f => f.value ? (
-                    <div key={f.label} className="flex justify-between text-sm">
-                      <span className="text-slate-500">{f.label}</span>
-                      <span className="font-medium text-slate-700">{f.value}</span>
+                    <div key={f.label} className="flex justify-between gap-3 text-sm">
+                      <span className="shrink-0 text-slate-500">{f.label}</span>
+                      <span className="min-w-0 break-words text-right font-medium text-slate-700">{f.value}</span>
                     </div>
                   ) : null)}
                   {branchFields.every(f => !f.value) && (
@@ -1753,7 +1752,7 @@ function LeadDetailPanel({
               {notesDirty && (
                 <button
                   onClick={saveNotes}
-                  className="mt-2 rounded-lg bg-button-gradient px-4 py-1.5 text-xs font-bold text-white shadow-sm"
+                  className="mt-2 rounded-lg bg-button-gradient px-4 py-2 text-sm font-bold text-white shadow-sm"
                 >
                   Notities opslaan
                 </button>
