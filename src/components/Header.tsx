@@ -26,6 +26,7 @@ const navLinks = [
 
 export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [showMobileStickyCta, setShowMobileStickyCta] = useState(false);
   const pathname = usePathname();
 
   useEffect(() => {
@@ -36,6 +37,28 @@ export function Header() {
     }
     return () => { document.body.style.overflow = ''; };
   }, [mobileMenuOpen]);
+
+  useEffect(() => {
+    const stickyEnabled = pathname !== '/plan-gesprek' && pathname !== '/gratis-account';
+    if (!stickyEnabled) {
+      setShowMobileStickyCta(false);
+      return;
+    }
+
+    if (pathname !== '/') {
+      setShowMobileStickyCta(true);
+      return;
+    }
+
+    const onScroll = () => {
+      // Homepage: avoid duplicate CTA in first viewport; show after hero interaction zone.
+      setShowMobileStickyCta(window.scrollY > 420);
+    };
+
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, [pathname]);
 
   return (
     <>
@@ -212,17 +235,34 @@ export function Header() {
         )}
       </AnimatePresence>
       {/* Sticky mobile CTA bar (hidden on /plan-gesprek and /gratis-account) */}
-      {pathname !== '/plan-gesprek' && pathname !== '/gratis-account' && (
-      <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-slate-200 bg-white/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-lg sm:hidden">
-        <Link
-          href="/plan-gesprek"
-          className="group flex items-center justify-center gap-2 rounded-xl bg-button-gradient px-4 py-3 text-[14px] font-bold text-white shadow-lg shadow-brand-orange/25 transition active:scale-[0.98]"
-        >
-          Plan gratis strategiegesprek
-          <ArrowRightIcon className="h-4 w-4 transition group-hover:translate-x-0.5" />
-        </Link>
-      </div>
-      )}
+      <AnimatePresence>
+        {showMobileStickyCta && (
+          <motion.div
+            initial={{ y: 18, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 18, opacity: 0 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+            className="fixed bottom-0 left-0 right-0 z-50 border-t border-slate-200 bg-white/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-lg sm:hidden"
+          >
+            {pathname === '/' ? (
+              <Link
+                href="/gratis-account"
+                className="flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-3 text-[14px] font-semibold text-slate-700 transition active:scale-[0.98] hover:bg-slate-50"
+              >
+                Bekijk gratis ons portaal
+              </Link>
+            ) : (
+              <Link
+                href="/plan-gesprek"
+                className="group flex items-center justify-center gap-2 rounded-xl bg-button-gradient px-4 py-3 text-[14px] font-bold text-white shadow-lg shadow-brand-orange/25 transition active:scale-[0.98]"
+              >
+                Plan gratis strategiegesprek
+                <ArrowRightIcon className="h-4 w-4 transition group-hover:translate-x-0.5" />
+              </Link>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </>
   );
 }
