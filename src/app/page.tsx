@@ -116,7 +116,7 @@ WarmeLeads genereert exclusieve, verse leads voor jouw bedrijf.
                   href="/gratis-account"
                   className="inline-flex items-center justify-center gap-2 rounded-lg border border-white/25 bg-white/10 px-6 py-3.5 text-sm font-semibold text-white backdrop-blur transition hover:bg-white/20"
                 >
-                  Bekijk gratis ons portaal
+                  Bekijk gratis ons leadportaal
                 </Link>
               </motion.div>
 
@@ -779,7 +779,7 @@ WarmeLeads genereert exclusieve, verse leads voor jouw bedrijf.
                 href="/gratis-account"
                 className="inline-flex items-center justify-center rounded-lg border border-white/25 bg-white/10 px-6 py-3.5 text-sm font-semibold text-white backdrop-blur transition hover:bg-white/20"
               >
-                Bekijk gratis ons portaal
+                Bekijk gratis ons leadportaal
               </Link>
             </div>
           </div>

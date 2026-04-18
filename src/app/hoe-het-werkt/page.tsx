@@ -527,7 +527,7 @@ export default function HoeHetWerktPage() {
                 href="/gratis-account"
                 className="inline-flex items-center justify-center rounded-lg border border-white/25 bg-white/10 px-6 py-3.5 text-sm font-semibold text-white backdrop-blur transition hover:bg-white/20"
               >
-                Bekijk gratis ons portaal
+                Bekijk gratis ons leadportaal
               </Link>
             </div>
             <p className="mt-5 text-[12px] font-medium text-white/40 md:mt-6">

@@ -247,9 +247,10 @@ export function Header() {
             {pathname === '/' ? (
               <Link
                 href="/gratis-account"
-                className="flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-3 text-[14px] font-semibold text-slate-700 transition active:scale-[0.98] hover:bg-slate-50"
+                className="group flex items-center justify-center gap-2 rounded-xl border border-brand-purple/30 bg-gradient-to-r from-brand-purple/[0.08] via-brand-pink/[0.08] to-brand-orange/[0.08] px-4 py-3 text-[14px] font-bold text-brand-purple shadow-[0_10px_24px_-16px_rgba(59,47,117,0.75)] transition active:scale-[0.98] hover:brightness-105"
               >
-                Bekijk gratis ons portaal
+                Bekijk gratis ons leadportaal
+                <ArrowRightIcon className="h-4 w-4 transition group-hover:translate-x-0.5" />
               </Link>
             ) : (
               <Link
