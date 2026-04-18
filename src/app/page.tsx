@@ -157,7 +157,7 @@ WarmeLeads genereert exclusieve, verse leads voor jouw bedrijf.
                   className="animate-phone-float"
                   style={{ transform: 'rotateY(-8deg) rotateX(3deg)' }}
                 >
-                  <IPhoneMockup variant="hero" />
+                  <IPhoneMockup />
                 </div>
               </div>
             </motion.div>
@@ -169,7 +169,7 @@ WarmeLeads genereert exclusieve, verse leads voor jouw bedrijf.
             transition={{ duration: 0.6, delay: 0.5 }}
             className="mt-10 flex justify-center lg:hidden"
           >
-            <IPhoneMockup variant="proof" />
+            <IPhoneMockup />
           </motion.div>
         </div>
       </section>
@@ -313,7 +313,7 @@ WarmeLeads genereert exclusieve, verse leads voor jouw bedrijf.
               transition={{ duration: 0.5, delay: 0.1 }}
               className="flex justify-center"
             >
-              <IPhoneMockup variant="workflow" />
+              <IPhoneMockup />
             </motion.div>
           </div>
         </div>
