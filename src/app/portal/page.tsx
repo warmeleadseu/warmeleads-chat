@@ -253,6 +253,7 @@ export default function PortalPage() {
   const [showWelcome, setShowWelcome] = useState(false);
   const [welcomeOffer, setWelcomeOffer] = useState<{ active: boolean; expiresAt: string | null }>({ active: false, expiresAt: null });
   const [welcomeDismissed, setWelcomeDismissed] = useState(false);
+  const [showOverviewPanel, setShowOverviewPanel] = useState(false);
 
   useEffect(() => {
     const paidParam = searchParams.get('paid');
@@ -279,6 +280,20 @@ export default function PortalPage() {
   const conversionRate = stats.totalLeads > 0
     ? Math.round((stats.sold / stats.totalLeads) * 100)
     : 0;
+  const activeBatchCount = batches.active.length;
+  const hasUnpaidBatch = useMemo(
+    () => batches.active.some((b: Record<string, unknown>) => b.is_paid === false),
+    [batches.active],
+  );
+
+  useEffect(() => {
+    if (!showOverviewPanel) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [showOverviewPanel]);
 
   const fetchStats = useCallback(async (silent = false) => {
     if (!silent) setStatsLoading(true);
@@ -701,393 +716,82 @@ export default function PortalPage() {
         </p>
       </div>
 
-      {/* Batch Progress */}
-      {batchesLoading ? (
-        <div className="grid gap-3 sm:grid-cols-2">
-          {[0, 1].map((i) => (
-            <div key={i} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="mb-3 flex items-center justify-between">
-                <div className="h-5 w-24 animate-pulse rounded-full bg-slate-100" />
-                <div className="h-4 w-8 animate-pulse rounded bg-slate-100" />
-              </div>
-              <div className="mb-2 h-2.5 animate-pulse rounded-full bg-slate-100" />
-              <div className="h-3 w-32 animate-pulse rounded bg-slate-50" />
-            </div>
-          ))}
-        </div>
-      ) : customer.demo_mode ? (
-        <div className="rounded-xl border border-dashed border-brand-purple/30 bg-brand-purple/[0.03] p-5">
-          <div className="flex flex-col items-center gap-3 text-center sm:flex-row sm:text-left">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-purple/10">
-              <ShoppingCartIcon className="h-5 w-5 text-brand-purple" />
-            </div>
-            <div className="flex-1">
-              <p className="text-sm font-semibold text-slate-800">Nog geen actieve batches</p>
-              <p className="mt-0.5 text-xs text-slate-500">Bestel je eerste batch om echte leads te ontvangen. De demo leads verdwijnen automatisch.</p>
-            </div>
-            <Link
-              href="/portal/bestellen"
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-button-gradient px-4 py-2.5 text-xs font-bold text-white shadow-lg shadow-brand-orange/20 transition hover:shadow-brand-orange/30"
-            >
-              <SparklesIcon className="h-3.5 w-3.5" />
-              Bestel je eerste batch
-            </Link>
-          </div>
-        </div>
-      ) : (batches.active.length > 0 || batches.completed.length > 0) && (
-        <div className="space-y-3">
-          {batches.active.length > 0 && (
-            <>
-              <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                <span className="relative flex h-2 w-2">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
-                </span>
-                Actieve batches
-              </h2>
-              <div className="grid gap-3 sm:grid-cols-2">
-                {batches.active.map((b: Record<string, any>) => {
-                  const pct = b.batch_size > 0 ? Math.min(100, Math.round((b.leads_delivered / b.batch_size) * 100)) : 0;
-                  const comps: { amount: number; reason: string }[] = Array.isArray(b.compensations) ? b.compensations : [];
-                  const totalComp = comps.reduce((s: number, c: { amount: number }) => s + c.amount, 0);
-                  const originalSize = b.batch_size - totalComp;
-                  return (
-                    <div key={b.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:shadow-md">
-                      <div className="mb-2.5 flex items-center justify-between">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="rounded-full bg-brand-purple/10 px-2.5 py-0.5 text-[11px] font-semibold text-brand-purple">
-                            {b.branch_name || b.branch}
-                          </span>
-                          {b.is_paid === false && (
-                            <span className="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-600">Onbetaald</span>
-                          )}
-                          {b.starts_at && new Date(b.starts_at) > new Date() && (
-                            <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
-                              <CalendarDaysIcon className="h-3 w-3" />
-                              Start {new Date(b.starts_at).toLocaleDateString('nl-NL', { timeZone: 'Europe/Amsterdam', day: 'numeric', month: 'short' })} {new Date(b.starts_at).toLocaleTimeString('nl-NL', { timeZone: 'Europe/Amsterdam', hour: '2-digit', minute: '2-digit' })}
-                            </span>
-                          )}
-                          {b.leads_per_day > 0 && (
-                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">max {b.leads_per_day}/dag</span>
-                          )}
-                          {b.leads_per_week > 0 && (
-                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">max {b.leads_per_week}/week</span>
-                          )}
-                        </div>
-                        <span className="text-sm font-bold text-slate-900">{pct}%</span>
-                      </div>
-                      <div className="mb-2.5 h-2.5 overflow-hidden rounded-full bg-slate-100">
-                        <div
-                          className="h-full rounded-full bg-gradient-to-r from-brand-purple to-brand-pink transition-all duration-700"
-                          style={{ width: `${Math.min(pct, 100)}%` }}
-                        />
-                      </div>
-                      <div className="flex items-center justify-between text-xs text-slate-500">
-                        <span className="font-medium">
-                          {Math.min(b.leads_delivered, b.batch_size)} / {b.batch_size} leads
-                          {totalComp > 0 && (
-                            <span className="ml-1 text-emerald-600">
-                              (incl. {totalComp} compensatie)
-                            </span>
-                          )}
-                        </span>
-                        {b.estimated_completion && (
-                          <span className="text-slate-400">
-                            Klaar ~{new Date(b.estimated_completion).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}
-                          </span>
-                        )}
-                      </div>
-                      {b.starts_at && new Date(b.starts_at) > new Date() && (
-                        <div className="mt-2 flex items-start gap-2 rounded-lg border border-amber-100 bg-amber-50/50 px-3 py-2">
-                          <CalendarDaysIcon className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
-                          <div>
-                            <p className="text-[11px] font-medium text-amber-700">
-                              Deze batch start op {new Date(b.starts_at).toLocaleDateString('nl-NL', { timeZone: 'Europe/Amsterdam', weekday: 'long', day: 'numeric', month: 'long' })} om {new Date(b.starts_at).toLocaleTimeString('nl-NL', { timeZone: 'Europe/Amsterdam', hour: '2-digit', minute: '2-digit' })}
-                            </p>
-                            <p className="mt-0.5 text-[10px] text-amber-600/70">
-                              Leads worden vanaf dat moment toegewezen aan je batch.
-                            </p>
-                          </div>
-                        </div>
-                      )}
-                      {totalComp > 0 && (
-                        <div className="mt-2 rounded-lg border border-emerald-100 bg-emerald-50/50 px-3 py-2">
-                          <div className="flex items-center gap-1.5 text-[11px] font-medium text-emerald-700">
-                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7" />
-                            </svg>
-                            {totalComp} compensatie {totalComp === 1 ? 'lead' : 'leads'} toegevoegd
-                          </div>
-                          <p className="mt-0.5 text-[10px] text-emerald-600/70">
-                            Origineel {originalSize} leads + {totalComp} extra
-                          </p>
-                        </div>
-                      )}
-                      {(b.avg_leads_per_day > 0 || b.this_week_count > 0) && (
-                        <div className="mt-2 flex gap-3 border-t border-slate-50 pt-2 text-[11px] text-slate-400">
-                          {b.avg_leads_per_day > 0 && <span>~{b.avg_leads_per_day.toFixed(1)} leads/dag</span>}
-                          {b.this_week_count > 0 && (
-                            <span className="font-medium text-brand-purple">Deze week: {b.this_week_count}</span>
-                          )}
-                        </div>
-                      )}
-                      {b.is_paid === false && (
-                        <button
-                          onClick={() => handlePayBatch(b.id)}
-                          disabled={payingBatch === b.id}
-                          className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-lg border-2 border-red-200 bg-red-50 px-3 py-2 text-[12px] font-semibold text-red-700 transition hover:bg-red-100 disabled:opacity-50"
-                        >
-                          {payingBatch === b.id ? (
-                            <><span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-red-300 border-t-red-600" /> Laden...</>
-                          ) : (
-                            <><CreditCardIcon className="h-3.5 w-3.5" /> Batch betalen &middot; &euro;{(Number(b.total_price || 0) * 1.21).toFixed(2)}</>
-                          )}
-                        </button>
-                      )}
-                      {b.is_paid !== false && pct >= 80 && (
-                        <Link
-                          href={`/portal/bestellen?batch=${b.id}`}
-                          className="mt-2.5 flex items-center justify-center gap-1.5 rounded-lg bg-gradient-to-r from-brand-purple to-brand-pink px-3 py-2 text-[12px] font-semibold text-white shadow-sm transition hover:shadow-md"
-                        >
-                          <ShoppingCartIcon className="h-3.5 w-3.5" />
-                          Vervolg batch bestellen
-                        </Link>
-                      )}
-                      {b.lead_filters && Array.isArray(b.lead_filters) && b.lead_filters.length > 0 && (
-                        <div className="mt-2 flex flex-wrap items-center gap-1 border-t border-slate-50 pt-2">
-                          <span className="text-[10px] text-slate-400">Filters:</span>
-                          {b.lead_filters.map((f: Record<string, unknown>, i: number) => {
-                            const vals = Array.isArray(f.values) ? f.values as string[] : [];
-                            const count = vals.length || (f.value ? 1 : 0);
-                            return (
-                              <span key={i} className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
-                                {String(f.field)}: {count} {count === 1 ? 'waarde' : 'waarden'}
-                              </span>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </>
-          )}
-          {batches.completed.length > 0 && batches.active.length === 0 && (() => {
-            const last = batches.completed[0] as Record<string, any>;
-            const leadsDelivered = Math.min(last.leads_delivered ?? 0, last.batch_size ?? 0);
-            const durationDays = last.duration_days ?? 0;
-            const tempo = durationDays > 0 ? (leadsDelivered / durationDays).toFixed(1) : '—';
-            return (
-              <motion.div
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, ease: 'easeOut' }}
-                className="rounded-2xl border border-slate-200/80 bg-gradient-to-br from-white via-brand-purple/[0.03] to-brand-pink/[0.05] p-5 shadow-sm"
-              >
-                <div className="mb-4">
-                  <h2 className="text-lg font-bold text-slate-800">Klaar voor een nieuwe batch?</h2>
-                  <p className="mt-1 text-sm text-slate-500">
-                    Je vorige batch is succesvol afgerond. Bestel direct een nieuwe batch om door te gaan met het ontvangen van leads.
-                  </p>
-                </div>
-
-                <motion.div
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.35, delay: 0.15, ease: 'easeOut' }}
-                  className="mb-5 grid grid-cols-3 gap-1.5 sm:gap-2"
-                >
-                  <div className="rounded-xl border border-slate-100 bg-white/80 p-2.5 text-center">
-                    <div className="mx-auto mb-1.5 flex h-7 w-7 items-center justify-center rounded-lg bg-brand-purple/10">
-                      <UserGroupIcon className="h-3.5 w-3.5 text-brand-purple" />
-                    </div>
-                    <p className="text-[15px] font-bold leading-tight text-slate-800">{leadsDelivered}</p>
-                    <p className="mt-0.5 text-[10px] leading-tight text-slate-400">Leads geleverd</p>
-                  </div>
-                  <div className="rounded-xl border border-slate-100 bg-white/80 p-2.5 text-center">
-                    <div className="mx-auto mb-1.5 flex h-7 w-7 items-center justify-center rounded-lg bg-blue-50">
-                      <ClockIcon className="h-3.5 w-3.5 text-blue-500" />
-                    </div>
-                    <p className="text-[15px] font-bold leading-tight text-slate-800">{durationDays || '—'}</p>
-                    <p className="mt-0.5 text-[10px] leading-tight text-slate-400">Doorlooptijd</p>
-                  </div>
-                  <div className="rounded-xl border border-slate-100 bg-white/80 p-2.5 text-center">
-                    <div className="mx-auto mb-1.5 flex h-7 w-7 items-center justify-center rounded-lg bg-amber-50">
-                      <BoltIcon className="h-3.5 w-3.5 text-amber-500" />
-                    </div>
-                    <p className="text-[15px] font-bold leading-tight text-slate-800">{tempo}</p>
-                    <p className="mt-0.5 text-[10px] leading-tight text-slate-400">Leads / dag</p>
-                  </div>
-                </motion.div>
-
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ duration: 0.3, delay: 0.3 }}
-                >
-                  <Link
-                    href={`/portal/bestellen?batch=${last.id}`}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-brand-purple to-brand-pink px-4 py-3 text-sm font-semibold text-white shadow-md transition-all hover:shadow-lg hover:brightness-110 active:scale-[0.98]"
-                  >
-                    <ShoppingCartIcon className="h-[18px] w-[18px]" />
-                    Nieuwe batch bestellen
-                  </Link>
-                </motion.div>
-
-                <details className="group mt-4">
-                  <summary className="flex cursor-pointer items-center justify-center gap-1 text-[11px] font-medium text-slate-400 transition hover:text-slate-600">
-                    <ChevronDownIcon className="h-3.5 w-3.5 transition-transform group-open:rotate-180" />
-                    <span>{batches.completed.length} voltooide {batches.completed.length === 1 ? 'batch' : 'batches'} bekijken</span>
-                  </summary>
-                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                    {batches.completed.map((b: Record<string, any>) => {
-                      const compTotal = (Array.isArray(b.compensations) ? b.compensations : []).reduce((s: number, c: { amount: number }) => s + c.amount, 0);
-                      return (
-                        <div key={b.id} className="rounded-lg border border-slate-100 bg-white/60 p-3">
-                          <div className="flex items-center justify-between">
-                            <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-semibold text-emerald-600">
-                              {b.branch_name || b.branch} ✓
-                            </span>
-                            <span className="text-[10px] text-slate-400">
-                              {b.duration_days ? `${b.duration_days} dagen` : ''}
-                            </span>
-                          </div>
-                          <p className="mt-1.5 text-xs text-slate-500">
-                            {Math.min(b.leads_delivered, b.batch_size)} / {b.batch_size} leads
-                            {compTotal > 0 && <span className="text-emerald-600"> (incl. {compTotal} compensatie)</span>}
-                            {b.completed_at && (
-                              <span className="text-slate-400"> · {new Date(b.completed_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
-                            )}
-                          </p>
-                          <Link
-                            href={`/portal/bestellen?batch=${b.id}`}
-                            className="mt-2 inline-flex items-center gap-1 rounded-md bg-brand-purple/10 px-2.5 py-1 text-[11px] font-semibold text-brand-purple transition hover:bg-brand-purple/20"
-                          >
-                            <ShoppingCartIcon className="h-3 w-3" />
-                            Opnieuw bestellen
-                          </Link>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </details>
-              </motion.div>
-            );
-          })()}
-          {batches.completed.length > 0 && batches.active.length > 0 && (
-            <details className="group rounded-xl border border-slate-200 bg-white shadow-sm">
-              <summary className="flex cursor-pointer items-center justify-between px-4 py-3 text-xs font-medium text-slate-500 transition hover:text-slate-700">
-                <span>{batches.completed.length} voltooide {batches.completed.length === 1 ? 'batch' : 'batches'}</span>
-                <svg className="h-4 w-4 transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </summary>
-              <div className="grid gap-2 border-t border-slate-100 p-3 sm:grid-cols-2">
-                {batches.completed.map((b: Record<string, any>) => {
-                  const compTotal = (Array.isArray(b.compensations) ? b.compensations : []).reduce((s: number, c: { amount: number }) => s + c.amount, 0);
-                  return (
-                    <div key={b.id} className="rounded-lg border border-slate-100 bg-slate-50/50 p-3">
-                      <div className="flex items-center justify-between">
-                        <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-semibold text-emerald-600">
-                          {b.branch_name || b.branch} ✓
-                        </span>
-                        <span className="text-[10px] text-slate-400">
-                          {b.duration_days ? `${b.duration_days} dagen` : ''}
-                        </span>
-                      </div>
-                      <p className="mt-1.5 text-xs text-slate-500">
-                        {Math.min(b.leads_delivered, b.batch_size)} / {b.batch_size} leads
-                        {compTotal > 0 && <span className="text-emerald-600"> (incl. {compTotal} compensatie)</span>}
-                        {b.completed_at && (
-                          <span className="text-slate-400"> · {new Date(b.completed_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
-                        )}
-                      </p>
-                      <Link
-                        href={`/portal/bestellen?batch=${b.id}`}
-                        className="mt-2 inline-flex items-center gap-1 rounded-md bg-brand-purple/10 px-2.5 py-1 text-[11px] font-semibold text-brand-purple transition hover:bg-brand-purple/20"
-                      >
-                        <ShoppingCartIcon className="h-3 w-3" />
-                        Opnieuw bestellen
-                      </Link>
-                    </div>
-                  );
-                })}
-              </div>
-            </details>
-          )}
-        </div>
-      )}
-
-      {/* Stats */}
-      {statsLoading ? (
-        <StatsSkeleton />
-      ) : (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {[
-            { label: 'Totaal leads', value: stats.totalLeads, icon: UserGroupIcon, color: 'text-brand-purple', bg: 'bg-brand-purple/10' },
-            { label: 'Nieuw deze week', value: stats.newThisWeek, icon: SparklesIcon, color: 'text-blue-600', bg: 'bg-blue-50' },
-            { label: 'Gecontacteerd', value: stats.contacted, icon: ArrowTrendingUpIcon, color: 'text-amber-600', bg: 'bg-amber-50' },
-            { label: 'Verkocht', value: stats.sold, icon: CheckCircleIcon, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-          ].map(stat => (
-            <div key={stat.label} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="flex items-center gap-2">
-                <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${stat.bg}`}>
-                  <stat.icon className={`h-4 w-4 ${stat.color}`} />
-                </div>
-              </div>
-              <p className="mt-3 text-2xl font-bold text-slate-900">{stat.value}</p>
-              <p className="text-xs text-slate-500">{stat.label}</p>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Conversion rate + New leads banner */}
-      {!statsLoading && stats.totalLeads > 0 && (
-        <div className="flex flex-col gap-3 sm:flex-row">
-          <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm sm:flex-1">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-purple/10">
-              <ChartBarIcon className="h-5 w-5 text-brand-purple" />
-            </div>
-            <div className="flex-1">
-              <p className="text-xs text-slate-500">Conversieratio</p>
-              <div className="mt-0.5 flex items-center gap-2">
-                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100">
-                  <div
-                    className="h-full rounded-full bg-gradient-to-r from-brand-purple to-brand-pink transition-all duration-500"
-                    style={{ width: `${Math.min(conversionRate, 100)}%` }}
-                  />
-                </div>
-                <span className="text-sm font-bold text-slate-900">{conversionRate}%</span>
-              </div>
-            </div>
-          </div>
-
-          {stats.newThisWeek > 0 && (
+      <div className="overflow-x-auto hide-scrollbar">
+        <div className="flex min-w-max snap-x snap-mandatory items-stretch gap-2 pb-0.5">
+          <button
+            onClick={() => setShowOverviewPanel(true)}
+            className="inline-flex min-h-11 snap-start items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+          >
+            <InboxIcon className="h-4 w-4 text-brand-purple" />
+            {customer.demo_mode
+              ? 'Demo modus'
+              : activeBatchCount > 0
+                ? `${activeBatchCount} actieve ${activeBatchCount === 1 ? 'batch' : 'batches'}`
+                : 'Geen actieve batch'}
+          </button>
+          <button
+            onClick={viewNewLeads}
+            className="inline-flex min-h-11 snap-start items-center gap-1.5 rounded-xl border border-blue-100 bg-blue-50 px-3.5 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
+          >
+            <SparklesIcon className="h-4 w-4" />
+            {stats.newThisWeek} nieuw deze week
+          </button>
+          {hasUnpaidBatch && (
             <button
-              onClick={viewNewLeads}
-              className="flex items-center gap-3 rounded-xl border border-blue-100 bg-gradient-to-r from-blue-50 to-indigo-50 px-4 py-3 shadow-sm transition hover:shadow-md sm:flex-1"
+              onClick={() => setShowOverviewPanel(true)}
+              className="inline-flex min-h-11 snap-start items-center gap-1.5 rounded-xl border border-red-200 bg-red-50 px-3.5 py-2 text-xs font-semibold text-red-700 transition hover:bg-red-100"
             >
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-100">
-                <SparklesIcon className="h-5 w-5 text-blue-600" />
-              </div>
-              <div className="flex-1 text-left">
-                <p className="text-sm font-semibold text-slate-900">
-                  {stats.newThisWeek} nieuwe {stats.newThisWeek === 1 ? 'lead' : 'leads'}
-                </p>
-                <p className="text-xs text-slate-500">Klik om te bekijken</p>
-              </div>
-              <ChevronRightIcon className="h-4 w-4 text-slate-400" />
+              <CreditCardIcon className="h-4 w-4" />
+              Batch onbetaald
             </button>
           )}
+          <button
+            onClick={() => setShowOverviewPanel(true)}
+            className="inline-flex min-h-11 snap-start items-center gap-1.5 rounded-xl border border-brand-purple/20 bg-brand-purple/5 px-3.5 py-2 text-xs font-semibold text-brand-purple transition hover:bg-brand-purple/10"
+          >
+            <ChartBarIcon className="h-4 w-4" />
+            Conversie {conversionRate}%
+          </button>
+          <Link
+            href="/portal/bestellen"
+            className="inline-flex min-h-11 snap-start items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2 text-xs font-semibold text-amber-700 transition hover:bg-amber-100"
+          >
+            <ShoppingCartIcon className="h-4 w-4" />
+            Bestellen
+          </Link>
+          <button
+            onClick={() => setShowExportWizard(true)}
+            disabled={total === 0}
+            className="inline-flex min-h-11 snap-start items-center gap-1.5 rounded-xl border border-brand-purple/30 bg-brand-purple/5 px-3.5 py-2 text-xs font-semibold text-brand-purple transition hover:bg-brand-purple/10 disabled:opacity-40"
+          >
+            <ArrowDownTrayIcon className="h-4 w-4" />
+            Exporteer
+          </button>
+          <button
+            onClick={() => setShowOverviewPanel(true)}
+            className="inline-flex min-h-11 snap-start items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
+          >
+            Overzicht
+            <ChevronRightIcon className="h-4 w-4" />
+          </button>
         </div>
-      )}
+      </div>
 
-      {/* Mini Charts */}
-      {!statsLoading && stats.totalLeads > 0 && (
-        <MiniCharts stats={stats} getBranch={getBranch} />
-      )}
+      <OverviewDetailPanel
+        open={showOverviewPanel}
+        onClose={() => setShowOverviewPanel(false)}
+        customer={customer}
+        batches={batches}
+        batchesLoading={batchesLoading}
+        stats={stats}
+        statsLoading={statsLoading}
+        conversionRate={conversionRate}
+        hasUnpaidBatch={hasUnpaidBatch}
+        onPayBatch={handlePayBatch}
+        payingBatch={payingBatch}
+        onViewNewLeads={viewNewLeads}
+        getBranch={getBranch}
+      />
 
       {/* Toolbar */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1769,6 +1473,221 @@ function LeadDetailPanel({
         </div>
       </motion.div>
     </>
+  );
+}
+
+function OverviewDetailPanel({
+  open,
+  onClose,
+  customer,
+  batches,
+  batchesLoading,
+  stats,
+  statsLoading,
+  conversionRate,
+  hasUnpaidBatch,
+  onPayBatch,
+  payingBatch,
+  onViewNewLeads,
+  getBranch,
+}: {
+  open: boolean;
+  onClose: () => void;
+  customer: { demo_mode: boolean };
+  batches: { active: Array<Record<string, unknown>>; completed: Array<Record<string, unknown>> };
+  batchesLoading: boolean;
+  stats: Stats;
+  statsLoading: boolean;
+  conversionRate: number;
+  hasUnpaidBatch: boolean;
+  onPayBatch: (batchId: string) => void;
+  payingBatch: string | null;
+  onViewNewLeads: () => void;
+  getBranch: (slug: string) => { name: string; light: string; text: string };
+}) {
+  const topActiveBatch = batches.active[0];
+
+  return (
+    <AnimatePresence>
+      {open && (
+        <>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[70] bg-black/35 backdrop-blur-sm"
+            onClick={onClose}
+          />
+          <motion.div
+            initial={{ y: '100%' }}
+            animate={{ y: 0 }}
+            exit={{ y: '100%' }}
+            transition={{ type: 'spring', damping: 30, stiffness: 280 }}
+            className="fixed inset-x-0 bottom-0 z-[80] max-h-[84vh] overflow-hidden rounded-t-2xl border border-slate-200 bg-white shadow-2xl md:inset-y-0 md:right-0 md:left-auto md:max-h-full md:w-[560px] md:rounded-none md:rounded-l-2xl"
+          >
+        <div className="border-b border-slate-100 px-4 py-3 md:px-5">
+          <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-slate-200 md:hidden" />
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-slate-900">Overzicht</h2>
+            <button
+              onClick={onClose}
+              className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+              aria-label="Sluiten"
+            >
+              <XMarkIcon className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+
+        <div className="space-y-4 overflow-y-auto p-4 md:p-5">
+          {customer.demo_mode && (
+            <div className="rounded-xl border border-dashed border-brand-purple/30 bg-brand-purple/[0.03] p-4">
+              <p className="text-sm font-semibold text-slate-800">Demo modus actief</p>
+              <p className="mt-1 text-xs text-slate-500">Je bekijkt demo leads. Bestel je eerste batch voor echte leads.</p>
+              <Link
+                href="/portal/bestellen"
+                onClick={onClose}
+                className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-button-gradient px-3 py-2 text-xs font-semibold text-white"
+              >
+                <SparklesIcon className="h-3.5 w-3.5" />
+                Bestel je eerste batch
+              </Link>
+            </div>
+          )}
+
+          {!customer.demo_mode && (
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              {batchesLoading ? (
+                <div className="space-y-2">
+                  <div className="h-4 w-28 animate-pulse rounded bg-slate-100" />
+                  <div className="h-2.5 w-full animate-pulse rounded bg-slate-100" />
+                  <div className="h-3 w-40 animate-pulse rounded bg-slate-50" />
+                </div>
+              ) : topActiveBatch ? (
+                <>
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="rounded-full bg-brand-purple/10 px-2.5 py-0.5 text-[11px] font-semibold text-brand-purple">
+                      {String(topActiveBatch.branch_name || topActiveBatch.branch || 'Batch')}
+                    </span>
+                    <span className="text-xs font-bold text-slate-900">
+                      {Math.min(
+                        Number(topActiveBatch.leads_delivered || 0),
+                        Number(topActiveBatch.batch_size || 0),
+                      )} / {Number(topActiveBatch.batch_size || 0)}
+                    </span>
+                  </div>
+                  <div className="mb-2 h-2.5 overflow-hidden rounded-full bg-slate-100">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-brand-purple to-brand-pink"
+                      style={{
+                        width: `${Number(topActiveBatch.batch_size || 0) > 0
+                          ? Math.min(100, Math.round((Number(topActiveBatch.leads_delivered || 0) / Number(topActiveBatch.batch_size || 1)) * 100))
+                          : 0}%`,
+                      }}
+                    />
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    {Number(topActiveBatch.leads_per_day || 0) > 0 ? `Max ${Number(topActiveBatch.leads_per_day)} per dag` : 'Geen daglimiet'}
+                  </p>
+                  {topActiveBatch.is_paid === false && typeof topActiveBatch.id === 'string' && (
+                    <button
+                      onClick={() => onPayBatch(topActiveBatch.id as string)}
+                      disabled={payingBatch === topActiveBatch.id}
+                      className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 transition hover:bg-red-100 disabled:opacity-50"
+                    >
+                      {payingBatch === topActiveBatch.id ? 'Laden...' : 'Batch betalen'}
+                    </button>
+                  )}
+                </>
+              ) : (
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">Geen actieve batch</p>
+                  <p className="mt-1 text-xs text-slate-500">Bestel een batch om nieuwe leads te ontvangen.</p>
+                  <Link
+                    href="/portal/bestellen"
+                    onClick={onClose}
+                    className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-button-gradient px-3 py-2 text-xs font-semibold text-white"
+                  >
+                    <ShoppingCartIcon className="h-3.5 w-3.5" />
+                    Naar bestellen
+                  </Link>
+                </div>
+              )}
+            </div>
+          )}
+
+          {statsLoading ? (
+            <StatsSkeleton />
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                {[
+                  { label: 'Totaal leads', value: stats.totalLeads, icon: UserGroupIcon, color: 'text-brand-purple', bg: 'bg-brand-purple/10' },
+                  { label: 'Nieuw deze week', value: stats.newThisWeek, icon: SparklesIcon, color: 'text-blue-600', bg: 'bg-blue-50' },
+                  { label: 'Gecontacteerd', value: stats.contacted, icon: ArrowTrendingUpIcon, color: 'text-amber-600', bg: 'bg-amber-50' },
+                  { label: 'Verkocht', value: stats.sold, icon: CheckCircleIcon, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+                ].map(stat => (
+                  <div key={stat.label} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+                    <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${stat.bg}`}>
+                      <stat.icon className={`h-4 w-4 ${stat.color}`} />
+                    </div>
+                    <p className="mt-2 text-xl font-bold text-slate-900">{stat.value}</p>
+                    <p className="text-[11px] text-slate-500">{stat.label}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm sm:flex-1">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-purple/10">
+                    <ChartBarIcon className="h-5 w-5 text-brand-purple" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-xs text-slate-500">Conversieratio</p>
+                    <div className="mt-0.5 flex items-center gap-2">
+                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100">
+                        <div
+                          className="h-full rounded-full bg-gradient-to-r from-brand-purple to-brand-pink"
+                          style={{ width: `${Math.min(conversionRate, 100)}%` }}
+                        />
+                      </div>
+                      <span className="text-sm font-bold text-slate-900">{conversionRate}%</span>
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    onViewNewLeads();
+                    onClose();
+                  }}
+                  className="flex items-center gap-3 rounded-xl border border-blue-100 bg-gradient-to-r from-blue-50 to-indigo-50 px-4 py-3 text-left shadow-sm transition hover:shadow-md sm:flex-1"
+                >
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-100">
+                    <SparklesIcon className="h-5 w-5 text-blue-600" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-slate-900">
+                      {stats.newThisWeek} nieuwe {stats.newThisWeek === 1 ? 'lead' : 'leads'}
+                    </p>
+                    <p className="text-xs text-slate-500">Klik om te bekijken</p>
+                  </div>
+                </button>
+              </div>
+
+              {stats.totalLeads > 0 && <MiniCharts stats={stats} getBranch={getBranch} />}
+            </>
+          )}
+
+          {hasUnpaidBatch && (
+            <div className="rounded-xl border border-red-100 bg-red-50 p-3 text-xs text-red-700">
+              Je hebt minimaal één onbetaalde batch. Betaal deze om levering te hervatten.
+            </div>
+          )}
+        </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
   );
 }
 
