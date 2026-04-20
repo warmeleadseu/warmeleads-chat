@@ -1729,7 +1729,7 @@ function OverviewDetailPanel({
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
             transition={{ type: 'spring', damping: 30, stiffness: 280 }}
-            className="fixed inset-x-0 bottom-0 z-[80] max-h-[84vh] overflow-hidden rounded-t-2xl border border-slate-200 bg-white shadow-2xl md:inset-y-0 md:right-0 md:left-auto md:max-h-full md:w-[560px] md:rounded-none md:rounded-l-2xl"
+            className="fixed inset-x-0 bottom-0 z-[80] flex max-h-[84vh] flex-col overflow-hidden rounded-t-2xl border border-slate-200 bg-white shadow-2xl md:inset-y-0 md:right-0 md:left-auto md:max-h-full md:w-[560px] md:rounded-none md:rounded-l-2xl"
           >
         <div className="border-b border-slate-100 px-4 py-3 md:px-5">
           <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-slate-200 md:hidden" />
@@ -1745,7 +1745,7 @@ function OverviewDetailPanel({
           </div>
         </div>
 
-        <div className="space-y-4 overflow-y-auto p-4 md:p-5">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] md:p-5">
           {customer.demo_mode && (
             <div className="rounded-xl border border-dashed border-brand-purple/30 bg-brand-purple/[0.03] p-4">
               <p className="text-sm font-semibold text-slate-800">Demo modus actief</p>
