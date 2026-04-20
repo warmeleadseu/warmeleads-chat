@@ -325,6 +325,12 @@ export default function PortalPage() {
   }, [primaryBatch]);
   const primaryBatchIsUnpaid = primaryBatch ? primaryBatch.is_paid === false : false;
   const primaryBatchShouldUpsell = !!primaryBatch && !primaryBatchIsUnpaid && primaryBatchProgressPct >= 80;
+  const latestHistoricalBatchId = useMemo(() => {
+    if (batches.completed.length > 0 && typeof batches.completed[0].id === 'string') {
+      return batches.completed[0].id;
+    }
+    return null;
+  }, [batches.completed]);
 
   useEffect(() => {
     if (!showOverviewPanel) return;
@@ -760,6 +766,7 @@ export default function PortalPage() {
         customerDemoMode={customer.demo_mode}
         batchesLoading={batchesLoading}
         primaryBatch={primaryBatch}
+        latestHistoricalBatchId={latestHistoricalBatchId}
         progressPct={primaryBatchProgressPct}
         isUnpaid={primaryBatchIsUnpaid}
         shouldUpsell={primaryBatchShouldUpsell}
@@ -1505,6 +1512,7 @@ function BatchConversionCard({
   customerDemoMode,
   batchesLoading,
   primaryBatch,
+  latestHistoricalBatchId,
   progressPct,
   isUnpaid,
   shouldUpsell,
@@ -1515,6 +1523,7 @@ function BatchConversionCard({
   customerDemoMode: boolean;
   batchesLoading: boolean;
   primaryBatch: Batch | null;
+  latestHistoricalBatchId: string | null;
   progressPct: number;
   isUnpaid: boolean;
   shouldUpsell: boolean;
@@ -1559,19 +1568,29 @@ function BatchConversionCard({
   }
 
   if (!primaryBatch) {
+    const hasBatchHistory = !!latestHistoricalBatchId;
+    const emptyStateTitle = hasBatchHistory ? 'Geen actieve batch' : 'Nog geen batch actief';
+    const emptyStateDescription = hasBatchHistory
+      ? 'Je vorige batch is afgerond. Start direct je volgende instroom.'
+      : 'Start direct je eerste batch om instroom te activeren.';
+    const emptyStateCtaLabel = hasBatchHistory ? 'Bestel je volgende batch' : 'Bestel je eerste batch';
+    const emptyStateCtaHref = hasBatchHistory
+      ? `/portal/bestellen?batch=${latestHistoricalBatchId}`
+      : '/portal/bestellen';
+
     return (
       <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-sm font-semibold text-slate-900">Geen actieve batch</p>
-            <p className="mt-0.5 text-xs text-slate-500">Start direct een nieuwe batch om instroom te activeren.</p>
+            <p className="text-sm font-semibold text-slate-900">{emptyStateTitle}</p>
+            <p className="mt-0.5 text-xs text-slate-500">{emptyStateDescription}</p>
           </div>
           <Link
-            href="/portal/bestellen"
+            href={emptyStateCtaHref}
             className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg bg-button-gradient px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-brand-orange/20 transition hover:brightness-105"
           >
             <ShoppingCartIcon className="h-4 w-4" />
-            Bestel je eerste batch
+            {emptyStateCtaLabel}
           </Link>
         </div>
       </div>
