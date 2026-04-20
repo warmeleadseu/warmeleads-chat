@@ -73,6 +73,15 @@ interface BatchInfo {
   completed_at?: string;
 }
 
+interface UnpaidBatchReminderInfo {
+  id: string;
+  branch: string;
+  branch_name?: string;
+  batch_size: number;
+  price_per_lead: number | null;
+  total_price: number | null;
+}
+
 interface WeeklyStats {
   totalLeads: number;
   newLeadsThisWeek: number;
@@ -445,6 +454,57 @@ export async function sendBatchMilestoneEmail(
     titles[milestone],
     layout(titles[milestone], content),
     { type: milestoneTypes[milestone] || 'batch_milestone', toName: greeting, metadata: { customer_id: customer.id, batch_id: batch.id, milestone } },
+  );
+}
+
+export async function sendUnpaidBatchReminderEmail(
+  customer: Customer,
+  batch: UnpaidBatchReminderInfo,
+): Promise<boolean> {
+  const branchLabel = batch.branch_name || batch.branch;
+  const greeting = customer.contact_person || customer.name;
+  const portalUrl = `${BASE_URL}/portal`;
+  const subtotal = Number(batch.total_price || 0);
+  const btwAmount = Math.round(subtotal * 0.21 * 100) / 100;
+  const totalInclBtw = subtotal + btwAmount;
+
+  const pricingRows = batch.price_per_lead
+    ? row('Prijs per lead (excl. BTW)', `&euro;${Number(batch.price_per_lead).toFixed(2)}`) +
+      row('Subtotaal excl. BTW', `&euro;${subtotal.toFixed(2)}`) +
+      row('BTW 21%', `&euro;${btwAmount.toFixed(2)}`) +
+      `<tr>
+        <td style="padding:16px 20px;font-size:15px;color:#3B2F75;font-weight:700;border-bottom:none">Totaal incl. BTW</td>
+        <td style="padding:16px 20px;font-size:18px;color:#3B2F75;font-weight:800;text-align:right;border-bottom:none">&euro;${totalInclBtw.toFixed(2)}</td>
+      </tr>`
+    : row('Prijs', 'Bekijk bedrag in je portaal');
+
+  const content = `
+    <p style="margin:0 0 20px">${statusBadge('BATCH WACHT OP BETALING', 'red')}</p>
+    <p style="margin:0 0 16px;font-size:16px;font-weight:600;color:#0f172a">Hallo ${greeting},</p>
+    <p style="margin:0 0 8px">Je batch <strong style="color:#0f172a">${branchLabel}</strong> staat voor je klaar, maar is nog niet betaald.</p>
+    <p style="margin:0 0 8px">Zodra je betaalt, start de levering direct en ontvang je nieuwe leads in je portaal.</p>
+    ${dataTable(
+      row('Branche', `<strong style="color:#0f172a">${branchLabel}</strong>`) +
+      row('Batch grootte', `<strong style="color:#0f172a">${batch.batch_size}</strong> leads`) +
+      pricingRows,
+      'Openstaande batch',
+    )}
+    ${cta('Batch betalen in je portaal &rarr;', portalUrl)}
+    <p style="margin:12px 0 0;font-size:13px;color:#94a3b8">Na betaling gaat je batch direct live.</p>`;
+
+  return sendEmail(
+    customer.email,
+    `Herinnering: je batch ${branchLabel} wacht op betaling`,
+    layout('Batch betaling herinnering', content),
+    {
+      type: 'batch_payment_reminder',
+      toName: greeting,
+      metadata: {
+        customer_id: customer.id,
+        batch_id: batch.id,
+        branch: batch.branch,
+      },
+    },
   );
 }
 

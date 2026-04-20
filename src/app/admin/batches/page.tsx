@@ -18,6 +18,7 @@ import {
   CheckCircleIcon,
   CalendarDaysIcon,
   ClockIcon,
+  EnvelopeIcon,
   DocumentTextIcon,
   ArrowDownTrayIcon,
   DocumentDuplicateIcon,
@@ -561,6 +562,7 @@ interface OrderInfo { id: string; branch: string; batch_size: number; price_per_
 interface InvoiceInfo { id: string; invoice_number: string | null; description: string | null; subtotal: number; btw_percentage: number; btw_amount: number; total_incl_btw: number; status: string; paid_at: string | null; created_at: string; uploaded_pdf_path: string | null }
 
 interface AMOption { id: string; name: string; avatar_url?: string | null }
+interface AdminUserOption extends AMOption { is_account_manager?: boolean; is_active?: boolean }
 
 function BatchDetailPanel({ batchId, branches, onClose, onEdit }: {
   batchId: string; branches: BranchOption[];
@@ -574,9 +576,12 @@ function BatchDetailPanel({ batchId, branches, onClose, onEdit }: {
   const [copied, setCopied] = useState<string | null>(null);
   const [amOptions, setAmOptions] = useState<AMOption[]>([]);
   const [savingAM, setSavingAM] = useState(false);
+  const [sendingReminder, setSendingReminder] = useState(false);
+  const [reminderFeedback, setReminderFeedback] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
 
   useEffect(() => {
     setLoading(true);
+    setReminderFeedback(null);
     adminFetch(`/api/admin/batches/${batchId}`)
       .then(r => r.ok ? r.json() : null)
       .then(d => {
@@ -593,7 +598,7 @@ function BatchDetailPanel({ batchId, branches, onClose, onEdit }: {
   useEffect(() => {
     if (currentUser.role === 'accountmanager') return;
     adminFetch('/api/admin/users').then(r => r.ok ? r.json() : null).then(d => {
-      if (d?.users) setAmOptions(d.users.filter((u: any) => u.is_account_manager && u.is_active));
+      if (d?.users) setAmOptions((d.users as AdminUserOption[]).filter((u) => u.is_account_manager && u.is_active));
     }).catch(() => {});
   }, [currentUser.role]);
 
@@ -617,6 +622,32 @@ function BatchDetailPanel({ batchId, branches, onClose, onEdit }: {
     navigator.clipboard.writeText(text);
     setCopied(label);
     setTimeout(() => setCopied(null), 2000);
+  };
+
+  const sendPaymentReminder = async () => {
+    if (!batch || batch.is_paid) return;
+    setSendingReminder(true);
+    setReminderFeedback(null);
+    try {
+      const res = await adminFetch(`/api/admin/batches/${batch.id}/payment-reminder`, {
+        method: 'POST',
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || 'Herinnering versturen mislukt');
+      }
+      setReminderFeedback({
+        kind: 'success',
+        message: 'Herinneringsmail is verstuurd naar de klant.',
+      });
+    } catch (err) {
+      setReminderFeedback({
+        kind: 'error',
+        message: err instanceof Error ? err.message : 'Herinnering versturen mislukt',
+      });
+    } finally {
+      setSendingReminder(false);
+    }
   };
 
   const getBranch = (slug: string) => {
@@ -805,6 +836,32 @@ function BatchDetailPanel({ batchId, branches, onClose, onEdit }: {
                             </div>
                           )}
                         </div>
+                        {!batch.is_paid && (
+                          <div className="mt-3 border-t border-slate-100 pt-3">
+                            <button
+                              onClick={sendPaymentReminder}
+                              disabled={sendingReminder}
+                              className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 transition hover:bg-amber-100 disabled:opacity-60"
+                            >
+                              {sendingReminder ? (
+                                <>
+                                  <ArrowPathIcon className="h-4 w-4 animate-spin" />
+                                  Verzenden...
+                                </>
+                              ) : (
+                                <>
+                                  <EnvelopeIcon className="h-4 w-4" />
+                                  Stuur betaalherinnering
+                                </>
+                              )}
+                            </button>
+                            {reminderFeedback && (
+                              <p className={`mt-2 text-[11px] ${reminderFeedback.kind === 'success' ? 'text-emerald-600' : 'text-red-600'}`}>
+                                {reminderFeedback.message}
+                              </p>
+                            )}
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <div className="flex items-center gap-2 text-sm text-slate-400">
