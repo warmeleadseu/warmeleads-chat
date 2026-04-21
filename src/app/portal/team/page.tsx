@@ -466,7 +466,7 @@ function AssignmentRulesEditor({
 
             {/* Limits */}
             <div>
-              <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Limieten</p>
+              <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Leads-limieten</p>
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="mb-0.5 block text-[10px] text-slate-400">Max per dag</label>
@@ -487,6 +487,35 @@ function AssignmentRulesEditor({
                     placeholder="Onbeperkt"
                     value={rules.max_leads_per_week || ''}
                     onChange={e => onChange({ ...rules, max_leads_per_week: e.target.value ? parseInt(e.target.value) : undefined })}
+                    className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs outline-none transition focus:border-brand-purple focus:ring-1 focus:ring-brand-purple/30"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Appointment limits */}
+            <div>
+              <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Afspraken-limieten</p>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="mb-0.5 block text-[10px] text-slate-400">Max per dag</label>
+                  <input
+                    type="number"
+                    min={0}
+                    placeholder="Onbeperkt"
+                    value={rules.max_appointments_per_day || ''}
+                    onChange={e => onChange({ ...rules, max_appointments_per_day: e.target.value ? parseInt(e.target.value) : undefined })}
+                    className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs outline-none transition focus:border-brand-purple focus:ring-1 focus:ring-brand-purple/30"
+                  />
+                </div>
+                <div>
+                  <label className="mb-0.5 block text-[10px] text-slate-400">Max per week</label>
+                  <input
+                    type="number"
+                    min={0}
+                    placeholder="Onbeperkt"
+                    value={rules.max_appointments_per_week || ''}
+                    onChange={e => onChange({ ...rules, max_appointments_per_week: e.target.value ? parseInt(e.target.value) : undefined })}
                     className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs outline-none transition focus:border-brand-purple focus:ring-1 focus:ring-brand-purple/30"
                   />
                 </div>
@@ -572,10 +601,18 @@ function AssignmentRulesSummary({ rules }: { rules: Record<string, unknown> }) {
           )}
           {(r.max_leads_per_day || r.max_leads_per_week) && (
             <div className="flex items-center gap-2 text-[11px] text-slate-400">
-              <span>Limieten:</span>
+              <span>Leads:</span>
               {r.max_leads_per_day && <span>Max {r.max_leads_per_day}/dag</span>}
               {r.max_leads_per_day && r.max_leads_per_week && <span>&middot;</span>}
               {r.max_leads_per_week && <span>Max {r.max_leads_per_week}/week</span>}
+            </div>
+          )}
+          {(r.max_appointments_per_day || r.max_appointments_per_week) && (
+            <div className="flex items-center gap-2 text-[11px] text-slate-400">
+              <span>Afspraken:</span>
+              {r.max_appointments_per_day && <span>Max {r.max_appointments_per_day}/dag</span>}
+              {r.max_appointments_per_day && r.max_appointments_per_week && <span>&middot;</span>}
+              {r.max_appointments_per_week && <span>Max {r.max_appointments_per_week}/week</span>}
             </div>
           )}
         </>

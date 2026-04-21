@@ -19,7 +19,10 @@ import {
   ArrowRightIcon,
   BoltIcon,
   DocumentTextIcon,
+  InboxStackIcon,
+  CalendarDaysIcon,
 } from '@heroicons/react/24/outline';
+import AppointmentsOrderView from '../AppointmentsOrderView';
 import { CheckCircleIcon as CheckCircleSolid } from '@heroicons/react/24/solid';
 
 interface Batch {
@@ -92,6 +95,8 @@ export default function BestellenPage() {
   const sourceBatchId = searchParams.get('batch');
   const orderRedirectId = searchParams.get('order');
   const redirectStatus = searchParams.get('status');
+  const productParam = searchParams.get('product');
+  const product: 'leads' | 'appointments' = productParam === 'appointments' ? 'appointments' : 'leads';
 
   const [batches, setBatches] = useState<{ active: Batch[]; completed: Batch[] }>({ active: [], completed: [] });
   const [orders, setOrders] = useState<Order[]>([]);
@@ -431,6 +436,53 @@ export default function BestellenPage() {
     );
   }
 
+  /* ── Appointments flow (bypasses leads-specific logic entirely) ── */
+  if (product === 'appointments') {
+    return (
+      <div className="space-y-6 pb-28 sm:pb-0">
+        <AnimatePresence>
+          {toast && (
+            <motion.div initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 50 }}
+              className={`fixed bottom-[max(1rem,env(safe-area-inset-bottom))] left-1/2 z-[100] w-[calc(100%-1.5rem)] max-w-sm -translate-x-1/2 rounded-xl px-5 py-3 text-sm font-medium text-white shadow-xl ${
+                toast.type === 'error' ? 'bg-red-600' : 'bg-slate-900'
+              }`}>
+              <div className="flex items-center gap-2">
+                {toast.type === 'error' ? <XCircleIcon className="h-4 w-4 text-red-200" /> : <CheckCircleIcon className="h-4 w-4 text-emerald-400" />}
+                {toast.msg}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <div>
+          <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">Bestellen</h1>
+          <p className="mt-0.5 text-sm text-slate-500">Bestel afspraken en vul je agenda</p>
+        </div>
+
+        <div className="inline-flex w-full items-center gap-1 rounded-xl bg-slate-100 p-1 sm:w-auto">
+          <button
+            onClick={() => router.push('/portal/bestellen')}
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-semibold text-slate-500 transition hover:text-slate-700 sm:flex-initial"
+          >
+            <InboxStackIcon className="h-4 w-4" />
+            Leads
+          </button>
+          <button
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-white px-3.5 py-2 text-sm font-semibold text-slate-900 shadow-sm sm:flex-initial"
+          >
+            <CalendarDaysIcon className="h-4 w-4" />
+            Afspraken
+          </button>
+        </div>
+
+        <AppointmentsOrderView
+          customerBranches={customer.branches || []}
+          onToast={showToast}
+        />
+      </div>
+    );
+  }
+
   /* ── No batches: new customer first-order flow ── */
   if (allBatches.length === 0) {
     return (
@@ -496,6 +548,23 @@ export default function BestellenPage() {
             </span>
           </button>
         )}
+      </div>
+
+      {/* Product tabs */}
+      <div className="inline-flex w-full items-center gap-1 rounded-xl bg-slate-100 p-1 sm:w-auto">
+        <button
+          className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-white px-3.5 py-2 text-sm font-semibold text-slate-900 shadow-sm sm:flex-initial"
+        >
+          <InboxStackIcon className="h-4 w-4" />
+          Leads
+        </button>
+        <button
+          onClick={() => router.push('/portal/bestellen?product=appointments')}
+          className="flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-semibold text-slate-500 transition hover:text-slate-700 sm:flex-initial"
+        >
+          <CalendarDaysIcon className="h-4 w-4" />
+          Afspraken
+        </button>
       </div>
 
       {/* Orders panel (collapsible) */}

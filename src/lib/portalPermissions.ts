@@ -12,6 +12,11 @@ export const PERMISSIONS = {
   INVOICES_VIEW: 'invoices.view',
   ACCOUNT_EDIT: 'account.edit',
   TEAM_MANAGE: 'team.manage',
+  APPOINTMENTS_VIEW: 'appointments.view',
+  APPOINTMENTS_VIEW_ALL: 'appointments.view_all',
+  APPOINTMENTS_EDIT: 'appointments.edit',
+  APPOINTMENTS_ORDER: 'appointments.order',
+  AVAILABILITY_MANAGE: 'availability.manage',
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -30,11 +35,17 @@ export const ROLE_DEFAULTS: Record<string, Permission[]> = {
     PERMISSIONS.STATISTICS_VIEW,
     PERMISSIONS.INVOICES_VIEW,
     PERMISSIONS.TEAM_MANAGE,
+    PERMISSIONS.APPOINTMENTS_VIEW,
+    PERMISSIONS.APPOINTMENTS_VIEW_ALL,
+    PERMISSIONS.APPOINTMENTS_EDIT,
+    PERMISSIONS.AVAILABILITY_MANAGE,
   ],
   agent: [
     PERMISSIONS.LEADS_VIEW,
     PERMISSIONS.LEADS_EDIT,
     PERMISSIONS.RECLAMATIONS_CREATE,
+    PERMISSIONS.APPOINTMENTS_VIEW,
+    PERMISSIONS.APPOINTMENTS_EDIT,
   ],
 };
 
@@ -53,6 +64,16 @@ export const PERMISSION_GROUPS: { label: string; permissions: { key: Permission;
     permissions: [
       { key: PERMISSIONS.ORDERS_VIEW, label: 'Batches en bestellingen bekijken' },
       { key: PERMISSIONS.ORDERS_CREATE, label: 'Nieuwe batches bestellen' },
+      { key: PERMISSIONS.APPOINTMENTS_ORDER, label: 'Afspraken-batches bestellen' },
+    ],
+  },
+  {
+    label: 'Afspraken',
+    permissions: [
+      { key: PERMISSIONS.APPOINTMENTS_VIEW, label: 'Afspraken bekijken' },
+      { key: PERMISSIONS.APPOINTMENTS_VIEW_ALL, label: 'Alle afspraken zien (niet alleen eigen)' },
+      { key: PERMISSIONS.APPOINTMENTS_EDIT, label: 'Afspraken aanmaken en bewerken' },
+      { key: PERMISSIONS.AVAILABILITY_MANAGE, label: 'Beschikbaarheid adviseurs beheren' },
     ],
   },
   {
@@ -89,6 +110,8 @@ export interface AssignmentRules {
   regions?: { type: 'provinces' | 'postcodes'; values: string[] };
   max_leads_per_day?: number;
   max_leads_per_week?: number;
+  max_appointments_per_day?: number;
+  max_appointments_per_week?: number;
   round_robin_weight?: number;
 }
 

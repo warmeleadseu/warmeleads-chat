@@ -49,6 +49,11 @@ interface Branch {
   pricing_tiers: PricingTier[];
   min_batch_size: number;
   nationwide_discount: number;
+  appointment_pricing_tiers?: PricingTier[];
+  appointment_min_batch_size?: number;
+  appointment_nationwide_discount?: number;
+  default_appointment_duration?: number;
+  default_travel_buffer?: number;
 }
 
 const COLORS = [
@@ -302,10 +307,20 @@ function BranchForm({ branch, onClose, onSaved }: { branch: Branch | null; onClo
     is_active: branch?.is_active ?? true,
     min_batch_size: branch?.min_batch_size ?? 10,
     nationwide_discount: branch?.nationwide_discount ?? 0,
+    appointment_min_batch_size: branch?.appointment_min_batch_size ?? 5,
+    appointment_nationwide_discount: branch?.appointment_nationwide_discount ?? 0,
+    default_appointment_duration: branch?.default_appointment_duration ?? 60,
+    default_travel_buffer: branch?.default_travel_buffer ?? 30,
   });
+  const [pricingProduct, setPricingProduct] = useState<'leads' | 'appointments'>('leads');
   const [tiers, setTiers] = useState<PricingTier[]>(
     branch?.pricing_tiers && Array.isArray(branch.pricing_tiers)
       ? [...branch.pricing_tiers].sort((a, b) => a.min_leads - b.min_leads)
+      : []
+  );
+  const [apptTiers, setApptTiers] = useState<PricingTier[]>(
+    branch?.appointment_pricing_tiers && Array.isArray(branch.appointment_pricing_tiers)
+      ? [...branch.appointment_pricing_tiers].sort((a, b) => a.min_leads - b.min_leads)
       : []
   );
   const [newTierLeads, setNewTierLeads] = useState('');
@@ -324,22 +339,25 @@ function BranchForm({ branch, onClose, onSaved }: { branch: Branch | null; onClo
     }));
   };
 
+  const currentTiers = pricingProduct === 'leads' ? tiers : apptTiers;
+  const setCurrentTiers = pricingProduct === 'leads' ? setTiers : setApptTiers;
+
   const addTier = () => {
     const leads = parseInt(newTierLeads);
     const price = parseFloat(newTierPrice);
     if (!leads || leads <= 0 || isNaN(price) || price < 0) return;
-    if (tiers.some(t => t.min_leads === leads)) {
-      setError(`Staffel voor ${leads} leads bestaat al`);
+    if (currentTiers.some(t => t.min_leads === leads)) {
+      setError(`Staffel voor ${leads} ${pricingProduct === 'leads' ? 'leads' : 'afspraken'} bestaat al`);
       return;
     }
-    setTiers(prev => [...prev, { min_leads: leads, price_per_lead: price }].sort((a, b) => a.min_leads - b.min_leads));
+    setCurrentTiers(prev => [...prev, { min_leads: leads, price_per_lead: price }].sort((a, b) => a.min_leads - b.min_leads));
     setNewTierLeads('');
     setNewTierPrice('');
     setError('');
   };
 
   const removeTier = (idx: number) => {
-    setTiers(prev => prev.filter((_, i) => i !== idx));
+    setCurrentTiers(prev => prev.filter((_, i) => i !== idx));
   };
 
   const save = async () => {
@@ -349,19 +367,21 @@ function BranchForm({ branch, onClose, onSaved }: { branch: Branch | null; onClo
     setError('');
 
     const finalTiers = [...tiers];
+    const finalApptTiers = [...apptTiers];
     if (newTierLeads && newTierPrice) {
       const leads = parseInt(newTierLeads);
       const price = parseFloat(newTierPrice);
-      if (leads > 0 && !isNaN(price) && price >= 0 && !finalTiers.some(t => t.min_leads === leads)) {
-        finalTiers.push({ min_leads: leads, price_per_lead: price });
-        finalTiers.sort((a, b) => a.min_leads - b.min_leads);
+      const target = pricingProduct === 'leads' ? finalTiers : finalApptTiers;
+      if (leads > 0 && !isNaN(price) && price >= 0 && !target.some(t => t.min_leads === leads)) {
+        target.push({ min_leads: leads, price_per_lead: price });
+        target.sort((a, b) => a.min_leads - b.min_leads);
       }
     }
 
     try {
       const payload = isEdit
-        ? { id: branch!.id, ...form, pricing_tiers: finalTiers }
-        : { ...form, pricing_tiers: finalTiers };
+        ? { id: branch!.id, ...form, pricing_tiers: finalTiers, appointment_pricing_tiers: finalApptTiers }
+        : { ...form, pricing_tiers: finalTiers, appointment_pricing_tiers: finalApptTiers };
       const res = await adminFetch('/api/admin/branches', {
         method: isEdit ? 'PUT' : 'POST',
         body: JSON.stringify(payload),
@@ -456,44 +476,115 @@ function BranchForm({ branch, onClose, onSaved }: { branch: Branch | null; onClo
 
           {/* Pricing section */}
           <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-4">
-            <h3 className="flex items-center gap-1.5 text-sm font-bold text-slate-800">
-              <CurrencyEuroIcon className="h-4 w-4 text-brand-purple" />
-              Prijzen &amp; staffels
-            </h3>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="mb-1 block text-xs font-medium text-slate-500">Min. afname (leads)</label>
-                <input
-                  type="number"
-                  min="1"
-                  value={form.min_batch_size}
-                  onChange={e => setForm(f => ({ ...f, min_batch_size: parseInt(e.target.value) || 10 }))}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-medium text-slate-500">Korting landelijk (€)</label>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.50"
-                  value={form.nationwide_discount}
-                  onChange={e => setForm(f => ({ ...f, nationwide_discount: parseFloat(e.target.value) || 0 }))}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50"
-                />
-                <p className="mt-0.5 text-[10px] text-slate-400">Korting per lead bij heel NL/BE</p>
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="flex items-center gap-1.5 text-sm font-bold text-slate-800">
+                <CurrencyEuroIcon className="h-4 w-4 text-brand-purple" />
+                Prijzen &amp; staffels
+              </h3>
+              <div className="inline-flex items-center gap-0.5 rounded-lg bg-white p-0.5 shadow-sm ring-1 ring-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setPricingProduct('leads')}
+                  className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition ${pricingProduct === 'leads' ? 'bg-brand-purple text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                  Leads
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPricingProduct('appointments')}
+                  className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition ${pricingProduct === 'appointments' ? 'bg-brand-purple text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                  Afspraken
+                </button>
               </div>
             </div>
 
+            {pricingProduct === 'leads' ? (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-500">Min. afname (leads)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={form.min_batch_size}
+                    onChange={e => setForm(f => ({ ...f, min_batch_size: parseInt(e.target.value) || 10 }))}
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-500">Korting landelijk (€)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.50"
+                    value={form.nationwide_discount}
+                    onChange={e => setForm(f => ({ ...f, nationwide_discount: parseFloat(e.target.value) || 0 }))}
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50"
+                  />
+                  <p className="mt-0.5 text-[10px] text-slate-400">Korting per lead bij heel NL/BE</p>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-500">Min. afname (afspraken)</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={form.appointment_min_batch_size}
+                      onChange={e => setForm(f => ({ ...f, appointment_min_batch_size: parseInt(e.target.value) || 5 }))}
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-500">Korting landelijk (€)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.50"
+                      value={form.appointment_nationwide_discount}
+                      onChange={e => setForm(f => ({ ...f, appointment_nationwide_discount: parseFloat(e.target.value) || 0 }))}
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50"
+                    />
+                    <p className="mt-0.5 text-[10px] text-slate-400">Korting per afspraak bij heel NL/BE</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-500">Default duur (min)</label>
+                    <input
+                      type="number"
+                      min="15"
+                      step="15"
+                      value={form.default_appointment_duration}
+                      onChange={e => setForm(f => ({ ...f, default_appointment_duration: parseInt(e.target.value) || 60 }))}
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-500">Default reistijd-buffer (min)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="15"
+                      value={form.default_travel_buffer}
+                      onChange={e => setForm(f => ({ ...f, default_travel_buffer: parseInt(e.target.value) || 0 }))}
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50"
+                    />
+                  </div>
+                </div>
+              </>
+            )}
+
             <div>
               <label className="mb-1.5 block text-xs font-medium text-slate-500">Prijsstaffels</label>
-              {tiers.length > 0 ? (
+              {currentTiers.length > 0 ? (
                 <div className="space-y-1.5 mb-2.5">
-                  {tiers.map((t, i) => (
+                  {currentTiers.map((t, i) => (
                     <div key={i} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
                       <span className="flex-1 text-sm text-slate-700">
-                        Vanaf <span className="font-semibold">{t.min_leads}</span> leads
+                        Vanaf <span className="font-semibold">{t.min_leads}</span> {pricingProduct === 'leads' ? 'leads' : 'afspraken'}
                       </span>
                       <span className="text-sm font-bold text-slate-900">€{Number(t.price_per_lead).toFixed(2)}</span>
                       <button onClick={() => removeTier(i)} className="ml-1 rounded p-1 text-slate-300 hover:bg-red-50 hover:text-red-500">
@@ -508,18 +599,18 @@ function BranchForm({ branch, onClose, onSaved }: { branch: Branch | null; onClo
 
               <div className="flex items-end gap-2">
                 <div className="flex-1">
-                  <label className="mb-0.5 block text-[10px] text-slate-400">Vanaf (leads)</label>
+                  <label className="mb-0.5 block text-[10px] text-slate-400">Vanaf ({pricingProduct === 'leads' ? 'leads' : 'afspraken'})</label>
                   <input
                     type="number"
                     min="1"
                     value={newTierLeads}
                     onChange={e => setNewTierLeads(e.target.value)}
-                    placeholder="30"
+                    placeholder={pricingProduct === 'leads' ? '30' : '10'}
                     className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm text-slate-900 outline-none focus:border-brand-purple/50"
                   />
                 </div>
                 <div className="flex-1">
-                  <label className="mb-0.5 block text-[10px] text-slate-400">€ per lead</label>
+                  <label className="mb-0.5 block text-[10px] text-slate-400">€ per {pricingProduct === 'leads' ? 'lead' : 'afspraak'}</label>
                   <input
                     type="number"
                     min="0"

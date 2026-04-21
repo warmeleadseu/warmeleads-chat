@@ -169,11 +169,18 @@ function cta(text: string, url: string): string {
   </table>`;
 }
 
+export interface EmailAttachment {
+  filename: string;
+  content: string; // base64 or utf8 string
+  contentType?: string;
+}
+
 export async function sendEmail(
   to: string,
   subject: string,
   html: string,
   logOptions?: EmailLogOptions,
+  attachments?: EmailAttachment[],
 ): Promise<boolean> {
   try {
     const resend = getResend();
@@ -182,7 +189,11 @@ export async function sendEmail(
       logEmail(to, subject, html, 'failed', logOptions, 'RESEND_API_KEY not configured').catch(() => {});
       return false;
     }
-    const { error } = await resend.emails.send({ from: FROM, to, subject, html });
+    const payload: Parameters<typeof resend.emails.send>[0] = { from: FROM, to, subject, html };
+    if (attachments && attachments.length > 0) {
+      payload.attachments = attachments.map(a => ({ filename: a.filename, content: a.content, contentType: a.contentType }));
+    }
+    const { error } = await resend.emails.send(payload);
     if (error) {
       console.error('[email] send failed:', error);
       logEmail(to, subject, html, 'failed', logOptions, String(error.message || error)).catch(() => {});

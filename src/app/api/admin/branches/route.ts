@@ -67,6 +67,11 @@ export async function POST(request: NextRequest) {
         pricing_tiers: Array.isArray(body.pricing_tiers) ? body.pricing_tiers : [],
         min_batch_size: typeof body.min_batch_size === 'number' ? body.min_batch_size : 10,
         nationwide_discount: typeof body.nationwide_discount === 'number' ? body.nationwide_discount : 0,
+        appointment_pricing_tiers: Array.isArray(body.appointment_pricing_tiers) ? body.appointment_pricing_tiers : [],
+        appointment_min_batch_size: typeof body.appointment_min_batch_size === 'number' ? body.appointment_min_batch_size : 5,
+        appointment_nationwide_discount: typeof body.appointment_nationwide_discount === 'number' ? body.appointment_nationwide_discount : 0,
+        default_appointment_duration: typeof body.default_appointment_duration === 'number' ? body.default_appointment_duration : 60,
+        default_travel_buffer: typeof body.default_travel_buffer === 'number' ? body.default_travel_buffer : 30,
       })
       .select()
       .single();

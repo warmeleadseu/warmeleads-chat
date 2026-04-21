@@ -137,6 +137,131 @@ export async function POST(request: NextRequest) {
 
     const supabase = createServerClient();
     const status = payment.status;
+    const kind = (payment.metadata as { kind?: string })?.kind;
+
+    // Appointment order payment
+    if (kind === 'appointment_order') {
+      const apptOrderId = rawOrderId;
+      if (status === 'paid') {
+        const { data: claimedOrder, error: claimErr } = await supabase
+          .from('appointment_orders')
+          .update({ status: 'paid', paid_at: new Date().toISOString() })
+          .eq('id', apptOrderId)
+          .neq('status', 'paid')
+          .select('*')
+          .single();
+
+        if (claimErr || !claimedOrder) {
+          return NextResponse.json({ ok: true });
+        }
+
+        const { data: orderCust } = await supabase
+          .from('customers')
+          .select('id, name, email, contact_person, account_manager_id')
+          .eq('id', claimedOrder.customer_id)
+          .single();
+
+        const { data: newBatch, error: batchError } = await supabase
+          .from('appointment_batches')
+          .insert({
+            customer_id: claimedOrder.customer_id,
+            branch: claimedOrder.branch,
+            batch_size: claimedOrder.batch_size,
+            price_per_appointment: claimedOrder.price_per_appointment,
+            total_price: claimedOrder.total_price,
+            appointments_per_week: claimedOrder.appointments_per_week,
+            appointments_per_day: claimedOrder.appointments_per_day,
+            lead_filters: claimedOrder.lead_filters || [],
+            notes: claimedOrder.notes ? `[Portal bestelling] ${claimedOrder.notes}` : '[Portal bestelling]',
+            status: 'active',
+            appointments_delivered: 0,
+            is_paid: true,
+            account_manager_id: orderCust?.account_manager_id || null,
+          })
+          .select()
+          .single();
+
+        if (batchError || !newBatch) {
+          console.error('[mollie-webhook] appointment batch insert FAILED:', batchError);
+          sendEmail('info@warmeleads.eu', `[URGENT] Appointment batch aanmaken mislukt voor order ${apptOrderId}`,
+            errorEmailHtml('Appointment batch aanmaken mislukt', `
+              <p style="margin:0 0 16px">De Mollie betaling is gelukt maar de afspraken-batch kon niet worden aangemaakt.</p>
+              <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;margin-bottom:16px">
+                <tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9;width:120px">Order ID</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;font-weight:600;border-bottom:1px solid #f1f5f9;font-family:monospace">${apptOrderId}</td></tr>
+                <tr><td style="padding:12px 20px;font-size:14px;color:#64748b">Error</td><td style="padding:12px 20px;font-size:14px;color:#dc2626;font-weight:600">${batchError?.message || 'Unknown'}</td></tr>
+              </table>`),
+            { type: 'mollie_error', metadata: { order_id: apptOrderId, error_type: 'appointment_batch_insert_failed' } },
+          ).catch(() => {});
+          return NextResponse.json({ ok: true });
+        }
+
+        await supabase
+          .from('appointment_orders')
+          .update({ batch_id: newBatch.id })
+          .eq('id', apptOrderId);
+
+        const { data: branchRow } = await supabase.from('branches').select('name').eq('slug', claimedOrder.branch).single();
+        const branchName = branchRow?.name || claimedOrder.branch;
+
+        if (orderCust) {
+          sendOrderConfirmationEmail(orderCust, {
+            branch: claimedOrder.branch,
+            branch_name: `${branchName} (afspraken)`,
+            batch_size: claimedOrder.batch_size,
+            total_price: Number(claimedOrder.total_price),
+            price_per_lead: Number(claimedOrder.price_per_appointment),
+          }).catch(() => {});
+
+          sendPushToCustomer(orderCust.id, {
+            title: 'Afspraken-bestelling bevestigd!',
+            body: `Je nieuwe batch ${branchName} (${claimedOrder.batch_size} afspraken) is aangemaakt.`,
+            url: '/portal/agenda',
+            tag: 'appointment-order-confirmed',
+          }).catch(() => {});
+        }
+
+        createInvoice({
+          customer_id: claimedOrder.customer_id,
+          batch_order_id: apptOrderId,
+          batch_id: newBatch.id,
+          branch_name: `${branchName} (afspraken)`,
+          batch_size: claimedOrder.batch_size,
+          price_per_lead: Number(claimedOrder.price_per_appointment),
+          total_price: Number(claimedOrder.total_price),
+          mollie_payment_id: paymentId,
+          paid_at: new Date().toISOString(),
+        }).catch(e => {
+          console.error('[mollie-webhook] appointment invoice creation failed:', e);
+        });
+
+        sendNewBatchAdminEmail({
+          customer_name: orderCust?.name || 'Onbekend',
+          branch_name: `${branchName} (afspraken)`,
+          batch_size: claimedOrder.batch_size,
+          total_price: Number(claimedOrder.total_price),
+          price_per_lead: Number(claimedOrder.price_per_appointment),
+          is_paid: true,
+          source: 'portal',
+        }).catch(() => {});
+
+        insertCelebrationEvent(
+          supabase,
+          orderCust?.name || 'Onbekend',
+          claimedOrder.branch,
+          Number(claimedOrder.total_price || 0),
+          claimedOrder.customer_id,
+          newBatch.account_manager_id,
+        ).catch(() => {});
+      } else if (status === 'failed') {
+        await supabase.from('appointment_orders').update({ status: 'failed' }).eq('id', apptOrderId);
+      } else if (status === 'expired') {
+        await supabase.from('appointment_orders').update({ status: 'expired' }).eq('id', apptOrderId);
+      } else if (status === 'canceled') {
+        await supabase.from('appointment_orders').update({ status: 'cancelled' }).eq('id', apptOrderId);
+      }
+
+      return NextResponse.json({ ok: true });
+    }
 
     // Direct batch payment (from portal pay-batch endpoint)
     if (rawOrderId.startsWith('batch:')) {

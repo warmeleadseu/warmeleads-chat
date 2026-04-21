@@ -91,6 +91,32 @@ export async function sendNewLeadPush(
 }
 
 /**
+ * Send a push notification about a new appointment.
+ */
+export async function sendAppointmentPush(
+  customerId: string,
+  kind: 'created' | 'reminder' | 'cancelled',
+  opts: { contactName: string; whenLabel: string; appointmentId: string },
+): Promise<void> {
+  const msgs: Record<string, { title: string; body: string }> = {
+    created: { title: 'Nieuwe afspraak ingepland', body: `${opts.contactName} · ${opts.whenLabel}` },
+    reminder: { title: 'Afspraak morgen', body: `${opts.contactName} · ${opts.whenLabel}` },
+    cancelled: { title: 'Afspraak geannuleerd', body: `${opts.contactName} · ${opts.whenLabel}` },
+  };
+  const m = msgs[kind];
+  try {
+    await sendPushToCustomer(customerId, {
+      title: m.title,
+      body: m.body,
+      url: `/portal/agenda`,
+      tag: `appointment-${kind}-${opts.appointmentId}`,
+    });
+  } catch (err) {
+    console.error('sendAppointmentPush error:', err);
+  }
+}
+
+/**
  * Send a batch milestone push notification.
  */
 export async function sendBatchMilestonePush(

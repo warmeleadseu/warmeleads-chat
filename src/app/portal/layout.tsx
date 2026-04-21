@@ -18,6 +18,7 @@ import {
   ShieldCheckIcon,
   BeakerIcon,
   SparklesIcon,
+  CalendarDaysIcon,
 } from '@heroicons/react/24/outline';
 import { PortalContext, type PortalCustomer, type ClientPortalUser } from './portalContext';
 import { portalFetch } from '@/lib/portalAuth';
@@ -243,6 +244,7 @@ interface NavItem {
 
 const ALL_PORTAL_NAV: (NavItem & { shortLabel?: string })[] = [
   { label: 'Leads', href: '/portal', icon: InboxStackIcon, permission: PERMISSIONS.LEADS_VIEW },
+  { label: 'Agenda', href: '/portal/agenda', icon: CalendarDaysIcon, permission: PERMISSIONS.APPOINTMENTS_VIEW },
   { label: 'Bestellen', href: '/portal/bestellen', icon: ShoppingCartIcon, permission: PERMISSIONS.ORDERS_CREATE },
   { label: 'Team', href: '/portal/team', icon: UsersIcon, permission: PERMISSIONS.TEAM_MANAGE },
   { label: 'Account & Insights', shortLabel: 'Account', href: '/portal/account', icon: UserCircleIcon },

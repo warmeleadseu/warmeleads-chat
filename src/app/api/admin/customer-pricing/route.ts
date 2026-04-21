@@ -2,18 +2,23 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 
+function tableFor(product: string | null | undefined): 'customer_pricing' | 'customer_appointment_pricing' {
+  return product === 'appointments' ? 'customer_appointment_pricing' : 'customer_pricing';
+}
+
 export async function GET(request: NextRequest) {
   const admin = await verifyAdmin(request);
   if (!admin) return unauthorized();
 
   const customerId = request.nextUrl.searchParams.get('customer_id');
+  const product = request.nextUrl.searchParams.get('product');
   if (!customerId) {
     return NextResponse.json({ error: 'customer_id is verplicht' }, { status: 400 });
   }
 
   const supabase = createServerClient();
   const { data, error } = await supabase
-    .from('customer_pricing')
+    .from(tableFor(product))
     .select('*')
     .eq('customer_id', customerId)
     .order('branch_slug', { ascending: true });
@@ -37,7 +42,7 @@ export async function POST(request: NextRequest) {
 
     const supabase = createServerClient();
     const { data, error } = await supabase
-      .from('customer_pricing')
+      .from(tableFor(body.product))
       .upsert({
         customer_id: body.customer_id,
         branch_slug: body.branch_slug,
@@ -64,11 +69,12 @@ export async function DELETE(request: NextRequest) {
   if (!admin) return unauthorized();
 
   try {
-    const { id } = await request.json();
+    const body = await request.json();
+    const { id, product } = body;
     if (!id) return NextResponse.json({ error: 'ID is verplicht' }, { status: 400 });
 
     const supabase = createServerClient();
-    const { error } = await supabase.from('customer_pricing').delete().eq('id', id);
+    const { error } = await supabase.from(tableFor(product)).delete().eq('id', id);
 
     if (error) {
       return NextResponse.json({ error: 'Verwijderen mislukt' }, { status: 500 });

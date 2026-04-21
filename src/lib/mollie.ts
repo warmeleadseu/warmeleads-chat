@@ -20,6 +20,8 @@ export interface CreateBatchPaymentParams {
   webhookUrl: string;
   customerEmail: string;
   customerName: string;
+  /** Kind discriminator for Mollie metadata; defaults to 'batch' (leads). */
+  kind?: 'batch' | 'appointment_order';
 }
 
 export async function createBatchPayment({
@@ -30,6 +32,7 @@ export async function createBatchPayment({
   webhookUrl,
   customerEmail,
   customerName,
+  kind = 'batch',
 }: CreateBatchPaymentParams) {
   const mollie = getMollieClient();
 
@@ -41,7 +44,7 @@ export async function createBatchPayment({
     description,
     redirectUrl,
     webhookUrl,
-    metadata: { orderId },
+    metadata: { orderId, kind },
     billingEmail: customerEmail,
   });
 
