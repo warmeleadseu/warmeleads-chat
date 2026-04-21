@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   PlusIcon,
@@ -670,48 +671,70 @@ function AddMemberModal({
     setSaving(false);
   };
 
-  return (
-    <>
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed inset-0 z-[60] flex items-center justify-center p-3 sm:p-6 pointer-events-none">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95, y: 12 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.95, y: 12 }}
-          className="pointer-events-auto flex w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl max-h-[calc(100vh-1.5rem)] sm:max-h-[calc(100vh-3rem)]"
-          onClick={e => e.stopPropagation()}
-        >
-          <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
-            <h2 className="text-lg font-bold text-slate-900">Teamlid toevoegen</h2>
-            <button onClick={onClose} className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600">
-              <XMarkIcon className="h-5 w-5" />
-            </button>
-          </div>
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
 
-          <form onSubmit={submit} className="flex-1 overflow-y-auto overscroll-contain px-5 py-4 space-y-4">
+  if (typeof window === 'undefined') return null;
+
+  return createPortal(
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center sm:bg-black/40 sm:p-4 sm:backdrop-blur-[2px]"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ y: '100%' }}
+        animate={{ y: 0 }}
+        exit={{ y: '100%' }}
+        transition={{ type: 'spring', damping: 32, stiffness: 300 }}
+        onClick={e => e.stopPropagation()}
+        className="flex h-[100dvh] w-full max-w-full flex-col overflow-hidden bg-white shadow-2xl sm:h-auto sm:max-h-[min(92vh,920px)] sm:max-w-4xl sm:rounded-2xl sm:border sm:border-slate-200"
+      >
+        <div
+          className="flex shrink-0 items-center justify-between border-b border-slate-100 bg-white px-5 py-4 sm:rounded-t-2xl"
+          style={{ paddingTop: 'max(env(safe-area-inset-top), 1rem)' }}
+        >
+          <div>
+            <h2 className="text-lg font-bold text-slate-900">Teamlid toevoegen</h2>
+            <p className="mt-0.5 hidden text-xs text-slate-500 sm:block">Vul gegevens in en stel rechten in</p>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600" aria-label="Sluiten">
+            <XMarkIcon className="h-5 w-5" />
+          </button>
+        </div>
+
+        <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-5 py-4" style={{ WebkitOverflowScrolling: 'touch' }}>
             {error && <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               <div>
                 <label className="mb-1 block text-xs font-medium text-slate-500">Naam *</label>
                 <input type="text" required value={name} onChange={e => setName(e.target.value)}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-brand-purple focus:ring-1 focus:ring-brand-purple/30"
+                  className="min-h-11 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-brand-purple focus:ring-1 focus:ring-brand-purple/30"
                   placeholder="Jan de Vries" />
               </div>
               <div>
                 <label className="mb-1 block text-xs font-medium text-slate-500">E-mail *</label>
                 <input type="email" required value={email} onChange={e => setEmail(e.target.value)}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-brand-purple focus:ring-1 focus:ring-brand-purple/30"
+                  className="min-h-11 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-brand-purple focus:ring-1 focus:ring-brand-purple/30"
                   placeholder="jan@bedrijf.nl" />
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               <div>
                 <label className="mb-1 block text-xs font-medium text-slate-500">Wachtwoord * (min. 8 tekens)</label>
                 <div className="relative">
                   <input type={showPassword ? 'text' : 'password'} required minLength={8} value={password} onChange={e => setPassword(e.target.value)}
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 pr-10 text-sm outline-none transition focus:border-brand-purple focus:ring-1 focus:ring-brand-purple/30" />
+                    className="min-h-11 w-full rounded-lg border border-slate-200 px-3 py-2 pr-10 text-sm outline-none transition focus:border-brand-purple focus:ring-1 focus:ring-brand-purple/30" />
                   <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-1.5 text-slate-400 hover:text-slate-600">
                     {showPassword ? <EyeSlashIcon className="h-4 w-4" /> : <EyeIcon className="h-4 w-4" />}
                   </button>
@@ -720,18 +743,17 @@ function AddMemberModal({
               <div>
                 <label className="mb-1 block text-xs font-medium text-slate-500">Telefoon</label>
                 <input type="tel" value={phone} onChange={e => setPhone(e.target.value)}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-brand-purple focus:ring-1 focus:ring-brand-purple/30"
+                  className="min-h-11 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-brand-purple focus:ring-1 focus:ring-brand-purple/30"
                   placeholder="06-12345678" />
               </div>
             </div>
 
-            {/* Role */}
             <div>
               <label className="mb-1.5 block text-xs font-medium text-slate-500">Rol</label>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {(['agent', 'manager'] as const).map(r => (
                   <button key={r} type="button" onClick={() => applyRoleDefaults(r)}
-                    className={`rounded-lg border-2 px-3 py-2 text-sm font-medium transition ${
+                    className={`rounded-xl border-2 px-3 py-3 text-left text-sm font-medium transition ${
                       role === r ? 'border-brand-purple bg-brand-purple/5 text-brand-purple' : 'border-slate-200 text-slate-600 hover:border-slate-300'
                     }`}>
                     {ROLE_LABELS[r]}
@@ -743,19 +765,18 @@ function AddMemberModal({
               </div>
             </div>
 
-            {/* Permissions */}
             <div>
               <label className="mb-1.5 block text-xs font-medium text-slate-500">Rechten</label>
-              <div className="space-y-3 rounded-xl border border-slate-200 p-3">
+              <div className="grid gap-3 sm:grid-cols-2 sm:gap-4">
                 {PERMISSION_GROUPS.map(group => (
-                  <div key={group.label}>
-                    <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400">{group.label}</p>
+                  <div key={group.label} className="rounded-xl border border-slate-200 p-3">
+                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">{group.label}</p>
                     <div className="space-y-1">
                       {group.permissions.map(perm => (
-                        <label key={perm.key} className="flex items-center gap-2 rounded-lg px-2 py-1.5 transition hover:bg-slate-50 cursor-pointer">
+                        <label key={perm.key} className="flex cursor-pointer items-start gap-2 rounded-lg px-2 py-1.5 transition hover:bg-slate-50">
                           <input type="checkbox" checked={permissions.includes(perm.key)} onChange={() => togglePerm(perm.key)}
-                            className="h-4 w-4 rounded border-slate-300 text-brand-purple focus:ring-brand-purple/30" />
-                          <span className="text-sm text-slate-700">{perm.label}</span>
+                            className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-brand-purple focus:ring-brand-purple/30" />
+                          <span className="text-sm leading-snug text-slate-700">{perm.label}</span>
                         </label>
                       ))}
                     </div>
@@ -764,27 +785,33 @@ function AddMemberModal({
               </div>
             </div>
 
-            {/* Assignment Rules */}
             <AssignmentRulesEditor
               rules={assignmentRules}
               onChange={setAssignmentRules}
               customerBranches={customer.branches}
             />
-          </form>
-
-          <div className="border-t border-slate-100 px-5 py-3">
-            <div className="flex items-center justify-end gap-3">
-              <button type="button" onClick={onClose} className="rounded-lg px-4 py-2 text-sm font-medium text-slate-500 transition hover:bg-slate-50">Annuleren</button>
-              <button onClick={submit} disabled={saving || !name || !email || password.length < 8}
-                className="inline-flex items-center gap-2 rounded-lg bg-brand-purple px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-purple/90 disabled:opacity-50">
-                {saving && <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />}
-                Toevoegen
-              </button>
-            </div>
           </div>
-        </motion.div>
-      </div>
-    </>
+
+          <div
+            className="flex shrink-0 items-center justify-end gap-3 border-t border-slate-100 bg-white px-5 py-3"
+            style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 0.75rem)' }}
+          >
+            <button type="button" onClick={onClose} className="min-h-11 rounded-lg px-4 py-2 text-sm font-medium text-slate-500 transition hover:bg-slate-50">
+              Annuleren
+            </button>
+            <button
+              type="submit"
+              disabled={saving || !name || !email || password.length < 8}
+              className="inline-flex min-h-11 min-w-[7rem] items-center justify-center gap-2 rounded-xl bg-brand-purple px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-purple/90 disabled:opacity-50"
+            >
+              {saving && <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />}
+              Toevoegen
+            </button>
+          </div>
+        </form>
+      </motion.div>
+    </motion.div>,
+    document.body,
   );
 }
 
