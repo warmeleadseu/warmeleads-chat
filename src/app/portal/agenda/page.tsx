@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { usePortal } from '../portalContext';
 import { portalFetch } from '@/lib/portalAuth';
 import { PERMISSIONS } from '@/lib/portalPermissions';
@@ -105,6 +106,20 @@ export default function AgendaPage() {
   const [detail, setDetail] = useState<Appointment | null>(null);
   const [showAvailability, setShowAvailability] = useState(false);
   const [branchNames, setBranchNames] = useState<Record<string, string>>({});
+  const [availabilityPortalReady, setAvailabilityPortalReady] = useState(false);
+
+  useEffect(() => {
+    setAvailabilityPortalReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!showAvailability) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [showAvailability]);
 
   const weekStart = useMemo(() => startOfWeek(anchor), [anchor]);
   const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart]);
@@ -410,42 +425,46 @@ export default function AgendaPage() {
         )}
       </AnimatePresence>
 
-      <AnimatePresence>
-        {showAvailability && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/40"
-            onClick={() => setShowAvailability(false)}
-          >
-            <motion.div
-              initial={{ x: '100%' }}
-              animate={{ x: 0 }}
-              exit={{ x: '100%' }}
-              transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-              onClick={e => e.stopPropagation()}
-              className="absolute right-0 top-0 h-full w-full max-w-2xl overflow-y-auto bg-white shadow-2xl"
-            >
-              <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white/95 px-5 py-4 backdrop-blur">
-                <div className="flex items-center gap-2">
-                  <CalendarDaysIcon className="h-5 w-5 text-brand-purple" />
-                  <h2 className="text-lg font-bold text-slate-900">Beschikbaarheid</h2>
-                </div>
-                <button onClick={() => setShowAvailability(false)} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100">
-                  <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
-                </button>
-              </div>
-              <div className="p-5">
-                <AvailabilityPanel
-                  portalUserId={portalUser?.role === 'agent' ? portalUser.id : null}
-                  canEdit={canManageAvailability}
-                />
-              </div>
-            </motion.div>
-          </motion.div>
+      {availabilityPortalReady &&
+        createPortal(
+          <AnimatePresence>
+            {showAvailability && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-[100] bg-black/40"
+                onClick={() => setShowAvailability(false)}
+              >
+                <motion.div
+                  initial={{ x: '100%' }}
+                  animate={{ x: 0 }}
+                  exit={{ x: '100%' }}
+                  transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+                  onClick={e => e.stopPropagation()}
+                  className="absolute inset-y-0 right-0 flex h-full w-full max-w-2xl flex-col overflow-hidden bg-white shadow-2xl"
+                >
+                  <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between border-b border-slate-200 bg-white/95 px-5 py-4 backdrop-blur" style={{ paddingTop: 'max(env(safe-area-inset-top), 1rem)' }}>
+                    <div className="flex items-center gap-2">
+                      <CalendarDaysIcon className="h-5 w-5 text-brand-purple" />
+                      <h2 className="text-lg font-bold text-slate-900">Beschikbaarheid</h2>
+                    </div>
+                    <button type="button" onClick={() => setShowAvailability(false)} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100">
+                      <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+                    </button>
+                  </div>
+                  <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5" style={{ WebkitOverflowScrolling: 'touch', paddingBottom: 'max(env(safe-area-inset-bottom), 1.25rem)' }}>
+                    <AvailabilityPanel
+                      portalUserId={portalUser?.role === 'agent' ? portalUser.id : null}
+                      canEdit={canManageAvailability}
+                    />
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>,
+          document.body,
         )}
-      </AnimatePresence>
     </div>
   );
 }
