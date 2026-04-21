@@ -249,7 +249,7 @@ export default function PortalPage() {
   const [branchFilter, setBranchFilter] = useState('all');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
-  const [sort, setSort] = useState('created_at');
+  const [sort, setSort] = useState('received_at');
   const [order, setOrder] = useState<'asc' | 'desc'>('desc');
   const [leadSource, setLeadSource] = useState<'all' | 'fresh' | 'bulk'>('all');
   const [bulkCount, setBulkCount] = useState(0);
@@ -1008,7 +1008,7 @@ export default function PortalPage() {
                       { key: 'distance_km', label: 'Afstand' },
                       { key: 'branch', label: 'Branche' },
                       { key: 'status', label: 'Status' },
-                      { key: 'wervingsdatum', label: 'Datum' },
+                      { key: 'received_at', label: 'Datum' },
                     ].map(col => (
                       <th
                         key={col.key}
@@ -1495,12 +1495,6 @@ function LeadDetailPanel({
               )}
             </div>
 
-            {/* Meta info */}
-            <div className="border-t border-slate-100 pt-4">
-              <div className="space-y-1 text-xs text-slate-400">
-                <p>Aangemaakt: {formatDateLong(lead.created_at)}</p>
-              </div>
-            </div>
           </div>
         </div>
       </motion.div>

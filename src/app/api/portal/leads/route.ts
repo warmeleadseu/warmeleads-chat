@@ -175,7 +175,7 @@ export async function GET(request: NextRequest) {
   const search = url.searchParams.get('search');
   const from = url.searchParams.get('from');
   const to = url.searchParams.get('to');
-  const sort = url.searchParams.get('sort') || 'created_at';
+  const sort = url.searchParams.get('sort') || 'received_at';
   const order = url.searchParams.get('order') || 'desc';
   const page = parseInt(url.searchParams.get('page') || '1');
   const limit = parseInt(url.searchParams.get('limit') || '25');
@@ -218,10 +218,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ leads: [], total: 0, page, totalPages: 0, bulkCount });
   }
 
-  const allowedSorts = ['created_at', 'naam_klant', 'email', 'status', 'wervingsdatum', 'plaatsnaam', 'provincie', 'branch', 'distance_km'];
-  const col = allowedSorts.includes(sort) ? sort : 'created_at';
+  const allowedSorts = ['received_at', 'created_at', 'naam_klant', 'email', 'status', 'wervingsdatum', 'plaatsnaam', 'provincie', 'branch', 'distance_km'];
+  const col = allowedSorts.includes(sort) ? sort : 'received_at';
   const asc = order === 'asc';
-  const dbSortable = col !== 'distance_km' && col !== 'status';
+  // received_at is enriched from lead_assignments.assigned_at — not a leads table column
+  const dbSortable = col !== 'distance_km' && col !== 'status' && col !== 'received_at';
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function applyFilters(q: any) {
@@ -304,6 +305,12 @@ export async function GET(request: NextRequest) {
       const va = (a.distance_km as number | null) ?? Infinity;
       const vb = (b.distance_km as number | null) ?? Infinity;
       const cmp = va - vb;
+      return asc ? cmp : -cmp;
+    }
+    if (col === 'received_at' || col === 'created_at' || col === 'wervingsdatum') {
+      const ta = new Date(String((a as Record<string, unknown>)[col] || 0)).getTime();
+      const tb = new Date(String((b as Record<string, unknown>)[col] || 0)).getTime();
+      const cmp = ta - tb;
       return asc ? cmp : -cmp;
     }
     const va = ((a as Record<string, unknown>)[col] as string) ?? '';
