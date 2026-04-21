@@ -7,15 +7,11 @@ import { usePortal } from '../portalContext';
 import { portalFetch } from '@/lib/portalAuth';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  ShoppingCartIcon,
   CheckCircleIcon,
   XCircleIcon,
   ArrowPathIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
   MinusIcon,
   PlusIcon,
-  CubeIcon,
   CreditCardIcon,
   ClockIcon,
   SparklesIcon,
@@ -62,6 +58,15 @@ interface PricingData {
 
 const BTW_RATE = 0.21;
 
+function formatCurrency(value: number) {
+  return new Intl.NumberFormat('nl-NL', {
+    style: 'currency',
+    currency: 'EUR',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, { text: string; cls: string; dot: string }> = {
     paid: { text: 'Betaald', cls: 'bg-emerald-50 text-emerald-700', dot: 'bg-emerald-500' },
@@ -103,6 +108,8 @@ export default function BestellenPage() {
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
   const [showOrders, setShowOrders] = useState(false);
+  const [pendingCancelOrderId, setPendingCancelOrderId] = useState<string | null>(null);
+  const [cancellingOrder, setCancellingOrder] = useState(false);
   const [pricingData, setPricingData] = useState<PricingData | null>(null);
   const [welcomeDiscount, setWelcomeDiscount] = useState<{ active: boolean; expiresAt: string | null }>({ active: false, expiresAt: null });
 
@@ -271,15 +278,21 @@ export default function BestellenPage() {
     return defaults.slice(0, 4);
   }, [minBatchSize]);
 
-  const handleCancelOrder = async (orderId: string) => {
-    if (!confirm('Weet je zeker dat je deze bestelling wilt verwijderen?')) return;
+  const handleCancelOrder = (orderId: string) => {
+    setPendingCancelOrderId(orderId);
+  };
+
+  const confirmCancelOrder = async () => {
+    if (!pendingCancelOrderId) return;
+    setCancellingOrder(true);
     try {
       const res = await portalFetch('/api/portal/orders', {
         method: 'DELETE',
-        body: JSON.stringify({ order_id: orderId }),
+        body: JSON.stringify({ order_id: pendingCancelOrderId }),
       });
       if (res.ok) {
-        setOrders(prev => prev.filter(o => o.id !== orderId));
+        setOrders(prev => prev.filter(o => o.id !== pendingCancelOrderId));
+        setPendingCancelOrderId(null);
         showToast('Bestelling verwijderd');
       } else {
         const d = await res.json().catch(() => ({}));
@@ -287,6 +300,8 @@ export default function BestellenPage() {
       }
     } catch {
       showToast('Verwijderen mislukt', 'error');
+    } finally {
+      setCancellingOrder(false);
     }
   };
 
@@ -430,15 +445,19 @@ export default function BestellenPage() {
 
   const pendingOrders = orders.filter(o => o.status !== 'paid');
   const paidOrders = orders.filter(o => o.status === 'paid');
+  const pendingCancelOrder = pendingCancelOrderId
+    ? orders.find(o => o.id === pendingCancelOrderId) || null
+    : null;
+  const canCheckout = !submitting && effectiveSize >= minBatchSize && !!sourceBatch;
 
   /* ── Main ordering view ── */
   return (
-    <div className="space-y-0">
+    <div className="space-y-0 pb-28 sm:pb-0">
       {/* Toast */}
       <AnimatePresence>
         {toast && (
           <motion.div initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 50 }}
-            className={`fixed bottom-6 left-1/2 z-[100] -translate-x-1/2 rounded-xl px-5 py-3 text-sm font-medium text-white shadow-xl ${
+            className={`fixed bottom-[max(1rem,env(safe-area-inset-bottom))] left-1/2 z-[100] w-[calc(100%-1.5rem)] max-w-sm -translate-x-1/2 rounded-xl px-5 py-3 text-sm font-medium text-white shadow-xl ${
               toast.type === 'error' ? 'bg-red-600' : 'bg-slate-900'
             }`}>
             <div className="flex items-center gap-2">
@@ -458,11 +477,16 @@ export default function BestellenPage() {
           </div>
           {orders.length > 0 && (
             <button onClick={() => setShowOrders(!showOrders)}
-              className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-xs font-semibold transition ${
+              className={`inline-flex min-h-11 items-center gap-1.5 rounded-full px-3.5 py-2 text-xs font-semibold transition ${
                 showOrders ? 'bg-brand-purple text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}>
               <DocumentTextIcon className="h-3.5 w-3.5" />
               Bestellingen ({orders.length})
+              {pendingOrders.length > 0 && (
+                <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${showOrders ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-700'}`}>
+                  {pendingOrders.length}
+                </span>
+              )}
             </button>
           )}
         </div>
@@ -509,19 +533,22 @@ export default function BestellenPage() {
         )}
       </AnimatePresence>
 
-      <div className="px-4 py-5 sm:px-6 sm:py-6">
+      <div className="space-y-6 px-4 py-5 sm:px-6 sm:py-6">
         {/* Branch selector (only if multiple branches) */}
         {branchGroups.length > 1 && (
-          <div className="mb-6">
+          <section>
             <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-slate-400">Branche</label>
-            <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
+            <div className="relative -mx-1 px-1">
+              <div className="pointer-events-none absolute inset-y-0 left-0 z-[1] w-4 bg-gradient-to-r from-slate-50 to-transparent sm:hidden" />
+              <div className="pointer-events-none absolute inset-y-0 right-0 z-[1] w-4 bg-gradient-to-l from-slate-50 to-transparent sm:hidden" />
+              <div className="hide-scrollbar flex gap-2 overflow-x-auto pb-1.5">
               {branchGroups.map(g => {
                 const isSelected = selectedBranch === g.branch;
                 const activeBatch = g.batches.find(b => b.status === 'active');
                 const pct = activeBatch && activeBatch.batch_size > 0 ? Math.round((activeBatch.leads_delivered / activeBatch.batch_size) * 100) : null;
                 return (
                   <button key={g.branch} onClick={() => setSelectedBranch(g.branch)}
-                    className={`group relative shrink-0 rounded-xl border-2 px-4 py-3 text-left transition ${
+                    className={`group relative min-h-11 shrink-0 rounded-xl border-2 px-4 py-3 text-left transition ${
                       isSelected
                         ? 'border-brand-purple bg-brand-purple/5 shadow-sm'
                         : 'border-slate-200 bg-white hover:border-slate-300'
@@ -534,13 +561,15 @@ export default function BestellenPage() {
                   </button>
                 );
               })}
+              </div>
             </div>
-          </div>
+            <p className="mt-1 text-[11px] text-slate-400 sm:hidden">Swipe om alle branches te zien</p>
+          </section>
         )}
 
         {/* Single branch auto-selected header */}
         {branchGroups.length === 1 && activeBranch && (
-          <div className="mb-6 flex items-center gap-3">
+          <section className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-brand-purple to-brand-pink">
               <BoltIcon className="h-5 w-5 text-white" />
             </div>
@@ -548,12 +577,12 @@ export default function BestellenPage() {
               <p className="text-sm font-bold text-slate-900">{activeBranch.name}</p>
               <p className="text-xs text-slate-400">&euro;{pricePerLead.toFixed(2)} per lead excl. BTW</p>
             </div>
-          </div>
+          </section>
         )}
 
         {/* Current batch info */}
         {sourceBatch && sourceBatch.status === 'active' && (
-          <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="mb-2 flex items-center justify-between">
               <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Huidige batch</span>
               <span className="text-xs font-bold text-slate-600">
@@ -572,7 +601,7 @@ export default function BestellenPage() {
                 Bijna vol! Bestel nu een vervolg batch zodat je geen leads mist.
               </p>
             )}
-          </div>
+          </section>
         )}
 
         {/* Completed batch context */}
@@ -581,7 +610,7 @@ export default function BestellenPage() {
           const totalComp = comps.reduce((s: number, c: { amount: number }) => s + c.amount, 0);
           const origSize = sourceBatch.batch_size - totalComp;
           return (
-            <div className="mb-6 flex items-start gap-3 rounded-2xl border border-emerald-100 bg-emerald-50/50 p-4">
+            <section className="flex items-start gap-3 rounded-2xl border border-emerald-100 bg-emerald-50/50 p-4">
               <CheckCircleSolid className="mt-0.5 h-5 w-5 shrink-0 text-emerald-500" />
               <div>
                 <p className="text-sm font-semibold text-slate-800">Herbestelling op basis van je vorige batch</p>
@@ -589,12 +618,12 @@ export default function BestellenPage() {
                   {sourceBatch.branch_name || sourceBatch.branch} &middot; {origSize} leads &middot; Voltooid
                 </p>
               </div>
-            </div>
+            </section>
           );
         })()}
 
         {/* Batch size selector */}
-        <div className="mb-6">
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
           <label className="mb-3 block text-sm font-semibold text-slate-800">Hoeveel leads wil je bestellen?</label>
 
           {/* Quick selection */}
@@ -631,40 +660,48 @@ export default function BestellenPage() {
 
           {/* Custom size */}
           <div className="mt-3">
-            <button onClick={() => { setUseCustom(true); if (!customSize) setCustomSize(String(batchSize || 75)); }}
-              className={`w-full rounded-2xl border-2 p-3 text-left transition ${
-                useCustom ? 'border-brand-purple bg-brand-purple/5' : 'border-dashed border-slate-200 hover:border-slate-300'
-              }`}>
-              {useCustom ? (
+            <div className={`w-full rounded-2xl border-2 p-3 text-left transition ${
+              useCustom ? 'border-brand-purple bg-brand-purple/5' : 'border-dashed border-slate-200'
+            }`}>
+              {!useCustom ? (
+                <button
+                  type="button"
+                  onClick={() => { setUseCustom(true); if (!customSize) setCustomSize(String(batchSize || 75)); }}
+                  className="flex min-h-11 w-full items-center justify-center rounded-xl text-sm font-medium text-slate-500 transition hover:bg-slate-50"
+                >
+                  Ander aantal kiezen...
+                </button>
+              ) : (
                 <div className="flex items-center gap-3">
                   <div className="flex items-center gap-1.5">
-                    <button onClick={(e) => { e.stopPropagation(); setCustomSize(String(Math.max(minBatchSize, (parseInt(customSize) || 0) - 10))); }}
-                      className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50">
+                    <button
+                      type="button"
+                      onClick={() => setCustomSize(String(Math.max(minBatchSize, (parseInt(customSize) || 0) - 10)))}
+                      className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50"
+                    >
                       <MinusIcon className="h-4 w-4" />
                     </button>
                     <input type="number" min="10" value={customSize}
-                      onClick={(e) => e.stopPropagation()}
                       onChange={(e) => setCustomSize(e.target.value)}
-                      className="h-9 w-20 rounded-xl border border-slate-200 bg-white px-2 text-center text-sm font-bold text-slate-900 outline-none focus:border-brand-purple focus:ring-1 focus:ring-brand-purple/20" />
-                    <button onClick={(e) => { e.stopPropagation(); setCustomSize(String((parseInt(customSize) || 0) + 10)); }}
-                      className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50">
+                      className="h-11 w-20 rounded-xl border border-slate-200 bg-white px-2 text-center text-sm font-bold text-slate-900 outline-none focus:border-brand-purple focus:ring-1 focus:ring-brand-purple/20" />
+                    <button
+                      type="button"
+                      onClick={() => setCustomSize(String((parseInt(customSize) || 0) + 10))}
+                      className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50"
+                    >
                       <PlusIcon className="h-4 w-4" />
                     </button>
                   </div>
                   <div className="flex-1">
                     <p className="text-sm font-semibold text-brand-purple">{effectiveSize} leads</p>
                     <p className="text-[11px] text-slate-400">
-                      &euro;{totalInclBtw.toFixed(2)} incl. BTW
+                      {formatCurrency(totalInclBtw)} incl. BTW
                     </p>
                   </div>
                   <CheckCircleSolid className="h-5 w-5 shrink-0 text-brand-purple" />
                 </div>
-              ) : (
-                <p className="text-center text-sm font-medium text-slate-400">
-                  Ander aantal kiezen...
-                </p>
               )}
-            </button>
+            </div>
           </div>
 
           {effectiveSize > 0 && effectiveSize < minBatchSize && (
@@ -692,11 +729,11 @@ export default function BestellenPage() {
               )}
             </div>
           )}
-        </div>
+        </section>
 
         {/* Delivery speed selector */}
         {effectiveSize > 0 && (
-          <div className="mb-6">
+          <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
             <label className="mb-3 block text-sm font-semibold text-slate-800">Leveringssnelheid</label>
 
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -737,23 +774,35 @@ export default function BestellenPage() {
             </div>
 
             <div className="mt-3">
-              <button onClick={() => { setUseCustomSpeed(true); if (!customSpeed) setCustomSpeed(String(leadsPerDay || SPEED_PRESETS[1] || 10)); }}
-                className={`w-full rounded-2xl border-2 p-3 text-left transition ${
-                  useCustomSpeed ? 'border-brand-purple bg-brand-purple/5' : 'border-dashed border-slate-200 hover:border-slate-300'
-                }`}>
-                {useCustomSpeed ? (
+              <div className={`w-full rounded-2xl border-2 p-3 text-left transition ${
+                useCustomSpeed ? 'border-brand-purple bg-brand-purple/5' : 'border-dashed border-slate-200'
+              }`}>
+                {!useCustomSpeed ? (
+                  <button
+                    type="button"
+                    onClick={() => { setUseCustomSpeed(true); if (!customSpeed) setCustomSpeed(String(leadsPerDay || SPEED_PRESETS[1] || 10)); }}
+                    className="flex min-h-11 w-full items-center justify-center rounded-xl text-sm font-medium text-slate-500 transition hover:bg-slate-50"
+                  >
+                    Ander aantal per dag kiezen...
+                  </button>
+                ) : (
                   <div className="flex items-center gap-3">
                     <div className="flex items-center gap-1.5">
-                      <button onClick={(e) => { e.stopPropagation(); setCustomSpeed(String(Math.max(1, (parseInt(customSpeed) || 0) - 1))); }}
-                        className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50">
+                      <button
+                        type="button"
+                        onClick={() => setCustomSpeed(String(Math.max(1, (parseInt(customSpeed) || 0) - 1)))}
+                        className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50"
+                      >
                         <MinusIcon className="h-4 w-4" />
                       </button>
                       <input type="number" min="1" value={customSpeed}
-                        onClick={(e) => e.stopPropagation()}
                         onChange={(e) => setCustomSpeed(e.target.value)}
-                        className="h-9 w-16 rounded-xl border border-slate-200 bg-white px-2 text-center text-sm font-bold text-slate-900 outline-none focus:border-brand-purple focus:ring-1 focus:ring-brand-purple/20" />
-                      <button onClick={(e) => { e.stopPropagation(); setCustomSpeed(String((parseInt(customSpeed) || 0) + 1)); }}
-                        className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50">
+                        className="h-11 w-16 rounded-xl border border-slate-200 bg-white px-2 text-center text-sm font-bold text-slate-900 outline-none focus:border-brand-purple focus:ring-1 focus:ring-brand-purple/20" />
+                      <button
+                        type="button"
+                        onClick={() => setCustomSpeed(String((parseInt(customSpeed) || 0) + 1))}
+                        className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50"
+                      >
                         <PlusIcon className="h-4 w-4" />
                       </button>
                     </div>
@@ -765,12 +814,8 @@ export default function BestellenPage() {
                     </div>
                     <CheckCircleSolid className="h-5 w-5 shrink-0 text-brand-purple" />
                   </div>
-                ) : (
-                  <p className="text-center text-sm font-medium text-slate-400">
-                    Ander aantal per dag kiezen...
-                  </p>
                 )}
-              </button>
+              </div>
             </div>
 
             {estimatedDays && !useCustomSpeed && leadsPerDay !== null && (
@@ -779,23 +824,23 @@ export default function BestellenPage() {
                 Geschatte doorlooptijd: ~{estimatedDays} {estimatedDays === 1 ? 'dag' : 'dagen'}
               </p>
             )}
-          </div>
+          </section>
         )}
 
         {/* Notes */}
-        <div className="mb-6">
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
           <label className="mb-1.5 block text-sm font-medium text-slate-700">
             Opmerkingen <span className="text-slate-400">(optioneel)</span>
           </label>
           <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2}
             placeholder="Bijv. voorkeur regio, specifieke wensen..."
             className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-brand-purple focus:ring-2 focus:ring-brand-purple/20" />
-        </div>
+        </section>
 
         {/* Price summary + CTA */}
         {/* Welcome discount banner */}
         {welcomeDiscount.active && (
-          <div className="mb-4 flex items-center gap-3 rounded-2xl border border-brand-purple/20 bg-gradient-to-r from-brand-purple/5 to-brand-pink/5 px-5 py-3.5">
+          <div className="flex items-center gap-3 rounded-2xl border border-brand-purple/20 bg-gradient-to-r from-brand-purple/5 to-brand-pink/5 px-5 py-3.5">
             <span className="text-xl">🎁</span>
             <div>
               <p className="text-sm font-bold text-brand-purple">20% welkomstkorting actief</p>
@@ -833,13 +878,13 @@ export default function BestellenPage() {
             </div>
           </div>
 
-          <div className="border-t border-slate-100 p-4">
+          <div className="hidden border-t border-slate-100 p-4 sm:block">
             <button onClick={handleOrder} disabled={submitting || effectiveSize < minBatchSize || !sourceBatch}
               className="flex w-full items-center justify-center gap-2.5 rounded-xl bg-gradient-to-r from-brand-purple to-brand-pink px-6 py-3.5 text-[15px] font-bold text-white shadow-lg transition hover:shadow-xl active:scale-[0.99] disabled:opacity-50 disabled:shadow-none">
               {submitting ? (
                 <><ArrowPathIcon className="h-5 w-5 animate-spin" /> Wordt verwerkt...</>
               ) : (
-                <><CreditCardIcon className="h-5 w-5" /> Afrekenen &middot; &euro;{totalInclBtw.toFixed(2)}</>
+                <><CreditCardIcon className="h-5 w-5" /> Afrekenen &middot; {formatCurrency(totalInclBtw)}</>
               )}
             </button>
             <div className="mt-3 flex items-start gap-2 px-1">
@@ -849,6 +894,31 @@ export default function BestellenPage() {
               </p>
             </div>
           </div>
+        </div>
+
+        {/* Sticky mobile checkout bar */}
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-8px_24px_-18px_rgba(15,23,42,0.55)] backdrop-blur sm:hidden">
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-xs text-slate-500">Totaal incl. BTW</p>
+            <p className="text-base font-bold text-brand-purple">{formatCurrency(totalInclBtw)}</p>
+          </div>
+          <button
+            onClick={handleOrder}
+            disabled={!canCheckout}
+            className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-button-gradient px-5 py-3 text-sm font-bold text-white shadow-lg shadow-brand-orange/20 transition active:scale-[0.99] disabled:opacity-50 disabled:shadow-none"
+          >
+            {submitting ? (
+              <>
+                <ArrowPathIcon className="h-5 w-5 animate-spin" />
+                Wordt verwerkt...
+              </>
+            ) : (
+              <>
+                <CreditCardIcon className="h-5 w-5" />
+                Afrekenen
+              </>
+            )}
+          </button>
         </div>
 
         {/* Pending orders warning */}
@@ -861,8 +931,17 @@ export default function BestellenPage() {
                   Je hebt {pendingOrders.length} openstaande {pendingOrders.length === 1 ? 'bestelling' : 'bestellingen'}
                 </p>
                 <p className="mt-0.5 text-[11px] text-amber-600">
-                  Klik op &apos;Bestellingen&apos; bovenaan om ze te bekijken of te verwijderen.
+                  Bekijk of verwijder ze direct vanuit je bestellingen-overzicht.
                 </p>
+                {!showOrders && (
+                  <button
+                    onClick={() => setShowOrders(true)}
+                    className="mt-2 inline-flex min-h-9 items-center gap-1 rounded-lg border border-amber-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-amber-700 transition hover:bg-amber-100"
+                  >
+                    <DocumentTextIcon className="h-3.5 w-3.5" />
+                    Open bestellingen
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -877,6 +956,62 @@ export default function BestellenPage() {
           </div>
         )}
       </div>
+
+      <AnimatePresence>
+        {pendingCancelOrder && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 bg-black/35 backdrop-blur-sm"
+              onClick={() => !cancellingOrder && setPendingCancelOrderId(null)}
+            />
+            <motion.div
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 28, stiffness: 280 }}
+              className="fixed inset-x-0 bottom-0 z-[60] rounded-t-2xl border border-slate-200 bg-white p-4 shadow-2xl"
+            >
+              <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-slate-200" />
+              <h3 className="text-sm font-semibold text-slate-900">Bestelling verwijderen?</h3>
+              <p className="mt-1 text-xs text-slate-500">
+                Je staat op het punt deze openstaande bestelling te verwijderen:
+              </p>
+              <p className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700">
+                {pendingCancelOrder.batch_size} leads - {pendingCancelOrder.branch}
+              </p>
+              <div className="mt-4 flex gap-2">
+                <button
+                  onClick={() => setPendingCancelOrderId(null)}
+                  disabled={cancellingOrder}
+                  className="flex min-h-11 flex-1 items-center justify-center rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 disabled:opacity-60"
+                >
+                  Annuleren
+                </button>
+                <button
+                  onClick={confirmCancelOrder}
+                  disabled={cancellingOrder}
+                  className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm font-semibold text-red-600 transition hover:bg-red-100 disabled:opacity-60"
+                >
+                  {cancellingOrder ? (
+                    <>
+                      <ArrowPathIcon className="h-4 w-4 animate-spin" />
+                      Verwijderen...
+                    </>
+                  ) : (
+                    <>
+                      <TrashIcon className="h-4 w-4" />
+                      Verwijderen
+                    </>
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -981,11 +1116,11 @@ function NewCustomerOrderView({
   const branchName = availableBranches.find(b => b.slug === selectedBranch)?.name || selectedBranch;
 
   return (
-    <div className="space-y-0">
+    <div className="space-y-0 pb-28 sm:pb-0">
       <AnimatePresence>
         {toast && (
           <motion.div initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 50 }}
-            className={`fixed bottom-6 left-1/2 z-[100] -translate-x-1/2 rounded-xl px-5 py-3 text-sm font-medium text-white shadow-xl ${
+            className={`fixed bottom-[max(1rem,env(safe-area-inset-bottom))] left-1/2 z-[100] w-[calc(100%-1.5rem)] max-w-sm -translate-x-1/2 rounded-xl px-5 py-3 text-sm font-medium text-white shadow-xl ${
               toast.type === 'error' ? 'bg-red-600' : 'bg-slate-900'
             }`}>
             <div className="flex items-center gap-2">
@@ -1001,10 +1136,10 @@ function NewCustomerOrderView({
         <p className="mt-0.5 text-sm text-slate-500">Kies een branche en het aantal leads om te starten</p>
       </div>
 
-      <div className="px-4 py-5 sm:px-6 sm:py-6">
+      <div className="space-y-6 px-4 py-5 sm:px-6 sm:py-6">
         {/* Welcome discount */}
         {welcomeDiscount.active && (
-          <div className="mb-6 flex items-center gap-3 rounded-2xl border border-brand-purple/20 bg-gradient-to-r from-brand-purple/5 to-brand-pink/5 px-5 py-4">
+          <div className="flex items-center gap-3 rounded-2xl border border-brand-purple/20 bg-gradient-to-r from-brand-purple/5 to-brand-pink/5 px-5 py-4">
             <span className="text-2xl">🎁</span>
             <div>
               <p className="text-sm font-bold text-brand-purple">20% welkomstkorting op je eerste bestelling!</p>
@@ -1020,12 +1155,15 @@ function NewCustomerOrderView({
 
         {/* Branch selector */}
         {availableBranches.length > 1 && (
-          <div className="mb-6">
+          <section>
             <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-slate-400">Branche</label>
-            <div className="flex flex-wrap gap-2">
+            <div className="relative -mx-1 px-1">
+              <div className="pointer-events-none absolute inset-y-0 left-0 z-[1] w-4 bg-gradient-to-r from-slate-50 to-transparent sm:hidden" />
+              <div className="pointer-events-none absolute inset-y-0 right-0 z-[1] w-4 bg-gradient-to-l from-slate-50 to-transparent sm:hidden" />
+              <div className="hide-scrollbar flex gap-2 overflow-x-auto pb-1.5">
               {availableBranches.map(b => (
                 <button key={b.slug} onClick={() => setSelectedBranch(b.slug)}
-                  className={`shrink-0 rounded-xl border-2 px-4 py-2.5 text-sm font-semibold transition ${
+                  className={`min-h-11 shrink-0 rounded-xl border-2 px-4 py-2.5 text-sm font-semibold transition ${
                     selectedBranch === b.slug
                       ? 'border-brand-purple bg-brand-purple/5 text-brand-purple'
                       : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
@@ -1033,12 +1171,14 @@ function NewCustomerOrderView({
                   {b.name}
                 </button>
               ))}
+              </div>
             </div>
-          </div>
+            <p className="mt-1 text-[11px] text-slate-400 sm:hidden">Swipe om alle branches te zien</p>
+          </section>
         )}
 
         {availableBranches.length === 1 && selectedBranch && (
-          <div className="mb-6 flex items-center gap-3">
+          <section className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-brand-purple to-brand-pink">
               <BoltIcon className="h-5 w-5 text-white" />
             </div>
@@ -1046,12 +1186,12 @@ function NewCustomerOrderView({
               <p className="text-sm font-bold text-slate-900">{branchName}</p>
               {dynamicPrice > 0 && <p className="text-xs text-slate-400">&euro;{dynamicPrice.toFixed(2)} per lead excl. BTW</p>}
             </div>
-          </div>
+          </section>
         )}
 
         {/* Batch size */}
         {dynamicPrice > 0 && (
-          <div className="mb-6">
+          <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
             <label className="mb-3 block text-sm font-semibold text-slate-800">Hoeveel leads wil je bestellen?</label>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {QUICK_SIZES.map(size => {
@@ -1082,36 +1222,46 @@ function NewCustomerOrderView({
             </div>
 
             <div className="mt-3">
-              <button onClick={() => { setUseCustom(true); if (!customSize) setCustomSize(String(batchSize || 75)); }}
-                className={`w-full rounded-2xl border-2 p-3 text-left transition ${
-                  useCustom ? 'border-brand-purple bg-brand-purple/5' : 'border-dashed border-slate-200 hover:border-slate-300'
-                }`}>
-                {useCustom ? (
+              <div className={`w-full rounded-2xl border-2 p-3 text-left transition ${
+                useCustom ? 'border-brand-purple bg-brand-purple/5' : 'border-dashed border-slate-200'
+              }`}>
+                {!useCustom ? (
+                  <button
+                    type="button"
+                    onClick={() => { setUseCustom(true); if (!customSize) setCustomSize(String(batchSize || 75)); }}
+                    className="flex min-h-11 w-full items-center justify-center rounded-xl text-sm font-medium text-slate-500 transition hover:bg-slate-50"
+                  >
+                    Ander aantal kiezen...
+                  </button>
+                ) : (
                   <div className="flex items-center gap-3">
                     <div className="flex items-center gap-1.5">
-                      <button onClick={(e) => { e.stopPropagation(); setCustomSize(String(Math.max(minBatchSize, (parseInt(customSize) || 0) - 10))); }}
-                        className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-50">
+                      <button
+                        type="button"
+                        onClick={() => setCustomSize(String(Math.max(minBatchSize, (parseInt(customSize) || 0) - 10)))}
+                        className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
+                      >
                         <MinusIcon className="h-4 w-4" />
                       </button>
                       <input type="number" min={minBatchSize} value={customSize}
-                        onClick={(e) => e.stopPropagation()}
                         onChange={(e) => setCustomSize(e.target.value)}
-                        className="h-9 w-20 rounded-xl border border-slate-200 bg-white px-2 text-center text-sm font-bold text-slate-900 outline-none focus:border-brand-purple focus:ring-1 focus:ring-brand-purple/20" />
-                      <button onClick={(e) => { e.stopPropagation(); setCustomSize(String((parseInt(customSize) || 0) + 10)); }}
-                        className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-50">
+                        className="h-11 w-20 rounded-xl border border-slate-200 bg-white px-2 text-center text-sm font-bold text-slate-900 outline-none focus:border-brand-purple focus:ring-1 focus:ring-brand-purple/20" />
+                      <button
+                        type="button"
+                        onClick={() => setCustomSize(String((parseInt(customSize) || 0) + 10))}
+                        className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
+                      >
                         <PlusIcon className="h-4 w-4" />
                       </button>
                     </div>
                     <div className="flex-1">
                       <p className="text-sm font-semibold text-brand-purple">{effectiveSize} leads</p>
-                      <p className="text-[11px] text-slate-400">&euro;{total.toFixed(2)} incl. BTW</p>
+                      <p className="text-[11px] text-slate-400">{formatCurrency(total)} incl. BTW</p>
                     </div>
                     <CheckCircleSolid className="h-5 w-5 shrink-0 text-brand-purple" />
                   </div>
-                ) : (
-                  <p className="text-center text-sm font-medium text-slate-400">Ander aantal kiezen...</p>
                 )}
-              </button>
+              </div>
             </div>
 
             {effectiveSize > 0 && effectiveSize < minBatchSize && (
@@ -1136,16 +1286,16 @@ function NewCustomerOrderView({
                 </div>
               </div>
             )}
-          </div>
+          </section>
         )}
 
         {/* Notes */}
-        <div className="mb-6">
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
           <label className="mb-1.5 block text-sm font-medium text-slate-700">Opmerkingen <span className="text-slate-400">(optioneel)</span></label>
           <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2}
             placeholder="Bijv. voorkeur regio, specifieke wensen..."
             className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-brand-purple focus:ring-2 focus:ring-brand-purple/20" />
-        </div>
+        </section>
 
         {/* Price summary */}
         {dynamicPrice > 0 && effectiveSize >= minBatchSize && (
@@ -1172,13 +1322,13 @@ function NewCustomerOrderView({
                 <span className="text-lg font-bold text-brand-purple">&euro;{total.toFixed(2)}</span>
               </div>
             </div>
-            <div className="border-t border-slate-100 p-4">
+            <div className="hidden border-t border-slate-100 p-4 sm:block">
               <button onClick={handleOrder} disabled={submitting || effectiveSize < minBatchSize}
                 className="flex w-full items-center justify-center gap-2.5 rounded-xl bg-gradient-to-r from-brand-purple to-brand-pink px-6 py-3.5 text-[15px] font-bold text-white shadow-lg transition hover:shadow-xl active:scale-[0.99] disabled:opacity-50 disabled:shadow-none">
                 {submitting ? (
                   <><ArrowPathIcon className="h-5 w-5 animate-spin" /> Wordt verwerkt...</>
                 ) : (
-                  <><CreditCardIcon className="h-5 w-5" /> Afrekenen &middot; &euro;{total.toFixed(2)}</>
+                  <><CreditCardIcon className="h-5 w-5" /> Afrekenen &middot; {formatCurrency(total)}</>
                 )}
               </button>
             </div>
@@ -1195,6 +1345,32 @@ function NewCustomerOrderView({
           </div>
         )}
       </div>
+
+      {dynamicPrice > 0 && (
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-8px_24px_-18px_rgba(15,23,42,0.55)] backdrop-blur sm:hidden">
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-xs text-slate-500">Totaal incl. BTW</p>
+            <p className="text-base font-bold text-brand-purple">{formatCurrency(total)}</p>
+          </div>
+          <button
+            onClick={handleOrder}
+            disabled={submitting || effectiveSize < minBatchSize}
+            className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-button-gradient px-5 py-3 text-sm font-bold text-white shadow-lg shadow-brand-orange/20 transition active:scale-[0.99] disabled:opacity-50 disabled:shadow-none"
+          >
+            {submitting ? (
+              <>
+                <ArrowPathIcon className="h-5 w-5 animate-spin" />
+                Wordt verwerkt...
+              </>
+            ) : (
+              <>
+                <CreditCardIcon className="h-5 w-5" />
+                Afrekenen
+              </>
+            )}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
