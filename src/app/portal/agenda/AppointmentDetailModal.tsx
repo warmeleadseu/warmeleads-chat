@@ -296,7 +296,7 @@ export default function AppointmentDetailModal({
           )}
         </div>
 
-        <footer className="flex items-center gap-2 border-t border-slate-200 bg-white px-5 py-3" style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 0.75rem)' }}>
+        <footer className="flex items-center gap-2 border-t border-slate-200 bg-white px-5 py-3" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 0.75rem)' }}>
           {!editing ? (
             <>
               {canEdit && appointment.status !== 'cancelled' && (

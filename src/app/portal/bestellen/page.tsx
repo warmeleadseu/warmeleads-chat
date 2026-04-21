@@ -439,7 +439,7 @@ export default function BestellenPage() {
   /* ── Appointments flow (bypasses leads-specific logic entirely) ── */
   if (product === 'appointments') {
     return (
-      <div className="space-y-6 pb-28 sm:pb-0">
+      <div className="space-y-6 pb-[calc(7rem+env(safe-area-inset-bottom))] sm:pb-0">
         <AnimatePresence>
           {toast && (
             <motion.div initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 50 }}
@@ -504,7 +504,7 @@ export default function BestellenPage() {
 
   /* ── Main ordering view ── */
   return (
-    <div className="space-y-6 pb-28 sm:pb-0">
+    <div className="space-y-6 pb-[calc(7rem+env(safe-area-inset-bottom))] sm:pb-0">
       {/* Toast */}
       <AnimatePresence>
         {toast && (
@@ -975,7 +975,7 @@ export default function BestellenPage() {
         </div>
 
         {/* Sticky mobile checkout bar */}
-        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-8px_24px_-18px_rgba(15,23,42,0.55)] backdrop-blur sm:hidden">
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 shadow-[0_-8px_24px_-18px_rgba(15,23,42,0.55)] backdrop-blur sm:hidden">
           <div className="mb-2 flex items-center justify-between">
             <p className="text-xs text-slate-500">Totaal incl. BTW</p>
             <p className="text-base font-bold text-brand-purple">{formatCurrency(totalInclBtw)}</p>
@@ -1194,7 +1194,7 @@ function NewCustomerOrderView({
   const branchName = availableBranches.find(b => b.slug === selectedBranch)?.name || selectedBranch;
 
   return (
-    <div className="space-y-6 pb-28 sm:pb-0">
+    <div className="space-y-6 pb-[calc(7rem+env(safe-area-inset-bottom))] sm:pb-0">
       <AnimatePresence>
         {toast && (
           <motion.div initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 50 }}
@@ -1425,7 +1425,7 @@ function NewCustomerOrderView({
       </div>
 
       {dynamicPrice > 0 && (
-        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-8px_24px_-18px_rgba(15,23,42,0.55)] backdrop-blur sm:hidden">
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 shadow-[0_-8px_24px_-18px_rgba(15,23,42,0.55)] backdrop-blur sm:hidden">
           <div className="mb-2 flex items-center justify-between">
             <p className="text-xs text-slate-500">Totaal incl. BTW</p>
             <p className="text-base font-bold text-brand-purple">{formatCurrency(total)}</p>

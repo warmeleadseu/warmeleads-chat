@@ -202,7 +202,7 @@ export default function AgendaPage() {
   const HOURS = Array.from({ length: HOUR_END - HOUR_START }, (_, i) => HOUR_START + i);
 
   return (
-    <div className="space-y-5 pb-28 sm:pb-0">
+    <div className="space-y-5 pb-[calc(5rem+env(safe-area-inset-bottom))] sm:pb-0">
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>

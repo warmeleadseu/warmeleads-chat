@@ -768,7 +768,7 @@ export default function ExportWizard({ open, onClose, filters, totalLeads, custo
               </div>
 
               {/* Footer */}
-              <div className="shrink-0 border-t border-slate-100 bg-white px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 sm:px-5 sm:pb-3">
+              <div className="shrink-0 border-t border-slate-100 bg-white px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 sm:px-5 sm:pb-3">
                 <div className="flex items-center justify-between gap-2">
                   <div>
                     {step > 1 && (
