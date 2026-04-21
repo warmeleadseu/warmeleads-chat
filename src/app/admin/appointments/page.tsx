@@ -97,10 +97,21 @@ export default function AdminAppointmentsPage() {
   const weekStart = useMemo(() => startOfWeek(anchor), [anchor]);
   const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart]);
 
-  const rangeStart = view === 'day' ? new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate()) :
-    view === 'week' ? weekStart : addDays(new Date(), -7);
-  const rangeEnd = view === 'day' ? addDays(rangeStart, 1) :
-    view === 'week' ? addDays(weekStart, 7) : addDays(new Date(), 60);
+  const rangeStart = useMemo(() => {
+    if (view === 'day') return new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate());
+    if (view === 'week') return weekStart;
+    const t = new Date();
+    t.setHours(0, 0, 0, 0);
+    return addDays(t, -7);
+  }, [view, weekStart, anchor]);
+
+  const rangeEnd = useMemo(() => {
+    if (view === 'day') return addDays(rangeStart, 1);
+    if (view === 'week') return addDays(weekStart, 7);
+    const t = new Date();
+    t.setHours(0, 0, 0, 0);
+    return addDays(t, 60);
+  }, [view, weekStart, rangeStart]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -114,7 +125,12 @@ export default function AdminAppointmentsPage() {
       if (statusFilter !== 'all') q.set('status', statusFilter);
       if (branchFilter !== 'all') q.set('branch', branchFilter);
       const res = await adminFetch(`/api/admin/appointments?${q.toString()}`);
-      if (res.ok) setAppointments(await res.json());
+      if (res.ok) {
+        const data = await res.json();
+        setAppointments(Array.isArray(data) ? data : []);
+      } else {
+        setAppointments([]);
+      }
     } finally {
       setLoading(false);
     }

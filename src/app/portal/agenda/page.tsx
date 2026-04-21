@@ -108,8 +108,15 @@ export default function AgendaPage() {
 
   const weekStart = useMemo(() => startOfWeek(anchor), [anchor]);
   const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart]);
-  const rangeStart = view === 'week' ? weekStart : new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate());
-  const rangeEnd = view === 'week' ? addDays(weekStart, 7) : addDays(rangeStart, 1);
+  // Stable date bounds — new Date() every render would change load()'s identity and retrigger useEffect infinitely.
+  const rangeStart = useMemo(() => {
+    if (view === 'week') return weekStart;
+    return new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate());
+  }, [view, weekStart, anchor]);
+  const rangeEnd = useMemo(() => {
+    if (view === 'week') return addDays(weekStart, 7);
+    return addDays(rangeStart, 1);
+  }, [view, weekStart, rangeStart]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -123,7 +130,9 @@ export default function AgendaPage() {
       const res = await portalFetch(`/api/portal/appointments?${q.toString()}`);
       if (res.ok) {
         const data = await res.json();
-        setAppointments(data);
+        setAppointments(Array.isArray(data) ? data : []);
+      } else {
+        setAppointments([]);
       }
     } finally {
       setLoading(false);
