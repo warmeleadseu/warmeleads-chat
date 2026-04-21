@@ -452,7 +452,7 @@ export default function BestellenPage() {
 
   /* ── Main ordering view ── */
   return (
-    <div className="space-y-0 pb-28 sm:pb-0">
+    <div className="space-y-6 pb-28 sm:pb-0">
       {/* Toast */}
       <AnimatePresence>
         {toast && (
@@ -469,71 +469,80 @@ export default function BestellenPage() {
       </AnimatePresence>
 
       {/* Header */}
-      <div className="border-b border-slate-100 bg-white px-4 pb-5 pt-1 sm:px-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">Bestellen</h1>
-            <p className="mt-0.5 text-sm text-slate-500">Bestel een nieuwe batch leads voor je bedrijf</p>
-          </div>
-          {orders.length > 0 && (
-            <button onClick={() => setShowOrders(!showOrders)}
-              className={`inline-flex min-h-11 items-center gap-1.5 rounded-full px-3.5 py-2 text-xs font-semibold transition ${
-                showOrders ? 'bg-brand-purple text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}>
-              <DocumentTextIcon className="h-3.5 w-3.5" />
-              Bestellingen ({orders.length})
-              {pendingOrders.length > 0 && (
-                <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${showOrders ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-700'}`}>
-                  {pendingOrders.length}
-                </span>
-              )}
-            </button>
-          )}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">Bestellen</h1>
+          <p className="mt-0.5 text-sm text-slate-500">Bestel een nieuwe batch leads voor je bedrijf</p>
         </div>
+        {orders.length > 0 && (
+          <button
+            onClick={() => setShowOrders(!showOrders)}
+            className={`inline-flex min-h-10 items-center gap-1.5 self-start rounded-xl border px-3.5 py-2 text-xs font-semibold transition sm:self-auto ${
+              showOrders
+                ? 'border-brand-purple bg-brand-purple text-white shadow-sm'
+                : 'border-slate-200 bg-white text-slate-600 shadow-sm hover:border-slate-300 hover:bg-slate-50'
+            }`}
+          >
+            <DocumentTextIcon className="h-3.5 w-3.5" />
+            Bestellingen
+            <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+              showOrders
+                ? 'bg-white/20 text-white'
+                : pendingOrders.length > 0
+                  ? 'bg-amber-100 text-amber-700'
+                  : 'bg-slate-100 text-slate-500'
+            }`}>
+              {orders.length}
+            </span>
+          </button>
+        )}
       </div>
 
       {/* Orders panel (collapsible) */}
-      <AnimatePresence>
+      <AnimatePresence initial={false}>
         {showOrders && orders.length > 0 && (
           <motion.div
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            className="overflow-hidden border-b border-slate-100 bg-slate-50/50"
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden"
           >
-            <div className="space-y-2 px-4 py-4 sm:px-6">
-              {orders.slice(0, 8).map(o => (
-                <div key={o.id} className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <p className="truncate text-sm font-medium text-slate-800">{o.batch_size} leads &middot; {o.branch}</p>
-                      <StatusBadge status={o.status} />
+            <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
+              <div className="space-y-2">
+                {orders.slice(0, 8).map(o => (
+                  <div key={o.id} className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50/60 px-3.5 py-2.5">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="truncate text-sm font-medium text-slate-800">{o.batch_size} leads &middot; {o.branch}</p>
+                        <StatusBadge status={o.status} />
+                      </div>
+                      <p className="mt-0.5 text-xs text-slate-400">
+                        {new Date(o.created_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' })}
+                        {o.status === 'paid' && <> &middot; &euro;{(Number(o.total_price) * 1.21).toFixed(2)} incl. BTW</>}
+                      </p>
                     </div>
-                    <p className="mt-0.5 text-xs text-slate-400">
-                      {new Date(o.created_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' })}
-                      {o.status === 'paid' && <> &middot; &euro;{(Number(o.total_price) * 1.21).toFixed(2)} incl. BTW</>}
-                    </p>
+                    {o.status !== 'paid' && (
+                      <button onClick={() => handleCancelOrder(o.id)}
+                        className="ml-3 shrink-0 rounded-lg p-2 text-slate-300 transition hover:bg-red-50 hover:text-red-500"
+                        title="Verwijderen">
+                        <TrashIcon className="h-4 w-4" />
+                      </button>
+                    )}
                   </div>
-                  {o.status !== 'paid' && (
-                    <button onClick={() => handleCancelOrder(o.id)}
-                      className="ml-3 shrink-0 rounded-lg p-2 text-slate-300 transition hover:bg-red-50 hover:text-red-500"
-                      title="Verwijderen">
-                      <TrashIcon className="h-4 w-4" />
-                    </button>
-                  )}
-                </div>
-              ))}
-              {orders.length > 8 && (
-                <Link href="/portal/account" className="block pt-1 text-center text-xs font-medium text-brand-purple hover:underline">
-                  Alle {orders.length} bestellingen bekijken
-                </Link>
-              )}
+                ))}
+                {orders.length > 8 && (
+                  <Link href="/portal/account" className="block pt-1 text-center text-xs font-medium text-brand-purple hover:underline">
+                    Alle {orders.length} bestellingen bekijken
+                  </Link>
+                )}
+              </div>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      <div className="space-y-6 px-4 py-5 sm:px-6 sm:py-6">
+      <div className="space-y-6">
         {/* Branch selector (only if multiple branches) */}
         {branchGroups.length > 1 && (
           <section>
@@ -1116,7 +1125,7 @@ function NewCustomerOrderView({
   const branchName = availableBranches.find(b => b.slug === selectedBranch)?.name || selectedBranch;
 
   return (
-    <div className="space-y-0 pb-28 sm:pb-0">
+    <div className="space-y-6 pb-28 sm:pb-0">
       <AnimatePresence>
         {toast && (
           <motion.div initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 50 }}
@@ -1131,12 +1140,12 @@ function NewCustomerOrderView({
         )}
       </AnimatePresence>
 
-      <div className="border-b border-slate-100 bg-white px-4 pb-5 pt-1 sm:px-6">
+      <div>
         <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">Eerste batch bestellen</h1>
         <p className="mt-0.5 text-sm text-slate-500">Kies een branche en het aantal leads om te starten</p>
       </div>
 
-      <div className="space-y-6 px-4 py-5 sm:px-6 sm:py-6">
+      <div className="space-y-6">
         {/* Welcome discount */}
         {welcomeDiscount.active && (
           <div className="flex items-center gap-3 rounded-2xl border border-brand-purple/20 bg-gradient-to-r from-brand-purple/5 to-brand-pink/5 px-5 py-4">
