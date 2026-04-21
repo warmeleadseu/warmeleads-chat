@@ -151,6 +151,26 @@ export default function ExportWizard({ open, onClose, filters, totalLeads, custo
   const [previewCount, setPreviewCount] = useState(0);
   const [previewLoading, setPreviewLoading] = useState(false);
 
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia('(max-width: 639px)');
+    const update = () => setIsMobile(mq.matches);
+    update();
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    if (typeof document === 'undefined') return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [open]);
+
   useEffect(() => {
     if (open) {
       setStep(1);
@@ -344,27 +364,31 @@ export default function ExportWizard({ open, onClose, filters, totalLeads, custo
     <AnimatePresence>
       {open && (
         <>
-          {/* Backdrop */}
+          {/* Backdrop (hidden below mobile fullscreen, visible behind desktop modal) */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm"
+            className="fixed inset-0 z-50 hidden bg-black/30 backdrop-blur-sm sm:block"
             onClick={closeSafe}
           />
 
-          {/* Centering wrapper */}
-          <div className="fixed inset-0 z-[60] flex items-center justify-center p-3 sm:p-6 pointer-events-none">
+          {/* Centering wrapper (fullscreen on mobile, centered modal on desktop) */}
+          <div className="pointer-events-none fixed inset-0 z-[60] flex sm:items-center sm:justify-center sm:p-6">
             <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 12 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 12 }}
-              transition={{ type: 'spring', damping: 26, stiffness: 320 }}
-              className="pointer-events-auto flex w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl max-h-[calc(100vh-1.5rem)] sm:max-h-[calc(100vh-3rem)]"
+              initial={isMobile ? { y: '100%' } : { opacity: 0, scale: 0.95, y: 12 }}
+              animate={isMobile ? { y: 0 } : { opacity: 1, scale: 1, y: 0 }}
+              exit={isMobile ? { y: '100%' } : { opacity: 0, scale: 0.95, y: 12 }}
+              transition={
+                isMobile
+                  ? { type: 'spring', damping: 30, stiffness: 280 }
+                  : { type: 'spring', damping: 26, stiffness: 320 }
+              }
+              className="pointer-events-auto flex w-full flex-col overflow-hidden bg-white sm:h-auto sm:max-h-[calc(100vh-3rem)] sm:w-full sm:max-w-xl sm:rounded-2xl sm:border sm:border-slate-200 sm:shadow-xl"
               onClick={e => e.stopPropagation()}
             >
               {/* Header */}
-              <div className="shrink-0 border-b border-slate-100 bg-white">
+              <div className="shrink-0 border-b border-slate-100 bg-white pt-[env(safe-area-inset-top)] sm:pt-0">
                 <div className="flex items-center justify-between px-4 py-3 sm:px-5 sm:py-4">
                   <div className="min-w-0">
                     <h2 className="text-base font-bold text-slate-900 sm:text-lg">Leads exporteren</h2>
@@ -744,13 +768,13 @@ export default function ExportWizard({ open, onClose, filters, totalLeads, custo
               </div>
 
               {/* Footer */}
-              <div className="shrink-0 border-t border-slate-100 bg-white px-4 py-3 sm:px-5">
-                <div className="flex items-center justify-between">
+              <div className="shrink-0 border-t border-slate-100 bg-white px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 sm:px-5 sm:pb-3">
+                <div className="flex items-center justify-between gap-2">
                   <div>
                     {step > 1 && (
                       <button
                         onClick={() => setStep(step - 1)}
-                        className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-sm font-medium text-slate-500 transition hover:bg-slate-50 hover:text-slate-700"
+                        className="inline-flex min-h-10 items-center gap-1 rounded-lg px-2 py-2 text-sm font-medium text-slate-500 transition hover:bg-slate-50 hover:text-slate-700"
                       >
                         <ChevronLeftIcon className="h-4 w-4" />
                         Vorige
@@ -761,7 +785,7 @@ export default function ExportWizard({ open, onClose, filters, totalLeads, custo
                     <button
                       onClick={() => setStep(step + 1)}
                       disabled={step === 1 && selectedCols.length === 0}
-                      className="inline-flex items-center gap-1 rounded-lg bg-brand-purple px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-purple/90 disabled:opacity-50"
+                      className="inline-flex min-h-10 items-center gap-1 rounded-lg bg-brand-purple px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-purple/90 disabled:opacity-50"
                     >
                       Volgende
                       <ChevronRightIcon className="h-4 w-4" />
@@ -770,7 +794,7 @@ export default function ExportWizard({ open, onClose, filters, totalLeads, custo
                     <button
                       onClick={handleDownload}
                       disabled={downloading || previewCount === 0}
-                      className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50"
+                      className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50"
                     >
                       {downloading ? (
                         <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
