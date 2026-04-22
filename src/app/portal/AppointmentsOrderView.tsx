@@ -1,17 +1,34 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { portalFetch } from '@/lib/portalAuth';
-import { motion, AnimatePresence } from 'framer-motion';
 import {
-  ArrowPathIcon,
-  CreditCardIcon,
-  CalendarDaysIcon,
   BoltIcon,
-  CheckCircleIcon,
-  MinusIcon,
-  PlusIcon,
+  CalendarDaysIcon,
+  ClockIcon,
+  SparklesIcon,
+  TrashIcon,
+  DocumentTextIcon,
+  ArrowPathIcon,
 } from '@heroicons/react/24/outline';
+import { motion, AnimatePresence } from 'framer-motion';
+import { portalFetch } from '@/lib/portalAuth';
+import { BTW_RATE, formatCurrency, formatDateNl, roundMoney } from '@/lib/portalFormat';
+import {
+  ChoicePill,
+  ChoiceTile,
+  NumberStepper,
+  OrderSummaryCard,
+  PortalSection,
+  PricingTierLegend,
+  SheetModal,
+  Skeleton,
+  StatusBadge,
+  StickyCheckoutBar,
+  T,
+  computeQuickSizes,
+  findTierPrice,
+  useToast,
+} from './_ui';
 
 interface ApptBatch {
   id: string;
@@ -39,9 +56,8 @@ interface ApptOrder {
   paid_at: string | null;
 }
 
-interface PricingTier { min_leads: number; price_per_lead: number }
 interface PricingData {
-  tiers: PricingTier[];
+  tiers: { min_leads: number; price_per_lead: number }[];
   min_batch_size: number;
   nationwide_discount: number;
   is_custom: boolean;
@@ -50,24 +66,21 @@ interface PricingData {
   branch_name: string;
 }
 
-const BTW_RATE = 0.21;
-
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat('nl-NL', {
-    style: 'currency',
-    currency: 'EUR',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value);
-}
+const SPEED_OPTIONS: { value: number | null; label: string; days: string }[] = [
+  { value: null, label: 'Zo snel', days: 'mogelijk' },
+  { value: 2, label: '2', days: 'per week' },
+  { value: 5, label: '5', days: 'per week' },
+  { value: 10, label: '10', days: 'per week' },
+  { value: 20, label: '20', days: 'per week' },
+];
 
 export default function AppointmentsOrderView({
   customerBranches,
-  onToast,
 }: {
   customerBranches: string[];
-  onToast: (msg: string, type?: 'success' | 'error') => void;
 }) {
+  const toast = useToast();
+
   const [batches, setBatches] = useState<ApptBatch[]>([]);
   const [orders, setOrders] = useState<ApptOrder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -80,6 +93,9 @@ export default function AppointmentsOrderView({
   const [apptsPerWeek, setApptsPerWeek] = useState<number | null>(null);
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [showOrders, setShowOrders] = useState(false);
+  const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
+  const [cancelling, setCancelling] = useState(false);
 
   const [pricingData, setPricingData] = useState<PricingData | null>(null);
 
@@ -136,15 +152,17 @@ export default function AppointmentsOrderView({
   const minBatchSize = pricingData?.min_batch_size || 5;
 
   const dynamicPrice = useMemo(() => {
-    if (!pricingData || pricingData.tiers.length === 0) return 0;
-    const sorted = [...pricingData.tiers].sort((a, b) => b.min_leads - a.min_leads);
-    const tier = sorted.find(t => effectiveSize >= t.min_leads);
-    return tier ? tier.price_per_lead : 0;
+    return findTierPrice(pricingData?.tiers, effectiveSize, 0);
   }, [pricingData, effectiveSize]);
 
-  const subtotal = dynamicPrice * effectiveSize;
-  const btw = subtotal * BTW_RATE;
+  const subtotal = roundMoney(dynamicPrice * effectiveSize);
+  const btw = roundMoney(subtotal * BTW_RATE);
   const total = subtotal + btw;
+
+  const QUICK_SIZES = useMemo(() => computeQuickSizes(minBatchSize, [5, 10, 20, 50]), [minBatchSize]);
+
+  const activeBatches = useMemo(() => batches.filter(b => b.status === 'active' && b.is_paid), [batches]);
+  const sourceBatch = activeBatches.find(b => b.branch === selectedBranch) || activeBatches[0] || null;
 
   const handleOrder = async () => {
     if (!selectedBranch || effectiveSize < minBatchSize || dynamicPrice <= 0) return;
@@ -161,248 +179,361 @@ export default function AppointmentsOrderView({
       });
       const data = await res.json();
       if (!res.ok) {
-        onToast(data.error || 'Bestelling mislukt', 'error');
+        toast.error(data.error || 'Bestelling mislukt');
         return;
       }
       if (data.checkoutUrl) {
         window.location.href = data.checkoutUrl;
       }
     } catch {
-      onToast('Er is iets misgegaan', 'error');
+      toast.error('Er is iets misgegaan');
     } finally {
       setSubmitting(false);
     }
   };
 
+  const confirmCancel = async () => {
+    if (!pendingCancelId) return;
+    setCancelling(true);
+    try {
+      const res = await portalFetch('/api/portal/appointment-orders', {
+        method: 'DELETE',
+        body: JSON.stringify({ order_id: pendingCancelId }),
+      });
+      if (res.ok) {
+        setOrders(prev => prev.filter(o => o.id !== pendingCancelId));
+        setPendingCancelId(null);
+        toast.success('Bestelling verwijderd');
+      } else {
+        const d = await res.json().catch(() => ({}));
+        toast.error(d.error || 'Verwijderen mislukt');
+      }
+    } catch {
+      toast.error('Verwijderen mislukt');
+    } finally {
+      setCancelling(false);
+    }
+  };
+
   if (loading) {
-    return (
-      <div className="space-y-3">
-        {[0, 1, 2].map(i => (
-          <div key={i} className="h-28 animate-pulse rounded-2xl border border-slate-200 bg-white" />
-        ))}
-      </div>
-    );
+    return <Skeleton.Cards count={3} />;
   }
 
-  const activeBatches = batches.filter(b => b.status === 'active' && b.is_paid);
-  const presetSizes = pricingData
-    ? Array.from(new Set([
-        minBatchSize,
-        ...pricingData.tiers.map(t => t.min_leads).filter(n => n >= minBatchSize),
-        Math.max(minBatchSize, 20),
-      ])).sort((a, b) => a - b).slice(0, 5)
-    : [5, 10, 15, 20, 30];
+  const pendingOrders = orders.filter(o => o.status !== 'paid');
+  const pendingCancel = pendingCancelId ? orders.find(o => o.id === pendingCancelId) || null : null;
+
+  const canCheckout = !submitting && effectiveSize >= minBatchSize && dynamicPrice > 0;
+  const branchName = pricingData?.branch_name || branchNames[selectedBranch || ''] || selectedBranch || '';
 
   return (
     <div className="space-y-6">
-      {activeBatches.length > 0 && (
-        <section>
-          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Actieve afspraken-batches</h2>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {activeBatches.map(b => {
-              const pct = b.batch_size > 0 ? Math.round((b.appointments_delivered / b.batch_size) * 100) : 0;
-              return (
-                <div key={b.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-bold text-slate-900">{branchNames[b.branch] || b.branch}</p>
-                    <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">Actief</span>
+      {orders.length > 0 && (
+        <div className="flex justify-end">
+          <button
+            onClick={() => setShowOrders(!showOrders)}
+            className={`inline-flex min-h-10 items-center gap-1.5 rounded-xl border px-3.5 py-2 text-xs font-semibold transition ${
+              showOrders
+                ? 'border-brand-purple bg-brand-purple text-white shadow-sm'
+                : 'border-slate-200 bg-white text-slate-600 shadow-sm hover:border-slate-300 hover:bg-slate-50'
+            }`}
+          >
+            <DocumentTextIcon className="h-3.5 w-3.5" />
+            Bestellingen
+            <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+              showOrders
+                ? 'bg-white/20 text-white'
+                : pendingOrders.length > 0
+                  ? 'bg-amber-100 text-amber-700'
+                  : 'bg-slate-100 text-slate-500'
+            }`}>
+              {orders.length}
+            </span>
+          </button>
+        </div>
+      )}
+
+      <AnimatePresence initial={false}>
+        {showOrders && orders.length > 0 && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden"
+          >
+            <div className={`${T.card} p-3 sm:p-4`}>
+              <div className="space-y-2">
+                {orders.slice(0, 8).map(o => (
+                  <div key={o.id} className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50/60 px-3.5 py-2.5">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="truncate text-sm font-medium text-slate-800">{o.batch_size} afspraken &middot; {branchNames[o.branch] || o.branch}</p>
+                        <StatusBadge status={o.status} scope="order" />
+                      </div>
+                      <p className="mt-0.5 text-xs text-slate-400">
+                        {formatDateNl(o.created_at)}
+                        {o.status === 'paid' && <> &middot; {formatCurrency(Number(o.total_price) * 1.21)} incl. BTW</>}
+                      </p>
+                    </div>
+                    {o.status !== 'paid' && (
+                      <button onClick={() => setPendingCancelId(o.id)}
+                        className="ml-3 shrink-0 rounded-lg p-2 text-slate-300 transition hover:bg-red-50 hover:text-red-500"
+                        title="Verwijderen">
+                        <TrashIcon className="h-4 w-4" />
+                      </button>
+                    )}
                   </div>
-                  <p className="mt-1 text-xs text-slate-500">{b.appointments_delivered} van {b.batch_size} geleverd</p>
-                  <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100">
-                    <div className="h-full bg-brand-purple" style={{ width: `${pct}%` }} />
-                  </div>
-                </div>
-              );
-            })}
+                ))}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {customerBranches.length > 1 && (
+        <PortalSection eyebrow="Branche" bare>
+          <div className="relative -mx-1 px-1">
+            <div className="pointer-events-none absolute inset-y-0 left-0 z-[1] w-4 bg-gradient-to-r from-slate-50 to-transparent sm:hidden" />
+            <div className="pointer-events-none absolute inset-y-0 right-0 z-[1] w-4 bg-gradient-to-l from-slate-50 to-transparent sm:hidden" />
+            <div className="hide-scrollbar flex gap-2 overflow-x-auto pb-1.5">
+              {customerBranches.map(b => (
+                <ChoicePill
+                  key={b}
+                  selected={selectedBranch === b}
+                  onClick={() => setSelectedBranch(b)}
+                >
+                  {branchNames[b] || b}
+                </ChoicePill>
+              ))}
+            </div>
+          </div>
+          <p className="mt-1 text-[11px] text-slate-400 sm:hidden">Swipe om alle branches te zien</p>
+        </PortalSection>
+      )}
+
+      {customerBranches.length === 1 && selectedBranch && (
+        <section className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-brand-purple to-brand-pink">
+            <CalendarDaysIcon className="h-5 w-5 text-white" />
+          </div>
+          <div>
+            <p className="text-sm font-bold text-slate-900">{branchName}</p>
+            {dynamicPrice > 0 && <p className="text-xs text-slate-400">{formatCurrency(dynamicPrice)} per afspraak excl. BTW</p>}
           </div>
         </section>
       )}
 
-      {customerBranches.length > 1 && (
-        <section>
-          <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-slate-400">Branche</label>
-          <div className="flex flex-wrap gap-2">
-            {customerBranches.map(b => (
-              <button
-                key={b}
-                onClick={() => setSelectedBranch(b)}
-                className={`min-h-11 rounded-xl border-2 px-4 py-2 text-sm font-semibold transition ${
-                  selectedBranch === b
-                    ? 'border-brand-purple bg-brand-purple/5 text-brand-purple'
-                    : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
-                }`}
-              >
-                {branchNames[b] || b}
-              </button>
-            ))}
+      {sourceBatch && (
+        <PortalSection bare className={`${T.card} ${T.cardPadding}`}>
+          <div className="mb-2 flex items-center justify-between">
+            <span className={T.eyebrow}>Huidige batch</span>
+            <span className="text-xs font-bold text-slate-600">
+              {sourceBatch.appointments_delivered}/{sourceBatch.batch_size} afspraken
+            </span>
           </div>
-        </section>
+          <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-brand-purple to-brand-pink transition-all duration-700"
+              style={{ width: `${Math.min(100, sourceBatch.batch_size > 0 ? (sourceBatch.appointments_delivered / sourceBatch.batch_size) * 100 : 0)}%` }}
+            />
+          </div>
+          {sourceBatch.appointments_delivered >= sourceBatch.batch_size * 0.8 && (
+            <p className="mt-2 text-xs font-medium text-amber-600">
+              <SparklesIcon className="mr-1 inline h-3.5 w-3.5" />
+              Bijna vol! Bestel nu een vervolg batch zodat je agenda doorloopt.
+            </p>
+          )}
+        </PortalSection>
       )}
 
       {pricingData && dynamicPrice > 0 ? (
         <>
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h3 className="text-sm font-bold text-slate-900">Hoeveel afspraken?</h3>
-            <p className="mt-0.5 text-xs text-slate-500">Vanaf {minBatchSize} afspraken</p>
-
-            <div className="mt-3 flex flex-wrap gap-2">
-              {presetSizes.map(size => (
-                <button
-                  key={size}
-                  onClick={() => { setBatchSize(size); setUseCustom(false); }}
-                  className={`min-h-10 rounded-xl border px-4 py-2 text-sm font-semibold transition ${
-                    !useCustom && batchSize === size
-                      ? 'border-brand-purple bg-brand-purple text-white shadow-sm'
-                      : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
-                  }`}
-                >
-                  {size}
-                </button>
-              ))}
-              <button
-                onClick={() => setUseCustom(true)}
-                className={`min-h-10 rounded-xl border px-4 py-2 text-sm font-semibold transition ${
-                  useCustom
-                    ? 'border-brand-purple bg-brand-purple text-white shadow-sm'
-                    : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
-                }`}
-              >
-                Custom
-              </button>
+          <PortalSection
+            title="Hoeveel afspraken wil je bestellen?"
+            description={`Vanaf ${minBatchSize} afspraken`}
+          >
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {QUICK_SIZES.map(size => {
+                const isActive = !useCustom && batchSize === size;
+                const sizePrice = findTierPrice(pricingData.tiers, size, dynamicPrice);
+                const price = roundMoney(size * sizePrice * (1 + BTW_RATE));
+                return (
+                  <ChoiceTile
+                    key={size}
+                    selected={isActive}
+                    onClick={() => { setBatchSize(size); setUseCustom(false); }}
+                    title={size}
+                    meta="afspraken"
+                    footer={<>{formatCurrency(price)} <span className="font-normal text-slate-400">incl.</span></>}
+                  />
+                );
+              })}
             </div>
 
-            {useCustom && (
-              <div className="mt-3 flex items-center gap-2">
-                <button
-                  onClick={() => setCustomSize(String(Math.max(minBatchSize, (parseInt(customSize) || minBatchSize) - 1)))}
-                  className="h-10 w-10 rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
-                >
-                  <MinusIcon className="mx-auto h-4 w-4" />
-                </button>
-                <input
-                  type="number"
-                  min={minBatchSize}
-                  value={customSize}
-                  onChange={e => setCustomSize(e.target.value)}
-                  className="h-10 flex-1 rounded-xl border border-slate-200 bg-white px-3 text-center text-sm font-semibold text-slate-900 outline-none focus:border-brand-purple/50"
-                  placeholder={`${minBatchSize}+`}
-                />
-                <button
-                  onClick={() => setCustomSize(String((parseInt(customSize) || minBatchSize) + 1))}
-                  className="h-10 w-10 rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
-                >
-                  <PlusIcon className="mx-auto h-4 w-4" />
-                </button>
-              </div>
+            <div className="mt-3">
+              <NumberStepper
+                active={useCustom}
+                onActivate={() => { setUseCustom(true); if (!customSize) setCustomSize(String(batchSize || minBatchSize)); }}
+                value={customSize}
+                onChange={setCustomSize}
+                min={minBatchSize}
+                step={1}
+                prompt="Ander aantal kiezen..."
+                previewTitle={`${effectiveSize} afspraken`}
+                previewSubtitle={`${formatCurrency(total)} incl. BTW`}
+              />
+            </div>
+
+            {effectiveSize > 0 && effectiveSize < minBatchSize && (
+              <p className="mt-2 text-center text-xs text-red-500">Minimaal {minBatchSize} afspraken per batch</p>
             )}
-          </section>
 
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h3 className="text-sm font-bold text-slate-900">Planningssnelheid (optioneel)</h3>
-            <p className="mt-0.5 text-xs text-slate-500">Hoeveel afspraken maximaal per week?</p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {[null, 2, 5, 10, 20].map((n, i) => (
-                <button
-                  key={i}
-                  onClick={() => setApptsPerWeek(n)}
-                  className={`min-h-10 rounded-xl border px-4 py-2 text-sm font-semibold transition ${
-                    apptsPerWeek === n
-                      ? 'border-brand-purple bg-brand-purple text-white shadow-sm'
-                      : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
-                  }`}
-                >
-                  {n === null ? 'Zo snel mogelijk' : `${n}/week`}
-                </button>
-              ))}
+            <PricingTierLegend
+              tiers={pricingData.tiers}
+              effectiveSize={effectiveSize}
+              unitLabel="afspraken"
+              isCustom={pricingData.is_custom}
+            />
+          </PortalSection>
+
+          <PortalSection
+            title="Planningssnelheid"
+            description="Hoeveel afspraken maximaal per week?"
+          >
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+              {SPEED_OPTIONS.map((opt, i) => {
+                const isActive = apptsPerWeek === opt.value;
+                const isAsap = opt.value === null;
+                return (
+                  <ChoiceTile
+                    key={i}
+                    selected={isActive}
+                    onClick={() => setApptsPerWeek(opt.value)}
+                    icon={isAsap ? <BoltIcon className={`h-5 w-5 ${isActive ? 'text-brand-purple' : 'text-slate-400'}`} /> : undefined}
+                    title={<span className={isAsap ? 'text-sm' : undefined}>{opt.label}</span>}
+                    meta={opt.days}
+                  />
+                );
+              })}
             </div>
-          </section>
+          </PortalSection>
 
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h3 className="text-sm font-bold text-slate-900">Opmerkingen (optioneel)</h3>
+          <PortalSection title="Opmerkingen" description="Optioneel — specifieke wensen, doelgroep-voorkeuren.">
             <textarea
               value={notes}
               onChange={e => setNotes(e.target.value)}
-              rows={3}
-              placeholder="Specifieke wensen, doelgroep-voorkeuren..."
-              className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50"
+              rows={2}
+              placeholder="Bijv. specifieke wensen, doelgroep-voorkeuren..."
+              className={T.textarea}
             />
-          </section>
+          </PortalSection>
 
-          <section className="rounded-2xl border border-brand-purple/20 bg-gradient-to-br from-brand-purple/5 to-brand-pink/5 p-5 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-slate-500">Prijs per afspraak</p>
-                <p className="text-lg font-bold text-slate-900">{formatCurrency(dynamicPrice)}</p>
+          <OrderSummaryCard
+            lines={[
+              {
+                label: <>{effectiveSize} afspraken &times; {formatCurrency(dynamicPrice)}</>,
+                value: <>{formatCurrency(subtotal)}</>,
+                tone: 'default',
+              },
+              { label: 'BTW 21%', value: <>{formatCurrency(btw)}</>, tone: 'muted' },
+            ]}
+            total={total}
+            onCheckout={handleOrder}
+            submitting={submitting}
+            disabled={!canCheckout}
+            ctaLabel="Afrekenen"
+            helper={
+              <div className="flex items-start gap-2">
+                <CalendarDaysIcon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
+                <p className="text-[11px] leading-relaxed text-slate-400">
+                  Default duur: {pricingData.default_duration} min &middot; Reistijd-buffer: {pricingData.default_travel_buffer} min. Na betaling kunnen afspraken ingepland worden via je agenda.
+                </p>
               </div>
-              <div className="text-right">
-                <p className="text-xs text-slate-500">Totaal incl. BTW</p>
-                <p className="text-2xl font-bold text-brand-purple">{formatCurrency(total)}</p>
-              </div>
-            </div>
-            <div className="mt-3 space-y-1 border-t border-slate-200/60 pt-3 text-xs text-slate-500">
-              <div className="flex justify-between">
-                <span>{effectiveSize} afspraken × {formatCurrency(dynamicPrice)}</span>
-                <span>{formatCurrency(subtotal)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>21% BTW</span>
-                <span>{formatCurrency(btw)}</span>
-              </div>
-            </div>
-            <button
-              onClick={handleOrder}
-              disabled={submitting || effectiveSize < minBatchSize}
-              className="mt-4 flex w-full items-center justify-center gap-2.5 rounded-xl bg-gradient-to-r from-brand-purple to-brand-pink px-6 py-3.5 text-[15px] font-bold text-white shadow-lg transition hover:shadow-xl disabled:opacity-50 disabled:shadow-none"
-            >
-              {submitting ? (
-                <><ArrowPathIcon className="h-5 w-5 animate-spin" /> Wordt verwerkt...</>
-              ) : (
-                <><CreditCardIcon className="h-5 w-5" /> Afrekenen · {formatCurrency(total)}</>
-              )}
-            </button>
-          </section>
+            }
+          />
 
-          <div className="rounded-xl bg-slate-50 p-4 text-xs text-slate-500">
-            <div className="flex items-center gap-2">
-              <CalendarDaysIcon className="h-4 w-4 text-brand-purple" />
-              <span className="font-semibold text-slate-700">Default duur: {pricingData.default_duration} min</span>
-              <span>·</span>
-              <span>Reistijd-buffer: {pricingData.default_travel_buffer} min</span>
+          <StickyCheckoutBar
+            total={total}
+            onCheckout={handleOrder}
+            submitting={submitting}
+            disabled={!canCheckout}
+          />
+
+          {pendingOrders.length > 0 && (
+            <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3.5">
+              <div className="flex items-start gap-2.5">
+                <ClockIcon className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+                <div>
+                  <p className="text-xs font-semibold text-amber-800">
+                    Je hebt {pendingOrders.length} openstaande {pendingOrders.length === 1 ? 'bestelling' : 'bestellingen'}
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-amber-600">
+                    Bekijk of verwijder ze direct vanuit je bestellingen-overzicht.
+                  </p>
+                  {!showOrders && (
+                    <button
+                      onClick={() => setShowOrders(true)}
+                      className="mt-2 inline-flex min-h-9 items-center gap-1 rounded-lg border border-amber-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-amber-700 transition hover:bg-amber-100"
+                    >
+                      <DocumentTextIcon className="h-3.5 w-3.5" />
+                      Open bestellingen
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
-            <p className="mt-1">Na betaling kunnen afspraken ingepland worden via je agenda.</p>
-          </div>
+          )}
         </>
-      ) : selectedBranch && (
+      ) : selectedBranch ? (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-center">
           <p className="text-sm font-semibold text-amber-800">Neem contact op met WarmeLeads voor afspraken-prijsinformatie</p>
           <a href="mailto:info@warmeleads.eu" className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-brand-purple hover:underline">
             info@warmeleads.eu
           </a>
         </div>
-      )}
+      ) : null}
 
-      {orders.length > 0 && (
-        <section>
-          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Afspraken-bestellingen</h2>
-          <div className="space-y-2">
-            {orders.slice(0, 5).map(o => (
-              <div key={o.id} className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3.5 py-2.5">
-                <div>
-                  <p className="text-sm font-medium text-slate-800">{o.batch_size} afspraken · {branchNames[o.branch] || o.branch}</p>
-                  <p className="text-xs text-slate-400">{new Date(o.created_at).toLocaleDateString('nl-NL')}</p>
-                </div>
-                <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                  o.status === 'paid' ? 'bg-emerald-50 text-emerald-700' :
-                  o.status === 'pending' ? 'bg-amber-50 text-amber-700' :
-                  'bg-slate-100 text-slate-500'
-                }`}>
-                  {o.status === 'paid' ? 'Betaald' : o.status === 'pending' ? 'In behandeling' : o.status}
-                </span>
-              </div>
-            ))}
+      <SheetModal
+        open={!!pendingCancel}
+        onClose={() => !cancelling && setPendingCancelId(null)}
+        title="Bestelling verwijderen?"
+        description="Je staat op het punt deze openstaande bestelling te verwijderen:"
+        size="sm"
+        footer={
+          <div className="flex gap-2">
+            <button
+              onClick={() => setPendingCancelId(null)}
+              disabled={cancelling}
+              className={`flex-1 ${T.btnSecondary}`}
+            >
+              Annuleren
+            </button>
+            <button
+              onClick={confirmCancel}
+              disabled={cancelling}
+              className={`flex-1 ${T.btnDanger}`}
+            >
+              {cancelling ? (
+                <>
+                  <ArrowPathIcon className="h-4 w-4 animate-spin" />
+                  Verwijderen...
+                </>
+              ) : (
+                <>
+                  <TrashIcon className="h-4 w-4" />
+                  Verwijderen
+                </>
+              )}
+            </button>
           </div>
-        </section>
-      )}
+        }
+      >
+        {pendingCancel && (
+          <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700">
+            {pendingCancel.batch_size} afspraken — {branchNames[pendingCancel.branch] || pendingCancel.branch}
+          </p>
+        )}
+      </SheetModal>
     </div>
   );
 }

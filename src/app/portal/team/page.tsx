@@ -20,6 +20,7 @@ import {
 import { usePortal } from '../portalContext';
 import { portalFetch } from '@/lib/portalAuth';
 import { PERMISSION_GROUPS, ROLE_DEFAULTS, type Permission, type AssignmentRules } from '@/lib/portalPermissions';
+import { EmptyState, PageHeader, Skeleton, T } from '../_ui';
 
 const PROVINCES_NL = ['Drenthe','Flevoland','Friesland','Gelderland','Groningen','Limburg','Noord-Brabant','Noord-Holland','Overijssel','Utrecht','Zeeland','Zuid-Holland'];
 const PROVINCES_BE = ['Antwerpen','Brussels','Henegouwen','Luik','Luxemburg','Namen','Oost-Vlaanderen','Vlaams-Brabant','Waals-Brabant','West-Vlaanderen'];
@@ -120,38 +121,33 @@ export default function TeamPage() {
 
   if (!canManage) {
     return (
-      <div className="py-16 text-center">
-        <ShieldCheckIcon className="mx-auto h-12 w-12 text-slate-300" />
-        <h2 className="mt-4 text-lg font-semibold text-slate-900">Geen toegang</h2>
-        <p className="mt-1 text-sm text-slate-500">Je hebt geen rechten om het team te beheren.</p>
-      </div>
+      <EmptyState
+        icon={ShieldCheckIcon}
+        title="Geen toegang"
+        body="Je hebt geen rechten om het team te beheren."
+      />
     );
   }
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-slate-200 border-t-brand-purple" />
-      </div>
-    );
+    return <Skeleton.Page />;
   }
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">Team</h1>
-          <p className="mt-0.5 text-sm text-slate-500">{members.length} teamleden bij {customer.name}</p>
-        </div>
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="inline-flex items-center gap-2 rounded-xl bg-brand-purple px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-purple/90"
-        >
-          <PlusIcon className="h-4 w-4" />
-          Teamlid toevoegen
-        </button>
-      </div>
+      <PageHeader
+        title="Team"
+        subtitle={`${members.length} teamleden bij ${customer.name}`}
+        action={
+          <button
+            onClick={() => setShowAddModal(true)}
+            className={T.btnPrimary}
+          >
+            <PlusIcon className="h-4 w-4" />
+            Teamlid toevoegen
+          </button>
+        }
+      />
 
       {/* Stats cards */}
       {stats.length > 0 && (
@@ -165,18 +161,20 @@ export default function TeamPage() {
 
       {/* Members list */}
       {members.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-slate-200 bg-white py-16 text-center">
-          <UserCircleIcon className="mx-auto h-12 w-12 text-slate-300" />
-          <h3 className="mt-3 text-sm font-semibold text-slate-900">Nog geen teamleden</h3>
-          <p className="mt-1 text-sm text-slate-500">Voeg je eerste agent of manager toe om leads te verdelen.</p>
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="mt-4 inline-flex items-center gap-2 rounded-lg bg-brand-purple px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-purple/90"
-          >
-            <PlusIcon className="h-4 w-4" />
-            Teamlid toevoegen
-          </button>
-        </div>
+        <EmptyState
+          icon={UserCircleIcon}
+          title="Nog geen teamleden"
+          body="Voeg je eerste agent of manager toe om leads te verdelen."
+          cta={
+            <button
+              onClick={() => setShowAddModal(true)}
+              className={T.btnPrimary}
+            >
+              <PlusIcon className="h-4 w-4" />
+              Teamlid toevoegen
+            </button>
+          }
+        />
       ) : (
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="overflow-x-auto">

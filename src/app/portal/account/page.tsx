@@ -30,6 +30,7 @@ import {
   CreditCardIcon,
 } from '@heroicons/react/24/outline';
 import { usePushNotifications } from '../usePushNotifications';
+import { PageHeader } from '../_ui';
 
 /* ─── Types ────────────────────────────────────────────────── */
 
@@ -1327,30 +1328,29 @@ export default function AccountPage() {
         )}
       </AnimatePresence>
 
-      {/* Header */}
-      <div>
-        <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">Account & Insights</h1>
-        <p className="mt-0.5 text-sm text-slate-500">
-          Beheer je account, bekijk prestaties en targetgebieden
-        </p>
-      </div>
+      <PageHeader
+        title="Account & Insights"
+        subtitle="Beheer je account, bekijk prestaties en targetgebieden"
+      />
 
-      {/* Tab Navigation */}
       <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0" style={{ scrollbarWidth: 'none' }}>
-        {TABS.map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
-            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2.5 text-[13px] font-medium transition sm:gap-2 sm:text-sm ${
-              activeTab === tab.key
-                ? 'bg-brand-purple text-white shadow-sm shadow-brand-purple/20'
-                : 'bg-white text-slate-600 shadow-sm ring-1 ring-slate-200/60 hover:bg-slate-50'
-            }`}
-          >
-            <tab.icon className="h-4 w-4" />
-            {tab.label}
-          </button>
-        ))}
+        {TABS.map((tab) => {
+          const active = activeTab === tab.key;
+          return (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={`inline-flex min-h-11 shrink-0 items-center gap-2 rounded-xl border-2 px-4 py-2.5 text-sm font-semibold transition ${
+                active
+                  ? 'border-brand-purple bg-brand-purple/5 text-brand-purple shadow-sm'
+                  : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'
+              }`}
+            >
+              <tab.icon className="h-4 w-4" />
+              {tab.label}
+            </button>
+          );
+        })}
       </div>
 
       {/* Tab Content */}

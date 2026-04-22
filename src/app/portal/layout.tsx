@@ -24,6 +24,7 @@ import { PortalContext, type PortalCustomer, type ClientPortalUser } from './por
 import { portalFetch } from '@/lib/portalAuth';
 import { PERMISSIONS } from '@/lib/portalPermissions';
 import { UsersIcon } from '@heroicons/react/24/outline';
+import { ToastProvider, AnnouncementBar } from './_ui';
 
 function LoginScreen({ onLogin }: { onLogin: (c: PortalCustomer, t: string, pu: ClientPortalUser | null) => void }) {
   const [email, setEmail] = useState('');
@@ -479,47 +480,39 @@ interface BeforeInstallPromptEvent extends Event {
 
 function DemoBanner() {
   return (
-    <div className="bg-gradient-to-r from-brand-purple via-brand-pink to-brand-orange">
-      <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-2.5 sm:px-6 lg:px-8">
-        <div className="flex items-center gap-2 text-sm text-white">
-          <BeakerIcon className="h-4 w-4 shrink-0" />
-          <span className="font-medium">
-            <span className="hidden sm:inline">Demo Modus</span>
-            <span className="sm:hidden">Demo</span>
-            {' — '}
-          </span>
-          <span className="truncate text-white/90">
-            <span className="hidden sm:inline">Je bekijkt voorbeeldleads om het portaal te ervaren</span>
-            <span className="sm:hidden">Voorbeeldleads</span>
-          </span>
-        </div>
+    <AnnouncementBar
+      variant="demo"
+      icon={<BeakerIcon className="h-4 w-4" />}
+      action={
         <Link
           href="/portal/bestellen"
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-white/20 px-3 py-1.5 text-xs font-bold text-white backdrop-blur-sm transition hover:bg-white/30"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-white/20 px-3 py-1.5 text-xs font-bold text-white backdrop-blur-sm transition hover:bg-white/30"
         >
           <SparklesIcon className="h-3.5 w-3.5" />
           <span className="hidden sm:inline">Bestel je eerste batch</span>
           <span className="sm:hidden">Bestellen</span>
         </Link>
-      </div>
-    </div>
+      }
+    >
+      <span className="font-medium">
+        <span className="hidden sm:inline">Demo Modus</span>
+        <span className="sm:hidden">Demo</span>
+        {' — '}
+      </span>
+      <span className="text-white/90">
+        <span className="hidden sm:inline">Je bekijkt voorbeeldleads om het portaal te ervaren</span>
+        <span className="sm:hidden">Voorbeeldleads</span>
+      </span>
+    </AnnouncementBar>
   );
 }
 
 function AdminViewBanner({ customerName, adminName, onStop }: { customerName: string; adminName: string; onStop: () => void }) {
   return (
-    <div className="bg-gradient-to-r from-amber-500 to-orange-500 text-white">
-      <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-2 sm:px-6 lg:px-8">
-        <div className="flex items-center gap-2 text-sm">
-          <EyeIcon className="h-4 w-4 shrink-0" />
-          <span className="font-medium">
-            <span className="hidden sm:inline">Admin-weergave</span>
-            <span className="sm:hidden">Admin</span>
-            {' · '}
-          </span>
-          <span className="truncate font-bold">{customerName}</span>
-          <span className="hidden text-white/70 sm:inline">— bekeken door {adminName}</span>
-        </div>
+    <AnnouncementBar
+      variant="admin"
+      icon={<EyeIcon className="h-4 w-4" />}
+      action={
         <div className="flex items-center gap-2">
           <a
             href="/admin/customers"
@@ -537,8 +530,26 @@ function AdminViewBanner({ customerName, adminName, onStop }: { customerName: st
             <XMarkIcon className="h-4 w-4" />
           </button>
         </div>
-      </div>
-    </div>
+      }
+    >
+      <span className="font-medium">
+        <span className="hidden sm:inline">Admin-weergave</span>
+        <span className="sm:hidden">Admin</span>
+        {' · '}
+      </span>
+      <span className="font-bold">{customerName}</span>
+      <span className="hidden text-white/70 sm:inline"> — bekeken door {adminName}</span>
+    </AnnouncementBar>
+  );
+}
+
+function RoleSubBar({ role, customerName }: { role: string; customerName: string }) {
+  return (
+    <AnnouncementBar variant="info" icon={<UsersIcon className="h-3.5 w-3.5 text-brand-purple/60" />}>
+      <span className="text-xs text-brand-purple/70">
+        Ingelogd als <span className="font-semibold">{role === 'manager' ? 'manager' : 'agent'}</span> bij {customerName}
+      </span>
+    </AnnouncementBar>
   );
 }
 
@@ -734,34 +745,29 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
 
   return (
     <PortalContext.Provider value={{ customer, portalUser, isOwner, hasPermission: hasPermFn, logout: handleLogout }}>
-      <div className="flex min-h-screen flex-col bg-slate-50">
-        <div className="sticky top-0 z-40">
-          {customer.demo_mode && !isAdminView && <DemoBanner />}
-          {isAdminView && (
-            <AdminViewBanner
-              customerName={customer.name}
-              adminName={adminName}
-              onStop={stopAdminView}
-            />
-          )}
-          {portalUser && portalUser.role !== 'owner' && !isAdminView && (
-            <div className="bg-brand-purple/5 border-b border-brand-purple/10">
-              <div className="mx-auto flex max-w-7xl items-center gap-2 px-4 py-1.5 sm:px-6 lg:px-8">
-                <UsersIcon className="h-3.5 w-3.5 text-brand-purple/60" />
-                <span className="text-xs text-brand-purple/70">
-                  Ingelogd als <span className="font-semibold">{portalUser.role === 'manager' ? 'manager' : 'agent'}</span> bij {customer.name}
-                </span>
-              </div>
-            </div>
-          )}
-          <PortalHeader customer={customer} portalUser={portalUser} hasPermFn={hasPermFn} onLogout={handleLogout} />
+      <ToastProvider>
+        <div className="flex min-h-screen flex-col bg-slate-50">
+          <div className="sticky top-0 z-40">
+            {customer.demo_mode && !isAdminView && <DemoBanner />}
+            {isAdminView && (
+              <AdminViewBanner
+                customerName={customer.name}
+                adminName={adminName}
+                onStop={stopAdminView}
+              />
+            )}
+            {portalUser && portalUser.role !== 'owner' && !isAdminView && (
+              <RoleSubBar role={portalUser.role} customerName={customer.name} />
+            )}
+            <PortalHeader customer={customer} portalUser={portalUser} hasPermFn={hasPermFn} onLogout={handleLogout} />
+          </div>
+          {!isAdminView && <InstallBanner />}
+          <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 lg:px-8">
+            {children}
+          </main>
+          <PortalFooter />
         </div>
-        {!isAdminView && <InstallBanner />}
-        <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 lg:px-8">
-          {children}
-        </main>
-        <PortalFooter />
-      </div>
+      </ToastProvider>
     </PortalContext.Provider>
   );
 }

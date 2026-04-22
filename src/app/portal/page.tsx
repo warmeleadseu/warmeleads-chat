@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
@@ -44,6 +44,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { usePushNotifications, type PushState } from './usePushNotifications';
 import ExportWizard, { type ExportFilters } from './ExportWizard';
+import { PageHeader, useToast } from './_ui';
 
 function WhatsAppIcon({ className }: { className?: string }) {
   return (
@@ -262,13 +263,10 @@ export default function PortalPage() {
   const [notificationFrequency, setNotificationFrequency] = useState('instant');
 
   const [payingBatch, setPayingBatch] = useState<string | null>(null);
-  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
-  const toastTimer = useRef<NodeJS.Timeout | null>(null);
+  const toast = useToast();
   const showToast = useCallback((msg: string, type: 'success' | 'error' = 'success') => {
-    setToast({ msg, type });
-    if (toastTimer.current) clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToast(null), 3000);
-  }, []);
+    toast.show(msg, type);
+  }, [toast]);
 
   const [showWelcome, setShowWelcome] = useState(false);
   const [welcomeOffer, setWelcomeOffer] = useState<{ active: boolean; expiresAt: string | null }>({ active: false, expiresAt: null });
@@ -593,29 +591,6 @@ export default function PortalPage() {
 
   return (
     <div className="space-y-6">
-      {/* Toast */}
-      <AnimatePresence>
-        {toast && (
-          <motion.div
-            initial={{ opacity: 0, y: 50 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 50 }}
-            className={`fixed bottom-6 left-1/2 z-[100] -translate-x-1/2 rounded-xl px-5 py-3 text-sm font-medium text-white shadow-xl ${
-              toast.type === 'error' ? 'bg-red-600' : 'bg-slate-900'
-            }`}
-          >
-            <div className="flex items-center gap-2">
-              {toast.type === 'error' ? (
-                <ExclamationTriangleIcon className="h-4 w-4 text-red-200" />
-              ) : (
-                <CheckCircleIcon className="h-4 w-4 text-emerald-400" />
-              )}
-              {toast.msg}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* Welcome overlay for new signups */}
       <AnimatePresence>
         {showWelcome && (
@@ -752,15 +727,11 @@ export default function PortalPage() {
         </motion.div>
       )}
 
-      {/* Welcome */}
-      <div>
-        <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">
-          Welkom, {customer.contact_person || customer.name}
-        </h1>
-        <p className="mt-0.5 text-sm text-slate-500">
-          Leadoverzicht voor {customer.name}
-        </p>
-      </div>
+      <PageHeader
+        title={`Welkom, ${customer.contact_person || customer.name}`}
+        subtitle={`Leadoverzicht voor ${customer.name}`}
+      />
+
 
       <BatchConversionCard
         customerDemoMode={customer.demo_mode}

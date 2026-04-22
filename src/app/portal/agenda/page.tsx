@@ -21,6 +21,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import BookAppointmentModal from './BookAppointmentModal';
 import AppointmentDetailModal from './AppointmentDetailModal';
 import AvailabilityPanel from '../AvailabilityPanel';
+import { PageHeader, ToggleGroup, T } from '../_ui';
 
 export interface Appointment {
   id: string;
@@ -227,35 +228,32 @@ export default function AgendaPage() {
 
   return (
     <div className="space-y-5 pb-[calc(5rem+env(safe-area-inset-bottom))] sm:pb-0">
-      {/* Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">Agenda</h1>
-          <p className="mt-0.5 text-sm text-slate-500">
-            {canViewAll ? 'Beheer je afspraken en beschikbaarheid' : 'Jouw afspraken en planning'}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {canManageAvailability && (
-            <button
-              onClick={() => setShowAvailability(true)}
-              className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-            >
-              <Cog6ToothIcon className="h-4 w-4" />
-              <span className="hidden sm:inline">Beschikbaarheid</span>
-            </button>
-          )}
-          {canEdit && (
-            <button
-              onClick={openNewAppointment}
-              className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-gradient-to-r from-brand-purple to-brand-pink px-4 text-sm font-bold text-white shadow-sm hover:shadow-md"
-            >
-              <PlusIcon className="h-4 w-4" />
-              Nieuwe afspraak
-            </button>
-          )}
-        </div>
-      </div>
+      <PageHeader
+        title="Agenda"
+        subtitle={canViewAll ? 'Beheer je afspraken en beschikbaarheid' : 'Jouw afspraken en planning'}
+        action={
+          <div className="flex flex-wrap items-center gap-2">
+            {canManageAvailability && (
+              <button
+                onClick={() => setShowAvailability(true)}
+                className={T.btnSecondary}
+              >
+                <Cog6ToothIcon className="h-4 w-4" />
+                <span className="hidden sm:inline">Beschikbaarheid</span>
+              </button>
+            )}
+            {canEdit && (
+              <button
+                onClick={openNewAppointment}
+                className={T.btnPrimary}
+              >
+                <PlusIcon className="h-4 w-4" />
+                Nieuwe afspraak
+              </button>
+            )}
+          </div>
+        }
+      />
 
       {/* Controls */}
       <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white p-3">
@@ -272,19 +270,16 @@ export default function AgendaPage() {
         </div>
         <span className="ml-1 text-sm font-semibold text-slate-700">{headerLabel}</span>
 
-        <div className="ml-auto inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 p-0.5">
-          <button
-            onClick={() => setView('day')}
-            className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${view === 'day' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}
-          >
-            Dag
-          </button>
-          <button
-            onClick={() => setView('week')}
-            className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${view === 'week' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}
-          >
-            Week
-          </button>
+        <div className="ml-auto">
+          <ToggleGroup
+            value={view}
+            onChange={(v: 'week' | 'day') => setView(v)}
+            options={[
+              { value: 'day', label: 'Dag' },
+              { value: 'week', label: 'Week' },
+            ]}
+            ariaLabel="Agenda-weergave"
+          />
         </div>
 
         {canViewAll && team.length > 0 && (
