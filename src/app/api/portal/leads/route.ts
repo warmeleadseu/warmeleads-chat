@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyCustomer, portalUnauthorized } from '@/lib/portalAuth';
 import { createServerClient } from '@/lib/supabase';
 import { hasPermission, forbidden, PERMISSIONS } from '@/lib/portalPermissions';
+import { repairDemoAssignmentsIfNeeded } from '@/lib/demoPortalLeads';
 
 const PAGE_SIZE = 1000;
 const IN_CHUNK = 500;
@@ -41,43 +42,6 @@ async function getCustomerDemoInfo(
   return { demoMode: data?.demo_mode ?? false, branches: data?.branches ?? [] };
 }
 
-const DEMO_STATUS_DISTRIBUTION: { status: string; notities: string | null }[] = [
-  { status: 'nieuw', notities: null },
-  { status: 'nieuw', notities: null },
-  { status: 'gecontacteerd', notities: 'Terugbellen na 17:00' },
-  { status: 'offerte', notities: 'Interesse in 10kWh systeem' },
-];
-
-async function ensureDemoLeads(
-  supabase: ReturnType<typeof createServerClient>,
-  customerId: string,
-  branches: string[],
-) {
-  const { data: demoLeads } = await supabase
-    .from('leads')
-    .select('id, branch')
-    .eq('bron', 'demo')
-    .is('customer_id', null)
-    .in('branch', branches);
-
-  if (!demoLeads || demoLeads.length === 0) return;
-
-  const assignments = demoLeads.map((lead, i) => {
-    const preset = DEMO_STATUS_DISTRIBUTION[i % DEMO_STATUS_DISTRIBUTION.length];
-    return {
-      lead_id: lead.id,
-      customer_id: customerId,
-      batch_id: null,
-      distance_km: Math.round((3 + Math.random() * 25) * 10) / 10,
-      source: 'demo',
-      status: preset.status,
-      notities: preset.notities,
-    };
-  });
-
-  await supabase.from('lead_assignments').insert(assignments);
-}
-
 async function getCustomerLeadData(
   supabase: ReturnType<typeof createServerClient>,
   customerId: string,
@@ -114,9 +78,9 @@ async function getCustomerLeadData(
     q = applyAgentScope(q);
     let demoLeads = await paginateQuery<AssignRow>(q);
 
-    // Re-seed demo leads if none found (recovery for failed initial seeding or deleted assignments)
+    // Re-seed / repair demo assignments when none visible with status=all (empty seed, branch mismatch, etc.)
     if (demoLeads.length === 0 && (!statusFilter || statusFilter === 'all')) {
-      await ensureDemoLeads(supabase, customerId, customerBranches);
+      await repairDemoAssignmentsIfNeeded(supabase, customerId, customerBranches);
       let retryQ = supabase.from('lead_assignments').select(selectFields).eq('customer_id', customerId).eq('source', 'demo').order('assigned_at', { ascending: false });
       retryQ = applyAgentScope(retryQ);
       demoLeads = await paginateQuery<AssignRow>(retryQ);
@@ -189,7 +153,28 @@ export async function GET(request: NextRequest) {
     ? { portalUserId: session.portalUser.id, viewAll: false }
     : null;
 
-  const { ids: leadIds, metaMap, bulkCount } = await getCustomerLeadData(supabase, customer.id, leadSource, demoMode, status, agentFilter, customerBranches);
+  let { ids: leadIds, metaMap, bulkCount } = await getCustomerLeadData(supabase, customer.id, leadSource, demoMode, status, agentFilter, customerBranches);
+
+  // Orphaned demo assignments (lead row removed): assignments exist but no matching demo leads
+  if (demoMode && leadIds.length > 0) {
+    let existingDemo = 0;
+    for (let i = 0; i < leadIds.length; i += IN_CHUNK) {
+      const chunk = leadIds.slice(i, i + IN_CHUNK);
+      const { count } = await supabase
+        .from('leads')
+        .select('id', { count: 'exact', head: true })
+        .in('id', chunk)
+        .eq('bron', 'demo');
+      existingDemo += count || 0;
+    }
+    if (existingDemo === 0) {
+      await repairDemoAssignmentsIfNeeded(supabase, customer.id, customerBranches);
+      const refreshed = await getCustomerLeadData(supabase, customer.id, leadSource, demoMode, status, agentFilter, customerBranches);
+      leadIds = refreshed.ids;
+      metaMap = refreshed.metaMap;
+      bulkCount = refreshed.bulkCount;
+    }
+  }
 
   // Build portal_user name lookup for "Toegewezen aan" column
   const portalUserIds = new Set<string>();
@@ -230,8 +215,11 @@ export async function GET(request: NextRequest) {
     if (search) {
       q = q.or(`naam_klant.ilike.%${search}%,email.ilike.%${search}%,telefoonnummer.ilike.%${search}%,postcode.ilike.%${search}%,plaatsnaam.ilike.%${search}%`);
     }
-    if (from) q = q.gte('wervingsdatum', from);
-    if (to) q = q.lte('wervingsdatum', to);
+    // Demo template dates can fall outside a user's date filter; hiding all demos is confusing
+    if (!demoMode) {
+      if (from) q = q.gte('wervingsdatum', from);
+      if (to) q = q.lte('wervingsdatum', to);
+    }
     return q;
   }
 

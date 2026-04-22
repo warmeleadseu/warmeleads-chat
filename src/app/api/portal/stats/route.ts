@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyCustomer, portalUnauthorized } from '@/lib/portalAuth';
 import { createServerClient } from '@/lib/supabase';
 import { hasPermission, forbidden, PERMISSIONS } from '@/lib/portalPermissions';
+import { repairDemoAssignmentsIfNeeded } from '@/lib/demoPortalLeads';
 
 const PAGE_SIZE = 1000;
 const IN_CHUNK = 500;
@@ -44,40 +45,15 @@ export async function GET(request: NextRequest) {
   }
   let assignments = await paginateQuery<{ lead_id: string; status: string | null }>(assignQuery);
 
-  // Re-seed demo leads if demo customer has no demo assignments
-  if (demoMode && assignments.length === 0 && customerBranches.length > 0) {
-    const { data: demoLeads } = await supabase
-      .from('leads')
-      .select('id, branch')
-      .eq('bron', 'demo')
-      .is('customer_id', null)
-      .in('branch', customerBranches);
-
-    if (demoLeads && demoLeads.length > 0) {
-      const DEMO_STATUSES = [
-        { status: 'nieuw', notities: null },
-        { status: 'nieuw', notities: null },
-        { status: 'gecontacteerd', notities: 'Terugbellen na 17:00' },
-        { status: 'offerte', notities: 'Interesse in 10kWh systeem' },
-      ];
-      const rows = demoLeads.map((lead, i) => {
-        const preset = DEMO_STATUSES[i % DEMO_STATUSES.length];
-        return {
-          lead_id: lead.id,
-          customer_id: customer.id,
-          batch_id: null,
-          distance_km: Math.round((3 + Math.random() * 25) * 10) / 10,
-          source: 'demo',
-          status: preset.status,
-          notities: preset.notities,
-        };
-      });
-      await supabase.from('lead_assignments').insert(rows);
-
-      // Re-query after seeding
-      let retryQ = supabase.from('lead_assignments').select('lead_id, status').eq('customer_id', customer.id).eq('source', 'demo').order('assigned_at', { ascending: false });
-      assignments = await paginateQuery<{ lead_id: string; status: string | null }>(retryQ);
-    }
+  if (demoMode && assignments.length === 0) {
+    await repairDemoAssignmentsIfNeeded(supabase, customer.id, customerBranches);
+    let retryQ = supabase
+      .from('lead_assignments')
+      .select('lead_id, status')
+      .eq('customer_id', customer.id)
+      .eq('source', 'demo')
+      .order('assigned_at', { ascending: false });
+    assignments = await paginateQuery<{ lead_id: string; status: string | null }>(retryQ);
   }
 
   const directLeads = demoMode
