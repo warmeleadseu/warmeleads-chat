@@ -665,21 +665,33 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!customer || isAdminView) return;
 
-    const sendHeartbeat = () => {
-      portalFetch('/api/portal/heartbeat', { method: 'POST' }).catch(() => {});
+    const sendHeartbeat = async () => {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+      try {
+        await portalFetch('/api/portal/heartbeat', { method: 'POST' });
+      } catch {
+        // Offline, DNS, tab sleep, etc. — avoid noisy unhandled rejections
+      }
     };
 
-    sendHeartbeat();
-    const interval = setInterval(sendHeartbeat, 2 * 60 * 1000);
+    void sendHeartbeat();
+    const interval = setInterval(() => {
+      void sendHeartbeat();
+    }, 2 * 60 * 1000);
 
     const handleVisibility = () => {
-      if (document.visibilityState === 'visible') sendHeartbeat();
+      if (document.visibilityState === 'visible') void sendHeartbeat();
+    };
+    const handleOnline = () => {
+      void sendHeartbeat();
     };
     document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('online', handleOnline);
 
     return () => {
       clearInterval(interval);
       document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('online', handleOnline);
     };
   }, [customer, isAdminView]);
 
