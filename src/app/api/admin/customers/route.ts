@@ -205,11 +205,16 @@ export async function PUT(request: NextRequest) {
   if (!admin) return unauthorized();
 
   try {
-    const { id, password, ...updates } = await request.json();
+    const { id, password, ...rawUpdates } = await request.json();
     if (!id) return NextResponse.json({ error: 'ID is verplicht' }, { status: 400 });
 
+    // demo_mode kantelt alleen via de Mollie-webhook (eerste betaalde batch) of het registratie-endpoint.
+    // Voorkom dat een admin-PUT per ongeluk een demo-portaal ontdoet van zijn demo-status.
+    const { demo_mode: _ignoredDemoMode, ...updates } = rawUpdates as Record<string, unknown>;
+    void _ignoredDemoMode;
+
     if (password) {
-      updates.password_hash = await bcrypt.hash(password, 12);
+      updates.password_hash = await bcrypt.hash(password as string, 12);
       updates.portal_password = password;
     }
 
