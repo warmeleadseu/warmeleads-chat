@@ -3242,11 +3242,23 @@ interface CustomerPricingEntry {
   notes: string | null;
 }
 
+type PricingProduct = 'leads' | 'appointments';
+
+interface BranchPricingRef {
+  slug: string;
+  name: string;
+  pricing_tiers: PricingTierItem[];
+  nationwide_discount: number;
+  appointment_pricing_tiers: PricingTierItem[];
+  appointment_nationwide_discount: number;
+}
+
 function CustomerPricingPanel({ customer, branchOptions, onClose, embedded }: {
   customer: Customer; branchOptions: BranchOption[]; onClose: () => void; embedded?: boolean;
 }) {
-  const [pricing, setPricing] = useState<CustomerPricingEntry[]>([]);
-  const [branches, setBranches] = useState<{ slug: string; name: string; pricing_tiers: PricingTierItem[]; nationwide_discount: number }[]>([]);
+  const [product, setProduct] = useState<PricingProduct>('leads');
+  const [pricingByProduct, setPricingByProduct] = useState<Record<PricingProduct, CustomerPricingEntry[]>>({ leads: [], appointments: [] });
+  const [branches, setBranches] = useState<BranchPricingRef[]>([]);
   const [loading, setLoading] = useState(true);
   const [editBranch, setEditBranch] = useState<string | null>(null);
   const [editTiers, setEditTiers] = useState<PricingTierItem[]>([]);
@@ -3255,17 +3267,40 @@ function CustomerPricingPanel({ customer, branchOptions, onClose, embedded }: {
   const [newTierLeads, setNewTierLeads] = useState('');
   const [newTierPrice, setNewTierPrice] = useState('');
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
+
+  const pricing = pricingByProduct[product];
+  const unitLabel = product === 'appointments' ? 'afspraken' : 'leads';
+  const unitSingular = product === 'appointments' ? 'afspraak' : 'lead';
 
   const fetchData = useCallback(async () => {
-    const [pRes, bRes] = await Promise.all([
-      adminFetch(`/api/admin/customer-pricing?customer_id=${customer.id}`),
+    const [pLeadsRes, pApptRes, bRes] = await Promise.all([
+      adminFetch(`/api/admin/customer-pricing?customer_id=${customer.id}&product=leads`),
+      adminFetch(`/api/admin/customer-pricing?customer_id=${customer.id}&product=appointments`),
       adminFetch('/api/admin/branches'),
     ]);
-    if (pRes.ok) { const d = await pRes.json(); setPricing(d.pricing || []); }
+    const next: Record<PricingProduct, CustomerPricingEntry[]> = { leads: [], appointments: [] };
+    if (pLeadsRes.ok) { const d = await pLeadsRes.json(); next.leads = d.pricing || []; }
+    if (pApptRes.ok) { const d = await pApptRes.json(); next.appointments = d.pricing || []; }
+    setPricingByProduct(next);
     if (bRes.ok) {
       const d = await bRes.json();
-      setBranches((d.branches || []).filter((b: { is_active: boolean }) => b.is_active).map((b: { slug: string; name: string; pricing_tiers: PricingTierItem[]; nationwide_discount: number }) => ({
-        slug: b.slug, name: b.name, pricing_tiers: b.pricing_tiers || [], nationwide_discount: Number(b.nationwide_discount) || 0,
+      type RawBranch = {
+        slug: string;
+        name: string;
+        is_active: boolean;
+        pricing_tiers?: PricingTierItem[];
+        nationwide_discount?: number | string | null;
+        appointment_pricing_tiers?: PricingTierItem[];
+        appointment_nationwide_discount?: number | string | null;
+      };
+      setBranches((d.branches || []).filter((b: RawBranch) => b.is_active).map((b: RawBranch) => ({
+        slug: b.slug,
+        name: b.name,
+        pricing_tiers: b.pricing_tiers || [],
+        nationwide_discount: Number(b.nationwide_discount) || 0,
+        appointment_pricing_tiers: b.appointment_pricing_tiers || [],
+        appointment_nationwide_discount: Number(b.appointment_nationwide_discount) || 0,
       })));
     }
     setLoading(false);
@@ -3275,6 +3310,25 @@ function CustomerPricingPanel({ customer, branchOptions, onClose, embedded }: {
 
   const customerBranches = branches.filter(b => customer.branches.includes(b.slug));
 
+  const branchDefaults = (b: BranchPricingRef) => product === 'appointments'
+    ? { tiers: b.appointment_pricing_tiers, discount: b.appointment_nationwide_discount }
+    : { tiers: b.pricing_tiers, discount: b.nationwide_discount };
+
+  const cancelEdit = () => {
+    setEditBranch(null);
+    setEditTiers([]);
+    setEditDiscount('');
+    setEditNotes('');
+    setNewTierLeads('');
+    setNewTierPrice('');
+    setSaveError('');
+  };
+
+  useEffect(() => {
+    cancelEdit();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [product]);
+
   const startEdit = (branchSlug: string) => {
     const existing = pricing.find(p => p.branch_slug === branchSlug);
     setEditBranch(branchSlug);
@@ -3283,6 +3337,7 @@ function CustomerPricingPanel({ customer, branchOptions, onClose, embedded }: {
     setEditNotes(existing?.notes || '');
     setNewTierLeads('');
     setNewTierPrice('');
+    setSaveError('');
   };
 
   const addTier = () => {
@@ -3298,8 +3353,6 @@ function CustomerPricingPanel({ customer, branchOptions, onClose, embedded }: {
   const removeTier = (idx: number) => {
     setEditTiers(prev => prev.filter((_, i) => i !== idx));
   };
-
-  const [saveError, setSaveError] = useState('');
 
   const savePricing = async () => {
     if (!editBranch) return;
@@ -3322,6 +3375,7 @@ function CustomerPricingPanel({ customer, branchOptions, onClose, embedded }: {
         body: JSON.stringify({
           customer_id: customer.id,
           branch_slug: editBranch,
+          product,
           pricing_tiers: finalTiers,
           nationwide_discount: editDiscount ? parseFloat(editDiscount) : null,
           notes: editNotes || null,
@@ -3346,13 +3400,32 @@ function CustomerPricingPanel({ customer, branchOptions, onClose, embedded }: {
     if (!confirm('Klantspecifieke prijs verwijderen? De standaard brancheprijs wordt dan weer gebruikt.')) return;
     await adminFetch('/api/admin/customer-pricing', {
       method: 'DELETE',
-      body: JSON.stringify({ id }),
+      body: JSON.stringify({ id, product }),
     });
     fetchData();
   };
 
   const pricingContentJSX = (
         <div className={`${embedded ? '' : 'flex-1 overflow-y-auto'} p-5 space-y-4`}>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Product</p>
+            <div className="inline-flex items-center gap-0.5 rounded-lg bg-slate-100 p-0.5 ring-1 ring-slate-200">
+              <button
+                type="button"
+                onClick={() => setProduct('leads')}
+                className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition ${product === 'leads' ? 'bg-white text-brand-purple shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                Leads
+              </button>
+              <button
+                type="button"
+                onClick={() => setProduct('appointments')}
+                className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition ${product === 'appointments' ? 'bg-white text-brand-purple shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                Afspraken
+              </button>
+            </div>
+          </div>
           {loading ? (
             <div className="space-y-3">
               {[0, 1].map(i => <div key={i} className="h-20 animate-pulse rounded-xl bg-slate-100" />)}
@@ -3366,35 +3439,36 @@ function CustomerPricingPanel({ customer, branchOptions, onClose, embedded }: {
             <>
               <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
                 <p className="text-xs text-amber-700">
-                  Stel hier afwijkende prijzen in per branche. Als er geen klantspecifieke prijs is ingesteld, gelden de standaard brancheprijzen.
+                  Stel hier afwijkende {unitLabel}prijzen in per branche. Als er geen klantspecifieke prijs is ingesteld, gelden de standaard brancheprijzen voor {unitLabel}.
                 </p>
               </div>
 
               {customerBranches.map(b => {
                 const cp = pricing.find(p => p.branch_slug === b.slug);
                 const isEditing = editBranch === b.slug;
-                const hasTiers = b.pricing_tiers && b.pricing_tiers.length > 0;
+                const defaults = branchDefaults(b);
+                const hasTiers = defaults.tiers && defaults.tiers.length > 0;
 
                 return (
-                  <div key={b.slug} className="rounded-xl border border-slate-200 overflow-hidden">
+                  <div key={`${product}:${b.slug}`} className="rounded-xl border border-slate-200 overflow-hidden">
                     <div className="flex items-start justify-between bg-slate-50 px-4 py-3">
                       <div>
                         <p className="text-sm font-semibold text-slate-900">{b.name}</p>
                         {hasTiers && (
                           <div className="mt-1 flex flex-wrap gap-1">
-                            {[...b.pricing_tiers].sort((a, b) => a.min_leads - b.min_leads).map((t, i) => (
+                            {[...defaults.tiers].sort((a, b) => a.min_leads - b.min_leads).map((t, i) => (
                               <span key={i} className="rounded bg-slate-200/70 px-1.5 py-0.5 text-[10px] text-slate-500">
                                 {t.min_leads}+ → €{Number(t.price_per_lead).toFixed(2)}
                               </span>
                             ))}
-                            {Number(b.nationwide_discount) > 0 && (
+                            {Number(defaults.discount) > 0 && (
                               <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] text-emerald-600">
-                                -€{b.nationwide_discount.toFixed(2)} landelijk
+                                -€{Number(defaults.discount).toFixed(2)} landelijk
                               </span>
                             )}
                           </div>
                         )}
-                        {!hasTiers && <p className="mt-0.5 text-[10px] text-slate-400 italic">Geen standaardstaffels ingesteld</p>}
+                        {!hasTiers && <p className="mt-0.5 text-[10px] text-slate-400 italic">Geen standaardstaffels voor {unitLabel}</p>}
                       </div>
                       {!isEditing && (
                         <button onClick={() => startEdit(b.slug)}
@@ -3442,7 +3516,7 @@ function CustomerPricingPanel({ customer, branchOptions, onClose, embedded }: {
                               {editTiers.map((t, i) => (
                                 <div key={i} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
                                   <span className="flex-1 text-sm text-slate-700">
-                                    Vanaf <span className="font-semibold">{t.min_leads}</span> leads
+                                    Vanaf <span className="font-semibold">{t.min_leads}</span> {unitLabel}
                                   </span>
                                   <span className="text-sm font-bold text-slate-900">€{Number(t.price_per_lead).toFixed(2)}</span>
                                   <button onClick={() => removeTier(i)} className="rounded p-1 text-slate-300 hover:text-red-500">
@@ -3457,16 +3531,16 @@ function CustomerPricingPanel({ customer, branchOptions, onClose, embedded }: {
 
                           <div className="flex items-end gap-2">
                             <div className="flex-1">
-                              <label className="mb-0.5 block text-[10px] text-slate-400">Vanaf (leads)</label>
+                              <label className="mb-0.5 block text-[10px] text-slate-400">Vanaf ({unitLabel})</label>
                               <input type="number" min="1" value={newTierLeads} onChange={e => setNewTierLeads(e.target.value)}
-                                placeholder="bijv. 250"
+                                placeholder={product === 'appointments' ? 'bijv. 25' : 'bijv. 250'}
                                 onKeyDown={e => e.key === 'Enter' && addTier()}
                                 className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
                             </div>
                             <div className="flex-1">
-                              <label className="mb-0.5 block text-[10px] text-slate-400">€ per lead</label>
+                              <label className="mb-0.5 block text-[10px] text-slate-400">€ per {unitSingular}</label>
                               <input type="number" min="0" step="0.50" value={newTierPrice} onChange={e => setNewTierPrice(e.target.value)}
-                                placeholder="bijv. 20.50"
+                                placeholder={product === 'appointments' ? 'bijv. 120.00' : 'bijv. 20.50'}
                                 onKeyDown={e => e.key === 'Enter' && addTier()}
                                 className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
                             </div>
@@ -3495,7 +3569,7 @@ function CustomerPricingPanel({ customer, branchOptions, onClose, embedded }: {
                         </div>
 
                         <div className="flex gap-2 pt-1">
-                          <button onClick={() => setEditBranch(null)}
+                          <button onClick={cancelEdit}
                             className="flex-1 rounded-lg border border-slate-200 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">Annuleren</button>
                           <button onClick={savePricing} disabled={saving}
                             className="flex-1 rounded-lg bg-button-gradient py-2 text-sm font-bold text-white disabled:opacity-50">
@@ -3526,7 +3600,7 @@ function CustomerPricingPanel({ customer, branchOptions, onClose, embedded }: {
           <div className="flex items-center justify-between px-5 py-4">
             <div>
               <h2 className="text-lg font-bold text-slate-900">Klantprijzen</h2>
-              <p className="mt-0.5 text-xs text-slate-500">{customer.name} &middot; Afwijkende staffelprijzen per branche</p>
+              <p className="mt-0.5 text-xs text-slate-500">{customer.name} &middot; Afwijkende staffelprijzen voor leads en afspraken</p>
             </div>
             <button onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"><XMarkIcon className="h-5 w-5" /></button>
           </div>

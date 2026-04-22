@@ -204,21 +204,23 @@ export default function BestellenPage() {
   }, [customer, sourceBatchId, orderRedirectId, redirectStatus, fetchData]);
 
   useEffect(() => {
+    if (product === 'appointments') { setPricingData(null); return; }
     if (!selectedBranch) { setPricingData(null); return; }
     portalFetch(`/api/portal/pricing?branch=${selectedBranch}`)
       .then(r => r.ok ? r.json() : null)
       .then(data => { if (data) setPricingData(data); })
       .catch(() => {});
-  }, [selectedBranch]);
+  }, [selectedBranch, product]);
 
   useEffect(() => {
+    if (product === 'appointments') return;
     portalFetch('/api/portal/welcome-offer')
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         if (data) setWelcomeDiscount({ active: data.active, expiresAt: data.expires_at });
       })
       .catch(() => {});
-  }, []);
+  }, [product]);
 
   const allBatches = useMemo(() => [...batches.active, ...batches.completed], [batches]);
 
