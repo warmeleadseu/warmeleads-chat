@@ -57,6 +57,7 @@ interface ApptOrder {
 }
 
 interface PricingData {
+  branch: string;
   tiers: { min_leads: number; price_per_lead: number }[];
   min_batch_size: number;
   nationwide_discount: number;
@@ -102,10 +103,14 @@ export default function AppointmentsOrderView({
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [batchesRes, ordersRes, branchesRes] = await Promise.all([
+      const guessBranch = customerBranches[0] || null;
+      const [batchesRes, ordersRes, branchesRes, pricingRes] = await Promise.all([
         portalFetch('/api/portal/appointment-batches'),
         portalFetch('/api/portal/appointment-orders'),
         portalFetch('/api/portal/branches'),
+        guessBranch
+          ? portalFetch(`/api/portal/appointment-pricing?branch=${encodeURIComponent(guessBranch)}`).catch(() => null)
+          : Promise.resolve(null),
       ]);
       if (batchesRes.ok) setBatches(await batchesRes.json());
       if (ordersRes.ok) setOrders(await ordersRes.json());
@@ -115,10 +120,28 @@ export default function AppointmentsOrderView({
         (data.branches || data || []).forEach((b: { slug: string; name: string }) => { map[b.slug] = b.name; });
         setBranchNames(map);
       }
+      if (pricingRes && 'ok' in pricingRes && pricingRes.ok && guessBranch) {
+        try {
+          const data = await pricingRes.json();
+          if (data) {
+            setPricingData({
+              branch: guessBranch,
+              tiers: data.tiers || [],
+              min_batch_size: data.min_batch_size,
+              nationwide_discount: data.nationwide_discount,
+              is_custom: data.is_custom,
+              default_duration: data.default_duration,
+              default_travel_buffer: data.default_travel_buffer,
+              branch_name: data.branch_name,
+            });
+            setBatchSize(prev => Math.max(prev, data.min_batch_size));
+          }
+        } catch { /* ignore */ }
+      }
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [customerBranches]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -130,11 +153,13 @@ export default function AppointmentsOrderView({
 
   useEffect(() => {
     if (!selectedBranch) return;
+    if (pricingData && pricingData.branch === selectedBranch) return;
     portalFetch(`/api/portal/appointment-pricing?branch=${encodeURIComponent(selectedBranch)}`)
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         if (!data) return;
         setPricingData({
+          branch: selectedBranch,
           tiers: data.tiers || [],
           min_batch_size: data.min_batch_size,
           nationwide_discount: data.nationwide_discount,
@@ -146,7 +171,7 @@ export default function AppointmentsOrderView({
         setBatchSize(prev => Math.max(prev, data.min_batch_size));
       })
       .catch(() => {});
-  }, [selectedBranch]);
+  }, [selectedBranch, pricingData]);
 
   const effectiveSize = useCustom ? (parseInt(customSize) || 0) : batchSize;
   const minBatchSize = pricingData?.min_batch_size || 5;

@@ -25,6 +25,8 @@ export interface Order {
 }
 
 export interface PricingData {
+  branch: string;
+  branch_name?: string;
   tiers: { min_leads: number; price_per_lead: number }[];
   min_batch_size: number;
   nationwide_discount: number;

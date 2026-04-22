@@ -80,15 +80,35 @@ export default function BestellenPage() {
   const fetchData = useCallback(async () => {
     if (!customer) return;
     try {
-      const [batchRaw, orderRaw] = await Promise.all([
+      const guessBranch = customer.branches?.[0] || null;
+      const [batchRaw, orderRaw, welcomeRaw, pricingRaw] = await Promise.all([
         portalFetch('/api/portal/batches'),
         portalFetch('/api/portal/orders'),
+        portalFetch('/api/portal/welcome-offer').catch(() => null),
+        guessBranch
+          ? portalFetch(`/api/portal/pricing?branch=${guessBranch}`).catch(() => null)
+          : Promise.resolve(null),
       ]);
       const batchRes = batchRaw.ok ? await batchRaw.json() : { active: [], completed: [] };
       const orderRes = orderRaw.ok ? await orderRaw.json() : [];
       if (!batchRaw.ok || !orderRaw.ok) toast.error('Gegevens konden niet volledig geladen worden');
       setBatches({ active: batchRes.active || [], completed: batchRes.completed || [] });
       setOrders(Array.isArray(orderRes) ? orderRes : []);
+
+      if (welcomeRaw && 'ok' in welcomeRaw && welcomeRaw.ok) {
+        try {
+          const welcome = await welcomeRaw.json();
+          if (welcome) setWelcomeDiscount({ active: welcome.active, expiresAt: welcome.expires_at });
+        } catch { /* ignore */ }
+      }
+
+      if (pricingRaw && 'ok' in pricingRaw && pricingRaw.ok) {
+        try {
+          const pricing = await pricingRaw.json();
+          if (pricing) setPricingData(pricing);
+        } catch { /* ignore */ }
+      }
+
       return { batches: batchRes, orders: Array.isArray(orderRes) ? orderRes : [] };
     } catch {
       toast.error('Gegevens konden niet geladen worden');
@@ -156,22 +176,13 @@ export default function BestellenPage() {
 
   useEffect(() => {
     if (product === 'appointments') { setPricingData(null); return; }
-    if (!selectedBranch) { setPricingData(null); return; }
+    if (!selectedBranch) return;
+    if (pricingData && pricingData.branch === selectedBranch) return;
     portalFetch(`/api/portal/pricing?branch=${selectedBranch}`)
       .then(r => r.ok ? r.json() : null)
       .then(data => { if (data) setPricingData(data); })
       .catch(() => {});
-  }, [selectedBranch, product]);
-
-  useEffect(() => {
-    if (product === 'appointments') return;
-    portalFetch('/api/portal/welcome-offer')
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        if (data) setWelcomeDiscount({ active: data.active, expiresAt: data.expires_at });
-      })
-      .catch(() => {});
-  }, [product]);
+  }, [selectedBranch, product, pricingData]);
 
   const allBatches = useMemo(() => [...batches.active, ...batches.completed], [batches]);
 
@@ -209,6 +220,7 @@ export default function BestellenPage() {
   const totalInclBtw = subtotal + btwAmount;
   const minBatchSize = pricingData?.min_batch_size || 10;
   const QUICK_SIZES = useMemo(() => computeQuickSizes(minBatchSize), [minBatchSize]);
+  const pricingReady = !!pricingData && (!selectedBranch || pricingData.branch === selectedBranch);
 
   const pendingCancelOrder = pendingCancelOrderId
     ? orders.find(o => o.id === pendingCancelOrderId) || null
@@ -314,7 +326,7 @@ export default function BestellenPage() {
 
   const pendingOrders = orders.filter(o => o.status !== 'paid');
   const paidOrders = orders.filter(o => o.status === 'paid');
-  const canCheckout = !submitting && effectiveSize >= minBatchSize && !!sourceBatch;
+  const canCheckout = !submitting && pricingReady && effectiveSize >= minBatchSize && !!sourceBatch;
 
   return (
     <div className={`space-y-6 ${T.pagePaddingForSticky}`}>
@@ -449,49 +461,62 @@ export default function BestellenPage() {
       })()}
 
       <PortalSection title="Hoeveel leads wil je bestellen?">
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {QUICK_SIZES.map(size => {
-            const isActive = !useCustom && batchSize === size;
-            const sizePrice = findTierPrice(pricingData?.tiers, size, pricePerLead);
-            const price = roundMoney(size * sizePrice * (1 + BTW_RATE));
-            return (
-              <ChoiceTile
-                key={size}
-                selected={isActive}
-                onClick={() => { setBatchSize(size); setUseCustom(false); }}
-                title={size}
-                meta="leads"
-                footer={<>&euro;{price.toFixed(2)} <span className="font-normal text-slate-400">incl.</span></>}
+        {pricingReady ? (
+          <>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {QUICK_SIZES.map(size => {
+                const isActive = !useCustom && batchSize === size;
+                const sizePrice = findTierPrice(pricingData?.tiers, size, pricePerLead);
+                const price = roundMoney(size * sizePrice * (1 + BTW_RATE));
+                return (
+                  <ChoiceTile
+                    key={size}
+                    selected={isActive}
+                    onClick={() => { setBatchSize(size); setUseCustom(false); }}
+                    title={size}
+                    meta="leads"
+                    footer={<>&euro;{price.toFixed(2)} <span className="font-normal text-slate-400">incl.</span></>}
+                  />
+                );
+              })}
+            </div>
+
+            <div className="mt-3">
+              <NumberStepper
+                active={useCustom}
+                onActivate={() => { setUseCustom(true); if (!customSize) setCustomSize(String(batchSize || 75)); }}
+                value={customSize}
+                onChange={setCustomSize}
+                min={minBatchSize}
+                step={10}
+                prompt="Ander aantal kiezen..."
+                previewTitle={`${effectiveSize} leads`}
+                previewSubtitle={`${formatCurrency(totalInclBtw)} incl. BTW`}
               />
-            );
-          })}
-        </div>
+            </div>
 
-        <div className="mt-3">
-          <NumberStepper
-            active={useCustom}
-            onActivate={() => { setUseCustom(true); if (!customSize) setCustomSize(String(batchSize || 75)); }}
-            value={customSize}
-            onChange={setCustomSize}
-            min={minBatchSize}
-            step={10}
-            prompt="Ander aantal kiezen..."
-            previewTitle={`${effectiveSize} leads`}
-            previewSubtitle={`${formatCurrency(totalInclBtw)} incl. BTW`}
-          />
-        </div>
+            {effectiveSize > 0 && effectiveSize < minBatchSize && (
+              <p className="mt-2 text-center text-xs text-red-500">Minimaal {minBatchSize} leads per batch</p>
+            )}
 
-        {effectiveSize > 0 && effectiveSize < minBatchSize && (
-          <p className="mt-2 text-center text-xs text-red-500">Minimaal {minBatchSize} leads per batch</p>
-        )}
-
-        {pricingData?.tiers && (
-          <PricingTierLegend
-            tiers={pricingData.tiers}
-            effectiveSize={effectiveSize}
-            unitLabel="leads"
-            isCustom={pricingData.is_custom}
-          />
+            {pricingData?.tiers && (
+              <PricingTierLegend
+                tiers={pricingData.tiers}
+                effectiveSize={effectiveSize}
+                unitLabel="leads"
+                isCustom={pricingData.is_custom}
+              />
+            )}
+          </>
+        ) : (
+          <div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {[0, 1, 2, 3].map(i => (
+                <div key={i} className="h-[86px] animate-pulse rounded-2xl border border-slate-200 bg-white" />
+              ))}
+            </div>
+            <div className="mt-3 h-[46px] animate-pulse rounded-2xl border border-dashed border-slate-200 bg-white" />
+          </div>
         )}
       </PortalSection>
 
