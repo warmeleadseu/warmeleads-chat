@@ -324,7 +324,7 @@ export default function AppointmentsOrderView({
       )}
 
       {sourceBatch && (
-        <PortalSection bare className={`${T.card} ${T.cardPadding}`}>
+        <section className={`${T.card} ${T.cardPadding}`}>
           <div className="mb-2 flex items-center justify-between">
             <span className={T.eyebrow}>Huidige batch</span>
             <span className="text-xs font-bold text-slate-600">
@@ -343,7 +343,7 @@ export default function AppointmentsOrderView({
               Bijna vol! Bestel nu een vervolg batch zodat je agenda doorloopt.
             </p>
           )}
-        </PortalSection>
+        </section>
       )}
 
       {pricingData && dynamicPrice > 0 ? (
