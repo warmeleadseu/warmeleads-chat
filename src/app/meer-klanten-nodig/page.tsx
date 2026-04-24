@@ -160,7 +160,7 @@ export default function MeerKlantenNodigPage() {
               },
               {
                 title: 'Marketing is duur',
-                description: '€3.000–€5.000 per maand aan Google Ads? SEO duurt maanden? Social media advertenties die niet converteren?',
+                description: '€3.000 tot €5.000 per maand aan Google Ads? SEO duurt maanden? Social media advertenties die niet converteren?',
                 icon: MegaphoneIcon,
                 accent: 'bg-brand-pink',
               },
@@ -350,8 +350,8 @@ export default function MeerKlantenNodigPage() {
                     <PhoneIcon className="h-5 w-5 text-white" />
                   </div>
                   <div>
-                    <p className="text-[14px] font-semibold text-slate-900">085 – 047 7067</p>
-                    <p className="text-[11px] text-slate-500">Bereikbaar ma-vr 9:00 – 17:00</p>
+                    <p className="text-[14px] font-semibold text-slate-900">085 047 7067</p>
+                    <p className="text-[11px] text-slate-500">Bereikbaar ma-vr 9:00 tot 17:00</p>
                   </div>
                 </a>
 

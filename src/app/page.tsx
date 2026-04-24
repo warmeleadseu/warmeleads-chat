@@ -371,7 +371,7 @@ WarmeLeads genereert exclusieve, verse leads voor jouw bedrijf.
 
             {[
               { step: '01', title: 'Strategiegesprek', description: 'We bepalen samen doelgroep, regio, volume en gewenste kostprijs per lead. Je krijgt een helder plan met concrete verwachtingen.' },
-              { step: '02', title: 'Campagne op maat', description: 'We bouwen campagnes die we vooraf grondig testen, afgestemd op jouw targetgebied en propositie. Klaar binnen 24–72 uur.' },
+              { step: '02', title: 'Campagne op maat', description: 'We bouwen campagnes die we vooraf grondig testen, afgestemd op jouw targetgebied en propositie. Klaar binnen 24 tot 72 uur.' },
               { step: '03', title: 'Automatische quality checks', description: 'Elke lead doorloopt automatisch meerdere kwaliteitscontroles. Contactgegevens, interesse en geschiktheid worden geverifieerd.' },
               { step: '04', title: 'Realtime in jouw portaal', description: 'Leads die aan al jouw eisen voldoen worden direct in je portaal geplaatst. Bel, app of mail ze met één klik.' },
             ].map((item, i) => (
@@ -603,7 +603,7 @@ WarmeLeads genereert exclusieve, verse leads voor jouw bedrijf.
               </div>
 
               <p className="relative mt-4 text-[13px] leading-relaxed text-slate-600 md:text-sm">
-                Klik door om te zien hoe we leads leveren in jouw vakgebied — inclusief
+                Klik door om te zien hoe we leads leveren in jouw vakgebied, inclusief
                 prijsindicatie, levertijd en voorbeeldresultaten.
               </p>
 
@@ -663,7 +663,7 @@ WarmeLeads genereert exclusieve, verse leads voor jouw bedrijf.
 
               <p className="relative mt-4 text-[13px] leading-relaxed text-slate-600 md:text-sm">
                 Zit jouw branche er nog niet tussen? We investeren eerst in marktonderzoek,
-                campagne-testen en strategie — en verdienen dat voor jou volledig terug in leads.
+                campagne-testen en strategie, en verdienen dat voor jou volledig terug in leads.
               </p>
 
               <ol className="relative mt-6 space-y-4 md:mt-7">
@@ -721,7 +721,7 @@ WarmeLeads genereert exclusieve, verse leads voor jouw bedrijf.
                 <CheckBadgeIcon className="mt-0.5 h-5 w-5 shrink-0 text-brand-orange" />
                 <p className="text-[12px] leading-relaxed text-slate-700 md:text-[13px]">
                   <span className="font-semibold text-slate-900">Nul risico.</span>{' '}
-                  De €750 verdien je volledig terug in leads — het kost je uiteindelijk niets extra.
+                  De €750 verdien je volledig terug in leads. Het kost je uiteindelijk niets extra.
                 </p>
               </div>
 

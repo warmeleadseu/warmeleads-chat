@@ -50,7 +50,7 @@ export function BranchLeadsPageContent({ metadata }: BranchLeadsPageProps) {
         <div className="relative z-10 mx-auto max-w-6xl px-5 text-center text-white lg:px-8">
           <h1 className="mb-4 text-4xl font-bold leading-tight md:text-5xl lg:text-6xl">
             {metadata.heroTitle}
-            <span className="sr-only"> — {metadata.title}</span>
+            <span className="sr-only">: {metadata.title}</span>
           </h1>
           <p className="mb-4 text-xl text-white/90 md:text-2xl">
             {metadata.heroSubtitle}
