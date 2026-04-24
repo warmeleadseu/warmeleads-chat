@@ -19,6 +19,12 @@ import {
   UserIcon,
   MapPinIcon,
   BeakerIcon,
+  SunIcon,
+  FireIcon,
+  Battery100Icon,
+  BanknotesIcon,
+  HomeModernIcon,
+  BuildingOffice2Icon,
 } from '@heroicons/react/24/outline';
 import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid';
 import { Header } from '@/components/Header';
@@ -27,6 +33,31 @@ import { IPhoneMockup } from '@/components/IPhoneMockup';
 import { SoftGlow } from '@/components/ui/SoftGlow';
 import { FadeOnView } from '@/components/ui/FadeOnView';
 import { useInViewport } from '@/hooks/useInViewport';
+
+function SnowflakeIcon({ className = '' }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M12 2v20" />
+      <path d="M9.5 4.5 12 7l2.5-2.5" />
+      <path d="M9.5 19.5 12 17l2.5 2.5" />
+      <path d="M3.34 7 20.66 17" />
+      <path d="m6.72 6.27-.7 2.58-2.58.7" />
+      <path d="m17.28 17.73.7-2.58 2.58-.7" />
+      <path d="M3.34 17 20.66 7" />
+      <path d="m6.02 15.15.7 2.58 2.58.7" />
+      <path d="m17.98 8.85-.7-2.58-2.58-.7" />
+    </svg>
+  );
+}
 
 const fadeUp = {
   hidden: { opacity: 0, y: 30 },
@@ -532,91 +563,175 @@ WarmeLeads genereert exclusieve, verse leads voor jouw bedrijf.
       </section>
 
       {/* ── Verticals + New branches ── */}
-      <section className="bg-gradient-to-b from-white to-slate-50 [content-visibility:auto] [contain-intrinsic-size:1000px]">
-        <div className="mx-auto max-w-7xl px-5 py-14 md:py-20 lg:px-8">
-          <div className="grid gap-5 md:grid-cols-2 md:gap-8">
-            <FadeOnView className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm md:p-7">
-              <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-brand-purple md:mb-3 md:text-[12px]">
-                Onze markten
-              </p>
-              <h2 className="text-xl font-bold tracking-tight md:text-2xl">
-                Gespecialiseerd in verduurzaming
-              </h2>
-              <p className="mt-2 text-[13px] leading-relaxed text-slate-600 md:mt-3 md:text-sm">
-                We zijn gespecialiseerd in leadgeneratie voor de verduurzamingsbranche, maar
-                genereren leads in vrijwel elke branche.
-              </p>
-              <div className="mt-5 grid grid-cols-2 gap-2 md:mt-6 md:grid-cols-3">
-                {[
-                  { label: 'Zonnepanelen', href: '/leads-zonnepanelen' },
-                  { label: 'Warmtepompen', href: '/leads-warmtepompen' },
-                  { label: 'Thuisbatterijen', href: '/leads-thuisbatterijen' },
-                  { label: 'Financial Lease', href: '/leads-financial-lease' },
-                  { label: 'Airco', href: '/leads-airco' },
-                  { label: 'Isolatie', href: '/maatwerk-leads' },
-                  { label: 'Laadpalen', href: '/maatwerk-leads' },
-                  { label: 'B2B Energie', href: '/maatwerk-leads' },
-                ].map((item) => (
-                  <Link
-                    key={item.label}
-                    href={item.href}
-                    className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-center text-[12px] font-semibold text-slate-700 transition hover:border-brand-purple/30 hover:bg-brand-purple/5 hover:text-brand-purple md:px-3 md:py-2.5 md:text-[13px]"
-                  >
-                    {item.label}
-                  </Link>
-                ))}
-              </div>
-            </FadeOnView>
+      <section className="relative overflow-hidden bg-gradient-to-b from-white to-slate-50 [content-visibility:auto] [contain-intrinsic-size:1100px]">
+        <SoftGlow color="purple" size="520px" intensity={0.08} className="-left-24 top-10" />
+        <SoftGlow color="orange" size="520px" intensity={0.08} className="-right-24 bottom-10" />
 
-            <FadeOnView className="flex flex-col rounded-xl border border-slate-200 bg-white p-5 shadow-sm md:p-7">
-              <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-brand-pink md:mb-3 md:text-[12px]">
-                Nieuwe branche?
-              </p>
-              <h3 className="text-xl font-bold tracking-tight md:text-2xl">
-                Wij onderzoeken het voor je
-              </h3>
-              <p className="mt-2 text-[13px] leading-relaxed text-slate-600 md:mt-3 md:text-sm">
-                Werkt u in een branche waarin we nog niet eerder leads hebben gegenereerd?
-                Geen probleem. We investeren eerst in onderzoek om de beste strategie
-                en tarieven te bepalen.
-              </p>
+        <div className="relative mx-auto max-w-7xl px-5 py-14 md:py-20 lg:px-8">
+          <FadeOnView className="mx-auto max-w-2xl text-center">
+            <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-brand-purple md:mb-3 md:text-[12px]">
+              Onze expertise
+            </p>
+            <h2 className="text-2xl font-bold tracking-tight md:text-3xl lg:text-4xl">
+              In elke branche thuis.
+              <br />
+              <span className="text-slate-500">Van zonnepanelen tot jouw niche.</span>
+            </h2>
+            <p className="mt-3 text-[14px] leading-relaxed text-slate-600 md:mt-4 md:text-[15px]">
+              We zijn groot geworden in verduurzaming, maar draaien campagnes in vrijwel elke
+              branche. Staat de jouwe er nog niet tussen? Dan onderzoeken we hem persoonlijk.
+            </p>
+          </FadeOnView>
 
-              <div className="mt-5 rounded-xl border border-brand-orange/20 bg-brand-orange/5 p-4 md:mt-6 md:p-5">
-                <div className="flex items-start gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-orange">
-                    <BeakerIcon className="h-5 w-5 text-white" />
-                  </div>
-                  <div>
-                    <p className="text-[14px] font-bold text-slate-900 md:text-[15px]">Onderzoekskosten: €750</p>
-                    <p className="mt-1 text-[12px] leading-relaxed text-slate-600 md:text-[13px]">
-                      Dit bedrag investeren we in marktonderzoek, campagne-testen en strategie-ontwikkeling
-                      voor jouw branche. Je krijgt dit bedrag volledig terug in leads, dus het kost je
-                      uiteindelijk niets extra.
-                    </p>
-                  </div>
+          <div className="mt-10 grid gap-5 md:mt-14 md:grid-cols-2 md:gap-6 lg:gap-8">
+            {/* ── Card 1: Onze markten ── */}
+            <FadeOnView className="group/card relative flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-[box-shadow,border-color] hover:border-slate-300 hover:shadow-md md:p-8">
+              <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-brand-purple/[0.06] blur-2xl" />
+
+              <div className="relative flex items-center gap-3">
+                <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand-purple/10 ring-1 ring-inset ring-brand-purple/15">
+                  <ShieldCheckIcon className="h-5 w-5 text-brand-purple" />
+                </span>
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-widest text-brand-purple md:text-[12px]">
+                    Onze markten
+                  </p>
+                  <h3 className="mt-0.5 text-lg font-bold tracking-tight text-slate-900 md:text-xl">
+                    8 branches die we door en door kennen
+                  </h3>
                 </div>
               </div>
 
-              <div className="mt-5 grid grid-cols-3 gap-2 md:mt-6 md:gap-3">
+              <p className="relative mt-4 text-[13px] leading-relaxed text-slate-600 md:text-sm">
+                Klik door om te zien hoe we leads leveren in jouw vakgebied — inclusief
+                prijsindicatie, levertijd en voorbeeldresultaten.
+              </p>
+
+              <div className="relative mt-6 grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:mt-7 md:gap-3">
                 {[
-                  { value: '€750', label: 'Onderzoek', bg: 'bg-brand-navy' },
-                  { value: '100%', label: 'Terug in leads', bg: 'bg-brand-purple' },
-                  { value: '2-4 wk', label: 'Onderzoekstijd', bg: 'bg-brand-orange' },
+                  { label: 'Zonnepanelen', href: '/leads-zonnepanelen', Icon: SunIcon, accent: 'orange' as const },
+                  { label: 'Warmtepompen', href: '/leads-warmtepompen', Icon: FireIcon, accent: 'pink' as const },
+                  { label: 'Thuisbatterijen', href: '/leads-thuisbatterijen', Icon: Battery100Icon, accent: 'purple' as const },
+                  { label: 'Financial Lease', href: '/leads-financial-lease', Icon: BanknotesIcon, accent: 'navy' as const },
+                  { label: 'Airco', href: '/leads-airco', Icon: SnowflakeIcon, accent: 'purple' as const },
+                  { label: 'Isolatie', href: '/maatwerk-leads', Icon: HomeModernIcon, accent: 'orange' as const },
+                  { label: 'Laadpalen', href: '/maatwerk-leads', Icon: BoltIcon, accent: 'pink' as const },
+                  { label: 'B2B Energie', href: '/maatwerk-leads', Icon: BuildingOffice2Icon, accent: 'navy' as const },
+                ].map((item) => {
+                  const accentMap = {
+                    purple: { bg: 'bg-brand-purple/10', text: 'text-brand-purple', ring: 'group-hover:border-brand-purple/40' },
+                    pink: { bg: 'bg-brand-pink/10', text: 'text-brand-pink', ring: 'group-hover:border-brand-pink/40' },
+                    orange: { bg: 'bg-brand-orange/10', text: 'text-brand-orange', ring: 'group-hover:border-brand-orange/40' },
+                    navy: { bg: 'bg-brand-navy/[0.08]', text: 'text-brand-navy', ring: 'group-hover:border-brand-navy/30' },
+                  }[item.accent];
+                  return (
+                    <Link
+                      key={item.label}
+                      href={item.href}
+                      className={`group relative flex items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3 py-2.5 transition-[background-color,border-color,transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:bg-slate-50 hover:shadow-sm ${accentMap.ring} md:px-3.5 md:py-3`}
+                    >
+                      <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${accentMap.bg} md:h-9 md:w-9`}>
+                        <item.Icon className={`h-4 w-4 ${accentMap.text} md:h-[18px] md:w-[18px]`} />
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-slate-800 md:text-[13px]">
+                        {item.label}
+                      </span>
+                      <ArrowRightIcon className="h-3 w-3 shrink-0 text-slate-300 transition-[color,transform] group-hover:translate-x-0.5 group-hover:text-brand-purple" />
+                    </Link>
+                  );
+                })}
+              </div>
+            </FadeOnView>
+
+            {/* ── Card 2: Nieuwe branche ── */}
+            <FadeOnView className="group/card relative flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-[box-shadow,border-color] hover:border-slate-300 hover:shadow-md md:p-8" delay={80}>
+              <div className="pointer-events-none absolute -left-10 -top-10 h-32 w-32 rounded-full bg-brand-pink/[0.06] blur-2xl" />
+
+              <div className="relative flex items-center gap-3">
+                <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand-pink/10 ring-1 ring-inset ring-brand-pink/15">
+                  <BeakerIcon className="h-5 w-5 text-brand-pink" />
+                </span>
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-widest text-brand-pink md:text-[12px]">
+                    Nieuwe branche
+                  </p>
+                  <h3 className="mt-0.5 text-lg font-bold tracking-tight text-slate-900 md:text-xl">
+                    Wij onderzoeken het voor je
+                  </h3>
+                </div>
+              </div>
+
+              <p className="relative mt-4 text-[13px] leading-relaxed text-slate-600 md:text-sm">
+                Zit jouw branche er nog niet tussen? We investeren eerst in marktonderzoek,
+                campagne-testen en strategie — en verdienen dat voor jou volledig terug in leads.
+              </p>
+
+              <ol className="relative mt-6 space-y-4 md:mt-7">
+                {[
+                  { num: 1, title: 'Onderzoek', desc: 'Marktanalyse en doelgroep-bepaling', time: 'Week 1' },
+                  { num: 2, title: 'Strategie', desc: 'Campagne-opzet en testfase', time: 'Week 2-3' },
+                  { num: 3, title: 'Eerste leads', desc: 'Gekwalificeerd in jouw portaal', time: 'Week 3-4' },
+                ].map((step, idx, arr) => (
+                  <li key={step.num} className="relative flex items-start gap-3.5">
+                    {idx < arr.length - 1 && (
+                      <span
+                        aria-hidden="true"
+                        className="absolute left-[13px] top-7 h-[calc(100%-0.25rem)] w-px bg-gradient-to-b from-brand-pink/30 to-transparent"
+                      />
+                    )}
+                    <span className="relative mt-0.5 flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-purple to-brand-pink text-[11px] font-bold text-white shadow-sm ring-4 ring-white">
+                      {step.num}
+                    </span>
+                    <div className="min-w-0 flex-1 pb-1">
+                      <div className="flex flex-wrap items-baseline justify-between gap-x-2">
+                        <p className="text-[13px] font-semibold text-slate-900 md:text-sm">{step.title}</p>
+                        <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400 md:text-[11.5px]">
+                          {step.time}
+                        </p>
+                      </div>
+                      <p className="mt-0.5 text-[12px] leading-relaxed text-slate-500 md:text-[13px]">
+                        {step.desc}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+
+              <div className="relative mt-6 grid grid-cols-3 gap-2 md:mt-7 md:gap-3">
+                {[
+                  { value: '€750', label: 'Onderzoek' },
+                  { value: '100%', label: 'Terug in leads' },
+                  { value: '2-4 wk', label: 'Doorlooptijd' },
                 ].map((item) => (
-                  <div key={item.label} className={`${item.bg} rounded-lg p-3 text-center text-white md:p-4`}>
-                    <p className="text-xl font-bold md:text-2xl">{item.value}</p>
-                    <p className="mt-0.5 text-[10px] uppercase tracking-wide text-white/80 md:mt-1 md:text-[11px]">{item.label}</p>
+                  <div
+                    key={item.label}
+                    className="rounded-xl border border-slate-200 bg-slate-50/70 px-2 py-3 text-center md:py-4"
+                  >
+                    <p className="text-lg font-extrabold tracking-tight text-brand-navy md:text-xl">
+                      {item.value}
+                    </p>
+                    <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500 md:text-[11px]">
+                      {item.label}
+                    </p>
                   </div>
                 ))}
               </div>
 
-              <div className="mt-auto pt-5 md:pt-6">
+              <div className="relative mt-5 flex items-start gap-3 rounded-xl border border-brand-orange/15 bg-brand-orange/[0.05] p-3 md:mt-6 md:p-4">
+                <CheckBadgeIcon className="mt-0.5 h-5 w-5 shrink-0 text-brand-orange" />
+                <p className="text-[12px] leading-relaxed text-slate-700 md:text-[13px]">
+                  <span className="font-semibold text-slate-900">Nul risico.</span>{' '}
+                  De €750 verdien je volledig terug in leads — het kost je uiteindelijk niets extra.
+                </p>
+              </div>
+
+              <div className="relative mt-auto pt-6 md:pt-7">
                 <Link
                   href="/plan-gesprek"
-                  className="group flex items-center gap-2 text-[13px] font-semibold text-brand-pink transition hover:text-brand-purple md:text-sm"
+                  className="group inline-flex w-full items-center justify-center gap-2 rounded-xl bg-brand-navy px-5 py-3 text-[13px] font-semibold text-white shadow-sm transition-[background-color,transform,box-shadow] duration-200 hover:bg-brand-purple hover:shadow-md active:scale-[0.99] md:text-sm"
                 >
                   Bespreek jouw branche
-                  <ArrowRightIcon className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
+                  <ArrowRightIcon className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
                 </Link>
               </div>
             </FadeOnView>
