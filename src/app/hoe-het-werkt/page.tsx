@@ -23,6 +23,8 @@ import {
 } from '@heroicons/react/24/outline';
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
+import { SoftGlow } from '@/components/ui/SoftGlow';
+import { FadeOnView } from '@/components/ui/FadeOnView';
 
 const fadeUp = {
   hidden: { opacity: 0, y: 30 },
@@ -42,8 +44,8 @@ export default function HoeHetWerktPage() {
       {/* ── Hero ── */}
       <section className="relative overflow-hidden bg-brand-navy">
         <div className="pointer-events-none absolute inset-0">
-          <div className="absolute -left-20 bottom-0 h-[400px] w-[400px] rounded-full bg-brand-purple/20 blur-[120px]" />
-          <div className="absolute right-1/4 top-0 h-[300px] w-[300px] rounded-full bg-brand-orange/10 blur-[100px]" />
+          <SoftGlow color="purple" className="-left-20 bottom-0" size="420px" intensity={0.22} />
+          <SoftGlow color="orange" className="right-1/4 top-0" size="320px" intensity={0.14} />
         </div>
 
         <div className="relative z-10 mx-auto max-w-7xl px-5 pb-14 pt-14 md:pb-20 md:pt-24 lg:px-8">
@@ -56,7 +58,7 @@ export default function HoeHetWerktPage() {
             <motion.p
               variants={fadeUp}
               custom={0}
-              className="mb-4 inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-white/80 backdrop-blur md:mb-5 md:text-[12px]"
+              className="mb-4 inline-flex items-center gap-2 rounded-full bg-white/15 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-white/80 md:mb-5 md:text-[12px]"
             >
               <SparklesIcon className="h-3.5 w-3.5 text-brand-orange" />
               Ons proces
@@ -152,12 +154,8 @@ export default function HoeHetWerktPage() {
                 footer: 'Je ontvangt een notificatie bij elke nieuwe lead, per e-mail en als pushmelding op je telefoon.',
               },
             ].map((item, idx) => (
-              <motion.div
+              <FadeOnView
                 key={item.step}
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: '-80px' }}
-                transition={{ duration: 0.5, delay: 0.1 }}
                 className="grid items-start gap-6 md:grid-cols-[auto_1fr] md:gap-10"
               >
                 <div className="flex items-start gap-4 md:flex-col md:items-center md:gap-3">
@@ -191,7 +189,7 @@ export default function HoeHetWerktPage() {
                     {item.footer}
                   </p>
                 </div>
-              </motion.div>
+              </FadeOnView>
             ))}
           </div>
         </div>
@@ -254,13 +252,10 @@ export default function HoeHetWerktPage() {
                 desc: 'Bekijk al je leads, filter op status, en houd je batch-voortgang bij. Alles transparant en real-time.',
               },
             ].map((item) => (
-              <motion.article
+              <FadeOnView
                 key={item.title}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: '-50px' }}
-                transition={{ duration: 0.5 }}
-                className="group relative overflow-hidden rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition-all hover:-translate-y-1 hover:shadow-lg md:p-6"
+                as="article"
+                className="group relative overflow-hidden rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition-[transform,box-shadow] hover:-translate-y-1 hover:shadow-lg md:p-6"
               >
                 <div className={`mb-4 inline-flex h-10 w-10 items-center justify-center rounded-lg ${item.accent}`}>
                   <item.icon className="h-5 w-5 text-white" />
@@ -268,23 +263,17 @@ export default function HoeHetWerktPage() {
                 <h3 className="text-[15px] font-bold text-slate-900 md:text-[16px]">{item.title}</h3>
                 <p className="mt-1.5 text-[13px] leading-relaxed text-slate-600 md:text-sm">{item.desc}</p>
                 <div className={`absolute bottom-0 left-0 h-[3px] w-full ${item.accent} opacity-0 transition-opacity group-hover:opacity-100`} />
-              </motion.article>
+              </FadeOnView>
             ))}
           </div>
         </div>
       </section>
 
       {/* ── Exclusivity + Quality ── */}
-      <section className="bg-white">
+      <section className="bg-white [content-visibility:auto] [contain-intrinsic-size:800px]">
         <div className="mx-auto max-w-7xl px-5 py-14 md:py-20 lg:px-8">
           <div className="grid gap-5 md:grid-cols-2 md:gap-8">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.5 }}
-              className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm md:p-7"
-            >
+            <FadeOnView className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm md:p-7">
               <div className="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-lg bg-brand-purple">
                 <ShieldCheckIcon className="h-5 w-5 text-white" />
               </div>
@@ -307,13 +296,10 @@ export default function HoeHetWerktPage() {
                   </li>
                 ))}
               </ul>
-            </motion.div>
+            </FadeOnView>
 
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.5, delay: 0.1 }}
+            <FadeOnView
+              delay={100}
               className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm md:p-7"
             >
               <div className="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-lg bg-brand-orange">
@@ -346,21 +332,16 @@ export default function HoeHetWerktPage() {
                   <ArrowRightIcon className="h-3 w-3" />
                 </Link>
               </div>
-            </motion.div>
+            </FadeOnView>
           </div>
         </div>
       </section>
 
       {/* ── New Niche Research ── */}
-      <section className="border-y border-slate-100 bg-gradient-to-b from-slate-50 to-white">
+      <section className="border-y border-slate-100 bg-gradient-to-b from-slate-50 to-white [content-visibility:auto] [contain-intrinsic-size:900px]">
         <div className="mx-auto max-w-7xl px-5 py-14 md:py-20 lg:px-8">
           <div className="grid items-center gap-8 md:grid-cols-2 md:gap-16">
-            <motion.div
-              initial={{ opacity: 0, x: -20 }}
-              whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.5 }}
-            >
+            <FadeOnView>
               <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-brand-pink md:mb-3 md:text-[12px]">
                 Nieuwe branches
               </p>
@@ -390,14 +371,9 @@ export default function HoeHetWerktPage() {
                   </div>
                 ))}
               </div>
-            </motion.div>
+            </FadeOnView>
 
-            <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.5, delay: 0.1 }}
-            >
+            <FadeOnView delay={100}>
               <div className="rounded-2xl border border-brand-orange/20 bg-brand-orange/5 p-6 md:p-8">
                 <div className="mb-6 flex items-center gap-3">
                   <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-brand-orange">
@@ -439,13 +415,13 @@ export default function HoeHetWerktPage() {
                   ))}
                 </div>
               </div>
-            </motion.div>
+            </FadeOnView>
           </div>
         </div>
       </section>
 
       {/* ── Personal Approach ── */}
-      <section className="bg-white">
+      <section className="bg-white [content-visibility:auto] [contain-intrinsic-size:700px]">
         <div className="mx-auto max-w-7xl px-5 py-14 md:py-20 lg:px-8">
           <div className="mb-8 text-center md:mb-12">
             <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-brand-purple md:mb-3 md:text-[12px]">
@@ -480,13 +456,10 @@ export default function HoeHetWerktPage() {
                 desc: 'We komen langs op jouw locatie voor strategiegesprekken, evaluaties en om je team te leren kennen. Persoonlijk contact is de basis.',
               },
             ].map((item) => (
-              <motion.article
+              <FadeOnView
                 key={item.title}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: '-50px' }}
-                transition={{ duration: 0.5 }}
-                className="group relative overflow-hidden rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition-all hover:-translate-y-1 hover:shadow-lg md:p-7"
+                as="article"
+                className="group relative overflow-hidden rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition-[transform,box-shadow] hover:-translate-y-1 hover:shadow-lg md:p-7"
               >
                 <div className={`mb-4 inline-flex h-10 w-10 items-center justify-center rounded-lg md:mb-5 md:h-11 md:w-11 ${item.accent}`}>
                   <item.icon className="h-5 w-5 text-white" />
@@ -494,7 +467,7 @@ export default function HoeHetWerktPage() {
                 <h3 className="text-[16px] font-bold text-slate-900 md:text-lg">{item.title}</h3>
                 <p className="mt-1.5 text-[13px] leading-relaxed text-slate-600 md:mt-2 md:text-sm">{item.desc}</p>
                 <div className={`absolute bottom-0 left-0 h-[3px] w-full ${item.accent} opacity-0 transition-opacity group-hover:opacity-100`} />
-              </motion.article>
+              </FadeOnView>
             ))}
           </div>
         </div>
@@ -503,8 +476,8 @@ export default function HoeHetWerktPage() {
       {/* ── Final CTA ── */}
       <section className="relative overflow-hidden bg-brand-navy">
         <div className="pointer-events-none absolute inset-0">
-          <div className="absolute -right-32 top-0 h-[300px] w-[300px] rounded-full bg-brand-purple/30 blur-[100px] md:h-[400px] md:w-[400px]" />
-          <div className="absolute -left-20 bottom-0 h-[200px] w-[200px] rounded-full bg-brand-orange/20 blur-[80px] md:h-[300px] md:w-[300px]" />
+          <SoftGlow color="purple" className="-right-32 top-0" size="420px" intensity={0.3} showOnMobile />
+          <SoftGlow color="orange" className="-left-20 bottom-0 hidden md:block" size="320px" intensity={0.22} showOnMobile />
         </div>
         <div className="relative z-10 mx-auto max-w-7xl px-5 py-14 text-white md:py-20 lg:px-8">
           <div className="max-w-2xl">
@@ -525,7 +498,7 @@ export default function HoeHetWerktPage() {
               </Link>
               <Link
                 href="/gratis-account"
-                className="inline-flex items-center justify-center rounded-lg border border-white/25 bg-white/10 px-6 py-3.5 text-sm font-semibold text-white backdrop-blur transition hover:bg-white/20"
+                className="inline-flex items-center justify-center rounded-lg border border-white/25 bg-white/15 px-6 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-white/25"
               >
                 Bekijk gratis ons leadportaal
               </Link>

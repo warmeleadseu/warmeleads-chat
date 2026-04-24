@@ -3,8 +3,7 @@ import { Inter, JetBrains_Mono } from "next/font/google";
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { StructuredData } from "@/components/StructuredData";
 import { GoogleAnalytics } from "@/components/GoogleAnalytics";
-import { FloatingWhatsAppButton } from "@/components/FloatingWhatsAppButton";
-import { CookieConsent } from '@/components/CookieConsent';
+import { DeferredGlobals } from "@/components/DeferredGlobals";
 import "./globals.css";
 
 const inter = Inter({ 
@@ -117,8 +116,7 @@ export default function RootLayout({
             {children}
           </div>
         </ErrorBoundary>
-        <FloatingWhatsAppButton />
-        <CookieConsent />
+        <DeferredGlobals />
       </body>
     </html>
   );

@@ -50,14 +50,32 @@ export function Header() {
       return;
     }
 
-    const onScroll = () => {
-      // Homepage: avoid duplicate CTA in first viewport; show after hero interaction zone.
-      setShowMobileStickyCta(window.scrollY > 420);
-    };
+    let raf = 0;
+    let shown = window.scrollY > 420;
+    setShowMobileStickyCta(shown);
 
-    onScroll();
+    const SHOW_AT = 420;
+    const HIDE_AT = 360;
+
+    const update = () => {
+      raf = 0;
+      const y = window.scrollY;
+      if (!shown && y > SHOW_AT) {
+        shown = true;
+        setShowMobileStickyCta(true);
+      } else if (shown && y < HIDE_AT) {
+        shown = false;
+        setShowMobileStickyCta(false);
+      }
+    };
+    const onScroll = () => {
+      if (!raf) raf = requestAnimationFrame(update);
+    };
     window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      if (raf) cancelAnimationFrame(raf);
+    };
   }, [pathname]);
 
   return (
@@ -242,7 +260,7 @@ export function Header() {
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 18, opacity: 0 }}
             transition={{ duration: 0.2, ease: 'easeOut' }}
-            className="fixed bottom-0 left-0 right-0 z-50 border-t border-slate-200 bg-white/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-lg sm:hidden"
+            className="fixed bottom-0 left-0 right-0 z-50 border-t border-slate-200 bg-white/98 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 sm:hidden"
           >
             {pathname === '/' ? (
               <Link

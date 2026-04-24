@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import {
@@ -53,19 +53,30 @@ const categoryColors: Record<string, string> = {
 };
 
 export default function BlogPostClient({ article, relatedArticles }: BlogPostClientProps) {
-  const [readingProgress, setReadingProgress] = useState(0);
   const [showShareMenu, setShowShareMenu] = useState(false);
+  const progressBarRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const updateReadingProgress = () => {
-      const scrollTop = window.scrollY;
-      const docHeight = document.documentElement.scrollHeight - document.documentElement.clientHeight;
-      const progress = (scrollTop / docHeight) * 100;
-      setReadingProgress(progress);
+    let raf = 0;
+    const update = () => {
+      raf = 0;
+      const docHeight =
+        document.documentElement.scrollHeight - document.documentElement.clientHeight;
+      const ratio = docHeight > 0 ? window.scrollY / docHeight : 0;
+      const clamped = Math.min(1, Math.max(0, ratio));
+      if (progressBarRef.current) {
+        progressBarRef.current.style.transform = `scaleX(${clamped})`;
+      }
     };
-
-    window.addEventListener('scroll', updateReadingProgress);
-    return () => window.removeEventListener('scroll', updateReadingProgress);
+    const onScroll = () => {
+      if (!raf) raf = requestAnimationFrame(update);
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    update();
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      if (raf) cancelAnimationFrame(raf);
+    };
   }, []);
 
   const shareUrl = typeof window !== 'undefined' ? window.location.href : '';
@@ -98,11 +109,10 @@ export default function BlogPostClient({ article, relatedArticles }: BlogPostCli
       <div className="min-h-screen bg-white text-slate-900">
         {/* Reading Progress Bar */}
         <div className="fixed top-0 left-0 right-0 z-[60] h-1 bg-slate-200/50">
-          <motion.div
-            className="h-full bg-warmeleads-gradient"
-            style={{ width: `${readingProgress}%` }}
-            initial={{ width: 0 }}
-            animate={{ width: `${readingProgress}%` }}
+          <div
+            ref={progressBarRef}
+            className="h-full origin-left bg-warmeleads-gradient"
+            style={{ transform: 'scaleX(0)', willChange: 'transform' }}
           />
         </div>
 
@@ -111,7 +121,7 @@ export default function BlogPostClient({ article, relatedArticles }: BlogPostCli
         <div className="relative">
           <button
             onClick={() => setShowShareMenu(!showShareMenu)}
-            className="bg-white text-slate-600 p-4 rounded-full border border-slate-200 shadow-lg hover:bg-slate-50 hover:text-brand-purple hover:scale-110 transition-all"
+            className="bg-white text-slate-600 p-4 rounded-full border border-slate-200 shadow-lg hover:bg-slate-50 hover:text-brand-purple hover:scale-110 transition-[background-color,color,transform,box-shadow]"
             title="Deel dit artikel"
           >
             <ShareIcon className="w-5 h-5" />
@@ -168,7 +178,7 @@ export default function BlogPostClient({ article, relatedArticles }: BlogPostCli
       </div>
 
       {/* Mobile Share Bar */}
-      <div className="lg:hidden sticky top-[75px] z-40 bg-white/80 backdrop-blur-md border-b border-slate-200">
+      <div className="lg:hidden sticky top-[75px] z-40 bg-white/95 border-b border-slate-200">
         <div className="max-w-4xl mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
             <Link href="/blog" className="text-slate-500 hover:text-slate-900 text-sm flex items-center gap-1.5">
@@ -380,7 +390,7 @@ export default function BlogPostClient({ article, relatedArticles }: BlogPostCli
                   {article.keywords.map((keyword) => (
                     <span
                       key={keyword}
-                      className="bg-slate-100 text-slate-600 px-4 py-2 rounded-full text-sm border border-slate-200 hover:bg-slate-200 hover:scale-105 transition-all cursor-default"
+                      className="bg-slate-100 text-slate-600 px-4 py-2 rounded-full text-sm border border-slate-200 hover:bg-slate-200 hover:scale-105 transition-[background-color,transform] cursor-default"
                     >
                       #{keyword}
                     </span>
@@ -402,7 +412,7 @@ export default function BlogPostClient({ article, relatedArticles }: BlogPostCli
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               <Link href="/leads-thuisbatterijen" className="group block">
-                <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-all hover:-translate-y-0.5">
+                <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm transition-[transform,box-shadow] hover:shadow-md hover:-translate-y-0.5">
                   <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-navy/10 mb-3">
                     <BoltIcon className="h-5 w-5 text-brand-navy" />
                   </div>
@@ -416,7 +426,7 @@ export default function BlogPostClient({ article, relatedArticles }: BlogPostCli
               </Link>
 
               <Link href="/leads-zonnepanelen" className="group block">
-                <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-all hover:-translate-y-0.5">
+                <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm transition-[transform,box-shadow] hover:shadow-md hover:-translate-y-0.5">
                   <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-orange/10 mb-3">
                     <SunIcon className="h-5 w-5 text-brand-orange" />
                   </div>
@@ -430,7 +440,7 @@ export default function BlogPostClient({ article, relatedArticles }: BlogPostCli
               </Link>
 
               <Link href="/leads-warmtepompen" className="group block">
-                <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-all hover:-translate-y-0.5">
+                <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm transition-[transform,box-shadow] hover:shadow-md hover:-translate-y-0.5">
                   <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-purple/10 mb-3">
                     <FireIcon className="h-5 w-5 text-brand-purple" />
                   </div>
@@ -444,7 +454,7 @@ export default function BlogPostClient({ article, relatedArticles }: BlogPostCli
               </Link>
 
               <Link href="/maatwerk-leads" className="group block">
-                <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-all hover:-translate-y-0.5">
+                <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm transition-[transform,box-shadow] hover:shadow-md hover:-translate-y-0.5">
                   <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-pink/10 mb-3">
                     <AdjustmentsHorizontalIcon className="h-5 w-5 text-brand-pink" />
                   </div>
@@ -512,7 +522,7 @@ export default function BlogPostClient({ article, relatedArticles }: BlogPostCli
                     transition={{ duration: 0.4, delay: 0.1 * index }}
                   >
                     <Link href={`/blog/${related.slug}`}>
-                      <div className="group bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-lg transition-all duration-300 hover:-translate-y-1 cursor-pointer h-full flex flex-col overflow-hidden">
+                      <div className="group bg-white rounded-2xl border border-slate-200 shadow-sm transition-[transform,box-shadow] duration-300 hover:shadow-lg hover:-translate-y-1 cursor-pointer h-full flex flex-col overflow-hidden">
                         <div className="h-1.5 w-full bg-brand-purple" />
                         <div className="p-6 flex flex-col flex-1">
                           <span className={`inline-block px-3 py-1 rounded-lg text-xs font-semibold border mb-3 self-start ${categoryColors[related.category] || 'bg-slate-100 text-slate-600 border-slate-200'}`}>
@@ -545,7 +555,7 @@ export default function BlogPostClient({ article, relatedArticles }: BlogPostCli
         <div className="text-center">
           <Link
             href="/blog"
-            className="inline-flex items-center gap-2 bg-brand-navy text-white px-8 py-4 rounded-xl font-semibold hover:bg-brand-navy/90 hover:scale-105 transition-all"
+            className="inline-flex items-center gap-2 bg-brand-navy text-white px-8 py-4 rounded-xl font-semibold hover:bg-brand-navy/90 hover:scale-105 transition-[background-color,transform]"
           >
             <ArrowLeftIcon className="h-4 w-4" />
             Terug naar alle artikelen

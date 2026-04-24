@@ -4,6 +4,7 @@ import React from 'react';
 import Link from 'next/link';
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
+import { SoftGlow } from '@/components/ui/SoftGlow';
 import {
   SparklesIcon,
   BoltIcon,
@@ -42,8 +43,8 @@ export function BranchLeadsPageContent({ metadata }: BranchLeadsPageProps) {
       {/* Hero Section */}
       <section className="relative overflow-hidden bg-brand-navy py-20 md:py-28">
         <div className="pointer-events-none absolute inset-0">
-          <div className="absolute -left-20 bottom-0 h-[400px] w-[400px] rounded-full bg-brand-purple/20 blur-[120px]" />
-          <div className="absolute -right-20 top-0 h-[300px] w-[300px] rounded-full bg-brand-pink/15 blur-[100px]" />
+          <SoftGlow color="purple" className="-left-20 bottom-0" size="420px" intensity={0.22} />
+          <SoftGlow color="pink" className="-right-20 top-0" size="320px" intensity={0.18} />
         </div>
 
         <div className="relative z-10 mx-auto max-w-6xl px-5 text-center text-white lg:px-8">
@@ -67,7 +68,7 @@ export function BranchLeadsPageContent({ metadata }: BranchLeadsPageProps) {
             </Link>
             <Link
               href="/hoe-het-werkt"
-              className="inline-flex items-center justify-center gap-2 rounded-lg border border-white/25 bg-white/10 px-6 py-3.5 text-sm font-semibold text-white backdrop-blur transition hover:bg-white/20"
+              className="inline-flex items-center justify-center gap-2 rounded-lg border border-white/25 bg-white/15 px-6 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-white/25"
             >
               Bekijk hoe het werkt
             </Link>
@@ -220,7 +221,7 @@ export function BranchLeadsPageContent({ metadata }: BranchLeadsPageProps) {
       {/* CTA Section */}
       <section className="relative overflow-hidden bg-brand-navy py-16 md:py-20">
         <div className="pointer-events-none absolute inset-0">
-          <div className="absolute -right-20 top-0 h-[300px] w-[300px] rounded-full bg-brand-purple/20 blur-[120px]" />
+          <SoftGlow color="purple" className="-right-20 top-0" size="320px" intensity={0.22} showOnMobile />
         </div>
         <div className="relative z-10 mx-auto max-w-3xl px-5 text-center text-white lg:px-8">
           <h2 className="mb-4 text-3xl font-bold">Klaar om te starten?</h2>

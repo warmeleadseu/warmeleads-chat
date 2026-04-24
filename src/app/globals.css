@@ -206,3 +206,48 @@
 .animate-phone-float {
   animation: phone-float 4s ease-in-out infinite;
 }
+
+/* ========================================
+   FADE-ON-VIEW (CSS-driven entrance)
+   ======================================== */
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 16px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.fade-on-view {
+  opacity: 0;
+  transform: translate3d(0, 16px, 0);
+}
+
+.fade-on-view.is-visible {
+  will-change: opacity, transform;
+  animation: fade-up 0.55s cubic-bezier(0.25, 0.4, 0.25, 1) forwards;
+}
+
+.fade-on-view.is-visible.has-animated {
+  will-change: auto;
+}
+
+/* Respect user motion preferences: disable non-essential animations. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .fade-on-view {
+    opacity: 1;
+    transform: none;
+  }
+}

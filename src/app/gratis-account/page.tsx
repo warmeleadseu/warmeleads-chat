@@ -31,6 +31,7 @@ import { CheckCircleIcon as CheckCircleSolid } from '@heroicons/react/24/solid';
 import { Car } from '@phosphor-icons/react';
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
+import { SoftGlow } from '@/components/ui/SoftGlow';
 
 interface Branch {
   slug: string;
@@ -312,8 +313,8 @@ export default function GratisAccountPage() {
         {/* Hero */}
         <section className="relative overflow-hidden bg-brand-navy">
           <div className="pointer-events-none absolute inset-0">
-            <div className="absolute -left-20 bottom-0 h-[300px] w-[300px] rounded-full bg-brand-purple/20 blur-[100px]" />
-            <div className="absolute right-0 top-0 h-[250px] w-[250px] rounded-full bg-brand-pink/10 blur-[80px]" />
+            <SoftGlow color="purple" className="-left-20 bottom-0" size="320px" intensity={0.22} />
+            <SoftGlow color="pink" className="right-0 top-0" size="260px" intensity={0.14} />
           </div>
           <div className="relative z-10 mx-auto max-w-4xl px-5 py-12 text-center md:py-16 lg:px-8">
             <h1 className="text-2xl font-extrabold tracking-tight text-white md:text-4xl">
@@ -332,7 +333,7 @@ export default function GratisAccountPage() {
               <div key={s.num} className="flex items-center">
                 <div className="flex flex-col items-center">
                   <div
-                    className={`flex h-10 w-10 items-center justify-center rounded-full border-2 transition-all duration-300 md:h-11 md:w-11 ${
+                    className={`flex h-10 w-10 items-center justify-center rounded-full border-2 transition-[background-color,border-color,box-shadow,color] duration-300 md:h-11 md:w-11 ${
                       step > s.num
                         ? 'border-brand-purple bg-brand-purple/10 text-brand-purple'
                         : step === s.num
@@ -548,7 +549,7 @@ export default function GratisAccountPage() {
                             type="button"
                             key={b.slug}
                             onClick={() => toggleBranch(b.slug)}
-                            className={`group relative overflow-hidden rounded-xl border-2 p-4 text-left transition-all ${
+                            className={`group relative overflow-hidden rounded-xl border-2 p-4 text-left transition-[background-color,border-color,box-shadow] ${
                               selected
                                 ? 'border-brand-purple bg-brand-purple/5 shadow-sm shadow-brand-purple/10'
                                 : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
@@ -596,7 +597,7 @@ export default function GratisAccountPage() {
                       <button
                         type="button"
                         onClick={() => handleRegionType('nl')}
-                        className={`group relative overflow-hidden rounded-xl border-2 p-4 text-left transition-all ${
+                        className={`group relative overflow-hidden rounded-xl border-2 p-4 text-left transition-[background-color,border-color,box-shadow] ${
                           regionType === 'nl'
                             ? 'border-brand-purple bg-brand-purple/5'
                             : 'border-slate-200 bg-white hover:border-slate-300'
@@ -610,7 +611,7 @@ export default function GratisAccountPage() {
                       <button
                         type="button"
                         onClick={() => handleRegionType('be')}
-                        className={`group relative overflow-hidden rounded-xl border-2 p-4 text-left transition-all ${
+                        className={`group relative overflow-hidden rounded-xl border-2 p-4 text-left transition-[background-color,border-color,box-shadow] ${
                           regionType === 'be'
                             ? 'border-brand-purple bg-brand-purple/5'
                             : 'border-slate-200 bg-white hover:border-slate-300'
@@ -624,7 +625,7 @@ export default function GratisAccountPage() {
                       <button
                         type="button"
                         onClick={() => handleRegionType('specific')}
-                        className={`group relative overflow-hidden rounded-xl border-2 p-4 text-left transition-all ${
+                        className={`group relative overflow-hidden rounded-xl border-2 p-4 text-left transition-[background-color,border-color,box-shadow] ${
                           regionType === 'specific'
                             ? 'border-brand-purple bg-brand-purple/5'
                             : 'border-slate-200 bg-white hover:border-slate-300'
@@ -637,15 +638,15 @@ export default function GratisAccountPage() {
                       </button>
                     </div>
 
-                    <AnimatePresence>
-                      {regionType === 'specific' && (
-                        <motion.div
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: 'auto' }}
-                          exit={{ opacity: 0, height: 0 }}
-                          className="overflow-hidden"
-                        >
-                          <div className="mt-5 space-y-4 border-t border-slate-100 pt-5">
+                    <div
+                      className="grid transition-[grid-template-rows,opacity] duration-300"
+                      style={{
+                        gridTemplateRows: regionType === 'specific' ? '1fr' : '0fr',
+                        opacity: regionType === 'specific' ? 1 : 0,
+                      }}
+                    >
+                      <div className="overflow-hidden">
+                        <div className="mt-5 space-y-4 border-t border-slate-100 pt-5">
                             <div>
                               <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Nederland</p>
                               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -693,9 +694,8 @@ export default function GratisAccountPage() {
                               </div>
                             </div>
                           </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
+                        </div>
+                      </div>
 
                     {selectedProvinces.length > 0 && (
                       <p className="mt-5 text-center text-xs font-medium text-brand-purple">
@@ -763,7 +763,7 @@ export default function GratisAccountPage() {
                           <div className="mt-2">
                             <div className="flex items-center gap-2">
                               <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100">
-                                <div className={`h-full ${strength.color} transition-all duration-300`} style={{ width: strength.width }} />
+                                <div className={`h-full ${strength.color} transition-[width,background-color] duration-300`} style={{ width: strength.width }} />
                               </div>
                               <span className="text-[11px] text-slate-500">{strength.label}</span>
                             </div>

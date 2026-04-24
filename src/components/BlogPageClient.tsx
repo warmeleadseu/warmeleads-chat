@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useDeferredValue, useEffect } from 'react';
 import Link from 'next/link';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import {
   BookOpenIcon,
   TagIcon,
@@ -107,23 +107,30 @@ const categoryAccent: Record<string, string> = {
 
 export default function BlogPageClient() {
   const [searchQuery, setSearchQuery] = useState('');
+  const deferredSearch = useDeferredValue(searchQuery);
   const [selectedCategory, setSelectedCategory] = useState<string>('Alle');
   const [currentPage, setCurrentPage] = useState(1);
   const articlesPerPage = 9;
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [deferredSearch, selectedCategory]);
+
   const filteredArticles = useMemo(() => {
+    const q = deferredSearch.toLowerCase();
     return blogArticles.filter(article => {
       const matchesSearch =
-        article.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        article.excerpt.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        article.keywords.some(keyword => keyword.toLowerCase().includes(searchQuery.toLowerCase()));
+        q.length === 0 ||
+        article.title.toLowerCase().includes(q) ||
+        article.excerpt.toLowerCase().includes(q) ||
+        article.keywords.some(keyword => keyword.toLowerCase().includes(q));
 
       const mappedCategory = categoryMapping[article.category] || article.category;
       const matchesCategory = selectedCategory === 'Alle' || mappedCategory === selectedCategory;
 
       return matchesSearch && matchesCategory;
     });
-  }, [searchQuery, selectedCategory]);
+  }, [deferredSearch, selectedCategory]);
 
   const totalPages = Math.ceil(filteredArticles.length / articlesPerPage);
   const startIndex = (currentPage - 1) * articlesPerPage;
@@ -144,7 +151,6 @@ export default function BlogPageClient() {
 
   const handleCategoryChange = (category: string) => {
     setSelectedCategory(category);
-    setCurrentPage(1);
   };
 
   return (
@@ -204,11 +210,8 @@ export default function BlogPageClient() {
                 aria-label="Zoek artikelen"
                 placeholder="Zoek artikelen over leadgeneratie, SEO, marketing..."
                 value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="w-full bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl pl-13 pr-12 py-4 text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/30 focus:bg-white/15 transition-all"
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-white/10 border border-white/20 rounded-2xl pl-13 pr-12 py-4 text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/30 focus:bg-white/15 transition-colors"
                 style={{ paddingLeft: '3.25rem' }}
               />
               {searchQuery && (
@@ -236,10 +239,10 @@ export default function BlogPageClient() {
                   onClick={() => handleCategoryChange(category)}
                   aria-pressed={selectedCategory === category}
                   className={`
-                    px-6 py-3 rounded-xl font-semibold text-sm transition-all duration-300
+                    px-6 py-3 rounded-xl font-semibold text-sm transition-[background-color,color,box-shadow,transform] duration-300
                     ${selectedCategory === category
                       ? 'bg-white text-brand-navy scale-110 shadow-xl'
-                      : 'bg-white/10 backdrop-blur-sm text-white/80 border border-white/20 hover:bg-white/20 hover:scale-105'
+                      : 'bg-white/15 text-white/85 border border-white/20 hover:bg-white/25 hover:scale-105'
                     }
                   `}
                 >
@@ -270,7 +273,7 @@ export default function BlogPageClient() {
                 </span>
               </div>
               <Link href={`/blog/${featuredArticle.slug}`}>
-                <div className="bg-brand-navy rounded-3xl p-8 md:p-12 hover:shadow-2xl transition-all duration-500 hover:scale-[1.02] cursor-pointer shadow-xl">
+                <div className="bg-brand-navy rounded-3xl p-8 md:p-12 transition-[transform,box-shadow] duration-500 hover:shadow-2xl hover:scale-[1.02] cursor-pointer shadow-xl">
                   <div className="max-w-3xl mx-auto">
                     <div className="flex items-center gap-3 mb-4">
                       <span className="px-3 py-1 rounded-lg text-xs font-semibold border bg-white/20 text-white border-white/30">
@@ -308,60 +311,44 @@ export default function BlogPageClient() {
           </div>
 
           {/* Articles Grid */}
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={`${selectedCategory}-${searchQuery}-${currentPage}`}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.4 }}
-              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-12"
-            >
-              {paginatedArticles.map((article, index) => {
-                const mapped = categoryMapping[article.category] || article.category;
-                const accent = categoryAccent[mapped] || 'bg-brand-navy';
-                return (
-                  <motion.div
-                    key={article.slug}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.4, delay: index * 0.05 }}
-                  >
-                    <Link href={`/blog/${article.slug}`}>
-                      <div className="group bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-lg transition-all duration-300 hover:-translate-y-1 cursor-pointer h-full flex flex-col overflow-hidden">
-                        <div className={`h-1.5 w-full ${accent}`} />
-                        <div className="p-6 flex flex-col flex-1">
-                          <div className="flex items-center gap-2 mb-3 flex-wrap">
-                            <span className={`px-2.5 py-1 rounded-lg text-xs font-semibold border ${categoryColors[mapped] || 'bg-slate-100 text-slate-600 border-slate-200'}`}>
-                              {article.category}
-                            </span>
-                            <span className="text-slate-400 text-xs">{article.readTime}</span>
-                          </div>
-
-                          <div className="text-sm text-slate-400 mb-3">{article.date}</div>
-
-                          <h3 className="text-xl font-bold text-slate-900 mb-3 leading-tight group-hover:text-brand-purple transition-colors flex-grow">
-                            {article.title}
-                          </h3>
-
-                          <p className="text-slate-500 text-sm leading-relaxed mb-4 line-clamp-3">
-                            {article.excerpt}
-                          </p>
-
-                          <div className="mt-auto">
-                            <span className="inline-flex items-center gap-2 text-brand-purple font-medium text-sm group-hover:gap-3 transition-all">
-                              Lees meer
-                              <ArrowRightIcon className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
-                            </span>
-                          </div>
-                        </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-12">
+            {paginatedArticles.map((article) => {
+              const mapped = categoryMapping[article.category] || article.category;
+              const accent = categoryAccent[mapped] || 'bg-brand-navy';
+              return (
+                <Link key={article.slug} href={`/blog/${article.slug}`}>
+                  <div className="group bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-lg transition-[box-shadow,transform] duration-300 hover:-translate-y-1 cursor-pointer h-full flex flex-col overflow-hidden">
+                    <div className={`h-1.5 w-full ${accent}`} />
+                    <div className="p-6 flex flex-col flex-1">
+                      <div className="flex items-center gap-2 mb-3 flex-wrap">
+                        <span className={`px-2.5 py-1 rounded-lg text-xs font-semibold border ${categoryColors[mapped] || 'bg-slate-100 text-slate-600 border-slate-200'}`}>
+                          {article.category}
+                        </span>
+                        <span className="text-slate-400 text-xs">{article.readTime}</span>
                       </div>
-                    </Link>
-                  </motion.div>
-                );
-              })}
-            </motion.div>
-          </AnimatePresence>
+
+                      <div className="text-sm text-slate-400 mb-3">{article.date}</div>
+
+                      <h3 className="text-xl font-bold text-slate-900 mb-3 leading-tight group-hover:text-brand-purple transition-colors flex-grow">
+                        {article.title}
+                      </h3>
+
+                      <p className="text-slate-500 text-sm leading-relaxed mb-4 line-clamp-3">
+                        {article.excerpt}
+                      </p>
+
+                      <div className="mt-auto">
+                        <span className="inline-flex items-center gap-2 text-brand-purple font-medium text-sm group-hover:gap-3 transition-[gap]">
+                          Lees meer
+                          <ArrowRightIcon className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
 
           {/* Pagination */}
           {totalPages > 1 && (
@@ -369,7 +356,7 @@ export default function BlogPageClient() {
               <button
                 onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                 disabled={currentPage === 1}
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-100 text-slate-700 rounded-xl border border-slate-200 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-200 transition-all text-sm"
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-100 text-slate-700 rounded-xl border border-slate-200 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-200 transition-[background-color,color] text-sm"
               >
                 <ArrowLeftIcon className="h-3.5 w-3.5" />
                 Vorige
@@ -387,7 +374,7 @@ export default function BlogPageClient() {
                         key={page}
                         onClick={() => setCurrentPage(page)}
                         className={`
-                          w-10 h-10 rounded-xl font-semibold transition-all
+                          w-10 h-10 rounded-xl font-semibold transition-[background-color,color,box-shadow]
                           ${currentPage === page
                             ? 'bg-brand-navy text-white scale-110'
                             : 'bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200'
@@ -414,7 +401,7 @@ export default function BlogPageClient() {
               <button
                 onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                 disabled={currentPage === totalPages}
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-100 text-slate-700 rounded-xl border border-slate-200 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-200 transition-all text-sm"
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-100 text-slate-700 rounded-xl border border-slate-200 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-200 transition-[background-color,color] text-sm"
               >
                 Volgende
                 <ArrowRightIcon className="h-3.5 w-3.5" />
@@ -459,7 +446,7 @@ export default function BlogPageClient() {
         <div className="text-center">
           <Link
             href="/"
-            className="inline-flex items-center gap-2 bg-brand-navy text-white px-8 py-4 rounded-xl font-semibold hover:bg-brand-navy/90 hover:scale-105 transition-all"
+            className="inline-flex items-center gap-2 bg-brand-navy text-white px-8 py-4 rounded-xl font-semibold hover:bg-brand-navy/90 hover:scale-105 transition-[background-color,transform]"
           >
             <ChevronLeftIcon className="h-4 w-4" />
             Terug naar homepage

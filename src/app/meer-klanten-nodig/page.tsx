@@ -26,6 +26,7 @@ import {
 import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid';
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
+import { SoftGlow } from '@/components/ui/SoftGlow';
 
 const fadeUp = {
   hidden: { opacity: 0, y: 30 },
@@ -45,9 +46,8 @@ export default function MeerKlantenNodigPage() {
       {/* ── Hero ── */}
       <section className="relative overflow-hidden bg-brand-navy">
         <div className="pointer-events-none absolute inset-0">
-          <div className="absolute -left-20 bottom-0 h-[400px] w-[400px] rounded-full bg-brand-purple/20 blur-[120px]" />
-          <div className="absolute left-1/3 top-0 h-[300px] w-[300px] rounded-full bg-brand-pink/10 blur-[100px]" />
-          <div className="absolute -right-20 top-1/4 h-[250px] w-[250px] rounded-full bg-brand-orange/10 blur-[80px]" />
+          <SoftGlow color="purple" className="-left-20 bottom-0" size="420px" intensity={0.22} />
+          <SoftGlow color="orange" className="-right-20 top-1/4" size="280px" intensity={0.14} />
         </div>
 
         <div className="relative z-10 mx-auto max-w-7xl px-5 pb-16 pt-14 md:pb-24 md:pt-24 lg:px-8">
@@ -60,7 +60,7 @@ export default function MeerKlantenNodigPage() {
             <motion.p
               variants={fadeUp}
               custom={0}
-              className="mb-4 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-white/80 backdrop-blur md:mb-5 md:px-4 md:text-[12px]"
+              className="mb-4 inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-white/80 md:mb-5 md:px-4 md:text-[12px]"
             >
               <SparklesIcon className="h-3.5 w-3.5 text-brand-orange" />
               Voor installatiebedrijven
@@ -96,7 +96,7 @@ export default function MeerKlantenNodigPage() {
               </Link>
               <a
                 href="#waarom-wij"
-                className="inline-flex items-center justify-center gap-2 rounded-lg border border-white/25 bg-white/10 px-6 py-3.5 text-sm font-semibold text-white backdrop-blur transition hover:bg-white/20"
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-white/25 bg-white/15 px-6 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-white/25"
               >
                 Waarom WarmeLeads
               </a>
@@ -119,7 +119,7 @@ export default function MeerKlantenNodigPage() {
                 key={item.label}
                 variants={fadeUp}
                 custom={i + 4}
-                className="flex items-center gap-3 rounded-xl bg-white/[0.07] px-4 py-3 backdrop-blur md:gap-4 md:px-5 md:py-4"
+                className="flex items-center gap-3 rounded-xl bg-white/[0.09] px-4 py-3 md:gap-4 md:px-5 md:py-4"
               >
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 md:h-10 md:w-10">
                   <item.icon className="h-4 w-4 text-brand-orange md:h-5 md:w-5" />
@@ -179,7 +179,7 @@ export default function MeerKlantenNodigPage() {
             ].map((item) => (
               <article
                 key={item.title}
-                className="group relative overflow-hidden rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-lg md:p-7"
+                className="group relative overflow-hidden rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition-[transform,box-shadow] duration-300 hover:-translate-y-1 hover:shadow-lg md:p-7"
               >
                 <div className={`mb-4 inline-flex h-10 w-10 items-center justify-center rounded-lg md:mb-5 md:h-11 md:w-11 ${item.accent}`}>
                   <item.icon className="h-5 w-5 text-white" />
@@ -214,7 +214,7 @@ export default function MeerKlantenNodigPage() {
             ].map((item) => (
               <article
                 key={item.title}
-                className="group relative overflow-hidden rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-lg md:p-7"
+                className="group relative overflow-hidden rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition-[transform,box-shadow] duration-300 hover:-translate-y-1 hover:shadow-lg md:p-7"
               >
                 <div className={`mb-4 inline-flex h-10 w-10 items-center justify-center rounded-lg md:mb-5 md:h-11 md:w-11 ${item.accent}`}>
                   <item.icon className="h-5 w-5 text-white" />
@@ -435,8 +435,7 @@ export default function MeerKlantenNodigPage() {
       {/* ── FAQ ── */}
       <section className="relative overflow-hidden bg-brand-navy">
         <div className="pointer-events-none absolute inset-0">
-          <div className="absolute -left-40 top-1/4 h-[400px] w-[400px] rounded-full bg-brand-purple/15 blur-[120px]" />
-          <div className="absolute -right-20 bottom-0 h-[300px] w-[300px] rounded-full bg-brand-pink/10 blur-[100px]" />
+          <SoftGlow color="purple" className="-left-40 top-1/4" size="420px" intensity={0.18} />
         </div>
 
         <div className="relative z-10 mx-auto max-w-3xl px-5 py-14 md:py-20 lg:px-8">
@@ -454,7 +453,7 @@ export default function MeerKlantenNodigPage() {
               { q: 'Kan ik eerst klein beginnen?', a: 'Zeker. Start gecontroleerd in één regio, bewijs rendement, en schaal dan uit. Wij schalen mee.' },
               { q: 'Hoe meld ik een slechte lead?', a: 'Via je portaal kun je per lead feedback geven. Bij gegronde klachten zorgen we voor vervanging of compensatie.' },
             ].map((item, i) => (
-              <details key={item.q} className="group rounded-xl border border-white/[0.08] bg-white/[0.04] backdrop-blur-sm transition-colors open:border-brand-purple/30 open:bg-white/[0.07]">
+              <details key={item.q} className="group rounded-xl border border-white/[0.08] bg-white/[0.06] transition-colors open:border-brand-purple/30 open:bg-white/[0.1]">
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-4 md:px-6 md:py-5 [&::-webkit-details-marker]:hidden">
                   <div className="flex items-center gap-3">
                     <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-brand-purple/20 text-[12px] font-bold text-brand-purple md:h-8 md:w-8 md:text-[13px]">
@@ -462,7 +461,7 @@ export default function MeerKlantenNodigPage() {
                     </span>
                     <span className="text-[14px] font-semibold text-white/90 md:text-[15px]">{item.q}</span>
                   </div>
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-white/10 transition-all duration-200 group-open:rotate-45 group-open:border-brand-orange/40 group-open:bg-brand-orange/10">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-white/10 transition-[transform,background-color,border-color] duration-200 group-open:rotate-45 group-open:border-brand-orange/40 group-open:bg-brand-orange/10">
                     <svg className="h-3 w-3 text-white/50 transition-colors group-open:text-brand-orange" fill="none" viewBox="0 0 12 12" stroke="currentColor" strokeWidth="2">
                       <path d="M6 1v10M1 6h10" />
                     </svg>
@@ -480,8 +479,8 @@ export default function MeerKlantenNodigPage() {
       {/* ── Final CTA ── */}
       <section className="relative overflow-hidden bg-brand-navy">
         <div className="pointer-events-none absolute inset-0">
-          <div className="absolute -right-32 top-0 h-[300px] w-[300px] rounded-full bg-brand-purple/30 blur-[100px] md:h-[400px] md:w-[400px]" />
-          <div className="absolute -left-20 bottom-0 h-[200px] w-[200px] rounded-full bg-brand-orange/20 blur-[80px] md:h-[300px] md:w-[300px]" />
+          <SoftGlow color="purple" className="-right-32 top-0" size="420px" intensity={0.3} showOnMobile />
+          <SoftGlow color="orange" className="-left-20 bottom-0 hidden md:block" size="320px" intensity={0.22} showOnMobile />
         </div>
         <div className="relative z-10 mx-auto max-w-7xl px-5 py-14 text-white md:py-20 lg:px-8">
           <div className="max-w-2xl">
@@ -502,7 +501,7 @@ export default function MeerKlantenNodigPage() {
               </Link>
               <Link
                 href="/hoe-het-werkt"
-                className="inline-flex items-center justify-center rounded-lg border border-white/25 bg-white/10 px-6 py-3.5 text-sm font-semibold text-white backdrop-blur transition hover:bg-white/20"
+                className="inline-flex items-center justify-center rounded-lg border border-white/25 bg-white/15 px-6 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-white/25"
               >
                 Bekijk hoe het werkt
               </Link>

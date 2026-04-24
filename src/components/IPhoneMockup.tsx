@@ -13,6 +13,7 @@ import {
   FunnelIcon,
   CalendarDaysIcon,
 } from '@heroicons/react/24/outline';
+import { useInViewport } from '@/hooks/useInViewport';
 
 function WAIcon({ className }: { className?: string }) {
   return (
@@ -30,9 +31,18 @@ const DEMO_LEADS = [
 ];
 
 export function IPhoneMockup() {
+  const { ref, isInView } = useInViewport<HTMLDivElement>({ rootMargin: '300px 0px' });
+  const playState = isInView ? 'running' : 'paused';
   return (
-    <div className="relative w-[240px] lg:w-[280px]" aria-hidden="true">
-      <div className="pointer-events-none absolute -inset-10 rounded-[60px] bg-gradient-to-br from-brand-purple/30 via-brand-pink/15 to-brand-orange/20 blur-[60px]" />
+    <div ref={ref} className="relative w-[240px] lg:w-[280px]" aria-hidden="true">
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -inset-10 hidden rounded-[60px] md:block"
+        style={{
+          backgroundImage:
+            'radial-gradient(closest-side, rgb(168 85 247 / 0.28), rgb(236 72 153 / 0.12) 55%, rgb(249 115 22 / 0) 85%)',
+        }}
+      />
 
       <div
         className="relative overflow-hidden rounded-[48px] border-[3.5px] border-[#2C2C2E] bg-[#1D1D1F] shadow-[0_0_0_1px_rgba(255,255,255,0.06)_inset,0_30px_60px_-10px_rgba(0,0,0,0.6)]"
@@ -86,7 +96,7 @@ export function IPhoneMockup() {
           </div>
 
           <div className="min-h-0 flex-1 overflow-hidden">
-            <div className="animate-portal-scroll space-y-2 px-2.5 pb-8 pt-2.5">
+            <div className="animate-portal-scroll space-y-2 px-2.5 pb-8 pt-2.5" style={{ animationPlayState: playState }}>
 
               <div>
                 <p className="text-[11px] font-bold text-slate-900">Welkom, Mark</p>
@@ -97,7 +107,7 @@ export function IPhoneMockup() {
                 <div className="mb-1 flex items-center justify-between">
                   <div className="flex items-center gap-1">
                     <span className="relative flex h-1.5 w-1.5">
-                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" style={{ animationPlayState: playState }} />
                       <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
                     </span>
                     <span className="rounded-full bg-brand-purple/10 px-1.5 py-[1px] text-[6px] font-semibold text-brand-purple">Zonnepanelen</span>

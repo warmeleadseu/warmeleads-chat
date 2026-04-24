@@ -19,6 +19,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
+import { SoftGlow } from '@/components/ui/SoftGlow';
 
 const DAYS_NL = ['Ma', 'Di', 'Wo', 'Do', 'Vr', 'Za', 'Zo'];
 const MONTHS_NL = [
@@ -135,8 +136,8 @@ export default function PlanGesprekPage() {
 
         <section className="relative overflow-hidden bg-brand-navy">
           <div className="pointer-events-none absolute inset-0">
-            <div className="absolute -left-20 bottom-0 h-[300px] w-[300px] rounded-full bg-brand-purple/20 blur-[100px]" />
-            <div className="absolute right-0 top-0 h-[250px] w-[250px] rounded-full bg-brand-pink/10 blur-[80px]" />
+            <SoftGlow color="purple" className="-left-20 bottom-0" size="320px" intensity={0.22} />
+            <SoftGlow color="pink" className="right-0 top-0" size="260px" intensity={0.14} />
           </div>
           <div className="relative z-10 mx-auto max-w-4xl px-5 py-12 text-center md:py-16 lg:px-8">
             <h1 className="text-2xl font-extrabold tracking-tight text-white md:text-4xl">
@@ -154,7 +155,7 @@ export default function PlanGesprekPage() {
             {STEPS.map((s, i) => (
               <div key={s.num} className="flex items-center">
                 <div className="flex flex-col items-center">
-                  <div className={`flex h-10 w-10 items-center justify-center rounded-full border-2 transition-all duration-300 md:h-11 md:w-11 ${
+                  <div className={`flex h-10 w-10 items-center justify-center rounded-full border-2 transition-[background-color,border-color,box-shadow,color] duration-300 md:h-11 md:w-11 ${
                     step > s.num
                       ? 'border-brand-purple bg-brand-purple/10 text-brand-purple'
                       : step === s.num
@@ -219,7 +220,7 @@ export default function PlanGesprekPage() {
                           key={day}
                           onClick={() => !disabled && handleDateSelect(date)}
                           disabled={disabled}
-                          className={`relative flex h-10 items-center justify-center rounded-lg text-sm font-medium transition-all md:h-11 ${
+                          className={`relative flex h-10 items-center justify-center rounded-lg text-sm font-medium transition-[background-color,color,box-shadow] md:h-11 ${
                             selected
                               ? 'bg-brand-purple text-white shadow-md shadow-brand-purple/25'
                               : disabled
@@ -273,7 +274,7 @@ export default function PlanGesprekPage() {
                         <button
                           key={slot}
                           onClick={() => handleTimeSelect(slot)}
-                          className={`flex h-12 items-center justify-center rounded-lg border text-sm font-semibold transition-all ${
+                          className={`flex h-12 items-center justify-center rounded-lg border text-sm font-semibold transition-[background-color,border-color,color] ${
                             selectedTime === slot
                               ? 'border-brand-purple bg-brand-purple text-white shadow-md shadow-brand-purple/25'
                               : 'border-slate-200 text-slate-700 hover:border-brand-purple/30 hover:bg-brand-purple/5 hover:text-brand-purple'

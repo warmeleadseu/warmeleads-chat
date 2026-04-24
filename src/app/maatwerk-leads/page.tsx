@@ -17,6 +17,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
+import { SoftGlow } from '@/components/ui/SoftGlow';
 
 export const metadata = {
   title: 'Maatwerk Leadgeneratie | Custom Lead Campaigns | Warmeleads.eu',
@@ -33,13 +34,13 @@ export default function MaatwerkLeadsPage() {
       {/* ── Hero ── */}
       <section className="relative overflow-hidden bg-brand-navy">
         <div className="pointer-events-none absolute inset-0">
-          <div className="absolute -left-20 bottom-0 h-[400px] w-[400px] rounded-full bg-brand-purple/20 blur-[120px]" />
-          <div className="absolute right-1/4 top-0 h-[300px] w-[300px] rounded-full bg-brand-pink/10 blur-[100px]" />
+          <SoftGlow color="purple" className="-left-20 bottom-0" size="420px" intensity={0.22} />
+          <SoftGlow color="pink" className="right-1/4 top-0" size="320px" intensity={0.14} />
         </div>
 
         <div className="relative z-10 mx-auto max-w-7xl px-5 pb-14 pt-14 md:pb-24 md:pt-24 lg:px-8">
           <div className="max-w-3xl">
-            <p className="mb-4 inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-white/80 backdrop-blur md:mb-5 md:text-[12px]">
+            <p className="mb-4 inline-flex items-center gap-2 rounded-full bg-white/15 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-white/80 md:mb-5 md:text-[12px]">
               <SparklesIcon className="h-3.5 w-3.5 text-brand-orange" />
               Custom leadgeneratie
             </p>
@@ -75,7 +76,7 @@ export default function MaatwerkLeadsPage() {
             ].map((item) => (
               <div
                 key={item.label}
-                className="flex items-center gap-3 rounded-xl bg-white/[0.07] px-4 py-3 backdrop-blur md:gap-4 md:px-5 md:py-4"
+                className="flex items-center gap-3 rounded-xl bg-white/[0.09] px-4 py-3 md:gap-4 md:px-5 md:py-4"
               >
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 md:h-10 md:w-10">
                   <item.icon className="h-4 w-4 text-brand-orange md:h-5 md:w-5" />
@@ -133,7 +134,7 @@ export default function MaatwerkLeadsPage() {
             ].map((item) => (
               <article
                 key={item.title}
-                className="group relative overflow-hidden rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-lg md:p-7"
+                className="group relative overflow-hidden rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition-[transform,box-shadow] duration-300 hover:-translate-y-1 hover:shadow-lg md:p-7"
               >
                 <div
                   className={`mb-4 inline-flex h-10 w-10 items-center justify-center rounded-lg md:mb-5 md:h-11 md:w-11 ${item.accent}`}
@@ -360,8 +361,8 @@ export default function MaatwerkLeadsPage() {
       {/* ── Final CTA ── */}
       <section className="relative overflow-hidden bg-brand-navy">
         <div className="pointer-events-none absolute inset-0">
-          <div className="absolute -right-32 top-0 h-[300px] w-[300px] rounded-full bg-brand-purple/30 blur-[100px] md:h-[400px] md:w-[400px]" />
-          <div className="absolute -left-20 bottom-0 h-[200px] w-[200px] rounded-full bg-brand-orange/20 blur-[80px] md:h-[300px] md:w-[300px]" />
+          <SoftGlow color="purple" className="-right-32 top-0" size="420px" intensity={0.3} showOnMobile />
+          <SoftGlow color="orange" className="-left-20 bottom-0 hidden md:block" size="320px" intensity={0.22} showOnMobile />
         </div>
         <div className="relative z-10 mx-auto max-w-7xl px-5 py-14 text-white md:py-20 lg:px-8">
           <div className="max-w-2xl">
@@ -385,7 +386,7 @@ export default function MaatwerkLeadsPage() {
               </Link>
               <Link
                 href="/"
-                className="inline-flex items-center justify-center rounded-lg border border-white/25 bg-white/10 px-6 py-3.5 text-sm font-semibold text-white backdrop-blur transition hover:bg-white/20"
+                className="inline-flex items-center justify-center rounded-lg border border-white/25 bg-white/15 px-6 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-white/25"
               >
                 Terug naar overzicht
               </Link>
