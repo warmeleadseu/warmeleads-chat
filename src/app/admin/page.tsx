@@ -19,6 +19,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
 import { useAdmin } from './adminContext';
+import { MyPipelineWidget } from './_components/MyPipelineWidget';
 
 interface AMTarget {
   id: string;
@@ -254,6 +255,9 @@ export default function AdminDashboard() {
           </div>
         ))}
       </div>
+
+      {/* Mijn pipeline (prospects) */}
+      {isAM && <MyPipelineWidget />}
 
       {/* My Targets (anyone with is_account_manager) */}
       {isAM && myTargets.length > 0 && (
