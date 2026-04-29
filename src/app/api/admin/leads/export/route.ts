@@ -91,7 +91,8 @@ export async function POST(request: NextRequest) {
   }
 
   const {
-    branch, customer_id, status, province, source,
+    branch, customer_id, exclude_customer_id, assignment,
+    status, province, source,
     phone_valid, date_from, date_to, search, bulk_status,
     target_customer_id, add_to_portal, format,
     max_leads, prioritize_least_exported,
@@ -110,9 +111,16 @@ export async function POST(request: NextRequest) {
   }
   if (customer_id) {
     const vals = String(customer_id).split(',').filter(Boolean);
-    if (vals.length === 1) query = query.eq('customer_id', vals[0]);
-    else if (vals.length > 1) query = query.in('customer_id', vals);
+    if (vals.length > 0) query = query.overlaps('assigned_customer_ids', vals);
   }
+  if (exclude_customer_id) {
+    const vals = String(exclude_customer_id).split(',').filter(Boolean);
+    if (vals.length > 0) {
+      query = query.not('assigned_customer_ids', 'ov', `{${vals.join(',')}}`);
+    }
+  }
+  if (assignment === 'assigned') query = query.eq('is_assigned', true);
+  else if (assignment === 'unassigned') query = query.eq('is_assigned', false);
   if (status) {
     const vals = String(status).split(',').filter(Boolean);
     if (vals.length === 1) query = query.eq('status', vals[0]);
@@ -144,7 +152,7 @@ export async function POST(request: NextRequest) {
     const { data: myCustomers } = await supabase.from('customers').select('id').eq('account_manager_id', admin.id);
     const ids = (myCustomers || []).map((c: { id: string }) => c.id);
     if (ids.length === 0) return buildCsv([]);
-    query = query.in('customer_id', ids);
+    query = query.overlaps('assigned_customer_ids', ids);
   }
 
   const shouldPrioritize = prioritize_least_exported !== false;
@@ -227,6 +235,8 @@ export async function POST(request: NextRequest) {
   const filterSnapshot: Record<string, unknown> = {};
   if (branch) filterSnapshot.branch = branch;
   if (customer_id) filterSnapshot.customer_id = customer_id;
+  if (exclude_customer_id) filterSnapshot.exclude_customer_id = exclude_customer_id;
+  if (assignment) filterSnapshot.assignment = assignment;
   if (status) filterSnapshot.status = status;
   if (province) filterSnapshot.province = province;
   if (source) filterSnapshot.source = source;

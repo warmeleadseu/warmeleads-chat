@@ -381,6 +381,7 @@ export default function LeadsCRMPage() {
   const [selStatuses, setSelStatuses] = useState<string[]>([]);
   const [selProvinces, setSelProvinces] = useState<string[]>([]);
   const [selSources, setSelSources] = useState<string[]>([]);
+  const [assignmentFilter, setAssignmentFilter] = useState<'all' | 'assigned' | 'unassigned'>('all');
   const [phoneFilter, setPhoneFilter] = useState('all');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -420,6 +421,7 @@ export default function LeadsCRMPage() {
     if (selStatuses.length > 0) p.set('status', selStatuses.join(','));
     if (selProvinces.length > 0) p.set('province', selProvinces.join(','));
     if (selSources.length > 0) p.set('source', selSources.join(','));
+    if (assignmentFilter !== 'all') p.set('assignment', assignmentFilter);
     if (phoneFilter !== 'all') p.set('phone_valid', phoneFilter);
     if (bulkFilter !== 'all') p.set('bulk_status', bulkFilter);
     if (dateFrom) p.set('date_from', dateFrom);
@@ -432,7 +434,7 @@ export default function LeadsCRMPage() {
     const res = await adminFetch(`/api/admin/leads?${p}`);
     if (res.ok) { const d = await res.json(); setLeads(d.leads || []); setTotal(d.total || 0); }
     setLoading(false);
-  }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, phoneFilter, bulkFilter, dateFrom, dateTo, search, page, perPage, sortBy, sortDir]);
+  }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, search, page, perPage, sortBy, sortDir]);
 
   const fetchFacets = useCallback(async () => {
     const p = new URLSearchParams();
@@ -441,6 +443,7 @@ export default function LeadsCRMPage() {
     if (selStatuses.length > 0) p.set('status', selStatuses.join(','));
     if (selProvinces.length > 0) p.set('province', selProvinces.join(','));
     if (selSources.length > 0) p.set('source', selSources.join(','));
+    if (assignmentFilter !== 'all') p.set('assignment', assignmentFilter);
     if (phoneFilter !== 'all') p.set('phone_valid', phoneFilter);
     if (bulkFilter !== 'all') p.set('bulk_status', bulkFilter);
     if (dateFrom) p.set('date_from', dateFrom);
@@ -448,7 +451,7 @@ export default function LeadsCRMPage() {
     if (search) p.set('search', search);
     const res = await adminFetch(`/api/admin/leads/facets?${p}`);
     if (res.ok) { const d = await res.json(); setFacets(d.facets || {}); }
-  }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, phoneFilter, bulkFilter, dateFrom, dateTo, search]);
+  }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, search]);
 
   const fetchExportHistory = useCallback(async () => {
     const res = await adminFetch('/api/admin/leads/export');
@@ -475,7 +478,7 @@ export default function LeadsCRMPage() {
   useEffect(() => { fetchMeta(); fetchExportHistory(); }, [fetchMeta, fetchExportHistory]);
   useEffect(() => { fetchLeads(); }, [fetchLeads]);
   useEffect(() => { fetchFacets(); }, [fetchFacets]);
-  useEffect(() => { setPage(1); }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, phoneFilter, bulkFilter, dateFrom, dateTo, search, perPage]);
+  useEffect(() => { setPage(1); }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, search, perPage]);
 
   const branchMap = useMemo(() => {
     const m: Record<string, BranchConfig> = {};
@@ -540,13 +543,14 @@ export default function LeadsCRMPage() {
     if (selStatuses.length > 0) p.status = selStatuses.join(',');
     if (selProvinces.length > 0) p.province = selProvinces.join(',');
     if (selSources.length > 0) p.source = selSources.join(',');
+    if (assignmentFilter !== 'all') p.assignment = assignmentFilter;
     if (phoneFilter !== 'all') p.phone_valid = phoneFilter;
     if (bulkFilter !== 'all') p.bulk_status = bulkFilter;
     if (dateFrom) p.date_from = dateFrom;
     if (dateTo) p.date_to = dateTo;
     if (search) p.search = search;
     return p;
-  }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, phoneFilter, bulkFilter, dateFrom, dateTo, search]);
+  }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, search]);
 
   const handleQuickStatus = async (id: string, newStatus: string) => {
     await adminFetch('/api/admin/leads', { method: 'PUT', body: JSON.stringify({ id, status: newStatus }) });
@@ -633,7 +637,7 @@ export default function LeadsCRMPage() {
           <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Zoek op naam, email, telefoon of postcode..."
             className="w-full rounded-lg border border-slate-200 bg-slate-50/50 py-2.5 pl-9 pr-4 text-sm text-slate-700 outline-none focus:border-brand-purple/50 focus:bg-white focus:ring-1 focus:ring-brand-purple/30" />
         </div>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-8">
           <MultiSelect
             label="branches"
             allLabel="Alle branches"
@@ -643,7 +647,7 @@ export default function LeadsCRMPage() {
             counts={facets.branch}
           />
           <MultiSelect
-            label="klanten"
+            label="uitgedeeld aan"
             allLabel="Alle klanten"
             options={customers.map(c => ({ value: c.id, label: c.name }))}
             selected={selCustomers}
@@ -683,6 +687,11 @@ export default function LeadsCRMPage() {
             onChange={setSelSources}
             counts={facets.source}
           />
+          <select value={assignmentFilter} onChange={e => setAssignmentFilter(e.target.value as 'all' | 'assigned' | 'unassigned')} className={`rounded-lg border px-3 py-2 text-sm ${assignmentFilter !== 'all' ? 'border-purple-300 bg-purple-50 text-purple-700' : 'border-slate-200 bg-white text-slate-700'}`} title="Toon enkel leads die wel of niet aan een klant zijn uitgedeeld">
+            <option value="all">Alle toewijzingen</option>
+            <option value="assigned">Wel uitgedeeld</option>
+            <option value="unassigned">Niet uitgedeeld</option>
+          </select>
           <select value={phoneFilter} onChange={e => setPhoneFilter(e.target.value)} className={`rounded-lg border px-3 py-2 text-sm ${phoneFilter === 'false' ? 'border-amber-300 bg-amber-50 text-amber-700' : 'border-slate-200 bg-white text-slate-700'}`}>
             <option value="all">Alle nummers</option>
             <option value="false">Verdacht nummer</option>
@@ -1036,6 +1045,9 @@ function ExportModal({
   const [format, setFormat] = useState<'csv' | 'xlsx'>('xlsx');
   const [prioritize, setPrioritize] = useState(true);
   const [maxLeads, setMaxLeads] = useState('');
+  const [excludeCustomers, setExcludeCustomers] = useState<string[]>([]);
+  const [excludeAlreadyAssigned, setExcludeAlreadyAssigned] = useState(false);
+  const [showExcludePicker, setShowExcludePicker] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState('');
 
@@ -1051,6 +1063,12 @@ function ExportModal({
       if (targetCustomerId) {
         body.target_customer_id = targetCustomerId;
         body.add_to_portal = addToPortal;
+      }
+      if (excludeCustomers.length > 0) {
+        body.exclude_customer_id = excludeCustomers.join(',');
+      }
+      if (excludeAlreadyAssigned) {
+        body.assignment = 'unassigned';
       }
       if (maxLeads && Number(maxLeads) > 0) body.max_leads = Number(maxLeads);
 
@@ -1117,6 +1135,56 @@ function ExportModal({
                 </div>
               </label>
             )}
+
+            <label className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-slate-50/50 px-4 py-3 text-sm text-slate-700 cursor-pointer hover:bg-slate-50">
+              <input type="checkbox" checked={excludeAlreadyAssigned} onChange={e => setExcludeAlreadyAssigned(e.target.checked)}
+                className="h-4 w-4 rounded border-slate-300 text-brand-purple focus:ring-brand-purple/30" />
+              <div>
+                <span className="font-medium">Sluit reeds uitgedeelde leads uit</span>
+                <p className="text-xs text-slate-500">Alleen leads exporteren die nog niet aan een klant zijn toegewezen</p>
+              </div>
+            </label>
+
+            <div className="rounded-lg border border-slate-200 bg-slate-50/50 px-4 py-3">
+              <button type="button" onClick={() => setShowExcludePicker(s => !s)} className="flex w-full items-center justify-between text-left text-sm font-medium text-slate-700">
+                <span>
+                  Sluit specifieke klanten uit
+                  {excludeCustomers.length > 0 && (
+                    <span className="ml-2 rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold text-rose-700">
+                      {excludeCustomers.length} geselecteerd
+                    </span>
+                  )}
+                </span>
+                <ChevronDownIcon className={`h-4 w-4 text-slate-400 transition ${showExcludePicker ? 'rotate-180' : ''}`} />
+              </button>
+              {!showExcludePicker && (
+                <p className="mt-1 text-xs text-slate-500">Verberg leads die al aan deze klanten zijn uitgedeeld</p>
+              )}
+              {showExcludePicker && (
+                <div className="mt-3 max-h-44 overflow-y-auto rounded-lg border border-slate-200 bg-white p-2">
+                  {customers.length === 0 && <p className="px-2 py-1 text-xs text-slate-400">Geen klanten</p>}
+                  {customers.map(c => {
+                    const checked = excludeCustomers.includes(c.id);
+                    return (
+                      <label key={c.id} className="flex items-center gap-2 rounded px-2 py-1.5 text-sm text-slate-700 hover:bg-slate-50 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => setExcludeCustomers(prev => checked ? prev.filter(id => id !== c.id) : [...prev, c.id])}
+                          className="h-4 w-4 rounded border-slate-300 text-brand-purple focus:ring-brand-purple/30"
+                        />
+                        <span>{c.name}</span>
+                      </label>
+                    );
+                  })}
+                  {excludeCustomers.length > 0 && (
+                    <button type="button" onClick={() => setExcludeCustomers([])} className="mt-2 text-xs font-medium text-slate-500 hover:text-slate-700">
+                      Selectie wissen
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>

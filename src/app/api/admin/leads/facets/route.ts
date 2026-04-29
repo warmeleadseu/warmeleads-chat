@@ -9,6 +9,8 @@ export async function GET(request: NextRequest) {
   const url = request.nextUrl.searchParams;
   const branch = url.get('branch');
   const customerId = url.get('customer_id');
+  const excludeCustomerId = url.get('exclude_customer_id');
+  const assignment = url.get('assignment');
   const status = url.get('status');
   const province = url.get('province');
   const source = url.get('source');
@@ -29,6 +31,8 @@ export async function GET(request: NextRequest) {
     p_date_from: dateFrom || null,
     p_date_to: dateTo || null,
     p_search: search || null,
+    p_assignment: assignment && (assignment === 'assigned' || assignment === 'unassigned') ? assignment : null,
+    p_exclude_customers: excludeCustomerId ? excludeCustomerId.split(',').filter(Boolean) : null,
   });
 
   if (error) {

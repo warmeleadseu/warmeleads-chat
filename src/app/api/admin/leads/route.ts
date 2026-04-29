@@ -15,6 +15,8 @@ export async function GET(request: NextRequest) {
   const url = request.nextUrl.searchParams;
   const branch = url.get('branch');
   const customerId = url.get('customer_id');
+  const excludeCustomerId = url.get('exclude_customer_id');
+  const assignment = url.get('assignment');
   const status = url.get('status');
   const province = url.get('province');
   const source = url.get('source');
@@ -38,10 +40,19 @@ export async function GET(request: NextRequest) {
     else if (vals.length > 1) query = query.in('branch', vals);
   }
   if (customerId) {
+    // assigned_customer_ids wordt door trigger uit lead_assignments gevuld en
+    // bevat dus zowel directe owner als alle uitgedeelde toewijzingen.
     const vals = customerId.split(',').filter(Boolean);
-    if (vals.length === 1) query = query.eq('customer_id', vals[0]);
-    else if (vals.length > 1) query = query.in('customer_id', vals);
+    if (vals.length > 0) query = query.overlaps('assigned_customer_ids', vals);
   }
+  if (excludeCustomerId) {
+    const vals = excludeCustomerId.split(',').filter(Boolean);
+    if (vals.length > 0) {
+      query = query.not('assigned_customer_ids', 'ov', `{${vals.join(',')}}`);
+    }
+  }
+  if (assignment === 'assigned') query = query.eq('is_assigned', true);
+  else if (assignment === 'unassigned') query = query.eq('is_assigned', false);
   if (status) {
     const vals = status.split(',').filter(Boolean);
     if (vals.length === 1) query = query.eq('status', vals[0]);
@@ -68,8 +79,8 @@ export async function GET(request: NextRequest) {
   if (admin.role === 'accountmanager') {
     const { data: myCustomers } = await supabase.from('customers').select('id').eq('account_manager_id', admin.id);
     const ids = (myCustomers || []).map(c => c.id);
-    if (ids.length === 0) return NextResponse.json({ data: [], total: 0 });
-    query = query.in('customer_id', ids);
+    if (ids.length === 0) return NextResponse.json({ leads: [], total: 0, page, perPage });
+    query = query.overlaps('assigned_customer_ids', ids);
   }
 
   const bulkStatus = url.get('bulk_status');
