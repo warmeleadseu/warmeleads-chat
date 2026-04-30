@@ -9,6 +9,21 @@ interface AddressResult {
   land?: 'NL' | 'BE';
 }
 
+// PDOK gebruikt de Friese officiele naam 'Fryslân'; Nominatim soms 'Fryslàn'.
+// In onze database hanteren we consequent 'Friesland' zodat exports/filters/
+// stats niet uit elkaar lopen op spelling.
+const PROVINCE_ALIASES: Record<string, string> = {
+  'Fryslân': 'Friesland',
+  'Fryslan': 'Friesland',
+  'Fryslàn': 'Friesland',
+};
+
+export function normalizeProvincie(val: string | undefined | null): string {
+  if (!val) return '';
+  const trimmed = val.trim();
+  return PROVINCE_ALIASES[trimmed] || trimmed;
+}
+
 export function isValidPlace(val: string | undefined): boolean {
   if (!val) return false;
   const v = val.trim();
@@ -175,7 +190,7 @@ async function pdokSearch(query: string, type: 'adres' | 'postcode'): Promise<Ad
     const coords = doc.centroide_ll ? parseWKTPoint(doc.centroide_ll) : null;
     return {
       plaatsnaam: doc.woonplaatsnaam || '',
-      provincie: doc.provincienaam || '',
+      provincie: normalizeProvincie(doc.provincienaam),
       lat: coords?.lat,
       lng: coords?.lng,
       land: 'NL',
@@ -218,7 +233,7 @@ async function nominatimSearch(params: Record<string, string>): Promise<AddressR
     const addr = doc.address || {};
     return {
       plaatsnaam: addr.city || addr.town || addr.village || addr.municipality || addr.city_district || '',
-      provincie: addr.state || '',
+      provincie: normalizeProvincie(addr.state),
       lat: doc.lat ? parseFloat(doc.lat) : undefined,
       lng: doc.lon ? parseFloat(doc.lon) : undefined,
     };
@@ -328,7 +343,14 @@ export async function enrichLeadAddress<
   const needsPlace = !isValidPlace(lead.plaatsnaam);
   const needsProv = !isValidPlace(lead.provincie);
   const needsCoords = !lead.lat || !lead.lng;
+  // Normaliseer de bestaande provincie-waarde altijd, ook als we niet
+  // verrijken; dat voorkomt dat handmatige inserts of webhooks 'Fryslân'
+  // doorlaten.
+  const normalizedExisting = normalizeProvincie(lead.provincie);
   if ((!needsPlace && !needsProv && !needsCoords) || !lead.postcode || !lead.huisnummer) {
+    if (normalizedExisting !== lead.provincie) {
+      return { ...lead, provincie: normalizedExisting };
+    }
     return lead;
   }
 
@@ -338,12 +360,17 @@ export async function enrichLeadAddress<
     lead.land as 'NL' | 'BE' | undefined,
     lead.telefoonnummer
   );
-  if (!result) return lead;
+  if (!result) {
+    if (normalizedExisting !== lead.provincie) {
+      return { ...lead, provincie: normalizedExisting };
+    }
+    return lead;
+  }
 
   return {
     ...lead,
     plaatsnaam: needsPlace && result.plaatsnaam ? result.plaatsnaam : lead.plaatsnaam,
-    provincie: needsProv && result.provincie ? result.provincie : lead.provincie,
+    provincie: needsProv && result.provincie ? result.provincie : normalizedExisting,
     lat: needsCoords && result.lat ? result.lat : lead.lat,
     lng: needsCoords && result.lng ? result.lng : lead.lng,
     land: !lead.land && result.land ? result.land : lead.land,
