@@ -15,6 +15,7 @@ export async function GET(request: NextRequest) {
   const province = url.get('province');
   const source = url.get('source');
   const phoneValid = url.get('phone_valid');
+  const bulkStatus = url.get('bulk_status');
   const dateFrom = url.get('date_from');
   const dateTo = url.get('date_to');
   const search = url.get('search');
@@ -31,8 +32,9 @@ export async function GET(request: NextRequest) {
     p_date_from: dateFrom || null,
     p_date_to: dateTo || null,
     p_search: search || null,
-    p_assignment: assignment && (assignment === 'assigned' || assignment === 'unassigned') ? assignment : null,
+    p_assignment: assignment === 'assigned' || assignment === 'unassigned' ? assignment : null,
     p_exclude_customers: excludeCustomerId ? excludeCustomerId.split(',').filter(Boolean) : null,
+    p_bulk_status: bulkStatus === 'never' || bulkStatus === 'once' || bulkStatus === 'multiple' ? bulkStatus : null,
   });
 
   if (error) {
