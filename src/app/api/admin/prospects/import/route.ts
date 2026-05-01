@@ -23,6 +23,9 @@ interface ImportBody {
   assignment_strategy?: 'manual' | 'specific_am' | 'round_robin';
   account_manager_id?: string;
   account_manager_ids?: string[];
+  /** Branches (slugs) die op alle geïmporteerde prospects worden toegepast,
+   *  gemerged met een eventuele branches-kolom uit het bestand. */
+  default_branches?: string[];
 }
 
 function normalizePhone(raw: unknown): string {
@@ -114,6 +117,26 @@ export async function POST(request: NextRequest) {
     for (const r of cRes.data || []) if (r.email) existingEmail.add(String(r.email).toLowerCase());
   }
 
+  // Valideer optionele default_branches tegen de branches-tabel zodat we nooit
+  // ongeldige slugs in prospects.branches krijgen, ongeacht wat de UI stuurt.
+  const requestedDefaultBranches = Array.isArray(body.default_branches)
+    ? Array.from(
+        new Set(
+          body.default_branches
+            .map(s => (typeof s === 'string' ? s.trim().toLowerCase() : ''))
+            .filter(Boolean),
+        ),
+      )
+    : [];
+  let validatedDefaultBranches: string[] = [];
+  if (requestedDefaultBranches.length > 0) {
+    const { data: branchRows } = await supabase
+      .from('branches')
+      .select('slug')
+      .in('slug', requestedDefaultBranches);
+    validatedDefaultBranches = (branchRows || []).map(b => String(b.slug));
+  }
+
   // Bepaal toewijzings-pool
   const strategy = body.assignment_strategy ?? 'manual';
   let amPool: string[] = [];
@@ -185,8 +208,9 @@ export async function POST(request: NextRequest) {
         const v = cleanPostcode(r.postcode);
         if (v) out.postcode = v;
       } else if (f === 'branches') {
-        const v = parseBranches(r.branches);
-        if (v.length > 0) out.branches = v;
+        const fromFile = parseBranches(r.branches);
+        const merged = Array.from(new Set([...fromFile, ...validatedDefaultBranches]));
+        if (merged.length > 0) out.branches = merged;
       } else if (f === 'email') {
         if (email) out.email = email;
       } else {
@@ -221,6 +245,7 @@ export async function POST(request: NextRequest) {
       column_mapping: body.column_mapping ?? null,
       assignment_strategy: strategy,
       assignment_admin_ids: assignmentAdminIds.length > 0 ? assignmentAdminIds : null,
+      default_branches: validatedDefaultBranches.length > 0 ? validatedDefaultBranches : null,
       errors: errors.length > 0 ? errors.slice(0, 200) : null,
     })
     .select()
@@ -288,6 +313,7 @@ export async function POST(request: NextRequest) {
       duplicates: errors.filter(e => !e.ok && e.reason.startsWith('duplicaat')).length,
       errors: errors.filter(e => !e.ok && !e.reason.startsWith('duplicaat')).length,
       strategy,
+      default_branches: validatedDefaultBranches.length > 0 ? validatedDefaultBranches : undefined,
     },
   });
 

@@ -112,6 +112,11 @@ interface DupeCheck {
   duplicate_emails: string[];
 }
 
+interface BranchOpt {
+  slug: string;
+  name: string;
+}
+
 export default function ProspectsImportPage() {
   const { user } = useAdmin();
   const router = useRouter();
@@ -129,6 +134,8 @@ export default function ProspectsImportPage() {
   const [amId, setAmId] = useState<string>('');
   const [poolIds, setPoolIds] = useState<Set<string>>(new Set());
   const [ams, setAms] = useState<AdminUserOption[]>([]);
+  const [branchOpts, setBranchOpts] = useState<BranchOpt[]>([]);
+  const [defaultBranches, setDefaultBranches] = useState<Set<string>>(new Set());
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<{ imported: number; duplicates: number; errors_count: number; total: number } | null>(null);
 
@@ -143,7 +150,38 @@ export default function ProspectsImportPage() {
         ),
       )
       .catch(() => {});
+
+    adminFetch('/api/admin/branches')
+      .then(r => r.json())
+      .then(d =>
+        setBranchOpts(
+          (d.branches || [])
+            .filter((b: { is_active?: boolean }) => b.is_active !== false)
+            .map((b: { slug: string; name: string }) => ({ slug: b.slug, name: b.name })),
+        ),
+      )
+      .catch(() => {});
   }, []);
+
+  const toggleDefaultBranch = useCallback((slug: string) => {
+    setDefaultBranches(prev => {
+      const next = new Set(prev);
+      if (next.has(slug)) next.delete(slug);
+      else next.add(slug);
+      return next;
+    });
+  }, []);
+
+  const branchNameMap = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const b of branchOpts) m[b.slug] = b.name;
+    return m;
+  }, [branchOpts]);
+
+  const hasBranchesMapping = useMemo(
+    () => Object.values(mapping).some(v => v === 'branches'),
+    [mapping],
+  );
 
   const onFile = useCallback(async (file: File) => {
     setParsing(true);
@@ -246,6 +284,7 @@ export default function ProspectsImportPage() {
       };
       if (strategy === 'specific_am') body.account_manager_id = amId;
       if (strategy === 'round_robin') body.account_manager_ids = Array.from(poolIds);
+      if (defaultBranches.size > 0) body.default_branches = Array.from(defaultBranches);
 
       const res = await adminFetch('/api/admin/prospects/import', {
         method: 'POST',
@@ -343,6 +382,53 @@ export default function ProspectsImportPage() {
           <p className="mb-4 text-sm text-slate-500">
             Koppel de kolommen uit jouw bestand aan de juiste prospect-velden. Bedrijfsnaam is verplicht.
           </p>
+
+          {branchOpts.length > 0 && (
+            <div className="mb-5 rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <h3 className="text-sm font-semibold text-slate-800">
+                  Branche(s) voor deze import <span className="text-slate-400">— optioneel</span>
+                </h3>
+                {defaultBranches.size > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setDefaultBranches(new Set())}
+                    className="text-xs font-medium text-slate-500 hover:text-slate-700"
+                  >
+                    Selectie wissen
+                  </button>
+                )}
+              </div>
+              <p className="mt-1 text-xs text-slate-500">
+                Wordt op alle geïmporteerde prospects toegepast.{' '}
+                {hasBranchesMapping
+                  ? 'Gekoppeld aan een branches-kolom uit je bestand: deze waarden worden samengevoegd, niet overschreven.'
+                  : 'Niets geselecteerd? Dan blijft de branches-array leeg, tenzij je in het bestand een kolom op "Branches" mapt.'}
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {branchOpts.map(b => {
+                  const active = defaultBranches.has(b.slug);
+                  return (
+                    <button
+                      key={b.slug}
+                      type="button"
+                      onClick={() => toggleDefaultBranch(b.slug)}
+                      aria-pressed={active}
+                      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+                        active
+                          ? 'border-brand-purple bg-brand-purple text-white shadow-sm'
+                          : 'border-slate-200 bg-white text-slate-700 hover:border-brand-purple/40 hover:bg-brand-purple/5'
+                      }`}
+                    >
+                      {active && <CheckIcon className="h-3 w-3" />}
+                      {b.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <div className="grid gap-2 md:grid-cols-2">
             {headers.map(h => (
               <div key={h} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50/40 p-2">
@@ -396,6 +482,19 @@ export default function ProspectsImportPage() {
             <Stat label="Validatie-fouten" value={validation.missingName} accent="bg-rose-50 text-rose-700" />
             <Stat label="Totaal" value={rows.length} accent="bg-slate-50 text-slate-700" />
           </div>
+
+          {defaultBranches.size > 0 && (
+            <div className="rounded-2xl border border-brand-purple/30 bg-brand-purple/5 p-4 text-sm text-slate-700">
+              <p className="font-semibold text-brand-purple">
+                Branche(s) op deze import: {Array.from(defaultBranches).map(s => branchNameMap[s] || s).join(', ')}
+              </p>
+              <p className="mt-0.5 text-xs text-slate-500">
+                {hasBranchesMapping
+                  ? 'Wordt samengevoegd met de branches-kolom uit je bestand.'
+                  : 'Wordt op elke geïmporteerde prospect toegepast.'}
+              </p>
+            </div>
+          )}
 
           {(validation.missingName > 0 || dupes) && (
             <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
@@ -609,6 +708,10 @@ export default function ProspectsImportPage() {
                 setMapping({});
                 setDupes(null);
                 setResult(null);
+                setDefaultBranches(new Set());
+                setStrategy('manual');
+                setAmId('');
+                setPoolIds(new Set());
               }}
               className="rounded-lg border border-emerald-200 bg-white px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100"
             >
