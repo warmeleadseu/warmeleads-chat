@@ -32,33 +32,37 @@ export async function POST(request: NextRequest) {
   const now = new Date().toISOString();
 
   if (body.strategy === 'unassign') {
-    const { error } = await supabase
+    const { data: updatedRows, error } = await supabase
       .from('prospects')
       .update({ account_manager_id: null, assigned_at: null })
-      .in('id', ids);
+      .in('id', ids)
+      .select('id');
     if (error) {
       return NextResponse.json({ error: 'Bulk unassign mislukt' }, { status: 500 });
     }
+    const updatedIds = (updatedRows || []).map(r => r.id);
 
-    await supabase.from('prospect_activities').insert(
-      ids.map(pid => ({
-        prospect_id: pid,
-        admin_user_id: admin.id,
-        type: 'assignment',
-        title: 'Toewijzing verwijderd (bulk)',
-        metadata: { bulk: true },
-      })),
-    );
+    if (updatedIds.length > 0) {
+      await supabase.from('prospect_activities').insert(
+        updatedIds.map(pid => ({
+          prospect_id: pid,
+          admin_user_id: admin.id,
+          type: 'assignment',
+          title: 'Toewijzing verwijderd (bulk)',
+          metadata: { bulk: true },
+        })),
+      );
+    }
 
     logAudit({
       adminId: admin.id,
       adminName: admin.name,
       action: 'prospect.bulk_unassigned',
       entityType: 'prospect',
-      details: { count: ids.length },
+      details: { requested: ids.length, updated: updatedIds.length },
     });
 
-    return NextResponse.json({ success: true, updated: ids.length });
+    return NextResponse.json({ success: true, requested: ids.length, updated: updatedIds.length });
   }
 
   if (body.strategy === 'specific_am') {
@@ -75,33 +79,37 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Account manager niet gevonden of inactief' }, { status: 400 });
     }
 
-    const { error } = await supabase
+    const { data: updatedRows, error } = await supabase
       .from('prospects')
       .update({ account_manager_id: amId, assigned_at: now })
-      .in('id', ids);
+      .in('id', ids)
+      .select('id');
     if (error) {
       return NextResponse.json({ error: 'Bulk-toewijzen mislukt' }, { status: 500 });
     }
+    const updatedIds = (updatedRows || []).map(r => r.id);
 
-    await supabase.from('prospect_activities').insert(
-      ids.map(pid => ({
-        prospect_id: pid,
-        admin_user_id: admin.id,
-        type: 'assignment',
-        title: `Toegewezen aan ${amRow.name} (bulk)`,
-        metadata: { bulk: true, to: amId },
-      })),
-    );
+    if (updatedIds.length > 0) {
+      await supabase.from('prospect_activities').insert(
+        updatedIds.map(pid => ({
+          prospect_id: pid,
+          admin_user_id: admin.id,
+          type: 'assignment',
+          title: `Toegewezen aan ${amRow.name} (bulk)`,
+          metadata: { bulk: true, to: amId },
+        })),
+      );
+    }
 
     logAudit({
       adminId: admin.id,
       adminName: admin.name,
       action: 'prospect.bulk_assigned',
       entityType: 'prospect',
-      details: { count: ids.length, to: amId },
+      details: { requested: ids.length, updated: updatedIds.length, to: amId },
     });
 
-    return NextResponse.json({ success: true, updated: ids.length });
+    return NextResponse.json({ success: true, requested: ids.length, updated: updatedIds.length });
   }
 
   if (body.strategy === 'round_robin') {
@@ -130,24 +138,32 @@ export async function POST(request: NextRequest) {
     });
 
     let updated = 0;
+    const failures: Array<{ am_id: string; reason: string; bucket_size: number }> = [];
     for (const am of validAms) {
       const list = buckets[am.id];
       if (list.length === 0) continue;
-      const { error } = await supabase
+      const { data: updatedRows, error } = await supabase
         .from('prospects')
         .update({ account_manager_id: am.id, assigned_at: now })
-        .in('id', list);
-      if (error) continue;
-      updated += list.length;
-      await supabase.from('prospect_activities').insert(
-        list.map(pid => ({
-          prospect_id: pid,
-          admin_user_id: admin.id,
-          type: 'assignment',
-          title: `Toegewezen aan ${am.name} (round-robin)`,
-          metadata: { bulk: true, strategy: 'round_robin', to: am.id },
-        })),
-      );
+        .in('id', list)
+        .select('id');
+      if (error) {
+        failures.push({ am_id: am.id, reason: error.message || 'unknown', bucket_size: list.length });
+        continue;
+      }
+      const updatedIds = (updatedRows || []).map(r => r.id);
+      updated += updatedIds.length;
+      if (updatedIds.length > 0) {
+        await supabase.from('prospect_activities').insert(
+          updatedIds.map(pid => ({
+            prospect_id: pid,
+            admin_user_id: admin.id,
+            type: 'assignment',
+            title: `Toegewezen aan ${am.name} (round-robin)`,
+            metadata: { bulk: true, strategy: 'round_robin', to: am.id },
+          })),
+        );
+      }
     }
 
     logAudit({
@@ -155,10 +171,22 @@ export async function POST(request: NextRequest) {
       adminName: admin.name,
       action: 'prospect.bulk_assigned',
       entityType: 'prospect',
-      details: { count: updated, strategy: 'round_robin', am_pool: validAms.map(a => a.id) },
+      details: {
+        requested: ids.length,
+        updated,
+        strategy: 'round_robin',
+        am_pool: validAms.map(a => a.id),
+        failures: failures.length,
+      },
     });
 
-    return NextResponse.json({ success: true, updated });
+    return NextResponse.json({
+      success: failures.length === 0,
+      partial: failures.length > 0 && updated > 0,
+      requested: ids.length,
+      updated,
+      failures,
+    });
   }
 
   return NextResponse.json({ error: 'Onbekende strategie' }, { status: 400 });

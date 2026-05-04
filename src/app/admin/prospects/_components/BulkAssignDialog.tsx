@@ -62,12 +62,24 @@ export function BulkAssignDialog({ open, onClose, prospectIds, ams, onDone }: Pr
         method: 'POST',
         body: JSON.stringify(body),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setError(data.error || 'Toewijzen mislukt');
+      } else if (data.partial) {
+        setError(
+          `${data.updated} van ${data.requested ?? prospectIds.length} prospects bijgewerkt; ${
+            (data.failures?.length ?? 0)
+          } AM-batches faalden. Probeer opnieuw of controleer de logs.`,
+        );
+      } else if (typeof data.requested === 'number' && typeof data.updated === 'number' && data.updated < data.requested) {
+        setError(
+          `${data.updated} van ${data.requested} prospects bijgewerkt. Sommige IDs bestaan mogelijk niet meer.`,
+        );
       } else {
         onDone();
       }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Toewijzen mislukt');
     } finally {
       setSubmitting(false);
     }

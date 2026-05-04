@@ -66,10 +66,28 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     .select()
     .single();
   if (cErr || !customer) {
-    return NextResponse.json(
-      { error: 'Klant aanmaken mislukt', details: cErr?.message },
-      { status: 500 },
-    );
+    console.error('[prospects/convert] customer insert error:', cErr?.message);
+    // Specifieke unique-violations krijgen een nette 409 zonder de DB-message te lekken.
+    if (cErr?.code === '23505') {
+      const m = (cErr.message || '').toLowerCase();
+      if (m.includes('email')) {
+        return NextResponse.json(
+          { error: 'Een klant met dit e-mailadres bestaat al' },
+          { status: 409 },
+        );
+      }
+      if (m.includes('kvk')) {
+        return NextResponse.json(
+          { error: 'Een klant met dit KVK-nummer bestaat al' },
+          { status: 409 },
+        );
+      }
+      return NextResponse.json(
+        { error: 'Klant met deze gegevens bestaat al' },
+        { status: 409 },
+      );
+    }
+    return NextResponse.json({ error: 'Klant aanmaken mislukt' }, { status: 500 });
   }
 
   // Update prospect

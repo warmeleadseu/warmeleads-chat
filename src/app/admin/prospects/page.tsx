@@ -70,6 +70,7 @@ export default function ProspectsPage() {
   const [stats, setStats] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   const [ams, setAms] = useState<AdminUserOption[]>([]);
   const [branches, setBranches] = useState<BranchOption[]>([]);
@@ -105,12 +106,17 @@ export default function ProspectsPage() {
         params.set('include_stats', '1');
 
         const res = await adminFetch(`/api/admin/prospects?${params}`);
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
         if (res.ok) {
           setProspects(data.prospects || []);
           setTotal(data.total || 0);
           if (data.stats) setStats(data.stats);
+          setFetchError(null);
+        } else {
+          setFetchError(data?.error || `Prospects ophalen mislukt (${res.status})`);
         }
+      } catch (err) {
+        setFetchError(err instanceof Error ? err.message : 'Prospects ophalen mislukt');
       } finally {
         setLoading(false);
         setRefreshing(false);
@@ -139,6 +145,7 @@ export default function ProspectsPage() {
   }, []);
 
   const amNames = useMemo(() => Object.fromEntries(ams.map(a => [a.id, a.name])), [ams]);
+  const branchNames = useMemo(() => Object.fromEntries(branches.map(b => [b.slug, b.name])), [branches]);
 
   const allSelected = prospects.length > 0 && prospects.every(p => selected.has(p.id));
   const toggleAll = () => {
@@ -173,23 +180,28 @@ export default function ProspectsPage() {
     [router, searchParams],
   );
 
+  const [createError, setCreateError] = useState<string | null>(null);
+
   const handleCreate = async () => {
     if (!createForm.company_name.trim() || creating) return;
     setCreating(true);
+    setCreateError(null);
     try {
       const res = await adminFetch('/api/admin/prospects', {
         method: 'POST',
         body: JSON.stringify(createForm),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (res.ok && data.prospect) {
         setShowCreate(false);
         setCreateForm(EMPTY_PROSPECT);
         await fetchData();
         openDrawer(data.prospect.id);
       } else {
-        alert(data.error || 'Aanmaken mislukt');
+        setCreateError(data.error || 'Aanmaken mislukt');
       }
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : 'Aanmaken mislukt');
     } finally {
       setCreating(false);
     }
@@ -207,7 +219,7 @@ export default function ProspectsPage() {
         setProspects(prev => prev.map(p => (p.id === id ? original : p)));
       }
       const data = await res.json().catch(() => null);
-      alert(data?.error || 'Status wijzigen mislukt');
+      setFetchError(data?.error || 'Status wijzigen mislukt');
       return;
     }
     fetchData(true);
@@ -260,9 +272,9 @@ export default function ProspectsPage() {
       </header>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 gap-2 md:grid-cols-4 lg:grid-cols-7">
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-4 lg:grid-cols-8">
         <KpiTile label="Totaal" value={stats.total ?? total} accent="bg-slate-50 text-slate-700" />
-        {PROSPECT_STATUSES.slice(0, 6).map(s => (
+        {PROSPECT_STATUSES.map(s => (
           <KpiTile
             key={s}
             label={PROSPECT_STATUS_LABELS[s]}
@@ -273,6 +285,21 @@ export default function ProspectsPage() {
           />
         ))}
       </div>
+
+      {fetchError && (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700" role="alert">
+          <div className="flex items-start justify-between gap-3">
+            <span>{fetchError}</span>
+            <button
+              type="button"
+              onClick={() => fetchData(true)}
+              className="shrink-0 rounded-md border border-rose-200 bg-white px-2 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-50"
+            >
+              Opnieuw proberen
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Filter bar */}
       <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
@@ -400,6 +427,7 @@ export default function ProspectsPage() {
         <ProspectsKanban
           prospects={prospects}
           amNames={amNames}
+          branchNames={branchNames}
           onMove={moveStatus}
           onOpen={openDrawer}
           canDrag
@@ -423,24 +451,36 @@ export default function ProspectsPage() {
 
       {/* Create */}
       {showCreate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4" onClick={() => setShowCreate(false)}>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+          onClick={() => { setShowCreate(false); setCreateError(null); }}
+        >
           <div
             className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-xl"
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
               <h2 className="text-lg font-bold text-slate-900">Nieuwe prospect</h2>
-              <button type="button" onClick={() => setShowCreate(false)} className="rounded p-1 text-slate-400 hover:bg-slate-100">
+              <button
+                type="button"
+                onClick={() => { setShowCreate(false); setCreateError(null); }}
+                className="rounded p-1 text-slate-400 hover:bg-slate-100"
+              >
                 <XMarkIcon className="h-5 w-5" />
               </button>
             </div>
             <div className="p-5">
               <ProspectFormFields value={createForm} onChange={setCreateForm} branches={branches} />
+              {createError && (
+                <div className="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                  {createError}
+                </div>
+              )}
             </div>
             <div className="flex justify-end gap-2 border-t border-slate-100 bg-slate-50 px-5 py-3">
               <button
                 type="button"
-                onClick={() => setShowCreate(false)}
+                onClick={() => { setShowCreate(false); setCreateError(null); }}
                 className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
               >
                 Annuleren

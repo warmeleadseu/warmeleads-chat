@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 import { ClockIcon, UserIcon, BriefcaseIcon } from '@heroicons/react/24/outline';
 import {
@@ -26,12 +26,13 @@ export interface KanbanProspect {
 interface Props {
   prospects: KanbanProspect[];
   amNames: Record<string, string>;
+  branchNames?: Record<string, string>;
   onMove: (id: string, status: ProspectStatus, lostReason?: string) => Promise<void> | void;
   onOpen: (id: string) => void;
   canDrag: boolean;
 }
 
-export function ProspectsKanban({ prospects, amNames, onMove, onOpen, canDrag }: Props) {
+export function ProspectsKanban({ prospects, amNames, branchNames = {}, onMove, onOpen, canDrag }: Props) {
   const grouped = useMemo(() => {
     const map = new Map<ProspectStatus, KanbanProspect[]>();
     for (const s of PROSPECT_STATUSES) map.set(s, []);
@@ -46,6 +47,9 @@ export function ProspectsKanban({ prospects, amNames, onMove, onOpen, canDrag }:
 
   const [pendingLost, setPendingLost] = useState<{ id: string } | null>(null);
   const [lostReason, setLostReason] = useState('');
+  const pressRef = useRef<{ x: number; y: number; t: number } | null>(null);
+  const DRAG_THRESHOLD_PX = 5;
+  const DRAG_THRESHOLD_MS = 250;
 
   const handleDragEnd = async (result: DropResult) => {
     const { destination, source, draggableId } = result;
@@ -108,7 +112,25 @@ export function ProspectsKanban({ prospects, amNames, onMove, onOpen, canDrag }:
                                 ref={prov.innerRef}
                                 {...prov.draggableProps}
                                 {...prov.dragHandleProps}
-                                onClick={() => onOpen(p.id)}
+                                onPointerDown={e => {
+                                  pressRef.current = { x: e.clientX, y: e.clientY, t: Date.now() };
+                                }}
+                                onClick={e => {
+                                  // Onderscheid drag van click op basis van afstand + duur,
+                                  // zodat de drawer niet opent direct na een sleepbeweging.
+                                  const start = pressRef.current;
+                                  pressRef.current = null;
+                                  if (start) {
+                                    const dx = Math.abs(e.clientX - start.x);
+                                    const dy = Math.abs(e.clientY - start.y);
+                                    const dt = Date.now() - start.t;
+                                    if (dx > DRAG_THRESHOLD_PX || dy > DRAG_THRESHOLD_PX || dt > DRAG_THRESHOLD_MS) {
+                                      return;
+                                    }
+                                  }
+                                  if (snap.isDragging) return;
+                                  onOpen(p.id);
+                                }}
                                 className={`cursor-pointer rounded-xl border bg-white p-3 shadow-sm transition-shadow ${
                                   snap.isDragging
                                     ? 'border-brand-purple/30 shadow-lg motion-reduce:shadow-sm'
@@ -131,7 +153,7 @@ export function ProspectsKanban({ prospects, amNames, onMove, onOpen, canDrag }:
                                       className="inline-flex items-center gap-1 rounded bg-brand-purple/10 px-1.5 py-0.5 text-brand-purple"
                                     >
                                       <BriefcaseIcon className="h-3 w-3" />
-                                      {b}
+                                      {branchNames[b] || b}
                                     </span>
                                   ))}
                                 </div>

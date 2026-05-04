@@ -88,6 +88,15 @@ export async function PATCH(request: NextRequest, { params }: { params: { taskId
       entityId: data.id,
       details: { prospect_id: task.prospect_id, title: task.title },
     });
+  } else if (Object.keys(updates).length > 0) {
+    logAudit({
+      adminId: admin.id,
+      adminName: admin.name,
+      action: 'prospect_task.updated',
+      entityType: 'prospect_task',
+      entityId: data.id,
+      details: { prospect_id: task.prospect_id, fields: Object.keys(updates) },
+    });
   }
 
   return NextResponse.json({ success: true, task: data });

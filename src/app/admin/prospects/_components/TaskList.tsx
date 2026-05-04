@@ -56,10 +56,12 @@ export function TaskList({ prospectId, tasks, onChange }: Props) {
   const [dueAt, setDueAt] = useState('');
   const [type, setType] = useState<'todo' | 'call' | 'email' | 'meeting' | 'followup'>('todo');
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const create = async () => {
     if (!title.trim() || saving) return;
     setSaving(true);
+    setError(null);
     try {
       const res = await adminFetch(`/api/admin/prospects/${prospectId}/tasks`, {
         method: 'POST',
@@ -69,29 +71,41 @@ export function TaskList({ prospectId, tasks, onChange }: Props) {
           due_at: dueAt ? new Date(dueAt).toISOString() : null,
         }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (res.ok && data.task) {
         onChange([data.task, ...tasks]);
         setTitle('');
         setDueAt('');
         setAdding(false);
+      } else {
+        setError(data.error || 'Taak aanmaken mislukt');
       }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Taak aanmaken mislukt');
     } finally {
       setSaving(false);
     }
   };
 
   const toggle = async (t: Task) => {
+    const previous = tasks;
     const next = tasks.map(x =>
       x.id === t.id ? { ...x, completed_at: t.completed_at ? null : new Date().toISOString() } : x,
     );
     onChange(next);
-    const res = await adminFetch(`/api/admin/prospects/tasks/${t.id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ completed: !t.completed_at }),
-    });
-    if (!res.ok) {
-      onChange(tasks);
+    try {
+      const res = await adminFetch(`/api/admin/prospects/tasks/${t.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ completed: !t.completed_at }),
+      });
+      if (!res.ok) {
+        onChange(previous);
+        const data = await res.json().catch(() => ({}));
+        setError(data.error || 'Taak bijwerken mislukt');
+      }
+    } catch (err) {
+      onChange(previous);
+      setError(err instanceof Error ? err.message : 'Taak bijwerken mislukt');
     }
   };
 
@@ -99,15 +113,23 @@ export function TaskList({ prospectId, tasks, onChange }: Props) {
     if (!confirm(`Taak "${t.title}" verwijderen?`)) return;
     const previous = tasks;
     onChange(tasks.filter(x => x.id !== t.id));
+    setError(null);
     const res = await adminFetch(`/api/admin/prospects/tasks/${t.id}`, { method: 'DELETE' });
     if (!res.ok) {
       onChange(previous);
-      alert('Verwijderen mislukt');
+      const data = await res.json().catch(() => ({}));
+      setError(data.error || 'Verwijderen mislukt');
     }
   };
 
   return (
     <div className="space-y-3">
+      {error && (
+        <div className="flex items-start justify-between gap-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+          <span>{error}</span>
+          <button type="button" onClick={() => setError(null)} className="text-rose-500 hover:text-rose-700">×</button>
+        </div>
+      )}
       {!adding ? (
         <button
           type="button"

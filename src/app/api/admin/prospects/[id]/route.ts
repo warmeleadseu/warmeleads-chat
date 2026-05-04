@@ -82,7 +82,26 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     if (!isValidStatus(body.status)) {
       return NextResponse.json({ error: 'Ongeldige status' }, { status: 400 });
     }
+    if (body.status === 'verloren') {
+      const reason = typeof body.lost_reason === 'string' ? body.lost_reason.trim() : '';
+      if (!reason) {
+        return NextResponse.json({ error: 'Geef een reden bij status "verloren"' }, { status: 400 });
+      }
+      updates.lost_reason = reason;
+    } else {
+      updates.lost_reason = null;
+    }
     updates.status = body.status;
+  } else if ('lost_reason' in body) {
+    // sta toe om alleen de reden bij te werken zolang status al "verloren" is
+    if (access.prospect?.status !== 'verloren') {
+      return NextResponse.json({ error: 'lost_reason alleen geldig bij status "verloren"' }, { status: 400 });
+    }
+    const reason = typeof body.lost_reason === 'string' ? body.lost_reason.trim() : '';
+    if (!reason) {
+      return NextResponse.json({ error: 'Reden mag niet leeg zijn' }, { status: 400 });
+    }
+    updates.lost_reason = reason;
   }
   if ('source' in body && !isAccountManagerScope(admin)) {
     if (!isValidSource(body.source)) {

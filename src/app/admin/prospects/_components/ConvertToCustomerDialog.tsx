@@ -63,12 +63,14 @@ export function ConvertToCustomerDialog({ open, onClose, prospect, branches, onD
           branches: Array.from(picked),
         }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setError(data.error || 'Conversie mislukt');
       } else if (data.customer) {
         onDone(data.customer.id);
       }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Conversie mislukt');
     } finally {
       setSubmitting(false);
     }

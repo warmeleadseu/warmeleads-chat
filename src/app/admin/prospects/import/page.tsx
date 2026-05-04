@@ -137,7 +137,15 @@ export default function ProspectsImportPage() {
   const [branchOpts, setBranchOpts] = useState<BranchOpt[]>([]);
   const [defaultBranches, setDefaultBranches] = useState<Set<string>>(new Set());
   const [submitting, setSubmitting] = useState(false);
-  const [result, setResult] = useState<{ imported: number; duplicates: number; errors_count: number; total: number } | null>(null);
+  const [result, setResult] = useState<{
+    imported: number;
+    duplicates: number;
+    errors_count: number;
+    total: number;
+    partial?: boolean;
+    chunk_errors?: number;
+  } | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -290,18 +298,23 @@ export default function ProspectsImportPage() {
         method: 'POST',
         body: JSON.stringify(body),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (res.ok) {
         setResult({
           imported: data.imported,
           duplicates: data.duplicates,
           errors_count: data.errors_count,
           total: data.total,
+          partial: !!data.partial,
+          chunk_errors: Array.isArray(data.chunk_errors) ? data.chunk_errors.length : 0,
         });
+        setSubmitError(null);
         setStep('done');
       } else {
-        alert(data.error || 'Import mislukt');
+        setSubmitError(data.error || 'Import mislukt');
       }
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : 'Import mislukt');
     } finally {
       setSubmitting(false);
     }
@@ -656,6 +669,12 @@ export default function ProspectsImportPage() {
             </div>
           )}
 
+          {submitError && (
+            <div className="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+              {submitError}
+            </div>
+          )}
+
           <div className="mt-6 flex justify-between border-t border-slate-100 pt-4">
             <button
               type="button"
@@ -685,11 +704,22 @@ export default function ProspectsImportPage() {
       )}
 
       {step === 'done' && result && (
-        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-8 text-center">
-          <CheckCircleIcon className="mx-auto h-12 w-12 text-emerald-600" />
-          <h2 className="mt-3 text-lg font-bold text-emerald-900">Import afgerond</h2>
-          <p className="mt-1 text-sm text-emerald-800">
+        <div
+          className={`rounded-2xl border p-8 text-center ${
+            result.partial
+              ? 'border-amber-200 bg-amber-50'
+              : 'border-emerald-200 bg-emerald-50'
+          }`}
+        >
+          <CheckCircleIcon className={`mx-auto h-12 w-12 ${result.partial ? 'text-amber-600' : 'text-emerald-600'}`} />
+          <h2 className={`mt-3 text-lg font-bold ${result.partial ? 'text-amber-900' : 'text-emerald-900'}`}>
+            {result.partial ? 'Import gedeeltelijk afgerond' : 'Import afgerond'}
+          </h2>
+          <p className={`mt-1 text-sm ${result.partial ? 'text-amber-800' : 'text-emerald-800'}`}>
             {result.imported} prospects toegevoegd. {result.duplicates} duplicaten en {result.errors_count} foutieve rijen overgeslagen.
+            {result.partial && (result.chunk_errors ?? 0) > 0 && (
+              <> {result.chunk_errors} batch(es) faalden tijdens insert; controleer de logs.</>
+            )}
           </p>
           <div className="mt-5 flex justify-center gap-2">
             <button
@@ -708,12 +738,17 @@ export default function ProspectsImportPage() {
                 setMapping({});
                 setDupes(null);
                 setResult(null);
+                setSubmitError(null);
                 setDefaultBranches(new Set());
                 setStrategy('manual');
                 setAmId('');
                 setPoolIds(new Set());
               }}
-              className="rounded-lg border border-emerald-200 bg-white px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100"
+              className={`rounded-lg border bg-white px-4 py-2 text-sm font-medium ${
+                result.partial
+                  ? 'border-amber-200 text-amber-700 hover:bg-amber-100'
+                  : 'border-emerald-200 text-emerald-700 hover:bg-emerald-100'
+              }`}
             >
               Nog een import doen
             </button>

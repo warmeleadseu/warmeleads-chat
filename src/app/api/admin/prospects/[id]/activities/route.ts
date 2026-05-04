@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { verifyAdmin, unauthorized, forbidden } from '@/lib/adminAuth';
+import { logAudit } from '@/lib/audit';
 import { loadAccessibleProspect } from '@/lib/prospects';
 
 const ALLOWED_TYPES = ['note', 'call', 'email', 'meeting'] as const;
@@ -87,6 +88,15 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       .update({ last_contacted_at: new Date().toISOString() })
       .eq('id', params.id);
   }
+
+  logAudit({
+    adminId: admin.id,
+    adminName: admin.name,
+    action: 'prospect.activity_created',
+    entityType: 'prospect',
+    entityId: params.id,
+    details: { activity_id: data?.id, type: body.type, title },
+  });
 
   return NextResponse.json({ success: true, activity: data });
 }

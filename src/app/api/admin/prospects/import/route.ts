@@ -167,7 +167,9 @@ export async function POST(request: NextRequest) {
   }
 
   // Bouw rijen op
-  type Built = { ok: true; row: Record<string, unknown> } | { ok: false; reason: string; index: number };
+  type Built =
+    | { ok: true; row: Record<string, unknown> }
+    | { ok: false; kind: 'duplicate' | 'invalid'; reason: string; index: number };
   const built: Built[] = [];
   const seenInBatchKvk = new Set<string>();
   const seenInBatchEmail = new Set<string>();
@@ -175,18 +177,18 @@ export async function POST(request: NextRequest) {
   body.rows.forEach((r, idx) => {
     const company = typeof r.company_name === 'string' ? r.company_name.trim() : '';
     if (!company) {
-      built.push({ ok: false, reason: 'lege company_name', index: idx });
+      built.push({ ok: false, kind: 'invalid', reason: 'lege company_name', index: idx });
       return;
     }
 
     const kvk = cleanKvk(r.kvk_nummer);
     if (kvk && (existingKvk.has(kvk) || seenInBatchKvk.has(kvk))) {
-      built.push({ ok: false, reason: 'duplicaat KVK', index: idx });
+      built.push({ ok: false, kind: 'duplicate', reason: 'duplicaat KVK', index: idx });
       return;
     }
     const email = isValidEmail(r.email) ? String(r.email).toLowerCase() : '';
     if (!kvk && email && (existingEmail.has(email) || seenInBatchEmail.has(email))) {
-      built.push({ ok: false, reason: 'duplicaat e-mail', index: idx });
+      built.push({ ok: false, kind: 'duplicate', reason: 'duplicaat e-mail', index: idx });
       return;
     }
     if (kvk) seenInBatchKvk.add(kvk);
@@ -223,7 +225,11 @@ export async function POST(request: NextRequest) {
   });
 
   const validRows = built.filter((b): b is { ok: true; row: Record<string, unknown> } => b.ok);
-  const errors = built.filter(b => !b.ok);
+  const errors = built.filter(
+    (b): b is { ok: false; kind: 'duplicate' | 'invalid'; reason: string; index: number } => !b.ok,
+  );
+  const duplicateCount = errors.filter(e => e.kind === 'duplicate').length;
+  const invalidCount = errors.filter(e => e.kind === 'invalid').length;
 
   // Toewijzing assignen
   if (amPool.length > 0) {
@@ -263,17 +269,24 @@ export async function POST(request: NextRequest) {
   // Bulk insert in batches van 500
   let imported = 0;
   const insertedIds: string[] = [];
+  const chunkErrors: Array<{ chunk_index: number; chunk_size: number; reason: string }> = [];
   const CHUNK = 500;
   for (let i = 0; i < validRows.length; i += CHUNK) {
     const chunk = validRows.slice(i, i + CHUNK).map(b => b.row);
     const { data, error } = await supabase.from('prospects').insert(chunk).select('id');
     if (error) {
       console.error('[prospects/import] insert error:', error.message);
+      chunkErrors.push({
+        chunk_index: i / CHUNK,
+        chunk_size: chunk.length,
+        reason: error.message || 'unknown',
+      });
       continue;
     }
     imported += data?.length || 0;
     for (const d of data || []) insertedIds.push(d.id);
   }
+  const insertFailed = validRows.length - imported;
 
   // Activity per imported prospect
   if (insertedIds.length > 0) {
@@ -294,11 +307,14 @@ export async function POST(request: NextRequest) {
     .from('prospect_imports')
     .update({
       imported_rows: imported,
-      duplicate_rows: errors.filter(e => !e.ok && e.reason.startsWith('duplicaat')).length,
-      error_rows: errors.filter(e => !e.ok && !e.reason.startsWith('duplicaat')).length,
-      skipped_rows: validRows.length - imported,
+      duplicate_rows: duplicateCount,
+      error_rows: invalidCount + insertFailed,
+      skipped_rows: insertFailed,
     })
     .eq('id', importRow.id);
+
+  const partial = chunkErrors.length > 0 || (validRows.length > 0 && imported < validRows.length);
+  const success = partial ? false : true;
 
   logAudit({
     adminId: admin.id,
@@ -310,20 +326,23 @@ export async function POST(request: NextRequest) {
       filename: body.filename,
       total: body.rows.length,
       imported,
-      duplicates: errors.filter(e => !e.ok && e.reason.startsWith('duplicaat')).length,
-      errors: errors.filter(e => !e.ok && !e.reason.startsWith('duplicaat')).length,
+      duplicates: duplicateCount,
+      errors: invalidCount + insertFailed,
+      chunk_errors: chunkErrors.length,
       strategy,
       default_branches: validatedDefaultBranches.length > 0 ? validatedDefaultBranches : undefined,
     },
   });
 
   return NextResponse.json({
-    success: true,
+    success,
+    partial,
     import_id: importRow.id,
     total: body.rows.length,
     imported,
-    duplicates: errors.filter(e => !e.ok && e.reason.startsWith('duplicaat')).length,
-    errors_count: errors.filter(e => !e.ok && !e.reason.startsWith('duplicaat')).length,
+    duplicates: duplicateCount,
+    errors_count: invalidCount + insertFailed,
+    chunk_errors: chunkErrors,
     error_samples: errors.slice(0, 20),
   });
 }

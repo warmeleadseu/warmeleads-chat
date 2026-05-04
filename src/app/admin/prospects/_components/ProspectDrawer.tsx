@@ -106,45 +106,64 @@ export function ProspectDrawer({
   const [savingEdit, setSavingEdit] = useState(false);
   const [showLost, setShowLost] = useState(false);
   const [lostReason, setLostReason] = useState('');
+  const [drawerError, setDrawerError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
     setTab('overzicht');
     setLoading(true);
+    setDrawerError(null);
     let cancel = false;
     (async () => {
-      const res = await adminFetch(`/api/admin/prospects/${prospectId}`);
-      const data = await res.json();
-      if (cancel) return;
-      if (res.ok) {
-        setProspect(data.prospect);
-        setTasks(data.tasks || []);
-        setActivities(data.activities || []);
-        setAm(data.account_manager || null);
-        const p = data.prospect as ProspectDetail;
-        setEditForm({
-          company_name: p.company_name || '',
-          contact_person: p.contact_person || '',
-          email: p.email || '',
-          phone: p.phone || '',
-          website: p.website || '',
-          kvk_nummer: p.kvk_nummer || '',
-          vat_id: p.vat_id || '',
-          address: p.address || '',
-          postcode: p.postcode || '',
-          city: p.city || '',
-          country: p.country || 'NL',
-          branches: p.branches || [],
-          company_size: p.company_size || '',
-          notes: p.notes || '',
-        });
+      try {
+        const res = await adminFetch(`/api/admin/prospects/${prospectId}`);
+        const data = await res.json().catch(() => ({}));
+        if (cancel) return;
+        if (res.ok) {
+          setProspect(data.prospect);
+          setTasks(data.tasks || []);
+          setActivities(data.activities || []);
+          setAm(data.account_manager || null);
+          const p = data.prospect as ProspectDetail;
+          setEditForm({
+            company_name: p.company_name || '',
+            contact_person: p.contact_person || '',
+            email: p.email || '',
+            phone: p.phone || '',
+            website: p.website || '',
+            kvk_nummer: p.kvk_nummer || '',
+            vat_id: p.vat_id || '',
+            address: p.address || '',
+            postcode: p.postcode || '',
+            city: p.city || '',
+            country: p.country || 'NL',
+            branches: p.branches || [],
+            company_size: p.company_size || '',
+            notes: p.notes || '',
+          });
+        } else {
+          setDrawerError(data?.error || `Prospect ophalen mislukt (${res.status})`);
+        }
+      } catch (err) {
+        if (!cancel) setDrawerError(err instanceof Error ? err.message : 'Prospect ophalen mislukt');
+      } finally {
+        if (!cancel) setLoading(false);
       }
-      setLoading(false);
     })();
     return () => {
       cancel = true;
     };
   }, [open, prospectId]);
+
+  // ESC sluit de drawer
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !showLost) onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, showLost, onClose]);
 
   const refreshActivities = async (id: string) => {
     const aRes = await adminFetch(`/api/admin/prospects/${id}/activities`);
@@ -159,27 +178,29 @@ export function ProspectDrawer({
       return;
     }
     if (status === prospect.status) return;
+    setDrawerError(null);
     const res = await adminFetch(`/api/admin/prospects/${prospect.id}/status`, {
       method: 'PATCH',
       body: JSON.stringify({ status }),
     });
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
     if (res.ok && data.prospect) {
       setProspect(data.prospect);
       onUpdated(data.prospect);
       refreshActivities(prospect.id);
     } else {
-      alert(data?.error || 'Status wijzigen mislukt');
+      setDrawerError(data?.error || 'Status wijzigen mislukt');
     }
   };
 
   const submitLost = async () => {
     if (!prospect || !lostReason.trim()) return;
+    setDrawerError(null);
     const res = await adminFetch(`/api/admin/prospects/${prospect.id}/status`, {
       method: 'PATCH',
       body: JSON.stringify({ status: 'verloren', lost_reason: lostReason.trim() }),
     });
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
     if (res.ok && data.prospect) {
       setProspect(data.prospect);
       onUpdated(data.prospect);
@@ -187,21 +208,24 @@ export function ProspectDrawer({
       setLostReason('');
       refreshActivities(prospect.id);
     } else {
-      alert(data?.error || 'Status wijzigen mislukt');
+      setDrawerError(data?.error || 'Status wijzigen mislukt');
     }
   };
 
   const setAssignment = async (amId: string | null) => {
     if (!prospect) return;
+    setDrawerError(null);
     const res = await adminFetch(`/api/admin/prospects/${prospect.id}/assign`, {
       method: 'PATCH',
       body: JSON.stringify({ account_manager_id: amId }),
     });
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
     if (res.ok && data.prospect) {
       setProspect(data.prospect);
       setAm(amId ? ams.find(a => a.id === amId) || null : null);
       onUpdated(data.prospect);
+    } else {
+      setDrawerError(data?.error || 'AM toewijzen mislukt');
     }
   };
 
@@ -209,17 +233,22 @@ export function ProspectDrawer({
     if (!prospect) return;
     if (!editForm.company_name.trim()) return;
     setSavingEdit(true);
+    setDrawerError(null);
     try {
       const res = await adminFetch(`/api/admin/prospects/${prospect.id}`, {
         method: 'PATCH',
         body: JSON.stringify(editForm),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (res.ok && data.prospect) {
         setProspect(data.prospect);
         onUpdated(data.prospect);
         setTab('overzicht');
+      } else {
+        setDrawerError(data?.error || 'Opslaan mislukt');
       }
+    } catch (err) {
+      setDrawerError(err instanceof Error ? err.message : 'Opslaan mislukt');
     } finally {
       setSavingEdit(false);
     }
@@ -228,10 +257,14 @@ export function ProspectDrawer({
   const remove = async () => {
     if (!prospect || !canManage) return;
     if (!confirm(`Weet je zeker dat je "${prospect.company_name}" wilt verwijderen?`)) return;
+    setDrawerError(null);
     const res = await adminFetch(`/api/admin/prospects/${prospect.id}`, { method: 'DELETE' });
     if (res.ok) {
       onDeleted?.(prospect.id);
       onClose();
+    } else {
+      const data = await res.json().catch(() => ({}));
+      setDrawerError(data?.error || 'Verwijderen mislukt');
     }
   };
 
@@ -312,6 +345,19 @@ export function ProspectDrawer({
             </div>
 
             <div className="flex-1 overflow-y-auto p-5">
+              {drawerError && (
+                <div className="mb-4 flex items-start justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700" role="alert">
+                  <span>{drawerError}</span>
+                  <button
+                    type="button"
+                    onClick={() => setDrawerError(null)}
+                    className="rounded p-0.5 text-rose-500 hover:bg-rose-100"
+                    aria-label="Sluiten"
+                  >
+                    <XMarkIcon className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
               {loading || !prospect ? (
                 <div className="space-y-3">
                   <div className="h-24 animate-pulse rounded-xl bg-white" />
@@ -323,6 +369,7 @@ export function ProspectDrawer({
                   prospect={prospect}
                   am={am}
                   ams={ams}
+                  branches={branches}
                   canManage={canManage}
                   onStatus={setStatus}
                   onAssign={setAssignment}
@@ -415,10 +462,22 @@ export function ProspectDrawer({
   );
 }
 
+function normalizeTelLink(phone: string): string {
+  // Normaliseer naar E.164-achtig formaat voor tel:-links.
+  // Behoud een leading +; vervang NL/BE-prefixen 0031/0032 naar +31/+32.
+  const cleaned = phone.replace(/[\s\-().\/]/g, '');
+  if (cleaned.startsWith('+')) return cleaned;
+  if (cleaned.startsWith('0031')) return `+31${cleaned.slice(4)}`;
+  if (cleaned.startsWith('0032')) return `+32${cleaned.slice(4)}`;
+  if (cleaned.startsWith('06') || cleaned.startsWith('0')) return `+31${cleaned.slice(1)}`;
+  return cleaned;
+}
+
 function Overview({
   prospect,
   am,
   ams,
+  branches,
   canManage,
   onStatus,
   onAssign,
@@ -427,6 +486,7 @@ function Overview({
   prospect: ProspectDetail;
   am: AdminUserOption | null;
   ams: AdminUserOption[];
+  branches: BranchOption[];
   canManage: boolean;
   onStatus: (s: ProspectStatus) => void;
   onAssign: (id: string | null) => void;
@@ -435,6 +495,10 @@ function Overview({
   const fullAddress = [prospect.address, [prospect.postcode, prospect.city].filter(Boolean).join(' ')]
     .filter(Boolean)
     .join(', ');
+  const mapsHref = fullAddress
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fullAddress)}`
+    : null;
+  const branchNameMap: Record<string, string> = Object.fromEntries(branches.map(b => [b.slug, b.name]));
 
   return (
     <div className="space-y-4">
@@ -493,7 +557,7 @@ function Overview({
             Icon={PhoneIcon}
             label="Telefoon"
             value={
-              <a href={`tel:${prospect.phone.replace(/\s/g, '')}`} className="text-brand-purple hover:underline">
+              <a href={`tel:${normalizeTelLink(prospect.phone)}`} className="text-brand-purple hover:underline">
                 {prospect.phone}
               </a>
             }
@@ -515,7 +579,26 @@ function Overview({
             }
           />
         )}
-        {fullAddress && <Detail Icon={MapPinIcon} label="Adres" value={fullAddress} />}
+        {fullAddress && (
+          <Detail
+            Icon={MapPinIcon}
+            label="Adres"
+            value={
+              mapsHref ? (
+                <a
+                  href={mapsHref}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-brand-purple hover:underline"
+                >
+                  {fullAddress}
+                </a>
+              ) : (
+                fullAddress
+              )
+            }
+          />
+        )}
       </div>
 
       {prospect.branches && prospect.branches.length > 0 && (
@@ -527,7 +610,7 @@ function Overview({
                 key={b}
                 className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700"
               >
-                {b}
+                {branchNameMap[b] || b}
               </span>
             ))}
           </div>

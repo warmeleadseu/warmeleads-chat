@@ -47,11 +47,20 @@ function relTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const min = diff / 60000;
   if (min < 1) return 'zojuist';
-  if (min < 60) return `${Math.floor(min)} min geleden`;
+  if (min < 60) {
+    const m = Math.floor(min);
+    return `${m} ${m === 1 ? 'minuut' : 'minuten'} geleden`;
+  }
   const hrs = min / 60;
-  if (hrs < 24) return `${Math.floor(hrs)} uur geleden`;
+  if (hrs < 24) {
+    const h = Math.floor(hrs);
+    return `${h} ${h === 1 ? 'uur' : 'uur'} geleden`;
+  }
   const days = hrs / 24;
-  if (days < 7) return `${Math.floor(days)} dag geleden`;
+  if (days < 7) {
+    const d = Math.floor(days);
+    return `${d} ${d === 1 ? 'dag' : 'dagen'} geleden`;
+  }
   return new Date(iso).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' });
 }
 
@@ -73,28 +82,48 @@ export function ActivityTimeline({ prospectId, activities, onAdded }: Props) {
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [filter, setFilter] = useState<'all' | 'contact' | 'system'>('all');
 
   const submit = async () => {
     if (!title.trim() || saving) return;
     setSaving(true);
+    setError(null);
     try {
       const res = await adminFetch(`/api/admin/prospects/${prospectId}/activities`, {
         method: 'POST',
         body: JSON.stringify({ type, title: title.trim(), body: body.trim() || null }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (res.ok && data.activity) {
         onAdded(data.activity);
         setTitle('');
         setBody('');
+      } else {
+        setError(data.error || 'Activiteit opslaan mislukt');
       }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Activiteit opslaan mislukt');
     } finally {
       setSaving(false);
     }
   };
 
+  const CONTACT_TYPES = new Set(['note', 'call', 'email', 'meeting']);
+  const filteredActivities = activities.filter(a => {
+    if (filter === 'all') return true;
+    if (filter === 'contact') return CONTACT_TYPES.has(a.type);
+    return !CONTACT_TYPES.has(a.type);
+  });
+
   return (
     <div className="space-y-4">
+      {error && (
+        <div className="flex items-start justify-between gap-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+          <span>{error}</span>
+          <button type="button" onClick={() => setError(null)} className="text-rose-500 hover:text-rose-700">×</button>
+        </div>
+      )}
       <div className="rounded-xl border border-slate-200 bg-white p-3">
         <div className="mb-2 flex flex-wrap gap-1.5">
           {QUICK_TYPES.map(t => (
@@ -141,14 +170,42 @@ export function ActivityTimeline({ prospectId, activities, onAdded }: Props) {
         </div>
       </div>
 
+      {activities.length > 0 && (
+        <div className="flex items-center gap-1 text-[11px]">
+          {([
+            { id: 'all', label: 'Alles' },
+            { id: 'contact', label: 'Contact' },
+            { id: 'system', label: 'Systeem' },
+          ] as const).map(o => (
+            <button
+              key={o.id}
+              type="button"
+              onClick={() => setFilter(o.id)}
+              className={`rounded-full px-2.5 py-1 font-medium ring-1 ring-inset transition-colors ${
+                filter === o.id
+                  ? 'bg-brand-purple/10 text-brand-purple ring-brand-purple/30'
+                  : 'bg-white text-slate-500 ring-slate-200 hover:bg-slate-50'
+              }`}
+            >
+              {o.label}
+            </button>
+          ))}
+          <span className="ml-auto text-slate-400">{filteredActivities.length} van {activities.length}</span>
+        </div>
+      )}
+
       {activities.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-400">
           Nog geen activiteiten.
         </div>
+      ) : filteredActivities.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-slate-200 px-4 py-8 text-center text-xs text-slate-400">
+          Geen activiteiten in dit filter.
+        </div>
       ) : (
         <ol className="relative space-y-3 pl-5">
           <span className="absolute left-[10px] top-2 bottom-2 w-px bg-slate-200" aria-hidden />
-          {activities.map(a => {
+          {filteredActivities.map(a => {
             const cfg = ICONS[a.type] || ICONS.note;
             const { Icon, color } = cfg;
             return (
