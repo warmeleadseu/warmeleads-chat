@@ -9,7 +9,9 @@ function getResend(): Resend | null {
 }
 
 const FROM = 'WarmeLeads <noreply@warmeleads.eu>';
-const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.warmeleads.eu';
+export const EMAIL_BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.warmeleads.eu';
+const BASE_URL = EMAIL_BASE_URL;
+export const ALLOWED_FROM_DOMAIN = 'warmeleads.eu';
 
 export interface EmailLogOptions {
   type: string;
@@ -17,31 +19,129 @@ export interface EmailLogOptions {
   metadata?: Record<string, unknown>;
 }
 
+export interface DispatchEmailOpts {
+  type: string;
+  toName?: string;
+  metadata?: Record<string, unknown>;
+  from?: string;
+  replyTo?: string;
+  headers?: Record<string, string>;
+  bodyText?: string;
+  attachments?: EmailAttachment[];
+  // AM-context velden (optioneel, voor uitgebreide logging)
+  fromAdminId?: string | null;
+  prospectId?: string | null;
+  customerId?: string | null;
+  templateKey?: string | null;
+  templateOptions?: Record<string, unknown> | null;
+  unsubscribeToken?: string | null;
+}
+
+export interface DispatchEmailResult {
+  ok: boolean;
+  messageId?: string | null;
+  emailLogId?: string | null;
+  error?: string;
+}
+
+type EmailStatus = 'sent' | 'failed' | 'queued' | 'bounced' | 'opt_out';
+
 async function logEmail(
   to: string,
   subject: string,
   html: string,
-  status: 'sent' | 'failed',
-  options?: EmailLogOptions,
+  status: EmailStatus,
+  opts: DispatchEmailOpts,
   error?: string,
-) {
+  providerMessageId?: string | null,
+): Promise<string | null> {
   try {
     const supabase = createServerClient();
-    const { error: dbError } = await supabase.from('email_log').insert({
-      type: options?.type || 'unknown',
-      to_email: to,
-      to_name: options?.toName || null,
-      subject,
-      html,
-      status,
-      error: error || null,
-      metadata: options?.metadata || {},
-    });
+    const { data, error: dbError } = await supabase
+      .from('email_log')
+      .insert({
+        type: opts.type || 'unknown',
+        to_email: to,
+        to_name: opts.toName || null,
+        subject,
+        html,
+        status,
+        error: error || null,
+        metadata: opts.metadata || {},
+        reply_to: opts.replyTo || null,
+        body_text: opts.bodyText || null,
+        from_admin_id: opts.fromAdminId || null,
+        prospect_id: opts.prospectId || null,
+        customer_id: opts.customerId || null,
+        template_key: opts.templateKey || null,
+        template_options: opts.templateOptions || null,
+        unsubscribe_token: opts.unsubscribeToken || null,
+        provider_message_id: providerMessageId || null,
+      })
+      .select('id')
+      .single();
     if (dbError) {
       console.error('[email-log] insert error:', dbError.message, dbError.code);
+      return null;
     }
+    return data?.id ?? null;
   } catch (e) {
     console.error('[email-log] failed to log:', e);
+    return null;
+  }
+}
+
+/**
+ * Lager-niveau dispatcher: stuurt een mail via Resend en logt het volledig in
+ * email_log. Geeft messageId + email_log id terug. sendEmail() en sendAsAdmin()
+ * zijn dunne wrappers hieromheen.
+ */
+export async function dispatchEmail(
+  to: string,
+  subject: string,
+  html: string,
+  opts: DispatchEmailOpts,
+): Promise<DispatchEmailResult> {
+  try {
+    const resend = getResend();
+    if (!resend) {
+      console.warn('[email] RESEND_API_KEY not configured, skipping send');
+      const id = await logEmail(to, subject, html, 'failed', opts, 'RESEND_API_KEY not configured');
+      return { ok: false, emailLogId: id, error: 'RESEND_API_KEY not configured' };
+    }
+
+    const payload: Parameters<typeof resend.emails.send>[0] = {
+      from: opts.from || FROM,
+      to,
+      subject,
+      html,
+    };
+    if (opts.replyTo) (payload as { replyTo?: string }).replyTo = opts.replyTo;
+    if (opts.bodyText) (payload as { text?: string }).text = opts.bodyText;
+    if (opts.headers && Object.keys(opts.headers).length > 0) {
+      (payload as { headers?: Record<string, string> }).headers = opts.headers;
+    }
+    if (opts.attachments && opts.attachments.length > 0) {
+      payload.attachments = opts.attachments.map(a => ({
+        filename: a.filename,
+        content: a.content,
+        contentType: a.contentType,
+      }));
+    }
+
+    const { data, error } = await resend.emails.send(payload);
+    if (error) {
+      console.error('[email] send failed:', error);
+      const id = await logEmail(to, subject, html, 'failed', opts, String(error.message || error));
+      return { ok: false, emailLogId: id, error: String(error.message || error) };
+    }
+    const messageId = (data as { id?: string } | null)?.id ?? null;
+    const id = await logEmail(to, subject, html, 'sent', opts, undefined, messageId);
+    return { ok: true, messageId, emailLogId: id };
+  } catch (err) {
+    console.error('[email] unexpected error:', err);
+    const id = await logEmail(to, subject, html, 'failed', opts, String(err));
+    return { ok: false, emailLogId: id, error: String(err) };
   }
 }
 
@@ -182,30 +282,13 @@ export async function sendEmail(
   logOptions?: EmailLogOptions,
   attachments?: EmailAttachment[],
 ): Promise<boolean> {
-  try {
-    const resend = getResend();
-    if (!resend) {
-      console.warn('[email] RESEND_API_KEY not configured, skipping send');
-      logEmail(to, subject, html, 'failed', logOptions, 'RESEND_API_KEY not configured').catch(() => {});
-      return false;
-    }
-    const payload: Parameters<typeof resend.emails.send>[0] = { from: FROM, to, subject, html };
-    if (attachments && attachments.length > 0) {
-      payload.attachments = attachments.map(a => ({ filename: a.filename, content: a.content, contentType: a.contentType }));
-    }
-    const { error } = await resend.emails.send(payload);
-    if (error) {
-      console.error('[email] send failed:', error);
-      logEmail(to, subject, html, 'failed', logOptions, String(error.message || error)).catch(() => {});
-      return false;
-    }
-    logEmail(to, subject, html, 'sent', logOptions).catch(() => {});
-    return true;
-  } catch (err) {
-    console.error('[email] unexpected error:', err);
-    logEmail(to, subject, html, 'failed', logOptions, String(err)).catch(() => {});
-    return false;
-  }
+  const result = await dispatchEmail(to, subject, html, {
+    type: logOptions?.type || 'unknown',
+    toName: logOptions?.toName,
+    metadata: logOptions?.metadata,
+    attachments,
+  });
+  return result.ok;
 }
 
 export async function sendLeadNotification(

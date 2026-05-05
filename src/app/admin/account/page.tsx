@@ -12,6 +12,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
 import { useAdmin } from '../adminContext';
+import { EmailSignaturePanel } from './EmailSignaturePanel';
 
 interface Profile {
   id: string;
@@ -377,6 +378,10 @@ export default function AccountPage() {
               )}
             </div>
           </div>
+        </div>
+
+        <div className="mt-6">
+          <EmailSignaturePanel />
         </div>
       </motion.div>
     </div>

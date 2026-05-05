@@ -15,7 +15,9 @@ import {
   ClockIcon,
   BriefcaseIcon,
   UserIcon,
+  EnvelopeIcon,
 } from '@heroicons/react/24/outline';
+import { ComposeMailDrawer } from '../_components/ComposeMailDrawer';
 import { adminFetch } from '@/lib/adminAuth';
 import {
   PROSPECT_STATUSES,
@@ -87,6 +89,7 @@ export default function ProspectsPage() {
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [composeOpen, setComposeOpen] = useState(false);
   const [convertProspect, setConvertProspect] = useState<ProspectDetail | null>(null);
 
   const limit = view === 'kanban' ? 200 : 50;
@@ -396,6 +399,14 @@ export default function ProspectsPage() {
             )}
             <button
               type="button"
+              onClick={() => setComposeOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-md bg-white px-2.5 py-1 text-xs font-medium text-slate-700 ring-1 ring-inset ring-slate-200 hover:bg-slate-50"
+            >
+              <EnvelopeIcon className="h-3.5 w-3.5" />
+              Mail versturen
+            </button>
+            <button
+              type="button"
               onClick={() => setSelected(new Set())}
               className="ml-auto inline-flex items-center gap-1 rounded-md bg-white px-2 py-1 text-[11px] text-slate-500 ring-1 ring-inset ring-slate-200 hover:bg-slate-50"
             >
@@ -526,6 +537,17 @@ export default function ProspectsPage() {
           }}
         />
       )}
+
+      <ComposeMailDrawer
+        open={composeOpen}
+        onClose={() => setComposeOpen(false)}
+        initialRecipients={Array.from(selected).map(id => ({ type: 'prospect' as const, id }))}
+        onSent={() => {
+          setComposeOpen(false);
+          setSelected(new Set());
+          fetchData(true);
+        }}
+      />
     </div>
   );
 }

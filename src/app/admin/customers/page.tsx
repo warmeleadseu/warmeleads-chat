@@ -31,6 +31,8 @@ import {
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
 import { useAdmin } from '../adminContext';
+import { ComposeMailDrawer } from '../_components/ComposeMailDrawer';
+import { MailHistory } from '../_components/MailHistory';
 
 interface Customer {
   id: string; name: string; contact_person: string; email: string; phone: string;
@@ -185,6 +187,7 @@ export default function CustomersPage() {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<Customer | null>(null);
   const [showNew, setShowNew] = useState(false);
+  const [bulkComposeOpen, setBulkComposeOpen] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerWithExtra | null>(null);
   const [previewReminder, setPreviewReminder] = useState<Customer | null>(null);
   const [sendingReminder, setSendingReminder] = useState<string | null>(null);
@@ -297,10 +300,28 @@ export default function CustomersPage() {
           <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">Klanten</h1>
           <p className="mt-0.5 text-sm text-slate-500">Bedrijven waarvoor we leads genereren</p>
         </div>
-        <button onClick={() => setShowNew(true)} className="inline-flex items-center gap-1.5 rounded-lg bg-button-gradient px-3.5 py-2.5 text-sm font-bold text-white shadow-sm">
-          <PlusIcon className="h-4 w-4" /> Nieuwe klant
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setBulkComposeOpen(true)}
+            disabled={customers.length === 0}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+            title="Stuur een bulk-mail naar alle klanten op deze pagina"
+          >
+            <EnvelopeIcon className="h-4 w-4" /> Mail bulk-versturen
+          </button>
+          <button onClick={() => setShowNew(true)} className="inline-flex items-center gap-1.5 rounded-lg bg-button-gradient px-3.5 py-2.5 text-sm font-bold text-white shadow-sm">
+            <PlusIcon className="h-4 w-4" /> Nieuwe klant
+          </button>
+        </div>
       </div>
+
+      <ComposeMailDrawer
+        open={bulkComposeOpen}
+        onClose={() => setBulkComposeOpen(false)}
+        initialRecipients={customers
+          .filter(c => c.email)
+          .map(c => ({ type: 'customer' as const, id: c.id, label: c.name }))}
+      />
 
       {/* KPI bar */}
       {kpis && (
@@ -678,7 +699,7 @@ export default function CustomersPage() {
 }
 
 /* ─── Customer Detail Slide-over Panel ──────────────────────── */
-type DetailTab = 'overview' | 'batches' | 'targets' | 'pricing' | 'leads';
+type DetailTab = 'overview' | 'batches' | 'targets' | 'pricing' | 'leads' | 'mail';
 
 function CustomerDetailPanel({
   customer, customers, branchOptions, accountManagers, portalUrl, reminderSent,
@@ -705,6 +726,7 @@ function CustomerDetailPanel({
   const [togglingPortal, setTogglingPortal] = useState(false);
   const [impersonating, setImpersonating] = useState(false);
   const [allBatches, setAllBatches] = useState<Batch[]>([]);
+  const [composeOpen, setComposeOpen] = useState(false);
 
   const c = customer;
 
@@ -762,6 +784,7 @@ function CustomerDetailPanel({
     { key: 'targets', label: 'Targets', icon: MapPinIcon },
     { key: 'pricing', label: 'Prijzen', icon: CurrencyEuroIcon },
     { key: 'leads', label: 'Leads', icon: UserGroupIcon },
+    { key: 'mail', label: 'Mail', icon: EnvelopeIcon },
   ];
 
   const activeBatches = allBatches.filter(b => b.status === 'active');
@@ -805,7 +828,17 @@ function CustomerDetailPanel({
                 {am && <span className="font-medium text-amber-600">AM: {am.name}</span>}
               </div>
             </div>
-            <div className="ml-3 flex items-center gap-1">
+            <div className="ml-3 flex items-center gap-2">
+              {c.email && (
+                <button
+                  onClick={() => setComposeOpen(true)}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-brand-purple px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-brand-purple/90"
+                  title="Stuur een mail vanuit je eigen WarmeLeads-adres"
+                >
+                  <EnvelopeIcon className="h-4 w-4" />
+                  Mail versturen
+                </button>
+              )}
               <button onClick={() => onEdit(c)} className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-brand-purple" title="Bewerken">
                 <PencilSquareIcon className="h-5 w-5" />
               </button>
@@ -1062,8 +1095,18 @@ function CustomerDetailPanel({
           {tab === 'leads' && (
             <LeadManagerPanelContent customer={c} />
           )}
+          {tab === 'mail' && (
+            <div className="p-5">
+              <MailHistory customerId={c.id} />
+            </div>
+          )}
         </div>
       </motion.div>
+      <ComposeMailDrawer
+        open={composeOpen}
+        onClose={() => setComposeOpen(false)}
+        initialRecipients={[{ type: 'customer', id: c.id, label: c.name }]}
+      />
     </>
   );
 }

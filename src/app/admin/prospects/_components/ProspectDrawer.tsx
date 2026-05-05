@@ -29,6 +29,8 @@ import { StatusBadge } from './StatusBadge';
 import { ActivityTimeline, type Activity } from './ActivityTimeline';
 import { TaskList, type Task } from './TaskList';
 import { ProspectFormFields, EMPTY_PROSPECT, type ProspectFormState } from './ProspectFormFields';
+import { ComposeMailDrawer } from '../../_components/ComposeMailDrawer';
+import { MailHistory } from '../../_components/MailHistory';
 
 export interface ProspectDetail {
   id: string;
@@ -83,7 +85,7 @@ interface Props {
   onConvert: (p: ProspectDetail) => void;
 }
 
-type Tab = 'overzicht' | 'activiteiten' | 'taken' | 'edit';
+type Tab = 'overzicht' | 'activiteiten' | 'taken' | 'mail' | 'edit';
 
 export function ProspectDrawer({
   prospectId,
@@ -107,6 +109,7 @@ export function ProspectDrawer({
   const [showLost, setShowLost] = useState(false);
   const [lostReason, setLostReason] = useState('');
   const [drawerError, setDrawerError] = useState<string | null>(null);
+  const [composeOpen, setComposeOpen] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -327,6 +330,7 @@ export function ProspectDrawer({
                 { id: 'overzicht', label: 'Overzicht', Icon: Bars3CenterLeftIcon },
                 { id: 'activiteiten', label: `Activiteiten${activities.length ? ` (${activities.length})` : ''}`, Icon: ClockIcon },
                 { id: 'taken', label: `Taken${tasks.filter(t => !t.completed_at).length ? ` (${tasks.filter(t => !t.completed_at).length})` : ''}`, Icon: ListBulletIcon },
+                { id: 'mail', label: 'Mail', Icon: EnvelopeIcon },
                 { id: 'edit', label: 'Bewerken', Icon: PencilSquareIcon },
               ] as { id: Tab; label: string; Icon: React.ComponentType<{ className?: string }> }[]).map(t => (
                 <button
@@ -374,6 +378,7 @@ export function ProspectDrawer({
                   onStatus={setStatus}
                   onAssign={setAssignment}
                   onConvert={() => onConvert(prospect)}
+                  onCompose={() => setComposeOpen(true)}
                 />
               ) : tab === 'activiteiten' ? (
                 <ActivityTimeline
@@ -383,6 +388,8 @@ export function ProspectDrawer({
                 />
               ) : tab === 'taken' ? (
                 <TaskList prospectId={prospect.id} tasks={tasks} onChange={setTasks} />
+              ) : tab === 'mail' ? (
+                <MailHistory prospectId={prospect.id} />
               ) : (
                 <div className="space-y-4">
                   <ProspectFormFields value={editForm} onChange={setEditForm} branches={branches} />
@@ -417,6 +424,17 @@ export function ProspectDrawer({
                 </div>
               )}
             </div>
+
+            {prospect && (
+              <ComposeMailDrawer
+                open={composeOpen}
+                onClose={() => setComposeOpen(false)}
+                initialRecipients={[{ type: 'prospect', id: prospect.id, label: prospect.company_name }]}
+                onSent={() => {
+                  refreshActivities(prospect.id);
+                }}
+              />
+            )}
 
             {showLost && prospect && (
               <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/30 px-4">
@@ -482,6 +500,7 @@ function Overview({
   onStatus,
   onAssign,
   onConvert,
+  onCompose,
 }: {
   prospect: ProspectDetail;
   am: AdminUserOption | null;
@@ -491,6 +510,7 @@ function Overview({
   onStatus: (s: ProspectStatus) => void;
   onAssign: (id: string | null) => void;
   onConvert: () => void;
+  onCompose: () => void;
 }) {
   const fullAddress = [prospect.address, [prospect.postcode, prospect.city].filter(Boolean).join(' ')]
     .filter(Boolean)
@@ -546,9 +566,20 @@ function Overview({
             Icon={EnvelopeIcon}
             label="E-mail"
             value={
-              <a href={`mailto:${prospect.email}`} className="text-brand-purple hover:underline">
-                {prospect.email}
-              </a>
+              <div className="flex flex-wrap items-center gap-2">
+                <a href={`mailto:${prospect.email}`} className="text-brand-purple hover:underline">
+                  {prospect.email}
+                </a>
+                <button
+                  type="button"
+                  onClick={onCompose}
+                  className="inline-flex items-center gap-1 rounded-full bg-brand-purple px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm hover:bg-brand-purple/90"
+                  title="Stuur een mail vanuit je eigen WarmeLeads-adres"
+                >
+                  <EnvelopeIcon className="h-3 w-3" />
+                  Mail versturen
+                </button>
+              </div>
             }
           />
         )}
@@ -651,16 +682,28 @@ function Overview({
         </div>
       </div>
 
-      {!prospect.converted_to_customer_id && (
+      <div className="grid gap-2 sm:grid-cols-2">
         <button
           type="button"
-          onClick={onConvert}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700"
+          onClick={onCompose}
+          disabled={!prospect.email}
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-purple px-4 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-purple/90 disabled:cursor-not-allowed disabled:opacity-50"
+          title={prospect.email ? 'Stuur een mail vanuit je eigen WarmeLeads-adres' : 'Geen e-mailadres bekend'}
         >
-          <CheckBadgeIcon className="h-5 w-5" />
-          Promoveer naar klant
+          <EnvelopeIcon className="h-5 w-5" />
+          Mail versturen
         </button>
-      )}
+        {!prospect.converted_to_customer_id && (
+          <button
+            type="button"
+            onClick={onConvert}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700"
+          >
+            <CheckBadgeIcon className="h-5 w-5" />
+            Promoveer naar klant
+          </button>
+        )}
+      </div>
     </div>
   );
 }

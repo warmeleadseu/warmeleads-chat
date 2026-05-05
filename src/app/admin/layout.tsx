@@ -36,6 +36,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { AdminContext, type AdminUser } from './adminContext';
 import { adminFetch } from '@/lib/adminAuth';
+import { GlobalComposeButton } from './_components/GlobalComposeButton';
 
 type NavRole = 'superadmin' | 'admin' | 'accountmanager';
 
@@ -199,6 +200,9 @@ function Sidebar({ user, onLogout, pendingReclamations }: { user: AdminUser; onL
         </div>
       </nav>
       <div className="border-t border-white/[0.06] px-4 py-4">
+        <div className="mb-3">
+          <GlobalComposeButton />
+        </div>
         <div className="mb-3 flex items-center gap-2.5">
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-purple/20 text-xs font-bold text-brand-purple">
             {user.name.charAt(0).toUpperCase()}
