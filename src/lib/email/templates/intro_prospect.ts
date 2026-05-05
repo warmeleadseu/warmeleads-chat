@@ -10,9 +10,12 @@ import {
   escape,
   greetingLine,
   htmlToText,
+  INFO_BLOCK_OPTIONS,
   joinNL,
   paragraph,
   pickFirstName,
+  readInfoFlags,
+  renderInfoBlocks,
   renderPricingBlock,
 } from './_helpers';
 
@@ -66,6 +69,7 @@ export const introProspectTemplate: EmailTemplate = {
       default: false,
       description: 'Voegt een korte zin toe over de groei van de installatiemarkt in 2026.',
     },
+    ...INFO_BLOCK_OPTIONS,
   ],
   defaultSubject: ctx => {
     const branches = (ctx.branchesSelected || []).map(b => b.name);
@@ -131,6 +135,9 @@ export const introProspectTemplate: EmailTemplate = {
         ),
       );
     }
+
+    const infoFlags = readInfoFlags(ctx.optionValues);
+    parts.push(renderInfoBlocks(ctx, infoFlags));
 
     parts.push(
       paragraph(

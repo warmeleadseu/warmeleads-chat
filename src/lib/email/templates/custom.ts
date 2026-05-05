@@ -7,7 +7,10 @@ import {
   composeShell,
   ctaButton,
   htmlToText,
+  INFO_BLOCK_OPTIONS,
   paragraph,
+  readInfoFlags,
+  renderInfoBlocks,
   renderPricingBlock,
 } from './_helpers';
 
@@ -117,6 +120,7 @@ export const customTemplate: EmailTemplate = {
       placeholder: 'https://www.warmeleads.eu/plan-gesprek',
       showWhen: 'cta_label',
     },
+    ...INFO_BLOCK_OPTIONS,
   ],
   defaultSubject: ctx => {
     const sub = asString(ctx.optionValues.subject_override).trim();
@@ -168,6 +172,9 @@ export const customTemplate: EmailTemplate = {
     } else if (showPricing) {
       warnings.push('Prijzen tonen aangevinkt maar geen branches geselecteerd.');
     }
+
+    const infoFlags = readInfoFlags(ctx.optionValues);
+    parts.push(renderInfoBlocks(ctx, infoFlags));
 
     if (ctaLabel) {
       const url = ctaUrl || `${ctx.baseUrl}/plan-gesprek`;

@@ -7,7 +7,10 @@ import {
   escape,
   greetingLine,
   htmlToText,
+  INFO_BLOCK_OPTIONS,
   paragraph,
+  readInfoFlags,
+  renderInfoBlocks,
 } from './_helpers';
 
 export const meetingRequestTemplate: EmailTemplate = {
@@ -42,6 +45,7 @@ export const meetingRequestTemplate: EmailTemplate = {
       type: 'boolean',
       default: true,
     },
+    ...INFO_BLOCK_OPTIONS,
   ],
   defaultSubject: ctx => {
     const dur = asString(ctx.optionValues.duration) || '15min';
@@ -95,6 +99,9 @@ export const meetingRequestTemplate: EmailTemplate = {
         ),
       );
     }
+
+    const infoFlags = readInfoFlags(ctx.optionValues);
+    parts.push(renderInfoBlocks(ctx, infoFlags));
 
     parts.push(paragraph('Met vriendelijke groet,'));
 

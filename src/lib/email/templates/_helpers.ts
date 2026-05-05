@@ -1,6 +1,6 @@
 import type { PricingTier } from '@/lib/pricing';
 import { sortTiersAscending } from '@/lib/pricing';
-import type { BranchCtx, RenderCtx } from './types';
+import type { BranchCtx, RenderCtx, TemplateOption } from './types';
 
 export function escape(s: string | number | null | undefined): string {
   if (s === null || s === undefined || s === '') return '';
@@ -237,4 +237,245 @@ export function asString(v: unknown): string {
 export function asStringArray(v: unknown): string[] {
   if (!Array.isArray(v)) return [];
   return v.filter((x): x is string => typeof x === 'string' && x.length > 0);
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Info-blokken (over WarmeLeads, werkwijze, garanties, portaal, etc.)       */
+/* -------------------------------------------------------------------------- */
+/*                                                                            */
+/*  Deze blokken zijn geschreven op basis van de marketing-copy op            */
+/*  warmeleads.eu en zijn 1-op-1 in lijn met wat ontvangers daar lezen. Zo    */
+/*  loopt iedere AM-mail consistent met de website. Elk blok komt in een      */
+/*  vaste, herbruikbare visuele stijl die past bij `composeShell`.            */
+/* -------------------------------------------------------------------------- */
+
+function sectionTitle(label: string): string {
+  return `<p style="margin:24px 0 10px;font-size:13px;font-weight:700;color:#3B2F75;text-transform:uppercase;letter-spacing:0.6px">${escape(
+    label,
+  )}</p>`;
+}
+
+function infoCard(html: string): string {
+  return `<div style="margin:0 0 14px;padding:16px 18px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;line-height:1.6;color:#0f172a">${html}</div>`;
+}
+
+function bulletList(items: string[]): string {
+  const lis = items
+    .map(
+      i =>
+        `<li style="margin:0 0 6px;padding:0 0 0 4px;line-height:1.55">${i}</li>`,
+    )
+    .join('');
+  return `<ul style="margin:8px 0 14px;padding:0 0 0 22px;color:#0f172a;font-size:14px">${lis}</ul>`;
+}
+
+function statTile(value: string, label: string): string {
+  return `<td valign="top" align="center" style="padding:10px 6px;background:#ffffff;border:1px solid #e2e8f0;border-radius:10px;width:25%">
+    <div style="font-size:18px;font-weight:800;color:#3B2F75;line-height:1.1">${escape(value)}</div>
+    <div style="margin-top:4px;font-size:11px;color:#64748b;line-height:1.3">${escape(label)}</div>
+  </td>`;
+}
+
+/** Blok 1 — Wie is WarmeLeads (propositie + persoonlijke AM). */
+export function infoAboutBlock(): string {
+  return [
+    sectionTitle('Over WarmeLeads'),
+    paragraph(
+      'WarmeLeads levert moderne leadinfrastructuur voor installateurs en energiepartners. We genereren <strong>exclusieve, verse leads</strong> uit eigen campagnes — realtime in jouw portaal, automatisch gekwalificeerd en met een persoonlijke accountmanager die met je meedenkt. Geen callcenter, geen doorverkoop.',
+    ),
+  ].join('');
+}
+
+/** Blok 2 — Hoe het werkt (4 stappen, 24-72u live). */
+export function infoHowItWorksBlock(): string {
+  return [
+    sectionTitle('Zo werken we samen'),
+    bulletList([
+      '<strong>Strategiegesprek</strong> — we bespreken doelgroep, regio, volume, kostprijs per lead en stellen samen een plan op.',
+      '<strong>Campagne op maat</strong> — gemiddeld <strong>binnen 24 tot 72 uur</strong> live na goedkeuring.',
+      '<strong>Automatische quality checks</strong> — telefoon- en e-mailverificatie, adresverrijking en kwaliteitsscore per lead.',
+      '<strong>Realtime in jouw portaal</strong> — direct opvolgen, met notities, status en feedback.',
+    ]),
+    paragraph(
+      '<span style="color:#64748b;font-size:13px">Geen abonnement, geen vaste kosten, geen lock-in. Je betaalt per lead.</span>',
+    ),
+  ].join('');
+}
+
+/** Blok 3 — Kwaliteitsgaranties (exclusiviteit, verse leads, reclamatie). */
+export function infoQualityBlock(): string {
+  return [
+    sectionTitle('Onze kwaliteitsgaranties'),
+    bulletList([
+      '<strong>100% exclusief</strong> — leads worden niet doorverkocht of gedeeld. Jouw lead = jouw prospect.',
+      '<strong>Vers en realtime</strong> — direct uit onze eigen campagnes, geen recycled lijsten.',
+      '<strong>Eerste levering binnen 24 uur</strong> na het live gaan van de campagne.',
+      '<strong>Reclamatiebeleid</strong> — meld een lead in het portaal; bij gegronde klacht ontvang je vervanging of compensatie.',
+    ]),
+  ].join('');
+}
+
+/** Blok 4 — Branches die we doen + maatwerk-mogelijkheden. */
+export function infoBranchesBlock(): string {
+  return [
+    sectionTitle('Branches die we door en door kennen'),
+    paragraph(
+      'We zijn gespecialiseerd in 8 verticals: <strong>zonnepanelen</strong>, <strong>warmtepompen</strong>, <strong>thuisbatterijen</strong>, <strong>airco</strong>, <strong>financial lease</strong>, <strong>isolatie</strong>, <strong>laadpalen</strong> en <strong>B2B energie</strong>. Daarnaast genereren we leads in vrijwel elke andere branche op aanvraag.',
+    ),
+    infoCard(
+      '<strong>Nieuwe niche?</strong> Voor branches buiten ons standaardaanbod werken we met een <strong>onderzoekstarief van €750</strong>, dat je <strong>100% terug ontvangt in leads</strong> zodra de campagne live gaat. Doorlooptijd: 2 tot 4 weken.',
+    ),
+  ].join('');
+}
+
+/** Blok 5 — Hoe ons portaal werkt. */
+export function infoPortalBlock(baseUrl: string): string {
+  const safeUrl = `${baseUrl.replace(/\/$/, '')}/portal`;
+  return [
+    sectionTitle('Hoe ons portaal werkt'),
+    paragraph(
+      `Alle leads komen realtime binnen op <a href="${escape(safeUrl)}" style="color:#3B2F75;font-weight:600;text-decoration:underline">${escape(safeUrl)}</a>. Inloggen kan op desktop én op je telefoon (installeerbaar als app).`,
+    ),
+    bulletList([
+      'Direct bellen, WhatsAppen of mailen vanuit het portaal.',
+      'Push- én e-mailnotificaties zodra er een nieuwe lead binnenkomt.',
+      'Per lead: notities, statussen, feedback en historie.',
+      'Filters, batch-voortgang en exports voor je administratie.',
+      'Webhooks en API beschikbaar voor koppeling met je CRM of rooster.',
+    ]),
+  ].join('');
+}
+
+/** Blok 6 — Welkomstkorting / pricing-aanpak. */
+export function infoWelcomeOfferBlock(): string {
+  return [
+    sectionTitle('Welkomstaanbieding'),
+    infoCard(
+      '<strong>20% welkomstkorting</strong> op je eerste batch. Geen abonnement, geen vaste kosten en geen lock-in — je betaalt simpelweg per lead. Lopen we tegen problemen aan, dan stoppen we per direct.',
+    ),
+  ].join('');
+}
+
+/** Blok 7 — Sociaal bewijs / cijfers. */
+export function infoSocialProofBlock(): string {
+  return [
+    sectionTitle('In cijfers'),
+    `<table cellpadding="0" cellspacing="6" role="presentation" style="margin:0 0 14px;border-collapse:separate;width:100%">
+      <tr>
+        ${statTile('750+', 'batches geleverd')}
+        ${statTile('25+', 'actieve niches')}
+        ${statTile('4.8★', 'klantwaardering')}
+        ${statTile('92%', 'retentie na 6 mnd')}
+      </tr>
+    </table>`,
+    `<p style="margin:0 0 14px;font-size:12px;color:#94a3b8">Actief in heel Nederland en België. Eerste levering doorgaans binnen 24 uur.</p>`,
+  ].join('');
+}
+
+/** Blok 8 — Reclamatie- / herleveringsbeleid (kort). */
+export function infoReclamationBlock(): string {
+  return [
+    sectionTitle('Reclamatie & herlevering'),
+    paragraph(
+      'Niet alle leads zijn perfect — dat snappen we. Meld een twijfelgeval direct in het portaal met je feedback. Elke melding wordt individueel beoordeeld; bij gegronde reclamatie ontvang je <strong>vervanging of compensatie</strong>. Volledige voorwaarden staan in onze Algemene Voorwaarden.',
+    ),
+  ].join('');
+}
+
+/** Centraal: rendert alle aangevinkte info-blokken in een vaste volgorde. */
+export function renderInfoBlocks(
+  ctx: RenderCtx,
+  flags: {
+    about?: boolean;
+    howItWorks?: boolean;
+    quality?: boolean;
+    branchesOverview?: boolean;
+    portal?: boolean;
+    welcomeOffer?: boolean;
+    socialProof?: boolean;
+    reclamation?: boolean;
+  },
+): string {
+  const out: string[] = [];
+  if (flags.about) out.push(infoAboutBlock());
+  if (flags.branchesOverview) out.push(infoBranchesBlock());
+  if (flags.howItWorks) out.push(infoHowItWorksBlock());
+  if (flags.quality) out.push(infoQualityBlock());
+  if (flags.portal) out.push(infoPortalBlock(ctx.baseUrl));
+  if (flags.reclamation) out.push(infoReclamationBlock());
+  if (flags.welcomeOffer) out.push(infoWelcomeOfferBlock());
+  if (flags.socialProof) out.push(infoSocialProofBlock());
+  return out.join('');
+}
+
+/** De 8 standaard info-toggle-opties die templates kunnen hergebruiken. */
+export const INFO_BLOCK_OPTIONS: TemplateOption[] = [
+  {
+    key: 'include_about',
+    label: 'Korte intro "Over WarmeLeads"',
+    type: 'boolean',
+    default: false,
+    description: 'Eén alinea met onze propositie (exclusief, verse leads, persoonlijke AM).',
+  },
+  {
+    key: 'include_branches_overview',
+    label: 'Overzicht van onze branches + maatwerk',
+    type: 'boolean',
+    default: false,
+    description: 'De 8 verticals + uitleg over maatwerk-niches (€750, 100% terug in leads).',
+  },
+  {
+    key: 'include_how_it_works',
+    label: 'Werkwijze in 4 stappen',
+    type: 'boolean',
+    default: false,
+    description: 'Strategiegesprek → campagne in 24-72u → quality checks → realtime portaal.',
+  },
+  {
+    key: 'include_quality',
+    label: 'Kwaliteitsgaranties (exclusief, vers, <24u)',
+    type: 'boolean',
+    default: false,
+  },
+  {
+    key: 'include_portal_features',
+    label: 'Hoe ons portaal werkt',
+    type: 'boolean',
+    default: false,
+    description: 'Realtime leads, mobiele app, notificaties, filters, webhooks.',
+  },
+  {
+    key: 'include_reclamation',
+    label: 'Reclamatie- en herleveringsbeleid',
+    type: 'boolean',
+    default: false,
+  },
+  {
+    key: 'include_welcome_offer',
+    label: '20% welkomstkorting noemen',
+    type: 'boolean',
+    default: false,
+    description: 'Voor nieuwe prospects: 20% op de eerste batch, geen lock-in.',
+  },
+  {
+    key: 'include_social_proof',
+    label: 'Cijfers / sociaal bewijs',
+    type: 'boolean',
+    default: false,
+    description: '750+ batches, 25+ niches, 4.8★, 92% retentie na 6 mnd.',
+  },
+];
+
+/** Helper: leest de 8 vlaggen in 1x uit de optionValues. */
+export function readInfoFlags(values: Record<string, unknown>) {
+  return {
+    about: asBoolean(values.include_about),
+    branchesOverview: asBoolean(values.include_branches_overview),
+    howItWorks: asBoolean(values.include_how_it_works),
+    quality: asBoolean(values.include_quality),
+    portal: asBoolean(values.include_portal_features),
+    reclamation: asBoolean(values.include_reclamation),
+    welcomeOffer: asBoolean(values.include_welcome_offer),
+    socialProof: asBoolean(values.include_social_proof),
+  };
 }

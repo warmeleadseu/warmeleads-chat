@@ -9,9 +9,12 @@ import {
   escape,
   greetingLine,
   htmlToText,
+  INFO_BLOCK_OPTIONS,
   joinNL,
   paragraph,
   quoteBox,
+  readInfoFlags,
+  renderInfoBlocks,
   renderPricingBlock,
   tipBox,
 } from './_helpers';
@@ -58,6 +61,7 @@ export const proposalTemplate: EmailTemplate = {
       type: 'boolean',
       default: true,
     },
+    ...INFO_BLOCK_OPTIONS,
   ],
   defaultSubject: ctx => {
     const volume = asNumber(ctx.optionValues.pricing_volume, 50);
@@ -110,6 +114,9 @@ export const proposalTemplate: EmailTemplate = {
         ),
       );
     }
+
+    const infoFlags = readInfoFlags(ctx.optionValues);
+    parts.push(renderInfoBlocks(ctx, infoFlags));
 
     parts.push(
       paragraph(

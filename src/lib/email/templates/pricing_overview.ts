@@ -9,8 +9,11 @@ import {
   escape,
   greetingLine,
   htmlToText,
+  INFO_BLOCK_OPTIONS,
   joinNL,
   paragraph,
+  readInfoFlags,
+  renderInfoBlocks,
   renderPricingBlock,
 } from './_helpers';
 
@@ -49,6 +52,7 @@ export const pricingOverviewTemplate: EmailTemplate = {
       type: 'boolean',
       default: true,
     },
+    ...INFO_BLOCK_OPTIONS,
   ],
   defaultSubject: ctx => {
     const branches = (ctx.branchesSelected || []).map(b => b.name);
@@ -86,6 +90,9 @@ export const pricingOverviewTemplate: EmailTemplate = {
         `<p style="margin:0 0 14px;font-size:12px;color:#94a3b8">Prijzen zijn excl. btw. Bij landelijke verspreiding gelden eventuele kortingen die hierboven al verwerkt staan.</p>`,
       );
     }
+
+    const infoFlags = readInfoFlags(ctx.optionValues);
+    parts.push(renderInfoBlocks(ctx, infoFlags));
 
     parts.push(
       paragraph(
