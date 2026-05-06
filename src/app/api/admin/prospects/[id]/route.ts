@@ -71,9 +71,36 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     return NextResponse.json({ error: 'Ongeldige data' }, { status: 400 });
   }
 
+  // Tekstvelden waarvoor lege strings naar NULL moeten worden genormaliseerd
+  // — vooral belangrijk voor velden met een (partiële) unique index zoals
+  // kvk_nummer: zonder normalisatie zou een tweede prospect zonder KVK met
+  // lege string botsen op de eerste lege string (NULL is daar wél meervoudig
+  // toegestaan).
+  const NULLABLE_TEXT_FIELDS = new Set([
+    'contact_person',
+    'email',
+    'phone',
+    'website',
+    'kvk_nummer',
+    'vat_id',
+    'address',
+    'postcode',
+    'city',
+    'country',
+    'company_size',
+    'notes',
+    'last_contacted_at',
+  ]);
+
   const updates: Record<string, unknown> = {};
   for (const key of EDITABLE_FIELDS) {
-    if (key in body) updates[key] = body[key];
+    if (!(key in body)) continue;
+    let value = body[key];
+    if (typeof value === 'string' && NULLABLE_TEXT_FIELDS.has(key)) {
+      const trimmed = value.trim();
+      value = trimmed === '' ? null : trimmed;
+    }
+    updates[key] = value;
   }
 
   // status / source / account_manager_id alleen via dedicated endpoints,

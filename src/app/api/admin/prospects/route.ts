@@ -180,9 +180,34 @@ export async function POST(request: NextRequest) {
     'source', 'source_metadata', 'account_manager_id',
   ] as const;
 
+  // Tekstvelden waarvoor lege strings naar NULL moeten worden genormaliseerd
+  // (zie ook /[id]/route.ts) — voorkomt dat de partiële unique-index op
+  // kvk_nummer botst tussen meerdere prospects zonder KVK.
+  const NULLABLE_TEXT_FIELDS = new Set([
+    'contact_person',
+    'email',
+    'phone',
+    'website',
+    'kvk_nummer',
+    'vat_id',
+    'address',
+    'postcode',
+    'city',
+    'country',
+    'company_size',
+    'notes',
+    'lost_reason',
+  ]);
+
   const insert: Record<string, unknown> = {};
   for (const key of allowed) {
-    if (key in body && body[key] !== undefined) insert[key] = body[key];
+    if (!(key in body) || body[key] === undefined) continue;
+    let value: unknown = body[key];
+    if (typeof value === 'string' && NULLABLE_TEXT_FIELDS.has(key)) {
+      const trimmed = value.trim();
+      value = trimmed === '' ? null : trimmed;
+    }
+    insert[key] = value;
   }
 
   if (insert.status && !isValidStatus(insert.status)) {
