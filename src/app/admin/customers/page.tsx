@@ -2612,7 +2612,7 @@ function BatchesPanel({ customer, branchOptions, onClose, embedded }: { customer
   const [batches, setBatches] = useState<Batch[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState<{ branch: string; batch_size: number; price_per_lead: string; leads_per_day: string; leads_per_week: string; lookback_days: string; notes: string; lead_filters: LeadFilter[] }>({ branch: '', batch_size: 100, price_per_lead: '', leads_per_day: '', leads_per_week: '', lookback_days: '3', notes: '', lead_filters: [] });
+  const [form, setForm] = useState<{ branch: string; batch_size: number; price_per_lead: string; leads_per_day: string; leads_per_week: string; lookback_days: string; notes: string; lead_filters: LeadFilter[]; is_paid: boolean }>({ branch: '', batch_size: 100, price_per_lead: '', leads_per_day: '', leads_per_week: '', lookback_days: '3', notes: '', lead_filters: [], is_paid: false });
   const [saving, setSaving] = useState(false);
 
   const fetchBatches = useCallback(async () => {
@@ -2639,6 +2639,7 @@ function BatchesPanel({ customer, branchOptions, onClose, embedded }: { customer
           lookback_days: parseInt(form.lookback_days) || 0,
           notes: form.notes || null,
           lead_filters: form.lead_filters.filter(f => f.field && (f.values?.length || 0) > 0),
+          is_paid: form.is_paid,
         }),
       });
       if (!res.ok) {
@@ -2648,7 +2649,7 @@ function BatchesPanel({ customer, branchOptions, onClose, embedded }: { customer
         return;
       }
       setShowAdd(false);
-      setForm({ branch: '', batch_size: 100, price_per_lead: '', leads_per_day: '', leads_per_week: '', lookback_days: '3', notes: '', lead_filters: [] });
+      setForm({ branch: '', batch_size: 100, price_per_lead: '', leads_per_day: '', leads_per_week: '', lookback_days: '3', notes: '', lead_filters: [], is_paid: false });
       fetchBatches();
     } catch {
       alert('Er ging iets mis');
@@ -2762,6 +2763,24 @@ function BatchesPanel({ customer, branchOptions, onClose, embedded }: { customer
                   branchSlug={form.branch}
                 />
               )}
+              <div className="mb-3 flex items-center justify-between rounded-lg border border-slate-200 bg-white p-3">
+                <div>
+                  <p className="text-xs font-semibold text-slate-700">Betaalstatus</p>
+                  <p className="mt-0.5 text-[11px] text-slate-400">
+                    {form.is_paid ? 'Batch wordt als betaald gemarkeerd' : 'Klant kan via portaal betalen'}
+                  </p>
+                </div>
+                <button type="button" onClick={() => setForm(f => ({ ...f, is_paid: !f.is_paid }))}
+                  role="switch" aria-checked={form.is_paid}
+                  aria-label={form.is_paid ? 'Markeren als onbetaald' : 'Markeren als betaald'}
+                  className={`relative inline-flex h-[24px] w-[44px] shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 ${
+                    form.is_paid ? 'bg-emerald-500' : 'bg-red-400'
+                  }`}>
+                  <span className={`pointer-events-none inline-block h-[20px] w-[20px] transform rounded-full bg-white shadow ring-0 transition duration-200 ${
+                    form.is_paid ? 'translate-x-[22px]' : 'translate-x-[2px]'
+                  }`} />
+                </button>
+              </div>
               <div className="flex gap-2">
                 <button onClick={() => setShowAdd(false)}
                   className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-500 hover:bg-slate-50">Annuleren</button>
