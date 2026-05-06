@@ -16,6 +16,9 @@ import {
   MagnifyingGlassIcon,
   PlusIcon,
   UsersIcon,
+  PencilSquareIcon,
+  ArrowUturnLeftIcon,
+  CodeBracketIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
 
@@ -129,6 +132,16 @@ interface Props {
   onSent?: () => void;
 }
 
+/**
+ * Handmatige per-ontvanger overrides bovenop de gerenderde template.
+ * Sleutel: `${type}:${id}`. Veranderingen blijven bewaard tot het sjabloon
+ * of de opties wijzigen — dan worden ze geleegd om verwarring te voorkomen.
+ */
+type Overrides = Record<string, { subject?: string; html?: string }>;
+function recipientKey(r: { type: RecipientType; id: string }): string {
+  return `${r.type}:${r.id}`;
+}
+
 const SCOPE_LABELS: Record<string, string> = {
   marketing: 'Commercieel',
   pricing: 'Prijsinfo',
@@ -164,6 +177,7 @@ export function ComposeMailDrawer({
   const [sendResult, setSendResult] = useState<SendSyncResponse | null>(null);
   const [job, setJob] = useState<JobStatus | null>(null);
   const [testStatus, setTestStatus] = useState<string | null>(null);
+  const [overrides, setOverrides] = useState<Overrides>({});
 
   const selected = useMemo(
     () => templates.find(t => t.key === selectedKey) || null,
@@ -185,8 +199,16 @@ export function ComposeMailDrawer({
     setSendResult(null);
     setJob(null);
     setTestStatus(null);
+    setOverrides({});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  // Wis handmatige bewerkingen wanneer template of opties wijzigen, zodat
+  // de gebruiker niet per ongeluk een edit gebaseerd op oude template-output
+  // verstuurt nadat ze opties hebben aangepast.
+  useEffect(() => {
+    setOverrides({});
+  }, [selectedKey, optionValues]);
 
   // Templates en branches laden bij eerste open.
   useEffect(() => {
@@ -290,21 +312,34 @@ export function ComposeMailDrawer({
     if (!selected) return;
     setTestStatus('Bezig met versturen…');
     try {
-      const sample = recipients[0]
-        ? { type: recipients[0].type, id: recipients[0].id }
-        : null;
+      // Pak de momenteel actieve preview: we testen wat de gebruiker
+      // ook daadwerkelijk in beeld heeft, inclusief eventuele bewerkingen.
+      const activePreview = preview?.previews[previewIdx] || null;
+      const activeRecipient = activePreview
+        ? { type: activePreview.recipient.type, id: activePreview.recipient.id }
+        : recipients[0]
+          ? { type: recipients[0].type, id: recipients[0].id }
+          : null;
+      const key = activeRecipient ? recipientKey(activeRecipient) : null;
+      const ov = key ? overrides[key] : undefined;
       const res = await adminFetch('/api/admin/emails/compose/test', {
         method: 'POST',
         body: JSON.stringify({
           template_key: selected.key,
           options: optionValues,
           subject_override: subjectOverride || undefined,
-          sample_recipient: sample,
+          sample_recipient: activeRecipient,
+          subject_override_full: ov?.subject || undefined,
+          html_override: ov?.html || undefined,
         }),
       });
       const j = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error((j as { error?: string }).error || 'Test mislukt');
-      setTestStatus('Test verstuurd naar je eigen inbox.');
+      setTestStatus(
+        ov
+          ? 'Test (bewerkte versie) verstuurd naar je eigen inbox.'
+          : 'Test verstuurd naar je eigen inbox.',
+      );
     } catch (err) {
       setTestStatus(err instanceof Error ? err.message : 'Test mislukt');
     }
@@ -324,6 +359,7 @@ export function ComposeMailDrawer({
           options: optionValues,
           subject_override: subjectOverride || undefined,
           recipient_ids: recipientsBody,
+          overrides: Object.keys(overrides).length > 0 ? overrides : undefined,
         }),
       });
       const j = (await res.json().catch(() => ({}))) as SendSyncResponse | { error?: string };
@@ -524,6 +560,35 @@ export function ComposeMailDrawer({
                   onReload={loadPreview}
                   onSendTest={sendTest}
                   testStatus={testStatus}
+                  overrides={overrides}
+                  onSubjectOverrideForRecipient={(key, subject) =>
+                    setOverrides(prev => {
+                      const cur = prev[key] || {};
+                      const next = { ...cur, subject: subject || undefined };
+                      const cleaned: Overrides = { ...prev };
+                      if (!next.subject && !next.html) delete cleaned[key];
+                      else cleaned[key] = next;
+                      return cleaned;
+                    })
+                  }
+                  onHtmlOverrideForRecipient={(key, html) =>
+                    setOverrides(prev => {
+                      const cur = prev[key] || {};
+                      const next = { ...cur, html: html || undefined };
+                      const cleaned: Overrides = { ...prev };
+                      if (!next.subject && !next.html) delete cleaned[key];
+                      else cleaned[key] = next;
+                      return cleaned;
+                    })
+                  }
+                  onResetOverride={key =>
+                    setOverrides(prev => {
+                      if (!prev[key]) return prev;
+                      const cleaned = { ...prev };
+                      delete cleaned[key];
+                      return cleaned;
+                    })
+                  }
                 />
               )}
 
@@ -533,6 +598,7 @@ export function ComposeMailDrawer({
                   sending={sending}
                   result={sendResult}
                   job={job}
+                  overrideCount={Object.keys(overrides).length}
                   onSend={actuallySend}
                   onClose={onClose}
                 />
@@ -882,6 +948,10 @@ function PreviewPanel({
   onReload,
   onSendTest,
   testStatus,
+  overrides,
+  onSubjectOverrideForRecipient,
+  onHtmlOverrideForRecipient,
+  onResetOverride,
 }: {
   loading: boolean;
   preview: PreviewResponse | null;
@@ -892,17 +962,46 @@ function PreviewPanel({
   onReload: () => void;
   onSendTest: () => void;
   testStatus: string | null;
+  overrides: Overrides;
+  onSubjectOverrideForRecipient: (key: string, subject: string) => void;
+  onHtmlOverrideForRecipient: (key: string, html: string) => void;
+  onResetOverride: (key: string) => void;
 }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const item = preview?.previews[selectedIdx];
+  const recipientKeyForActive = item ? recipientKey(item.recipient) : null;
+  const activeOverride = recipientKeyForActive ? overrides[recipientKeyForActive] : undefined;
+  const isEdited = !!activeOverride;
+
+  // Effectieve waarden in de UI: per-ontvanger override > globale subject_override > template-rendering.
+  const effectiveSubject =
+    activeOverride?.subject ?? (subjectOverride || item?.subject || '');
+  const effectiveHtml = activeOverride?.html ?? item?.html ?? '';
+
+  // Lokale buffer voor de HTML-editor zodat we niet bij elke keystroke de
+  // iframe re-renderen — pas bij "Toepassen" propageren we naar parent.
+  const [editing, setEditing] = useState(false);
+  const [draftHtml, setDraftHtml] = useState<string>('');
+  const [draftDirty, setDraftDirty] = useState(false);
+
+  // Reset draft wanneer recipient of preview-data wisselt.
   useEffect(() => {
-    if (!iframeRef.current || !item) return;
+    setDraftHtml(effectiveHtml);
+    setDraftDirty(false);
+    // We willen NIET re-syncen tijdens actief typen; alleen bij wissel van item/recipient.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [item?.recipient.id, recipientKeyForActive]);
+
+  // Re-render iframe wanneer effectiveHtml verandert (overrides toegepast,
+  // recipient gewisseld, of preview ververst).
+  useEffect(() => {
+    if (!iframeRef.current || !effectiveHtml) return;
     const doc = iframeRef.current.contentDocument;
     if (!doc) return;
     doc.open();
-    doc.write(item.html);
+    doc.write(effectiveHtml);
     doc.close();
-  }, [item]);
+  }, [effectiveHtml]);
 
   if (loading) {
     return (
@@ -921,6 +1020,26 @@ function PreviewPanel({
       </div>
     );
   }
+
+  function applyDraft() {
+    if (!recipientKeyForActive) return;
+    onHtmlOverrideForRecipient(recipientKeyForActive, draftHtml);
+    setDraftDirty(false);
+  }
+  function discardDraft() {
+    setDraftHtml(effectiveHtml);
+    setDraftDirty(false);
+  }
+  function resetThis() {
+    if (!recipientKeyForActive) return;
+    onResetOverride(recipientKeyForActive);
+    setDraftDirty(false);
+    setEditing(false);
+  }
+
+  const editedKeys = Object.keys(overrides);
+  const editedCount = editedKeys.length;
+
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
@@ -930,20 +1049,71 @@ function PreviewPanel({
         <CountChip label="Ongeldig" value={preview.counts.invalid} tone="rose" />
       </div>
 
+      {editedCount > 0 && (
+        <div className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-800 flex items-center gap-2">
+          <PencilSquareIcon className="w-4 h-4 shrink-0" />
+          <span>
+            {editedCount === 1
+              ? '1 ontvanger heeft een handmatig bewerkte mail.'
+              : `${editedCount} ontvangers hebben een handmatig bewerkte mail.`}{' '}
+            Niet-bewerkte ontvangers krijgen de standaard template-versie.
+          </span>
+        </div>
+      )}
+
       <div className="bg-white border border-slate-200 rounded-lg">
         <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-2">
           <span className="text-xs text-slate-500 shrink-0">Onderwerp:</span>
           <input
             type="text"
-            value={subjectOverride || item?.subject || ''}
-            onChange={e => onSubjectChange(e.target.value)}
+            value={effectiveSubject}
+            onChange={e => {
+              if (recipientKeyForActive) {
+                onSubjectOverrideForRecipient(recipientKeyForActive, e.target.value);
+              } else {
+                onSubjectChange(e.target.value);
+              }
+            }}
             placeholder={item?.subject || 'Onderwerp…'}
             className="flex-1 text-sm font-semibold text-slate-900 bg-transparent border-0 focus:outline-none focus:ring-0 p-0"
           />
+          {isEdited && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-violet-700">
+              <PencilSquareIcon className="w-3 h-3" />
+              Bewerkt
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              setEditing(prev => !prev);
+              if (!editing) {
+                setDraftHtml(effectiveHtml);
+                setDraftDirty(false);
+              }
+            }}
+            className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded ${
+              editing
+                ? 'bg-slate-900 text-white hover:bg-slate-800'
+                : 'text-slate-600 hover:bg-slate-100'
+            }`}
+            title="Handmatig HTML bewerken voor deze ontvanger"
+          >
+            {editing ? (
+              <>
+                <EyeIcon className="w-3.5 h-3.5" /> Voorbeeld
+              </>
+            ) : (
+              <>
+                <CodeBracketIcon className="w-3.5 h-3.5" /> Bewerk HTML
+              </>
+            )}
+          </button>
           <button
             type="button"
             onClick={onReload}
             className="text-xs text-slate-500 hover:text-slate-900 px-2 py-1 rounded hover:bg-slate-100"
+            title="Herlaad de template-rendering (handmatige bewerkingen blijven bewaard)"
           >
             Ververs
           </button>
@@ -954,29 +1124,43 @@ function PreviewPanel({
           <span className="text-slate-300">·</span>
           <span className="text-slate-500">Reply-To:</span>
           <span className="text-slate-900">{preview.reply_to}</span>
+          <span className="text-slate-300">·</span>
+          <span className="text-slate-500">Naar:</span>
+          <span className="text-slate-900 truncate">
+            {item?.recipient.name ? `${item.recipient.name} <${item.recipient.email}>` : item?.recipient.email}
+          </span>
         </div>
 
         {preview.previews.length > 1 && (
           <div className="px-4 py-2 border-b border-slate-100 flex items-center gap-1 overflow-x-auto">
-            {preview.previews.map((p, i) => (
-              <button
-                key={p.recipient.id}
-                type="button"
-                onClick={() => onSelect(i)}
-                className={`px-2 py-1 rounded text-xs whitespace-nowrap ${
-                  i === selectedIdx
-                    ? 'bg-slate-900 text-white'
-                    : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                {p.recipient.name || p.recipient.email}
-                {p.opted_out && <span className="ml-1 text-amber-400">⚠</span>}
-              </button>
-            ))}
+            {preview.previews.map((p, i) => {
+              const k = recipientKey(p.recipient);
+              const edited = !!overrides[k];
+              return (
+                <button
+                  key={p.recipient.id}
+                  type="button"
+                  onClick={() => onSelect(i)}
+                  className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs whitespace-nowrap ${
+                    i === selectedIdx
+                      ? 'bg-slate-900 text-white'
+                      : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  {edited && (
+                    <PencilSquareIcon
+                      className={`w-3 h-3 ${i === selectedIdx ? 'text-violet-300' : 'text-violet-500'}`}
+                    />
+                  )}
+                  {p.recipient.name || p.recipient.email}
+                  {p.opted_out && <span className="ml-1 text-amber-400">⚠</span>}
+                </button>
+              );
+            })}
           </div>
         )}
 
-        {item?.warnings && item.warnings.length > 0 && (
+        {item?.warnings && item.warnings.length > 0 && !isEdited && (
           <div className="px-4 py-2 bg-amber-50 border-b border-amber-100 text-xs text-amber-800 space-y-0.5">
             {item.warnings.map((w, i) => (
               <p key={i}>⚠ {w}</p>
@@ -990,12 +1174,67 @@ function PreviewPanel({
           </div>
         )}
 
-        <iframe
-          ref={iframeRef}
-          title="email-preview"
-          className="w-full bg-white"
-          style={{ height: 520 }}
-        />
+        {editing ? (
+          <div className="bg-slate-50 border-b border-slate-100">
+            <div className="px-4 py-2 border-b border-slate-200/70 bg-white text-xs text-slate-600 flex items-start gap-2">
+              <PencilSquareIcon className="w-4 h-4 mt-0.5 text-violet-500 shrink-0" />
+              <p>
+                Pas hier de volledige HTML aan voor <strong>{item?.recipient.name || item?.recipient.email}</strong>.
+                Wijzigingen gelden alleen voor deze ene ontvanger en worden meegestuurd zoals jij ze hier laat staan.
+                Tip: laat de buitenste structuur staan en pas alleen de tekst tussen de tags aan om de opmaak te behouden.
+              </p>
+            </div>
+            <textarea
+              value={draftHtml}
+              onChange={e => {
+                setDraftHtml(e.target.value);
+                setDraftDirty(true);
+              }}
+              spellCheck={false}
+              className="w-full bg-white px-4 py-3 text-[12px] leading-relaxed font-mono text-slate-800 border-0 focus:outline-none focus:ring-0 resize-none"
+              style={{ height: 420 }}
+            />
+            <div className="px-4 py-2 flex items-center justify-between gap-2 bg-white border-t border-slate-100">
+              <div className="flex items-center gap-2">
+                {isEdited && (
+                  <button
+                    type="button"
+                    onClick={resetThis}
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-rose-600 text-xs"
+                  >
+                    <ArrowUturnLeftIcon className="w-3.5 h-3.5" />
+                    Reset naar template
+                  </button>
+                )}
+                {draftDirty && (
+                  <button
+                    type="button"
+                    onClick={discardDraft}
+                    className="text-xs text-slate-500 hover:text-slate-800 px-2 py-1"
+                  >
+                    Verwerp wijzigingen
+                  </button>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={applyDraft}
+                disabled={!draftDirty}
+                className="inline-flex items-center gap-1 rounded-lg bg-violet-600 hover:bg-violet-700 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
+              >
+                <CheckCircleIcon className="w-3.5 h-3.5" />
+                {draftDirty ? 'Toepassen' : 'Toegepast'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <iframe
+            ref={iframeRef}
+            title="email-preview"
+            className="w-full bg-white"
+            style={{ height: 520 }}
+          />
+        )}
       </div>
 
       <div className="flex items-center justify-between gap-3 text-sm">
@@ -1037,6 +1276,7 @@ function SendPanel({
   sending,
   result,
   job,
+  overrideCount,
   onSend,
   onClose,
 }: {
@@ -1044,6 +1284,7 @@ function SendPanel({
   sending: boolean;
   result: SendSyncResponse | null;
   job: JobStatus | null;
+  overrideCount: number;
   onSend: () => void;
   onClose: () => void;
 }) {
@@ -1147,6 +1388,13 @@ function SendPanel({
             <> {preview?.counts.opted_out} ontvanger(s) zijn uitgeschreven en worden overgeslagen.</>
           )}
         </p>
+        {overrideCount > 0 && (
+          <div className="mt-3 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-800">
+            <strong>{overrideCount}</strong>{' '}
+            ontvanger{overrideCount === 1 ? '' : 's'} krijg{overrideCount === 1 ? 't' : 'en'} een
+            handmatig bewerkte versie. Overige ontvangers krijgen de standaard template-versie.
+          </div>
+        )}
         <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
           <Stat label="Verzendt naar" value={preview?.counts.sendable ?? 0} highlight />
           <Stat label="Wordt overgeslagen" value={(preview?.counts.opted_out ?? 0) + (preview?.counts.invalid ?? 0)} />

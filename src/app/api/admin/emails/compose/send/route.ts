@@ -28,6 +28,50 @@ interface SendBody {
   subject_override?: unknown;
   recipient_ids?: unknown;
   dry_run?: unknown;
+  /**
+   * Per-ontvanger handmatige overrides van `subject` en/of `html`.
+   * Sleutel-formaat: "prospect:<uuid>" of "customer:<uuid>".
+   */
+  overrides?: unknown;
+}
+
+interface RecipientOverride {
+  subject?: string;
+  html?: string;
+}
+
+function parseOverrides(input: unknown): Record<string, RecipientOverride> {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return {};
+  const out: Record<string, RecipientOverride> = {};
+  for (const [rawKey, val] of Object.entries(input as Record<string, unknown>)) {
+    if (typeof rawKey !== 'string' || !val || typeof val !== 'object') continue;
+    if (!/^(prospect|customer):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawKey)) continue;
+    const v = val as { subject?: unknown; html?: unknown };
+    const entry: RecipientOverride = {};
+    if (typeof v.subject === 'string' && v.subject.trim()) entry.subject = v.subject.trim().slice(0, 998);
+    if (typeof v.html === 'string' && v.html.trim()) entry.html = v.html;
+    if (entry.subject || entry.html) out[rawKey] = entry;
+  }
+  return out;
+}
+
+/** Veilig HTML→tekst voor de plain-text-deel van een edited mail. */
+function htmlToText(html: string): string {
+  return html
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<br\s*\/?>(\s*)/gi, '\n')
+    .replace(/<\/(p|div|li|h[1-6])>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/[\t ]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 interface RecipientIdsBody {
@@ -69,6 +113,7 @@ async function sendOneAndLog(
   admin: AdminRow,
   options: Record<string, unknown>,
   stats: SendStats,
+  manuallyEdited: boolean,
 ): Promise<void> {
   const r = rendered.recipient.recipient;
   const result = await sendAsAdmin({
@@ -81,7 +126,7 @@ async function sendOneAndLog(
     prospectId: r.type === 'prospect' ? r.id : null,
     customerId: r.type === 'customer' ? r.id : null,
     templateKey: template.key,
-    templateOptions: options,
+    templateOptions: manuallyEdited ? { ...options, _manually_edited: true } : options,
     unsubscribeToken: rendered.recipient.unsubscribeToken,
     toName: r.name,
   });
@@ -134,11 +179,20 @@ async function processBatch(
   template: EmailTemplate,
   admin: AdminRow,
   options: Record<string, unknown>,
+  editedSet: Set<string>,
   onProgress?: (stats: SendStats) => Promise<void>,
 ): Promise<SendStats> {
   const stats: SendStats = { sent: 0, failed: 0, optOut: 0, errors: [] };
   for (let i = 0; i < rendered.length; i++) {
-    await sendOneAndLog(rendered[i], template, admin, options, stats);
+    const recipientId = rendered[i].recipient.recipient.id;
+    await sendOneAndLog(
+      rendered[i],
+      template,
+      admin,
+      options,
+      stats,
+      editedSet.has(recipientId),
+    );
     if (onProgress) await onProgress(stats);
     if (i < rendered.length - 1) await delay(SEND_INTERVAL_MS);
   }
@@ -171,6 +225,7 @@ export async function POST(request: NextRequest) {
       : {};
   const subjectOverride =
     typeof body.subject_override === 'string' ? body.subject_override : '';
+  const overrides = parseOverrides(body.overrides);
   const dryRun = body.dry_run === true;
 
   const recipients = parseRecipients(body.recipient_ids);
@@ -215,6 +270,23 @@ export async function POST(request: NextRequest) {
     subjectOverride,
   });
 
+  // Pas handmatige per-ontvanger overrides toe en houd bij wie er bewerkt is.
+  const editedRecipientIds = new Set<string>();
+  for (const r of rendered) {
+    const recipient = r.recipient.recipient;
+    const key = `${recipient.type}:${recipient.id}`;
+    const override = overrides[key];
+    if (!override) continue;
+    if (override.subject) {
+      r.subject = override.subject;
+    }
+    if (override.html) {
+      r.html = override.html;
+      r.text = htmlToText(override.html);
+    }
+    editedRecipientIds.add(recipient.id);
+  }
+
   if (dryRun) {
     return NextResponse.json({
       success: true,
@@ -238,7 +310,7 @@ export async function POST(request: NextRequest) {
 
   // Synchroon voor batches tot SYNC_LIMIT.
   if (resolved.length <= SYNC_LIMIT) {
-    const stats = await processBatch(rendered, template, admin, options);
+    const stats = await processBatch(rendered, template, admin, options, editedRecipientIds);
 
     await logAudit({
       adminId: admin.id,
@@ -252,6 +324,7 @@ export async function POST(request: NextRequest) {
         sent: stats.sent,
         failed: stats.failed,
         opt_out: stats.optOut,
+        manually_edited: editedRecipientIds.size,
       },
     });
 
@@ -301,7 +374,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const stats = await runJobInline(job.id, rendered, template, admin, options);
+  const stats = await runJobInline(job.id, rendered, template, admin, options, editedRecipientIds);
 
   await logAudit({
     adminId: admin.id,
@@ -315,6 +388,7 @@ export async function POST(request: NextRequest) {
       sent: stats.sent,
       failed: stats.failed,
       opt_out: stats.optOut,
+      manually_edited: editedRecipientIds.size,
     },
   });
 
@@ -346,11 +420,12 @@ async function runJobInline(
   template: EmailTemplate,
   admin: AdminRow,
   options: Record<string, unknown>,
+  editedSet: Set<string>,
 ): Promise<SendStats> {
   const supabase = createServerClient();
   let lastUpdate = 0;
   try {
-    const stats = await processBatch(rendered, template, admin, options, async stats => {
+    const stats = await processBatch(rendered, template, admin, options, editedSet, async stats => {
       const now = Date.now();
       if (now - lastUpdate > 1000) {
         lastUpdate = now;

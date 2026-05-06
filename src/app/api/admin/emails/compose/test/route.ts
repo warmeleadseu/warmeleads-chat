@@ -20,6 +20,28 @@ interface TestBody {
   subject_override?: unknown;
   /** Eén ontvanger om als data-context te gebruiken (bv. eerste prospect). */
   sample_recipient?: unknown;
+  /** Volledige handmatige onderwerp-override voor deze test-mail. */
+  subject_override_full?: unknown;
+  /** Volledige handmatig bewerkte HTML voor deze test-mail. */
+  html_override?: unknown;
+}
+
+function htmlToText(html: string): string {
+  return html
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<br\s*\/?>(\s*)/gi, '\n')
+    .replace(/<\/(p|div|li|h[1-6])>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/[\t ]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 export async function POST(request: NextRequest) {
@@ -108,16 +130,27 @@ export async function POST(request: NextRequest) {
   });
   const r = rendered[0];
 
+  const subjectFull =
+    typeof body.subject_override_full === 'string' && body.subject_override_full.trim()
+      ? body.subject_override_full.trim()
+      : r.subject;
+  const htmlFull =
+    typeof body.html_override === 'string' && body.html_override.trim()
+      ? (body.html_override as string)
+      : r.html;
+  const textFull = htmlFull === r.html ? r.text : htmlToText(htmlFull);
+  const wasEdited = htmlFull !== r.html || subjectFull !== r.subject;
+
   const result = await sendAsAdmin({
     admin: { id: admin.id, name: admin.name, email: admin.email },
     to: admin.email,
-    subject: `[TEST] ${r.subject}`,
-    html: r.html,
-    text: r.text,
+    subject: `[TEST] ${subjectFull}`,
+    html: htmlFull,
+    text: textFull,
     scope: template.scope,
     bypassOptOut: true,
     templateKey: template.key,
-    templateOptions: { ...options, _is_test: true },
+    templateOptions: { ...options, _is_test: true, _manually_edited: wasEdited },
     toName: admin.name,
   });
 
