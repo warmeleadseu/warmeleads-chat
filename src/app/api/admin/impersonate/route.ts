@@ -1,15 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireSuperAdmin } from '@/lib/adminAuth';
+import { verifyAdmin, unauthorized, forbidden } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
+import { logAudit } from '@/lib/audit';
 import { SignJWT } from 'jose';
 
 const SECRET = new TextEncoder().encode(process.env.CRON_SECRET || 'fallback-impersonate-key');
 const ISSUER = 'warmeleads-admin';
 const EXPIRY = '1h';
 
+/**
+ * Genereert een korte-levensduur impersonate-token waarmee een admin/AM via
+ * de "Bekijk portaal"-knop het klantportaal van een specifieke klant opent.
+ *
+ * Toegang:
+ *  - superadmin / admin → elke klant
+ *  - accountmanager      → alleen klanten waar account_manager_id = jij
+ */
 export async function POST(request: NextRequest) {
-  const { admin, error: authError } = await requireSuperAdmin(request);
-  if (authError || !admin) return authError!;
+  const admin = await verifyAdmin(request);
+  if (!admin) return unauthorized();
 
   const { customer_id } = await request.json();
   if (!customer_id) {
@@ -19,12 +28,16 @@ export async function POST(request: NextRequest) {
   const supabase = createServerClient();
   const { data: customer, error: custError } = await supabase
     .from('customers')
-    .select('id, name, email, contact_person, branches, portal_active')
+    .select('id, name, email, contact_person, branches, portal_active, account_manager_id')
     .eq('id', customer_id)
     .single();
 
   if (custError || !customer) {
     return NextResponse.json({ error: 'Klant niet gevonden' }, { status: 404 });
+  }
+
+  if (admin.role === 'accountmanager' && customer.account_manager_id !== admin.id) {
+    return forbidden();
   }
 
   const token = await new SignJWT({
@@ -39,6 +52,15 @@ export async function POST(request: NextRequest) {
     .setIssuedAt()
     .setExpirationTime(EXPIRY)
     .sign(SECRET);
+
+  logAudit({
+    adminId: admin.id,
+    adminName: admin.name,
+    action: 'customer.impersonate',
+    entityType: 'customer',
+    entityId: customer.id,
+    details: { customer_name: customer.name, role: admin.role },
+  }).catch(() => {});
 
   return NextResponse.json({ token });
 }
