@@ -18,7 +18,7 @@ import {
   UsersIcon,
   PencilSquareIcon,
   ArrowUturnLeftIcon,
-  CodeBracketIcon,
+  LinkIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
 
@@ -978,22 +978,17 @@ function PreviewPanel({
     activeOverride?.subject ?? (subjectOverride || item?.subject || '');
   const effectiveHtml = activeOverride?.html ?? item?.html ?? '';
 
-  // Lokale buffer voor de HTML-editor zodat we niet bij elke keystroke de
-  // iframe re-renderen — pas bij "Toepassen" propageren we naar parent.
+  // We bewerken direct in de iframe (WYSIWYG). draftDirty wordt door de
+  // input-listener van het iframe-document op true gezet. De daadwerkelijke
+  // HTML wordt pas bij "Toepassen" uit de iframe gelezen en als override
+  // doorgegeven naar de parent.
   const [editing, setEditing] = useState(false);
-  const [draftHtml, setDraftHtml] = useState<string>('');
   const [draftDirty, setDraftDirty] = useState(false);
 
-  // Reset draft wanneer recipient of preview-data wisselt.
-  useEffect(() => {
-    setDraftHtml(effectiveHtml);
-    setDraftDirty(false);
-    // We willen NIET re-syncen tijdens actief typen; alleen bij wissel van item/recipient.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [item?.recipient.id, recipientKeyForActive]);
-
   // Re-render iframe wanneer effectiveHtml verandert (overrides toegepast,
-  // recipient gewisseld, of preview ververst).
+  // recipient gewisseld, of preview ververst). Dit reset ook eventuele
+  // niet-toegepaste wijzigingen, dus we laten de gebruiker bevestigen wanneer
+  // ze tussen ontvangers wisselen met een nog actieve edit (zie verder).
   useEffect(() => {
     if (!iframeRef.current || !effectiveHtml) return;
     const doc = iframeRef.current.contentDocument;
@@ -1001,7 +996,44 @@ function PreviewPanel({
     doc.open();
     doc.write(effectiveHtml);
     doc.close();
+    setDraftDirty(false);
   }, [effectiveHtml]);
+
+  // Activeer/deactiveer contentEditable in de iframe-body en koppel een
+  // input-listener om wijzigingen te detecteren. We her-attachen na elke
+  // her-render van de iframe (effectiveHtml wisselt) zodat we nooit met een
+  // stale body werken.
+  useEffect(() => {
+    const iframe = iframeRef.current;
+    if (!iframe) return;
+    const doc = iframe.contentDocument;
+    if (!doc || !doc.body) return;
+
+    if (editing) {
+      doc.body.setAttribute('contenteditable', 'true');
+      doc.body.style.outline = 'none';
+      doc.body.style.cursor = 'text';
+      doc.designMode = 'on';
+      const onInput = () => setDraftDirty(true);
+      doc.addEventListener('input', onInput);
+      // Klein delay zodat de iframe focus krijgt nadat de useEffect klaar is.
+      const t = window.setTimeout(() => {
+        try {
+          doc.body.focus();
+        } catch {
+          /* no-op */
+        }
+      }, 30);
+      return () => {
+        doc.removeEventListener('input', onInput);
+        window.clearTimeout(t);
+      };
+    } else {
+      doc.body.setAttribute('contenteditable', 'false');
+      doc.body.style.cursor = '';
+      doc.designMode = 'off';
+    }
+  }, [editing, effectiveHtml]);
 
   if (loading) {
     return (
@@ -1021,20 +1053,80 @@ function PreviewPanel({
     );
   }
 
+  function readIframeHtml(): string | null {
+    const doc = iframeRef.current?.contentDocument;
+    if (!doc || !doc.documentElement) return null;
+    // We willen de body-attribuut contenteditable niet meesturen in de mail.
+    const bodyEditable = doc.body?.getAttribute('contenteditable');
+    const bodyCursor = doc.body?.style.cursor;
+    if (doc.body) {
+      doc.body.removeAttribute('contenteditable');
+      doc.body.style.cursor = '';
+    }
+    const html = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
+    // Zet de attributen weer terug zodat de UI in editmode blijft.
+    if (doc.body && bodyEditable) {
+      doc.body.setAttribute('contenteditable', bodyEditable);
+    }
+    if (doc.body && bodyCursor) {
+      doc.body.style.cursor = bodyCursor;
+    }
+    return html;
+  }
+
   function applyDraft() {
     if (!recipientKeyForActive) return;
-    onHtmlOverrideForRecipient(recipientKeyForActive, draftHtml);
+    const html = readIframeHtml();
+    if (html === null) return;
+    onHtmlOverrideForRecipient(recipientKeyForActive, html);
     setDraftDirty(false);
+    setEditing(false);
   }
+
   function discardDraft() {
-    setDraftHtml(effectiveHtml);
+    // Re-render de iframe met de huidige effectiveHtml zodat ongesaved
+    // wijzigingen verdwijnen.
+    const doc = iframeRef.current?.contentDocument;
+    if (!doc) return;
+    doc.open();
+    doc.write(effectiveHtml);
+    doc.close();
     setDraftDirty(false);
   }
+
   function resetThis() {
     if (!recipientKeyForActive) return;
     onResetOverride(recipientKeyForActive);
     setDraftDirty(false);
     setEditing(false);
+  }
+
+  function applyFormat(cmd: string, value?: string) {
+    const doc = iframeRef.current?.contentDocument;
+    if (!doc) return;
+    try {
+      doc.execCommand(cmd, false, value);
+    } catch {
+      /* no-op */
+    }
+    setDraftDirty(true);
+    try {
+      doc.body?.focus();
+    } catch {
+      /* no-op */
+    }
+  }
+
+  function promptCreateLink() {
+    const doc = iframeRef.current?.contentDocument;
+    const sel = doc?.getSelection?.()?.toString() || '';
+    if (!sel) {
+      window.alert('Selecteer eerst de tekst die je naar een link wil omzetten.');
+      return;
+    }
+    const url = window.prompt('Link URL', 'https://');
+    if (!url) return;
+    applyFormat('createLink', url);
   }
 
   const editedKeys = Object.keys(overrides);
@@ -1086,26 +1178,29 @@ function PreviewPanel({
           <button
             type="button"
             onClick={() => {
-              setEditing(prev => !prev);
-              if (!editing) {
-                setDraftHtml(effectiveHtml);
-                setDraftDirty(false);
+              if (editing && draftDirty) {
+                const ok = window.confirm(
+                  'Je hebt niet-toegepaste wijzigingen. Weet je zeker dat je de bewerk-modus wil sluiten? Klik op "Toepassen" om de wijzigingen te bewaren.',
+                );
+                if (!ok) return;
+                discardDraft();
               }
+              setEditing(prev => !prev);
             }}
             className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded ${
               editing
-                ? 'bg-slate-900 text-white hover:bg-slate-800'
+                ? 'bg-violet-600 text-white hover:bg-violet-700'
                 : 'text-slate-600 hover:bg-slate-100'
             }`}
-            title="Handmatig HTML bewerken voor deze ontvanger"
+            title="Tekst direct in de mail aanpassen"
           >
             {editing ? (
               <>
-                <EyeIcon className="w-3.5 h-3.5" /> Voorbeeld
+                <EyeIcon className="w-3.5 h-3.5" /> Klaar met bewerken
               </>
             ) : (
               <>
-                <CodeBracketIcon className="w-3.5 h-3.5" /> Bewerk HTML
+                <PencilSquareIcon className="w-3.5 h-3.5" /> Tekst bewerken
               </>
             )}
           </button>
@@ -1174,66 +1269,56 @@ function PreviewPanel({
           </div>
         )}
 
-        {editing ? (
-          <div className="bg-slate-50 border-b border-slate-100">
-            <div className="px-4 py-2 border-b border-slate-200/70 bg-white text-xs text-slate-600 flex items-start gap-2">
-              <PencilSquareIcon className="w-4 h-4 mt-0.5 text-violet-500 shrink-0" />
-              <p>
-                Pas hier de volledige HTML aan voor <strong>{item?.recipient.name || item?.recipient.email}</strong>.
-                Wijzigingen gelden alleen voor deze ene ontvanger en worden meegestuurd zoals jij ze hier laat staan.
-                Tip: laat de buitenste structuur staan en pas alleen de tekst tussen de tags aan om de opmaak te behouden.
-              </p>
-            </div>
-            <textarea
-              value={draftHtml}
-              onChange={e => {
-                setDraftHtml(e.target.value);
-                setDraftDirty(true);
-              }}
-              spellCheck={false}
-              className="w-full bg-white px-4 py-3 text-[12px] leading-relaxed font-mono text-slate-800 border-0 focus:outline-none focus:ring-0 resize-none"
-              style={{ height: 420 }}
-            />
-            <div className="px-4 py-2 flex items-center justify-between gap-2 bg-white border-t border-slate-100">
-              <div className="flex items-center gap-2">
-                {isEdited && (
-                  <button
-                    type="button"
-                    onClick={resetThis}
-                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-rose-600 text-xs"
-                  >
-                    <ArrowUturnLeftIcon className="w-3.5 h-3.5" />
-                    Reset naar template
-                  </button>
-                )}
-                {draftDirty && (
-                  <button
-                    type="button"
-                    onClick={discardDraft}
-                    className="text-xs text-slate-500 hover:text-slate-800 px-2 py-1"
-                  >
-                    Verwerp wijzigingen
-                  </button>
-                )}
-              </div>
-              <button
-                type="button"
-                onClick={applyDraft}
-                disabled={!draftDirty}
-                className="inline-flex items-center gap-1 rounded-lg bg-violet-600 hover:bg-violet-700 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
-              >
-                <CheckCircleIcon className="w-3.5 h-3.5" />
-                {draftDirty ? 'Toepassen' : 'Toegepast'}
-              </button>
-            </div>
-          </div>
-        ) : (
+        {editing && (
+          <EditorToolbar
+            onCommand={applyFormat}
+            onCreateLink={promptCreateLink}
+            recipientLabel={item?.recipient.name || item?.recipient.email || ''}
+          />
+        )}
+
+        <div className={editing ? 'ring-2 ring-violet-300 ring-inset' : ''}>
           <iframe
             ref={iframeRef}
             title="email-preview"
             className="w-full bg-white"
-            style={{ height: 520 }}
+            style={{ height: editing ? 460 : 520 }}
           />
+        </div>
+
+        {editing && (
+          <div className="px-4 py-2 flex items-center justify-between gap-2 bg-white border-t border-slate-100">
+            <div className="flex items-center gap-2">
+              {isEdited && (
+                <button
+                  type="button"
+                  onClick={resetThis}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-rose-600 text-xs"
+                >
+                  <ArrowUturnLeftIcon className="w-3.5 h-3.5" />
+                  Reset naar template
+                </button>
+              )}
+              {draftDirty && (
+                <button
+                  type="button"
+                  onClick={discardDraft}
+                  className="text-xs text-slate-500 hover:text-slate-800 px-2 py-1"
+                >
+                  Verwerp wijzigingen
+                </button>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={applyDraft}
+              disabled={!draftDirty}
+              className="inline-flex items-center gap-1 rounded-lg bg-violet-600 hover:bg-violet-700 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
+            >
+              <CheckCircleIcon className="w-3.5 h-3.5" />
+              {draftDirty ? 'Bewerking toepassen' : 'Toegepast'}
+            </button>
+          </div>
         )}
       </div>
 
@@ -1255,6 +1340,102 @@ function PreviewPanel({
       </div>
     </div>
   );
+}
+
+/**
+ * Compact format-toolbar voor de inline mail-editor. We gebruiken
+ * `document.execCommand` op de iframe-document om vet/cursief/lijsten/links
+ * toe te passen op de selectie. `onMouseDown` op de buttons preventDefault'en
+ * zodat de focus/selectie in de iframe blijft staan tijdens een klik.
+ */
+function EditorToolbar({
+  onCommand,
+  onCreateLink,
+  recipientLabel,
+}: {
+  onCommand: (cmd: string, value?: string) => void;
+  onCreateLink: () => void;
+  recipientLabel: string;
+}) {
+  return (
+    <div className="border-b border-violet-200 bg-violet-50/80">
+      <div className="px-3 py-1.5 flex items-center gap-1 flex-wrap">
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-violet-700 mr-1 select-none">
+          Tekst bewerken
+        </span>
+        <ToolbarButton onClick={() => onCommand('bold')} title="Vet (Ctrl/Cmd+B)">
+          <span className="font-bold">B</span>
+        </ToolbarButton>
+        <ToolbarButton onClick={() => onCommand('italic')} title="Schuin (Ctrl/Cmd+I)">
+          <span className="italic">I</span>
+        </ToolbarButton>
+        <ToolbarButton onClick={() => onCommand('underline')} title="Onderstreept (Ctrl/Cmd+U)">
+          <span className="underline">U</span>
+        </ToolbarButton>
+        <ToolbarDivider />
+        <ToolbarButton
+          onClick={() => onCommand('insertUnorderedList')}
+          title="Bullet-lijst"
+        >
+          • Lijst
+        </ToolbarButton>
+        <ToolbarButton
+          onClick={() => onCommand('insertOrderedList')}
+          title="Genummerde lijst"
+        >
+          1. Lijst
+        </ToolbarButton>
+        <ToolbarDivider />
+        <ToolbarButton onClick={onCreateLink} title="Link toevoegen aan selectie">
+          <LinkIcon className="w-3.5 h-3.5" />
+          Link
+        </ToolbarButton>
+        <ToolbarButton onClick={() => onCommand('unlink')} title="Link verwijderen">
+          Geen link
+        </ToolbarButton>
+        <ToolbarDivider />
+        <ToolbarButton onClick={() => onCommand('removeFormat')} title="Opmaak verwijderen">
+          Wis opmaak
+        </ToolbarButton>
+        <ToolbarDivider />
+        <ToolbarButton onClick={() => onCommand('undo')} title="Ongedaan maken">
+          ↶
+        </ToolbarButton>
+        <ToolbarButton onClick={() => onCommand('redo')} title="Opnieuw">
+          ↷
+        </ToolbarButton>
+        <span className="ml-auto text-[10px] italic text-violet-700/80 select-none truncate">
+          Klik in de mail om tekst aan te passen{recipientLabel ? ` voor ${recipientLabel}` : ''}.
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function ToolbarButton({
+  onClick,
+  title,
+  children,
+}: {
+  onClick: () => void;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onMouseDown={e => e.preventDefault()}
+      onClick={onClick}
+      title={title}
+      className="inline-flex items-center gap-1 min-w-[26px] px-2 py-1 rounded text-xs text-slate-700 hover:bg-violet-100 active:bg-violet-200"
+    >
+      {children}
+    </button>
+  );
+}
+
+function ToolbarDivider() {
+  return <span className="mx-0.5 h-4 w-px bg-violet-200" aria-hidden />;
 }
 
 function CountChip({ label, value, tone }: { label: string; value: number; tone: 'green' | 'amber' | 'rose' }) {
