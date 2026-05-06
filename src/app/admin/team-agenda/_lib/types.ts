@@ -68,11 +68,13 @@ export interface Participant {
   id: string;
   name: string;
   email: string;
+  avatar_url?: string | null;
 }
 export interface AdminOption {
   id: string;
   name: string;
   email?: string | null;
+  avatar_url?: string | null;
 }
 
 export interface CalendarEvent {
@@ -87,7 +89,7 @@ export interface CalendarEvent {
   customer: { id: string; name: string | null; email?: string | null } | null;
   prospect: { id: string; company_name: string | null; email?: string | null; contact_person?: string | null } | null;
   created_by: string | null;
-  creator: { id: string; name: string } | null;
+  creator: { id: string; name: string; avatar_url?: string | null } | null;
   participants: Participant[];
   meeting_url: string | null;
   meeting_invite_sent_at: string | null;

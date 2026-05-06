@@ -56,7 +56,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       token: user.id,
-      user: { id: user.id, email: user.email, name: user.name, role: user.role, is_account_manager: !!user.is_account_manager },
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        is_account_manager: !!user.is_account_manager,
+        avatar_url: user.avatar_url ?? null,
+      },
     });
   } catch (err) {
     console.error('Login error:', err);

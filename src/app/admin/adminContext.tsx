@@ -8,6 +8,7 @@ export interface AdminUser {
   name: string;
   role: string;
   is_account_manager?: boolean;
+  avatar_url?: string | null;
 }
 
 export interface AdminCtx {

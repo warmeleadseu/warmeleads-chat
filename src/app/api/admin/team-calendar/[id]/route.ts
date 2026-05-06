@@ -59,7 +59,7 @@ function isIsoDateLike(v: unknown): v is string {
 
 interface ParticipantRow {
   admin_user_id: string;
-  admin_users: { id: string; name: string; email: string } | null;
+  admin_users: { id: string; name: string; email: string; avatar_url: string | null } | null;
 }
 interface EventRow {
   id: string;
@@ -79,7 +79,7 @@ interface EventRow {
   meeting_invite_sent_at: string | null;
   customer: { id: string; name: string; email: string | null } | null;
   prospect: { id: string; company_name: string; email: string | null; contact_person: string | null } | null;
-  creator: { id: string; name: string } | null;
+  creator: { id: string; name: string; avatar_url: string | null } | null;
   participants: ParticipantRow[];
 }
 
@@ -112,12 +112,24 @@ function shapeEvent(row: EventRow) {
       : null,
     created_by: row.created_by,
     creator: row.creator
-      ? { id: row.creator.id, name: row.creator.name }
+      ? {
+          id: row.creator.id,
+          name: row.creator.name,
+          avatar_url: row.creator.avatar_url ?? null,
+        }
       : null,
     participants: (row.participants || [])
       .map(p => p.admin_users)
-      .filter((p): p is { id: string; name: string; email: string } => !!p)
-      .map(p => ({ id: p.id, name: p.name, email: p.email })),
+      .filter(
+        (p): p is { id: string; name: string; email: string; avatar_url: string | null } =>
+          !!p,
+      )
+      .map(p => ({
+        id: p.id,
+        name: p.name,
+        email: p.email,
+        avatar_url: p.avatar_url ?? null,
+      })),
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
@@ -127,8 +139,8 @@ const FULL_SELECT = `
   *,
   customer:customers(id, name, email),
   prospect:prospects(id, company_name, email, contact_person),
-  creator:admin_users!team_calendar_events_created_by_fkey(id, name),
-  participants:team_calendar_event_participants(admin_user_id, admin_users(id, name, email))
+  creator:admin_users!team_calendar_events_created_by_fkey(id, name, avatar_url),
+  participants:team_calendar_event_participants(admin_user_id, admin_users(id, name, email, avatar_url))
 `;
 
 export async function GET(

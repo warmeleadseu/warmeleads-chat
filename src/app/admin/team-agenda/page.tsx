@@ -23,6 +23,7 @@ import {
 import { CalendarWeekView } from './_components/CalendarWeekView';
 import { CalendarListView } from './_components/CalendarListView';
 import { EventDrawer } from './_components/EventDrawer';
+import { AdminAvatar } from './_components/AdminAvatar';
 import {
   EVENT_TYPES,
   TYPE_META,
@@ -155,8 +156,20 @@ function TeamAgendaInner() {
         const res = await adminFetch('/api/admin/account-managers');
         const data = await res.json();
         if (cancelled) return;
-        const list = (data.account_managers || []) as Array<{ id: string; name: string; email: string | null }>;
-        setAdmins(list.map(a => ({ id: a.id, name: a.name, email: a.email })));
+        const list = (data.account_managers || []) as Array<{
+          id: string;
+          name: string;
+          email: string | null;
+          avatar_url: string | null;
+        }>;
+        setAdmins(
+          list.map(a => ({
+            id: a.id,
+            name: a.name,
+            email: a.email,
+            avatar_url: a.avatar_url,
+          })),
+        );
       } catch {
         if (!cancelled) setAdmins([]);
       }
@@ -170,9 +183,12 @@ function TeamAgendaInner() {
   useEffect(() => {
     setAdmins(prev => {
       if (prev.some(a => a.id === user.id)) return prev;
-      return [...prev, { id: user.id, name: user.name, email: user.email }];
+      return [
+        ...prev,
+        { id: user.id, name: user.name, email: user.email, avatar_url: user.avatar_url },
+      ];
     });
-  }, [user.id, user.name, user.email]);
+  }, [user.id, user.name, user.email, user.avatar_url]);
 
   // Open the create-drawer when arriving with ?create=1 (used by Plan-bezoek-buttons).
   useEffect(() => {
@@ -470,13 +486,13 @@ function TeamAgendaInner() {
                         : 'bg-white text-slate-600 ring-slate-200 hover:bg-slate-50'
                     }`}
                   >
-                    <span
-                      className={`flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-bold uppercase ${
-                        active ? 'bg-white/30' : 'bg-slate-100 text-slate-500'
-                      }`}
-                    >
-                      {a.name.charAt(0)}
-                    </span>
+                    <AdminAvatar
+                      id={a.id}
+                      name={a.name}
+                      avatarUrl={a.avatar_url}
+                      size={16}
+                      withTitle={false}
+                    />
                     {a.name}
                   </button>
                 );

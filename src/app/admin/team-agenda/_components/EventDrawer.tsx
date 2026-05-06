@@ -32,6 +32,7 @@ import {
   formatRange,
 } from '../_lib/datetime';
 import { EntityTypeahead, type EntityValue } from './EntityTypeahead';
+import { AdminAvatar } from './AdminAvatar';
 
 interface Props {
   open: boolean;
@@ -426,13 +427,31 @@ export function EventDrawer({
                   {mode === 'edit' ? 'Event bewerken' : 'Nieuw event'}
                 </h2>
                 {mode === 'edit' && existingEvent && (
-                  <p className="mt-0.5 text-xs text-slate-500">
-                    {formatRange(
-                      new Date(existingEvent.starts_at),
-                      new Date(existingEvent.ends_at),
-                      existingEvent.all_day,
+                  <>
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      {formatRange(
+                        new Date(existingEvent.starts_at),
+                        new Date(existingEvent.ends_at),
+                        existingEvent.all_day,
+                      )}
+                    </p>
+                    {existingEvent.creator?.name && (
+                      <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-slate-500">
+                        <AdminAvatar
+                          id={existingEvent.creator.id}
+                          name={existingEvent.creator.name}
+                          avatarUrl={existingEvent.creator.avatar_url}
+                          size={16}
+                        />
+                        <span>
+                          Aangemaakt door{' '}
+                          <span className="font-semibold text-slate-700">
+                            {existingEvent.creator.name}
+                          </span>
+                        </span>
+                      </div>
                     )}
-                  </p>
+                  </>
                 )}
               </div>
               <button
@@ -772,13 +791,19 @@ export function EventDrawer({
                             : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
                         } ${!canMutate ? 'opacity-60' : ''}`}
                       >
-                        <span
-                          className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold uppercase ${
-                            active ? 'bg-brand-purple text-white' : 'bg-slate-100 text-slate-500'
-                          }`}
-                        >
-                          {active ? <CheckIcon className="h-3 w-3" /> : a.name.charAt(0)}
-                        </span>
+                        {active ? (
+                          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand-purple text-white">
+                            <CheckIcon className="h-3 w-3" />
+                          </span>
+                        ) : (
+                          <AdminAvatar
+                            id={a.id}
+                            name={a.name}
+                            avatarUrl={a.avatar_url}
+                            size={20}
+                            withTitle={false}
+                          />
+                        )}
                         <span className="truncate">{a.name}</span>
                       </button>
                     );

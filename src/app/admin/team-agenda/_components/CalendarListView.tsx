@@ -9,6 +9,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { formatRange, formatTime } from '../_lib/datetime';
 import { TYPE_META, type CalendarEvent } from '../_lib/types';
+import { AdminAvatar } from './AdminAvatar';
 
 interface Props {
   events: CalendarEvent[];
@@ -95,6 +96,13 @@ export function CalendarListView({ events, onSelectEvent }: Props) {
                     className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50"
                   >
                     <div className={`mt-1 h-9 w-1.5 shrink-0 rounded-full ${meta.dot}`} />
+                    <AdminAvatar
+                      id={ev.creator?.id || ev.created_by}
+                      name={ev.creator?.name}
+                      avatarUrl={ev.creator?.avatar_url}
+                      size={26}
+                      className="mt-0.5"
+                    />
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="truncate text-sm font-semibold text-slate-900">
@@ -103,6 +111,11 @@ export function CalendarListView({ events, onSelectEvent }: Props) {
                         <span className={`inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 ring-inset ${meta.soft}`}>
                           {meta.label}
                         </span>
+                        {ev.creator?.name && (
+                          <span className="text-[11px] font-medium text-slate-500">
+                            · {ev.creator.name}
+                          </span>
+                        )}
                       </div>
                       <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-slate-500">
                         <span className="inline-flex items-center gap-1">

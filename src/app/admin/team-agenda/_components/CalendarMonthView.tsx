@@ -9,6 +9,7 @@ import {
   endOfDay,
 } from '../_lib/datetime';
 import { TYPE_META, type CalendarEvent } from '../_lib/types';
+import { AdminAvatar } from './AdminAvatar';
 
 interface Props {
   month: Date;
@@ -81,6 +82,7 @@ export function CalendarMonthView({ month, events, onSelectEvent, onSelectDay }:
                     const time = ev.all_day
                       ? 'Hele dag'
                       : `${String(start.getHours()).padStart(2, '0')}:${String(start.getMinutes()).padStart(2, '0')}`;
+                    const creatorName = ev.creator?.name || 'Onbekend';
                     return (
                       <button
                         key={ev.id}
@@ -88,10 +90,18 @@ export function CalendarMonthView({ month, events, onSelectEvent, onSelectDay }:
                           e.stopPropagation();
                           onSelectEvent(ev);
                         }}
-                        className={`flex w-full items-center gap-1 truncate rounded px-1.5 py-0.5 text-left text-[11px] font-medium transition-opacity hover:opacity-90 ${meta.pill}`}
-                        title={`${time} · ${ev.title}`}
+                        className={`flex w-full items-center gap-1 truncate rounded px-1 py-0.5 text-left text-[11px] font-medium transition-opacity hover:opacity-90 ${meta.pill}`}
+                        title={`${time} · ${ev.title} · ${creatorName}`}
                       >
-                        <span className="shrink-0 opacity-80">{time}</span>
+                        <AdminAvatar
+                          id={ev.creator?.id || ev.created_by}
+                          name={ev.creator?.name}
+                          avatarUrl={ev.creator?.avatar_url}
+                          size={14}
+                          withWhiteRing
+                          withTitle={false}
+                        />
+                        <span className="shrink-0 opacity-90">{time}</span>
                         <span className="truncate">{ev.title}</span>
                       </button>
                     );
@@ -134,8 +144,17 @@ export function CalendarMonthView({ month, events, onSelectEvent, onSelectDay }:
                               setPopoverDay(null);
                               onSelectEvent(ev);
                             }}
-                            className={`flex w-full items-center gap-1 truncate rounded px-1.5 py-1 text-left text-[11px] font-medium hover:opacity-90 ${meta.pill}`}
+                            className={`flex w-full items-center gap-1.5 truncate rounded px-1.5 py-1 text-left text-[11px] font-medium hover:opacity-90 ${meta.pill}`}
+                            title={ev.creator?.name ? `${ev.title} · ${ev.creator.name}` : ev.title}
                           >
+                            <AdminAvatar
+                              id={ev.creator?.id || ev.created_by}
+                              name={ev.creator?.name}
+                              avatarUrl={ev.creator?.avatar_url}
+                              size={14}
+                              withWhiteRing
+                              withTitle={false}
+                            />
                             <span className="truncate">{ev.title}</span>
                           </button>
                         );

@@ -8,6 +8,7 @@ import {
   endOfDay,
 } from '../_lib/datetime';
 import { TYPE_META, type CalendarEvent } from '../_lib/types';
+import { AdminAvatar } from './AdminAvatar';
 
 interface Props {
   weekStart: Date;
@@ -110,9 +111,18 @@ export function CalendarWeekView({ weekStart, events, onSelectEvent, onSelectSlo
                   <button
                     key={ev.id}
                     onClick={() => onSelectEvent(ev)}
-                    className={`block w-full truncate rounded px-1.5 py-0.5 text-left text-[11px] font-medium hover:opacity-90 ${meta.pill}`}
+                    className={`flex w-full items-center gap-1 truncate rounded px-1 py-0.5 text-left text-[11px] font-medium hover:opacity-90 ${meta.pill}`}
+                    title={ev.creator?.name ? `${ev.title} · ${ev.creator.name}` : ev.title}
                   >
-                    {ev.title}
+                    <AdminAvatar
+                      id={ev.creator?.id || ev.created_by}
+                      name={ev.creator?.name}
+                      avatarUrl={ev.creator?.avatar_url}
+                      size={14}
+                      withWhiteRing
+                      withTitle={false}
+                    />
+                    <span className="truncate">{ev.title}</span>
                   </button>
                 );
               })}
@@ -155,6 +165,7 @@ export function CalendarWeekView({ weekStart, events, onSelectEvent, onSelectSlo
               ))}
               {items.map(({ ev, top, height }) => {
                 const meta = TYPE_META[ev.event_type];
+                const creatorName = ev.creator?.name || 'Onbekend';
                 return (
                   <button
                     key={ev.id}
@@ -164,10 +175,26 @@ export function CalendarWeekView({ weekStart, events, onSelectEvent, onSelectSlo
                     }}
                     style={{ top, height }}
                     className={`absolute left-1 right-1 z-10 overflow-hidden rounded-md px-1.5 py-1 text-left text-[11px] font-medium leading-tight shadow-sm transition-opacity hover:opacity-95 ${meta.pill}`}
+                    title={`${ev.title} · ${creatorName}`}
                   >
-                    <div className="truncate font-semibold">{ev.title}</div>
+                    <div className="flex items-center gap-1">
+                      <AdminAvatar
+                        id={ev.creator?.id || ev.created_by}
+                        name={ev.creator?.name}
+                        avatarUrl={ev.creator?.avatar_url}
+                        size={height > 36 ? 16 : 12}
+                        withWhiteRing
+                        withTitle={false}
+                      />
+                      <span className="truncate font-semibold">{ev.title}</span>
+                    </div>
                     {height > 36 && ev.location && (
-                      <div className="truncate text-[10px] opacity-90">{ev.location}</div>
+                      <div className="mt-0.5 truncate text-[10px] opacity-90">{ev.location}</div>
+                    )}
+                    {height > 56 && ev.creator?.name && (
+                      <div className="mt-0.5 truncate text-[10px] opacity-80">
+                        Door {ev.creator.name}
+                      </div>
                     )}
                   </button>
                 );
