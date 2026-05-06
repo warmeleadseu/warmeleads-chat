@@ -323,7 +323,7 @@ export function infoBranchesBlock(): string {
       'We zijn gespecialiseerd in 8 verticals: <strong>zonnepanelen</strong>, <strong>warmtepompen</strong>, <strong>thuisbatterijen</strong>, <strong>airco</strong>, <strong>financial lease</strong>, <strong>isolatie</strong>, <strong>laadpalen</strong> en <strong>B2B energie</strong>. Daarnaast genereren we leads in vrijwel elke andere branche op aanvraag.',
     ),
     infoCard(
-      '<strong>Nieuwe niche?</strong> Voor branches buiten ons standaardaanbod werken we met een <strong>onderzoekstarief van €750</strong>, dat je <strong>100% terug ontvangt in leads</strong> zodra de campagne live gaat. Doorlooptijd: 2 tot 4 weken.',
+      '<strong>Nieuwe niche?</strong> Voor branches buiten ons standaardaanbod werken we met een <strong>onderzoekstarief van €1.000</strong>, dat je <strong>100% terug ontvangt in leads</strong> zodra de campagne live gaat. Doorlooptijd: 2 tot 4 weken.',
     ),
   ].join('');
 }
@@ -422,7 +422,7 @@ export const INFO_BLOCK_OPTIONS: TemplateOption[] = [
     label: 'Overzicht van onze branches + maatwerk',
     type: 'boolean',
     default: false,
-    description: 'De 8 verticals + uitleg over maatwerk-niches (€750, 100% terug in leads).',
+    description: 'De 8 verticals + uitleg over maatwerk-niches (€1.000, 100% terug in leads).',
   },
   {
     key: 'include_how_it_works',

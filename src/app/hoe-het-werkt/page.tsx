@@ -380,7 +380,7 @@ export default function HoeHetWerktPage() {
                     <BeakerIcon className="h-6 w-6 text-white" />
                   </div>
                   <div>
-                    <p className="text-lg font-bold text-slate-900 md:text-xl">Onderzoekskosten: €750</p>
+                    <p className="text-lg font-bold text-slate-900 md:text-xl">Onderzoekskosten: €1.000</p>
                     <p className="text-[12px] text-slate-500">Eenmalig, volledig terug in leads</p>
                   </div>
                 </div>
@@ -389,7 +389,7 @@ export default function HoeHetWerktPage() {
                   <div className="rounded-xl border border-white/80 bg-white/60 p-4">
                     <p className="text-[13px] font-semibold text-slate-900 md:text-[14px]">Wat houdt het in?</p>
                     <p className="mt-1 text-[12px] leading-relaxed text-slate-600 md:text-[13px]">
-                      We investeren €750 in marktonderzoek, campagne-testen en strategie-ontwikkeling
+                      We investeren €1.000 in marktonderzoek, campagne-testen en strategie-ontwikkeling
                       specifiek voor jouw branche en doelgroep.
                     </p>
                   </div>
@@ -404,7 +404,7 @@ export default function HoeHetWerktPage() {
 
                 <div className="mt-6 grid grid-cols-3 gap-3">
                   {[
-                    { value: '€750', label: 'Investering' },
+                    { value: '€1.000', label: 'Investering' },
                     { value: '100%', label: 'Terug in leads' },
                     { value: '2-4 wk', label: 'Doorlooptijd' },
                   ].map((item) => (

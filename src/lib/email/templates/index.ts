@@ -7,6 +7,7 @@ import type {
 import { introProspectTemplate } from './intro_prospect';
 import { pricingOverviewTemplate } from './pricing_overview';
 import { proposalTemplate } from './proposal';
+import { nicheResearchTemplate } from './niche_research';
 import { followUpTemplate } from './follow_up';
 import { meetingRequestTemplate } from './meeting_request';
 import { welcomeCustomerTemplate } from './welcome_customer';
@@ -18,6 +19,7 @@ const TEMPLATES: EmailTemplate[] = [
   introProspectTemplate,
   pricingOverviewTemplate,
   proposalTemplate,
+  nicheResearchTemplate,
   meetingRequestTemplate,
   followUpTemplate,
   welcomeCustomerTemplate,
