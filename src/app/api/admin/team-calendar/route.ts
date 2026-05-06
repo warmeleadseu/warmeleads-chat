@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
 import { logAudit } from '@/lib/audit';
-import { buildJitsiUrl } from '@/lib/email/videocallInvite';
 import { deliverVideocallInvite, type InviteResult } from '@/lib/email/deliverVideocallInvite';
 
 export const runtime = 'nodejs';
@@ -239,15 +238,14 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Voor videocall: genereer (of accepteer) een Jitsi-URL.
+  // Voor videocall: accepteer de meegegeven meeting-URL (Google Meet, Zoom,
+  // Teams, etc). We genereren niets meer automatisch.
   let meetingUrl: string | null = null;
   if (eventType === 'videocall') {
     const customUrl = asOptionalString(body.meeting_url);
     if (customUrl && /^https?:\/\//i.test(customUrl)) {
       meetingUrl = customUrl;
     }
-    // Definitieve URL wordt na insert ingevuld als geen custom-URL is meegegeven
-    // (zodat hij gebaseerd is op het echte event-id).
   }
 
   const supabase = createServerClient();
@@ -272,14 +270,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: error?.message || 'Aanmaken mislukt' }, { status: 500 });
   }
 
-  // Voor videocall zonder custom-URL: zet nu de Jitsi-URL gebaseerd op event-id.
-  if (eventType === 'videocall' && !meetingUrl) {
-    meetingUrl = buildJitsiUrl(created.id);
-    await supabase
-      .from('team_calendar_events')
-      .update({ meeting_url: meetingUrl })
-      .eq('id', created.id);
-  }
+  // We genereren géén meeting-URL meer automatisch. De AM plakt zelf een
+  // Google Meet / Zoom / Teams / etc-link in het meeting_url-veld.
 
   const participantIds = new Set<string>(asUuidArray(body.participant_ids));
   participantIds.add(admin.id);

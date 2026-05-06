@@ -1,16 +1,5 @@
 import { sendAsAdmin } from './sendAsAdmin';
 
-/**
- * Bouwt een Jitsi-Meet-room-URL die uniek én moeilijk te raden is.
- * We gebruiken het event-id (UUID, ~122 bits entropie) en strippen de
- * koppeltekens om een schone roomnaam te krijgen. Voorvoegsel `WarmeLeads-`
- * zorgt dat het op meet.jit.si herkenbaar is.
- */
-export function buildJitsiUrl(eventId: string): string {
-  const cleaned = eventId.replace(/-/g, '');
-  return `https://meet.jit.si/WarmeLeads-${cleaned}`;
-}
-
 export interface VideocallInviteInput {
   admin: { id: string; name: string; email: string };
   recipient: {
@@ -62,6 +51,24 @@ function escapeHtml(s: string): string {
     .replace(/'/g, '&#39;');
 }
 
+/**
+ * Detecteert het video-platform op basis van de URL zodat we de mail
+ * provider-bewust kunnen formuleren ("Google Meet" / "Zoom" / etc).
+ */
+export function detectMeetingProvider(url: string): {
+  key: 'google_meet' | 'zoom' | 'teams' | 'whereby' | 'jitsi' | 'other';
+  label: string;
+} {
+  const u = url.toLowerCase();
+  if (u.includes('meet.google.com')) return { key: 'google_meet', label: 'Google Meet' };
+  if (u.includes('zoom.us') || u.includes('zoom.com')) return { key: 'zoom', label: 'Zoom' };
+  if (u.includes('teams.microsoft.com') || u.includes('teams.live.com'))
+    return { key: 'teams', label: 'Microsoft Teams' };
+  if (u.includes('whereby.com')) return { key: 'whereby', label: 'Whereby' };
+  if (u.includes('meet.jit.si') || u.includes('jitsi')) return { key: 'jitsi', label: 'Jitsi Meet' };
+  return { key: 'other', label: 'Videocall' };
+}
+
 function renderHtml(input: VideocallInviteInput): { subject: string; html: string; text: string } {
   const { admin, recipient, event } = input;
   const greeting = recipient.name?.split(' ')[0] || recipient.company || '';
@@ -69,6 +76,7 @@ function renderHtml(input: VideocallInviteInput): { subject: string; html: strin
   const timeRange = event.all_day
     ? 'Hele dag'
     : `${formatDutchTime(event.starts_at)} – ${formatDutchTime(event.ends_at)} (NL-tijd)`;
+  const provider = detectMeetingProvider(event.meeting_url);
 
   const subject = event.all_day
     ? `Videocall met ${admin.name} op ${formatDutchDate(event.starts_at)}`
@@ -78,6 +86,7 @@ function renderHtml(input: VideocallInviteInput): { subject: string; html: strin
   const safeDescription = event.description ? escapeHtml(event.description).replace(/\n/g, '<br>') : '';
   const safeAdminName = escapeHtml(admin.name);
   const safeUrl = escapeHtml(event.meeting_url);
+  const safeProvider = escapeHtml(provider.label);
 
   const html = `<!DOCTYPE html>
 <html lang="nl">
@@ -92,8 +101,8 @@ function renderHtml(input: VideocallInviteInput): { subject: string; html: strin
           <h1 style="margin:0 0 18px;font-size:22px;font-weight:800;line-height:1.25;color:#0f172a">${safeTitle}</h1>
           ${greeting ? `<p style="margin:0 0 8px;font-size:15px;color:#0f172a">Hallo ${escapeHtml(greeting)},</p>` : ''}
           <p style="margin:0 0 14px;font-size:15px;line-height:1.6;color:#475569">
-            ${safeAdminName} heeft een videocall met je ingepland. Je kunt op het afgesproken moment
-            direct deelnemen via de onderstaande knop — geen account of installatie nodig.
+            ${safeAdminName} heeft een videocall met je ingepland. Klik op het afgesproken moment
+            op de knop hieronder om direct mee te doen.
           </p>
         </td></tr>
         <tr><td style="background:#ffffff;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0;padding:0 40px 8px">
@@ -109,7 +118,7 @@ function renderHtml(input: VideocallInviteInput): { subject: string; html: strin
           <table cellpadding="0" cellspacing="0" role="presentation" style="margin:0 auto">
             <tr><td style="border-radius:12px;background:linear-gradient(135deg,#6366F1 0%,#4F46E5 100%);box-shadow:0 8px 24px rgba(79,70,229,0.25)">
               <a href="${safeUrl}" target="_blank" style="display:inline-block;padding:16px 36px;color:#ffffff;font-size:15px;font-weight:700;text-decoration:none;letter-spacing:0.3px">
-                🎥 Deelnemen aan de videocall
+                Deelnemen aan de videocall
               </a>
             </td></tr>
           </table>
@@ -126,8 +135,7 @@ function renderHtml(input: VideocallInviteInput): { subject: string; html: strin
         </td></tr>` : ''}
         <tr><td style="background:#ffffff;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0;padding:24px 40px 28px">
           <p style="margin:0;font-size:13px;line-height:1.65;color:#64748b">
-            We bellen via Jitsi Meet — een open videoplatform dat in elke moderne browser werkt.
-            Op je telefoon werkt het ook direct via de gratis Jitsi Meet-app.
+            We bellen via ${safeProvider} — werkt direct in elke moderne browser, op je telefoon en op je laptop.
           </p>
           <p style="margin:14px 0 0;font-size:13px;color:#64748b">
             Vragen vooraf? Reply gerust op deze mail of bel ${safeAdminName} direct.
@@ -157,7 +165,7 @@ function renderHtml(input: VideocallInviteInput): { subject: string; html: strin
     event.meeting_url,
     '',
     event.description ? `Bericht: ${event.description}\n` : '',
-    'We bellen via Jitsi Meet — werkt in elke moderne browser, geen account nodig.',
+    `We bellen via ${provider.label} — werkt in elke moderne browser.`,
     '',
     `${admin.name} · WarmeLeads`,
     'warmeleads.eu',
@@ -190,6 +198,7 @@ export async function sendVideocallInvite(input: VideocallInviteInput) {
     templateOptions: {
       event_id: input.event.id,
       meeting_url: input.event.meeting_url,
+      meeting_provider: detectMeetingProvider(input.event.meeting_url).key,
       starts_at: input.event.starts_at,
     },
     metadata: { event_id: input.event.id },

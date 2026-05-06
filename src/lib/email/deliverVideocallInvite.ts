@@ -41,6 +41,14 @@ export async function deliverVideocallInvite(
     };
   }
 
+  if (!args.meetingUrl || !/^https?:\/\//i.test(args.meetingUrl)) {
+    return {
+      ok: false,
+      skipped_reason: 'no_meeting_url',
+      error: 'Voeg eerst een geldige videocall-link toe (Google Meet, Zoom, Teams, …) voordat je de uitnodiging verstuurt.',
+    };
+  }
+
   let recipientEmail: string | null = null;
   let recipientName: string | null = null;
   let recipientCompany: string | null = null;

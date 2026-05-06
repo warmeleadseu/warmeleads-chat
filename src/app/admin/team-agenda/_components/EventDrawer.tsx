@@ -61,6 +61,43 @@ const DEFAULT_VALUES: EventInput = {
   send_invite: false,
 };
 
+/**
+ * Provider-detectie op basis van de URL — gebruikt voor de badge en de
+ * begeleidende tekst in de drawer en mail.
+ */
+function detectVideoProvider(url: string): {
+  key: 'google_meet' | 'zoom' | 'teams' | 'whereby' | 'jitsi' | 'other';
+  label: string;
+} {
+  const u = (url || '').toLowerCase();
+  if (u.includes('meet.google.com')) return { key: 'google_meet', label: 'Google Meet' };
+  if (u.includes('zoom.us') || u.includes('zoom.com')) return { key: 'zoom', label: 'Zoom' };
+  if (u.includes('teams.microsoft.com') || u.includes('teams.live.com'))
+    return { key: 'teams', label: 'Microsoft Teams' };
+  if (u.includes('whereby.com')) return { key: 'whereby', label: 'Whereby' };
+  if (u.includes('meet.jit.si') || u.includes('jitsi'))
+    return { key: 'jitsi', label: 'Jitsi Meet' };
+  return { key: 'other', label: 'Videocall' };
+}
+
+function GoogleMeetIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 48 48"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+    >
+      <path fill="#00832d" d="M24 18l-6-6h12z" />
+      <path fill="#0066da" d="M6 14v20a4 4 0 0 0 4 4h8V12h-8a4 4 0 0 0-4 2z" />
+      <path fill="#e94235" d="M30 22l8-8v20l-8-8z" />
+      <path fill="#2684fc" d="M30 14H18l6 6-6 6h12V14z" />
+      <path fill="#00ac47" d="M30 26l8 8H10a4 4 0 0 1-4-4V14l8 8h16z" opacity="0" />
+      <path fill="#ffba00" d="M38 14v20l-8-8z" />
+    </svg>
+  );
+}
+
 function defaultStartFromNow(): { starts_at: string; ends_at: string } {
   const now = new Date();
   now.setMinutes(now.getMinutes() < 30 ? 30 : 0, 0, 0);
@@ -176,13 +213,15 @@ export function EventDrawer({
         : null;
   useEffect(() => {
     if (mode !== 'create') return;
-    if (form.event_type === 'videocall' && (customer || prospect)) {
+    const hasValidUrl =
+      !!form.meeting_url && /^https?:\/\//i.test(form.meeting_url);
+    if (form.event_type === 'videocall' && (customer || prospect) && hasValidUrl) {
       if (!form.send_invite) patch({ send_invite: true });
     } else if (form.send_invite) {
       patch({ send_invite: false });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.event_type, customer?.id, prospect?.id, mode]);
+  }, [form.event_type, customer?.id, prospect?.id, mode, form.meeting_url]);
 
   function toggleParticipant(id: string) {
     setForm(prev => {
@@ -329,6 +368,12 @@ export function EventDrawer({
       setInviteFeedback({
         tone: 'error',
         message: 'Je e-mailadres is geen @warmeleads.eu-adres; uitnodiging niet verstuurd.',
+      });
+    } else if (invite.skipped_reason === 'no_meeting_url') {
+      setInviteFeedback({
+        tone: 'error',
+        message:
+          'Voeg eerst een geldige videocall-link toe (Google Meet, Zoom, Teams, …) en sla opnieuw op om de uitnodiging te versturen.',
       });
     } else if (!invite.ok) {
       setInviteFeedback({
@@ -616,159 +661,266 @@ export function EventDrawer({
               </div>
 
               {/* Videocall sectie */}
-              {form.event_type === 'videocall' && (
-                <div className="rounded-xl border border-indigo-200 bg-indigo-50/60 p-4">
-                  <div className="mb-2 flex items-center gap-2">
-                    <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-500 text-white">
-                      <VideoCameraIcon className="h-4 w-4" />
-                    </span>
-                    <div>
-                      <div className="text-sm font-bold text-indigo-900">Videocall via Jitsi Meet</div>
-                      <p className="text-[11px] text-indigo-700">
-                        Werkt direct in elke browser — geen account of installatie nodig.
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Meeting-link weergeven of placeholder */}
-                  {form.meeting_url ? (
-                    <div className="mt-3 flex items-center gap-2 rounded-lg border border-indigo-200 bg-white px-3 py-2">
-                      <VideoCameraIcon className="h-4 w-4 shrink-0 text-indigo-500" />
-                      <code className="flex-1 truncate text-[12px] font-mono text-indigo-900">
-                        {form.meeting_url}
-                      </code>
-                      <button
-                        type="button"
-                        onClick={handleCopyMeetingUrl}
-                        className="rounded p-1.5 text-indigo-600 hover:bg-indigo-50"
-                        title="Kopieer link"
-                      >
-                        {copiedMeetingUrl ? (
-                          <CheckIcon className="h-3.5 w-3.5 text-emerald-600" />
-                        ) : (
-                          <ClipboardIcon className="h-3.5 w-3.5" />
-                        )}
-                      </button>
-                      <a
-                        href={form.meeting_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="rounded p-1.5 text-indigo-600 hover:bg-indigo-50"
-                        title="Open videocall"
-                      >
-                        <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5" />
-                      </a>
-                    </div>
-                  ) : (
-                    <div className="mt-3 rounded-lg border border-dashed border-indigo-300 bg-white px-3 py-2 text-[12px] text-indigo-700">
-                      We genereren een unieke Jitsi-link zodra je dit event opslaat.
-                    </div>
-                  )}
-
-                  {/* Verstuur-uitnodiging-toggle */}
-                  {canMutate && (customer || prospect) && (
-                    <div className="mt-3 flex items-start gap-3 rounded-lg border border-indigo-200 bg-white px-3 py-2.5">
-                      <button
-                        type="button"
-                        onClick={() => patch({ send_invite: !form.send_invite })}
-                        className={`mt-0.5 relative h-5 w-9 shrink-0 rounded-full transition-colors ${
-                          form.send_invite ? 'bg-indigo-500' : 'bg-slate-300'
-                        }`}
-                        aria-pressed={form.send_invite}
-                      >
-                        <span
-                          className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${
-                            form.send_invite ? 'left-4' : 'left-0.5'
-                          }`}
-                        />
-                      </button>
+              {form.event_type === 'videocall' && (() => {
+                const meetingUrl = form.meeting_url || '';
+                const provider = detectVideoProvider(meetingUrl);
+                const hasUrl = meetingUrl.trim().length > 0;
+                const isValidHttps = /^https?:\/\//i.test(meetingUrl.trim());
+                return (
+                  <div className="rounded-xl border border-indigo-200 bg-indigo-50/60 p-4">
+                    <div className="mb-3 flex items-center gap-2">
+                      <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-500 text-white">
+                        <VideoCameraIcon className="h-4 w-4" />
+                      </span>
                       <div className="min-w-0 flex-1">
-                        <div className="text-[13px] font-semibold text-slate-800">
-                          Verstuur uitnodiging per mail
-                        </div>
-                        <p className="text-[11px] text-slate-500">
-                          {mode === 'edit' && existingEvent?.meeting_invite_sent_at
-                            ? 'Stuurt een nieuwe uitnodiging naar de gekoppelde ontvanger zodra je opslaat.'
-                            : `De gekoppelde ${customer ? 'klant' : 'prospect'} ontvangt een mail met de Jitsi-link, datum en tijd.`}
-                          {linkedRecipientEmail && (
-                            <> Naar: <span className="font-medium text-slate-700">{linkedRecipientEmail}</span></>
-                          )}
+                        <div className="text-sm font-bold text-indigo-900">Videocall-link</div>
+                        <p className="text-[11px] text-indigo-700">
+                          Werk met je eigen Google Meet, Zoom of Teams — plak hieronder de link.
                         </p>
                       </div>
                     </div>
-                  )}
 
-                  {!customer && !prospect && (
-                    <p className="mt-3 text-[11px] text-indigo-700">
-                      Tip: koppel een klant of prospect om automatisch een uitnodiging te sturen met de videocall-link.
-                    </p>
-                  )}
-
-                  {/* Status: uitnodiging eerder verstuurd + opnieuw versturen */}
-                  {mode === 'edit' && existingEvent?.meeting_invite_sent_at && (
-                    <div className="mt-3 flex items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
-                      <div className="flex items-center gap-2 text-[12px] text-emerald-800">
-                        <CheckCircleIcon className="h-4 w-4 shrink-0" />
-                        <span>
-                          Uitnodiging verstuurd op{' '}
-                          {new Date(existingEvent.meeting_invite_sent_at).toLocaleString('nl-NL', {
-                            day: 'numeric',
-                            month: 'short',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
-                        </span>
+                    {/* Genereer-knoppen voor gangbare providers */}
+                    {canMutate && (
+                      <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                        <a
+                          href="https://meet.google.com/new"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center justify-center gap-2 rounded-lg bg-white px-3 py-2 text-xs font-semibold text-slate-800 ring-1 ring-slate-200 hover:bg-slate-50"
+                          title="Opent meet.google.com/new in een nieuwe tab"
+                        >
+                          <GoogleMeetIcon className="h-4 w-4" />
+                          Google Meet aanmaken
+                        </a>
+                        <a
+                          href="https://zoom.us/start/videomeeting"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center justify-center gap-2 rounded-lg bg-white px-3 py-2 text-xs font-semibold text-slate-800 ring-1 ring-slate-200 hover:bg-slate-50"
+                        >
+                          <span className="flex h-4 w-4 items-center justify-center rounded-sm bg-[#2D8CFF] text-[8px] font-bold text-white">Z</span>
+                          Zoom aanmaken
+                        </a>
+                        <a
+                          href="https://teams.microsoft.com/start"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center justify-center gap-2 rounded-lg bg-white px-3 py-2 text-xs font-semibold text-slate-800 ring-1 ring-slate-200 hover:bg-slate-50"
+                        >
+                          <span className="flex h-4 w-4 items-center justify-center rounded-sm bg-[#5059C9] text-[8px] font-bold text-white">T</span>
+                          Teams aanmaken
+                        </a>
                       </div>
-                      {canMutate && (customer || prospect) && (
+                    )}
+
+                    {canMutate && (
+                      <p className="mb-2 text-[11px] leading-relaxed text-indigo-800/90">
+                        <strong>Stappen:</strong> klik op een knop hierboven, log in met je eigen account,
+                        kopieer de link uit het gesprek of de adresbalk, en plak hem in het veld hieronder.
+                      </p>
+                    )}
+
+                    {/* Plak-veld voor de meeting-URL */}
+                    <div>
+                      <label className="mb-1 block text-[11px] font-semibold text-indigo-900">
+                        Meeting-URL
+                      </label>
+                      <div
+                        className={`flex items-center gap-2 rounded-lg border bg-white px-3 py-2 ${
+                          hasUrl && !isValidHttps
+                            ? 'border-rose-300 ring-1 ring-rose-100'
+                            : 'border-indigo-200 focus-within:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-100'
+                        }`}
+                      >
+                        <VideoCameraIcon className="h-4 w-4 shrink-0 text-indigo-500" />
+                        <input
+                          type="url"
+                          value={meetingUrl}
+                          onChange={e => patch({ meeting_url: e.target.value })}
+                          disabled={!canMutate}
+                          placeholder="Plak hier je videocall-link, bv. https://meet.google.com/abc-defg-hij"
+                          className="w-full bg-transparent text-[13px] text-indigo-900 outline-none placeholder:text-indigo-300"
+                        />
+                        {hasUrl && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={handleCopyMeetingUrl}
+                              className="rounded p-1.5 text-indigo-600 hover:bg-indigo-50"
+                              title="Kopieer link"
+                            >
+                              {copiedMeetingUrl ? (
+                                <CheckIcon className="h-3.5 w-3.5 text-emerald-600" />
+                              ) : (
+                                <ClipboardIcon className="h-3.5 w-3.5" />
+                              )}
+                            </button>
+                            <a
+                              href={isValidHttps ? meetingUrl : '#'}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={e => {
+                                if (!isValidHttps) e.preventDefault();
+                              }}
+                              className={`rounded p-1.5 ${
+                                isValidHttps
+                                  ? 'text-indigo-600 hover:bg-indigo-50'
+                                  : 'pointer-events-none text-slate-300'
+                              }`}
+                              title="Open videocall"
+                            >
+                              <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5" />
+                            </a>
+                          </>
+                        )}
+                      </div>
+                      <div className="mt-1.5 flex items-center justify-between gap-2 text-[11px]">
+                        {hasUrl ? (
+                          isValidHttps ? (
+                            <span className="inline-flex items-center gap-1 font-medium text-emerald-700">
+                              <CheckCircleIcon className="h-3.5 w-3.5" />
+                              {provider.label}-link gedetecteerd
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 font-medium text-rose-700">
+                              <ExclamationTriangleIcon className="h-3.5 w-3.5" />
+                              Link moet beginnen met https://
+                            </span>
+                          )
+                        ) : (
+                          <span className="text-indigo-700/70">
+                            Nog geen link toegevoegd
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Verstuur-uitnodiging-toggle */}
+                    {canMutate && (customer || prospect) && (
+                      <div className="mt-3 flex items-start gap-3 rounded-lg border border-indigo-200 bg-white px-3 py-2.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!hasUrl || !isValidHttps) return;
+                            patch({ send_invite: !form.send_invite });
+                          }}
+                          disabled={!hasUrl || !isValidHttps}
+                          className={`mt-0.5 relative h-5 w-9 shrink-0 rounded-full transition-colors ${
+                            !hasUrl || !isValidHttps
+                              ? 'cursor-not-allowed bg-slate-200'
+                              : form.send_invite
+                                ? 'bg-indigo-500'
+                                : 'bg-slate-300'
+                          }`}
+                          aria-pressed={form.send_invite}
+                          title={
+                            !hasUrl || !isValidHttps
+                              ? 'Voeg eerst een geldige videocall-link toe'
+                              : undefined
+                          }
+                        >
+                          <span
+                            className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${
+                              form.send_invite && hasUrl && isValidHttps
+                                ? 'left-4'
+                                : 'left-0.5'
+                            }`}
+                          />
+                        </button>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[13px] font-semibold text-slate-800">
+                            Verstuur uitnodiging per mail
+                          </div>
+                          <p className="text-[11px] text-slate-500">
+                            {!hasUrl || !isValidHttps ? (
+                              <>Voeg eerst een geldige videocall-link toe om de uitnodiging te kunnen versturen.</>
+                            ) : mode === 'edit' && existingEvent?.meeting_invite_sent_at ? (
+                              <>Stuurt een nieuwe uitnodiging naar de gekoppelde ontvanger zodra je opslaat.</>
+                            ) : (
+                              <>De gekoppelde {customer ? 'klant' : 'prospect'} ontvangt een mail met de {provider.label}-link, datum en tijd.</>
+                            )}
+                            {linkedRecipientEmail && hasUrl && isValidHttps && (
+                              <> Naar: <span className="font-medium text-slate-700">{linkedRecipientEmail}</span></>
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {!customer && !prospect && (
+                      <p className="mt-3 text-[11px] text-indigo-700">
+                        Tip: koppel een klant of prospect om automatisch een uitnodiging te sturen met de videocall-link.
+                      </p>
+                    )}
+
+                    {/* Status: uitnodiging eerder verstuurd + opnieuw versturen */}
+                    {mode === 'edit' && existingEvent?.meeting_invite_sent_at && (
+                      <div className="mt-3 flex items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
+                        <div className="flex items-center gap-2 text-[12px] text-emerald-800">
+                          <CheckCircleIcon className="h-4 w-4 shrink-0" />
+                          <span>
+                            Uitnodiging verstuurd op{' '}
+                            {new Date(existingEvent.meeting_invite_sent_at).toLocaleString('nl-NL', {
+                              day: 'numeric',
+                              month: 'short',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </span>
+                        </div>
+                        {canMutate && (customer || prospect) && hasUrl && isValidHttps && (
+                          <button
+                            type="button"
+                            onClick={handleResendInvite}
+                            disabled={inviteSending}
+                            className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-1 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-200 hover:bg-emerald-100 disabled:opacity-60"
+                          >
+                            <PaperAirplaneIcon className="h-3 w-3" />
+                            {inviteSending ? 'Bezig…' : 'Opnieuw versturen'}
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Direct-actie 'verstuur uitnodiging' voor edit zonder eerdere verzending */}
+                    {mode === 'edit' &&
+                      existingEvent &&
+                      !existingEvent.meeting_invite_sent_at &&
+                      canMutate &&
+                      (customer || prospect) &&
+                      hasUrl &&
+                      isValidHttps && (
                         <button
                           type="button"
                           onClick={handleResendInvite}
                           disabled={inviteSending}
-                          className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-1 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-200 hover:bg-emerald-100 disabled:opacity-60"
+                          className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"
                         >
-                          <PaperAirplaneIcon className="h-3 w-3" />
-                          {inviteSending ? 'Bezig…' : 'Opnieuw versturen'}
+                          <PaperAirplaneIcon className="h-3.5 w-3.5" />
+                          {inviteSending ? 'Versturen…' : 'Verstuur uitnodiging nu'}
                         </button>
                       )}
-                    </div>
-                  )}
 
-                  {/* Direct-actie 'verstuur uitnodiging' voor edit zonder eerdere verzending */}
-                  {mode === 'edit' &&
-                    existingEvent &&
-                    !existingEvent.meeting_invite_sent_at &&
-                    canMutate &&
-                    (customer || prospect) &&
-                    existingEvent.meeting_url && (
-                      <button
-                        type="button"
-                        onClick={handleResendInvite}
-                        disabled={inviteSending}
-                        className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"
+                    {inviteFeedback && (
+                      <div
+                        className={`mt-3 flex items-start gap-2 rounded-lg border px-3 py-2 text-[12px] ${
+                          inviteFeedback.tone === 'success'
+                            ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                            : 'border-rose-200 bg-rose-50 text-rose-800'
+                        }`}
                       >
-                        <PaperAirplaneIcon className="h-3.5 w-3.5" />
-                        {inviteSending ? 'Versturen…' : 'Verstuur uitnodiging nu'}
-                      </button>
+                        {inviteFeedback.tone === 'success' ? (
+                          <CheckCircleIcon className="h-4 w-4 shrink-0" />
+                        ) : (
+                          <ExclamationTriangleIcon className="h-4 w-4 shrink-0" />
+                        )}
+                        <span>{inviteFeedback.message}</span>
+                      </div>
                     )}
-
-                  {inviteFeedback && (
-                    <div
-                      className={`mt-3 flex items-start gap-2 rounded-lg border px-3 py-2 text-[12px] ${
-                        inviteFeedback.tone === 'success'
-                          ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
-                          : 'border-rose-200 bg-rose-50 text-rose-800'
-                      }`}
-                    >
-                      {inviteFeedback.tone === 'success' ? (
-                        <CheckCircleIcon className="h-4 w-4 shrink-0" />
-                      ) : (
-                        <ExclamationTriangleIcon className="h-4 w-4 shrink-0" />
-                      )}
-                      <span>{inviteFeedback.message}</span>
-                    </div>
-                  )}
-                </div>
-              )}
+                  </div>
+                );
+              })()}
 
               {/* Participants */}
               <div>

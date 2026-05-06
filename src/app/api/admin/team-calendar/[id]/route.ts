@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin, unauthorized, forbidden } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
 import { logAudit } from '@/lib/audit';
-import { buildJitsiUrl } from '@/lib/email/videocallInvite';
 import { deliverVideocallInvite, type InviteResult } from '@/lib/email/deliverVideocallInvite';
 
 export const runtime = 'nodejs';
@@ -242,19 +241,8 @@ export async function PATCH(
     }
     updates.meeting_url = m;
   }
-  // Wanneer iemand het type wijzigt naar videocall en er nog geen URL is,
-  // genereren we er hier alvast een op basis van het bestaande event-id.
-  const switchingToVideocall = updates.event_type === 'videocall';
-  if (switchingToVideocall && updates.meeting_url === undefined) {
-    const { data: existing } = await supabase
-      .from('team_calendar_events')
-      .select('meeting_url')
-      .eq('id', params.id)
-      .single();
-    if (!existing?.meeting_url) {
-      updates.meeting_url = buildJitsiUrl(params.id);
-    }
-  }
+  // We genereren geen automatische videocall-URL meer; de AM plakt zelf de
+  // Google Meet / Zoom / Teams-link in het meeting_url-veld.
 
   if (
     typeof updates.starts_at === 'string' &&
