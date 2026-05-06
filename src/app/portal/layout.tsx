@@ -497,7 +497,7 @@ function DemoBanner() {
       <span className="font-medium">
         <span className="hidden sm:inline">Demo Modus</span>
         <span className="sm:hidden">Demo</span>
-        {' — '}
+        {' · '}
       </span>
       <span className="text-white/90">
         <span className="hidden sm:inline">Je bekijkt voorbeeldleads om het portaal te ervaren</span>
@@ -538,7 +538,7 @@ function AdminViewBanner({ customerName, adminName, onStop }: { customerName: st
         {' · '}
       </span>
       <span className="font-bold">{customerName}</span>
-      <span className="hidden text-white/70 sm:inline"> — bekeken door {adminName}</span>
+      <span className="hidden text-white/70 sm:inline"> · bekeken door {adminName}</span>
     </AnnouncementBar>
   );
 }

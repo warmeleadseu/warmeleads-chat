@@ -55,9 +55,9 @@ export const reEngageTemplate: EmailTemplate = {
     const time = asString(ctx.optionValues.time_label) || 'enkele_maanden';
     const labels: Record<string, string> = {
       paar_weken: 'Even bijpraten?',
-      enkele_maanden: 'Lang niet meer gehoord — bijpraten?',
-      half_jaar: 'Een half jaar verder — staan we nog op de kaart?',
-      jaar_plus: 'Te lang stil geweest — hoe gaat het bij jullie?',
+      enkele_maanden: 'Lang niet meer gehoord, even bijpraten?',
+      half_jaar: 'Een half jaar verder, staan we nog op de kaart?',
+      jaar_plus: 'Te lang stil geweest. Hoe gaat het bij jullie?',
     };
     return labels[time] || 'Even bijpraten?';
   },

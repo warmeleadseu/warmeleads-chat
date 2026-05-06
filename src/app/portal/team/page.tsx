@@ -224,7 +224,7 @@ export default function TeamPage() {
                         )}
                       </td>
                       <td className="hidden px-4 py-3 text-center md:table-cell">
-                        <span className="text-sm text-slate-600">{st ? `${st.conversion_rate}%` : '—'}</span>
+                        <span className="text-sm text-slate-600">{st ? `${st.conversion_rate}%` : '-'}</span>
                       </td>
                       <td className="px-4 py-3 text-center">
                         {member.is_active ? (
@@ -564,7 +564,7 @@ function AssignmentRulesSummary({ rules }: { rules: Record<string, unknown> }) {
 
   if (mode === 'manual' || !r.mode) {
     return (
-      <p className="text-sm text-slate-500">Handmatig — ontvangt geen automatische leads</p>
+      <p className="text-sm text-slate-500">Handmatig: ontvangt geen automatische leads</p>
     );
   }
 
@@ -1168,7 +1168,7 @@ function MemberDetailPanel({
           <div className="space-y-2 rounded-xl border border-slate-200 p-3">
             <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Rechten</p>
             {member.role === 'owner' ? (
-              <p className="text-sm text-slate-500">Eigenaar — alle rechten</p>
+              <p className="text-sm text-slate-500">Eigenaar (alle rechten)</p>
             ) : (
               <div className="flex flex-wrap gap-1">
                 {member.permissions.map(p => (
@@ -1183,7 +1183,7 @@ function MemberDetailPanel({
           <div className="space-y-2 rounded-xl border border-slate-200 p-3">
             <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Lead toewijzing</p>
             {member.role === 'owner' ? (
-              <p className="text-sm text-slate-500">Eigenaar — ontvangt alle leads</p>
+              <p className="text-sm text-slate-500">Eigenaar (ontvangt alle leads)</p>
             ) : (
               <AssignmentRulesSummary rules={member.assignment_rules} />
             )}

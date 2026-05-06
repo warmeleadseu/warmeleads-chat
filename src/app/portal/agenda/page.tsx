@@ -218,7 +218,7 @@ export default function AgendaPage() {
 
   // Header label
   const headerLabel = view === 'week'
-    ? `${days[0].toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })} — ${days[6].toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' })}`
+    ? `${days[0].toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })} t/m ${days[6].toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' })}`
     : anchor.toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
   // Hour grid config for desktop

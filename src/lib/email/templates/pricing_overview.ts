@@ -78,7 +78,7 @@ export const pricingOverviewTemplate: EmailTemplate = {
     }
 
     if (ctx.branchesSelected.length === 0) {
-      warnings.push('Geen branches geselecteerd — prijsblok ontbreekt.');
+      warnings.push('Geen branches geselecteerd; prijsblok ontbreekt.');
       parts.push(
         paragraph(
           '<em>Selecteer minstens één branche bij de opties om hier de prijsstaffels te tonen.</em>',

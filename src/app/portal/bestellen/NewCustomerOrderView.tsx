@@ -217,7 +217,7 @@ export default function NewCustomerOrderView({
         </PortalSection>
       )}
 
-      <PortalSection title="Opmerkingen" description="Optioneel — bijv. voorkeur regio, specifieke wensen.">
+      <PortalSection title="Opmerkingen" description="Optioneel: bijv. voorkeur regio of specifieke wensen.">
         <textarea
           value={notes}
           onChange={(e) => setNotes(e.target.value)}

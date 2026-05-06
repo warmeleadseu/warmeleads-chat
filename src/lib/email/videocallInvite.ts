@@ -75,7 +75,7 @@ function renderHtml(input: VideocallInviteInput): { subject: string; html: strin
   const dateLabel = formatDutchDate(event.starts_at);
   const timeRange = event.all_day
     ? 'Hele dag'
-    : `${formatDutchTime(event.starts_at)} – ${formatDutchTime(event.ends_at)} (NL-tijd)`;
+    : `${formatDutchTime(event.starts_at)} tot ${formatDutchTime(event.ends_at)} (NL-tijd)`;
   const provider = detectMeetingProvider(event.meeting_url);
 
   const subject = event.all_day
@@ -135,7 +135,7 @@ function renderHtml(input: VideocallInviteInput): { subject: string; html: strin
         </td></tr>` : ''}
         <tr><td style="background:#ffffff;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0;padding:24px 40px 28px">
           <p style="margin:0;font-size:13px;line-height:1.65;color:#64748b">
-            We bellen via ${safeProvider} — werkt direct in elke moderne browser, op je telefoon en op je laptop.
+            We bellen via ${safeProvider}. Dat werkt direct in elke moderne browser, op je telefoon en op je laptop.
           </p>
           <p style="margin:14px 0 0;font-size:13px;color:#64748b">
             Vragen vooraf? Reply gerust op deze mail of bel ${safeAdminName} direct.
@@ -165,7 +165,7 @@ function renderHtml(input: VideocallInviteInput): { subject: string; html: strin
     event.meeting_url,
     '',
     event.description ? `Bericht: ${event.description}\n` : '',
-    `We bellen via ${provider.label} — werkt in elke moderne browser.`,
+    `We bellen via ${provider.label}, dat werkt in elke moderne browser.`,
     '',
     `${admin.name} · WarmeLeads`,
     'warmeleads.eu',

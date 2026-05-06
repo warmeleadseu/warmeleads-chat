@@ -26,7 +26,7 @@ export const meetingRequestTemplate: EmailTemplate = {
       label: 'Waar wil je over praten?',
       type: 'textarea',
       placeholder:
-        'Ik zie kansen voor jullie in warmtepompen — graag bel ik even over hoe we dat het beste insteken.',
+        'Ik zie kansen voor jullie in warmtepompen. Graag bel ik even over hoe we dat het beste insteken.',
     },
     {
       key: 'duration',
@@ -34,9 +34,9 @@ export const meetingRequestTemplate: EmailTemplate = {
       type: 'select',
       default: '15min',
       options: [
-        { value: '15min', label: '15 minuten — kort en scherp' },
-        { value: '30min', label: '30 minuten — voor uitleg + Q&A' },
-        { value: '45min', label: '45 minuten — uitgebreid kennismakingsgesprek' },
+        { value: '15min', label: '15 minuten (kort en scherp)' },
+        { value: '30min', label: '30 minuten (voor uitleg en Q&A)' },
+        { value: '45min', label: '45 minuten (uitgebreid kennismakingsgesprek)' },
       ],
     },
     {

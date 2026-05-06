@@ -24,11 +24,11 @@ const RESEARCH_FEE_LABEL = '€1.000';
 /**
  * Sjabloon: "Onderzoek nieuwe niche / maatwerk". Bedoeld voor prospects én
  * klanten die interesse hebben in een branche die (nog) buiten onze acht
- * standaardverticals valt. De toon is consultatief — geen sales-push, maar
- * een helder en eerlijk verhaal over wat we doen, wat het kost, hoe lang
- * het duurt en waarom het feitelijk geen verloren geld is. De cijfertegels
- * en het groene reassurance-blok pikken het visuele zwaartepunt op zonder
- * dat de mail commercieel agressief aanvoelt.
+ * standaardverticals valt. De toon is consultatief, geen sales-push: een
+ * helder en eerlijk verhaal over wat we doen, wat het kost, hoe lang het
+ * duurt en waarom het feitelijk geen verloren geld is. De cijfertegels en
+ * het groene reassurance-blok pikken het visuele zwaartepunt op zonder dat
+ * de mail commercieel agressief aanvoelt.
  */
 export const nicheResearchTemplate: EmailTemplate = {
   key: 'niche_research',
@@ -88,9 +88,9 @@ export const nicheResearchTemplate: EmailTemplate = {
   defaultSubject: ctx => {
     const niche = asString(ctx.optionValues.niche_name).trim();
     if (niche) {
-      return `Marktonderzoek ${niche} — investering 100% terug in leads`;
+      return `Marktonderzoek ${niche}: investering komt 100% terug in leads`;
     }
-    return 'Nieuwe niche aanboren — 100% terug in leads';
+    return 'Nieuwe niche aanboren? Investering komt 100% terug in leads';
   },
   render: ctx => {
     const niche = asString(ctx.optionValues.niche_name).trim();
@@ -128,7 +128,7 @@ export const nicheResearchTemplate: EmailTemplate = {
 
     parts.push(
       paragraph(
-        `Je gaf aan dat je geïnteresseerd bent in leads voor ${branchPhrase}. Omdat dit (nog) buiten onze acht standaardverticals valt, doen we eerst een gericht <strong>marktonderzoek</strong> voordat we een campagne live zetten. Zo zorgen we dat de leads die je krijgt vanaf dag één rendabel zijn — en niet dat we wat experimenten op jouw rekening uittesten.`,
+        `Je gaf aan dat je geïnteresseerd bent in leads voor ${branchPhrase}. Omdat dit (nog) buiten onze acht standaardverticals valt, doen we eerst een gericht <strong>marktonderzoek</strong> voordat we een campagne live zetten. Op die manier zorgen we ervoor dat de leads die je krijgt vanaf dag één rendabel zijn, in plaats van dat we wat experimenten op jouw rekening uittesten.`,
       ),
     );
 
@@ -154,7 +154,7 @@ export const nicheResearchTemplate: EmailTemplate = {
 
       parts.push(
         `<div style="margin:0 0 18px;padding:16px 18px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;font-size:14px;line-height:1.6;color:#065f46">
-          <strong>${RESEARCH_FEE_LABEL} is geen kostenpost — het is een voorschot op je eerste leads.</strong> Zodra de campagne live gaat crediteren we het volledige bedrag terug in jouw eerste leadlevering. Netto kost het onderzoek je dus niets extra; het is een commitment-signaal dat we het allebei serieus aanpakken.
+          <strong>${RESEARCH_FEE_LABEL} is geen kostenpost. Het is een voorschot op je eerste leads.</strong> Zodra de campagne live gaat crediteren we het volledige bedrag terug in jouw eerste leadlevering. Netto kost het onderzoek je dus niets extra; het is een commitment-signaal dat we het allebei serieus aanpakken.
         </div>`,
       );
     }
@@ -165,11 +165,10 @@ export const nicheResearchTemplate: EmailTemplate = {
       );
       parts.push(
         `<ul style="margin:8px 0 14px;padding:0 0 0 22px;color:#0f172a;font-size:14px">
-          <li style="margin:0 0 6px;padding:0 0 0 4px;line-height:1.55"><strong>Markt- en concurrentie-analyse</strong> — wie is er actief in ${branchPhrase}, waar zit prijsdruk en welke gaten zijn nog niet ingevuld?</li>
-          <li style="margin:0 0 6px;padding:0 0 0 4px;line-height:1.55"><strong>Doelgroep- en intentieonderzoek</strong> — hoe ziet de typische koper eruit en welke triggers zetten ze in beweging?</li>
-          <li style="margin:0 0 6px;padding:0 0 0 4px;line-height:1.55"><strong>Live test-campagnes op Meta + Google</strong> — we draaien gerichte advertenties om realistische conversies en kostprijs per lead te meten.</li>
-          <li style="margin:0 0 6px;padding:0 0 0 4px;line-height:1.55"><strong>Eerste validatie-leads</strong> — een kleine batch om het kwaliteitsniveau en de aansluiting met jouw business te toetsen.</li>
-          <li style="margin:0 0 6px;padding:0 0 0 4px;line-height:1.55"><strong>Tariefadvies en volumeschatting</strong> — concreet inzicht in wat een lead in deze branche kost en hoeveel we per maand kunnen leveren.</li>
+          <li style="margin:0 0 6px;padding:0 0 0 4px;line-height:1.55"><strong>Doelgroep- en intentieonderzoek</strong>: hoe ziet de typische koper eruit en welke triggers zetten ze in beweging?</li>
+          <li style="margin:0 0 6px;padding:0 0 0 4px;line-height:1.55"><strong>Live test-campagnes op Meta en Google</strong>: we draaien gerichte advertenties om realistische conversies en kostprijs per lead te meten.</li>
+          <li style="margin:0 0 6px;padding:0 0 0 4px;line-height:1.55"><strong>Eerste validatie-leads</strong>: een kleine batch om het kwaliteitsniveau en de aansluiting met jouw business te toetsen.</li>
+          <li style="margin:0 0 6px;padding:0 0 0 4px;line-height:1.55"><strong>Tariefadvies en volumeschatting</strong>: concreet inzicht in wat een lead in deze branche kost en hoeveel we per maand kunnen leveren.</li>
         </ul>`,
       );
     }
@@ -184,7 +183,7 @@ export const nicheResearchTemplate: EmailTemplate = {
           <li style="margin:0 0 6px;padding:0 0 0 4px;line-height:1.55">Wekelijkse check-ins met je accountmanager (${escape(
             ctx.admin.firstName,
           )}) zodat je live meekijkt met de uitkomsten.</li>
-          <li style="margin:0 0 6px;padding:0 0 0 4px;line-height:1.55">Aan het einde een helder <strong>go / no-go advies</strong> — gaan we live, of zien we onvoldoende potentie? In beide gevallen ben je transparant geadviseerd zonder vervolgverplichting.</li>
+          <li style="margin:0 0 6px;padding:0 0 0 4px;line-height:1.55">Aan het einde een helder <strong>go / no-go advies</strong>: gaan we live, of zien we onvoldoende potentie? In beide gevallen ben je transparant geadviseerd zonder vervolgverplichting.</li>
         </ul>`,
       );
     }
@@ -192,7 +191,7 @@ export const nicheResearchTemplate: EmailTemplate = {
     if (showNoRisk) {
       parts.push(
         quoteBox(
-          `Van de niches die we onderzoeken zetten we het overgrote deel daarna ook live. Loopt het onderzoek tóch op niets uit, dan heb je voor ${RESEARCH_FEE_LABEL} een diepgaande markt- en concurrentie-analyse in handen — iets wat in de open markt al snel een veelvoud kost — en geen leadleveringen op je nek waar je niets mee kunt.`,
+          `Van de niches die we onderzoeken zetten we het overgrote deel daarna ook live. Loopt het onderzoek toch op niets uit, dan heb je voor ${RESEARCH_FEE_LABEL} alsnog concrete test-data, doelgroepinzicht en een onderbouwd tariefadvies in handen. Geen leadleveringen op je nek waar je niets mee kunt, en je weet meteen waar je qua marketing wel of niet op moet inzetten.`,
         ),
       );
     }

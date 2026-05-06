@@ -182,7 +182,7 @@ export default function AppointmentDetailModal({
                 </p>
                 <p className="mt-0.5 flex items-center gap-1.5 text-sm text-slate-600">
                   <ClockIcon className="h-3.5 w-3.5" />
-                  {s.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })} – {e.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}
+                  {s.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })} tot {e.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}
                   <span className="text-xs text-slate-400">· {appointment.duration_minutes} min</span>
                 </p>
               </div>

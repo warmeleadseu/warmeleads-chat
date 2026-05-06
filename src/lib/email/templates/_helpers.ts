@@ -129,7 +129,7 @@ export function renderPricingText(
           !tiers.some(x => x.min_leads > t.min_leads && volume >= x.min_leads)
             ? '➜ '
             : '  ';
-        return `${marker}vanaf ${t.min_leads} leads — ${EURO(t.price_per_lead)} per lead`;
+        return `${marker}vanaf ${t.min_leads} leads: ${EURO(t.price_per_lead)} per lead`;
       });
       return `${b.name}\n${lines.join('\n')}`;
     })
@@ -276,25 +276,25 @@ function statTile(value: string, label: string): string {
   </td>`;
 }
 
-/** Blok 1 — Wie is WarmeLeads (propositie + persoonlijke AM). */
+/** Blok 1: Wie is WarmeLeads (propositie + persoonlijke AM). */
 export function infoAboutBlock(): string {
   return [
     sectionTitle('Over WarmeLeads'),
     paragraph(
-      'WarmeLeads levert moderne leadinfrastructuur voor installateurs en energiepartners. We genereren <strong>exclusieve, verse leads</strong> uit eigen campagnes — realtime in jouw portaal, automatisch gekwalificeerd en met een persoonlijke accountmanager die met je meedenkt. Geen callcenter, geen doorverkoop.',
+      'WarmeLeads levert moderne leadinfrastructuur voor installateurs en energiepartners. We genereren <strong>exclusieve, verse leads</strong> uit eigen campagnes: realtime in jouw portaal, automatisch gekwalificeerd en met een persoonlijke accountmanager die met je meedenkt. Geen callcenter, geen doorverkoop.',
     ),
   ].join('');
 }
 
-/** Blok 2 — Hoe het werkt (4 stappen, 24-72u live). */
+/** Blok 2: Hoe het werkt (4 stappen, 24-72u live). */
 export function infoHowItWorksBlock(): string {
   return [
     sectionTitle('Zo werken we samen'),
     bulletList([
-      '<strong>Strategiegesprek</strong> — we bespreken doelgroep, regio, volume, kostprijs per lead en stellen samen een plan op.',
-      '<strong>Campagne op maat</strong> — gemiddeld <strong>binnen 24 tot 72 uur</strong> live na goedkeuring.',
-      '<strong>Automatische quality checks</strong> — telefoon- en e-mailverificatie, adresverrijking en kwaliteitsscore per lead.',
-      '<strong>Realtime in jouw portaal</strong> — direct opvolgen, met notities, status en feedback.',
+      '<strong>Strategiegesprek</strong>: we bespreken doelgroep, regio, volume, kostprijs per lead en stellen samen een plan op.',
+      '<strong>Campagne op maat</strong>: gemiddeld <strong>binnen 24 tot 72 uur</strong> live na goedkeuring.',
+      '<strong>Automatische quality checks</strong>: telefoon- en e-mailverificatie, adresverrijking en kwaliteitsscore per lead.',
+      '<strong>Realtime in jouw portaal</strong>: direct opvolgen, met notities, status en feedback.',
     ]),
     paragraph(
       '<span style="color:#64748b;font-size:13px">Geen abonnement, geen vaste kosten, geen lock-in. Je betaalt per lead.</span>',
@@ -302,20 +302,20 @@ export function infoHowItWorksBlock(): string {
   ].join('');
 }
 
-/** Blok 3 — Kwaliteitsgaranties (exclusiviteit, verse leads, reclamatie). */
+/** Blok 3: Kwaliteitsgaranties (exclusiviteit, verse leads, reclamatie). */
 export function infoQualityBlock(): string {
   return [
     sectionTitle('Onze kwaliteitsgaranties'),
     bulletList([
-      '<strong>100% exclusief</strong> — leads worden niet doorverkocht of gedeeld. Jouw lead = jouw prospect.',
-      '<strong>Vers en realtime</strong> — direct uit onze eigen campagnes, geen recycled lijsten.',
+      '<strong>100% exclusief</strong>: leads worden niet doorverkocht of gedeeld. Jouw lead = jouw prospect.',
+      '<strong>Vers en realtime</strong>: direct uit onze eigen campagnes, geen recycled lijsten.',
       '<strong>Eerste levering binnen 24 uur</strong> na het live gaan van de campagne.',
-      '<strong>Reclamatiebeleid</strong> — meld een lead in het portaal; bij gegronde klacht ontvang je vervanging of compensatie.',
+      '<strong>Reclamatiebeleid</strong>: meld een lead in het portaal; bij gegronde klacht ontvang je vervanging of compensatie.',
     ]),
   ].join('');
 }
 
-/** Blok 4 — Branches die we doen + maatwerk-mogelijkheden. */
+/** Blok 4: Branches die we doen + maatwerk-mogelijkheden. */
 export function infoBranchesBlock(): string {
   return [
     sectionTitle('Branches die we door en door kennen'),
@@ -328,7 +328,7 @@ export function infoBranchesBlock(): string {
   ].join('');
 }
 
-/** Blok 5 — Hoe ons portaal werkt. */
+/** Blok 5: Hoe ons portaal werkt. */
 export function infoPortalBlock(baseUrl: string): string {
   const safeUrl = `${baseUrl.replace(/\/$/, '')}/portal`;
   return [
@@ -346,17 +346,17 @@ export function infoPortalBlock(baseUrl: string): string {
   ].join('');
 }
 
-/** Blok 6 — Welkomstkorting / pricing-aanpak. */
+/** Blok 6: Welkomstkorting / pricing-aanpak. */
 export function infoWelcomeOfferBlock(): string {
   return [
     sectionTitle('Welkomstaanbieding'),
     infoCard(
-      '<strong>20% welkomstkorting</strong> op je eerste batch. Geen abonnement, geen vaste kosten en geen lock-in — je betaalt simpelweg per lead. Lopen we tegen problemen aan, dan stoppen we per direct.',
+      '<strong>20% welkomstkorting</strong> op je eerste batch. Geen abonnement, geen vaste kosten en geen lock-in: je betaalt simpelweg per lead. Lopen we tegen problemen aan, dan stoppen we per direct.',
     ),
   ].join('');
 }
 
-/** Blok 7 — Sociaal bewijs / cijfers. */
+/** Blok 7: Sociaal bewijs / cijfers. */
 export function infoSocialProofBlock(): string {
   return [
     sectionTitle('In cijfers'),
@@ -372,12 +372,12 @@ export function infoSocialProofBlock(): string {
   ].join('');
 }
 
-/** Blok 8 — Reclamatie- / herleveringsbeleid (kort). */
+/** Blok 8: Reclamatie- / herleveringsbeleid (kort). */
 export function infoReclamationBlock(): string {
   return [
     sectionTitle('Reclamatie & herlevering'),
     paragraph(
-      'Niet alle leads zijn perfect — dat snappen we. Meld een twijfelgeval direct in het portaal met je feedback. Elke melding wordt individueel beoordeeld; bij gegronde reclamatie ontvang je <strong>vervanging of compensatie</strong>. Volledige voorwaarden staan in onze Algemene Voorwaarden.',
+      'Niet alle leads zijn perfect, dat snappen we. Meld een twijfelgeval direct in het portaal met je feedback. Elke melding wordt individueel beoordeeld; bij gegronde reclamatie ontvang je <strong>vervanging of compensatie</strong>. Volledige voorwaarden staan in onze Algemene Voorwaarden.',
     ),
   ].join('');
 }

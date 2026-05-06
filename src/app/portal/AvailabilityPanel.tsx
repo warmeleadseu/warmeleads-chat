@@ -253,7 +253,7 @@ export default function AvailabilityPanel({
                       {new Date(o.date + 'T00:00:00').toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short' })}
                     </span>
                     {o.type === 'extra' && o.start_time && o.end_time && (
-                      <span className="text-slate-600">{o.start_time.slice(0, 5)}–{o.end_time.slice(0, 5)}</span>
+                      <span className="text-slate-600">{o.start_time.slice(0, 5)}-{o.end_time.slice(0, 5)}</span>
                     )}
                     {o.reason && <span className="text-slate-500">· {o.reason}</span>}
                     {canEdit && (

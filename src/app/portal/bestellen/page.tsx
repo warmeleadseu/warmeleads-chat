@@ -570,7 +570,7 @@ export default function BestellenPage() {
         </PortalSection>
       )}
 
-      <PortalSection title="Opmerkingen" description="Optioneel — bijv. voorkeur regio, specifieke wensen.">
+      <PortalSection title="Opmerkingen" description="Optioneel: bijv. voorkeur regio of specifieke wensen.">
         <textarea
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
@@ -698,7 +698,7 @@ export default function BestellenPage() {
       >
         {pendingCancelOrder && (
           <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700">
-            {pendingCancelOrder.batch_size} leads — {pendingCancelOrder.branch}
+            {pendingCancelOrder.batch_size} leads · {pendingCancelOrder.branch}
           </p>
         )}
       </SheetModal>

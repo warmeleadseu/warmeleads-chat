@@ -79,7 +79,7 @@ export const introProspectTemplate: EmailTemplate = {
     if (branches.length > 1) {
       return `Warme leads voor ${joinNL(branches)}`;
     }
-    return `Kennismaken — ${ctx.recipient.companyName}`;
+    return `Kennismaken met ${ctx.recipient.companyName}`;
   },
   render: ctx => {
     const opening = asString(ctx.optionValues.opening_line).trim();
@@ -103,7 +103,7 @@ export const introProspectTemplate: EmailTemplate = {
 
     parts.push(
       paragraph(
-        `Mijn naam is ${escape(ctx.admin.firstName)} en ik ben accountmanager bij <strong>WarmeLeads</strong>. Wij leveren warme leads aan installateurs en helpen jullie om consistent nieuwe opdrachten binnen te halen — zonder zelf te hoeven prospecteren.`,
+        `Mijn naam is ${escape(ctx.admin.firstName)} en ik ben accountmanager bij <strong>WarmeLeads</strong>. Wij leveren warme leads aan installateurs en helpen jullie om consistent nieuwe opdrachten binnen te halen, zonder dat je zelf hoeft te prospecteren.`,
       ),
     );
 
@@ -125,13 +125,13 @@ export const introProspectTemplate: EmailTemplate = {
         `<p style="margin:0 0 14px;font-size:12px;color:#94a3b8">Prijzen excl. btw. Volume-staffel ingesteld op ${volume} leads voor de highlight.</p>`,
       );
     } else if (showPricing && branchSelected.length === 0) {
-      warnings.push('Prijzen tonen aangevinkt maar geen branches geselecteerd — prijsblok wordt niet getoond.');
+      warnings.push('Prijzen tonen aangevinkt maar geen branches geselecteerd; prijsblok wordt niet getoond.');
     }
 
     if (mentionMarket) {
       parts.push(
         paragraph(
-          'De installatiemarkt blijft groeien — vooral in warmtepompen en zonnepanelen zien we 2026 weer een sterke vraag. Dat betekent meer goede leads beschikbaar dan ooit.',
+          'De installatiemarkt blijft groeien. Vooral in warmtepompen en zonnepanelen zien we in 2026 weer een sterke vraag, wat betekent dat er meer goede leads beschikbaar zijn dan ooit.',
         ),
       );
     }

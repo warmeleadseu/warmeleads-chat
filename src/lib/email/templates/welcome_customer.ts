@@ -84,7 +84,7 @@ export const welcomeCustomerTemplate: EmailTemplate = {
     if (portalLink) {
       parts.push(
         paragraph(
-          'Inloggen kan via het klantenportaal — daar zie je live je leads, batches en facturen.',
+          'Inloggen kan via het klantenportaal. Daar zie je live je leads, batches en facturen.',
         ),
       );
       parts.push(ctaButton('Naar je portaal', `${ctx.baseUrl}/portal`));
@@ -99,7 +99,7 @@ export const welcomeCustomerTemplate: EmailTemplate = {
     }
 
     parts.push(
-      paragraph('Heb je vragen? Bel of mail me direct — ik reageer doorgaans binnen een paar uur.'),
+      paragraph('Heb je vragen? Bel of mail me direct, ik reageer doorgaans binnen een paar uur.'),
     );
 
     parts.push(paragraph('Met vriendelijke groet,'));

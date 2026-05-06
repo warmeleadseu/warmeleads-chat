@@ -38,7 +38,7 @@ export const followUpTemplate: EmailTemplate = {
       label: 'Zachte afsluiting',
       type: 'boolean',
       default: true,
-      description: 'Sluit af met "geen reactie = geen probleem" — werkt vaak beter dan harde druk.',
+      description: 'Sluit af met "geen reactie = geen probleem". Werkt vaak beter dan harde druk.',
     },
   ],
   defaultSubject: ctx =>
@@ -61,14 +61,14 @@ export const followUpTemplate: EmailTemplate = {
     } else {
       parts.push(
         paragraph(
-          'Ik wilde even kort checken — drukte aan jullie kant of is er nog iets waarvoor ik input mis?',
+          'Ik wilde even kort checken: is het drukte aan jullie kant, of is er nog iets waarvoor ik input mis?',
         ),
       );
     }
 
     parts.push(
       paragraph(
-        'Een snelle reactie helpt me om verder te plannen. Een no-go of "kom over een maand even terug" is ook prima — dan weet ik waar ik aan toe ben.',
+        'Een snelle reactie helpt me om verder te plannen. Een no-go of "kom over een maand even terug" is ook prima, dan weet ik waar ik aan toe ben.',
       ),
     );
 
@@ -79,7 +79,7 @@ export const followUpTemplate: EmailTemplate = {
     if (softClose) {
       parts.push(
         paragraph(
-          'Geen reactie? Geen probleem — dan plan ik over een paar weken zelf nog even een belmoment.',
+          'Geen reactie? Geen probleem. Dan plan ik over een paar weken zelf nog even een belmoment.',
         ),
       );
     }

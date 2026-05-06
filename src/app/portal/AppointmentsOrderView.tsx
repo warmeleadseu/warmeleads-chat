@@ -443,7 +443,7 @@ export default function AppointmentsOrderView({
             </div>
           </PortalSection>
 
-          <PortalSection title="Opmerkingen" description="Optioneel — specifieke wensen, doelgroep-voorkeuren.">
+          <PortalSection title="Opmerkingen" description="Optioneel: specifieke wensen of doelgroep-voorkeuren.">
             <textarea
               value={notes}
               onChange={e => setNotes(e.target.value)}
@@ -555,7 +555,7 @@ export default function AppointmentsOrderView({
       >
         {pendingCancel && (
           <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700">
-            {pendingCancel.batch_size} afspraken — {branchNames[pendingCancel.branch] || pendingCancel.branch}
+            {pendingCancel.batch_size} afspraken · {branchNames[pendingCancel.branch] || pendingCancel.branch}
           </p>
         )}
       </SheetModal>

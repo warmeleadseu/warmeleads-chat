@@ -66,9 +66,9 @@ export const proposalTemplate: EmailTemplate = {
   defaultSubject: ctx => {
     const volume = asNumber(ctx.optionValues.pricing_volume, 50);
     const branches = (ctx.branchesSelected || []).map(b => b.name);
-    if (branches.length === 1) return `Voorstel ${volume} leads — ${branches[0]}`;
-    if (branches.length > 1) return `Voorstel ${volume} leads — ${joinNL(branches)}`;
-    return `Voorstel ${volume} leads — ${ctx.recipient.companyName}`;
+    if (branches.length === 1) return `Voorstel ${volume} leads voor ${branches[0]}`;
+    if (branches.length > 1) return `Voorstel ${volume} leads voor ${joinNL(branches)}`;
+    return `Voorstel ${volume} leads voor ${ctx.recipient.companyName}`;
   },
   render: ctx => {
     const intro = asString(ctx.optionValues.intro_recap).trim();
@@ -93,7 +93,7 @@ export const proposalTemplate: EmailTemplate = {
     }
 
     if (ctx.branchesSelected.length === 0) {
-      warnings.push('Geen branches geselecteerd — voorstel mist branche-overzicht.');
+      warnings.push('Geen branches geselecteerd; voorstel mist branche-overzicht.');
     } else {
       const branchNames = ctx.branchesSelected.map(b => `<strong>${escape(b.name)}</strong>`);
       parts.push(
