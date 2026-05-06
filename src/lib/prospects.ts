@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 export const PROSPECT_STATUSES = [
   'nieuw',
+  'voicemail',
   'contact',
   'gekwalificeerd',
   'voorstel',
@@ -14,6 +15,7 @@ export type ProspectStatus = (typeof PROSPECT_STATUSES)[number];
 
 export const PROSPECT_STATUS_LABELS: Record<ProspectStatus, string> = {
   nieuw: 'Nieuw',
+  voicemail: 'Voicemail',
   contact: 'Contact gelegd',
   gekwalificeerd: 'Gekwalificeerd',
   voorstel: 'Voorstel',
@@ -24,6 +26,7 @@ export const PROSPECT_STATUS_LABELS: Record<ProspectStatus, string> = {
 
 export const PROSPECT_STATUS_COLORS: Record<ProspectStatus, { bg: string; text: string; ring: string; dot: string }> = {
   nieuw: { bg: 'bg-slate-50', text: 'text-slate-700', ring: 'ring-slate-200', dot: 'bg-slate-400' },
+  voicemail: { bg: 'bg-amber-50', text: 'text-amber-700', ring: 'ring-amber-200', dot: 'bg-amber-500' },
   contact: { bg: 'bg-sky-50', text: 'text-sky-700', ring: 'ring-sky-200', dot: 'bg-sky-500' },
   gekwalificeerd: { bg: 'bg-purple-50', text: 'text-purple-700', ring: 'ring-purple-200', dot: 'bg-purple-500' },
   voorstel: { bg: 'bg-orange-50', text: 'text-orange-700', ring: 'ring-orange-200', dot: 'bg-orange-500' },
