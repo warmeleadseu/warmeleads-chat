@@ -10,6 +10,7 @@ import {
 import { formatRange, formatTime } from '../_lib/datetime';
 import { TYPE_META, type CalendarEvent } from '../_lib/types';
 import { AdminAvatar } from './AdminAvatar';
+import { colorForAdmin, firstNameForName } from '../_lib/admin-color';
 
 interface Props {
   events: CalendarEvent[];
@@ -89,11 +90,14 @@ export function CalendarListView({ events, onSelectEvent }: Props) {
                 const start = new Date(ev.starts_at);
                 const end = new Date(ev.ends_at);
                 const company = ev.customer?.name || ev.prospect?.company_name || null;
+                const amColor = colorForAdmin(ev.creator?.id || ev.created_by);
+                const firstName = firstNameForName(ev.creator?.name);
                 return (
                   <button
                     key={ev.id}
                     onClick={() => onSelectEvent(ev)}
-                    className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50"
+                    style={{ borderLeftColor: amColor.bg }}
+                    className="flex w-full items-start gap-3 border-l-4 px-4 py-3 text-left transition-colors hover:bg-slate-50"
                   >
                     <div className={`mt-1 h-9 w-1.5 shrink-0 rounded-full ${meta.dot}`} />
                     <AdminAvatar
@@ -101,6 +105,7 @@ export function CalendarListView({ events, onSelectEvent }: Props) {
                       name={ev.creator?.name}
                       avatarUrl={ev.creator?.avatar_url}
                       size={26}
+                      withAmRing
                       className="mt-0.5"
                     />
                     <div className="min-w-0 flex-1">
@@ -112,8 +117,12 @@ export function CalendarListView({ events, onSelectEvent }: Props) {
                           {meta.label}
                         </span>
                         {ev.creator?.name && (
-                          <span className="text-[11px] font-medium text-slate-500">
-                            · {ev.creator.name}
+                          <span
+                            style={{ backgroundColor: amColor.bg, color: '#ffffff' }}
+                            className="inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide"
+                            title={ev.creator.name}
+                          >
+                            {firstName}
                           </span>
                         )}
                       </div>

@@ -9,6 +9,7 @@ import {
 } from '../_lib/datetime';
 import { TYPE_META, type CalendarEvent } from '../_lib/types';
 import { AdminAvatar } from './AdminAvatar';
+import { colorForAdmin, firstNameForName } from '../_lib/admin-color';
 
 interface Props {
   weekStart: Date;
@@ -107,11 +108,13 @@ export function CalendarWeekView({ weekStart, events, onSelectEvent, onSelectSlo
             <div key={d.toISOString()} className="border-l border-slate-200 px-1 py-1 space-y-1 min-h-[28px]">
               {items.map(ev => {
                 const meta = TYPE_META[ev.event_type];
+                const amColor = colorForAdmin(ev.creator?.id || ev.created_by);
                 return (
                   <button
                     key={ev.id}
                     onClick={() => onSelectEvent(ev)}
-                    className={`flex w-full items-center gap-1 truncate rounded px-1 py-0.5 text-left text-[11px] font-medium hover:opacity-90 ${meta.pill}`}
+                    style={{ borderLeft: `3px solid ${amColor.bg}` }}
+                    className={`flex w-full items-center gap-1 truncate rounded-r px-1 py-0.5 text-left text-[11px] font-medium hover:opacity-90 ${meta.pill}`}
                     title={ev.creator?.name ? `${ev.title} · ${ev.creator.name}` : ev.title}
                   >
                     <AdminAvatar
@@ -120,6 +123,7 @@ export function CalendarWeekView({ weekStart, events, onSelectEvent, onSelectSlo
                       avatarUrl={ev.creator?.avatar_url}
                       size={14}
                       withWhiteRing
+                      withAmRing
                       withTitle={false}
                     />
                     <span className="truncate">{ev.title}</span>
@@ -166,6 +170,8 @@ export function CalendarWeekView({ weekStart, events, onSelectEvent, onSelectSlo
               {items.map(({ ev, top, height }) => {
                 const meta = TYPE_META[ev.event_type];
                 const creatorName = ev.creator?.name || 'Onbekend';
+                const amColor = colorForAdmin(ev.creator?.id || ev.created_by);
+                const firstName = firstNameForName(ev.creator?.name);
                 return (
                   <button
                     key={ev.id}
@@ -173,8 +179,12 @@ export function CalendarWeekView({ weekStart, events, onSelectEvent, onSelectSlo
                       e.stopPropagation();
                       onSelectEvent(ev);
                     }}
-                    style={{ top, height }}
-                    className={`absolute left-1 right-1 z-10 overflow-hidden rounded-md px-1.5 py-1 text-left text-[11px] font-medium leading-tight shadow-sm transition-opacity hover:opacity-95 ${meta.pill}`}
+                    style={{
+                      top,
+                      height,
+                      borderLeft: `4px solid ${amColor.bg}`,
+                    }}
+                    className={`absolute left-1 right-1 z-10 overflow-hidden rounded-r-md px-1.5 py-1 text-left text-[11px] font-medium leading-tight shadow-sm transition-opacity hover:opacity-95 ${meta.pill}`}
                     title={`${ev.title} · ${creatorName}`}
                   >
                     <div className="flex items-center gap-1">
@@ -184,6 +194,7 @@ export function CalendarWeekView({ weekStart, events, onSelectEvent, onSelectSlo
                         avatarUrl={ev.creator?.avatar_url}
                         size={height > 36 ? 16 : 12}
                         withWhiteRing
+                        withAmRing
                         withTitle={false}
                       />
                       <span className="truncate font-semibold">{ev.title}</span>
@@ -191,9 +202,14 @@ export function CalendarWeekView({ weekStart, events, onSelectEvent, onSelectSlo
                     {height > 36 && ev.location && (
                       <div className="mt-0.5 truncate text-[10px] opacity-90">{ev.location}</div>
                     )}
-                    {height > 56 && ev.creator?.name && (
-                      <div className="mt-0.5 truncate text-[10px] opacity-80">
-                        Door {ev.creator.name}
+                    {height > 52 && ev.creator?.name && (
+                      <div className="mt-1">
+                        <span
+                          style={{ borderColor: amColor.bg, color: amColor.bg }}
+                          className="inline-flex items-center rounded-full border bg-white/95 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide"
+                        >
+                          {firstName}
+                        </span>
                       </div>
                     )}
                   </button>

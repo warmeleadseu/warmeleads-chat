@@ -42,3 +42,13 @@ export function initialsForName(name: string | null | undefined): string {
   if (parts.length === 1) return parts[0]!.charAt(0).toUpperCase();
   return (parts[0]!.charAt(0) + parts[parts.length - 1]!.charAt(0)).toUpperCase();
 }
+
+/** Eerste deel van een naam, met hoofdletter. Valt terug op de hele naam
+ *  als er geen spaties in zitten, en op `'Onbekend'` als de naam leeg is. */
+export function firstNameForName(name: string | null | undefined): string {
+  if (!name) return 'Onbekend';
+  const cleaned = name.trim();
+  if (!cleaned) return 'Onbekend';
+  const first = cleaned.split(/\s+/)[0] || cleaned;
+  return first.charAt(0).toUpperCase() + first.slice(1);
+}

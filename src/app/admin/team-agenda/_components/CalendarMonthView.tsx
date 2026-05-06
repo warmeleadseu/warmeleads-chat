@@ -10,6 +10,7 @@ import {
 } from '../_lib/datetime';
 import { TYPE_META, type CalendarEvent } from '../_lib/types';
 import { AdminAvatar } from './AdminAvatar';
+import { colorForAdmin } from '../_lib/admin-color';
 
 interface Props {
   month: Date;
@@ -83,6 +84,7 @@ export function CalendarMonthView({ month, events, onSelectEvent, onSelectDay }:
                       ? 'Hele dag'
                       : `${String(start.getHours()).padStart(2, '0')}:${String(start.getMinutes()).padStart(2, '0')}`;
                     const creatorName = ev.creator?.name || 'Onbekend';
+                    const amColor = colorForAdmin(ev.creator?.id || ev.created_by);
                     return (
                       <button
                         key={ev.id}
@@ -90,7 +92,8 @@ export function CalendarMonthView({ month, events, onSelectEvent, onSelectDay }:
                           e.stopPropagation();
                           onSelectEvent(ev);
                         }}
-                        className={`flex w-full items-center gap-1 truncate rounded px-1 py-0.5 text-left text-[11px] font-medium transition-opacity hover:opacity-90 ${meta.pill}`}
+                        style={{ borderLeft: `3px solid ${amColor.bg}` }}
+                        className={`flex w-full items-center gap-1 truncate rounded-r px-1 py-0.5 text-left text-[11px] font-medium transition-opacity hover:opacity-90 ${meta.pill}`}
                         title={`${time} · ${ev.title} · ${creatorName}`}
                       >
                         <AdminAvatar
@@ -99,6 +102,7 @@ export function CalendarMonthView({ month, events, onSelectEvent, onSelectDay }:
                           avatarUrl={ev.creator?.avatar_url}
                           size={14}
                           withWhiteRing
+                          withAmRing
                           withTitle={false}
                         />
                         <span className="shrink-0 opacity-90">{time}</span>
@@ -137,6 +141,7 @@ export function CalendarMonthView({ month, events, onSelectEvent, onSelectDay }:
                     <div className="space-y-1">
                       {dayEvents.map(ev => {
                         const meta = TYPE_META[ev.event_type];
+                        const amColor = colorForAdmin(ev.creator?.id || ev.created_by);
                         return (
                           <button
                             key={ev.id}
@@ -144,7 +149,8 @@ export function CalendarMonthView({ month, events, onSelectEvent, onSelectDay }:
                               setPopoverDay(null);
                               onSelectEvent(ev);
                             }}
-                            className={`flex w-full items-center gap-1.5 truncate rounded px-1.5 py-1 text-left text-[11px] font-medium hover:opacity-90 ${meta.pill}`}
+                            style={{ borderLeft: `3px solid ${amColor.bg}` }}
+                            className={`flex w-full items-center gap-1.5 truncate rounded-r px-1.5 py-1 text-left text-[11px] font-medium hover:opacity-90 ${meta.pill}`}
                             title={ev.creator?.name ? `${ev.title} · ${ev.creator.name}` : ev.title}
                           >
                             <AdminAvatar
@@ -153,6 +159,7 @@ export function CalendarMonthView({ month, events, onSelectEvent, onSelectDay }:
                               avatarUrl={ev.creator?.avatar_url}
                               size={14}
                               withWhiteRing
+                              withAmRing
                               withTitle={false}
                             />
                             <span className="truncate">{ev.title}</span>
