@@ -2,12 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin, unauthorized, forbidden } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
 import { logAudit } from '@/lib/audit';
+import { buildJitsiUrl } from '@/lib/email/videocallInvite';
+import { deliverVideocallInvite, type InviteResult } from '@/lib/email/deliverVideocallInvite';
 
 export const runtime = 'nodejs';
 
 const EVENT_TYPES = [
   'customer_visit',
   'prospect_visit',
+  'videocall',
   'internal',
   'external_event',
   'vacation',
@@ -26,6 +29,9 @@ interface UpdateBody {
   customer_id?: unknown;
   prospect_id?: unknown;
   participant_ids?: unknown;
+  meeting_url?: unknown;
+  /** Verstuur (of opnieuw versturen) van de videocall-uitnodiging. */
+  send_invite?: unknown;
 }
 
 function asOptionalString(v: unknown): string | null {
@@ -69,8 +75,10 @@ interface EventRow {
   created_by: string | null;
   created_at: string;
   updated_at: string;
-  customer: { id: string; name: string } | null;
-  prospect: { id: string; company_name: string } | null;
+  meeting_url: string | null;
+  meeting_invite_sent_at: string | null;
+  customer: { id: string; name: string; email: string | null } | null;
+  prospect: { id: string; company_name: string; email: string | null; contact_person: string | null } | null;
   creator: { id: string; name: string } | null;
   participants: ParticipantRow[];
 }
@@ -85,13 +93,21 @@ function shapeEvent(row: EventRow) {
     ends_at: row.ends_at,
     all_day: row.all_day,
     location: row.location,
+    meeting_url: row.meeting_url,
+    meeting_invite_sent_at: row.meeting_invite_sent_at,
     customer: row.customer_id
-      ? { id: row.customer_id, name: row.customer?.name ?? null }
+      ? {
+          id: row.customer_id,
+          name: row.customer?.name ?? null,
+          email: row.customer?.email ?? null,
+        }
       : null,
     prospect: row.prospect_id
       ? {
           id: row.prospect_id,
           company_name: row.prospect?.company_name ?? null,
+          email: row.prospect?.email ?? null,
+          contact_person: row.prospect?.contact_person ?? null,
         }
       : null,
     created_by: row.created_by,
@@ -109,8 +125,8 @@ function shapeEvent(row: EventRow) {
 
 const FULL_SELECT = `
   *,
-  customer:customers(id, name),
-  prospect:prospects(id, company_name),
+  customer:customers(id, name, email),
+  prospect:prospects(id, company_name, email, contact_person),
   creator:admin_users!team_calendar_events_created_by_fkey(id, name),
   participants:team_calendar_event_participants(admin_user_id, admin_users(id, name, email))
 `;
@@ -207,6 +223,26 @@ export async function PATCH(
   if (body.location !== undefined) updates.location = asOptionalString(body.location);
   if (body.customer_id !== undefined) updates.customer_id = asOptionalUuid(body.customer_id);
   if (body.prospect_id !== undefined) updates.prospect_id = asOptionalUuid(body.prospect_id);
+  if (body.meeting_url !== undefined) {
+    const m = asOptionalString(body.meeting_url);
+    if (m && !/^https?:\/\//i.test(m)) {
+      return NextResponse.json({ error: 'Meeting-URL moet beginnen met http(s)://' }, { status: 400 });
+    }
+    updates.meeting_url = m;
+  }
+  // Wanneer iemand het type wijzigt naar videocall en er nog geen URL is,
+  // genereren we er hier alvast een op basis van het bestaande event-id.
+  const switchingToVideocall = updates.event_type === 'videocall';
+  if (switchingToVideocall && updates.meeting_url === undefined) {
+    const { data: existing } = await supabase
+      .from('team_calendar_events')
+      .select('meeting_url')
+      .eq('id', params.id)
+      .single();
+    if (!existing?.meeting_url) {
+      updates.meeting_url = buildJitsiUrl(params.id);
+    }
+  }
 
   if (
     typeof updates.starts_at === 'string' &&
@@ -254,6 +290,32 @@ export async function PATCH(
     }
   }
 
+  // Verstuur of opnieuw versturen van de videocall-uitnodiging.
+  let inviteResult: InviteResult | null = null;
+  if (body.send_invite === true) {
+    const { data: full } = await supabase
+      .from('team_calendar_events')
+      .select('id, title, description, event_type, starts_at, ends_at, all_day, meeting_url, customer_id, prospect_id')
+      .eq('id', params.id)
+      .single();
+    if (full && full.event_type === 'videocall' && full.meeting_url) {
+      inviteResult = await deliverVideocallInvite(supabase, {
+        eventId: full.id,
+        admin: { id: admin.id, name: admin.name, email: admin.email },
+        title: full.title,
+        description: full.description,
+        startsAt: full.starts_at,
+        endsAt: full.ends_at,
+        allDay: full.all_day,
+        meetingUrl: full.meeting_url,
+        customerId: full.customer_id,
+        prospectId: full.prospect_id,
+      });
+    } else {
+      inviteResult = { ok: false, skipped_reason: 'event_not_videocall_or_missing_url' };
+    }
+  }
+
   logAudit({
     adminId: admin.id,
     adminName: admin.name,
@@ -268,8 +330,8 @@ export async function PATCH(
     .select(FULL_SELECT)
     .eq('id', params.id)
     .single();
-  if (!full) return NextResponse.json({ id: params.id });
-  return NextResponse.json(shapeEvent(full as unknown as EventRow));
+  if (!full) return NextResponse.json({ id: params.id, invite: inviteResult });
+  return NextResponse.json({ ...shapeEvent(full as unknown as EventRow), invite: inviteResult });
 }
 
 export async function DELETE(

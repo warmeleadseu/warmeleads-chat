@@ -1,6 +1,7 @@
 export const EVENT_TYPES = [
   'customer_visit',
   'prospect_visit',
+  'videocall',
   'internal',
   'external_event',
   'vacation',
@@ -25,6 +26,13 @@ export const TYPE_META: Record<
     dot: 'bg-sky-500',
     ring: 'ring-sky-200',
     soft: 'bg-sky-50 text-sky-700 ring-sky-200',
+  },
+  videocall: {
+    label: 'Videocall',
+    pill: 'bg-indigo-500 text-white',
+    dot: 'bg-indigo-500',
+    ring: 'ring-indigo-200',
+    soft: 'bg-indigo-50 text-indigo-700 ring-indigo-200',
   },
   internal: {
     label: 'Intern',
@@ -76,11 +84,13 @@ export interface CalendarEvent {
   ends_at: string;
   all_day: boolean;
   location: string | null;
-  customer: { id: string; name: string | null } | null;
-  prospect: { id: string; company_name: string | null } | null;
+  customer: { id: string; name: string | null; email?: string | null } | null;
+  prospect: { id: string; company_name: string | null; email?: string | null; contact_person?: string | null } | null;
   created_by: string | null;
   creator: { id: string; name: string } | null;
   participants: Participant[];
+  meeting_url: string | null;
+  meeting_invite_sent_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -97,6 +107,8 @@ export interface EventInput {
   customer_id: string | null;
   prospect_id: string | null;
   participant_ids: string[];
+  meeting_url: string | null;
+  send_invite: boolean;
 }
 
 export type CalendarView = 'month' | 'week' | 'list';

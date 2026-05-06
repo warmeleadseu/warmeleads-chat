@@ -10,6 +10,12 @@ import {
   MapPinIcon,
   PencilSquareIcon,
   UserGroupIcon,
+  VideoCameraIcon,
+  ClipboardIcon,
+  ArrowTopRightOnSquareIcon,
+  PaperAirplaneIcon,
+  CheckCircleIcon,
+  ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
 import {
@@ -50,6 +56,8 @@ const DEFAULT_VALUES: EventInput = {
   customer_id: null,
   prospect_id: null,
   participant_ids: [],
+  meeting_url: null,
+  send_invite: false,
 };
 
 function defaultStartFromNow(): { starts_at: string; ends_at: string } {
@@ -78,6 +86,12 @@ export function EventDrawer({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [inviteSending, setInviteSending] = useState(false);
+  const [inviteFeedback, setInviteFeedback] = useState<
+    | { tone: 'success' | 'error'; message: string }
+    | null
+  >(null);
+  const [copiedMeetingUrl, setCopiedMeetingUrl] = useState(false);
 
   const canMutate = useMemo(() => {
     if (mode === 'create') return true;
@@ -90,6 +104,8 @@ export function EventDrawer({
     if (!open) return;
     setError(null);
     setConfirmDelete(false);
+    setInviteFeedback(null);
+    setCopiedMeetingUrl(false);
     if (mode === 'edit' && existingEvent) {
       setForm({
         id: existingEvent.id,
@@ -107,6 +123,8 @@ export function EventDrawer({
         customer_id: existingEvent.customer?.id || null,
         prospect_id: existingEvent.prospect?.id || null,
         participant_ids: existingEvent.participants.map(p => p.id),
+        meeting_url: existingEvent.meeting_url,
+        send_invite: false,
       });
       setCustomer(
         existingEvent.customer
@@ -142,6 +160,28 @@ export function EventDrawer({
   function patch(p: Partial<EventInput>) {
     setForm(prev => ({ ...prev, ...p }));
   }
+
+  /**
+   * Voor nieuwe videocall-events met een gekoppelde klant of prospect
+   * staat de "verstuur uitnodiging"-toggle standaard aan, mits we een
+   * email in beeld hebben. Bij wisselen van type uit videocall zetten
+   * we hem netjes weer uit.
+   */
+  const linkedRecipientEmail =
+    customer && existingEvent?.customer?.id === customer.id
+      ? existingEvent.customer.email || null
+      : prospect && existingEvent?.prospect?.id === prospect.id
+        ? existingEvent.prospect.email || null
+        : null;
+  useEffect(() => {
+    if (mode !== 'create') return;
+    if (form.event_type === 'videocall' && (customer || prospect)) {
+      if (!form.send_invite) patch({ send_invite: true });
+    } else if (form.send_invite) {
+      patch({ send_invite: false });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.event_type, customer?.id, prospect?.id, mode]);
 
   function toggleParticipant(id: string) {
     setForm(prev => {
@@ -211,7 +251,7 @@ export function EventDrawer({
       return;
     }
 
-    const payload = {
+    const payload: Record<string, unknown> = {
       title: form.title.trim(),
       description: form.description.trim() || null,
       event_type: form.event_type,
@@ -223,8 +263,15 @@ export function EventDrawer({
       prospect_id: prospect?.id ?? null,
       participant_ids: form.participant_ids,
     };
+    if (form.event_type === 'videocall' && form.meeting_url) {
+      payload.meeting_url = form.meeting_url;
+    }
+    if (form.event_type === 'videocall' && form.send_invite) {
+      payload.send_invite = true;
+    }
 
     setSaving(true);
+    setInviteFeedback(null);
     try {
       const url =
         mode === 'edit' && form.id
@@ -241,11 +288,95 @@ export function EventDrawer({
         setSaving(false);
         return;
       }
-      onSaved(data as CalendarEvent);
+      // Toon eventuele invite-feedback in de UI nog even, zodat het meteen
+      // duidelijk is of de uitnodiging daadwerkelijk verstuurd is.
+      if (data.invite) {
+        applyInviteFeedback(data.invite);
+      }
+      const { invite: _invite, ...event } = data as CalendarEvent & { invite?: unknown };
+      void _invite;
+      onSaved(event as CalendarEvent);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Onbekende fout');
     } finally {
       setSaving(false);
+    }
+  }
+
+  function applyInviteFeedback(invite: {
+    ok: boolean;
+    recipient_email?: string | null;
+    error?: string;
+    skipped_reason?: string;
+  }) {
+    if (invite.ok && invite.recipient_email) {
+      setInviteFeedback({
+        tone: 'success',
+        message: `Uitnodiging verstuurd naar ${invite.recipient_email}.`,
+      });
+    } else if (invite.skipped_reason === 'no_recipient_email') {
+      setInviteFeedback({
+        tone: 'error',
+        message: 'Geen e-mailadres bekend bij de gekoppelde klant of prospect — uitnodiging niet verstuurd.',
+      });
+    } else if (invite.skipped_reason === 'no_linked_recipient') {
+      setInviteFeedback({
+        tone: 'error',
+        message: 'Koppel een klant of prospect aan dit event om de uitnodiging te kunnen versturen.',
+      });
+    } else if (invite.skipped_reason === 'admin_email_not_warmeleads') {
+      setInviteFeedback({
+        tone: 'error',
+        message: 'Je e-mailadres is geen @warmeleads.eu-adres; uitnodiging niet verstuurd.',
+      });
+    } else if (!invite.ok) {
+      setInviteFeedback({
+        tone: 'error',
+        message: invite.error || 'Versturen van de uitnodiging mislukt.',
+      });
+    }
+  }
+
+  async function handleResendInvite() {
+    if (!form.id) return;
+    setInviteSending(true);
+    setInviteFeedback(null);
+    try {
+      const res = await adminFetch(`/api/admin/team-calendar/${form.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ send_invite: true }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setInviteFeedback({
+          tone: 'error',
+          message: data.error || 'Versturen mislukt',
+        });
+        return;
+      }
+      if (data.invite) applyInviteFeedback(data.invite);
+      const { invite: _invite, ...event } = data as CalendarEvent & { invite?: unknown };
+      void _invite;
+      onSaved(event as CalendarEvent);
+    } catch (err) {
+      setInviteFeedback({
+        tone: 'error',
+        message: err instanceof Error ? err.message : 'Onbekende fout',
+      });
+    } finally {
+      setInviteSending(false);
+    }
+  }
+
+  async function handleCopyMeetingUrl() {
+    const url = form.meeting_url || existingEvent?.meeting_url;
+    if (!url) return;
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedMeetingUrl(true);
+      setTimeout(() => setCopiedMeetingUrl(false), 2000);
+    } catch {
+      /* clipboard kan geblokkeerd zijn — gebruiker kan de link nog handmatig kopiëren */
     }
   }
 
@@ -464,6 +595,161 @@ export function EventDrawer({
                   />
                 </div>
               </div>
+
+              {/* Videocall sectie */}
+              {form.event_type === 'videocall' && (
+                <div className="rounded-xl border border-indigo-200 bg-indigo-50/60 p-4">
+                  <div className="mb-2 flex items-center gap-2">
+                    <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-500 text-white">
+                      <VideoCameraIcon className="h-4 w-4" />
+                    </span>
+                    <div>
+                      <div className="text-sm font-bold text-indigo-900">Videocall via Jitsi Meet</div>
+                      <p className="text-[11px] text-indigo-700">
+                        Werkt direct in elke browser — geen account of installatie nodig.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Meeting-link weergeven of placeholder */}
+                  {form.meeting_url ? (
+                    <div className="mt-3 flex items-center gap-2 rounded-lg border border-indigo-200 bg-white px-3 py-2">
+                      <VideoCameraIcon className="h-4 w-4 shrink-0 text-indigo-500" />
+                      <code className="flex-1 truncate text-[12px] font-mono text-indigo-900">
+                        {form.meeting_url}
+                      </code>
+                      <button
+                        type="button"
+                        onClick={handleCopyMeetingUrl}
+                        className="rounded p-1.5 text-indigo-600 hover:bg-indigo-50"
+                        title="Kopieer link"
+                      >
+                        {copiedMeetingUrl ? (
+                          <CheckIcon className="h-3.5 w-3.5 text-emerald-600" />
+                        ) : (
+                          <ClipboardIcon className="h-3.5 w-3.5" />
+                        )}
+                      </button>
+                      <a
+                        href={form.meeting_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="rounded p-1.5 text-indigo-600 hover:bg-indigo-50"
+                        title="Open videocall"
+                      >
+                        <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5" />
+                      </a>
+                    </div>
+                  ) : (
+                    <div className="mt-3 rounded-lg border border-dashed border-indigo-300 bg-white px-3 py-2 text-[12px] text-indigo-700">
+                      We genereren een unieke Jitsi-link zodra je dit event opslaat.
+                    </div>
+                  )}
+
+                  {/* Verstuur-uitnodiging-toggle */}
+                  {canMutate && (customer || prospect) && (
+                    <div className="mt-3 flex items-start gap-3 rounded-lg border border-indigo-200 bg-white px-3 py-2.5">
+                      <button
+                        type="button"
+                        onClick={() => patch({ send_invite: !form.send_invite })}
+                        className={`mt-0.5 relative h-5 w-9 shrink-0 rounded-full transition-colors ${
+                          form.send_invite ? 'bg-indigo-500' : 'bg-slate-300'
+                        }`}
+                        aria-pressed={form.send_invite}
+                      >
+                        <span
+                          className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${
+                            form.send_invite ? 'left-4' : 'left-0.5'
+                          }`}
+                        />
+                      </button>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[13px] font-semibold text-slate-800">
+                          Verstuur uitnodiging per mail
+                        </div>
+                        <p className="text-[11px] text-slate-500">
+                          {mode === 'edit' && existingEvent?.meeting_invite_sent_at
+                            ? 'Stuurt een nieuwe uitnodiging naar de gekoppelde ontvanger zodra je opslaat.'
+                            : `De gekoppelde ${customer ? 'klant' : 'prospect'} ontvangt een mail met de Jitsi-link, datum en tijd.`}
+                          {linkedRecipientEmail && (
+                            <> Naar: <span className="font-medium text-slate-700">{linkedRecipientEmail}</span></>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {!customer && !prospect && (
+                    <p className="mt-3 text-[11px] text-indigo-700">
+                      Tip: koppel een klant of prospect om automatisch een uitnodiging te sturen met de videocall-link.
+                    </p>
+                  )}
+
+                  {/* Status: uitnodiging eerder verstuurd + opnieuw versturen */}
+                  {mode === 'edit' && existingEvent?.meeting_invite_sent_at && (
+                    <div className="mt-3 flex items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
+                      <div className="flex items-center gap-2 text-[12px] text-emerald-800">
+                        <CheckCircleIcon className="h-4 w-4 shrink-0" />
+                        <span>
+                          Uitnodiging verstuurd op{' '}
+                          {new Date(existingEvent.meeting_invite_sent_at).toLocaleString('nl-NL', {
+                            day: 'numeric',
+                            month: 'short',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </span>
+                      </div>
+                      {canMutate && (customer || prospect) && (
+                        <button
+                          type="button"
+                          onClick={handleResendInvite}
+                          disabled={inviteSending}
+                          className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-1 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-200 hover:bg-emerald-100 disabled:opacity-60"
+                        >
+                          <PaperAirplaneIcon className="h-3 w-3" />
+                          {inviteSending ? 'Bezig…' : 'Opnieuw versturen'}
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Direct-actie 'verstuur uitnodiging' voor edit zonder eerdere verzending */}
+                  {mode === 'edit' &&
+                    existingEvent &&
+                    !existingEvent.meeting_invite_sent_at &&
+                    canMutate &&
+                    (customer || prospect) &&
+                    existingEvent.meeting_url && (
+                      <button
+                        type="button"
+                        onClick={handleResendInvite}
+                        disabled={inviteSending}
+                        className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"
+                      >
+                        <PaperAirplaneIcon className="h-3.5 w-3.5" />
+                        {inviteSending ? 'Versturen…' : 'Verstuur uitnodiging nu'}
+                      </button>
+                    )}
+
+                  {inviteFeedback && (
+                    <div
+                      className={`mt-3 flex items-start gap-2 rounded-lg border px-3 py-2 text-[12px] ${
+                        inviteFeedback.tone === 'success'
+                          ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                          : 'border-rose-200 bg-rose-50 text-rose-800'
+                      }`}
+                    >
+                      {inviteFeedback.tone === 'success' ? (
+                        <CheckCircleIcon className="h-4 w-4 shrink-0" />
+                      ) : (
+                        <ExclamationTriangleIcon className="h-4 w-4 shrink-0" />
+                      )}
+                      <span>{inviteFeedback.message}</span>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Participants */}
               <div>
