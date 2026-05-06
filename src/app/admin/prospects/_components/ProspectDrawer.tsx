@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   XMarkIcon,
@@ -16,6 +17,7 @@ import {
   GlobeAltIcon,
   PhoneIcon,
   EnvelopeIcon,
+  CalendarDaysIcon,
   MapPinIcon,
   IdentificationIcon,
 } from '@heroicons/react/24/outline';
@@ -693,11 +695,19 @@ function Overview({
           <EnvelopeIcon className="h-5 w-5" />
           Mail versturen
         </button>
+        <Link
+          href={`/admin/team-agenda?create=1&prospect_id=${prospect.id}&type=prospect_visit&title=${encodeURIComponent('Bezoek ' + prospect.company_name)}`}
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-sky-500 px-4 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-sky-600"
+          title="Plan een bezoek of gesprek in de team-agenda"
+        >
+          <CalendarDaysIcon className="h-5 w-5" />
+          Plan bezoek
+        </Link>
         {!prospect.converted_to_customer_id && (
           <button
             type="button"
             onClick={onConvert}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700"
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 sm:col-span-2"
           >
             <CheckBadgeIcon className="h-5 w-5" />
             Promoveer naar klant

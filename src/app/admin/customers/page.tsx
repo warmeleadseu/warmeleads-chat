@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import Link from 'next/link';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -28,6 +29,7 @@ import {
   ExclamationTriangleIcon,
   EnvelopeIcon,
   ChevronUpDownIcon,
+  CalendarDaysIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
 import { useAdmin } from '../adminContext';
@@ -839,6 +841,14 @@ function CustomerDetailPanel({
                   Mail versturen
                 </button>
               )}
+              <Link
+                href={`/admin/team-agenda?create=1&customer_id=${c.id}&type=customer_visit&title=${encodeURIComponent('Bezoek ' + c.name)}`}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-600"
+                title="Plan een bezoek of gesprek in de team-agenda"
+              >
+                <CalendarDaysIcon className="h-4 w-4" />
+                Plan bezoek
+              </Link>
               <button onClick={() => onEdit(c)} className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-brand-purple" title="Bewerken">
                 <PencilSquareIcon className="h-5 w-5" />
               </button>
