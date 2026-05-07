@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
+import { resendOpenInvoiceWithPaymentLinks } from '@/lib/invoice';
 
 export async function GET(request: NextRequest) {
   const admin = await verifyAdmin(request);
@@ -91,6 +92,15 @@ export async function POST(request: NextRequest) {
     ? line_items
     : [{ description, quantity: 1, unit_price: sub, total: sub }];
 
+  const invStatus = (status || 'paid') as string;
+  const isPaidStatus = invStatus === 'paid';
+  const paidAtValue =
+    paid_at != null
+      ? paid_at
+      : isPaidStatus
+        ? new Date().toISOString()
+        : null;
+
   const { data: invoice, error: insertErr } = await supabase
     .from('invoices')
     .insert({
@@ -106,13 +116,21 @@ export async function POST(request: NextRequest) {
       btw_percentage: btwPct,
       btw_amount: btwAmount,
       total_incl_btw: totalInclBtw,
-      status: status || 'paid',
-      paid_at: paid_at || new Date().toISOString(),
+      status: invStatus,
+      paid_at: paidAtValue,
     })
     .select()
     .single();
 
   if (insertErr) return NextResponse.json({ error: insertErr.message }, { status: 500 });
+
+  if (invoice && invStatus === 'open') {
+    try {
+      await resendOpenInvoiceWithPaymentLinks(invoice.id);
+    } catch (e) {
+      console.error('[admin/invoices] open invoice mail/Mollie mislukt:', e);
+    }
+  }
 
   return NextResponse.json(invoice, { status: 201 });
 }

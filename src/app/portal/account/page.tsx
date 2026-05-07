@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { usePortal } from '../portalContext';
 import { portalFetch, portalHeaders } from '@/lib/portalAuth';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -900,12 +901,12 @@ function AreasTab({
 
 /* ─── Invoices Tab ─────────────────────────────────────── */
 
-function InvoicesTab({ data, loading, onDownload, onPay, payingBatchId }: {
+function InvoicesTab({ data, loading, onDownload, onPay, payingInvoiceId }: {
   data: { id: string; invoice_number: string; description: string; subtotal: number; btw_amount: number; total_incl_btw: number; status: string; paid_at: string | null; created_at: string; batch_id: string | null }[];
   loading: boolean;
   onDownload: (inv: { id: string; invoice_number: string }) => void;
-  onPay: (batchId: string) => void;
-  payingBatchId: string | null;
+  onPay: (inv: { id: string }) => void;
+  payingInvoiceId: string | null;
 }) {
   if (loading) {
     return (
@@ -985,13 +986,13 @@ function InvoicesTab({ data, loading, onDownload, onPay, payingBatchId }: {
           ) : null}
         </div>
       </div>
-      {inv.status === 'open' && inv.batch_id && (
+      {inv.status === 'open' && (
         <button
-          onClick={() => onPay(inv.batch_id!)}
-          disabled={payingBatchId === inv.batch_id}
+          onClick={() => onPay(inv)}
+          disabled={payingInvoiceId === inv.id}
           className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-brand-orange to-brand-pink px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:shadow-md disabled:opacity-50"
         >
-          {payingBatchId === inv.batch_id ? (
+          {payingInvoiceId === inv.id ? (
             <><span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" /> Bezig...</>
           ) : (
             <><CreditCardIcon className="h-4 w-4" /> Betaal nu &middot; &euro;{Number(inv.total_incl_btw).toFixed(2)}</>
@@ -1151,6 +1152,7 @@ function OrdersTab({ data, loading, onDelete }: { data: OrderData[]; loading: bo
 
 export default function AccountPage() {
   const { customer } = usePortal();
+  const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<TabKey>('account');
 
   const [accountData, setAccountData] = useState<AccountData | null>(null);
@@ -1168,7 +1170,7 @@ export default function AccountPage() {
 
   const [invoicesData, setInvoicesData] = useState<{ id: string; invoice_number: string; description: string; subtotal: number; btw_amount: number; total_incl_btw: number; status: string; paid_at: string | null; created_at: string; batch_id: string | null }[]>([]);
   const [invoicesLoading, setInvoicesLoading] = useState(false);
-  const [payingInvoice, setPayingInvoice] = useState<string | null>(null);
+  const [payingInvoiceId, setPayingInvoiceId] = useState<string | null>(null);
 
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
   const toastTimer = useRef<NodeJS.Timeout | null>(null);
@@ -1274,13 +1276,13 @@ export default function AccountPage() {
     }
   }, [showToast]);
 
-  const handlePayInvoice = useCallback(async (batchId: string) => {
-    setPayingInvoice(batchId);
+  const handlePayInvoice = useCallback(async (inv: { id: string }) => {
+    setPayingInvoiceId(inv.id);
     try {
-      const res = await portalFetch('/api/portal/pay-batch', {
+      const res = await portalFetch('/api/portal/pay-invoice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ batch_id: batchId }),
+        body: JSON.stringify({ invoice_id: inv.id }),
       });
       const data = await res.json();
       if (data.checkoutUrl) {
@@ -1291,9 +1293,19 @@ export default function AccountPage() {
     } catch {
       showToast('Er ging iets mis bij het starten van de betaling', 'error');
     } finally {
-      setPayingInvoice(null);
+      setPayingInvoiceId(null);
     }
   }, [showToast]);
+
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab === 'invoices') setActiveTab('invoices');
+    const paid = searchParams.get('paid');
+    if (paid === 'invoice') {
+      showToast('Betaling verwerkt. Je factuur wordt zo bijgewerkt.', 'success');
+      fetchInvoices();
+    }
+  }, [searchParams, showToast, fetchInvoices]);
 
   useEffect(() => {
     if (activeTab === 'account' && !accountData) fetchAccount();
@@ -1402,7 +1414,7 @@ export default function AccountPage() {
           )}
 
           {activeTab === 'invoices' && (
-            <InvoicesTab data={invoicesData} loading={invoicesLoading} onDownload={downloadInvoicePdf} onPay={handlePayInvoice} payingBatchId={payingInvoice} />
+            <InvoicesTab data={invoicesData} loading={invoicesLoading} onDownload={downloadInvoicePdf} onPay={handlePayInvoice} payingInvoiceId={payingInvoiceId} />
           )}
         </motion.div>
       </AnimatePresence>

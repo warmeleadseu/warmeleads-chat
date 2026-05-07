@@ -21,7 +21,7 @@ export interface CreateBatchPaymentParams {
   customerEmail: string;
   customerName: string;
   /** Kind discriminator for Mollie metadata; defaults to 'batch' (leads). */
-  kind?: 'batch' | 'appointment_order';
+  kind?: 'batch' | 'appointment_order' | 'invoice';
 }
 
 export async function createBatchPayment({

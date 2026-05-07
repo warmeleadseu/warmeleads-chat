@@ -1,6 +1,7 @@
 import { createServerClient } from '@/lib/supabase';
 import { sendEmail } from '@/lib/email';
 import type { InvoiceLineItem } from '@/lib/invoicePdf';
+import { ensureInvoiceMollieCheckout } from '@/lib/invoiceCheckout';
 
 const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.warmeleads.eu';
 
@@ -142,7 +143,25 @@ export async function createInvoice(params: CreateInvoiceParams) {
   if (isPaid) {
     sendInvoiceEmail(customer, invoice).catch(e => console.error('[invoice] email send failed:', e));
   } else {
-    sendOpenInvoiceEmail(customer, invoice).catch(e => console.error('[invoice] open invoice email send failed:', e));
+    (async () => {
+      let checkoutUrl: string | undefined;
+      try {
+        const ensured = await ensureInvoiceMollieCheckout({
+          id: invoice.id,
+          invoice_number: invoice.invoice_number,
+          description: invoice.description,
+          customer_id: invoice.customer_id,
+          total_incl_btw: Number(invoice.total_incl_btw),
+          mollie_payment_id: invoice.mollie_payment_id,
+        });
+        checkoutUrl = ensured.checkoutUrl;
+      } catch (e) {
+        console.error('[invoice] Mollie checkout voor open factuur mislukt:', e);
+      }
+      sendOpenInvoiceEmail(customer, invoice, checkoutUrl).catch(err =>
+        console.error('[invoice] open invoice email send failed:', err),
+      );
+    })().catch(() => {});
   }
 
   return invoice;
@@ -198,11 +217,53 @@ export async function markInvoicePaid(batchId: string, molliePaymentId: string) 
   return updated;
 }
 
-function sendOpenInvoiceEmail(
+/** Stuurt bevestiging dat de factuur betaald is (bijv. na invoice:* Mollie-webhook i.p.v. markInvoicePaid). */
+export async function notifyCustomerInvoicePaid(invoiceId: string): Promise<void> {
+  const supabase = createServerClient();
+  const { data: invoice } = await supabase.from('invoices').select('*').eq('id', invoiceId).single();
+  if (!invoice || invoice.status !== 'paid') return;
+  const { data: customer } = await supabase
+    .from('customers')
+    .select('id, name, email, contact_person')
+    .eq('id', invoice.customer_id)
+    .single();
+  if (customer) {
+    sendInvoiceEmail(customer, invoice).catch(e => console.error('[invoice] paid notify failed:', e));
+  }
+}
+
+/** Opnieuw versturen van open factuur + verse Mollie-betaallink (accountmanager / admin). */
+export async function resendOpenInvoiceWithPaymentLinks(invoiceId: string): Promise<void> {
+  const supabase = createServerClient();
+  const { data: invoice } = await supabase.from('invoices').select('*').eq('id', invoiceId).single();
+  if (!invoice || invoice.status !== 'open') {
+    throw new Error('Alleen een openstaande factuur kan opnieuw worden verstuurd');
+  }
+  const { data: customer } = await supabase
+    .from('customers')
+    .select('id, name, email, contact_person')
+    .eq('id', invoice.customer_id)
+    .single();
+  if (!customer?.email) throw new Error('Klant heeft geen e-mailadres');
+
+  const { checkoutUrl } = await ensureInvoiceMollieCheckout({
+    id: invoice.id,
+    invoice_number: invoice.invoice_number,
+    description: invoice.description,
+    customer_id: invoice.customer_id,
+    total_incl_btw: Number(invoice.total_incl_btw),
+    mollie_payment_id: invoice.mollie_payment_id,
+  });
+
+  await sendOpenInvoiceEmail(customer, invoice, checkoutUrl);
+}
+
+export function sendOpenInvoiceEmail(
   customer: { name: string; email: string; contact_person?: string },
   invoice: { invoice_number: string; total_incl_btw: number; description: string; id: string },
+  directCheckoutUrl?: string,
 ) {
-  const portalUrl = `${BASE_URL}/portal/account`;
+  const portalUrl = `${BASE_URL}/portal/account?tab=invoices`;
   const logoUrl = `${BASE_URL}/warmeleads-logo-2026.png`;
   const greeting = customer.contact_person || customer.name;
   const year = new Date().getFullYear();
@@ -243,10 +304,16 @@ function sendOpenInvoiceEmail(
                   </table>
                 </td></tr>
               </table>
-              <p style="margin:0 0 24px;font-size:14px;color:#64748b;line-height:1.7">Je kunt direct betalen via je portaal. Na betaling wordt je batch direct geactiveerd en ontvang je leads.</p>
-              <table cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom:8px">
+              <p style="margin:0 0 24px;font-size:14px;color:#64748b;line-height:1.7">Betaal veilig online via de knop hieronder, of open je portaal onder het tabblad Facturen. Na betaling wordt een gekoppelde lead-batch direct geactiveerd.</p>
+              ${directCheckoutUrl ? `
+              <table cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom:12px">
                 <tr><td style="border-radius:10px;background:linear-gradient(135deg,#FF6B35,#FF4757)">
-                  <a href="${portalUrl}" target="_blank" style="display:inline-block;padding:14px 32px;color:#ffffff;font-size:14px;font-weight:700;text-decoration:none;letter-spacing:0.3px">Bekijk factuur &amp; betaal &rarr;</a>
+                  <a href="${directCheckoutUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:14px 32px;color:#ffffff;font-size:14px;font-weight:700;text-decoration:none;letter-spacing:0.3px">Nu online betalen (iDEAL / kaart) &rarr;</a>
+                </td></tr>
+              </table>` : ''}
+              <table cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom:8px">
+                <tr><td style="border-radius:10px;background:#3B2F75">
+                  <a href="${portalUrl}" target="_blank" style="display:inline-block;padding:14px 32px;color:#ffffff;font-size:14px;font-weight:700;text-decoration:none;letter-spacing:0.3px">Portaal: factuur bekijken &amp; betalen &rarr;</a>
                 </td></tr>
               </table>
             </td></tr>

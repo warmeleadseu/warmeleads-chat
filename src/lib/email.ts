@@ -554,10 +554,11 @@ export async function sendBatchMilestoneEmail(
 export async function sendUnpaidBatchReminderEmail(
   customer: Customer,
   batch: UnpaidBatchReminderInfo,
+  options?: { directCheckoutUrl?: string | null },
 ): Promise<boolean> {
   const branchLabel = batch.branch_name || batch.branch;
   const greeting = customer.contact_person || customer.name;
-  const portalUrl = `${BASE_URL}/portal`;
+  const portalAccountInvoicesUrl = `${BASE_URL}/portal/account?tab=invoices`;
   const subtotal = Number(batch.total_price || 0);
   const btwAmount = Math.round(subtotal * 0.21 * 100) / 100;
   const totalInclBtw = subtotal + btwAmount;
@@ -583,7 +584,10 @@ export async function sendUnpaidBatchReminderEmail(
       pricingRows,
       'Openstaande batch',
     )}
-    ${cta('Batch betalen in je portaal &rarr;', portalUrl)}
+    ${options?.directCheckoutUrl
+      ? `${cta('Direct online betalen (Mollie) &rarr;', options.directCheckoutUrl)}`
+      : ''}
+    ${cta('Factuur openen in je portaal &rarr;', portalAccountInvoicesUrl)}
     <p style="margin:12px 0 0;font-size:13px;color:#94a3b8">Na betaling gaat je batch direct live.</p>`;
 
   return sendEmail(

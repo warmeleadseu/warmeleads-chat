@@ -27,6 +27,29 @@ export async function POST(request: NextRequest) {
     if (!batch) return NextResponse.json({ error: 'Batch niet gevonden' }, { status: 404 });
     if (batch.is_paid) return NextResponse.json({ error: 'Batch is al betaald' }, { status: 400 });
 
+    const { data: openInvoice } = await supabase
+      .from('invoices')
+      .select('id, invoice_number, description, customer_id, total_incl_btw, mollie_payment_id')
+      .eq('batch_id', batch.id)
+      .eq('customer_id', customer.id)
+      .eq('status', 'open')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (openInvoice) {
+      const { ensureInvoiceMollieCheckout } = await import('@/lib/invoiceCheckout');
+      const { checkoutUrl } = await ensureInvoiceMollieCheckout({
+        id: openInvoice.id,
+        invoice_number: openInvoice.invoice_number,
+        description: openInvoice.description,
+        customer_id: openInvoice.customer_id,
+        total_incl_btw: Number(openInvoice.total_incl_btw),
+        mollie_payment_id: openInvoice.mollie_payment_id,
+      });
+      return NextResponse.json({ checkoutUrl });
+    }
+
     const { data: custData } = await supabase
       .from('customers')
       .select('id, name, email')

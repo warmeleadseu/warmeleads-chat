@@ -4,7 +4,9 @@ import { getPayment } from '@/lib/mollie';
 import { backfillBatch } from '@/lib/distribution';
 import { sendOrderConfirmationEmail, sendEmail } from '@/lib/email';
 import { sendPushToCustomer } from '@/lib/pushNotification';
-import { createInvoice, markInvoicePaid, sendNewBatchAdminEmail } from '@/lib/invoice';
+import { createInvoice, notifyCustomerInvoicePaid, sendNewBatchAdminEmail } from '@/lib/invoice';
+import { insertCelebrationEvent } from '@/lib/celebrationInsert';
+import { finalizePaidLeadBatch } from '@/lib/finalizePaidLeadBatch';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.warmeleads.eu';
 
@@ -54,68 +56,6 @@ function errorEmailHtml(title: string, details: string): string {
   </table>
 </body>
 </html>`;
-}
-
-async function insertCelebrationEvent(
-  supabase: ReturnType<typeof createServerClient>,
-  customerName: string,
-  branch: string,
-  amount: number,
-  customerId: string,
-  batchAmId?: string | null,
-) {
-  try {
-    const { data: custRow } = await supabase
-      .from('customers')
-      .select('account_manager_id')
-      .eq('id', customerId)
-      .single();
-
-    const resolvedAmId = batchAmId || custRow?.account_manager_id;
-
-    let amPayload: Record<string, unknown> = {};
-    if (resolvedAmId) {
-      const { data: am } = await supabase
-        .from('admin_users')
-        .select('id, name, avatar_url, celebration_video_url, celebration_video_start, celebration_video_end')
-        .eq('id', resolvedAmId)
-        .single();
-      if (am) {
-        amPayload = {
-          amId: am.id,
-          amName: am.name,
-          amAvatarUrl: am.avatar_url,
-          celebrationVideoUrl: am.celebration_video_url,
-          videoStart: am.celebration_video_start,
-          videoEnd: am.celebration_video_end,
-        };
-      }
-    }
-
-    await supabase.from('celebration_events').insert({
-      event_type: 'sale',
-      payload: { customer: customerName, branch, amount, ...amPayload },
-    });
-
-    // Milestone detection: count sales today
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    const { count } = await supabase
-      .from('celebration_events')
-      .select('id', { count: 'exact', head: true })
-      .eq('event_type', 'sale')
-      .gte('created_at', todayStart.toISOString());
-
-    const milestoneNumbers = [3, 5, 10, 15, 20, 25, 50, 100];
-    if (count && milestoneNumbers.includes(count)) {
-      await supabase.from('celebration_events').insert({
-        event_type: 'milestone',
-        payload: { milestoneText: `${count}e sale vandaag!`, count },
-      });
-    }
-  } catch (e) {
-    console.error('[mollie-webhook] celebration event insert failed:', e);
-  }
 }
 
 export async function POST(request: NextRequest) {
@@ -263,12 +203,49 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
+    // Factuur betaling (portaal / e-mail Mollie-link); metadata.kind === 'invoice', orderId invoice:<uuid>
+    if (kind === 'invoice' || rawOrderId.startsWith('invoice:')) {
+      const invoiceId = rawOrderId.startsWith('invoice:')
+        ? rawOrderId.slice('invoice:'.length)
+        : rawOrderId;
+
+      if (status === 'paid') {
+        const nowIso = new Date().toISOString();
+        const { data: inv, error: invErr } = await supabase
+          .from('invoices')
+          .update({ status: 'paid', paid_at: nowIso, mollie_payment_id: paymentId })
+          .eq('id', invoiceId)
+          .eq('status', 'open')
+          .select('*')
+          .single();
+
+        if (!invErr && inv) {
+          await notifyCustomerInvoicePaid(inv.id);
+
+          if (inv.batch_id) {
+            const { data: batchClaim } = await supabase
+              .from('customer_batches')
+              .update({ is_paid: true, mollie_payment_id: paymentId })
+              .eq('id', inv.batch_id)
+              .eq('is_paid', false)
+              .select('id, customer_id, branch, batch_size, price_per_lead, total_price, leads_per_week, leads_per_day, lead_filters, starts_at, lookback_days')
+              .single();
+
+            if (batchClaim) {
+              await finalizePaidLeadBatch(supabase, batchClaim, paymentId, { skipInvoiceHandling: true });
+            }
+          }
+        }
+      }
+
+      return NextResponse.json({ ok: true });
+    }
+
     // Direct batch payment (from portal pay-batch endpoint)
     if (rawOrderId.startsWith('batch:')) {
       const batchId = rawOrderId.replace('batch:', '');
 
       if (status === 'paid') {
-        // Atomic claim: only update if currently unpaid
         const { data: claimed, error: claimErr } = await supabase
           .from('customer_batches')
           .update({ is_paid: true, mollie_payment_id: paymentId })
@@ -277,139 +254,18 @@ export async function POST(request: NextRequest) {
           .select('id, customer_id, branch, batch_size, price_per_lead, total_price, leads_per_week, leads_per_day, lead_filters, starts_at, lookback_days')
           .single();
 
-        if (claimErr || !claimed) {
-          return NextResponse.json({ ok: true });
-        }
-
-        const { data: cust } = await supabase
-          .from('customers')
-          .select('id, name, email, contact_person, account_manager_id')
-          .eq('id', claimed.customer_id)
-          .single();
-
-        if (cust?.account_manager_id) {
-          await supabase.from('customer_batches').update({ account_manager_id: cust.account_manager_id }).eq('id', batchId).is('account_manager_id', null);
-        }
-
-        const { data: branchRow } = await supabase.from('branches').select('name').eq('slug', claimed.branch).single();
-        const branchName = branchRow?.name || claimed.branch;
-
-        if (cust) {
-          sendOrderConfirmationEmail(cust, {
-            branch: claimed.branch,
-            branch_name: branchName,
-            batch_size: claimed.batch_size,
-            total_price: Number(claimed.total_price),
-            price_per_lead: Number(claimed.price_per_lead),
-          }).catch(() => {});
-
-          sendPushToCustomer(cust.id, {
-            title: 'Betaling ontvangen!',
-            body: `Je batch ${branchName} (${claimed.batch_size} leads) is betaald.`,
-            url: '/portal',
-            tag: 'batch-paid',
-          }).catch(() => {});
-        }
-
-        // Mark existing open invoice as paid, or create new one
-        if (Number(claimed.price_per_lead) > 0 && Number(claimed.total_price) > 0) {
-          markInvoicePaid(claimed.id, paymentId).then(updated => {
-            if (updated) return;
-            // No open invoice found — create a new one
-            return createInvoice({
-              customer_id: claimed.customer_id,
-              batch_id: claimed.id,
-              branch_name: branchName,
-              batch_size: claimed.batch_size,
-              price_per_lead: Number(claimed.price_per_lead),
-              total_price: Number(claimed.total_price),
-              mollie_payment_id: paymentId,
-              paid_at: new Date().toISOString(),
-            });
-          }).catch(e => {
-            console.error('[mollie-webhook] invoice handling failed:', e);
-            sendEmail('info@warmeleads.eu', `[WAARSCHUWING] Factuur aanmaken/bijwerken mislukt`,
-              errorEmailHtml('Factuur bijwerken mislukt', `
-                <p style="margin:0 0 16px">Batch betaling is gelukt maar de factuur kon niet worden bijgewerkt.</p>
-                <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;margin-bottom:16px">
-                  <tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9;width:120px">Batch ID</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;font-weight:600;border-bottom:1px solid #f1f5f9;font-family:monospace">${claimed.id}</td></tr>
-                  <tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">Klant</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;border-bottom:1px solid #f1f5f9">${cust?.name || 'Onbekend'}</td></tr>
-                  <tr><td style="padding:12px 20px;font-size:14px;color:#64748b">Error</td><td style="padding:12px 20px;font-size:14px;color:#dc2626;font-weight:600">${e?.message || String(e)}</td></tr>
-                </table>`),
-              { type: 'mollie_error', metadata: { batch_id: claimed.id, error_type: 'invoice_update_failed' } },
+        if (!claimErr && claimed) {
+          try {
+            await finalizePaidLeadBatch(supabase, claimed, paymentId, {});
+          } catch (e) {
+            console.error('[mollie-webhook] finalizePaidLeadBatch failed:', e);
+            sendEmail('info@warmeleads.eu', `[WAARSCHUWING] Batch na betaling verwerken mislukt`,
+              errorEmailHtml('Batch verwerken mislukt', `
+                <p style="margin:0 0 16px">Mollie meldt betaald maar verdere verwerking faalde.</p>
+                <p style="margin:0;font-family:monospace;font-size:13px">${String(e)}</p>`),
+              { type: 'mollie_error', metadata: { batch_id: claimed.id, error_type: 'finalize_failed' } },
             ).catch(() => {});
-          });
-        }
-
-        // Create batch_orders record so the payment is visible in admin & portal
-        const { error: orderInsertErr } = await supabase
-          .from('batch_orders')
-          .insert({
-            customer_id: claimed.customer_id,
-            branch: claimed.branch,
-            batch_size: claimed.batch_size,
-            price_per_lead: claimed.price_per_lead,
-            total_price: claimed.total_price,
-            leads_per_week: claimed.leads_per_week,
-            leads_per_day: claimed.leads_per_day,
-            lead_filters: claimed.lead_filters || [],
-            source_batch_id: claimed.id,
-            batch_id: claimed.id,
-            mollie_payment_id: paymentId,
-            status: 'paid',
-            paid_at: new Date().toISOString(),
-            notes: '[Portal batch betaling]',
-          });
-
-        if (orderInsertErr) {
-          console.error('[mollie-webhook] batch_orders insert failed:', orderInsertErr);
-        }
-
-        // Admin notification
-        sendNewBatchAdminEmail({
-          customer_name: cust?.name || 'Onbekend',
-          branch_name: branchName,
-          batch_size: claimed.batch_size,
-          total_price: Number(claimed.total_price || 0),
-          price_per_lead: Number(claimed.price_per_lead || 0),
-          is_paid: true,
-          source: 'portal_pay',
-        }).catch(() => {});
-
-        // Celebration event for live dashboard
-        insertCelebrationEvent(
-          supabase,
-          cust?.name || 'Onbekend',
-          claimed.branch,
-          Number(claimed.total_price || 0),
-          claimed.customer_id,
-          cust?.account_manager_id || null,
-        ).catch(() => {});
-
-        // Transition from demo to production mode
-        const { data: demoBatchCust } = await supabase
-          .from('customers')
-          .select('demo_mode')
-          .eq('id', claimed.customer_id)
-          .single();
-
-        if (demoBatchCust?.demo_mode) {
-          await supabase
-            .from('customers')
-            .update({ demo_mode: false })
-            .eq('id', claimed.customer_id);
-
-          await supabase
-            .from('lead_assignments')
-            .delete()
-            .eq('customer_id', claimed.customer_id)
-            .eq('source', 'demo');
-        }
-
-        const startsInFuture = claimed.starts_at && new Date(claimed.starts_at) > new Date();
-        if (!startsInFuture) {
-          const lookback = claimed.lookback_days ?? 3;
-          if (lookback > 0) backfillBatch(claimed.id, lookback).catch(() => {});
+          }
         }
       }
 

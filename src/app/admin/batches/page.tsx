@@ -578,10 +578,13 @@ function BatchDetailPanel({ batchId, branches, onClose, onEdit }: {
   const [savingAM, setSavingAM] = useState(false);
   const [sendingReminder, setSendingReminder] = useState(false);
   const [reminderFeedback, setReminderFeedback] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
+  const [sendingInvoice, setSendingInvoice] = useState(false);
+  const [invoiceSendFeedback, setInvoiceSendFeedback] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
 
   useEffect(() => {
     setLoading(true);
     setReminderFeedback(null);
+    setInvoiceSendFeedback(null);
     adminFetch(`/api/admin/batches/${batchId}`)
       .then(r => r.ok ? r.json() : null)
       .then(d => {
@@ -647,6 +650,30 @@ function BatchDetailPanel({ batchId, branches, onClose, onEdit }: {
       });
     } finally {
       setSendingReminder(false);
+    }
+  };
+
+  const sendInvoiceWithPayLink = async () => {
+    if (!batch || batch.is_paid) return;
+    setSendingInvoice(true);
+    setInvoiceSendFeedback(null);
+    try {
+      const res = await adminFetch(`/api/admin/batches/${batch.id}/send-invoice`, { method: 'POST' });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || 'Factuur versturen mislukt');
+      }
+      setInvoiceSendFeedback({
+        kind: 'success',
+        message: 'Factuur met betaallink is per e-mail naar de klant verstuurd.',
+      });
+    } catch (err) {
+      setInvoiceSendFeedback({
+        kind: 'error',
+        message: err instanceof Error ? err.message : 'Factuur versturen mislukt',
+      });
+    } finally {
+      setSendingInvoice(false);
     }
   };
 
@@ -837,26 +864,52 @@ function BatchDetailPanel({ batchId, branches, onClose, onEdit }: {
                           )}
                         </div>
                         {!batch.is_paid && (
-                          <div className="mt-3 border-t border-slate-100 pt-3">
-                            <button
-                              onClick={sendPaymentReminder}
-                              disabled={sendingReminder}
-                              className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 transition hover:bg-amber-100 disabled:opacity-60"
-                            >
-                              {sendingReminder ? (
-                                <>
-                                  <ArrowPathIcon className="h-4 w-4 animate-spin" />
-                                  Verzenden...
-                                </>
-                              ) : (
-                                <>
-                                  <EnvelopeIcon className="h-4 w-4" />
-                                  Stuur betaalherinnering
-                                </>
-                              )}
-                            </button>
+                          <div className="mt-3 space-y-2 border-t border-slate-100 pt-3">
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={sendInvoiceWithPayLink}
+                                disabled={sendingInvoice}
+                                className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-brand-purple/30 bg-brand-purple/5 px-3 py-2 text-xs font-semibold text-brand-purple transition hover:bg-brand-purple/10 disabled:opacity-60"
+                              >
+                                {sendingInvoice ? (
+                                  <>
+                                    <ArrowPathIcon className="h-4 w-4 animate-spin" />
+                                    Verzenden...
+                                  </>
+                                ) : (
+                                  <>
+                                    <DocumentTextIcon className="h-4 w-4" />
+                                    Stuur factuur + betaallink
+                                  </>
+                                )}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={sendPaymentReminder}
+                                disabled={sendingReminder}
+                                className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 transition hover:bg-amber-100 disabled:opacity-60"
+                              >
+                                {sendingReminder ? (
+                                  <>
+                                    <ArrowPathIcon className="h-4 w-4 animate-spin" />
+                                    Verzenden...
+                                  </>
+                                ) : (
+                                  <>
+                                    <EnvelopeIcon className="h-4 w-4" />
+                                    Stuur betaalherinnering
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                            {invoiceSendFeedback && (
+                              <p className={`text-[11px] ${invoiceSendFeedback.kind === 'success' ? 'text-emerald-600' : 'text-red-600'}`}>
+                                {invoiceSendFeedback.message}
+                              </p>
+                            )}
                             {reminderFeedback && (
-                              <p className={`mt-2 text-[11px] ${reminderFeedback.kind === 'success' ? 'text-emerald-600' : 'text-red-600'}`}>
+                              <p className={`text-[11px] ${reminderFeedback.kind === 'success' ? 'text-emerald-600' : 'text-red-600'}`}>
                                 {reminderFeedback.message}
                               </p>
                             )}

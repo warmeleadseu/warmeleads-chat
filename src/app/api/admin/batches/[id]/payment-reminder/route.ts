@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
 import { sendUnpaidBatchReminderEmail } from '@/lib/email';
+import { ensureInvoiceMollieCheckout } from '@/lib/invoiceCheckout';
 
 export async function POST(
   request: NextRequest,
@@ -61,14 +62,42 @@ export async function POST(
     return NextResponse.json({ error: 'Klant heeft geen e-mailadres' }, { status: 400 });
   }
 
-  const sent = await sendUnpaidBatchReminderEmail(customer, {
-    id: batch.id,
-    branch: batch.branch,
-    branch_name: branchRow?.name || batch.branch,
-    batch_size: batch.batch_size,
-    price_per_lead: batch.price_per_lead,
-    total_price: batch.total_price,
-  });
+  const { data: openInvoice } = await supabase
+    .from('invoices')
+    .select('id, invoice_number, description, customer_id, total_incl_btw, mollie_payment_id')
+    .eq('batch_id', batch.id)
+    .eq('status', 'open')
+    .maybeSingle();
+
+  let directCheckoutUrl: string | undefined;
+  if (openInvoice) {
+    try {
+      const { checkoutUrl } = await ensureInvoiceMollieCheckout({
+        id: openInvoice.id,
+        invoice_number: openInvoice.invoice_number,
+        description: openInvoice.description,
+        customer_id: openInvoice.customer_id,
+        total_incl_btw: Number(openInvoice.total_incl_btw),
+        mollie_payment_id: openInvoice.mollie_payment_id,
+      });
+      directCheckoutUrl = checkoutUrl;
+    } catch {
+      /* herinnering zonder directe link als Mollie faalt */
+    }
+  }
+
+  const sent = await sendUnpaidBatchReminderEmail(
+    customer,
+    {
+      id: batch.id,
+      branch: batch.branch,
+      branch_name: branchRow?.name || batch.branch,
+      batch_size: batch.batch_size,
+      price_per_lead: batch.price_per_lead,
+      total_price: batch.total_price,
+    },
+    { directCheckoutUrl },
+  );
 
   if (!sent) {
     return NextResponse.json({ error: 'E-mail versturen mislukt' }, { status: 500 });
