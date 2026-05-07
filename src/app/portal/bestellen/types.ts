@@ -22,6 +22,9 @@ export interface Order {
   status: string;
   created_at: string;
   paid_at: string | null;
+  /** 'niche_research' = onderzoeksbatch €1000 (portaal) */
+  batch_kind?: 'leads' | 'niche_research' | string;
+  niche_title?: string | null;
 }
 
 export interface PricingData {

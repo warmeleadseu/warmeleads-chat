@@ -33,11 +33,17 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { batch_size, source_batch_id, notes, leads_per_day: customerLeadsPerDay } = body;
+    const {
+      batch_size: rawBatchSize,
+      source_batch_id,
+      notes,
+      leads_per_day: customerLeadsPerDay,
+      batch_kind: rawBatchKind,
+      niche_title: rawNicheTitle,
+    } = body;
 
-    if (!batch_size || batch_size < 10) {
-      return NextResponse.json({ error: 'Batch grootte moet minimaal 10 zijn' }, { status: 400 });
-    }
+    const batchKind =
+      rawBatchKind === 'niche_research' ? 'niche_research' : 'leads';
 
     const supabase = createServerClient();
 
@@ -48,6 +54,89 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (!custData) return NextResponse.json({ error: 'Klant niet gevonden' }, { status: 404 });
+
+    if (batchKind === 'niche_research') {
+      const nicheTitle = typeof rawNicheTitle === 'string' ? rawNicheTitle.trim() : '';
+      if (nicheTitle.length < 3) {
+        return NextResponse.json(
+          { error: 'Geef een duidelijke naam voor de niche (minimaal 3 tekens).' },
+          { status: 400 },
+        );
+      }
+
+      const RESEARCH_EXCL = 1000;
+      const batch_size = 1;
+      const branch = 'niche_research';
+      const price_per_lead = RESEARCH_EXCL;
+      const total_price = RESEARCH_EXCL;
+      const btw_amount = Math.round(total_price * 0.21 * 100) / 100;
+      const total_incl_btw = total_price + btw_amount;
+
+      const combinedNotes = [
+        `[Onderzoeksbatch] ${nicheTitle}`,
+        typeof notes === 'string' && notes.trim() ? notes.trim() : '',
+      ]
+        .filter(Boolean)
+        .join('\n');
+
+      const { data: order, error: orderErr } = await supabase
+        .from('batch_orders')
+        .insert({
+          customer_id: customer.id,
+          branch,
+          batch_size,
+          price_per_lead,
+          total_price,
+          leads_per_week: null,
+          leads_per_day: null,
+          lead_filters: [],
+          notes: combinedNotes || null,
+          source_batch_id: null,
+          status: 'pending',
+          welcome_discount_applied: false,
+          batch_kind: 'niche_research',
+          niche_title: nicheTitle,
+        })
+        .select()
+        .single();
+
+      if (orderErr || !order) {
+        console.error('[portal/orders] niche research order insert:', orderErr);
+        return NextResponse.json({ error: 'Bestelling aanmaken mislukt' }, { status: 500 });
+      }
+
+      const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://warmeleads.eu';
+
+      let payment;
+      try {
+        payment = await createBatchPayment({
+          orderId: order.id,
+          amount: total_incl_btw,
+          description: `WarmeLeads onderzoeksbatch: ${nicheTitle} (incl. 21% BTW)`,
+          redirectUrl: `${baseUrl}/portal/bestellen?order=${order.id}&status=redirect`,
+          webhookUrl: `${baseUrl}/api/webhooks/mollie`,
+          customerEmail: custData.email,
+          customerName: custData.name,
+        });
+      } catch (mollieErr) {
+        console.error('Mollie payment creation failed, cleaning up order:', mollieErr);
+        await supabase.from('batch_orders').delete().eq('id', order.id);
+        return NextResponse.json({ error: 'Betaling aanmaken mislukt. Probeer het opnieuw.' }, { status: 500 });
+      }
+
+      await supabase.from('batch_orders').update({ mollie_payment_id: payment.id }).eq('id', order.id);
+
+      return NextResponse.json({
+        orderId: order.id,
+        checkoutUrl: payment.getCheckoutUrl(),
+      });
+    }
+
+    const batch_size = rawBatchSize;
+
+    if (!batch_size || batch_size < 10) {
+      return NextResponse.json({ error: 'Batch grootte moet minimaal 10 zijn' }, { status: 400 });
+    }
 
     let welcomeEligible =
       custData.welcome_offer_used === false &&
@@ -175,6 +264,8 @@ export async function POST(request: NextRequest) {
         source_batch_id: source_batch_id || null,
         status: 'pending',
         welcome_discount_applied: welcomeEligible && discountAmount > 0,
+        batch_kind: 'leads',
+        niche_title: null,
       })
       .select()
       .single();

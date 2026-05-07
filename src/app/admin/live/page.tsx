@@ -166,6 +166,7 @@ const BRANCH_CONFETTI: Record<string, string[]> = {
   thuisbatterij: ['#34d399', '#10b981', '#059669', '#6ee7b7', '#a7f3d0'],
   airco: ['#38bdf8', '#0ea5e9', '#0284c7', '#7dd3fc', '#bae6fd'],
   zonnepanelen: ['#facc15', '#eab308', '#ca8a04', '#fde047', '#fef08a'],
+  niche_research: ['#8b5cf6', '#a78bfa', '#6366f1', '#c4b5fd', '#ddd6fe'],
 };
 
 function fireCelebration(canvas: HTMLCanvasElement, variant: CelebrationVariant = 'confetti', branch?: string) {

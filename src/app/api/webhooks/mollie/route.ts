@@ -437,6 +437,25 @@ export async function POST(request: NextRequest) {
 
       const { data: orderCust } = await supabase.from('customers').select('id, name, email, contact_person, account_manager_id').eq('id', order.customer_id).single();
 
+      const orderBatchKind =
+        (order as { batch_kind?: string }).batch_kind === 'niche_research'
+          ? 'niche_research'
+          : 'leads';
+      const orderNicheTitle =
+        typeof (order as { niche_title?: string }).niche_title === 'string'
+          ? String((order as { niche_title?: string }).niche_title).trim()
+          : '';
+
+      const nowIso = new Date().toISOString();
+      const researchCompleted =
+        orderBatchKind === 'niche_research'
+          ? {
+              status: 'completed' as const,
+              leads_delivered: 1,
+              completed_at: nowIso,
+            }
+          : { status: 'active' as const, leads_delivered: 0, completed_at: null as string | null };
+
       const { data: newBatch, error: batchError } = await supabase
         .from('customer_batches')
         .insert({
@@ -449,10 +468,13 @@ export async function POST(request: NextRequest) {
           leads_per_day: order.leads_per_day,
           lead_filters: order.lead_filters || [],
           notes: order.notes ? `[Portal bestelling] ${order.notes}` : '[Portal bestelling]',
-          status: 'active',
-          leads_delivered: 0,
+          status: researchCompleted.status,
+          leads_delivered: researchCompleted.leads_delivered,
+          completed_at: researchCompleted.completed_at,
           is_paid: true,
           account_manager_id: orderCust?.account_manager_id || null,
+          batch_kind: orderBatchKind,
+          niche_title: orderNicheTitle || null,
         })
         .select()
         .single();
@@ -515,6 +537,11 @@ export async function POST(request: NextRequest) {
       const branchName = branchRow?.name || order.branch;
 
       if (orderCust) {
+        const pushBody =
+          orderBatchKind === 'niche_research' && orderNicheTitle
+            ? `Je onderzoeksbatch voor "${orderNicheTitle}" is bevestigd.`
+            : `Je nieuwe batch ${branchName} (${order.batch_size} leads) is aangemaakt.`;
+
         sendOrderConfirmationEmail(orderCust, {
           branch: order.branch,
           branch_name: branchName,
@@ -525,7 +552,7 @@ export async function POST(request: NextRequest) {
 
         sendPushToCustomer(orderCust.id, {
           title: 'Bestelling bevestigd!',
-          body: `Je nieuwe batch ${branchName} (${order.batch_size} leads) is aangemaakt.`,
+          body: pushBody,
           url: '/portal',
           tag: 'order-confirmed',
         }).catch(() => {});
@@ -542,6 +569,8 @@ export async function POST(request: NextRequest) {
         total_price: Number(order.total_price),
         mollie_payment_id: paymentId,
         paid_at: new Date().toISOString(),
+        invoice_product: orderBatchKind === 'niche_research' ? 'niche_research' : 'leads',
+        niche_title: orderNicheTitle || null,
       }).catch(e => {
         console.error('[mollie-webhook] invoice creation failed:', e);
         sendEmail('info@warmeleads.eu', `[WAARSCHUWING] Factuur aanmaken mislukt`,
@@ -577,7 +606,9 @@ export async function POST(request: NextRequest) {
         newBatch.account_manager_id,
       ).catch(() => {});
 
-      backfillBatch(newBatch.id, 3).catch(() => {});
+      if (orderBatchKind !== 'niche_research') {
+        backfillBatch(newBatch.id, 3).catch(() => {});
+      }
 
     } else if (status === 'failed') {
       await supabase.from('batch_orders').update({ status: 'failed' }).eq('id', orderId);

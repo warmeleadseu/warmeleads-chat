@@ -17,6 +17,7 @@ import {
   DocumentTextIcon,
   InboxStackIcon,
   CalendarDaysIcon,
+  MagnifyingGlassCircleIcon,
 } from '@heroicons/react/24/outline';
 import AppointmentsOrderView from '../AppointmentsOrderView';
 import { CheckCircleIcon as CheckCircleSolid } from '@heroicons/react/24/solid';
@@ -41,6 +42,7 @@ import {
   useToast,
 } from '../_ui';
 import NewCustomerOrderView from './NewCustomerOrderView';
+import NicheResearchOrderView from './NicheResearchOrderView';
 import type { Batch, Order, PricingData, WelcomeDiscountState } from './types';
 
 export default function BestellenPage() {
@@ -53,7 +55,12 @@ export default function BestellenPage() {
   const orderRedirectId = searchParams.get('order');
   const redirectStatus = searchParams.get('status');
   const productParam = searchParams.get('product');
-  const product: 'leads' | 'appointments' = productParam === 'appointments' ? 'appointments' : 'leads';
+  const product: 'leads' | 'appointments' | 'research' =
+    productParam === 'appointments'
+      ? 'appointments'
+      : productParam === 'research'
+        ? 'research'
+        : 'leads';
 
   const [batches, setBatches] = useState<{ active: Batch[]; completed: Batch[] }>({ active: [], completed: [] });
   const [orders, setOrders] = useState<Order[]>([]);
@@ -92,8 +99,8 @@ export default function BestellenPage() {
       const batchRes = batchRaw.ok ? await batchRaw.json() : { active: [], completed: [] };
       const orderRes = orderRaw.ok ? await orderRaw.json() : [];
       if (!batchRaw.ok || !orderRaw.ok) toast.error('Gegevens konden niet volledig geladen worden');
-      setBatches({ active: batchRes.active || [], completed: batchRes.completed || [] });
-      setOrders(Array.isArray(orderRes) ? orderRes : []);
+    setBatches({ active: batchRes.active || [], completed: batchRes.completed || [] });
+    setOrders(Array.isArray(orderRes) ? orderRes : []);
 
       if (welcomeRaw && 'ok' in welcomeRaw && welcomeRaw.ok) {
         try {
@@ -109,7 +116,7 @@ export default function BestellenPage() {
         } catch { /* ignore */ }
       }
 
-      return { batches: batchRes, orders: Array.isArray(orderRes) ? orderRes : [] };
+    return { batches: batchRes, orders: Array.isArray(orderRes) ? orderRes : [] };
     } catch {
       toast.error('Gegevens konden niet geladen worden');
       return undefined;
@@ -175,7 +182,7 @@ export default function BestellenPage() {
   }, [customer, sourceBatchId, orderRedirectId, redirectStatus, fetchData]);
 
   useEffect(() => {
-    if (product === 'appointments') { setPricingData(null); return; }
+    if (product === 'appointments' || product === 'research') { setPricingData(null); return; }
     if (!selectedBranch) return;
     if (pricingData && pricingData.branch === selectedBranch) return;
     portalFetch(`/api/portal/pricing?branch=${selectedBranch}`)
@@ -298,17 +305,33 @@ export default function BestellenPage() {
   const productTabs = (
     <ToggleGroup
       value={product}
-      onChange={(v: 'leads' | 'appointments') => {
-        router.push(v === 'appointments' ? '/portal/bestellen?product=appointments' : '/portal/bestellen');
+      onChange={(v: 'leads' | 'appointments' | 'research') => {
+        if (v === 'appointments') router.push('/portal/bestellen?product=appointments');
+        else if (v === 'research') router.push('/portal/bestellen?product=research');
+        else router.push('/portal/bestellen');
       }}
       fullWidth
       options={[
         { value: 'leads', label: 'Leads', icon: <InboxStackIcon className="h-4 w-4" /> },
+        { value: 'research', label: 'Onderzoek', icon: <MagnifyingGlassCircleIcon className="h-4 w-4" /> },
         { value: 'appointments', label: 'Afspraken', icon: <CalendarDaysIcon className="h-4 w-4" /> },
       ]}
       ariaLabel="Product"
     />
   );
+
+  if (product === 'research') {
+    return (
+      <div className={`space-y-6 ${T.pagePaddingForSticky}`}>
+        <PageHeader
+          title="Bestellen"
+          subtitle="Onderzoeksbatch voor een maatwerk-niche buiten ons standaardaanbod"
+        />
+        {productTabs}
+        <NicheResearchOrderView />
+      </div>
+    );
+  }
 
   if (product === 'appointments') {
     return (
@@ -321,7 +344,16 @@ export default function BestellenPage() {
   }
 
   if (allBatches.length === 0) {
-    return <NewCustomerOrderView customer={customer} welcomeDiscount={welcomeDiscount} />;
+    return (
+      <div className={`space-y-6 ${T.pagePaddingForSticky}`}>
+        <PageHeader
+          title="Bestellen"
+          subtitle="Kies leads voor je eerste batch, een onderzoeksbatch voor een nieuwe niche, of afspraken"
+        />
+        {productTabs}
+        <NewCustomerOrderView customer={customer} welcomeDiscount={welcomeDiscount} embedded />
+      </div>
+    );
   }
 
   const pendingOrders = orders.filter(o => o.status !== 'paid');
@@ -714,7 +746,13 @@ function OrdersPanel({ orders, onCancel }: { orders: Order[]; onCancel: (id: str
           <div key={o.id} className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50/60 px-3.5 py-2.5">
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
-                <p className="truncate text-sm font-medium text-slate-800">{o.batch_size} leads &middot; {o.branch}</p>
+                <p className="truncate text-sm font-medium text-slate-800">
+                  {o.batch_kind === 'niche_research' ? (
+                    <>Onderzoeksbatch{o.niche_title ? ` &middot; ${o.niche_title}` : ''} &middot; {o.branch}</>
+                  ) : (
+                    <>{o.batch_size} leads &middot; {o.branch}</>
+                  )}
+                </p>
                 <StatusBadge status={o.status} scope="order" />
               </div>
               <p className="mt-0.5 text-xs text-slate-400">
@@ -750,78 +788,80 @@ function RedirectResultView({
   onContinue: () => void;
   onRetry: () => void;
 }) {
-  const isPaid = redirectOrder.status === 'paid';
-  const isPending = redirectOrder.status === 'pending';
-  const isExpired = redirectOrder.status === 'expired';
-  const isCancelled = redirectOrder.status === 'cancelled';
-  const isFailed = !isPaid && !isPending;
+    const isPaid = redirectOrder.status === 'paid';
+    const isPending = redirectOrder.status === 'pending';
+    const isExpired = redirectOrder.status === 'expired';
+    const isCancelled = redirectOrder.status === 'cancelled';
+    const isFailed = !isPaid && !isPending;
 
-  return (
-    <div className="flex min-h-[60vh] flex-col items-center justify-center px-4 py-16 text-center">
-      <motion.div
-        initial={{ scale: 0.6, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={{ type: 'spring', damping: 18, stiffness: 280 }}
-        className={`mb-6 flex h-20 w-20 items-center justify-center rounded-full shadow-lg ${
-          isPaid ? 'bg-emerald-500 shadow-emerald-200' : isPending ? 'bg-amber-400 shadow-amber-200' : 'bg-red-500 shadow-red-200'
-        }`}
-      >
-        {isPaid ? (
-          <CheckCircleIcon className="h-10 w-10 text-white" />
-        ) : isPending ? (
-          <ClockIcon className="h-10 w-10 text-white" />
-        ) : (
-          <XCircleIcon className="h-10 w-10 text-white" />
-        )}
-      </motion.div>
+    return (
+      <div className="flex min-h-[60vh] flex-col items-center justify-center px-4 py-16 text-center">
+        <motion.div
+          initial={{ scale: 0.6, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ type: 'spring', damping: 18, stiffness: 280 }}
+          className={`mb-6 flex h-20 w-20 items-center justify-center rounded-full shadow-lg ${
+            isPaid ? 'bg-emerald-500 shadow-emerald-200' : isPending ? 'bg-amber-400 shadow-amber-200' : 'bg-red-500 shadow-red-200'
+          }`}
+        >
+          {isPaid ? (
+            <CheckCircleIcon className="h-10 w-10 text-white" />
+          ) : isPending ? (
+            <ClockIcon className="h-10 w-10 text-white" />
+          ) : (
+            <XCircleIcon className="h-10 w-10 text-white" />
+          )}
+        </motion.div>
 
-      <motion.h2 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
-        className="text-xl font-bold text-slate-900 sm:text-2xl">
-        {isPaid ? 'Betaling gelukt!' : isPending ? 'Betaling wordt verwerkt...' : isExpired ? 'Betaling verlopen' : isCancelled ? 'Betaling geannuleerd' : 'Betaling niet gelukt'}
-      </motion.h2>
+        <motion.h2 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
+          className="text-xl font-bold text-slate-900 sm:text-2xl">
+          {isPaid ? 'Betaling gelukt!' : isPending ? 'Betaling wordt verwerkt...' : isExpired ? 'Betaling verlopen' : isCancelled ? 'Betaling geannuleerd' : 'Betaling niet gelukt'}
+        </motion.h2>
 
-      <motion.p initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}
-        className="mt-3 max-w-md text-sm leading-relaxed text-slate-500">
-        {isPaid
-          ? 'Je nieuwe batch is aangemaakt en leads worden automatisch toegewezen. Je ontvangt een bevestiging per e-mail.'
-          : isPending
-          ? 'De betaling wordt verwerkt. Dit duurt meestal een paar seconden.'
+        <motion.p initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}
+          className="mt-3 max-w-md text-sm leading-relaxed text-slate-500">
+          {isPaid
+          ? (redirectOrder.batch_kind === 'niche_research'
+            ? 'Je onderzoeksbatch is bevestigd. Je accountmanager neemt contact op over de vervolgstappen. Je ontvangt een bevestiging per e-mail.'
+            : 'Je nieuwe batch is aangemaakt en leads worden automatisch toegewezen. Je ontvangt een bevestiging per e-mail.')
+            : isPending
+            ? 'De betaling wordt verwerkt. Dit duurt meestal een paar seconden.'
           : 'De betaling is helaas niet gelukt. Je kunt het opnieuw proberen.'}
-      </motion.p>
+        </motion.p>
 
-      {isPending && (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }}
-          className="mt-4 flex items-center gap-2 text-xs text-amber-600">
-          <ArrowPathIcon className="h-4 w-4 animate-spin" />
-          <span>Status wordt automatisch bijgewerkt...</span>
-        </motion.div>
-      )}
-
-      {isPaid && (
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }}
-          className="mt-5 rounded-2xl border border-emerald-100 bg-emerald-50 px-6 py-4">
-          <div className="flex items-center gap-2">
-            <CheckCircleSolid className="h-5 w-5 text-emerald-500" />
-            <p className="text-sm font-semibold text-emerald-800">
-              {redirectOrder.batch_size} leads &middot; {formatCurrency(Number(redirectOrder.total_price) * 1.21)} incl. BTW
-            </p>
-          </div>
-          <p className="mt-1 text-xs text-emerald-600">Je batch is direct actief en leads worden automatisch toegewezen</p>
-        </motion.div>
-      )}
-
-      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.45 }}
-        className="mt-8 flex flex-col gap-3 sm:flex-row">
-        <button onClick={onContinue}
-          className="rounded-xl bg-brand-purple px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-purple/90">
-          Naar mijn leads
-        </button>
-        {isFailed && (
-          <button onClick={onRetry} className={T.btnSecondary}>
-            Opnieuw proberen
-          </button>
+        {isPending && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }}
+            className="mt-4 flex items-center gap-2 text-xs text-amber-600">
+            <ArrowPathIcon className="h-4 w-4 animate-spin" />
+            <span>Status wordt automatisch bijgewerkt...</span>
+          </motion.div>
         )}
-      </motion.div>
+
+        {isPaid && (
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }}
+            className="mt-5 rounded-2xl border border-emerald-100 bg-emerald-50 px-6 py-4">
+            <div className="flex items-center gap-2">
+              <CheckCircleSolid className="h-5 w-5 text-emerald-500" />
+              <p className="text-sm font-semibold text-emerald-800">
+              {redirectOrder.batch_size} leads &middot; {formatCurrency(Number(redirectOrder.total_price) * 1.21)} incl. BTW
+              </p>
+            </div>
+          <p className="mt-1 text-xs text-emerald-600">Je batch is direct actief en leads worden automatisch toegewezen</p>
+          </motion.div>
+        )}
+
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.45 }}
+          className="mt-8 flex flex-col gap-3 sm:flex-row">
+        <button onClick={onContinue}
+            className="rounded-xl bg-brand-purple px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-purple/90">
+            Naar mijn leads
+          </button>
+          {isFailed && (
+          <button onClick={onRetry} className={T.btnSecondary}>
+              Opnieuw proberen
+            </button>
+          )}
+        </motion.div>
     </div>
   );
 }

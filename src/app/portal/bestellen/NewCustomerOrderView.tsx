@@ -26,9 +26,12 @@ import type { PricingData, WelcomeDiscountState } from './types';
 export default function NewCustomerOrderView({
   customer,
   welcomeDiscount,
+  embedded = false,
 }: {
   customer: { id: string; name: string; email: string; contact_person: string; branches: string[] };
   welcomeDiscount: WelcomeDiscountState;
+  /** Gezet vanuit bestellen/page wanneer PageHeader + tabs al buiten staat */
+  embedded?: boolean;
 }) {
   const toast = useToast();
 
@@ -112,11 +115,13 @@ export default function NewCustomerOrderView({
   const canCheckout = !submitting && effectiveSize >= minBatchSize && dynamicPrice > 0;
 
   return (
-    <div className={`space-y-6 ${T.pagePaddingForSticky}`}>
-      <PageHeader
-        title="Eerste batch bestellen"
-        subtitle="Kies een branche en het aantal leads om te starten"
-      />
+    <div className={`space-y-6 ${embedded ? '' : T.pagePaddingForSticky}`}>
+      {!embedded && (
+        <PageHeader
+          title="Eerste batch bestellen"
+          subtitle="Kies een branche en het aantal leads om te starten"
+        />
+      )}
 
       {welcomeDiscount.active && (
         <div className="flex items-center gap-3 rounded-2xl border border-brand-purple/20 bg-gradient-to-r from-brand-purple/5 to-brand-pink/5 px-5 py-4">
