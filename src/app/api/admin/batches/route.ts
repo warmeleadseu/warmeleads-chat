@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
   const body = await request.json();
 
   const {
-    customer_id, branch, batch_size, price_per_lead, leads_per_week, leads_per_day, notes, lead_filters, is_paid, lookback_days, starts_at,
+    customer_id, branch, batch_size, price_per_lead, leads_per_week, leads_per_day, notes, lead_filters, lookback_days, starts_at,
     batch_kind: rawBatchKind,
   } = body;
   const batch_kind = normalizeBatchKind(typeof rawBatchKind === 'string' ? rawBatchKind : undefined);
@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
       leads_per_day: leads_per_day || null,
       notes,
       lead_filters: sanitizedFilters,
-      is_paid: is_paid !== false,
+      is_paid: body.is_paid === true,
       lookback_days: lookback,
       starts_at: startsAtValue,
       account_manager_id: custRow?.account_manager_id || null,
@@ -100,7 +100,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Admin notification email + invoice if paid with pricing
-  const batchIsPaid = is_paid !== false;
+  const batchIsPaid = body.is_paid === true;
   const { data: brRow } = await supabase.from('branches').select('name').eq('slug', branch).single();
   const brName = brRow?.name || branch;
 
@@ -115,17 +115,22 @@ export async function POST(request: NextRequest) {
   }).catch(() => {});
 
   if (price_per_lead && total_price) {
-    createInvoice({
-      customer_id,
-      batch_id: data.id,
-      branch_name: brName,
-      batch_size,
-      price_per_lead,
-      total_price,
-      status: batchIsPaid ? 'paid' : 'open',
-      ...(batchIsPaid ? { paid_at: new Date().toISOString() } : {}),
-      ...(batch_kind === 'bulk_leads' ? { invoice_product: 'bulk_leads' as const } : {}),
-    }).catch(e => console.error('[admin/batches] invoice creation failed:', e));
+    try {
+      await createInvoice({
+        customer_id,
+        batch_id: data.id,
+        branch_name: brName,
+        batch_size,
+        price_per_lead,
+        total_price,
+        status: batchIsPaid ? 'paid' : 'open',
+        ...(batchIsPaid ? { paid_at: new Date().toISOString() } : {}),
+        ...(batch_kind === 'bulk_leads' ? { invoice_product: 'bulk_leads' as const } : {}),
+        ...(!batchIsPaid ? { email_context: 'new_batch_order' as const } : {}),
+      });
+    } catch (e) {
+      console.error('[admin/batches] invoice creation failed:', e);
+    }
   }
 
   return NextResponse.json(data, { status: 201 });

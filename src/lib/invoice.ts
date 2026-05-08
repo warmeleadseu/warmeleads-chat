@@ -20,6 +20,11 @@ interface CreateInvoiceParams {
   invoice_product?: 'leads' | 'niche_research' | 'bulk_leads';
   /** Titel van de te onderzoeken niche (alleen bij niche_research) */
   niche_title?: string | null;
+  /**
+   * `new_batch_order`: klant krijgt open-factuurmail met extra intro over net aangemaakte batch
+   * (admin → nieuwe batch + factuur met betaallink).
+   */
+  email_context?: 'new_batch_order';
 }
 
 async function getNextInvoiceNumber(supabase: ReturnType<typeof createServerClient>): Promise<string> {
@@ -146,27 +151,44 @@ export async function createInvoice(params: CreateInvoiceParams) {
   }
 
   if (isPaid) {
-    sendInvoiceEmail(customer, invoice).catch(e => console.error('[invoice] email send failed:', e));
-  } else {
-    (async () => {
-      let checkoutUrl: string | undefined;
+    if (customer.email?.trim()) {
       try {
-        const ensured = await ensureInvoiceMollieCheckout({
-          id: invoice.id,
-          invoice_number: invoice.invoice_number,
-          description: invoice.description,
-          customer_id: invoice.customer_id,
-          total_incl_btw: Number(invoice.total_incl_btw),
-          mollie_payment_id: invoice.mollie_payment_id,
-        });
-        checkoutUrl = ensured.checkoutUrl;
+        await sendInvoiceEmail(customer, invoice);
       } catch (e) {
-        console.error('[invoice] Mollie checkout voor open factuur mislukt:', e);
+        console.error('[invoice] email send failed:', e);
       }
-      sendOpenInvoiceEmail(customer, invoice, checkoutUrl).catch(err =>
-        console.error('[invoice] open invoice email send failed:', err),
-      );
-    })().catch(() => {});
+    }
+  } else {
+    let checkoutUrl: string | undefined;
+    try {
+      const ensured = await ensureInvoiceMollieCheckout({
+        id: invoice.id,
+        invoice_number: invoice.invoice_number,
+        description: invoice.description,
+        customer_id: invoice.customer_id,
+        total_incl_btw: Number(invoice.total_incl_btw),
+        mollie_payment_id: invoice.mollie_payment_id,
+      });
+      checkoutUrl = ensured.checkoutUrl;
+    } catch (e) {
+      console.error('[invoice] Mollie checkout voor open factuur mislukt:', e);
+    }
+    if (!customer.email?.trim()) {
+      console.warn('[invoice] Geen klant-e-mail: open factuur (en betaallink-mail) overgeslagen');
+    } else {
+      try {
+        await sendOpenInvoiceEmail(
+          customer,
+          invoice,
+          checkoutUrl,
+          params.email_context === 'new_batch_order'
+            ? { newBatchOrder: { branch_name: params.branch_name, batch_size: params.batch_size } }
+            : undefined,
+        );
+      } catch (err) {
+        console.error('[invoice] open invoice email send failed:', err);
+      }
+    }
   }
 
   return invoice;
@@ -238,6 +260,10 @@ export async function notifyCustomerInvoicePaid(invoiceId: string): Promise<void
 }
 
 /** Opnieuw versturen van open factuur + verse Mollie-betaallink (accountmanager / admin). */
+export type SendOpenInvoiceEmailOptions = {
+  newBatchOrder?: { branch_name: string; batch_size: number };
+};
+
 export async function resendOpenInvoiceWithPaymentLinks(invoiceId: string): Promise<void> {
   const supabase = createServerClient();
   const { data: invoice } = await supabase.from('invoices').select('*').eq('id', invoiceId).single();
@@ -263,15 +289,26 @@ export async function resendOpenInvoiceWithPaymentLinks(invoiceId: string): Prom
   await sendOpenInvoiceEmail(customer, invoice, checkoutUrl);
 }
 
-export function sendOpenInvoiceEmail(
+export async function sendOpenInvoiceEmail(
   customer: { name: string; email: string; contact_person?: string },
   invoice: { invoice_number: string; total_incl_btw: number; description: string; id: string },
   directCheckoutUrl?: string,
-) {
+  options?: SendOpenInvoiceEmailOptions,
+): Promise<boolean> {
   const portalUrl = `${BASE_URL}/portal/account?tab=invoices`;
   const logoUrl = `${BASE_URL}/warmeleads-logo-2026.png`;
   const greeting = customer.contact_person || customer.name;
   const year = new Date().getFullYear();
+  const nb = options?.newBatchOrder;
+  const esc = (s: string) =>
+    s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const subject = nb
+    ? `Nieuwe lead-batch — factuur ${invoice.invoice_number} - WarmeLeads`
+    : `Nieuwe factuur ${invoice.invoice_number} - WarmeLeads`;
+  const introBlock = nb
+    ? `<p style="margin:0 0 12px;font-size:15px;color:#475569;line-height:1.7">We hebben zojuist een <strong>nieuwe lead-batch</strong> voor je aangemaakt: <strong>${nb.batch_size} leads</strong> voor <strong>${esc(nb.branch_name)}</strong>.</p>
+              <p style="margin:0 0 28px;font-size:15px;color:#475569;line-height:1.7">Hieronder vind je de bijbehorende openstaande factuur. Betaal direct via de oranje knop (iDEAL / kaart), of open je portaal onder het tabblad Facturen — allebei dezelfde veilige Mollie-betaallink.</p>`
+    : `<p style="margin:0 0 28px;font-size:15px;color:#475569;line-height:1.7">Er staat een nieuwe factuur voor je klaar.</p>`;
 
   const fullHtml = `<!DOCTYPE html>
 <html lang="nl">
@@ -295,7 +332,7 @@ export function sendOpenInvoiceEmail(
                 </td></tr>
               </table>
               <p style="margin:0 0 16px;font-size:16px;font-weight:600;color:#0f172a;line-height:1.4">Hallo ${greeting},</p>
-              <p style="margin:0 0 28px;font-size:15px;color:#475569;line-height:1.7">Er staat een nieuwe factuur voor je klaar.</p>
+              ${introBlock}
               <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom:28px;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
                 <tr><td style="background-color:#f8fafc;padding:14px 20px;border-bottom:1px solid #e2e8f0">
                   <span style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:1px">Factuurgegevens</span>
@@ -340,9 +377,17 @@ export function sendOpenInvoiceEmail(
 
   return sendEmail(
     customer.email,
-    `Nieuwe factuur ${invoice.invoice_number} - WarmeLeads`,
+    subject,
     fullHtml,
-    { type: 'invoice_open', toName: greeting, metadata: { invoice_id: invoice.id, invoice_number: invoice.invoice_number } },
+    {
+      type: nb ? 'invoice_open_new_batch' : 'invoice_open',
+      toName: greeting,
+      metadata: {
+        invoice_id: invoice.id,
+        invoice_number: invoice.invoice_number,
+        ...(nb ? { batch_intro: true, branch: nb.branch_name, batch_size: nb.batch_size } : {}),
+      },
+    },
   );
 }
 
