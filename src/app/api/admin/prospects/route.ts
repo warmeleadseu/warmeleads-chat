@@ -13,28 +13,36 @@ import {
 const DEFAULT_LIMIT = 25;
 const MAX_LIMIT = 200;
 
-/** PostgREST `.or()` filter: bedrijf, contact, e-mail, plaats, KVK, telefoon (+ genormaliseerde cijfers). */
-function buildProspectSearchOrFilter(searchRaw: string): string {
+/**
+ * PostgREST `.or()` filter: bedrijf, contact, e-mail, plaats, KVK, ruwe telefoon-string.
+ * Genormaliseerde cijfer-match gaat via RPC `prospect_ids_by_phone_digits` (geen phone_digits-kolom vereist).
+ */
+function buildProspectTextSearchOrFilter(searchRaw: string): string {
   const trimmed = searchRaw.trim();
   if (!trimmed) return '';
 
   const sanitized = trimmed.replace(/[%_\\]/g, c => `\\${c}`);
-  const parts: string[] = [
+  return [
     `company_name.ilike.%${sanitized}%`,
     `contact_person.ilike.%${sanitized}%`,
     `email.ilike.%${sanitized}%`,
     `city.ilike.%${sanitized}%`,
     `kvk_nummer.ilike.%${sanitized}%`,
     `phone.ilike.%${sanitized}%`,
-  ];
+  ].join(',');
+}
 
-  const digitsOnly = trimmed.replace(/\D/g, '');
-  if (digitsOnly.length >= 3) {
-    const dSan = digitsOnly.replace(/[%_\\]/g, c => `\\${c}`);
-    parts.push(`phone_digits.ilike.%${dSan}%`);
+function asUuidStringArray(raw: unknown): string[] {
+  if (!raw || !Array.isArray(raw) || raw.length === 0) return [];
+  const first = raw[0];
+  if (typeof first === 'string') return (raw as string[]).filter(Boolean);
+  if (typeof first === 'object' && first !== null) {
+    const key = 'prospect_ids_by_phone_digits';
+    return (raw as Record<string, string>[])
+      .map((row) => (typeof row[key] === 'string' ? row[key] : Object.values(row).find((v) => typeof v === 'string')))
+      .filter((x): x is string => typeof x === 'string' && x.length > 0);
   }
-
-  return parts.join(',');
+  return [];
 }
 
 export async function GET(request: NextRequest) {
@@ -63,10 +71,30 @@ export async function GET(request: NextRequest) {
   dataQuery = applyAmScope(dataQuery, admin);
 
   if (search) {
-    const filter = buildProspectSearchOrFilter(search);
-    if (filter) {
-      countQuery = countQuery.or(filter);
-      dataQuery = dataQuery.or(filter);
+    const textFilter = buildProspectTextSearchOrFilter(search);
+    let orFilter = textFilter;
+
+    const digitsOnly = search.replace(/\D/g, '');
+    if (digitsOnly.length >= 3) {
+      const { data: digitIdRows, error: rpcErr } = await supabase.rpc('prospect_ids_by_phone_digits', {
+        digits: search,
+        p_am_id: isAccountManagerScope(admin) ? admin.id : null,
+      });
+      if (rpcErr) {
+        console.warn('[prospects] prospect_ids_by_phone_digits RPC:', rpcErr.message);
+      } else {
+        const digitIds = asUuidStringArray(digitIdRows);
+        if (digitIds.length > 0) {
+          const maxIds = 800;
+          const capped = digitIds.slice(0, maxIds);
+          orFilter = `${textFilter},id.in.(${capped.join(',')})`;
+        }
+      }
+    }
+
+    if (orFilter) {
+      countQuery = countQuery.or(orFilter);
+      dataQuery = dataQuery.or(orFilter);
     }
   }
 
@@ -114,13 +142,16 @@ export async function GET(request: NextRequest) {
     .order(sortCol, { ascending: asc, nullsFirst: false })
     .range((page - 1) * limit, page * limit - 1);
 
-  const [{ count: totalCount }, { data: prospects, error }] = await Promise.all([
+  const [
+    { count: totalCount, error: countErr },
+    { data: prospects, error: dataErr },
+  ] = await Promise.all([
     countQuery,
     dataQuery,
   ]);
 
-  if (error) {
-    console.error('[prospects] list error:', error.message);
+  if (countErr || dataErr) {
+    console.error('[prospects] list error:', countErr?.message || dataErr?.message);
     return NextResponse.json({ error: 'Prospects ophalen mislukt' }, { status: 500 });
   }
 
