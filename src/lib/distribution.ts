@@ -11,6 +11,76 @@ const COOLDOWN_HOURS = 12;
 const FAIRNESS_WINDOW_HOURS = 24;
 const REASSIGNMENT_COOLDOWN_DAYS = 30;
 
+const ASSIGNMENT_PAGE_SIZE = 1000;
+
+type SupabaseClient = ReturnType<typeof createServerClient>;
+
+/**
+ * Alle lead_id's die ooit aan deze klant zijn gekoppeld (alle batches).
+ * Gepagineerd: zonder dit mist backfill rijen na de PostgREST-default (meestal 1000)
+ * en kunnen dezelfde leads opnieuw aan een nieuwe batch worden toegevoegd.
+ */
+async function fetchAllLeadIdsAssignedToCustomer(
+  supabase: SupabaseClient,
+  customerId: string,
+): Promise<Set<string>> {
+  const ids = new Set<string>();
+  let offset = 0;
+  while (true) {
+    const { data } = await supabase
+      .from('lead_assignments')
+      .select('lead_id')
+      .eq('customer_id', customerId)
+      .range(offset, offset + ASSIGNMENT_PAGE_SIZE - 1);
+    if (!data || data.length === 0) break;
+    for (const row of data) ids.add(row.lead_id);
+    if (data.length < ASSIGNMENT_PAGE_SIZE) break;
+    offset += ASSIGNMENT_PAGE_SIZE;
+  }
+  return ids;
+}
+
+/**
+ * Pipeline (leads): per klant + branche maximaal één actieve batch ontvangt nieuwe toewijzingen —
+ * de oudste batch die nog niet vol is en waarvan starts_at al bereikt is (FIFO / strict queue).
+ */
+function isPipelineBatchOpenForInbound<T extends {
+  leads_delivered: number | null;
+  batch_size: number;
+  starts_at?: string | null;
+}>(b: T, now: Date): boolean {
+  const delivered = Number(b.leads_delivered ?? 0);
+  const size = Number(b.batch_size ?? 0);
+  if (size <= 0 || delivered >= size) return false;
+  if (b.starts_at && new Date(b.starts_at) > now) return false;
+  return true;
+}
+
+function filterActivePipelineBatchesToFifoHeadPerCustomer<T extends {
+  id: string;
+  customer_id: string;
+  branch: string;
+  created_at: string;
+  leads_delivered: number | null;
+  batch_size: number;
+  starts_at?: string | null;
+}>(batches: T[], now: Date): T[] {
+  const byCustomer = new Map<string, T[]>();
+  for (const b of batches) {
+    const key = b.customer_id;
+    const list = byCustomer.get(key);
+    if (list) list.push(b);
+    else byCustomer.set(key, [b]);
+  }
+  const keep = new Set<string>();
+  for (const list of byCustomer.values()) {
+    list.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+    const head = list.find(b => isPipelineBatchOpenForInbound(b, now));
+    if (head) keep.add(head.id);
+  }
+  return batches.filter(b => keep.has(b.id));
+}
+
 function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371;
   const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -152,13 +222,16 @@ export async function distributeLead(lead: LeadForDistribution): Promise<Distrib
 
   if (!activeBatches || activeBatches.length === 0) return result;
 
-  const batchesWithWeeklyLimit = activeBatches.filter(b => b.leads_per_week && b.leads_per_week > 0);
-  const batchesWithDailyLimit = activeBatches.filter(b => b.leads_per_day && b.leads_per_day > 0);
+  const now = new Date();
+  const fifoActiveBatches = filterActivePipelineBatchesToFifoHeadPerCustomer(activeBatches, now);
+  if (fifoActiveBatches.length === 0) return result;
+
+  const batchesWithWeeklyLimit = fifoActiveBatches.filter(b => b.leads_per_week && b.leads_per_week > 0);
+  const batchesWithDailyLimit = fifoActiveBatches.filter(b => b.leads_per_day && b.leads_per_day > 0);
   const weeklyCountByBatch: Record<string, number> = {};
   const dailyCountByBatch: Record<string, number> = {};
 
   if (batchesWithWeeklyLimit.length > 0 || batchesWithDailyLimit.length > 0) {
-    const now = new Date();
     const weekStart = new Date(now);
     weekStart.setDate(weekStart.getDate() - weekStart.getDay() + (weekStart.getDay() === 0 ? -6 : 1));
     weekStart.setHours(0, 0, 0, 0);
@@ -187,7 +260,7 @@ export async function distributeLead(lead: LeadForDistribution): Promise<Distrib
     }
   }
 
-  const customerIds = [...new Set(activeBatches.map(b => b.customer_id))];
+  const customerIds = [...new Set(fifoActiveBatches.map(b => b.customer_id))];
 
   const { data: targets } = await supabase
     .from('customer_targets')
@@ -225,8 +298,7 @@ export async function distributeLead(lead: LeadForDistribution): Promise<Distrib
 
   const matches: Match[] = [];
 
-  const now = new Date();
-  for (const batch of activeBatches) {
+  for (const batch of fifoActiveBatches) {
     if (batch.leads_delivered >= batch.batch_size) continue;
     if (recentAssignedIds.has(batch.customer_id)) continue;
     if (batch.starts_at && new Date(batch.starts_at) > now) continue;
@@ -330,7 +402,7 @@ export async function distributeLead(lead: LeadForDistribution): Promise<Distrib
       .from('lead_assignments')
       .select('id', { count: 'exact', head: true })
       .eq('batch_id', m.batch_id);
-    const batchForCheck = activeBatches.find(b => b.id === m.batch_id);
+    const batchForCheck = fifoActiveBatches.find(b => b.id === m.batch_id);
     const externalOffset = (batchForCheck as any)?.leads_delivered_external || 0;
     if (batchForCheck && (currentCount || 0) + externalOffset >= batchForCheck.batch_size) continue;
 
@@ -415,6 +487,22 @@ export async function backfillBatch(batchId: string, lookbackDays: number): Prom
   if (batch.is_paid === false) return { assigned: 0 };
   if (batch.starts_at && new Date(batch.starts_at) > new Date()) return { assigned: 0 };
 
+  const nowBf = new Date();
+  const { data: fifoSiblings } = await supabase
+    .from('customer_batches')
+    .select('id, created_at, leads_delivered, batch_size, starts_at')
+    .eq('customer_id', batch.customer_id)
+    .eq('branch', batch.branch)
+    .eq('status', 'active')
+    .eq('batch_kind', 'leads')
+    .neq('is_paid', false)
+    .order('created_at', { ascending: true });
+
+  const fifoHead = (fifoSiblings || []).find(b => isPipelineBatchOpenForInbound(b, nowBf));
+  if (!fifoHead || fifoHead.id !== batch.id) {
+    return { assigned: 0 };
+  }
+
   const { data: targets } = await supabase
     .from('customer_targets')
     .select('*')
@@ -475,12 +563,7 @@ export async function backfillBatch(batchId: string, lookbackDays: number): Prom
 
   if (!leads || leads.length === 0) return { assigned: 0 };
 
-  const { data: existingAssignments } = await supabase
-    .from('lead_assignments')
-    .select('lead_id')
-    .eq('customer_id', batch.customer_id);
-
-  const alreadyAssigned = new Set((existingAssignments || []).map(a => a.lead_id));
+  const alreadyAssigned = await fetchAllLeadIdsAssignedToCustomer(supabase, batch.customer_id);
 
   const filters: LeadFilter[] = Array.isArray(batch.lead_filters) ? batch.lead_filters : [];
   let assigned = 0;
