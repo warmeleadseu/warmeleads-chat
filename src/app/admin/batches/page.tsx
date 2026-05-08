@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   PlusIcon,
@@ -43,7 +44,12 @@ interface Batch {
   starts_at: string | null;
   account_manager_id: string | null;
   created_at: string; completed_at: string | null;
+  batch_kind?: string | null;
   customers?: { name: string } | null;
+}
+
+function isBulkLeadsBatch(b: Pick<Batch, 'batch_kind'>): boolean {
+  return (b.batch_kind || 'leads') === 'bulk_leads';
 }
 interface BranchOption { slug: string; name: string; color: string; is_active: boolean }
 interface Customer { id: string; name: string; is_active: boolean }
@@ -386,6 +392,9 @@ export default function BatchesPage() {
                       <td className="px-4 py-3">
                         <div className="flex flex-col gap-1">
                           <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_COLORS[b.status] || 'bg-slate-100 text-slate-600'}`}>{STATUS_LABELS[b.status] || b.status}</span>
+                          {isBulkLeadsBatch(b) && (
+                            <span className="w-fit rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold text-violet-800">Bulk</span>
+                          )}
                           {!b.is_paid && (
                             <span className="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-600">Onbetaald</span>
                           )}
@@ -454,6 +463,9 @@ export default function BatchesPage() {
                       <div className="mt-1 flex items-center gap-1.5">
                         <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${c.light} ${c.text}`}>{br.name}</span>
                         <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${STATUS_COLORS[b.status] || 'bg-slate-100 text-slate-600'}`}>{STATUS_LABELS[b.status] || b.status}</span>
+                        {isBulkLeadsBatch(b) && (
+                          <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold text-violet-800">Bulk</span>
+                        )}
                         {!b.is_paid && <span className="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-600">Onbetaald</span>}
                         {b.starts_at && new Date(b.starts_at) > new Date() && (
                           <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
@@ -757,6 +769,9 @@ function BatchDetailPanel({ batchId, branches, onClose, onEdit }: {
                 <div className="flex flex-wrap items-center gap-2">
                   <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${c.light} ${c.text}`}>{br.name}</span>
                   <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_COLORS[batch.status] || 'bg-slate-100 text-slate-600'}`}>{STATUS_LABELS[batch.status] || batch.status}</span>
+                  {isBulkLeadsBatch(batch) && (
+                    <span className="rounded-full bg-violet-100 px-2.5 py-1 text-xs font-semibold text-violet-800">Bulk CRM</span>
+                  )}
                   {batch.is_paid ? (
                     <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
                       <CheckBadgeIcon className="h-3.5 w-3.5" /> Betaald
@@ -777,6 +792,26 @@ function BatchDetailPanel({ batchId, branches, onClose, onEdit }: {
                     <> &middot; <span className="font-medium text-amber-600">Start {formatStartsAt(batch.starts_at)}</span></>
                   )}
                 </div>
+
+                {isBulkLeadsBatch(batch) && (
+                  <div className="space-y-2">
+                    <div className="rounded-lg border border-violet-200 bg-violet-50/60 px-3 py-2.5 text-xs text-violet-900">
+                      <p className="font-medium">Bulk-leads pakket</p>
+                      <p className="mt-0.5 text-violet-800/90">
+                        Er worden geen leads automatisch via de pijplijn toegewezen. Gebruik bulk export op de leads-pagina om leads aan het klantportaal te koppelen aan deze batch.
+                      </p>
+                    </div>
+                    {batch.is_paid && (
+                      <Link
+                        href={`/admin/leads?customer=${encodeURIComponent(batch.customer_id)}&bulk_batch=${encodeURIComponent(batch.id)}`}
+                        className="flex w-full items-center justify-center gap-2 rounded-lg border border-violet-300 bg-white px-4 py-2.5 text-sm font-semibold text-violet-800 shadow-sm transition hover:bg-violet-50"
+                      >
+                        <ArrowDownTrayIcon className="h-4 w-4" />
+                        Bulk leads uitdelen
+                      </Link>
+                    )}
+                  </div>
+                )}
 
                 {/* Progress */}
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
@@ -1463,6 +1498,7 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
   const [form, setForm] = useState({
     customer_id: '', branch: '', batch_size: 100, is_paid: false,
     price_per_lead: '', leads_per_day: '', leads_per_week: '', lookback_days: '3', notes: '', lead_filters: [] as LeadFilter[],
+    batch_delivery: 'pipeline' as 'pipeline' | 'bulk',
   });
   const [saving, setSaving] = useState(false);
   const [branchFields, setBranchFields] = useState<BranchField[]>([]);
@@ -1553,6 +1589,7 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
           notes: form.notes || null,
           lead_filters: form.lead_filters.filter(f => f.field && (f.values?.length || 0) > 0),
           starts_at: startsAtISO,
+          batch_kind: form.batch_delivery === 'bulk' ? 'bulk_leads' : 'leads',
         }),
       });
       if (res.ok) onCreated();
@@ -1599,6 +1636,36 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
               <option value="">Selecteer branche...</option>
               {activeBranches.map(b => <option key={b.slug} value={b.slug}>{b.name}</option>)}
             </select>
+          </div>
+
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <p className="mb-2 text-xs font-medium text-slate-700">Levering</p>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setForm(f => ({ ...f, batch_delivery: 'pipeline' }))}
+                className={`rounded-lg border px-3 py-2 text-left text-xs font-semibold transition ${
+                  form.batch_delivery === 'pipeline'
+                    ? 'border-brand-purple bg-brand-purple/10 text-brand-purple'
+                    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                Verse leads
+                <span className="mt-0.5 block font-normal text-[10px] text-slate-500">Automatische pijplijn + backfill</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setForm(f => ({ ...f, batch_delivery: 'bulk' }))}
+                className={`rounded-lg border px-3 py-2 text-left text-xs font-semibold transition ${
+                  form.batch_delivery === 'bulk'
+                    ? 'border-violet-500 bg-violet-50 text-violet-900'
+                    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                Bulk (CRM)
+                <span className="mt-0.5 block font-normal text-[10px] text-slate-500">Alleen factuur/anker; export naar portaal</span>
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -1665,43 +1732,49 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
             </div>
           </div>
 
-          {/* Lookback */}
-          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-            <div className="mb-2 flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-slate-700">Lookback dagen</p>
-                <p className="text-[11px] text-slate-400">
-                  {form.lookback_days === '0'
-                    ? 'Alleen nieuwe leads, geen bestaande leads laden'
-                    : `Direct bestaande leads van de afgelopen ${form.lookback_days || 3} dag(en) toewijzen`}
-                </p>
+          {/* Lookback — alleen zinvol voor pijplijn-batches */}
+          {form.batch_delivery === 'pipeline' ? (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-slate-700">Lookback dagen</p>
+                  <p className="text-[11px] text-slate-400">
+                    {form.lookback_days === '0'
+                      ? 'Alleen nieuwe leads, geen bestaande leads laden'
+                      : `Direct bestaande leads van de afgelopen ${form.lookback_days || 3} dag(en) toewijzen`}
+                  </p>
+                </div>
+                <input
+                  type="number"
+                  value={form.lookback_days}
+                  onChange={e => setForm(f => ({ ...f, lookback_days: e.target.value }))}
+                  min={0}
+                  max={30}
+                  className="w-16 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-center text-sm font-semibold text-slate-900 outline-none focus:border-brand-purple/50"
+                />
               </div>
-              <input
-                type="number"
-                value={form.lookback_days}
-                onChange={e => setForm(f => ({ ...f, lookback_days: e.target.value }))}
-                min={0}
-                max={30}
-                className="w-16 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-center text-sm font-semibold text-slate-900 outline-none focus:border-brand-purple/50"
-              />
+              <div className="flex gap-1">
+                {[0, 1, 3, 7, 14].map(d => (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => setForm(f => ({ ...f, lookback_days: String(d) }))}
+                    className={`rounded-md px-2 py-1 text-[11px] font-medium transition ${
+                      form.lookback_days === String(d)
+                        ? 'bg-brand-purple text-white'
+                        : 'bg-white text-slate-500 hover:bg-slate-100'
+                    }`}
+                  >
+                    {d === 0 ? 'Geen' : `${d}d`}
+                  </button>
+                ))}
+              </div>
             </div>
-            <div className="flex gap-1">
-              {[0, 1, 3, 7, 14].map(d => (
-                <button
-                  key={d}
-                  type="button"
-                  onClick={() => setForm(f => ({ ...f, lookback_days: String(d) }))}
-                  className={`rounded-md px-2 py-1 text-[11px] font-medium transition ${
-                    form.lookback_days === String(d)
-                      ? 'bg-brand-purple text-white'
-                      : 'bg-white text-slate-500 hover:bg-slate-100'
-                  }`}
-                >
-                  {d === 0 ? 'Geen' : `${d}d`}
-                </button>
-              ))}
+          ) : (
+            <div className="rounded-lg border border-violet-200 bg-violet-50/40 p-3 text-[11px] text-violet-900">
+              Lookback en automatische backfill gelden niet voor bulk-batches. Leads koppel je later via <span className="font-semibold">Admin → Leads → Bulk export</span> met portaaltoewijzing.
             </div>
-          </div>
+          )}
 
           {/* Startdatum */}
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
@@ -1709,7 +1782,9 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
               <div>
                 <p className="text-sm font-medium text-slate-700">Startdatum</p>
                 <p className="text-[11px] text-slate-400">
-                  {scheduledStart ? 'Batch start op het ingestelde tijdstip' : 'Batch start direct na aanmaken'}
+                  {form.batch_delivery === 'bulk'
+                    ? (scheduledStart ? 'Batch wordt actief op het ingestelde tijdstip (zonder automatische lead-toewijzing).' : 'Batch start direct na aanmaken.')
+                    : (scheduledStart ? 'Batch start op het ingestelde tijdstip' : 'Batch start direct na aanmaken')}
                 </p>
               </div>
               <button type="button" onClick={() => {
@@ -1750,8 +1825,9 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
                   </div>
                 </div>
                 <p className="col-span-2 text-[10px] text-slate-400">
-                  Batch is direct betaalbaar, maar leads worden pas toegewezen vanaf dit moment.
-                  De lookback telt dan ook terug vanaf de startdatum.
+                  {form.batch_delivery === 'bulk'
+                    ? 'Batch is direct betaalbaar; bulk-leads worden handmatig via export aan het portaal gekoppeld.'
+                    : 'Batch is direct betaalbaar, maar leads worden pas toegewezen vanaf dit moment. De lookback telt dan ook terug vanaf de startdatum.'}
                 </p>
               </div>
             )}
@@ -1768,7 +1844,11 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
             <div>
               <p className="text-sm font-medium text-slate-700">Betaalstatus</p>
               <p className="text-[11px] text-slate-400">
-                {form.is_paid ? 'Batch wordt als betaald gemarkeerd' : 'Klant kan via portaal betalen'}
+                {form.is_paid
+                  ? 'Batch wordt als betaald gemarkeerd'
+                  : form.batch_delivery === 'bulk'
+                    ? 'Open factuur / betaallink voor het bulk-pakket'
+                    : 'Klant kan via portaal betalen'}
               </p>
             </div>
             <button type="button" onClick={() => setForm(f => ({ ...f, is_paid: !f.is_paid }))}

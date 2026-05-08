@@ -62,6 +62,7 @@ export async function POST(
   } else {
     const { data: br } = await supabase.from('branches').select('name').eq('slug', batch.branch).single();
     const isResearch = batch.batch_kind === 'niche_research';
+    const isBulk = batch.batch_kind === 'bulk_leads';
     const nicheTitle =
       typeof batch.niche_title === 'string' && batch.niche_title.trim() ? batch.niche_title.trim() : null;
     const created = await createInvoice({
@@ -74,7 +75,9 @@ export async function POST(
       status: 'open',
       ...(isResearch
         ? { invoice_product: 'niche_research' as const, niche_title: nicheTitle }
-        : {}),
+        : isBulk
+          ? { invoice_product: 'bulk_leads' as const }
+          : {}),
     });
     invoiceId = created.id;
   }

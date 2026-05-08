@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   MagnifyingGlassIcon,
@@ -368,6 +369,7 @@ function getLeadFieldValue(lead: Lead, key: string): string {
 }
 
 export default function LeadsCRMPage() {
+  const searchParams = useSearchParams();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [branches, setBranches] = useState<BranchConfig[]>([]);
@@ -400,6 +402,9 @@ export default function LeadsCRMPage() {
   const [showNew, setShowNew] = useState(false);
   const [bulkStatus, setBulkStatus] = useState('');
   const [showExportModal, setShowExportModal] = useState(false);
+  const [exportModalKey, setExportModalKey] = useState(0);
+  const [exportPresetCustomerId, setExportPresetCustomerId] = useState('');
+  const [exportPresetBulkBatchId, setExportPresetBulkBatchId] = useState('');
   const [exportHistory, setExportHistory] = useState<LeadExport[]>([]);
   const [showExportHistory, setShowExportHistory] = useState(false);
   const [undoingExportId, setUndoingExportId] = useState<string | null>(null);
@@ -479,6 +484,15 @@ export default function LeadsCRMPage() {
   useEffect(() => { fetchLeads(); }, [fetchLeads]);
   useEffect(() => { fetchFacets(); }, [fetchFacets]);
   useEffect(() => { setPage(1); }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, search, perPage]);
+
+  useEffect(() => {
+    const c = searchParams.get('customer');
+    if (!c) return;
+    setExportPresetCustomerId(c);
+    setExportPresetBulkBatchId(searchParams.get('bulk_batch') || '');
+    setExportModalKey(k => k + 1);
+    setShowExportModal(true);
+  }, [searchParams]);
 
   const branchMap = useMemo(() => {
     const m: Record<string, BranchConfig> = {};
@@ -603,7 +617,15 @@ export default function LeadsCRMPage() {
               <><MapPinIcon className="h-4 w-4" /> Adressen aanvullen</>
             )}
           </button>
-          <button onClick={() => setShowExportModal(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">
+          <button
+            onClick={() => {
+              setExportPresetCustomerId('');
+              setExportPresetBulkBatchId('');
+              setExportModalKey(k => k + 1);
+              setShowExportModal(true);
+            }}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+          >
             <ArrowDownTrayIcon className="h-4 w-4" /> Bulk export
           </button>
           <button onClick={() => setShowNew(true)} className="inline-flex items-center gap-1.5 rounded-lg bg-button-gradient px-3.5 py-2 text-sm font-bold text-white shadow-sm">
@@ -1019,9 +1041,12 @@ export default function LeadsCRMPage() {
       <AnimatePresence>
         {showExportModal && (
           <ExportModal
+            key={exportModalKey}
             total={total}
             customers={customers}
             filterParams={currentFilterParams}
+            presetCustomerId={exportPresetCustomerId}
+            presetBulkBatchId={exportPresetBulkBatchId}
             onClose={() => setShowExportModal(false)}
             onExported={() => { fetchLeads(); fetchExportHistory(); }}
           />
@@ -1032,16 +1057,19 @@ export default function LeadsCRMPage() {
 }
 
 function ExportModal({
-  total, customers, filterParams, onClose, onExported,
+  total, customers, filterParams, presetCustomerId, presetBulkBatchId, onClose, onExported,
 }: {
   total: number;
   customers: Customer[];
   filterParams: Record<string, string>;
+  presetCustomerId?: string;
+  presetBulkBatchId?: string;
   onClose: () => void;
   onExported: () => void;
 }) {
-  const [targetCustomerId, setTargetCustomerId] = useState('');
-  const [addToPortal, setAddToPortal] = useState(false);
+  const [targetCustomerId, setTargetCustomerId] = useState(presetCustomerId || '');
+  const [bulkBatchId, setBulkBatchId] = useState(presetBulkBatchId || '');
+  const [addToPortal, setAddToPortal] = useState(!!(presetCustomerId && presetBulkBatchId));
   const [format, setFormat] = useState<'csv' | 'xlsx'>('xlsx');
   const [prioritize, setPrioritize] = useState(true);
   const [maxLeads, setMaxLeads] = useState('');
@@ -1063,6 +1091,9 @@ function ExportModal({
       if (targetCustomerId) {
         body.target_customer_id = targetCustomerId;
         body.add_to_portal = addToPortal;
+        if (addToPortal && bulkBatchId) {
+          body.bulk_batch_id = bulkBatchId;
+        }
       }
       if (excludeCustomers.length > 0) {
         body.exclude_customer_id = excludeCustomers.join(',');
@@ -1118,12 +1149,33 @@ function ExportModal({
 
             <div>
               <label className="mb-1.5 block text-xs font-medium text-slate-500">Exporteren voor klant (optioneel)</label>
-              <select value={targetCustomerId} onChange={e => { setTargetCustomerId(e.target.value); if (!e.target.value) setAddToPortal(false); }}
-                className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm text-slate-900">
+              <select
+                value={targetCustomerId}
+                onChange={e => {
+                  const v = e.target.value;
+                  if (!v) {
+                    setTargetCustomerId('');
+                    setAddToPortal(false);
+                    setBulkBatchId('');
+                    return;
+                  }
+                  if (v !== targetCustomerId) setBulkBatchId('');
+                  setTargetCustomerId(v);
+                }}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm text-slate-900"
+              >
                 <option value="">- Geen specifieke klant -</option>
                 {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
+
+            {bulkBatchId && targetCustomerId && (
+              <div className="rounded-lg border border-violet-200 bg-violet-50/50 px-3 py-2 text-xs text-violet-900">
+                <span className="font-semibold">Bulk-batch</span>
+                <span className="ml-1 font-mono text-[11px] text-violet-700">{bulkBatchId.slice(0, 8)}…</span>
+                <p className="mt-1 text-violet-800/90">Portaaltoewijzingen krijgen deze batch als <code className="rounded bg-white/80 px-1">batch_id</code>.</p>
+              </div>
+            )}
 
             {targetCustomerId && (
               <label className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-slate-50/50 px-4 py-3 text-sm text-slate-700 cursor-pointer hover:bg-slate-50">

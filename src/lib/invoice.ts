@@ -17,7 +17,7 @@ interface CreateInvoiceParams {
   paid_at?: string;
   status?: 'paid' | 'open';
   /** Onderzoeksbatch: factuurregels spreken over onderzoek i.p.v. "X leads" */
-  invoice_product?: 'leads' | 'niche_research';
+  invoice_product?: 'leads' | 'niche_research' | 'bulk_leads';
   /** Titel van de te onderzoeken niche (alleen bij niche_research) */
   niche_title?: string | null;
 }
@@ -88,19 +88,24 @@ export async function createInvoice(params: CreateInvoiceParams) {
   const totalInclBtw = subtotal + btwAmount;
 
   const isNiche = params.invoice_product === 'niche_research';
+  const isBulk = params.invoice_product === 'bulk_leads';
   const nicheLabel = (params.niche_title || '').trim();
   const lineDescription = isNiche
     ? `Onderzoeksbatch niche-onderzoek${nicheLabel ? `: ${nicheLabel}` : ''} (€${subtotal.toFixed(2).replace('.', ',')} excl. btw)`
-    : `${params.branch_name} leads`;
+    : isBulk
+      ? `Bulk-leads pakket ${params.branch_name}: ${params.batch_size} leads (€${subtotal.toFixed(2).replace('.', ',')} excl. btw)`
+      : `${params.branch_name} leads`;
 
   const invoiceSummaryDescription = isNiche
     ? `Onderzoeksbatch niche-onderzoek${nicheLabel ? ` (${nicheLabel})` : ''}`
-    : `${params.batch_size} ${params.branch_name} leads`;
+    : isBulk
+      ? `Bulk-leads: ${params.batch_size} × ${params.branch_name}`
+      : `${params.batch_size} ${params.branch_name} leads`;
 
   const lineItems: InvoiceLineItem[] = [{
     description: lineDescription,
-    quantity: isNiche ? 1 : params.batch_size,
-    unit_price: isNiche ? subtotal : Number(params.price_per_lead),
+    quantity: isNiche || isBulk ? 1 : params.batch_size,
+    unit_price: isNiche || isBulk ? subtotal : Number(params.price_per_lead),
     total: subtotal,
   }];
 

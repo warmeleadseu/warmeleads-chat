@@ -18,6 +18,7 @@ export async function GET(request: NextRequest) {
     .from('customer_batches')
     .select('id, customer_id, branch, batch_size, leads_delivered, completed_at')
     .eq('status', 'completed')
+    .eq('batch_kind', 'leads')
     .eq('notified_completed', true)
     .eq('notified_reminder', false)
     .lte('completed_at', threeDaysAgo.toISOString());
@@ -49,6 +50,7 @@ export async function GET(request: NextRequest) {
       .select('id', { count: 'exact', head: true })
       .eq('customer_id', batch.customer_id)
       .eq('branch', batch.branch)
+      .eq('batch_kind', 'leads')
       .eq('status', 'active')
       .neq('is_paid', false);
 

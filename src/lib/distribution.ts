@@ -2,6 +2,7 @@ import { createServerClient } from './supabase';
 import { sendLeadNotification } from './email';
 import { sendNewLeadPush } from './pushNotification';
 import { syncBatchDelivered } from './batchSync';
+import { isPipelineBatchKind } from './batchKind';
 
 const MAX_ASSIGNMENTS = 3;
 const TARGET_AVG_ASSIGNMENTS = 2;
@@ -144,6 +145,7 @@ export async function distributeLead(lead: LeadForDistribution): Promise<Distrib
     .select('id, customer_id, branch, batch_size, leads_delivered, leads_delivered_external, leads_per_week, leads_per_day, lead_filters, created_at, is_paid, starts_at, customers!inner(id, is_active, portal_active)')
     .eq('branch', lead.branch)
     .eq('status', 'active')
+    .eq('batch_kind', 'leads')
     .eq('customers.is_active', true)
     .neq('is_paid', false)
     .order('created_at', { ascending: true });
@@ -401,12 +403,15 @@ export async function backfillBatch(batchId: string, lookbackDays: number): Prom
 
   const { data: batch } = await supabase
     .from('customer_batches')
-    .select('id, customer_id, branch, batch_size, leads_delivered, leads_delivered_external, leads_per_week, leads_per_day, lead_filters, is_paid, starts_at, customers!inner(id, is_active)')
+    .select('id, customer_id, branch, batch_size, leads_delivered, leads_delivered_external, leads_per_week, leads_per_day, lead_filters, is_paid, starts_at, batch_kind, customers!inner(id, is_active)')
     .eq('id', batchId)
     .eq('status', 'active')
     .single();
 
-  if (!batch || batch.leads_delivered >= batch.batch_size) return { assigned: 0 };
+  if (!batch || !isPipelineBatchKind((batch as { batch_kind?: string }).batch_kind)) {
+    return { assigned: 0 };
+  }
+  if (batch.leads_delivered >= batch.batch_size) return { assigned: 0 };
   if (batch.is_paid === false) return { assigned: 0 };
   if (batch.starts_at && new Date(batch.starts_at) > new Date()) return { assigned: 0 };
 

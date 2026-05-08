@@ -132,6 +132,7 @@ export async function GET(request: NextRequest) {
     .from('customer_batches')
     .select('id, lookback_days, starts_at')
     .eq('status', 'active')
+    .eq('batch_kind', 'leads')
     .eq('is_paid', true)
     .not('starts_at', 'is', null)
     .lte('starts_at', new Date().toISOString())

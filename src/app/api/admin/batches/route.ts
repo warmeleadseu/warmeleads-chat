@@ -4,6 +4,7 @@ import { createServerClient } from '@/lib/supabase';
 import { backfillBatch, distributeUnassignedLeads } from '@/lib/distribution';
 import { checkBatchMilestones } from '@/lib/batchNotifications';
 import { createInvoice, markInvoicePaid, sendNewBatchAdminEmail } from '@/lib/invoice';
+import { isPipelineBatchKind, normalizeBatchKind } from '@/lib/batchKind';
 
 export async function GET(request: NextRequest) {
   const admin = await verifyAdmin(request);
@@ -41,7 +42,14 @@ export async function POST(request: NextRequest) {
   const supabase = createServerClient();
   const body = await request.json();
 
-  const { customer_id, branch, batch_size, price_per_lead, leads_per_week, leads_per_day, notes, lead_filters, is_paid, lookback_days, starts_at } = body;
+  const {
+    customer_id, branch, batch_size, price_per_lead, leads_per_week, leads_per_day, notes, lead_filters, is_paid, lookback_days, starts_at,
+    batch_kind: rawBatchKind,
+  } = body;
+  const batch_kind = normalizeBatchKind(typeof rawBatchKind === 'string' ? rawBatchKind : undefined);
+  if (batch_kind === 'niche_research') {
+    return NextResponse.json({ error: 'Onderzoeksbatches worden via het portaal aangemaakt' }, { status: 400 });
+  }
   if (!customer_id || !branch || !batch_size) {
     return NextResponse.json({ error: 'Vereiste velden ontbreken' }, { status: 400 });
   }
@@ -64,7 +72,22 @@ export async function POST(request: NextRequest) {
 
   const { data, error } = await supabase
     .from('customer_batches')
-    .insert({ customer_id, branch, batch_size, price_per_lead, total_price, leads_per_week: leads_per_week || null, leads_per_day: leads_per_day || null, notes, lead_filters: sanitizedFilters, is_paid: is_paid !== false, lookback_days: lookback, starts_at: startsAtValue, account_manager_id: custRow?.account_manager_id || null })
+    .insert({
+      customer_id,
+      branch,
+      batch_size,
+      price_per_lead,
+      total_price,
+      leads_per_week: leads_per_week || null,
+      leads_per_day: leads_per_day || null,
+      notes,
+      lead_filters: sanitizedFilters,
+      is_paid: is_paid !== false,
+      lookback_days: lookback,
+      starts_at: startsAtValue,
+      account_manager_id: custRow?.account_manager_id || null,
+      batch_kind,
+    })
     .select()
     .single();
 
@@ -72,7 +95,7 @@ export async function POST(request: NextRequest) {
 
   // Targeted backfill: only if starts_at is NULL or in the past
   const startsInFuture = startsAtValue && new Date(startsAtValue) > new Date();
-  if (lookback > 0 && !startsInFuture) {
+  if (lookback > 0 && !startsInFuture && isPipelineBatchKind(batch_kind)) {
     try { backfillBatch(data.id, lookback); } catch { /* non-blocking */ }
   }
 
@@ -101,6 +124,7 @@ export async function POST(request: NextRequest) {
       total_price,
       status: batchIsPaid ? 'paid' : 'open',
       ...(batchIsPaid ? { paid_at: new Date().toISOString() } : {}),
+      ...(batch_kind === 'bulk_leads' ? { invoice_product: 'bulk_leads' as const } : {}),
     }).catch(e => console.error('[admin/batches] invoice creation failed:', e));
   }
 
@@ -133,6 +157,14 @@ export async function PUT(request: NextRequest) {
   if (fetchError || !existing) {
     console.error('[admin/batches PUT] fetch error:', fetchError?.message);
     return NextResponse.json({ error: fetchError?.message || 'Batch niet gevonden' }, { status: fetchError ? 500 : 404 });
+  }
+
+  if (updates.batch_kind !== undefined) {
+    const nextKind = normalizeBatchKind(typeof updates.batch_kind === 'string' ? updates.batch_kind : undefined);
+    if (nextKind === 'niche_research') {
+      return NextResponse.json({ error: 'Onderzoeksbatches kunnen niet via admin worden ingesteld' }, { status: 400 });
+    }
+    updates.batch_kind = nextKind;
   }
 
   if (admin.role === 'accountmanager') {
@@ -194,7 +226,7 @@ export async function PUT(request: NextRequest) {
     'batch_size', 'leads_delivered', 'leads_delivered_external', 'is_paid',
     'price_per_lead', 'total_price', 'leads_per_day', 'leads_per_week',
     'notes', 'lead_filters', 'status', 'completed_at', 'lookback_days',
-    'compensations', 'starts_at', 'account_manager_id',
+    'compensations', 'starts_at', 'account_manager_id', 'batch_kind',
   ];
   const safeUpdates: Record<string, unknown> = {};
   for (const key of allowedFields) {
@@ -213,15 +245,22 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  const effectiveBatchKind =
+    updates.batch_kind !== undefined
+      ? String(updates.batch_kind)
+      : (existing as { batch_kind?: string }).batch_kind;
+
   // Trigger milestone notifications when leads_delivered changes
   if (updates.leads_delivered !== undefined && updates.leads_delivered !== existing.leads_delivered) {
     const batchSize = updates.batch_size ?? existing.batch_size;
-    checkBatchMilestones(supabase, id, updates.leads_delivered, batchSize).catch(() => {});
+    if (isPipelineBatchKind(effectiveBatchKind)) {
+      checkBatchMilestones(supabase, id, updates.leads_delivered, batchSize).catch(() => {});
+    }
   }
 
   // When batch_size grew and backfill requested, fill the extra slots
   const batchGrew = trigger_backfill && updates.batch_size && updates.batch_size > existing.batch_size;
-  if (batchGrew) {
+  if (batchGrew && isPipelineBatchKind(effectiveBatchKind)) {
     const lookback = existing.lookback_days ?? 3;
     try { backfillBatch(id, Math.max(lookback, 3)); } catch { /* non-blocking */ }
   }

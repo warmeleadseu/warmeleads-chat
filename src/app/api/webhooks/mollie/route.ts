@@ -6,7 +6,8 @@ import { sendOrderConfirmationEmail, sendEmail } from '@/lib/email';
 import { sendPushToCustomer } from '@/lib/pushNotification';
 import { createInvoice, notifyCustomerInvoicePaid, sendNewBatchAdminEmail } from '@/lib/invoice';
 import { insertCelebrationEvent } from '@/lib/celebrationInsert';
-import { finalizePaidLeadBatch } from '@/lib/finalizePaidLeadBatch';
+import { finalizePaidLeadBatch, finalizePaidBulkLeadBatch } from '@/lib/finalizePaidLeadBatch';
+import { isBulkLeadsBatchKind } from '@/lib/batchKind';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.warmeleads.eu';
 
@@ -228,11 +229,15 @@ export async function POST(request: NextRequest) {
               .update({ is_paid: true, mollie_payment_id: paymentId })
               .eq('id', inv.batch_id)
               .eq('is_paid', false)
-              .select('id, customer_id, branch, batch_size, price_per_lead, total_price, leads_per_week, leads_per_day, lead_filters, starts_at, lookback_days')
+              .select('id, customer_id, branch, batch_size, price_per_lead, total_price, leads_per_week, leads_per_day, lead_filters, starts_at, lookback_days, batch_kind')
               .single();
 
             if (batchClaim) {
-              await finalizePaidLeadBatch(supabase, batchClaim, paymentId, { skipInvoiceHandling: true });
+              if (isBulkLeadsBatchKind(batchClaim.batch_kind)) {
+                await finalizePaidBulkLeadBatch(supabase, batchClaim, paymentId, { skipInvoiceHandling: true });
+              } else {
+                await finalizePaidLeadBatch(supabase, batchClaim, paymentId, { skipInvoiceHandling: true });
+              }
             }
           }
         }
@@ -293,10 +298,13 @@ export async function POST(request: NextRequest) {
 
       const { data: orderCust } = await supabase.from('customers').select('id, name, email, contact_person, account_manager_id').eq('id', order.customer_id).single();
 
+      const rawKind = (order as { batch_kind?: string }).batch_kind;
       const orderBatchKind =
-        (order as { batch_kind?: string }).batch_kind === 'niche_research'
+        rawKind === 'niche_research'
           ? 'niche_research'
-          : 'leads';
+          : rawKind === 'bulk_leads'
+            ? 'bulk_leads'
+            : 'leads';
       const orderNicheTitle =
         typeof (order as { niche_title?: string }).niche_title === 'string'
           ? String((order as { niche_title?: string }).niche_title).trim()
@@ -396,15 +404,19 @@ export async function POST(request: NextRequest) {
         const pushBody =
           orderBatchKind === 'niche_research' && orderNicheTitle
             ? `Je onderzoeksbatch voor "${orderNicheTitle}" is bevestigd.`
-            : `Je nieuwe batch ${branchName} (${order.batch_size} leads) is aangemaakt.`;
+            : orderBatchKind === 'bulk_leads'
+              ? `Je bulk-pakket ${branchName} (${order.batch_size} leads) is bevestigd.`
+              : `Je nieuwe batch ${branchName} (${order.batch_size} leads) is aangemaakt.`;
 
-        sendOrderConfirmationEmail(orderCust, {
-          branch: order.branch,
-          branch_name: branchName,
-          batch_size: order.batch_size,
-          total_price: order.total_price,
-          price_per_lead: order.price_per_lead,
-        }).catch(() => {});
+        if (orderBatchKind !== 'bulk_leads') {
+          sendOrderConfirmationEmail(orderCust, {
+            branch: order.branch,
+            branch_name: branchName,
+            batch_size: order.batch_size,
+            total_price: order.total_price,
+            price_per_lead: order.price_per_lead,
+          }).catch(() => {});
+        }
 
         sendPushToCustomer(orderCust.id, {
           title: 'Bestelling bevestigd!',
@@ -425,7 +437,12 @@ export async function POST(request: NextRequest) {
         total_price: Number(order.total_price),
         mollie_payment_id: paymentId,
         paid_at: new Date().toISOString(),
-        invoice_product: orderBatchKind === 'niche_research' ? 'niche_research' : 'leads',
+        invoice_product:
+          orderBatchKind === 'niche_research'
+            ? 'niche_research'
+            : orderBatchKind === 'bulk_leads'
+              ? 'bulk_leads'
+              : 'leads',
         niche_title: orderNicheTitle || null,
       }).catch(e => {
         console.error('[mollie-webhook] invoice creation failed:', e);
@@ -462,7 +479,7 @@ export async function POST(request: NextRequest) {
         newBatch.account_manager_id,
       ).catch(() => {});
 
-      if (orderBatchKind !== 'niche_research') {
+      if (orderBatchKind === 'leads') {
         backfillBatch(newBatch.id, 3).catch(() => {});
       }
 

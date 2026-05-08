@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { logAudit } from '@/lib/audit';
+import { isBulkLeadsBatchKind, normalizeBatchKind } from '@/lib/batchKind';
 import * as XLSX from 'xlsx';
 
 const COLUMN_HEADERS = [
@@ -96,6 +97,7 @@ export async function POST(request: NextRequest) {
     phone_valid, date_from, date_to, search, bulk_status,
     target_customer_id, add_to_portal, format,
     max_leads, prioritize_least_exported,
+    bulk_batch_id,
   } = body as Record<string, string | boolean | number | undefined>;
 
   const supabase = createServerClient();
@@ -188,13 +190,46 @@ export async function POST(request: NextRequest) {
 
   if (add_to_portal && target_customer_id) {
     const custId = String(target_customer_id);
-    const { data: activeBatch } = await supabase
-      .from('customer_batches')
-      .select('id')
-      .eq('customer_id', custId)
-      .eq('status', 'active')
-      .limit(1)
-      .maybeSingle();
+    let portalBatchId: string | null = null;
+
+    const bulkIdRaw = bulk_batch_id != null && bulk_batch_id !== '' ? String(bulk_batch_id) : null;
+    if (bulkIdRaw) {
+      const { data: bulkBatch, error: bulkErr } = await supabase
+        .from('customer_batches')
+        .select('id, customer_id, batch_kind, status, is_paid')
+        .eq('id', bulkIdRaw)
+        .maybeSingle();
+
+      if (bulkErr || !bulkBatch) {
+        return NextResponse.json({ error: 'bulk_batch_id ongeldig of niet gevonden' }, { status: 400 });
+      }
+      if (bulkBatch.customer_id !== custId) {
+        return NextResponse.json({ error: 'Bulk-batch hoort niet bij de geselecteerde klant' }, { status: 400 });
+      }
+      if (!isBulkLeadsBatchKind(bulkBatch.batch_kind)) {
+        return NextResponse.json({ error: 'bulk_batch_id moet een bulk-leads batch zijn' }, { status: 400 });
+      }
+      if (bulkBatch.status !== 'active') {
+        return NextResponse.json({ error: 'Bulk-batch moet actief zijn om leads te koppelen' }, { status: 400 });
+      }
+      if (!bulkBatch.is_paid) {
+        return NextResponse.json({ error: 'Bulk-batch moet betaald zijn voordat leads aan het portaal worden gekoppeld' }, { status: 400 });
+      }
+      portalBatchId = bulkBatch.id;
+    } else {
+      const { data: pipelineBatch } = await supabase
+        .from('customer_batches')
+        .select('id, batch_kind')
+        .eq('customer_id', custId)
+        .eq('status', 'active')
+        .eq('batch_kind', 'leads')
+        .limit(1)
+        .maybeSingle();
+
+      if (pipelineBatch && normalizeBatchKind(pipelineBatch.batch_kind) === 'leads') {
+        portalBatchId = pipelineBatch.id;
+      }
+    }
 
     // Find leads already assigned to this customer within the last 30 days
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
@@ -216,7 +251,7 @@ export async function POST(request: NextRequest) {
       lead_id: leadId,
       customer_id: custId,
       source: 'bulk_export' as const,
-      ...(activeBatch ? { batch_id: activeBatch.id } : {}),
+      ...(portalBatchId ? { batch_id: portalBatchId } : {}),
     }));
 
     const CHUNK = 500;
@@ -246,6 +281,9 @@ export async function POST(request: NextRequest) {
   if (search) filterSnapshot.search = search;
   if (bulk_status) filterSnapshot.bulk_status = bulk_status;
   if (max_leads) filterSnapshot.max_leads = max_leads;
+  if (add_to_portal && target_customer_id && bulk_batch_id) {
+    filterSnapshot.bulk_batch_id = String(bulk_batch_id);
+  }
 
   let customerName: string | null = null;
   if (target_customer_id) {
