@@ -313,7 +313,7 @@ export default function ProspectsPage() {
               type="text"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Zoek op bedrijfsnaam, contact, e-mail, KVK, plaats..."
+              placeholder="Zoek op bedrijfsnaam, contact, e-mail, telefoon, KVK, plaats..."
               className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm outline-none focus:border-brand-purple/50"
             />
           </div>

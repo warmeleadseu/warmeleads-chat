@@ -13,6 +13,30 @@ import {
 const DEFAULT_LIMIT = 25;
 const MAX_LIMIT = 200;
 
+/** PostgREST `.or()` filter: bedrijf, contact, e-mail, plaats, KVK, telefoon (+ genormaliseerde cijfers). */
+function buildProspectSearchOrFilter(searchRaw: string): string {
+  const trimmed = searchRaw.trim();
+  if (!trimmed) return '';
+
+  const sanitized = trimmed.replace(/[%_\\]/g, c => `\\${c}`);
+  const parts: string[] = [
+    `company_name.ilike.%${sanitized}%`,
+    `contact_person.ilike.%${sanitized}%`,
+    `email.ilike.%${sanitized}%`,
+    `city.ilike.%${sanitized}%`,
+    `kvk_nummer.ilike.%${sanitized}%`,
+    `phone.ilike.%${sanitized}%`,
+  ];
+
+  const digitsOnly = trimmed.replace(/\D/g, '');
+  if (digitsOnly.length >= 3) {
+    const dSan = digitsOnly.replace(/[%_\\]/g, c => `\\${c}`);
+    parts.push(`phone_digits.ilike.%${dSan}%`);
+  }
+
+  return parts.join(',');
+}
+
 export async function GET(request: NextRequest) {
   const admin = await verifyAdmin(request);
   if (!admin) return unauthorized();
@@ -39,10 +63,11 @@ export async function GET(request: NextRequest) {
   dataQuery = applyAmScope(dataQuery, admin);
 
   if (search) {
-    const sanitized = search.replace(/[%_\\]/g, c => `\\${c}`);
-    const filter = `company_name.ilike.%${sanitized}%,contact_person.ilike.%${sanitized}%,email.ilike.%${sanitized}%,city.ilike.%${sanitized}%,kvk_nummer.ilike.%${sanitized}%`;
-    countQuery = countQuery.or(filter);
-    dataQuery = dataQuery.or(filter);
+    const filter = buildProspectSearchOrFilter(search);
+    if (filter) {
+      countQuery = countQuery.or(filter);
+      dataQuery = dataQuery.or(filter);
+    }
   }
 
   if (status && status !== 'all' && isValidStatus(status)) {
