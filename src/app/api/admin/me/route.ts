@@ -9,7 +9,9 @@ export async function GET(request: NextRequest) {
   const supabase = createServerClient();
   const { data, error } = await supabase
     .from('admin_users')
-    .select('id, email, name, role, phone, title, celebration_video_url, celebration_video_start, celebration_video_end, created_at, last_login')
+    .select(
+      'id, email, name, role, phone, title, is_account_manager, avatar_url, celebration_video_url, celebration_video_start, celebration_video_end, created_at, last_login',
+    )
     .eq('id', admin.id)
     .single();
 

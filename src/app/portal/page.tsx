@@ -45,6 +45,7 @@ import {
 import { usePushNotifications, type PushState } from './usePushNotifications';
 import ExportWizard, { type ExportFilters } from './ExportWizard';
 import { PageHeader, useToast } from './_ui';
+import { STATUS_COLORS, STATUS_OPTIONS } from './_constants/leadStatus';
 
 function WhatsAppIcon({ className }: { className?: string }) {
   return (
@@ -59,25 +60,6 @@ function whatsappUrl(phone: string) {
   const intl = digits.startsWith('0') ? '31' + digits.slice(1) : digits;
   return `https://wa.me/${intl}`;
 }
-
-const STATUS_OPTIONS = [
-  { value: 'all', label: 'Alle statussen' },
-  { value: 'nieuw', label: 'Nieuw' },
-  { value: 'gecontacteerd', label: 'Gecontacteerd' },
-  { value: 'geen_gehoor', label: 'Geen gehoor' },
-  { value: 'offerte', label: 'Offerte' },
-  { value: 'verkocht', label: 'Verkocht' },
-  { value: 'afgewezen', label: 'Afgewezen' },
-];
-
-const STATUS_COLORS: Record<string, string> = {
-  nieuw: 'bg-blue-100 text-blue-700',
-  gecontacteerd: 'bg-amber-100 text-amber-700',
-  geen_gehoor: 'bg-orange-100 text-orange-700',
-  offerte: 'bg-purple-100 text-purple-700',
-  verkocht: 'bg-emerald-100 text-emerald-700',
-  afgewezen: 'bg-slate-100 text-slate-500',
-};
 
 interface BranchField { key: string; label: string; field_type: string; options: string[]; is_required: boolean; sort_order: number; }
 interface BranchConfig { slug: string; name: string; color: string; branch_fields: BranchField[]; }
@@ -232,6 +214,9 @@ function formatCurrencyEUR(amount: number) {
 
 export default function PortalPage() {
   const { customer } = usePortal();
+  const showDemoPortal =
+    customer.show_demo_portal ??
+    (customer.signup_source === 'website' || customer.demo_mode === true);
   const searchParams = useSearchParams();
 
   const [stats, setStats] = useState<Stats>({ totalLeads: 0, newThisWeek: 0, contacted: 0, sold: 0 });
@@ -632,7 +617,7 @@ export default function PortalPage() {
                   Welkom bij WarmeLeads{customer.name ? `, ${customer.name}` : ''}!
                 </h2>
                 <p className="mt-2 text-sm text-slate-500">
-                  {customer.demo_mode
+                  {showDemoPortal
                     ? 'Je account is aangemaakt! Je zit nu in demo modus met voorbeeldleads zodat je het portaal kunt ervaren.'
                     : 'Je account is succesvol aangemaakt. Ontdek je persoonlijke leadportaal.'}
                 </p>
@@ -657,13 +642,13 @@ export default function PortalPage() {
                   <div className="flex items-center gap-3 rounded-lg bg-brand-purple/5 p-3 ring-2 ring-brand-purple/20">
                     <SparklesIcon className="h-5 w-5 shrink-0 text-brand-purple" />
                     <span className="text-sm font-medium text-brand-purple">
-                      {customer.demo_mode ? 'Bekijk demo leads' : 'Bekijk je portaal'}
+                      {showDemoPortal ? 'Bekijk demo leads' : 'Bekijk je portaal'}
                     </span>
                   </div>
                   <div className="flex items-center gap-3 rounded-lg bg-slate-50 p-3">
                     <ShoppingCartIcon className="h-5 w-5 shrink-0 text-slate-400" />
                     <span className="text-sm text-slate-500">
-                      {customer.demo_mode ? 'Bestel je eerste batch voor echte leads' : 'Bestel je eerste leads'}
+                      {showDemoPortal ? 'Bestel je eerste batch voor echte leads' : 'Bestel je eerste leads'}
                     </span>
                   </div>
                 </div>
@@ -674,7 +659,7 @@ export default function PortalPage() {
                     onClick={() => setShowWelcome(false)}
                     className="flex-1 rounded-xl bg-brand-purple px-4 py-3 text-sm font-bold text-white transition hover:bg-brand-purple/90"
                   >
-                    {customer.demo_mode ? 'Bekijk demo portaal' : 'Bekijk mijn portaal'}
+                    {showDemoPortal ? 'Bekijk demo portaal' : 'Bekijk mijn portaal'}
                   </button>
                   <Link
                     href="/portal/bestellen"
@@ -734,7 +719,7 @@ export default function PortalPage() {
 
 
       <BatchConversionCard
-        customerDemoMode={customer.demo_mode}
+        showDemoPortal={showDemoPortal}
         batchesLoading={batchesLoading}
         primaryBatch={primaryBatch}
         latestHistoricalBatchId={latestHistoricalBatchId}
@@ -784,6 +769,7 @@ export default function PortalPage() {
         open={showOverviewPanel}
         onClose={() => setShowOverviewPanel(false)}
         customer={customer}
+        showDemoPortal={showDemoPortal}
         batches={batches}
         batchesLoading={batchesLoading}
         stats={stats}
@@ -1474,7 +1460,7 @@ function LeadDetailPanel({
 }
 
 function BatchConversionCard({
-  customerDemoMode,
+  showDemoPortal,
   batchesLoading,
   primaryBatch,
   latestHistoricalBatchId,
@@ -1485,7 +1471,7 @@ function BatchConversionCard({
   onPayBatch,
   onOpenOverview,
 }: {
-  customerDemoMode: boolean;
+  showDemoPortal: boolean;
   batchesLoading: boolean;
   primaryBatch: Batch | null;
   latestHistoricalBatchId: string | null;
@@ -1496,7 +1482,7 @@ function BatchConversionCard({
   onPayBatch: (batchId: string) => void;
   onOpenOverview: () => void;
 }) {
-  if (customerDemoMode) {
+  if (showDemoPortal) {
     return (
       <div className="rounded-xl border border-brand-purple/25 bg-gradient-to-r from-brand-purple/[0.06] via-brand-pink/[0.05] to-brand-orange/[0.05] p-3 sm:p-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1670,6 +1656,7 @@ function OverviewDetailPanel({
   open,
   onClose,
   customer,
+  showDemoPortal,
   batches,
   batchesLoading,
   stats,
@@ -1684,6 +1671,7 @@ function OverviewDetailPanel({
   open: boolean;
   onClose: () => void;
   customer: { demo_mode: boolean };
+  showDemoPortal: boolean;
   batches: { active: Batch[]; completed: Batch[] };
   batchesLoading: boolean;
   stats: Stats;
@@ -1730,7 +1718,7 @@ function OverviewDetailPanel({
         </div>
 
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] md:p-5">
-          {customer.demo_mode && (
+          {showDemoPortal && (
             <div className="rounded-xl border border-dashed border-brand-purple/30 bg-brand-purple/[0.03] p-4">
               <p className="text-sm font-semibold text-slate-800">Demo modus actief</p>
               <p className="mt-1 text-xs text-slate-500">Je bekijkt demo leads. Bestel je eerste batch voor echte leads.</p>
@@ -1745,7 +1733,7 @@ function OverviewDetailPanel({
             </div>
           )}
 
-          {!customer.demo_mode && (
+          {!showDemoPortal && (
             <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
               {batchesLoading ? (
                 <div className="space-y-2">

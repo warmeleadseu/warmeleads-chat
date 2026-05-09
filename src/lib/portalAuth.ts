@@ -1,48 +1,146 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from './supabase';
 import type { PortalSession } from './portalPermissions';
+import {
+  PORTAL_SESSION_COOKIE,
+  verifyPortalSessionJwt,
+} from '@/lib/portalSession';
+import { looksLikeJwt } from '@/lib/jwtFormat';
 
 export type { PortalSession };
 
+const CUSTOMER_SELECT =
+  'id, name, email, contact_person, branches, portal_active, demo_mode, signup_source, is_active';
+
+const PORTAL_USER_SELECT =
+  'id, customer_id, name, email, role, is_active, permissions, assignment_rules, last_login_at, last_seen_at, login_count, phone, created_at';
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function mapSessionCustomer(row: {
+  id: string;
+  name: string;
+  email: string;
+  contact_person: string | null;
+  branches: string[] | null;
+  portal_active: boolean;
+  demo_mode?: boolean | null;
+  signup_source?: string | null;
+}): PortalSession['customer'] {
+  return {
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    contact_person: row.contact_person || '',
+    branches: row.branches ?? [],
+    portal_active: row.portal_active,
+    demo_mode: row.demo_mode ?? undefined,
+    signup_source: row.signup_source ?? undefined,
+  };
+}
+
 /**
- * Verifies the portal bearer token.
- * Checks customers table first (owner login), then portal_users table (agent login).
- * Returns a PortalSession with the customer + optional portalUser info.
+ * Verifies portal session: httpOnly JWT cookie and/or Bearer (JWT or legacy UUID).
  */
 export async function verifyCustomer(request: NextRequest): Promise<PortalSession | null> {
-  const header = request.headers.get('Authorization');
-  if (!header?.startsWith('Bearer ')) return null;
+  const authHeader = request.headers.get('Authorization');
+  let bearer: string | null = null;
+  if (authHeader?.startsWith('Bearer ')) {
+    bearer = authHeader.slice(7).trim();
+  }
 
-  const token = header.slice(7);
+  const cookieJwt = request.cookies.get(PORTAL_SESSION_COOKIE)?.value ?? null;
+
+  const jwtCandidate =
+    cookieJwt ||
+    (bearer && looksLikeJwt(bearer) ? bearer : null);
+
   const supabase = createServerClient();
 
-  // 1. Check customers table (owner login — token = customer.id)
+  if (jwtCandidate) {
+    const claims = await verifyPortalSessionJwt(jwtCandidate);
+    if (!claims) return null;
+
+    if (claims.typ === 'owner') {
+      const { data: customer } = await supabase
+        .from('customers')
+        .select(CUSTOMER_SELECT)
+        .eq('id', claims.sub)
+        .eq('is_active', true)
+        .eq('portal_active', true)
+        .single();
+
+      if (!customer) return null;
+
+      return {
+        customer: mapSessionCustomer(customer),
+        portalUser: undefined,
+        isOwner: true,
+      };
+    }
+
+    if (claims.typ === 'portal_user') {
+      const { data: portalUser } = await supabase
+        .from('portal_users')
+        .select(PORTAL_USER_SELECT)
+        .eq('id', claims.sub)
+        .eq('customer_id', claims.cid)
+        .eq('is_active', true)
+        .single();
+
+      if (!portalUser) return null;
+
+      const { data: parentCustomer } = await supabase
+        .from('customers')
+        .select(CUSTOMER_SELECT)
+        .eq('id', claims.cid)
+        .eq('is_active', true)
+        .eq('portal_active', true)
+        .single();
+
+      if (!parentCustomer) return null;
+
+      return {
+        customer: mapSessionCustomer(parentCustomer),
+        portalUser,
+        isOwner: portalUser.role === 'owner',
+      };
+    }
+  }
+
+  // Legacy: Bearer UUID (customer id or portal_user id)
+  const raw = bearer;
+  if (!raw || looksLikeJwt(raw) || !UUID_RE.test(raw)) return null;
+
   const { data: customer } = await supabase
     .from('customers')
-    .select('id, name, email, contact_person, branches, portal_active')
-    .eq('id', token)
+    .select('id, name, email, contact_person, branches, portal_active, demo_mode, signup_source')
+    .eq('id', raw)
     .eq('is_active', true)
     .eq('portal_active', true)
     .single();
 
   if (customer) {
-    return { customer, portalUser: undefined, isOwner: true };
+    return {
+      customer: mapSessionCustomer(customer),
+      portalUser: undefined,
+      isOwner: true,
+    };
   }
 
-  // 2. Check portal_users table (agent/manager login — token = portal_user.id)
   const { data: portalUser } = await supabase
     .from('portal_users')
-    .select('id, customer_id, name, email, role, is_active, permissions, assignment_rules, last_login_at, last_seen_at, login_count, phone, created_at')
-    .eq('id', token)
+    .select(PORTAL_USER_SELECT)
+    .eq('id', raw)
     .eq('is_active', true)
     .single();
 
   if (!portalUser) return null;
 
-  // Fetch the parent customer
   const { data: parentCustomer } = await supabase
     .from('customers')
-    .select('id, name, email, contact_person, branches, portal_active')
+    .select(CUSTOMER_SELECT)
     .eq('id', portalUser.customer_id)
     .eq('is_active', true)
     .eq('portal_active', true)
@@ -51,7 +149,7 @@ export async function verifyCustomer(request: NextRequest): Promise<PortalSessio
   if (!parentCustomer) return null;
 
   return {
-    customer: parentCustomer,
+    customer: mapSessionCustomer(parentCustomer),
     portalUser,
     isOwner: portalUser.role === 'owner',
   };
@@ -65,17 +163,22 @@ export function portalHeaders(): Record<string, string> {
   if (typeof window === 'undefined') return {};
   try {
     const raw = localStorage.getItem('warmeleads-portal-auth');
-    if (!raw) return {};
-    const { token } = JSON.parse(raw);
-    return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+    const h: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed.token && typeof parsed.token === 'string') {
+        h.Authorization = `Bearer ${parsed.token}`;
+      }
+    }
+    return h;
   } catch {
-    return {};
+    return { 'Content-Type': 'application/json' };
   }
 }
 
 export async function portalFetch(url: string, options: RequestInit = {}) {
   const headers = { ...portalHeaders(), ...(options.headers || {}) };
-  const res = await fetch(url, { ...options, headers });
+  const res = await fetch(url, { ...options, headers, credentials: 'include' });
 
   if (res.status === 401 && typeof window !== 'undefined') {
     try {

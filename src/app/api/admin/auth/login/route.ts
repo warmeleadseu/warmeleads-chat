@@ -3,6 +3,11 @@ import bcrypt from 'bcryptjs';
 import { createServerClient } from '@/lib/supabase';
 import { logAudit } from '@/lib/audit';
 import { rateLimit, getClientIp } from '@/lib/rateLimit';
+import {
+  ADMIN_SESSION_COOKIE,
+  adminSessionCookieOptions,
+  signAdminSession,
+} from '@/lib/adminSession';
 
 const MAX_ATTEMPTS = 5;
 const WINDOW_MS = 15 * 60 * 1000;
@@ -53,9 +58,10 @@ export async function POST(request: NextRequest) {
       ipAddress: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || null,
     });
 
-    return NextResponse.json({
+    const sessionJwt = await signAdminSession(user.id);
+
+    const res = NextResponse.json({
       success: true,
-      token: user.id,
       user: {
         id: user.id,
         email: user.email,
@@ -65,6 +71,10 @@ export async function POST(request: NextRequest) {
         avatar_url: user.avatar_url ?? null,
       },
     });
+
+    res.cookies.set(ADMIN_SESSION_COOKIE, sessionJwt, adminSessionCookieOptions());
+
+    return res;
   } catch (err) {
     console.error('Login error:', err);
     return NextResponse.json({ error: 'Inloggen mislukt' }, { status: 500 });

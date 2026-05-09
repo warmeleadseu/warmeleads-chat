@@ -26,7 +26,7 @@ import { PERMISSIONS } from '@/lib/portalPermissions';
 import { UsersIcon } from '@heroicons/react/24/outline';
 import { ToastProvider, AnnouncementBar } from './_ui';
 
-function LoginScreen({ onLogin }: { onLogin: (c: PortalCustomer, t: string, pu: ClientPortalUser | null) => void }) {
+function LoginScreen({ onLogin }: { onLogin: (c: PortalCustomer, pu: ClientPortalUser | null) => void }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -44,12 +44,13 @@ function LoginScreen({ onLogin }: { onLogin: (c: PortalCustomer, t: string, pu: 
     try {
       const res = await fetch('/api/portal/auth/login', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Inloggen mislukt');
-      onLogin(data.customer, data.token, data.portal_user || null);
+      onLogin(data.customer, data.portal_user || null);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Inloggen mislukt');
     } finally {
@@ -569,22 +570,45 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
   }, [isOwner, portalUser]);
 
   useEffect(() => {
-    const restoreSession = () => {
+    let cancelled = false;
+
+    async function restoreFromCookieOrLegacy() {
+      try {
+        const res = await fetch('/api/portal/auth/session', { credentials: 'include' });
+        if (cancelled) return;
+        if (res.ok) {
+          const data = await res.json();
+          setCustomer(data.customer);
+          setPortalUser(data.portal_user ?? null);
+          return;
+        }
+      } catch {
+        /* noop */
+      }
+
       try {
         const raw = localStorage.getItem('warmeleads-portal-auth');
         if (!raw) return;
         const parsed = JSON.parse(raw);
-        if (!parsed.token || !parsed.customer) { localStorage.removeItem('warmeleads-portal-auth'); return; }
+        if (!parsed.customer) {
+          localStorage.removeItem('warmeleads-portal-auth');
+          return;
+        }
         const maxAge = parsed.is_admin_view ? 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000;
-        if (Date.now() - parsed.timestamp > maxAge) { localStorage.removeItem('warmeleads-portal-auth'); return; }
+        if (Date.now() - parsed.timestamp > maxAge) {
+          localStorage.removeItem('warmeleads-portal-auth');
+          return;
+        }
         setCustomer(parsed.customer);
         if (parsed.portal_user) setPortalUser(parsed.portal_user);
         if (parsed.is_admin_view) {
           setIsAdminView(true);
           setAdminName(parsed.admin_name || 'Admin');
         }
-      } catch { localStorage.removeItem('warmeleads-portal-auth'); }
-    };
+      } catch {
+        localStorage.removeItem('warmeleads-portal-auth');
+      }
+    }
 
     const params = new URLSearchParams(window.location.search);
     const impersonateToken = params.get('impersonate');
@@ -594,37 +618,49 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
         try {
           const res = await fetch('/api/portal/auth/impersonate', {
             method: 'POST',
+            credentials: 'include',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ token: impersonateToken }),
           });
           if (!res.ok) throw new Error('Impersonation mislukt');
           const data = await res.json();
 
+          if (cancelled) return;
           setCustomer(data.customer);
           setPortalUser(null);
           setIsAdminView(true);
           setAdminName(data.impersonation?.admin_name || 'Admin');
 
-          localStorage.setItem('warmeleads-portal-auth', JSON.stringify({
-            customer: data.customer,
-            token: data.token,
-            timestamp: Date.now(),
-            is_admin_view: true,
-            admin_name: data.impersonation?.admin_name || 'Admin',
-          }));
+          localStorage.setItem(
+            'warmeleads-portal-auth',
+            JSON.stringify({
+              customer: data.customer,
+              timestamp: Date.now(),
+              is_admin_view: true,
+              admin_name: data.impersonation?.admin_name || 'Admin',
+            }),
+          );
 
           window.history.replaceState({}, '', '/portal');
         } catch {
-          restoreSession();
+          await restoreFromCookieOrLegacy();
+        } finally {
+          if (!cancelled) setLoading(false);
         }
-        setLoading(false);
       })();
-      return;
+      return () => {
+        cancelled = true;
+      };
     }
 
-    restoreSession();
-    setLoading(false);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    (async () => {
+      await restoreFromCookieOrLegacy();
+      if (!cancelled) setLoading(false);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -645,21 +681,37 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
     }
   }, [customer, isAdminView]);
 
-  // Sync demo_mode from server: check on initial load and after payment redirects
+  // Sync account (o.a. show_demo_portal) from server: na betaling, tab refresh, of periodiek
   useEffect(() => {
-    if (!customer?.demo_mode || isAdminView) return;
+    if (!customer || isAdminView) return;
 
-    const syncDemoMode = () => {
+    const syncAccount = () => {
       portalFetch('/api/portal/account')
-        .then(r => r.ok ? r.json() : null)
+        .then(r => (r.ok ? r.json() : null))
         .then(data => {
-          if (!data?.customer || data.customer.demo_mode !== false) return;
-          setCustomer(prev => prev ? { ...prev, demo_mode: false } : prev);
+          if (!data?.customer) return;
+          const c = data.customer as import('./portalContext').PortalCustomer;
+          setCustomer(prev => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              demo_mode: c.demo_mode,
+              signup_source: c.signup_source ?? prev.signup_source,
+              show_demo_portal: c.show_demo_portal,
+              has_paid_customer_batch: c.has_paid_customer_batch,
+            };
+          });
           try {
             const raw = localStorage.getItem('warmeleads-portal-auth');
             if (raw) {
               const parsed = JSON.parse(raw);
-              parsed.customer = { ...parsed.customer, demo_mode: false };
+              parsed.customer = {
+                ...parsed.customer,
+                demo_mode: c.demo_mode,
+                signup_source: c.signup_source ?? parsed.customer?.signup_source,
+                show_demo_portal: c.show_demo_portal,
+                has_paid_customer_batch: c.has_paid_customer_batch,
+              };
               localStorage.setItem('warmeleads-portal-auth', JSON.stringify(parsed));
             }
           } catch { /* ignore */ }
@@ -667,10 +719,11 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
         .catch(() => {});
     };
 
-    syncDemoMode();
-    const interval = setInterval(syncDemoMode, 30_000);
+    syncAccount();
+    const interval = setInterval(syncAccount, 30_000);
     return () => clearInterval(interval);
-  }, [customer?.demo_mode, isAdminView]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- alleen klant-id; volledige customer wijzigt via deze sync
+  }, [customer?.id, isAdminView]);
 
   // Heartbeat: update last_seen_at every 2 minutes so admin sees "online" status
   useEffect(() => {
@@ -706,17 +759,22 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
     };
   }, [customer, isAdminView]);
 
-  const handleLogin = useCallback((c: PortalCustomer, token: string, pu: ClientPortalUser | null) => {
+  const handleLogin = useCallback((c: PortalCustomer, pu: ClientPortalUser | null) => {
     setCustomer(c);
     setPortalUser(pu);
     setIsAdminView(false);
     setAdminName('');
-    const authData: Record<string, unknown> = { customer: c, token, timestamp: Date.now() };
+    const authData: Record<string, unknown> = { customer: c, timestamp: Date.now() };
     if (pu) authData.portal_user = pu;
     localStorage.setItem('warmeleads-portal-auth', JSON.stringify(authData));
   }, []);
 
-  const handleLogout = useCallback(() => {
+  const handleLogout = useCallback(async () => {
+    try {
+      await fetch('/api/portal/auth/logout', { method: 'POST', credentials: 'include' });
+    } catch {
+      /* noop */
+    }
     setCustomer(null);
     setPortalUser(null);
     setIsAdminView(false);
@@ -724,7 +782,12 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
     localStorage.removeItem('warmeleads-portal-auth');
   }, []);
 
-  const stopAdminView = useCallback(() => {
+  const stopAdminView = useCallback(async () => {
+    try {
+      await fetch('/api/portal/auth/logout', { method: 'POST', credentials: 'include' });
+    } catch {
+      /* noop */
+    }
     setCustomer(null);
     setPortalUser(null);
     setIsAdminView(false);
@@ -748,7 +811,9 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
       <ToastProvider>
         <div className="flex min-h-screen flex-col bg-slate-50">
           <div className="sticky top-0 z-40">
-            {customer.demo_mode && !isAdminView && <DemoBanner />}
+            {(customer.show_demo_portal ??
+              (customer.signup_source === 'website' || customer.demo_mode === true)) &&
+              !isAdminView && <DemoBanner />}
             {isAdminView && (
               <AdminViewBanner
                 customerName={customer.name}

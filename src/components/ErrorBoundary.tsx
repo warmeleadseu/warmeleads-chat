@@ -4,6 +4,7 @@ import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import { ExclamationTriangleIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
 import { Logo } from './Logo';
+import { captureClientException } from '@/lib/monitoring';
 
 interface Props {
   children: ReactNode;
@@ -33,11 +34,9 @@ export class ErrorBoundary extends Component<Props, State> {
       errorInfo,
     });
 
-    // Send error to monitoring service in production
-    if (process.env.NODE_ENV === 'production') {
-      // Example: Sentry, LogRocket, etc.
-      // Sentry.captureException(error, { contexts: { errorBoundary: errorInfo } });
-    }
+    captureClientException(error, {
+      componentStack: errorInfo.componentStack,
+    });
   }
 
   private handleRetry = () => {

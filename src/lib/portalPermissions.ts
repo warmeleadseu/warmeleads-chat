@@ -123,6 +123,8 @@ export interface PortalSession {
     contact_person: string;
     branches: string[];
     portal_active: boolean;
+    demo_mode?: boolean;
+    signup_source?: string | null;
   };
   portalUser?: PortalUser;
   isOwner: boolean;

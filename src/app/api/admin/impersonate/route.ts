@@ -3,8 +3,8 @@ import { verifyAdmin, unauthorized, forbidden } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
 import { logAudit } from '@/lib/audit';
 import { SignJWT } from 'jose';
+import { getSessionSecretKey } from '@/lib/sessionSecrets';
 
-const SECRET = new TextEncoder().encode(process.env.CRON_SECRET || 'fallback-impersonate-key');
 const ISSUER = 'warmeleads-admin';
 const EXPIRY = '1h';
 
@@ -40,6 +40,7 @@ export async function POST(request: NextRequest) {
     return forbidden();
   }
 
+  const secret = getSessionSecretKey();
   const token = await new SignJWT({
     admin_id: admin.id,
     admin_name: admin.name,
@@ -51,7 +52,7 @@ export async function POST(request: NextRequest) {
     .setIssuer(ISSUER)
     .setIssuedAt()
     .setExpirationTime(EXPIRY)
-    .sign(SECRET);
+    .sign(secret);
 
   logAudit({
     adminId: admin.id,

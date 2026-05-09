@@ -40,7 +40,13 @@ import { GlobalComposeButton } from './_components/GlobalComposeButton';
 
 type NavRole = 'superadmin' | 'admin' | 'accountmanager';
 
-const NAV: { label: string; href: string; icon: React.ComponentType<any>; badge?: boolean; roles: NavRole[] }[] = [
+const NAV: {
+  label: string;
+  href: string;
+  icon: React.ComponentType<{ className?: string }>;
+  badge?: boolean;
+  roles: NavRole[];
+}[] = [
   { label: 'Dashboard', href: '/admin', icon: HomeIcon, roles: ['superadmin', 'admin', 'accountmanager'] },
   { label: 'Leads CRM', href: '/admin/leads', icon: ChartBarSquareIcon, roles: ['superadmin', 'admin', 'accountmanager'] },
   { label: 'Reclamaties', href: '/admin/reclamaties', icon: FlagIcon, badge: true, roles: ['superadmin', 'admin', 'accountmanager'] },
@@ -54,7 +60,7 @@ const NAV: { label: string; href: string; icon: React.ComponentType<any>; badge?
   { label: 'Facturen', href: '/admin/invoices', icon: DocumentTextIcon, roles: ['superadmin', 'admin', 'accountmanager'] },
   { label: 'Branches', href: '/admin/branches', icon: Squares2X2Icon, roles: ['superadmin', 'admin'] },
   { label: 'Plan-gesprekken', href: '/admin/agenda', icon: CalendarDaysIcon, roles: ['superadmin', 'admin', 'accountmanager'] },
-  { label: 'Team-agenda', href: '/admin/team-agenda', icon: CalendarDaysIcon, roles: ['superadmin', 'admin', 'accountmanager'] },
+  { label: 'Team-agenda', href: '/admin/team-agenda', icon: UserGroupIcon, roles: ['superadmin', 'admin', 'accountmanager'] },
   { label: 'Bedrijfsgegevens', href: '/admin/bedrijf', icon: BuildingOffice2Icon, roles: ['superadmin'] },
   { label: 'Koppelingen', href: '/admin/koppelingen', icon: Cog6ToothIcon, roles: ['superadmin'] },
   { label: 'Live', href: '/admin/live', icon: TvIcon, roles: ['superadmin', 'admin', 'accountmanager'] },
@@ -73,7 +79,7 @@ const ROLE_BADGE: Record<string, { label: string; className: string }> = {
   accountmanager: { label: 'Accountmanager', className: 'bg-amber-500/20 text-amber-300' },
 };
 
-function LoginScreen({ onLogin }: { onLogin: (u: AdminUser, t: string) => void }) {
+function LoginScreen({ onLogin }: { onLogin: (u: AdminUser) => void }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -86,14 +92,15 @@ function LoginScreen({ onLogin }: { onLogin: (u: AdminUser, t: string) => void }
     try {
       const res = await fetch('/api/admin/auth/login', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Login mislukt');
-      onLogin(data.user, data.token);
-    } catch (err: any) {
-      setError(err.message);
+      onLogin(data.user);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Login mislukt');
     } finally {
       setLoading(false);
     }
@@ -338,18 +345,34 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const [pendingReclamations, setPendingReclamations] = useState(0);
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem('warmeleads-admin-auth');
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed.token && parsed.user && Date.now() - parsed.timestamp < 24 * 60 * 60 * 1000) {
-          setUser(parsed.user);
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/admin/me', { credentials: 'include' });
+        if (cancelled) return;
+        if (res.ok) {
+          const data = await res.json();
+          const u = data.user;
+          setUser({
+            id: u.id,
+            email: u.email,
+            name: u.name,
+            role: u.role,
+            is_account_manager: !!u.is_account_manager,
+            avatar_url: u.avatar_url ?? null,
+          });
         } else {
           localStorage.removeItem('warmeleads-admin-auth');
         }
+      } catch {
+        localStorage.removeItem('warmeleads-admin-auth');
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-    } catch { /* noop */ }
-    setLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -368,12 +391,17 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     return () => clearInterval(interval);
   }, [user]);
 
-  const handleLogin = useCallback((u: AdminUser, token: string) => {
+  const handleLogin = useCallback((u: AdminUser) => {
     setUser(u);
-    localStorage.setItem('warmeleads-admin-auth', JSON.stringify({ user: u, token, timestamp: Date.now() }));
+    localStorage.setItem('warmeleads-admin-auth', JSON.stringify({ user: u, timestamp: Date.now() }));
   }, []);
 
-  const handleLogout = useCallback(() => {
+  const handleLogout = useCallback(async () => {
+    try {
+      await fetch('/api/admin/auth/logout', { method: 'POST', credentials: 'include' });
+    } catch {
+      /* noop */
+    }
     setUser(null);
     localStorage.removeItem('warmeleads-admin-auth');
   }, []);

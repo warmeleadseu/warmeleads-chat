@@ -3,6 +3,12 @@ import { createServerClient } from '@/lib/supabase';
 import bcrypt from 'bcryptjs';
 import { rateLimit, getClientIp } from '@/lib/rateLimit';
 import { repairDemoAssignmentsIfNeeded } from '@/lib/demoPortalLeads';
+import {
+  PORTAL_SESSION_COOKIE,
+  portalSessionCookieOptions,
+  signPortalOwnerSession,
+  signPortalUserSession,
+} from '@/lib/portalSession';
 
 const MAX_ATTEMPTS = 10;
 const WINDOW_MS = 15 * 60 * 1000;
@@ -25,7 +31,7 @@ export async function POST(request: NextRequest) {
     // 1. Try customer (owner) login first
     const { data: customer } = await supabase
       .from('customers')
-      .select('id, name, email, contact_person, branches, is_active, portal_active, password_hash, login_count, demo_mode')
+      .select('id, name, email, contact_person, branches, is_active, portal_active, password_hash, login_count, demo_mode, signup_source')
       .eq('email', normalizedEmail)
       .single();
 
@@ -64,12 +70,14 @@ export async function POST(request: NextRequest) {
 
       const { password_hash: _, ...safeCustomer } = customer;
 
-      return NextResponse.json({
+      const portalJwt = await signPortalOwnerSession(customer.id);
+      const res = NextResponse.json({
         success: true,
-        token: customer.id,
         customer: safeCustomer,
         is_portal_user: false,
       });
+      res.cookies.set(PORTAL_SESSION_COOKIE, portalJwt, portalSessionCookieOptions());
+      return res;
     }
 
     // 2. Try portal_users (agent/manager) login
@@ -95,7 +103,7 @@ export async function POST(request: NextRequest) {
     // Verify parent customer is still active
     const { data: parentCustomer } = await supabase
       .from('customers')
-      .select('id, name, email, contact_person, branches, is_active, portal_active, demo_mode')
+      .select('id, name, email, contact_person, branches, is_active, portal_active, demo_mode, signup_source')
       .eq('id', portalUser.customer_id)
       .eq('is_active', true)
       .eq('portal_active', true)
@@ -119,13 +127,15 @@ export async function POST(request: NextRequest) {
     const { password_hash: __, ...safePortalUser } = portalUser;
     const { demo_mode, ...safeParent } = parentCustomer;
 
-    return NextResponse.json({
+    const portalJwt = await signPortalUserSession(portalUser.id, portalUser.customer_id);
+    const res = NextResponse.json({
       success: true,
-      token: portalUser.id,
       customer: { ...safeParent, demo_mode },
       portal_user: safePortalUser,
       is_portal_user: true,
     });
+    res.cookies.set(PORTAL_SESSION_COOKIE, portalJwt, portalSessionCookieOptions());
+    return res;
   } catch {
     return NextResponse.json({ error: 'Er ging iets mis' }, { status: 500 });
   }
