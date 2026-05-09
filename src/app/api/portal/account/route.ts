@@ -3,6 +3,7 @@ import { verifyCustomer, portalUnauthorized } from '@/lib/portalAuth';
 import { createServerClient } from '@/lib/supabase';
 import { hasPermission, forbidden, PERMISSIONS } from '@/lib/portalPermissions';
 import bcrypt from 'bcryptjs';
+import { getHasPaidCustomerBatch, shouldUseDemoPortalExperience } from '@/lib/demoPortalEligibility';
 
 export async function GET(request: NextRequest) {
   const session = await verifyCustomer(request);
@@ -14,13 +15,20 @@ export async function GET(request: NextRequest) {
 
   const { data, error } = await supabase
     .from('customers')
-    .select('name, contact_person, email, phone, branches, email_notifications, notification_frequency, created_at, account_manager_id, demo_mode')
+    .select('name, contact_person, email, phone, branches, email_notifications, notification_frequency, created_at, account_manager_id, demo_mode, signup_source')
     .eq('id', customer.id)
     .single();
 
   if (error || !data) {
     return NextResponse.json({ error: 'Kon accountgegevens niet ophalen' }, { status: 500 });
   }
+
+  const hasPaidCustomerBatch = await getHasPaidCustomerBatch(supabase, customer.id);
+  const show_demo_portal = shouldUseDemoPortalExperience({
+    signup_source: data.signup_source,
+    demo_mode: data.demo_mode,
+    hasPaidCustomerBatch,
+  });
 
   let accountManager = null;
   if (data.account_manager_id) {
@@ -34,7 +42,14 @@ export async function GET(request: NextRequest) {
   }
 
   const { account_manager_id: _amId, ...customerData } = data;
-  return NextResponse.json({ customer: customerData, account_manager: accountManager });
+  return NextResponse.json({
+    customer: {
+      ...customerData,
+      has_paid_customer_batch: hasPaidCustomerBatch,
+      show_demo_portal,
+    },
+    account_manager: accountManager,
+  });
 }
 
 export async function PUT(request: NextRequest) {
@@ -123,11 +138,28 @@ export async function PUT(request: NextRequest) {
 
     const { data: updated } = await supabase
       .from('customers')
-      .select('name, contact_person, email, phone, branches, email_notifications, notification_frequency, created_at, demo_mode')
+      .select('name, contact_person, email, phone, branches, email_notifications, notification_frequency, created_at, demo_mode, signup_source')
       .eq('id', customer.id)
       .single();
 
-    return NextResponse.json({ customer: updated });
+    if (!updated) {
+      return NextResponse.json({ error: 'Account niet gevonden' }, { status: 404 });
+    }
+
+    const hasPaidCustomerBatch = await getHasPaidCustomerBatch(supabase, customer.id);
+    const show_demo_portal = shouldUseDemoPortalExperience({
+      signup_source: updated.signup_source,
+      demo_mode: updated.demo_mode,
+      hasPaidCustomerBatch,
+    });
+
+    return NextResponse.json({
+      customer: {
+        ...updated,
+        has_paid_customer_batch: hasPaidCustomerBatch,
+        show_demo_portal,
+      },
+    });
   } catch {
     return NextResponse.json({ error: 'Er ging iets mis' }, { status: 500 });
   }

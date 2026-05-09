@@ -7,6 +7,7 @@ export async function GET() {
     .from('branches')
     .select('slug, name, color, description')
     .eq('is_active', true)
+    .eq('hidden_from_admin', false)
     .order('sort_order', { ascending: true });
 
   if (error) {

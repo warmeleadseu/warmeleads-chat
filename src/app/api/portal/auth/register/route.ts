@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
         welcome_offer_expires_at: welcomeExpiry,
         demo_mode: true,
       })
-      .select('id, name, email, contact_person, branches, demo_mode')
+      .select('id, name, email, contact_person, branches, demo_mode, signup_source')
       .single();
 
     if (insertErr || !customer) {

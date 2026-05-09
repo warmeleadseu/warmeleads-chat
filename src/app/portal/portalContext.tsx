@@ -9,6 +9,11 @@ export interface PortalCustomer {
   contact_person: string;
   branches: string[];
   demo_mode: boolean;
+  /** Zelfservice website-registratie */
+  signup_source?: string | null;
+  /** Server-berekend: demo-ervaring tot eerste betaalde customer_batch */
+  show_demo_portal?: boolean;
+  has_paid_customer_batch?: boolean;
 }
 
 export interface ClientPortalUser {

@@ -110,7 +110,12 @@ export default function BranchesPage() {
   useEffect(() => { fetchBranches(); }, [fetchBranches]);
 
   const handleDelete = async (b: Branch) => {
-    if (!confirm(`Branche "${b.name}" verwijderen? Dit kan alleen als er geen leads aan gekoppeld zijn.`)) return;
+    if (
+      !confirm(
+        `Branche "${b.name}" verwijderen? Alle leads, webhooks, pricing en batches voor deze branche worden permanent verwijderd.`,
+      )
+    )
+      return;
     const res = await adminFetch('/api/admin/branches', { method: 'DELETE', body: JSON.stringify({ id: b.id }) });
     if (!res.ok) {
       const d = await res.json();

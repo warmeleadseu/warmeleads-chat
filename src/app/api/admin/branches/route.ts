@@ -9,7 +9,11 @@ export async function GET(request: NextRequest) {
   const supabase = createServerClient();
 
   const [branchRes, leadCountsRes, webhookCountsRes] = await Promise.all([
-    supabase.from('branches').select('*, branch_fields(*)').order('sort_order', { ascending: true }),
+    supabase
+      .from('branches')
+      .select('*, branch_fields(*)')
+      .eq('hidden_from_admin', false)
+      .order('sort_order', { ascending: true }),
     supabase.from('leads').select('branch'),
     supabase.from('webhook_keys').select('branch'),
   ]);
@@ -126,30 +130,29 @@ export async function DELETE(request: NextRequest) {
 
     const supabase = createServerClient();
 
-    const { data: branch } = await supabase
+    const { data: branch, error: fetchErr } = await supabase
       .from('branches')
-      .select('slug')
+      .select('slug, hidden_from_admin')
       .eq('id', id)
-      .single();
+      .maybeSingle();
 
-    if (branch) {
-      const { data: leads } = await supabase
-        .from('leads')
-        .select('id')
-        .eq('branch', branch.slug)
-        .limit(1);
-
-      if (leads && leads.length > 0) {
-        return NextResponse.json(
-          { error: 'Kan branche niet verwijderen: er zijn nog leads gekoppeld' },
-          { status: 409 }
-        );
-      }
+    if (fetchErr) {
+      return NextResponse.json({ error: 'Branche ophalen mislukt' }, { status: 500 });
+    }
+    if (!branch) {
+      return NextResponse.json({ error: 'Branche niet gevonden' }, { status: 404 });
     }
 
-    const { error } = await supabase.from('branches').delete().eq('id', id);
-    if (error) {
-      return NextResponse.json({ error: 'Verwijderen mislukt' }, { status: 500 });
+    if (branch.hidden_from_admin) {
+      return NextResponse.json({ error: 'Deze branche kan niet worden verwijderd' }, { status: 403 });
+    }
+
+    const { error: rpcError } = await supabase.rpc('delete_branch_cascade', { p_slug: branch.slug });
+    if (rpcError) {
+      return NextResponse.json(
+        { error: 'Verwijderen mislukt', details: rpcError.message },
+        { status: 500 }
+      );
     }
     return NextResponse.json({ success: true });
   } catch {

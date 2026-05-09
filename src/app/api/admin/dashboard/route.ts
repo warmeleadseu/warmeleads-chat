@@ -84,7 +84,11 @@ export async function GET(request: NextRequest) {
     const { data: myCusts } = await supabase.from('customers').select('id').eq('account_manager_id', admin.id);
     amCustomerIds = (myCusts || []).map(c => c.id);
     if (amCustomerIds.length === 0) {
-      const { data: brData } = await supabase.from('branches').select('slug, name, color').order('sort_order', { ascending: true });
+      const { data: brData } = await supabase
+        .from('branches')
+        .select('slug, name, color')
+        .eq('hidden_from_admin', false)
+        .order('sort_order', { ascending: true });
       const bm: Record<string, { slug: string; name: string; color: string }> = {};
       (brData || []).forEach((b: any) => { bm[b.slug] = b; });
       return NextResponse.json({
@@ -126,7 +130,11 @@ export async function GET(request: NextRequest) {
       scopeAssign(supabase.from('lead_assignments').select('id', { count: 'exact', head: true })),
     ]),
     scopeLeads(supabase.from('leads').select('*, customers(id, name)').neq('bron', 'excel_import').order('created_at', { ascending: false }).limit(10)),
-    supabase.from('branches').select('slug, name, color').order('sort_order', { ascending: true }),
+    supabase
+      .from('branches')
+      .select('slug, name, color')
+      .eq('hidden_from_admin', false)
+      .order('sort_order', { ascending: true }),
     isAM
       ? supabase.from('customers').select('id, name').in('id', amCustomerIds)
       : supabase.from('customers').select('id, name'),

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyCustomer, portalUnauthorized } from '@/lib/portalAuth';
 import { createServerClient } from '@/lib/supabase';
 import { hasPermission, forbidden, PERMISSIONS } from '@/lib/portalPermissions';
+import { getHasPaidCustomerBatch, shouldUseDemoPortalExperience } from '@/lib/demoPortalEligibility';
 
 const IN_CHUNK = 500;
 
@@ -16,10 +17,15 @@ export async function GET(request: NextRequest) {
 
   const { data: custData } = await supabase
     .from('customers')
-    .select('demo_mode')
+    .select('demo_mode, signup_source')
     .eq('id', customer.id)
     .single();
-  const demoMode = custData?.demo_mode ?? false;
+  const hasPaidCustomerBatch = await getHasPaidCustomerBatch(supabase, customer.id);
+  const demoMode = shouldUseDemoPortalExperience({
+    signup_source: custData?.signup_source,
+    demo_mode: custData?.demo_mode,
+    hasPaidCustomerBatch,
+  });
 
   const directLeads = demoMode
     ? []

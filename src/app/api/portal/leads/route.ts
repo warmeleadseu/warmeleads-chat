@@ -3,6 +3,7 @@ import { verifyCustomer, portalUnauthorized } from '@/lib/portalAuth';
 import { createServerClient } from '@/lib/supabase';
 import { hasPermission, forbidden, PERMISSIONS } from '@/lib/portalPermissions';
 import { repairDemoAssignmentsIfNeeded } from '@/lib/demoPortalLeads';
+import { getHasPaidCustomerBatch, shouldUseDemoPortalExperience } from '@/lib/demoPortalEligibility';
 
 const PAGE_SIZE = 1000;
 const IN_CHUNK = 500;
@@ -36,10 +37,16 @@ async function getCustomerDemoInfo(
 ): Promise<{ demoMode: boolean; branches: string[] }> {
   const { data } = await supabase
     .from('customers')
-    .select('demo_mode, branches')
+    .select('demo_mode, branches, signup_source')
     .eq('id', customerId)
     .single();
-  return { demoMode: data?.demo_mode ?? false, branches: data?.branches ?? [] };
+  const hasPaidCustomerBatch = await getHasPaidCustomerBatch(supabase, customerId);
+  const demoMode = shouldUseDemoPortalExperience({
+    signup_source: data?.signup_source,
+    demo_mode: data?.demo_mode,
+    hasPaidCustomerBatch,
+  });
+  return { demoMode, branches: data?.branches ?? [] };
 }
 
 async function getCustomerLeadData(
