@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
-import { sendFeedbackDigest } from '@/lib/email';
+import { sendFeedbackDigest, type FeedbackItem } from '@/lib/email';
+
+function stripAccountManagerId(
+  rows: Array<FeedbackItem & { accountManagerId: string | null }>,
+): FeedbackItem[] {
+  return rows.map(({ accountManagerId: _am, ...rest }) => rest);
+}
 
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get('authorization');
@@ -29,13 +35,13 @@ export async function GET(request: NextRequest) {
 
   const [{ data: leads }, { data: customers }] = await Promise.all([
     supabase.from('leads').select('id, naam_klant, branch').in('id', leadIds),
-    supabase.from('customers').select('id, name').in('id', customerIds),
+    supabase.from('customers').select('id, name, account_manager_id').in('id', customerIds),
   ]);
 
   const leadMap = new Map((leads || []).map(l => [l.id, l]));
   const customerMap = new Map((customers || []).map(c => [c.id, c]));
 
-  const feedbackItems = feedbacks.map(f => {
+  const rowsWithAm: Array<FeedbackItem & { accountManagerId: string | null }> = feedbacks.map(f => {
     const lead = leadMap.get(f.lead_id);
     const customer = customerMap.get(f.customer_id);
     return {
@@ -45,24 +51,36 @@ export async function GET(request: NextRequest) {
       rating: f.rating,
       comment: f.comment,
       createdAt: f.created_at,
+      accountManagerId: customer?.account_manager_id ?? null,
     };
   });
 
   const { data: admins } = await supabase
     .from('admin_users')
-    .select('email')
+    .select('id, email, role, is_account_manager')
     .eq('is_active', true);
 
   let emailsSent = 0;
   for (const admin of admins || []) {
-    const ok = await sendFeedbackDigest(admin.email, feedbackItems);
+    const isAm = admin.role === 'accountmanager' || !!admin.is_account_manager;
+    let digestRows: Array<FeedbackItem & { accountManagerId: string | null }>;
+
+    if (admin.role === 'superadmin') {
+      digestRows = rowsWithAm;
+    } else if (isAm) {
+      digestRows = rowsWithAm.filter(r => r.accountManagerId === admin.id);
+    } else {
+      continue;
+    }
+
+    const ok = await sendFeedbackDigest(admin.email, stripAccountManagerId(digestRows));
     if (ok) emailsSent++;
   }
 
   return NextResponse.json({
     ok: true,
     sent: true,
-    feedbackCount: feedbackItems.length,
+    feedbackCount: rowsWithAm.length,
     emailsSent,
   });
 }

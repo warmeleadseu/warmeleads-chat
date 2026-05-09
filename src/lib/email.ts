@@ -426,7 +426,7 @@ export async function sendDailyLeadDigest(
   );
 }
 
-interface FeedbackItem {
+export interface FeedbackItem {
   leadName: string;
   customerName: string;
   branch: string;
