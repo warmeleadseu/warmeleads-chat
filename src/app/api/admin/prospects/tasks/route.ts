@@ -34,6 +34,8 @@ function computeBucket(dueAt: string | null, completedAt: string | null): TaskBu
  * - prospect_status=<ProspectStatus> — filter op pipeline-status van de prospect.
  * - search= — filter op titel of bedrijfsnaam (case-insensitive).
  * - limit= — max 500.
+ * - from / to — ISO range filter op due_at (gebruikt door agenda-weergave).
+ * - count_only=1 — alleen buckets, geen tasks-array (voor badge in nav).
  */
 export async function GET(request: NextRequest) {
   const admin = await verifyAdmin(request);
@@ -49,6 +51,9 @@ export async function GET(request: NextRequest) {
   const bucketFilter = url.searchParams.get('bucket') as TaskBucket | 'all' | null;
 
   const limit = Math.min(500, Math.max(1, parseInt(url.searchParams.get('limit') || '200', 10)));
+  const countOnly = url.searchParams.get('count_only') === '1';
+  const fromParam = url.searchParams.get('from');
+  const toParam = url.searchParams.get('to');
 
   const supabase = createServerClient();
 
@@ -76,6 +81,13 @@ export async function GET(request: NextRequest) {
 
   if (prospectStatusParam && isValidStatus(prospectStatusParam)) {
     query = query.eq('prospect.status', prospectStatusParam as ProspectStatus);
+  }
+
+  if (fromParam) {
+    query = query.gte('due_at', fromParam);
+  }
+  if (toParam) {
+    query = query.lt('due_at', toParam);
   }
 
   if (allOrg) {
@@ -159,6 +171,13 @@ export async function GET(request: NextRequest) {
   let filtered = withMeta;
   if (bucketFilter && bucketFilter !== 'all' && taskStatus !== 'done') {
     filtered = withMeta.filter(t => t.bucket === bucketFilter);
+  }
+
+  if (countOnly) {
+    return NextResponse.json({
+      buckets,
+      fetched_at: new Date(now).toISOString(),
+    });
   }
 
   return NextResponse.json({

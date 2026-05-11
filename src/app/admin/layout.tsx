@@ -54,7 +54,7 @@ const NAV: {
   { label: 'Verdeling', href: '/admin/verdeling', icon: ArrowsRightLeftIcon, roles: ['superadmin'] },
   { label: 'Importeren', href: '/admin/import', icon: DocumentArrowUpIcon, roles: ['superadmin'] },
   { label: 'Klanten', href: '/admin/customers', icon: BuildingOfficeIcon, roles: ['superadmin', 'admin', 'accountmanager'] },
-  { label: 'Prospect taken', href: '/admin/prospects/taken', icon: ListBulletIcon, roles: ['superadmin', 'admin', 'accountmanager'] },
+  { label: 'Mijn taken', href: '/admin/prospects/taken', icon: ListBulletIcon, roles: ['superadmin', 'admin', 'accountmanager'] },
   { label: 'Prospects', href: '/admin/prospects', icon: BriefcaseIcon, roles: ['superadmin', 'admin', 'accountmanager'] },
   { label: 'Batches', href: '/admin/batches', icon: RectangleStackIcon, roles: ['superadmin', 'admin', 'accountmanager'] },
   { label: 'Klant-afspraken', href: '/admin/appointments', icon: CalendarDaysIcon, roles: ['superadmin', 'admin', 'accountmanager'] },
@@ -168,7 +168,17 @@ function LoginScreen({ onLogin }: { onLogin: (u: AdminUser) => void }) {
   );
 }
 
-function Sidebar({ user, onLogout, pendingReclamations }: { user: AdminUser; onLogout: () => void; pendingReclamations: number }) {
+function Sidebar({
+  user,
+  onLogout,
+  pendingReclamations,
+  pendingTasks,
+}: {
+  user: AdminUser;
+  onLogout: () => void;
+  pendingReclamations: number;
+  pendingTasks: number;
+}) {
   const pathname = usePathname();
   const visibleNav = NAV.filter(item => item.roles.includes(user.role as NavRole));
   const rb = ROLE_BADGE[user.role] || ROLE_BADGE.admin;
@@ -196,6 +206,11 @@ function Sidebar({ user, onLogout, pendingReclamations }: { user: AdminUser; onL
                 {item.badge && pendingReclamations > 0 && (
                   <span className="ml-auto flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white">
                     {pendingReclamations}
+                  </span>
+                )}
+                {item.href === '/admin/prospects/taken' && pendingTasks > 0 && (
+                  <span className="ml-auto flex h-5 min-w-[20px] items-center justify-center rounded-full bg-orange-500 px-1.5 text-[10px] font-bold text-white">
+                    {pendingTasks > 99 ? '99+' : pendingTasks}
                   </span>
                 )}
                 {item.href === '/admin/live' && (
@@ -237,7 +252,17 @@ function Sidebar({ user, onLogout, pendingReclamations }: { user: AdminUser; onL
   );
 }
 
-function MobileHeader({ user, onLogout, pendingReclamations }: { user: AdminUser; onLogout: () => void; pendingReclamations: number }) {
+function MobileHeader({
+  user,
+  onLogout,
+  pendingReclamations,
+  pendingTasks,
+}: {
+  user: AdminUser;
+  onLogout: () => void;
+  pendingReclamations: number;
+  pendingTasks: number;
+}) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
 
@@ -297,6 +322,11 @@ function MobileHeader({ user, onLogout, pendingReclamations }: { user: AdminUser
                             {pendingReclamations}
                           </span>
                         )}
+                        {item.href === '/admin/prospects/taken' && pendingTasks > 0 && (
+                          <span className="ml-auto flex h-5 min-w-[20px] items-center justify-center rounded-full bg-orange-500 px-1.5 text-[10px] font-bold text-white">
+                            {pendingTasks > 99 ? '99+' : pendingTasks}
+                          </span>
+                        )}
                         {item.href === '/admin/live' && (
                           <span className="relative ml-auto flex h-2 w-2">
                             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
@@ -345,6 +375,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AdminUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [pendingReclamations, setPendingReclamations] = useState(0);
+  const [pendingTasks, setPendingTasks] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -393,6 +424,26 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     return () => clearInterval(interval);
   }, [user]);
 
+  useEffect(() => {
+    if (!user) return;
+    const isAm = user.role === 'accountmanager';
+    const params = new URLSearchParams({ count_only: '1', task_status: 'open' });
+    if (isAm) params.set('portfolio', '1');
+    const fetchTasks = async () => {
+      try {
+        const res = await adminFetch(`/api/admin/prospects/tasks?${params.toString()}`);
+        if (res.ok) {
+          const data = await res.json();
+          const b = data.buckets || {};
+          setPendingTasks((b.overdue || 0) + (b.today || 0));
+        }
+      } catch { /* ignore */ }
+    };
+    fetchTasks();
+    const interval = setInterval(fetchTasks, 60_000);
+    return () => clearInterval(interval);
+  }, [user]);
+
   const handleLogin = useCallback((u: AdminUser) => {
     setUser(u);
     localStorage.setItem('warmeleads-admin-auth', JSON.stringify({ user: u, timestamp: Date.now() }));
@@ -436,8 +487,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   return (
     <AdminContext.Provider value={{ user, logout: handleLogout }}>
       <div className="min-h-screen bg-slate-50">
-        <Sidebar user={user} onLogout={handleLogout} pendingReclamations={pendingReclamations} />
-        <MobileHeader user={user} onLogout={handleLogout} pendingReclamations={pendingReclamations} />
+        <Sidebar user={user} onLogout={handleLogout} pendingReclamations={pendingReclamations} pendingTasks={pendingTasks} />
+        <MobileHeader user={user} onLogout={handleLogout} pendingReclamations={pendingReclamations} pendingTasks={pendingTasks} />
         <main className="lg:pl-60">
           <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
             {routeAllowed ? children : <RouteBlocked />}
