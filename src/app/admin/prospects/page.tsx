@@ -597,8 +597,12 @@ function statusColorClass(s: ProspectStatus): string {
   switch (s) {
     case 'nieuw':
       return 'bg-slate-100 text-slate-600';
+    case 'voicemail':
+      return 'bg-amber-100 text-amber-700';
     case 'contact':
       return 'bg-sky-100 text-sky-700';
+    case 'mail_verstuurd':
+      return 'bg-indigo-100 text-indigo-700';
     case 'gekwalificeerd':
       return 'bg-purple-100 text-purple-700';
     case 'voorstel':
@@ -607,6 +611,8 @@ function statusColorClass(s: ProspectStatus): string {
       return 'bg-emerald-100 text-emerald-700';
     case 'verloren':
       return 'bg-rose-100 text-rose-700';
+    case 'niet_relevant':
+      return 'bg-slate-100 text-slate-500';
     default:
       return 'bg-slate-100 text-slate-500';
   }
