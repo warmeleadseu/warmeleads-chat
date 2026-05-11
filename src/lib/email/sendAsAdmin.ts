@@ -42,15 +42,58 @@ export interface SendAsAdminInput {
   unsubscribeToken?: string | null;
   metadata?: Record<string, unknown>;
   toName?: string;
+  /**
+   * Cc-ontvangers. Worden gevalideerd, ge-dedupliceerd en gefilterd op
+   * opt-outs (op de matching scope of 'all'). Ze ontvangen GEEN eigen
+   * unsubscribe-link (dat is voor de primaire ontvanger).
+   */
+  cc?: string[];
+  /** Bcc-ontvangers. Idem als cc, maar onzichtbaar voor andere ontvangers. */
+  bcc?: string[];
 }
 
 export interface SendAsAdminResult extends DispatchEmailResult {
   /** True als opt-out de verzending heeft tegengehouden */
   blockedByOptOut?: boolean;
   unsubscribeToken?: string | null;
+  /** Cc/Bcc-adressen die zijn weggefilterd omdat ze uitgeschreven zijn. */
+  filteredOptedOut?: { cc: string[]; bcc: string[] };
 }
 
+const MAX_CC = 25;
+const MAX_BCC = 25;
+
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * Normaliseert een lijst e-mailadressen: lowercase, trim, dedupe, max-length.
+ * Adressen die het primaire `to`-adres of een al gebruikt cc-adres dupliceren
+ * worden weggefilterd. Ongeldige adressen worden via `invalid` teruggemeld.
+ */
+export function normalizeCcBcc(
+  raw: string[] | undefined,
+  exclude: Set<string>,
+  max: number,
+): { addresses: string[]; invalid: string[] } {
+  if (!raw || !Array.isArray(raw)) return { addresses: [], invalid: [] };
+  const addresses: string[] = [];
+  const invalid: string[] = [];
+  const seen = new Set<string>();
+  for (const item of raw) {
+    if (typeof item !== 'string') continue;
+    const trimmed = item.trim().toLowerCase();
+    if (!trimmed) continue;
+    if (!EMAIL_REGEX.test(trimmed) || trimmed.length > 254) {
+      invalid.push(trimmed);
+      continue;
+    }
+    if (exclude.has(trimmed) || seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    addresses.push(trimmed);
+    if (addresses.length >= max) break;
+  }
+  return { addresses, invalid };
+}
 
 export function generateUnsubscribeToken(): string {
   return randomBytes(24).toString('base64url');
@@ -84,16 +127,55 @@ export async function sendAsAdmin(input: SendAsAdminInput): Promise<SendAsAdminR
 
   const recipientEmail = input.to.trim().toLowerCase();
 
+  // 0. Cc/bcc normaliseren — de primaire ontvanger of admin zelf nemen we
+  //    nooit twee keer mee. Cc-set is ook excluded van bcc om duplicaten
+  //    te voorkomen.
+  const adminEmail = admin.email.trim().toLowerCase();
+  const exclude = new Set<string>([recipientEmail, adminEmail]);
+  const cc = normalizeCcBcc(input.cc, exclude, MAX_CC);
+  for (const a of cc.addresses) exclude.add(a);
+  const bcc = normalizeCcBcc(input.bcc, exclude, MAX_BCC);
+
+  let filteredCc = cc.addresses;
+  let filteredBcc = bcc.addresses;
+  const optedOutCc: string[] = [];
+  const optedOutBcc: string[] = [];
+
   // 1. Opt-out check (tenzij expliciet gebypassed). We blokkeren wanneer
   //    de ontvanger uitgeschreven is op de matching scope of op 'all'.
+  //    Cc/bcc-adressen die uitgeschreven zijn worden stil weggefilterd
+  //    zodat we de primaire mail wél kunnen sturen.
   if (!input.bypassOptOut) {
     const supabase = createServerClient();
     const scopesToCheck = ['all', input.scope].filter((v, i, a) => a.indexOf(v) === i);
-    const { data: optouts } = await supabase
+    const allCheckEmails = Array.from(new Set([recipientEmail, ...filteredCc, ...filteredBcc]));
+    const { data: optoutRows } = await supabase
       .from('email_optouts')
       .select('email, scope')
-      .eq('email', recipientEmail)
+      .in('email', allCheckEmails)
       .in('scope', scopesToCheck);
+    const optedOutEmails = new Set((optoutRows || []).map(r => r.email));
+    if (filteredCc.length > 0) {
+      filteredCc = filteredCc.filter(e => {
+        if (optedOutEmails.has(e)) {
+          optedOutCc.push(e);
+          return false;
+        }
+        return true;
+      });
+    }
+    if (filteredBcc.length > 0) {
+      filteredBcc = filteredBcc.filter(e => {
+        if (optedOutEmails.has(e)) {
+          optedOutBcc.push(e);
+          return false;
+        }
+        return true;
+      });
+    }
+    const optouts = optedOutEmails.has(recipientEmail)
+      ? (optoutRows || []).filter(r => r.email === recipientEmail)
+      : [];
     if (optouts && optouts.length > 0) {
       // Toch loggen zodat AM dit terugziet in de mail-historie.
       await dispatchEmail(input.to, input.subject, input.html, {
@@ -158,6 +240,8 @@ export async function sendAsAdmin(input: SendAsAdminInput): Promise<SendAsAdminR
     replyTo: input.admin.email,
     headers,
     bodyText: input.text,
+    cc: filteredCc.length > 0 ? filteredCc : undefined,
+    bcc: filteredBcc.length > 0 ? filteredBcc : undefined,
     fromAdminId: admin.id,
     prospectId: input.prospectId ?? null,
     customerId: input.customerId ?? null,
@@ -166,5 +250,10 @@ export async function sendAsAdmin(input: SendAsAdminInput): Promise<SendAsAdminR
     unsubscribeToken,
   });
 
-  return { ...result, unsubscribeToken };
+  const filteredOptedOut =
+    optedOutCc.length > 0 || optedOutBcc.length > 0
+      ? { cc: optedOutCc, bcc: optedOutBcc }
+      : undefined;
+
+  return { ...result, unsubscribeToken, filteredOptedOut };
 }

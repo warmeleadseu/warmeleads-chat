@@ -9,14 +9,30 @@ import {
   type ComposeRecipient,
 } from '@/lib/email/composeContext';
 import { getTemplate } from '@/lib/email/templates';
+import { normalizeCcBcc } from '@/lib/email/sendAsAdmin';
 
 const MAX_PREVIEW = 5;
+const MAX_CC = 25;
+const MAX_BCC = 25;
 
 interface PreviewBody {
   template_key?: unknown;
   options?: unknown;
   subject_override?: unknown;
   recipient_ids?: unknown;
+  cc?: unknown;
+  bcc?: unknown;
+}
+
+function parseAddressList(input: unknown): string[] {
+  if (Array.isArray(input)) return input.filter((v): v is string => typeof v === 'string');
+  if (typeof input === 'string') {
+    return input
+      .split(/[,;\n]/)
+      .map(s => s.trim())
+      .filter(Boolean);
+  }
+  return [];
 }
 
 interface RecipientIdsBody {
@@ -93,15 +109,38 @@ export async function POST(request: NextRequest) {
 
   // Optouts checken voor preview-info (we blokkeren niet, alleen waarschuwen)
   const recipientEmails = resolved.map(r => r.recipient.email.toLowerCase());
-  let optedOut: string[] = [];
-  if (recipientEmails.length > 0) {
+
+  const ccCheck = normalizeCcBcc(parseAddressList(body.cc), new Set(), MAX_CC);
+  const bccCheck = normalizeCcBcc(parseAddressList(body.bcc), new Set(), MAX_BCC);
+  if (ccCheck.invalid.length > 0) {
+    return NextResponse.json(
+      { error: `Ongeldig cc-adres: ${ccCheck.invalid.join(', ')}` },
+      { status: 400 },
+    );
+  }
+  if (bccCheck.invalid.length > 0) {
+    return NextResponse.json(
+      { error: `Ongeldig bcc-adres: ${bccCheck.invalid.join(', ')}` },
+      { status: 400 },
+    );
+  }
+  const cc = ccCheck.addresses;
+  const bcc = bccCheck.addresses;
+
+  const allOptoutCheck = Array.from(new Set([...recipientEmails, ...cc, ...bcc]));
+  let optoutRows: { email: string; scope: string }[] = [];
+  if (allOptoutCheck.length > 0) {
     const { data } = await supabase
       .from('email_optouts')
       .select('email, scope')
-      .in('email', recipientEmails)
+      .in('email', allOptoutCheck)
       .in('scope', ['all', template.scope]);
-    optedOut = Array.from(new Set((data || []).map(o => o.email)));
+    optoutRows = data || [];
   }
+  const optedOutSet = new Set(optoutRows.map(o => o.email));
+  const optedOut = recipientEmails.filter(e => optedOutSet.has(e));
+  const ccOptedOut = cc.filter(e => optedOutSet.has(e));
+  const bccOptedOut = bcc.filter(e => optedOutSet.has(e));
 
   const limited = resolved.slice(0, MAX_PREVIEW);
   const previews = await renderForRecipients(supabase, admin, limited, {
@@ -121,10 +160,18 @@ export async function POST(request: NextRequest) {
       invalid: invalid.length,
       opted_out: optedOut.length,
       sendable: resolved.length - optedOut.length,
+      cc: cc.length,
+      bcc: bcc.length,
+      cc_opted_out: ccOptedOut.length,
+      bcc_opted_out: bccOptedOut.length,
     },
     forbidden,
     invalid,
     opted_out_emails: optedOut,
+    cc,
+    bcc,
+    cc_opted_out: ccOptedOut,
+    bcc_opted_out: bccOptedOut,
     previews: previews.map(p => ({
       recipient: {
         id: p.recipient.recipient.id,

@@ -27,6 +27,8 @@ interface SentItem {
   last_opened_at: string | null;
   last_clicked_at: string | null;
   from_admin: { id: string; name: string; email: string } | null;
+  cc_emails: string[] | null;
+  bcc_emails: string[] | null;
 }
 
 interface DetailEmail extends SentItem {
@@ -171,6 +173,25 @@ export function MailHistory({ prospectId, customerId }: Props) {
                   {status.label}
                 </span>
               </div>
+              {(m.cc_emails?.length || m.bcc_emails?.length) ? (
+                <p className="mt-1 text-[11px] text-slate-500 truncate">
+                  {(m.cc_emails?.length ?? 0) > 0 && (
+                    <span>
+                      <span className="font-semibold uppercase tracking-wide text-[10px] mr-1">Cc</span>
+                      {m.cc_emails!.join(', ')}
+                    </span>
+                  )}
+                  {(m.cc_emails?.length ?? 0) > 0 && (m.bcc_emails?.length ?? 0) > 0 && (
+                    <span className="text-slate-300 mx-1">·</span>
+                  )}
+                  {(m.bcc_emails?.length ?? 0) > 0 && (
+                    <span>
+                      <span className="font-semibold uppercase tracking-wide text-[10px] mr-1">Bcc</span>
+                      {m.bcc_emails!.join(', ')}
+                    </span>
+                  )}
+                </p>
+              ) : null}
               <div className="mt-2 flex items-center gap-3 text-[11px] text-slate-500">
                 {m.opens_count > 0 && (
                   <span className="inline-flex items-center gap-1 text-emerald-600">
@@ -247,6 +268,18 @@ function DetailModal({
                   {email.from_admin && ` · van ${email.from_admin.name}`} ·{' '}
                   {timeFmt(email.created_at)}
                 </p>
+                {(email.cc_emails?.length ?? 0) > 0 && (
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    <span className="font-semibold uppercase tracking-wide text-[10px] mr-1">Cc</span>
+                    {email.cc_emails!.join(', ')}
+                  </p>
+                )}
+                {(email.bcc_emails?.length ?? 0) > 0 && (
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    <span className="font-semibold uppercase tracking-wide text-[10px] mr-1">Bcc</span>
+                    {email.bcc_emails!.join(', ')}
+                  </p>
+                )}
                 {email.opens_count > 0 || email.clicks_count > 0 ? (
                   <p className="text-[11px] text-slate-500 mt-1 inline-flex items-center gap-3">
                     {email.opens_count > 0 && (

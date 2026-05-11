@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { ALLOWED_FROM_DOMAIN } from '@/lib/email';
-import { sendAsAdmin } from '@/lib/email/sendAsAdmin';
+import { sendAsAdmin, normalizeCcBcc } from '@/lib/email/sendAsAdmin';
 import { logAudit } from '@/lib/audit';
 import {
   loadAdminFull,
@@ -24,6 +24,20 @@ interface TestBody {
   subject_override_full?: unknown;
   /** Volledige handmatig bewerkte HTML voor deze test-mail. */
   html_override?: unknown;
+  /** Cc/bcc — getoond in de test-mail zodat de gebruiker het echt ziet. */
+  cc?: unknown;
+  bcc?: unknown;
+}
+
+function parseAddressList(input: unknown): string[] {
+  if (Array.isArray(input)) return input.filter((v): v is string => typeof v === 'string');
+  if (typeof input === 'string') {
+    return input
+      .split(/[,;\n]/)
+      .map(s => s.trim())
+      .filter(Boolean);
+  }
+  return [];
 }
 
 function htmlToText(html: string): string {
@@ -141,6 +155,21 @@ export async function POST(request: NextRequest) {
   const textFull = htmlFull === r.html ? r.text : htmlToText(htmlFull);
   const wasEdited = htmlFull !== r.html || subjectFull !== r.subject;
 
+  const ccCheck = normalizeCcBcc(parseAddressList(body.cc), new Set(), 25);
+  const bccCheck = normalizeCcBcc(parseAddressList(body.bcc), new Set(), 25);
+  if (ccCheck.invalid.length > 0) {
+    return NextResponse.json(
+      { error: `Ongeldig cc-adres: ${ccCheck.invalid.join(', ')}` },
+      { status: 400 },
+    );
+  }
+  if (bccCheck.invalid.length > 0) {
+    return NextResponse.json(
+      { error: `Ongeldig bcc-adres: ${bccCheck.invalid.join(', ')}` },
+      { status: 400 },
+    );
+  }
+
   const result = await sendAsAdmin({
     admin: { id: admin.id, name: admin.name, email: admin.email },
     to: admin.email,
@@ -152,6 +181,8 @@ export async function POST(request: NextRequest) {
     templateKey: template.key,
     templateOptions: { ...options, _is_test: true, _manually_edited: wasEdited },
     toName: admin.name,
+    cc: ccCheck.addresses.length > 0 ? ccCheck.addresses : undefined,
+    bcc: bccCheck.addresses.length > 0 ? bccCheck.addresses : undefined,
   });
 
   await logAudit({

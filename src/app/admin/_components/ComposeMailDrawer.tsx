@@ -88,10 +88,18 @@ interface PreviewResponse {
     invalid: number;
     opted_out: number;
     sendable: number;
+    cc?: number;
+    bcc?: number;
+    cc_opted_out?: number;
+    bcc_opted_out?: number;
   };
   forbidden: ComposeRecipientRef[];
   invalid: ComposeRecipientRef[];
   opted_out_emails: string[];
+  cc?: string[];
+  bcc?: string[];
+  cc_opted_out?: string[];
+  bcc_opted_out?: string[];
   previews: PreviewItem[];
 }
 
@@ -178,6 +186,10 @@ export function ComposeMailDrawer({
   const [job, setJob] = useState<JobStatus | null>(null);
   const [testStatus, setTestStatus] = useState<string | null>(null);
   const [overrides, setOverrides] = useState<Overrides>({});
+  const [ccAddresses, setCcAddresses] = useState<string[]>([]);
+  const [bccAddresses, setBccAddresses] = useState<string[]>([]);
+  const [showCc, setShowCc] = useState(false);
+  const [showBcc, setShowBcc] = useState(false);
 
   const selected = useMemo(
     () => templates.find(t => t.key === selectedKey) || null,
@@ -200,6 +212,10 @@ export function ComposeMailDrawer({
     setJob(null);
     setTestStatus(null);
     setOverrides({});
+    setCcAddresses([]);
+    setBccAddresses([]);
+    setShowCc(false);
+    setShowBcc(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -286,6 +302,8 @@ export function ComposeMailDrawer({
           options: optionValues,
           subject_override: subjectOverride || undefined,
           recipient_ids: recipientsBody,
+          cc: ccAddresses.length > 0 ? ccAddresses : undefined,
+          bcc: bccAddresses.length > 0 ? bccAddresses : undefined,
         }),
       });
       const j = (await res.json().catch(() => ({}))) as PreviewResponse | { error?: string };
@@ -299,7 +317,7 @@ export function ComposeMailDrawer({
     } finally {
       setLoading(false);
     }
-  }, [selected, optionValues, subjectOverride, recipientsBody]);
+  }, [selected, optionValues, subjectOverride, recipientsBody, ccAddresses, bccAddresses]);
 
   // Laad preview bij entry van stap 3.
   useEffect(() => {
@@ -331,6 +349,8 @@ export function ComposeMailDrawer({
           sample_recipient: activeRecipient,
           subject_override_full: ov?.subject || undefined,
           html_override: ov?.html || undefined,
+          cc: ccAddresses.length > 0 ? ccAddresses : undefined,
+          bcc: bccAddresses.length > 0 ? bccAddresses : undefined,
         }),
       });
       const j = await res.json().catch(() => ({}));
@@ -360,6 +380,8 @@ export function ComposeMailDrawer({
           subject_override: subjectOverride || undefined,
           recipient_ids: recipientsBody,
           overrides: Object.keys(overrides).length > 0 ? overrides : undefined,
+          cc: ccAddresses.length > 0 ? ccAddresses : undefined,
+          bcc: bccAddresses.length > 0 ? bccAddresses : undefined,
         }),
       });
       const j = (await res.json().catch(() => ({}))) as SendSyncResponse | { error?: string };
@@ -560,6 +582,15 @@ export function ComposeMailDrawer({
                   onReload={loadPreview}
                   onSendTest={sendTest}
                   testStatus={testStatus}
+                  recipientsCount={recipients.length}
+                  ccAddresses={ccAddresses}
+                  bccAddresses={bccAddresses}
+                  showCc={showCc}
+                  showBcc={showBcc}
+                  onToggleCc={() => setShowCc(v => !v)}
+                  onToggleBcc={() => setShowBcc(v => !v)}
+                  onCcChange={setCcAddresses}
+                  onBccChange={setBccAddresses}
                   overrides={overrides}
                   onSubjectOverrideForRecipient={(key, subject) =>
                     setOverrides(prev => {
@@ -599,6 +630,9 @@ export function ComposeMailDrawer({
                   result={sendResult}
                   job={job}
                   overrideCount={Object.keys(overrides).length}
+                  ccCount={ccAddresses.length}
+                  bccCount={bccAddresses.length}
+                  recipientsCount={recipients.length}
                   onSend={actuallySend}
                   onClose={onClose}
                 />
@@ -948,6 +982,15 @@ function PreviewPanel({
   onReload,
   onSendTest,
   testStatus,
+  recipientsCount,
+  ccAddresses,
+  bccAddresses,
+  showCc,
+  showBcc,
+  onToggleCc,
+  onToggleBcc,
+  onCcChange,
+  onBccChange,
   overrides,
   onSubjectOverrideForRecipient,
   onHtmlOverrideForRecipient,
@@ -962,6 +1005,15 @@ function PreviewPanel({
   onReload: () => void;
   onSendTest: () => void;
   testStatus: string | null;
+  recipientsCount: number;
+  ccAddresses: string[];
+  bccAddresses: string[];
+  showCc: boolean;
+  showBcc: boolean;
+  onToggleCc: () => void;
+  onToggleBcc: () => void;
+  onCcChange: (addrs: string[]) => void;
+  onBccChange: (addrs: string[]) => void;
   overrides: Overrides;
   onSubjectOverrideForRecipient: (key: string, subject: string) => void;
   onHtmlOverrideForRecipient: (key: string, html: string) => void;
@@ -1213,7 +1265,7 @@ function PreviewPanel({
             Ververs
           </button>
         </div>
-        <div className="px-4 py-2 border-b border-slate-100 flex items-center gap-3 text-xs">
+        <div className="px-4 py-2 border-b border-slate-100 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
           <span className="text-slate-500">Van:</span>
           <span className="text-slate-900">{preview.from}</span>
           <span className="text-slate-300">·</span>
@@ -1224,7 +1276,65 @@ function PreviewPanel({
           <span className="text-slate-900 truncate">
             {item?.recipient.name ? `${item.recipient.name} <${item.recipient.email}>` : item?.recipient.email}
           </span>
+          <span className="ml-auto inline-flex items-center gap-2">
+            {!showCc && ccAddresses.length === 0 && (
+              <button
+                type="button"
+                onClick={onToggleCc}
+                className="rounded px-2 py-0.5 text-[11px] font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+              >
+                + Cc
+              </button>
+            )}
+            {!showBcc && bccAddresses.length === 0 && (
+              <button
+                type="button"
+                onClick={onToggleBcc}
+                className="rounded px-2 py-0.5 text-[11px] font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+              >
+                + Bcc
+              </button>
+            )}
+          </span>
         </div>
+
+        {(showCc || ccAddresses.length > 0) && (
+          <AddressFieldRow
+            label="Cc"
+            addresses={ccAddresses}
+            onChange={onCcChange}
+            onClose={() => {
+              onCcChange([]);
+              onToggleCc();
+            }}
+            optedOut={preview.cc_opted_out || []}
+            onBlurReload={onReload}
+          />
+        )}
+        {(showBcc || bccAddresses.length > 0) && (
+          <AddressFieldRow
+            label="Bcc"
+            addresses={bccAddresses}
+            onChange={onBccChange}
+            onClose={() => {
+              onBccChange([]);
+              onToggleBcc();
+            }}
+            optedOut={preview.bcc_opted_out || []}
+            onBlurReload={onReload}
+          />
+        )}
+        {recipientsCount > 1 && (ccAddresses.length > 0 || bccAddresses.length > 0) && (
+          <div className="px-4 py-2 bg-amber-50 border-b border-amber-100 text-xs text-amber-800 flex items-start gap-2">
+            <ExclamationTriangleIcon className="w-4 h-4 shrink-0 mt-0.5" />
+            <span>
+              Je hebt <strong>{recipientsCount}</strong> primaire ontvangers. Iedere ontvanger
+              krijgt <strong>dezelfde</strong> {ccAddresses.length > 0 ? 'cc' : 'bcc'}
+              {ccAddresses.length > 0 && bccAddresses.length > 0 ? ' & bcc' : ''}-adressen
+              te zien. Verwijder cc/bcc als dat niet de bedoeling is.
+            </span>
+          </div>
+        )}
 
         {preview.previews.length > 1 && (
           <div className="px-4 py-2 border-b border-slate-100 flex items-center gap-1 overflow-x-auto">
@@ -1438,6 +1548,150 @@ function ToolbarDivider() {
   return <span className="mx-0.5 h-4 w-px bg-violet-200" aria-hidden />;
 }
 
+const EMAIL_REGEX_UI = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function AddressFieldRow({
+  label,
+  addresses,
+  onChange,
+  onClose,
+  optedOut,
+  onBlurReload,
+}: {
+  label: string;
+  addresses: string[];
+  onChange: (addrs: string[]) => void;
+  onClose: () => void;
+  optedOut: string[];
+  onBlurReload: () => void;
+}) {
+  const [draft, setDraft] = useState('');
+  const [invalidNote, setInvalidNote] = useState<string | null>(null);
+
+  function commitDraft(value: string): { added: number } {
+    const parts = value
+      .split(/[,;\s]+/)
+      .map(p => p.trim().toLowerCase())
+      .filter(Boolean);
+    if (parts.length === 0) return { added: 0 };
+    const invalids: string[] = [];
+    const next = [...addresses];
+    for (const p of parts) {
+      if (!EMAIL_REGEX_UI.test(p)) {
+        invalids.push(p);
+        continue;
+      }
+      if (next.includes(p)) continue;
+      next.push(p);
+    }
+    if (invalids.length > 0) {
+      setInvalidNote(`Ongeldig: ${invalids.join(', ')}`);
+    } else {
+      setInvalidNote(null);
+    }
+    if (next.length !== addresses.length) onChange(next);
+    return { added: next.length - addresses.length };
+  }
+
+  function handleKey(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter' || e.key === ',' || e.key === ';' || e.key === ' ' || e.key === 'Tab') {
+      const v = draft.trim();
+      if (!v) return;
+      e.preventDefault();
+      const { added } = commitDraft(draft);
+      setDraft('');
+      if (added > 0) onBlurReload();
+    } else if (e.key === 'Backspace' && draft.length === 0 && addresses.length > 0) {
+      e.preventDefault();
+      const next = addresses.slice(0, -1);
+      onChange(next);
+      onBlurReload();
+    }
+  }
+
+  function handleBlur() {
+    const v = draft.trim();
+    if (v) {
+      const { added } = commitDraft(draft);
+      setDraft('');
+      if (added > 0) onBlurReload();
+    }
+  }
+
+  function removeAt(idx: number) {
+    const next = addresses.filter((_, i) => i !== idx);
+    onChange(next);
+    onBlurReload();
+  }
+
+  function handlePaste(e: React.ClipboardEvent<HTMLInputElement>) {
+    const text = e.clipboardData.getData('text');
+    if (!text) return;
+    if (/[,;\n]/.test(text) || text.split(/\s+/).length > 1) {
+      e.preventDefault();
+      const { added } = commitDraft(text);
+      setDraft('');
+      if (added > 0) onBlurReload();
+    }
+  }
+
+  return (
+    <div className="px-4 py-2 border-b border-slate-100 flex items-start gap-2 text-xs bg-slate-50/50">
+      <span className="shrink-0 pt-1.5 font-semibold uppercase tracking-wide text-[10px] text-slate-500 w-8">
+        {label}
+      </span>
+      <div className="flex-1 flex flex-wrap items-center gap-1.5 min-h-[28px]">
+        {addresses.map((a, i) => {
+          const isOptedOut = optedOut.includes(a);
+          return (
+            <span
+              key={`${a}-${i}`}
+              className={`inline-flex items-center gap-1 rounded-full pl-2 pr-1 py-0.5 text-xs ${
+                isOptedOut
+                  ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                  : 'bg-slate-200 text-slate-800'
+              }`}
+              title={isOptedOut ? 'Deze ontvanger heeft zich uitgeschreven en wordt overgeslagen.' : a}
+            >
+              <span className="truncate max-w-[200px]">{a}</span>
+              <button
+                type="button"
+                onClick={() => removeAt(i)}
+                className="rounded-full p-0.5 hover:bg-slate-300/70"
+                aria-label="Verwijderen"
+              >
+                <XMarkIcon className="w-3 h-3" />
+              </button>
+            </span>
+          );
+        })}
+        <input
+          type="text"
+          value={draft}
+          onChange={e => {
+            setDraft(e.target.value);
+            if (invalidNote) setInvalidNote(null);
+          }}
+          onKeyDown={handleKey}
+          onBlur={handleBlur}
+          onPaste={handlePaste}
+          placeholder={addresses.length === 0 ? 'naam@bedrijf.nl, …' : ''}
+          className="flex-1 min-w-[120px] border-0 bg-transparent p-0.5 text-xs text-slate-900 focus:outline-none focus:ring-0"
+        />
+      </div>
+      {invalidNote && <span className="text-[10px] text-rose-600 self-center">{invalidNote}</span>}
+      <button
+        type="button"
+        onClick={onClose}
+        className="shrink-0 text-slate-400 hover:text-slate-700 p-1"
+        title={`${label}-veld verwijderen`}
+      >
+        <XMarkIcon className="w-3.5 h-3.5" />
+      </button>
+    </div>
+  );
+}
+
 function CountChip({ label, value, tone }: { label: string; value: number; tone: 'green' | 'amber' | 'rose' }) {
   const map = {
     green: 'bg-emerald-50 text-emerald-700 border-emerald-200',
@@ -1458,6 +1712,9 @@ function SendPanel({
   result,
   job,
   overrideCount,
+  ccCount,
+  bccCount,
+  recipientsCount,
   onSend,
   onClose,
 }: {
@@ -1466,6 +1723,9 @@ function SendPanel({
   result: SendSyncResponse | null;
   job: JobStatus | null;
   overrideCount: number;
+  ccCount: number;
+  bccCount: number;
+  recipientsCount: number;
   onSend: () => void;
   onClose: () => void;
 }) {
@@ -1574,6 +1834,38 @@ function SendPanel({
             <strong>{overrideCount}</strong>{' '}
             ontvanger{overrideCount === 1 ? '' : 's'} krijg{overrideCount === 1 ? 't' : 'en'} een
             handmatig bewerkte versie. Overige ontvangers krijgen de standaard template-versie.
+          </div>
+        )}
+        {(ccCount > 0 || bccCount > 0) && (
+          <div
+            className={`mt-3 rounded-lg border px-3 py-2 text-xs ${
+              recipientsCount > 1
+                ? 'border-amber-300 bg-amber-50 text-amber-800'
+                : 'border-slate-200 bg-slate-50 text-slate-700'
+            }`}
+          >
+            {ccCount > 0 && (
+              <p>
+                <strong>{ccCount}</strong> cc-ontvanger{ccCount === 1 ? '' : 's'} per mail.
+              </p>
+            )}
+            {bccCount > 0 && (
+              <p>
+                <strong>{bccCount}</strong> bcc-ontvanger{bccCount === 1 ? '' : 's'} per mail.
+              </p>
+            )}
+            {recipientsCount > 1 && (
+              <p className="mt-1 font-semibold">
+                ⚠ Iedere primaire ontvanger krijgt dezelfde cc/bcc-adressen mee — controleer dit
+                voordat je verstuurt.
+              </p>
+            )}
+            {(preview?.counts.cc_opted_out ?? 0) + (preview?.counts.bcc_opted_out ?? 0) > 0 && (
+              <p className="mt-1">
+                {(preview?.counts.cc_opted_out ?? 0) + (preview?.counts.bcc_opted_out ?? 0)}{' '}
+                cc/bcc-adres(sen) zijn uitgeschreven en worden automatisch overgeslagen.
+              </p>
+            )}
           </div>
         )}
         <div className="mt-4 grid grid-cols-2 gap-2 text-sm">

@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
 
   let query = supabase
     .from('email_log')
-    .select('id, type, to_email, to_name, subject, status, error, metadata, created_at', { count: 'exact' })
+    .select('id, type, to_email, to_name, subject, status, error, metadata, created_at, cc_emails, bcc_emails', { count: 'exact' })
     .order('created_at', { ascending: false });
 
   if (type) query = query.eq('type', type);

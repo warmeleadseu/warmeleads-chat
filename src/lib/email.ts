@@ -28,6 +28,10 @@ export interface DispatchEmailOpts {
   headers?: Record<string, string>;
   bodyText?: string;
   attachments?: EmailAttachment[];
+  /** Cc-ontvangers. Zichtbaar voor alle ontvangers. */
+  cc?: string[];
+  /** Bcc-ontvangers. Onzichtbaar voor andere ontvangers. */
+  bcc?: string[];
   // AM-context velden (optioneel, voor uitgebreide logging)
   fromAdminId?: string | null;
   prospectId?: string | null;
@@ -77,6 +81,8 @@ async function logEmail(
         template_options: opts.templateOptions || null,
         unsubscribe_token: opts.unsubscribeToken || null,
         provider_message_id: providerMessageId || null,
+        cc_emails: opts.cc && opts.cc.length > 0 ? opts.cc : null,
+        bcc_emails: opts.bcc && opts.bcc.length > 0 ? opts.bcc : null,
       })
       .select('id')
       .single();
@@ -118,6 +124,8 @@ export async function dispatchEmail(
     };
     if (opts.replyTo) (payload as { replyTo?: string }).replyTo = opts.replyTo;
     if (opts.bodyText) (payload as { text?: string }).text = opts.bodyText;
+    if (opts.cc && opts.cc.length > 0) (payload as { cc?: string[] }).cc = opts.cc;
+    if (opts.bcc && opts.bcc.length > 0) (payload as { bcc?: string[] }).bcc = opts.bcc;
     if (opts.headers && Object.keys(opts.headers).length > 0) {
       (payload as { headers?: Record<string, string> }).headers = opts.headers;
     }

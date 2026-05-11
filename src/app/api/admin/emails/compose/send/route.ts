@@ -3,7 +3,7 @@ import { createServerClient } from '@/lib/supabase';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { ALLOWED_FROM_DOMAIN } from '@/lib/email';
 import { logAudit } from '@/lib/audit';
-import { sendAsAdmin } from '@/lib/email/sendAsAdmin';
+import { sendAsAdmin, normalizeCcBcc } from '@/lib/email/sendAsAdmin';
 import {
   loadAdminFull,
   renderForRecipients,
@@ -33,6 +33,24 @@ interface SendBody {
    * Sleutel-formaat: "prospect:<uuid>" of "customer:<uuid>".
    */
   overrides?: unknown;
+  /** Cc-adressen — worden voor IEDERE ontvanger gebruikt. */
+  cc?: unknown;
+  /** Bcc-adressen — worden voor IEDERE ontvanger gebruikt. */
+  bcc?: unknown;
+}
+
+const MAX_CC = 25;
+const MAX_BCC = 25;
+
+function parseAddressList(input: unknown): string[] {
+  if (Array.isArray(input)) return input.filter((v): v is string => typeof v === 'string');
+  if (typeof input === 'string') {
+    return input
+      .split(/[,;\n]/)
+      .map(s => s.trim())
+      .filter(Boolean);
+  }
+  return [];
 }
 
 interface RecipientOverride {
@@ -114,6 +132,8 @@ async function sendOneAndLog(
   options: Record<string, unknown>,
   stats: SendStats,
   manuallyEdited: boolean,
+  cc: string[],
+  bcc: string[],
 ): Promise<void> {
   const r = rendered.recipient.recipient;
   const result = await sendAsAdmin({
@@ -129,6 +149,8 @@ async function sendOneAndLog(
     templateOptions: manuallyEdited ? { ...options, _manually_edited: true } : options,
     unsubscribeToken: rendered.recipient.unsubscribeToken,
     toName: r.name,
+    cc: cc.length > 0 ? cc : undefined,
+    bcc: bcc.length > 0 ? bcc : undefined,
   });
 
   if (result.blockedByOptOut) {
@@ -180,6 +202,8 @@ async function processBatch(
   admin: AdminRow,
   options: Record<string, unknown>,
   editedSet: Set<string>,
+  cc: string[],
+  bcc: string[],
   onProgress?: (stats: SendStats) => Promise<void>,
 ): Promise<SendStats> {
   const stats: SendStats = { sent: 0, failed: 0, optOut: 0, errors: [] };
@@ -192,6 +216,8 @@ async function processBatch(
       options,
       stats,
       editedSet.has(recipientId),
+      cc,
+      bcc,
     );
     if (onProgress) await onProgress(stats);
     if (i < rendered.length - 1) await delay(SEND_INTERVAL_MS);
@@ -232,6 +258,38 @@ export async function POST(request: NextRequest) {
   if (recipients.length === 0) {
     return NextResponse.json({ error: 'Geen ontvangers opgegeven' }, { status: 400 });
   }
+
+  const ccRaw = parseAddressList(body.cc);
+  const bccRaw = parseAddressList(body.bcc);
+  if (ccRaw.length > MAX_CC) {
+    return NextResponse.json(
+      { error: `Maximaal ${MAX_CC} cc-adressen toegestaan` },
+      { status: 400 },
+    );
+  }
+  if (bccRaw.length > MAX_BCC) {
+    return NextResponse.json(
+      { error: `Maximaal ${MAX_BCC} bcc-adressen toegestaan` },
+      { status: 400 },
+    );
+  }
+  // Pre-validatie (definitieve dedupe gebeurt per-ontvanger in sendAsAdmin).
+  const ccCheck = normalizeCcBcc(ccRaw, new Set(), MAX_CC);
+  const bccCheck = normalizeCcBcc(bccRaw, new Set(), MAX_BCC);
+  if (ccCheck.invalid.length > 0) {
+    return NextResponse.json(
+      { error: `Ongeldig cc-adres: ${ccCheck.invalid.join(', ')}` },
+      { status: 400 },
+    );
+  }
+  if (bccCheck.invalid.length > 0) {
+    return NextResponse.json(
+      { error: `Ongeldig bcc-adres: ${bccCheck.invalid.join(', ')}` },
+      { status: 400 },
+    );
+  }
+  const cc = ccCheck.addresses;
+  const bcc = bccCheck.addresses;
 
   const supabase = createServerClient();
   const admin = await loadAdminFull(supabase, adminAuth.id);
@@ -310,7 +368,7 @@ export async function POST(request: NextRequest) {
 
   // Synchroon voor batches tot SYNC_LIMIT.
   if (resolved.length <= SYNC_LIMIT) {
-    const stats = await processBatch(rendered, template, admin, options, editedRecipientIds);
+    const stats = await processBatch(rendered, template, admin, options, editedRecipientIds, cc, bcc);
 
     await logAudit({
       adminId: admin.id,
@@ -325,6 +383,8 @@ export async function POST(request: NextRequest) {
         failed: stats.failed,
         opt_out: stats.optOut,
         manually_edited: editedRecipientIds.size,
+        cc_count: cc.length,
+        bcc_count: bcc.length,
       },
     });
 
@@ -374,7 +434,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const stats = await runJobInline(job.id, rendered, template, admin, options, editedRecipientIds);
+  const stats = await runJobInline(job.id, rendered, template, admin, options, editedRecipientIds, cc, bcc);
 
   await logAudit({
     adminId: admin.id,
@@ -389,6 +449,8 @@ export async function POST(request: NextRequest) {
       failed: stats.failed,
       opt_out: stats.optOut,
       manually_edited: editedRecipientIds.size,
+      cc_count: cc.length,
+      bcc_count: bcc.length,
     },
   });
 
@@ -421,11 +483,13 @@ async function runJobInline(
   admin: AdminRow,
   options: Record<string, unknown>,
   editedSet: Set<string>,
+  cc: string[],
+  bcc: string[],
 ): Promise<SendStats> {
   const supabase = createServerClient();
   let lastUpdate = 0;
   try {
-    const stats = await processBatch(rendered, template, admin, options, editedSet, async stats => {
+    const stats = await processBatch(rendered, template, admin, options, editedSet, cc, bcc, async stats => {
       const now = Date.now();
       if (now - lastUpdate > 1000) {
         lastUpdate = now;

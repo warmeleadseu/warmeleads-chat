@@ -33,6 +33,8 @@ interface EmailEntry {
   metadata: Record<string, unknown> | null;
   created_at: string;
   html?: string;
+  cc_emails?: string[] | null;
+  bcc_emails?: string[] | null;
 }
 
 interface TemplateEntry {
@@ -603,6 +605,23 @@ export default function EmailLogPage() {
                           <td className="px-4 py-3">
                             <div className="text-sm text-slate-700 truncate max-w-[200px]">{em.to_email}</div>
                             {em.to_name && <div className="text-xs text-slate-400 truncate">{em.to_name}</div>}
+                            {(em.cc_emails?.length || em.bcc_emails?.length) ? (
+                              <div className="mt-0.5 text-[10px] text-slate-400 truncate max-w-[200px]">
+                                {(em.cc_emails?.length ?? 0) > 0 && (
+                                  <span title={em.cc_emails!.join(', ')}>
+                                    <span className="font-semibold mr-0.5">Cc</span>
+                                    {em.cc_emails!.length}
+                                  </span>
+                                )}
+                                {(em.cc_emails?.length ?? 0) > 0 && (em.bcc_emails?.length ?? 0) > 0 && <span className="mx-1">·</span>}
+                                {(em.bcc_emails?.length ?? 0) > 0 && (
+                                  <span title={em.bcc_emails!.join(', ')}>
+                                    <span className="font-semibold mr-0.5">Bcc</span>
+                                    {em.bcc_emails!.length}
+                                  </span>
+                                )}
+                              </div>
+                            ) : null}
                           </td>
                           <td className="px-4 py-3 text-sm text-slate-600 max-w-[260px] truncate">{em.subject}</td>
                           <td className="px-4 py-3">{statusBadge(em.status)}</td>
@@ -637,6 +656,13 @@ export default function EmailLogPage() {
                       <div>
                         <p className="text-sm font-medium text-slate-700 line-clamp-1">{em.subject}</p>
                         <p className="text-xs text-slate-500 mt-0.5">{em.to_email}{em.to_name ? ` (${em.to_name})` : ''}</p>
+                        {(em.cc_emails?.length || em.bcc_emails?.length) ? (
+                          <p className="mt-0.5 text-[10px] text-slate-400 truncate">
+                            {(em.cc_emails?.length ?? 0) > 0 && <span><span className="font-semibold mr-0.5">Cc</span>{em.cc_emails!.join(', ')}</span>}
+                            {(em.cc_emails?.length ?? 0) > 0 && (em.bcc_emails?.length ?? 0) > 0 && <span className="mx-1">·</span>}
+                            {(em.bcc_emails?.length ?? 0) > 0 && <span><span className="font-semibold mr-0.5">Bcc</span>{em.bcc_emails!.join(', ')}</span>}
+                          </p>
+                        ) : null}
                       </div>
                       <div className="flex items-center justify-between">
                         {statusBadge(em.status)}
