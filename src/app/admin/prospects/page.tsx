@@ -254,6 +254,13 @@ export default function ProspectsPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href="/admin/prospects/taken"
+            className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 sm:flex-initial"
+          >
+            <ListBulletIcon className="h-4 w-4" />
+            Taken-overzicht
+          </Link>
           {canManage && (
             <Link
               href="/admin/prospects/import"

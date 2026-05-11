@@ -64,13 +64,22 @@ export function MyPipelineWidget() {
             <p className="text-[11px] text-slate-500">Prospects waar jij aan werkt</p>
           </div>
         </div>
-        <Link
-          href="/admin/prospects"
-          className="inline-flex items-center gap-1 text-xs font-medium text-brand-purple hover:underline"
-        >
-          Naar prospects
-          <ArrowRightIcon className="h-3 w-3" />
-        </Link>
+        <div className="flex flex-wrap items-center gap-3">
+          <Link
+            href="/admin/prospects/taken"
+            className="inline-flex items-center gap-1 text-xs font-medium text-brand-purple hover:underline"
+          >
+            Alle taken
+            <ArrowRightIcon className="h-3 w-3" />
+          </Link>
+          <Link
+            href="/admin/prospects"
+            className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-brand-purple hover:underline"
+          >
+            Naar prospects
+            <ArrowRightIcon className="h-3 w-3" />
+          </Link>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">

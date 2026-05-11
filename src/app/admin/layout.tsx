@@ -33,6 +33,7 @@ import {
   UserCircleIcon,
   BeakerIcon,
   BriefcaseIcon,
+  ListBulletIcon,
 } from '@heroicons/react/24/outline';
 import { AdminContext, type AdminUser } from './adminContext';
 import { adminFetch } from '@/lib/adminAuth';
@@ -53,6 +54,7 @@ const NAV: {
   { label: 'Verdeling', href: '/admin/verdeling', icon: ArrowsRightLeftIcon, roles: ['superadmin'] },
   { label: 'Importeren', href: '/admin/import', icon: DocumentArrowUpIcon, roles: ['superadmin'] },
   { label: 'Klanten', href: '/admin/customers', icon: BuildingOfficeIcon, roles: ['superadmin', 'admin', 'accountmanager'] },
+  { label: 'Prospect taken', href: '/admin/prospects/taken', icon: ListBulletIcon, roles: ['superadmin', 'admin', 'accountmanager'] },
   { label: 'Prospects', href: '/admin/prospects', icon: BriefcaseIcon, roles: ['superadmin', 'admin', 'accountmanager'] },
   { label: 'Batches', href: '/admin/batches', icon: RectangleStackIcon, roles: ['superadmin', 'admin', 'accountmanager'] },
   { label: 'Klant-afspraken', href: '/admin/appointments', icon: CalendarDaysIcon, roles: ['superadmin', 'admin', 'accountmanager'] },
