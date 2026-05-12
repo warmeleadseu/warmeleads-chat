@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
 
   const { data, error } = await supabase
     .from('customers')
-    .select('name, contact_person, email, phone, branches, email_notifications, notification_frequency, created_at, account_manager_id, demo_mode, signup_source, vat_id')
+    .select('name, contact_person, email, phone, branches, email_notifications, notification_frequency, created_at, account_manager_id, demo_mode, signup_source, country, vat_id')
     .eq('id', customer.id)
     .single();
 
@@ -43,11 +43,13 @@ export async function GET(request: NextRequest) {
   }
 
   const { account_manager_id: _amId, vat_id, ...customerData } = data;
-  const country = (data as { country?: string | null }).country ?? 'NL';
+  const country = (data.country as string | null | undefined) ?? 'NL';
   const reverse_charge = qualifiesBelgiumReverseCharge({ country, vat_id });
+  const { country: _omitCountry, ...customerWithoutCountry } = customerData;
+  void _omitCountry;
   return NextResponse.json({
     customer: {
-      ...customerData,
+      ...customerWithoutCountry,
       country,
       vat_id: vat_id ?? null,
       reverse_charge,
@@ -144,7 +146,7 @@ export async function PUT(request: NextRequest) {
 
     const { data: updated } = await supabase
       .from('customers')
-      .select('name, contact_person, email, phone, branches, email_notifications, notification_frequency, created_at, demo_mode, signup_source, vat_id')
+      .select('name, contact_person, email, phone, branches, email_notifications, notification_frequency, created_at, demo_mode, signup_source, country, vat_id')
       .eq('id', customer.id)
       .single();
 
@@ -159,14 +161,17 @@ export async function PUT(request: NextRequest) {
       hasPaidCustomerBatch,
     });
 
+    const updatedCountry = (updated.country as string | null | undefined) ?? 'NL';
     const reverse_charge = qualifiesBelgiumReverseCharge({
-      country: (updated as { country?: string | null }).country ?? 'NL',
+      country: updatedCountry,
       vat_id: updated.vat_id,
     });
+    const { country: _omitUpdCountry, ...updatedWithoutCountry } = updated;
+    void _omitUpdCountry;
     return NextResponse.json({
       customer: {
-        ...updated,
-        country: (updated as { country?: string | null }).country ?? 'NL',
+        ...updatedWithoutCountry,
+        country: updatedCountry,
         reverse_charge,
         has_paid_customer_batch: hasPaidCustomerBatch,
         show_demo_portal,

@@ -4,6 +4,7 @@ import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import bcrypt from 'bcryptjs';
 import { logAudit } from '@/lib/audit';
 import { buildPhoneSearchIlikeClauses, sanitizePostgrestIlike } from '@/lib/phoneSearch';
+import { sanitizeCustomerWritePayload } from '@/lib/customerCountrySupport';
 
 const DEFAULT_LIMIT = 25;
 const MAX_LIMIT = 100;
@@ -200,7 +201,8 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = createServerClient();
-    const { data, error } = await supabase.from('customers').insert(rest).select().single();
+    const insertPayload = await sanitizeCustomerWritePayload(supabase, rest);
+    const { data, error } = await supabase.from('customers').insert(insertPayload).select().single();
 
     if (error) {
       return NextResponse.json({ error: 'Klant aanmaken mislukt', details: error.message }, { status: 500 });
@@ -235,7 +237,8 @@ export async function PUT(request: NextRequest) {
     }
 
     const supabase = createServerClient();
-    const { data, error } = await supabase.from('customers').update(updates).eq('id', id).select().single();
+    const updatePayload = await sanitizeCustomerWritePayload(supabase, updates);
+    const { data, error } = await supabase.from('customers').update(updatePayload).eq('id', id).select().single();
 
     if (error) {
       return NextResponse.json({ error: 'Bijwerken mislukt' }, { status: 500 });

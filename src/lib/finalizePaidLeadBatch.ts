@@ -34,7 +34,7 @@ export async function finalizePaidBulkLeadBatch(
 ): Promise<void> {
   const { data: cust } = await supabase
     .from('customers')
-    .select('id, name, email, contact_person, account_manager_id, vat_id')
+    .select('id, name, email, contact_person, account_manager_id, country, vat_id')
     .eq('id', claimed.customer_id)
     .single();
 
@@ -57,6 +57,7 @@ export async function finalizePaidBulkLeadBatch(
       tag: 'bulk-batch-paid',
     }).catch(() => {});
   }
+  const bulkBillingCountry = (cust?.country as string | null | undefined) ?? 'NL';
 
   if (
     !options.skipInvoiceHandling &&
@@ -90,7 +91,7 @@ export async function finalizePaidBulkLeadBatch(
     is_paid: true,
     source: 'portal_pay',
     batch_kind: 'bulk_leads',
-    billing_country: (cust as { country?: string | null } | null | undefined)?.country ?? 'NL',
+    billing_country: bulkBillingCountry,
     billing_vat_id: cust?.vat_id,
   }).catch(() => {});
 
@@ -119,7 +120,7 @@ export async function finalizePaidLeadBatch(
 ): Promise<void> {
   const { data: cust } = await supabase
     .from('customers')
-    .select('id, name, email, contact_person, account_manager_id, vat_id')
+    .select('id, name, email, contact_person, account_manager_id, country, vat_id')
     .eq('id', claimed.customer_id)
     .single();
 
@@ -133,6 +134,7 @@ export async function finalizePaidLeadBatch(
 
   const { data: branchRow } = await supabase.from('branches').select('name').eq('slug', claimed.branch).single();
   const branchName = branchRow?.name || claimed.branch;
+  const leadBillingCountry = (cust?.country as string | null | undefined) ?? 'NL';
 
   if (cust) {
     sendOrderConfirmationEmail(cust, {
@@ -202,7 +204,7 @@ export async function finalizePaidLeadBatch(
     price_per_lead: Number(claimed.price_per_lead || 0),
     is_paid: true,
     source: 'portal_pay',
-    billing_country: (cust as { country?: string | null } | null | undefined)?.country ?? 'NL',
+    billing_country: leadBillingCountry,
     billing_vat_id: cust?.vat_id,
   }).catch(() => {});
 

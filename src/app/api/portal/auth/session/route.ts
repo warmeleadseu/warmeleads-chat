@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
   const supabase = createServerClient();
   const { data: row, error } = await supabase
     .from('customers')
-    .select('id, name, email, contact_person, branches, demo_mode, signup_source, vat_id')
+    .select('id, name, email, contact_person, branches, demo_mode, signup_source, country, vat_id')
     .eq('id', session.customer.id)
     .single();
 
@@ -27,8 +27,9 @@ export async function GET(request: NextRequest) {
     hasPaidCustomerBatch,
   });
 
+  const billingCountry = (row.country as string | null | undefined) ?? 'NL';
   const reverse_charge = qualifiesBelgiumReverseCharge({
-    country: (row as { country?: string | null }).country ?? 'NL',
+    country: billingCountry,
     vat_id: row.vat_id,
   });
   const customer: PortalCustomer = {
@@ -39,7 +40,7 @@ export async function GET(request: NextRequest) {
     branches: row.branches ?? [],
     demo_mode: !!row.demo_mode,
     signup_source: row.signup_source,
-    country: (row as { country?: string | null }).country ?? 'NL',
+    country: billingCountry,
     vat_id: row.vat_id ?? undefined,
     reverse_charge,
     show_demo_portal,

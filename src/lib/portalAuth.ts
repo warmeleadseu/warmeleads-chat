@@ -7,11 +7,16 @@ import {
 } from '@/lib/portalSession';
 import { looksLikeJwt } from '@/lib/jwtFormat';
 import { qualifiesBelgiumReverseCharge } from '@/lib/invoiceVat';
+import { buildCustomerSelectWithCountry } from '@/lib/customerCountrySupport';
 
 export type { PortalSession };
 
-/** Zonder `country`: oude databases vóór migratie 100 (customers.country) blijven werken. */
-const CUSTOMER_SELECT =
+/**
+ * Basis-velden voor de portaalsessie. `country` wordt dynamisch toegevoegd via
+ * `buildCustomerSelectWithCountry()` zodat de query ook werkt op DB's vóór
+ * migratie 100 (waar de kolom nog niet bestaat).
+ */
+const CUSTOMER_SELECT_BASE =
   'id, name, email, contact_person, branches, portal_active, demo_mode, signup_source, is_active, vat_id';
 
 const PORTAL_USER_SELECT =
@@ -20,7 +25,7 @@ const PORTAL_USER_SELECT =
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-function mapSessionCustomer(row: {
+type SessionCustomerRow = {
   id: string;
   name: string;
   email: string;
@@ -31,7 +36,9 @@ function mapSessionCustomer(row: {
   signup_source?: string | null;
   country?: string | null;
   vat_id?: string | null;
-}): PortalSession['customer'] {
+};
+
+function mapSessionCustomer(row: SessionCustomerRow): PortalSession['customer'] {
   const reverse_charge = qualifiesBelgiumReverseCharge({
     country: row.country ?? 'NL',
     vat_id: row.vat_id,
@@ -68,6 +75,7 @@ export async function verifyCustomer(request: NextRequest): Promise<PortalSessio
     (bearer && looksLikeJwt(bearer) ? bearer : null);
 
   const supabase = createServerClient();
+  const customerSelect = await buildCustomerSelectWithCountry(supabase, CUSTOMER_SELECT_BASE);
 
   if (jwtCandidate) {
     const claims = await verifyPortalSessionJwt(jwtCandidate);
@@ -76,10 +84,11 @@ export async function verifyCustomer(request: NextRequest): Promise<PortalSessio
     if (claims.typ === 'owner') {
       const { data: customer } = await supabase
         .from('customers')
-        .select(CUSTOMER_SELECT)
+        .select(customerSelect)
         .eq('id', claims.sub)
         .eq('is_active', true)
         .eq('portal_active', true)
+        .returns<SessionCustomerRow>()
         .single();
 
       if (!customer) return null;
@@ -104,10 +113,11 @@ export async function verifyCustomer(request: NextRequest): Promise<PortalSessio
 
       const { data: parentCustomer } = await supabase
         .from('customers')
-        .select(CUSTOMER_SELECT)
+        .select(customerSelect)
         .eq('id', claims.cid)
         .eq('is_active', true)
         .eq('portal_active', true)
+        .returns<SessionCustomerRow>()
         .single();
 
       if (!parentCustomer) return null;
@@ -126,10 +136,11 @@ export async function verifyCustomer(request: NextRequest): Promise<PortalSessio
 
   const { data: customer } = await supabase
     .from('customers')
-    .select(CUSTOMER_SELECT)
+    .select(customerSelect)
     .eq('id', raw)
     .eq('is_active', true)
     .eq('portal_active', true)
+    .returns<SessionCustomerRow>()
     .single();
 
   if (customer) {
@@ -151,10 +162,11 @@ export async function verifyCustomer(request: NextRequest): Promise<PortalSessio
 
   const { data: parentCustomer } = await supabase
     .from('customers')
-    .select(CUSTOMER_SELECT)
+    .select(customerSelect)
     .eq('id', portalUser.customer_id)
     .eq('is_active', true)
     .eq('portal_active', true)
+    .returns<SessionCustomerRow>()
     .single();
 
   if (!parentCustomer) return null;

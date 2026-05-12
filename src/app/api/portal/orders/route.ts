@@ -50,13 +50,13 @@ export async function POST(request: NextRequest) {
 
     const { data: custData } = await supabase
       .from('customers')
-      .select('id, name, email, contact_person, welcome_offer_used, welcome_offer_expires_at, vat_id')
+      .select('id, name, email, contact_person, welcome_offer_used, welcome_offer_expires_at, country, vat_id')
       .eq('id', customer.id)
       .single();
 
     if (!custData) return NextResponse.json({ error: 'Klant niet gevonden' }, { status: 404 });
 
-    const billingCountry = customer.country ?? 'NL';
+    const billingCountry = (custData.country as string | null | undefined) ?? customer.country ?? 'NL';
 
     if (batchKind === 'niche_research') {
       const nicheTitle = typeof rawNicheTitle === 'string' ? rawNicheTitle.trim() : '';

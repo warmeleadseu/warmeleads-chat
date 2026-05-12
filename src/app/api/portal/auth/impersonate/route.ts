@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
     const supabase = createServerClient();
     const { data: customer, error } = await supabase
       .from('customers')
-      .select('id, name, email, contact_person, branches, portal_active, demo_mode, signup_source, vat_id')
+      .select('id, name, email, contact_person, branches, portal_active, demo_mode, signup_source, country, vat_id')
       .eq('id', payload.customer_id as string)
       .single();
 
@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
     });
 
     const portalJwt = await signPortalOwnerSession(customer.id);
-    const billingCountry = (customer as { country?: string | null }).country ?? 'NL';
+    const billingCountry = (customer.country as string | null | undefined) ?? 'NL';
     const reverse_charge = qualifiesBelgiumReverseCharge({ country: billingCountry, vat_id: customer.vat_id });
     const res = NextResponse.json({
       success: true,

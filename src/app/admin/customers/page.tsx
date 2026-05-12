@@ -456,6 +456,14 @@ export default function CustomersPage() {
                               <p className="truncate font-semibold text-slate-900">{c.name}</p>
                               {c.contact_person && <p className="truncate text-xs text-slate-500">{c.contact_person}</p>}
                             </div>
+                            {c.country === 'BE' && (
+                              <span
+                                className="shrink-0 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800"
+                                title="Belgische klant — facturen met BTW verlegd"
+                              >
+                                BE
+                              </span>
+                            )}
                             {Date.now() - new Date(c.created_at).getTime() < 7 * 24 * 60 * 60 * 1000 && (
                               <span className="shrink-0 rounded-full bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-600">Nieuw</span>
                             )}
@@ -555,7 +563,17 @@ export default function CustomersPage() {
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
-                      <p className="truncate font-semibold text-slate-900">{c.name}</p>
+                      <div className="flex items-center gap-1.5">
+                        <p className="truncate font-semibold text-slate-900">{c.name}</p>
+                        {c.country === 'BE' && (
+                          <span
+                            className="shrink-0 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800"
+                            title="Belgische klant — facturen met BTW verlegd"
+                          >
+                            BE
+                          </span>
+                        )}
+                      </div>
                       {c.contact_person && <p className="truncate text-xs text-slate-500">{c.contact_person}</p>}
                     </div>
                     <div className="flex items-center gap-2">
@@ -828,6 +846,14 @@ function CustomerDetailPanel({
                 <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${c.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
                   {c.is_active ? 'Actief' : 'Inactief'}
                 </span>
+                {c.country === 'BE' && (
+                  <span
+                    className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800"
+                    title="Belgische B2B-klant: facturen met BTW verlegd (intracommunautair) mits geldig BE-BTW-nummer."
+                  >
+                    BE · BTW verlegd
+                  </span>
+                )}
                 <span className={`flex shrink-0 items-center gap-1 text-[11px] font-medium ${activity.color}`}>
                   <span className={`inline-block h-1.5 w-1.5 rounded-full ${activity.dotColor} ${activity.sort === 0 ? 'animate-pulse' : ''}`} />
                   {activity.label}

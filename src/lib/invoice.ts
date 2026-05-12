@@ -3,6 +3,7 @@ import { sendEmail } from '@/lib/email';
 import type { InvoiceLineItem } from '@/lib/invoicePdf';
 import { ensureInvoiceMollieCheckout } from '@/lib/invoiceCheckout';
 import { computeInvoiceVat } from '@/lib/invoiceVat';
+import { sanitizeInvoiceWritePayload } from '@/lib/customerCountrySupport';
 
 const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.warmeleads.eu';
 
@@ -75,7 +76,7 @@ export async function createInvoice(params: CreateInvoiceParams) {
 
   const { data: customer, error: custErr } = await supabase
     .from('customers')
-    .select('id, name, email, contact_person, street, house_number, postcode, city, vat_id, kvk_nummer')
+    .select('id, name, email, contact_person, street, house_number, postcode, city, country, vat_id, kvk_nummer')
     .eq('id', params.customer_id)
     .single();
 
@@ -91,7 +92,7 @@ export async function createInvoice(params: CreateInvoiceParams) {
   const subtotal = Number(params.total_price);
   const vat = computeInvoiceVat({
     subtotalExclBtw: subtotal,
-    country: (customer as { country?: string | null }).country ?? 'NL',
+    country: (customer.country as string | null | undefined) ?? 'NL',
     customerVatId: customer.vat_id,
   });
   const { vat_mode: vatMode, btw_percentage: btwPercentage, btw_amount: btwAmount, total_incl_btw: totalInclBtw } = vat;
@@ -124,29 +125,31 @@ export async function createInvoice(params: CreateInvoiceParams) {
   const invoiceStatus = params.status || 'paid';
   const isPaid = invoiceStatus === 'paid';
 
+  const invoicePayload = await sanitizeInvoiceWritePayload(supabase, {
+    invoice_number: invoiceNumber,
+    customer_id: params.customer_id,
+    batch_order_id: params.batch_order_id || null,
+    batch_id: params.batch_id || null,
+    customer_name: customer.name,
+    customer_email: customer.email,
+    customer_address: customerAddress,
+    customer_kvk: customer.kvk_nummer || null,
+    customer_vat_id: customer.vat_id || null,
+    description: invoiceSummaryDescription,
+    line_items: lineItems,
+    subtotal,
+    btw_percentage: btwPercentage,
+    btw_amount: btwAmount,
+    total_incl_btw: totalInclBtw,
+    vat_mode: vatMode,
+    mollie_payment_id: params.mollie_payment_id || null,
+    status: invoiceStatus,
+    paid_at: isPaid ? (params.paid_at || now) : null,
+  });
+
   const { data: invoice, error } = await supabase
     .from('invoices')
-    .insert({
-      invoice_number: invoiceNumber,
-      customer_id: params.customer_id,
-      batch_order_id: params.batch_order_id || null,
-      batch_id: params.batch_id || null,
-      customer_name: customer.name,
-      customer_email: customer.email,
-      customer_address: customerAddress,
-      customer_kvk: customer.kvk_nummer || null,
-      customer_vat_id: customer.vat_id || null,
-      description: invoiceSummaryDescription,
-      line_items: lineItems,
-      subtotal,
-      btw_percentage: btwPercentage,
-      btw_amount: btwAmount,
-      total_incl_btw: totalInclBtw,
-      vat_mode: vatMode,
-      mollie_payment_id: params.mollie_payment_id || null,
-      status: invoiceStatus,
-      paid_at: isPaid ? (params.paid_at || now) : null,
-    })
+    .insert(invoicePayload)
     .select()
     .single();
 

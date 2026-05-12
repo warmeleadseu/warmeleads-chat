@@ -3,6 +3,7 @@ import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
 import { resendOpenInvoiceWithPaymentLinks } from '@/lib/invoice';
 import { computeInvoiceVat } from '@/lib/invoiceVat';
+import { sanitizeInvoiceWritePayload } from '@/lib/customerCountrySupport';
 
 export async function GET(request: NextRequest) {
   const admin = await verifyAdmin(request);
@@ -44,7 +45,7 @@ export async function POST(request: NextRequest) {
 
   const { data: customer } = await supabase
     .from('customers')
-    .select('id, name, email, street, house_number, postcode, city, vat_id, account_manager_id')
+    .select('id, name, email, street, house_number, postcode, city, country, vat_id, account_manager_id')
     .eq('id', customer_id)
     .single();
 
@@ -62,7 +63,7 @@ export async function POST(request: NextRequest) {
   const sub = Number(subtotal);
   const vat = computeInvoiceVat({
     subtotalExclBtw: sub,
-    country: (customer as { country?: string | null }).country ?? 'NL',
+    country: (customer.country as string | null | undefined) ?? 'NL',
     customerVatId: customer.vat_id,
   });
   const { btw_percentage: btwPct, btw_amount: btwAmount, total_incl_btw: totalInclBtw, vat_mode: vatMode } = vat;
@@ -105,25 +106,27 @@ export async function POST(request: NextRequest) {
         ? new Date().toISOString()
         : null;
 
+  const invoicePayload = await sanitizeInvoiceWritePayload(supabase, {
+    invoice_number: invoiceNumber,
+    customer_id,
+    customer_name: customer.name,
+    customer_email: customer.email,
+    customer_address: custAddress,
+    customer_vat_id: customer.vat_id || null,
+    description,
+    line_items: items,
+    subtotal: sub,
+    btw_percentage: btwPct,
+    btw_amount: btwAmount,
+    total_incl_btw: totalInclBtw,
+    vat_mode: vatMode,
+    status: invStatus,
+    paid_at: paidAtValue,
+  });
+
   const { data: invoice, error: insertErr } = await supabase
     .from('invoices')
-    .insert({
-      invoice_number: invoiceNumber,
-      customer_id,
-      customer_name: customer.name,
-      customer_email: customer.email,
-      customer_address: custAddress,
-      customer_vat_id: customer.vat_id || null,
-      description,
-      line_items: items,
-      subtotal: sub,
-      btw_percentage: btwPct,
-      btw_amount: btwAmount,
-      total_incl_btw: totalInclBtw,
-      vat_mode: vatMode,
-      status: invStatus,
-      paid_at: paidAtValue,
-    })
+    .insert(invoicePayload)
     .select()
     .single();
 
@@ -170,14 +173,14 @@ export async function PUT(request: NextRequest) {
 
     const { data: cust } = await supabase
       .from('customers')
-      .select('vat_id')
+      .select('country, vat_id')
       .eq('id', existing.customer_id)
       .maybeSingle();
 
     const sub = Number(updates.subtotal ?? existing.subtotal);
     const vat = computeInvoiceVat({
       subtotalExclBtw: sub,
-      country: (cust as { country?: string | null } | null | undefined)?.country ?? 'NL',
+      country: ((cust?.country as string | null | undefined) ?? 'NL'),
       customerVatId: cust?.vat_id,
     });
     updates.subtotal = sub;
@@ -198,9 +201,10 @@ export async function PUT(request: NextRequest) {
     if (updates[key] !== undefined) safeUpdates[key] = updates[key];
   }
 
+  const sanitizedUpdates = await sanitizeInvoiceWritePayload(supabase, safeUpdates);
   const { data, error } = await supabase
     .from('invoices')
-    .update(safeUpdates)
+    .update(sanitizedUpdates)
     .eq('id', id)
     .select()
     .single();

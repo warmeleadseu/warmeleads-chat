@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
 
         const { data: orderCust } = await supabase
           .from('customers')
-          .select('id, name, email, contact_person, account_manager_id, vat_id')
+          .select('id, name, email, contact_person, account_manager_id, country, vat_id')
           .eq('id', claimedOrder.customer_id)
           .single();
 
@@ -183,7 +183,7 @@ export async function POST(request: NextRequest) {
           price_per_lead: Number(claimedOrder.price_per_appointment),
           is_paid: true,
           source: 'portal',
-          billing_country: (orderCust as { country?: string | null } | null | undefined)?.country ?? 'NL',
+          billing_country: (orderCust?.country as string | null | undefined) ?? 'NL',
           billing_vat_id: orderCust?.vat_id,
         }).catch(() => {});
 
@@ -298,7 +298,7 @@ export async function POST(request: NextRequest) {
 
       const order = claimedOrder;
 
-      const { data: orderCust } = await supabase.from('customers').select('id, name, email, contact_person, account_manager_id, vat_id').eq('id', order.customer_id).single();
+      const { data: orderCust } = await supabase.from('customers').select('id, name, email, contact_person, account_manager_id, country, vat_id').eq('id', order.customer_id).single();
 
       const rawKind = (order as { batch_kind?: string }).batch_kind;
       const orderBatchKind =
@@ -455,7 +455,7 @@ export async function POST(request: NextRequest) {
         source: 'portal',
         batch_kind: orderBatchKind,
         niche_title: orderNicheTitle || null,
-        billing_country: (orderCust as { country?: string | null } | null | undefined)?.country ?? 'NL',
+        billing_country: (orderCust?.country as string | null | undefined) ?? 'NL',
         billing_vat_id: orderCust?.vat_id,
       }).catch(() => {});
 
