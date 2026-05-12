@@ -109,6 +109,23 @@ function persistPresets(presets: ExportPreset[]) {
   } catch { /* quota exceeded */ }
 }
 
+async function readPortalExportErrorMessage(res: Response): Promise<string> {
+  const raw = await res.text();
+  const trimmed = raw.trim();
+  if (trimmed.startsWith('{')) {
+    try {
+      const j = JSON.parse(trimmed) as { error?: string };
+      if (typeof j.error === 'string' && j.error.trim()) return j.error;
+    } catch {
+      /* ignore */
+    }
+  }
+  if (res.status === 413) {
+    return 'De export is te groot voor één download. Gebruik filters (datum, branche, status) of neem contact op voor een uitgebreide export.';
+  }
+  return 'Export mislukt. Probeer het later opnieuw.';
+}
+
 /* ─── component ─── */
 
 interface ExportWizardProps {
@@ -118,9 +135,18 @@ interface ExportWizardProps {
   totalLeads: number;
   customerName: string;
   branchFields: BranchField[];
+  showToast?: (msg: string, type?: 'success' | 'error' | 'info') => void;
 }
 
-export default function ExportWizard({ open, onClose, filters, totalLeads, customerName, branchFields }: ExportWizardProps) {
+export default function ExportWizard({
+  open,
+  onClose,
+  filters,
+  totalLeads,
+  customerName,
+  branchFields,
+  showToast,
+}: ExportWizardProps) {
   const [step, setStep] = useState(1);
 
   const allColumns = useMemo<ExportColumn[]>(() => {
@@ -286,7 +312,15 @@ export default function ExportWizard({ open, onClose, filters, totalLeads, custo
       params.set('separator', ',');
       params.set('include_headers', 'true');
       const res = await portalFetch(`/api/portal/export?${params}`);
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const errMsg = await readPortalExportErrorMessage(res);
+        showToast?.(errMsg, 'error');
+        setPreview([]);
+        setPreviewHeaders([]);
+        setPreviewCount(0);
+        setPreviewLoading(false);
+        return;
+      }
       const text = await res.text();
       const bom = text.startsWith('\uFEFF') ? text.slice(1) : text;
       const lines = bom.split('\r\n').filter(l => l.trim());
@@ -323,9 +357,10 @@ export default function ExportWizard({ open, onClose, filters, totalLeads, custo
     } catch {
       setPreview([]);
       setPreviewCount(0);
+      showToast?.('Preview kon niet geladen worden', 'error');
     }
     setPreviewLoading(false);
-  }, [buildParams]);
+  }, [buildParams, showToast]);
 
   useEffect(() => {
     if (step === 3) loadPreview();
@@ -336,7 +371,11 @@ export default function ExportWizard({ open, onClose, filters, totalLeads, custo
     try {
       const params = buildParams();
       const res = await portalFetch(`/api/portal/export?${params}`);
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const errMsg = await readPortalExportErrorMessage(res);
+        showToast?.(errMsg, 'error');
+        return;
+      }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -345,8 +384,11 @@ export default function ExportWizard({ open, onClose, filters, totalLeads, custo
       a.download = `leads-${customerName.replace(/\s+/g, '-').toLowerCase()}-${new Date().toISOString().slice(0, 10)}.${ext}`;
       a.click();
       URL.revokeObjectURL(url);
+      showToast?.('Export gedownload', 'success');
       onClose();
-    } catch { /* handled by caller */ }
+    } catch {
+      showToast?.('Download mislukt. Controleer je verbinding en probeer opnieuw.', 'error');
+    }
     setDownloading(false);
   };
 

@@ -107,6 +107,10 @@ interface Stats {
   bulkLeads?: number;
   statusBreakdown?: Record<string, number>;
   branchBreakdown?: Record<string, number>;
+  /** True when API capped rows for DB safety; totals may be approximate. */
+  partial?: boolean;
+  maxPaginateRows?: number;
+  maxLeadDetailRows?: number;
 }
 
 interface Batch {
@@ -238,6 +242,8 @@ export default function PortalPage() {
   const [order, setOrder] = useState<'asc' | 'desc'>('desc');
   const [leadSource, setLeadSource] = useState<'all' | 'fresh' | 'bulk'>('all');
   const [bulkCount, setBulkCount] = useState(0);
+  const [leadsScopePartial, setLeadsScopePartial] = useState(false);
+  const [leadsScopeMaxRows, setLeadsScopeMaxRows] = useState<number | null>(null);
 
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [showFilters, setShowFilters] = useState(false);
@@ -248,7 +254,7 @@ export default function PortalPage() {
 
   const [payingBatch, setPayingBatch] = useState<string | null>(null);
   const toast = useToast();
-  const showToast = useCallback((msg: string, type: 'success' | 'error' = 'success') => {
+  const showToast = useCallback((msg: string, type: 'success' | 'error' | 'info' = 'success') => {
     toast.show(msg, type);
   }, [toast]);
 
@@ -362,10 +368,17 @@ export default function PortalPage() {
         setTotal(data.total || 0);
         setTotalPages(data.totalPages || 1);
         if (data.bulkCount !== undefined) setBulkCount(data.bulkCount);
+        const partial = !!data.partial;
+        setLeadsScopePartial(partial);
+        setLeadsScopeMaxRows(partial && typeof data.maxPaginateRows === 'number' ? data.maxPaginateRows : null);
       } else {
+        setLeadsScopePartial(false);
+        setLeadsScopeMaxRows(null);
         showToast('Leads konden niet geladen worden', 'error');
       }
     } catch {
+      setLeadsScopePartial(false);
+      setLeadsScopeMaxRows(null);
       showToast('Leads konden niet geladen worden', 'error');
     }
     setLoading(false);
@@ -716,6 +729,35 @@ export default function PortalPage() {
         subtitle={`Leadoverzicht voor ${customer.name}`}
       />
 
+      {(stats.partial || leadsScopePartial) && (
+        <div
+          role="status"
+          className="flex gap-3 rounded-xl border border-amber-200/80 bg-amber-50/90 px-4 py-3 text-sm text-amber-950 shadow-sm"
+        >
+          <ExclamationTriangleIcon className="h-5 w-5 shrink-0 text-amber-600" aria-hidden />
+          <div className="min-w-0 space-y-1">
+            <p className="font-semibold leading-tight">Weergave beperkt voor snelheid</p>
+            <ul className="list-inside list-disc space-y-0.5 text-xs leading-relaxed text-amber-900/90">
+              {leadsScopePartial && (
+                <li>
+                  De leadlijst is afgekapt (max.{' '}
+                  {leadsScopeMaxRows != null ? leadsScopeMaxRows.toLocaleString('nl-NL') : 'veel'}{' '}
+                  leads). Gebruik filters (zoeken, datum, status, branche) om een kleinere set te tonen.
+                </li>
+              )}
+              {stats.partial && (
+                <li>
+                  Statistieken en grafieken zijn gebaseerd op een steekproef
+                  {typeof stats.maxLeadDetailRows === 'number'
+                    ? ` (max. ${stats.maxLeadDetailRows.toLocaleString('nl-NL')} leads)`
+                    : ''}
+                  . Cijfers kunnen afwijken van het totaal in de database.
+                </li>
+              )}
+            </ul>
+          </div>
+        </div>
+      )}
 
       <BatchConversionCard
         showDemoPortal={showDemoPortal}
@@ -1192,6 +1234,7 @@ export default function PortalPage() {
         totalLeads={total}
         customerName={customer.name}
         branchFields={branchFieldsForExport}
+        showToast={showToast}
       />
 
       {/* Settings slide-over (portalled to body) */}

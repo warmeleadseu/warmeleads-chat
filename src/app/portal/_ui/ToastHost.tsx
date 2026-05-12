@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useRef, useState, ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CheckCircleIcon, XCircleIcon } from '@heroicons/react/24/outline';
+import { CheckCircleIcon, InformationCircleIcon, XCircleIcon } from '@heroicons/react/24/outline';
 
 export type ToastType = 'success' | 'error' | 'info';
 
@@ -16,6 +16,7 @@ interface ToastApi {
   show: (msg: string, type?: ToastType) => void;
   success: (msg: string) => void;
   error: (msg: string) => void;
+  info: (msg: string) => void;
 }
 
 const ToastContext = createContext<ToastApi | null>(null);
@@ -39,6 +40,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     show,
     success: msg => show(msg, 'success'),
     error: msg => show(msg, 'error'),
+    info: msg => show(msg, 'info'),
   };
 
   return (
@@ -57,11 +59,13 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           >
             <div className="flex items-center gap-2">
               {toast.type === 'error' ? (
-                <XCircleIcon className="h-4 w-4 text-red-200" />
+                <XCircleIcon className="h-4 w-4 shrink-0 text-red-200" />
+              ) : toast.type === 'info' ? (
+                <InformationCircleIcon className="h-4 w-4 shrink-0 text-sky-200" />
               ) : (
-                <CheckCircleIcon className="h-4 w-4 text-emerald-400" />
+                <CheckCircleIcon className="h-4 w-4 shrink-0 text-emerald-400" />
               )}
-              {toast.msg}
+              <span className="min-w-0 flex-1 leading-snug">{toast.msg}</span>
             </div>
           </motion.div>
         )}
@@ -77,6 +81,7 @@ export function useToast(): ToastApi {
       show: () => {},
       success: () => {},
       error: () => {},
+      info: () => {},
     };
   }
   return ctx;
