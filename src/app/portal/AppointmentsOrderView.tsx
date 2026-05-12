@@ -306,7 +306,7 @@ export default function AppointmentsOrderView({
                       </div>
                       <p className="mt-0.5 text-xs text-slate-400">
                         {formatDateNl(o.created_at)}
-                        {o.status === 'paid' && <> &middot; {formatCurrency(Number(o.total_price) * 1.21)} incl. BTW</>}
+                        {o.status === 'paid' && <> &middot; {formatCurrency(Number(o.total_price) * (1 + btwRate))} {btwRate === 0 ? '(BTW verlegd)' : 'incl. BTW'}</>}
                       </p>
                     </div>
                     {o.status !== 'paid' && (

@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { usePortal, isDemoPortalExperience } from './portalContext';
 import { portalFetch } from '@/lib/portalAuth';
+import { portalBtwRate } from '@/lib/invoiceVat';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   MagnifyingGlassIcon,
@@ -727,6 +728,7 @@ export default function PortalPage() {
         payingBatch={payingBatch}
         onPayBatch={handlePayBatch}
         onOpenOverview={() => setShowOverviewPanel(true)}
+        customer={customer}
       />
 
       <div className="overflow-x-auto hide-scrollbar">
@@ -1468,6 +1470,7 @@ function BatchConversionCard({
   payingBatch,
   onPayBatch,
   onOpenOverview,
+  customer,
 }: {
   showDemoPortal: boolean;
   batchesLoading: boolean;
@@ -1479,6 +1482,7 @@ function BatchConversionCard({
   payingBatch: string | null;
   onPayBatch: (batchId: string) => void;
   onOpenOverview: () => void;
+  customer: { country?: string | null; vat_id?: string | null; reverse_charge?: boolean };
 }) {
   if (batchesLoading) {
     return (
@@ -1552,9 +1556,14 @@ function BatchConversionCard({
     Number(primaryBatch.batch_size || 0),
   );
   const size = Number(primaryBatch.batch_size || 0);
-  const amountInclBtw = Number(primaryBatch.total_price || 0) > 0
-    ? Math.round(Number(primaryBatch.total_price || 0) * 1.21 * 100) / 100
+  const btwRate = portalBtwRate(customer);
+  const isReverseCharge = btwRate === 0;
+  const amountForPayment = Number(primaryBatch.total_price || 0) > 0
+    ? Math.round(Number(primaryBatch.total_price || 0) * (1 + btwRate) * 100) / 100
     : null;
+  const amountLabel = amountForPayment != null
+    ? `${formatCurrencyEUR(amountForPayment)} ${isReverseCharge ? '(BTW verlegd)' : 'incl. btw'}`
+    : '';
   const statusTone = isUnpaid
     ? 'border-red-200 bg-red-50/70'
     : shouldUpsell
@@ -1623,7 +1632,7 @@ function BatchConversionCard({
               <CreditCardIcon className="h-4 w-4" />
               {payingBatch === batchId
                 ? 'Betaling openen...'
-                : `Batch betalen${amountInclBtw ? ` - ${formatCurrencyEUR(amountInclBtw)} incl. btw` : ''}`}
+                : `Batch betalen${amountLabel ? ` - ${amountLabel}` : ''}`}
             </button>
           ) : shouldUpsell ? (
             <Link

@@ -4,7 +4,8 @@ import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import bcrypt from 'bcryptjs';
 import { logAudit } from '@/lib/audit';
 import { buildPhoneSearchIlikeClauses, sanitizePostgrestIlike } from '@/lib/phoneSearch';
-import { sanitizeCustomerWritePayload } from '@/lib/customerCountrySupport';
+import { sanitizeCustomerWritePayload, customersHaveCountryColumn } from '@/lib/customerCountrySupport';
+import { recalcOpenInvoicesForCustomer } from '@/lib/recalcOpenInvoices';
 
 const DEFAULT_LIMIT = 25;
 const MAX_LIMIT = 100;
@@ -237,13 +238,55 @@ export async function PUT(request: NextRequest) {
     }
 
     const supabase = createServerClient();
+
+    const hasCountryColumn = await customersHaveCountryColumn(supabase);
+    const beforeSelect = hasCountryColumn ? 'country, vat_id' : 'vat_id';
+    const { data: before } = await supabase
+      .from('customers')
+      .select(beforeSelect)
+      .eq('id', id)
+      .maybeSingle<{ country?: string | null; vat_id?: string | null }>();
+
     const updatePayload = await sanitizeCustomerWritePayload(supabase, updates);
     const { data, error } = await supabase.from('customers').update(updatePayload).eq('id', id).select().single();
 
     if (error) {
       return NextResponse.json({ error: 'Bijwerken mislukt' }, { status: 500 });
     }
-    return NextResponse.json({ success: true, customer: { ...data, password_hash: undefined } });
+
+    let recalcedInvoices: Awaited<ReturnType<typeof recalcOpenInvoicesForCustomer>> = [];
+    const countryChanged = hasCountryColumn
+      && Object.prototype.hasOwnProperty.call(updates, 'country')
+      && (before?.country ?? null) !== ((updates as Record<string, unknown>).country ?? null);
+    const vatIdChanged = Object.prototype.hasOwnProperty.call(updates, 'vat_id')
+      && (before?.vat_id ?? null) !== ((updates as Record<string, unknown>).vat_id ?? null);
+    if (countryChanged || vatIdChanged) {
+      try {
+        recalcedInvoices = await recalcOpenInvoicesForCustomer(supabase, id);
+        if (recalcedInvoices.length > 0) {
+          await logAudit({
+            adminId: admin.id ?? null,
+            adminName: admin.name ?? admin.email ?? null,
+            action: 'invoices.recalc_after_customer_country_change',
+            entityType: 'customer',
+            entityId: id,
+            details: {
+              count: recalcedInvoices.length,
+              invoices: recalcedInvoices,
+              changed: { country: countryChanged, vat_id: vatIdChanged },
+            },
+          });
+        }
+      } catch (e) {
+        console.error('[admin/customers PUT] recalc open invoices failed:', e);
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      customer: { ...data, password_hash: undefined },
+      recalced_invoices: recalcedInvoices,
+    });
   } catch {
     return NextResponse.json({ error: 'Ongeldige data' }, { status: 400 });
   }
