@@ -20,7 +20,7 @@ import {
   SparklesIcon,
   CalendarDaysIcon,
 } from '@heroicons/react/24/outline';
-import { PortalContext, type PortalCustomer, type ClientPortalUser } from './portalContext';
+import { PortalContext, type PortalCustomer, type ClientPortalUser, isDemoPortalExperience } from './portalContext';
 import { portalFetch } from '@/lib/portalAuth';
 import { PERMISSIONS } from '@/lib/portalPermissions';
 import { UsersIcon } from '@heroicons/react/24/outline';
@@ -811,9 +811,7 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
       <ToastProvider>
         <div className="flex min-h-screen flex-col bg-slate-50">
           <div className="sticky top-0 z-40">
-            {(customer.show_demo_portal ??
-              (customer.signup_source === 'website' || customer.demo_mode === true)) &&
-              !isAdminView && <DemoBanner />}
+            {isDemoPortalExperience(customer) && !isAdminView && <DemoBanner />}
             {isAdminView && (
               <AdminViewBanner
                 customerName={customer.name}

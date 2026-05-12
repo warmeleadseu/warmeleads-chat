@@ -3,6 +3,7 @@ import { createServerClient } from '@/lib/supabase';
 import bcrypt from 'bcryptjs';
 import { sendEmail } from '@/lib/email';
 import { rateLimit, getClientIp } from '@/lib/rateLimit';
+import { syncDemoLeadAssignmentsForCustomer } from '@/lib/demoPortalLeads';
 
 const MAX_ATTEMPTS = 5;
 const WINDOW_MS = 60 * 60 * 1000;
@@ -102,8 +103,8 @@ export async function POST(request: NextRequest) {
       await supabase.from('customer_targets').insert(targetRows);
     }
 
-    seedDemoLeads(supabase, customer.id, branches).catch((e) =>
-      console.error('[register] demo seed error:', e)
+    syncDemoLeadAssignmentsForCustomer(supabase, customer.id, branches).catch((e) =>
+      console.error('[register] demo seed error:', e),
     );
 
     sendWelcomeEmail(customer.email, customer.contact_person || customer.name, welcomeExpiry).catch(() => {});
@@ -168,43 +169,6 @@ async function sendWelcomeEmail(email: string, name: string, expiresAt: string) 
     type: 'welcome_signup',
     toName: name,
   });
-}
-
-const DEMO_STATUS_DISTRIBUTION: { status: string; notities: string | null }[] = [
-  { status: 'nieuw', notities: null },
-  { status: 'nieuw', notities: null },
-  { status: 'gecontacteerd', notities: 'Terugbellen na 17:00' },
-  { status: 'offerte', notities: 'Interesse in 10kWh systeem' },
-];
-
-async function seedDemoLeads(
-  supabase: ReturnType<typeof createServerClient>,
-  customerId: string,
-  branches: string[]
-) {
-  const { data: demoLeads } = await supabase
-    .from('leads')
-    .select('id, branch')
-    .eq('bron', 'demo')
-    .is('customer_id', null)
-    .in('branch', branches);
-
-  if (!demoLeads || demoLeads.length === 0) return;
-
-  const assignments = demoLeads.map((lead, i) => {
-    const preset = DEMO_STATUS_DISTRIBUTION[i % DEMO_STATUS_DISTRIBUTION.length];
-    return {
-      lead_id: lead.id,
-      customer_id: customerId,
-      batch_id: null,
-      distance_km: Math.round((3 + Math.random() * 25) * 10) / 10,
-      source: 'demo',
-      status: preset.status,
-      notities: preset.notities,
-    };
-  });
-
-  await supabase.from('lead_assignments').insert(assignments);
 }
 
 async function notifyAdmins(supabase: ReturnType<typeof createServerClient>, customer: { id: string; name: string; email: string; contact_person: string }) {

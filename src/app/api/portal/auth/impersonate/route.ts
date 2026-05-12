@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { jwtVerify } from 'jose';
 import { getSessionSecretKey } from '@/lib/sessionSecrets';
+import { getHasPaidCustomerBatch, shouldUseDemoPortalExperience } from '@/lib/demoPortalEligibility';
 import {
   PORTAL_SESSION_COOKIE,
   portalSessionCookieOptions,
@@ -35,10 +36,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Klant niet gevonden' }, { status: 404 });
     }
 
+    const hasPaidCustomerBatch = await getHasPaidCustomerBatch(supabase, customer.id);
+    const show_demo_portal = shouldUseDemoPortalExperience({
+      signup_source: customer.signup_source,
+      demo_mode: customer.demo_mode,
+      hasPaidCustomerBatch,
+    });
+
     const portalJwt = await signPortalOwnerSession(customer.id);
     const res = NextResponse.json({
       success: true,
-      customer,
+      customer: {
+        ...customer,
+        show_demo_portal,
+        has_paid_customer_batch: hasPaidCustomerBatch,
+      },
       impersonation: {
         admin_id: payload.admin_id,
         admin_name: payload.admin_name,

@@ -34,7 +34,7 @@ export async function finalizePaidBulkLeadBatch(
 ): Promise<void> {
   const { data: cust } = await supabase
     .from('customers')
-    .select('id, name, email, contact_person, account_manager_id, demo_mode')
+    .select('id, name, email, contact_person, account_manager_id')
     .eq('id', claimed.customer_id)
     .single();
 
@@ -100,10 +100,8 @@ export async function finalizePaidBulkLeadBatch(
     cust?.account_manager_id || null,
   ).catch(() => {});
 
-  if (cust?.demo_mode) {
-    await supabase.from('customers').update({ demo_mode: false }).eq('id', claimed.customer_id);
-    await supabase.from('lead_assignments').delete().eq('customer_id', claimed.customer_id).eq('source', 'demo');
-  }
+  await supabase.from('lead_assignments').delete().eq('customer_id', claimed.customer_id).eq('source', 'demo');
+  await supabase.from('customers').update({ demo_mode: false }).eq('id', claimed.customer_id);
 }
 
 /**
@@ -118,7 +116,7 @@ export async function finalizePaidLeadBatch(
 ): Promise<void> {
   const { data: cust } = await supabase
     .from('customers')
-    .select('id, name, email, contact_person, account_manager_id, demo_mode')
+    .select('id, name, email, contact_person, account_manager_id')
     .eq('id', claimed.customer_id)
     .single();
 
@@ -212,10 +210,8 @@ export async function finalizePaidLeadBatch(
     cust?.account_manager_id || null,
   ).catch(() => {});
 
-  if (cust?.demo_mode) {
-    await supabase.from('customers').update({ demo_mode: false }).eq('id', claimed.customer_id);
-    await supabase.from('lead_assignments').delete().eq('customer_id', claimed.customer_id).eq('source', 'demo');
-  }
+  await supabase.from('lead_assignments').delete().eq('customer_id', claimed.customer_id).eq('source', 'demo');
+  await supabase.from('customers').update({ demo_mode: false }).eq('id', claimed.customer_id);
 
   const startsInFuture = claimed.starts_at && new Date(claimed.starts_at) > new Date();
   if (!startsInFuture) {

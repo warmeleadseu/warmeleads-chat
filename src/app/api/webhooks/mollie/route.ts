@@ -377,25 +377,9 @@ export async function POST(request: NextRequest) {
           .eq('id', order.customer_id);
       }
 
-      // Transition from demo to production mode
-      const { data: demoCust } = await supabase
-        .from('customers')
-        .select('demo_mode')
-        .eq('id', order.customer_id)
-        .single();
-
-      if (demoCust?.demo_mode) {
-        await supabase
-          .from('customers')
-          .update({ demo_mode: false })
-          .eq('id', order.customer_id);
-
-        await supabase
-          .from('lead_assignments')
-          .delete()
-          .eq('customer_id', order.customer_id)
-          .eq('source', 'demo');
-      }
+      // Eerste (of elke) betaalde batch: demo-toewijzingen opruimen en vlag gelijk trekken
+      await supabase.from('lead_assignments').delete().eq('customer_id', order.customer_id).eq('source', 'demo');
+      await supabase.from('customers').update({ demo_mode: false }).eq('id', order.customer_id);
 
       const { data: branchRow } = await supabase.from('branches').select('name').eq('slug', order.branch).single();
       const branchName = branchRow?.name || order.branch;

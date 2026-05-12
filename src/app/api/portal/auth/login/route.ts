@@ -3,6 +3,7 @@ import { createServerClient } from '@/lib/supabase';
 import bcrypt from 'bcryptjs';
 import { rateLimit, getClientIp } from '@/lib/rateLimit';
 import { repairDemoAssignmentsIfNeeded } from '@/lib/demoPortalLeads';
+import { getHasPaidCustomerBatch, shouldUseDemoPortalExperience } from '@/lib/demoPortalEligibility';
 import {
   PORTAL_SESSION_COOKIE,
   portalSessionCookieOptions,
@@ -51,6 +52,18 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Ongeldige inloggegevens' }, { status: 401 });
       }
 
+      const hasPaidCustomerBatch = await getHasPaidCustomerBatch(supabase, customer.id);
+      const show_demo_portal = shouldUseDemoPortalExperience({
+        signup_source: customer.signup_source,
+        demo_mode: customer.demo_mode,
+        hasPaidCustomerBatch,
+      });
+      if (show_demo_portal) {
+        repairDemoAssignmentsIfNeeded(supabase, customer.id, customer.branches as string[] | null).catch((e) =>
+          console.error('[login] demo repair error:', e),
+        );
+      }
+
       const now = new Date().toISOString();
       supabase
         .from('customers')
@@ -62,18 +75,16 @@ export async function POST(request: NextRequest) {
         .eq('id', customer.id)
         .then(() => {});
 
-      if (customer.demo_mode) {
-        repairDemoAssignmentsIfNeeded(supabase, customer.id, customer.branches as string[] | null).catch((e) =>
-          console.error('[login] demo repair error:', e)
-        );
-      }
-
       const { password_hash: _, ...safeCustomer } = customer;
 
       const portalJwt = await signPortalOwnerSession(customer.id);
       const res = NextResponse.json({
         success: true,
-        customer: safeCustomer,
+        customer: {
+          ...safeCustomer,
+          show_demo_portal,
+          has_paid_customer_batch: hasPaidCustomerBatch,
+        },
         is_portal_user: false,
       });
       res.cookies.set(PORTAL_SESSION_COOKIE, portalJwt, portalSessionCookieOptions());
@@ -113,6 +124,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Het bedrijfsaccount is niet meer actief' }, { status: 403 });
     }
 
+    const hasPaidCustomerBatch = await getHasPaidCustomerBatch(supabase, portalUser.customer_id);
+    const show_demo_portal = shouldUseDemoPortalExperience({
+      signup_source: parentCustomer.signup_source,
+      demo_mode: parentCustomer.demo_mode,
+      hasPaidCustomerBatch,
+    });
+    if (show_demo_portal) {
+      repairDemoAssignmentsIfNeeded(supabase, portalUser.customer_id, parentCustomer.branches as string[] | null).catch(
+        (e) => console.error('[login] demo repair error (agent):', e),
+      );
+    }
+
     const now = new Date().toISOString();
     supabase
       .from('portal_users')
@@ -130,7 +153,12 @@ export async function POST(request: NextRequest) {
     const portalJwt = await signPortalUserSession(portalUser.id, portalUser.customer_id);
     const res = NextResponse.json({
       success: true,
-      customer: { ...safeParent, demo_mode },
+      customer: {
+        ...safeParent,
+        demo_mode,
+        show_demo_portal,
+        has_paid_customer_batch: hasPaidCustomerBatch,
+      },
       portal_user: safePortalUser,
       is_portal_user: true,
     });

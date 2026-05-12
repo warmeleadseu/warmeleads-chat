@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { usePortal } from './portalContext';
+import { usePortal, isDemoPortalExperience } from './portalContext';
 import { portalFetch } from '@/lib/portalAuth';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -214,9 +214,7 @@ function formatCurrencyEUR(amount: number) {
 
 export default function PortalPage() {
   const { customer } = usePortal();
-  const showDemoPortal =
-    customer.show_demo_portal ??
-    (customer.signup_source === 'website' || customer.demo_mode === true);
+  const showDemoPortal = isDemoPortalExperience(customer);
   const searchParams = useSearchParams();
 
   const [stats, setStats] = useState<Stats>({ totalLeads: 0, newThisWeek: 0, contacted: 0, sold: 0 });

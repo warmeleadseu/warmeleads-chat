@@ -16,6 +16,11 @@ export interface PortalCustomer {
   has_paid_customer_batch?: boolean;
 }
 
+/** Demo-banner en lead-API: server stuurt `show_demo_portal`; fallback lekt geen echte leads vóór betaling. */
+export function isDemoPortalExperience(c: PortalCustomer): boolean {
+  return c.show_demo_portal ?? c.has_paid_customer_batch !== true;
+}
+
 export interface ClientPortalUser {
   id: string;
   customer_id: string;

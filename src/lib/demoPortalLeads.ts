@@ -2,6 +2,9 @@ import { createServerClient } from '@/lib/supabase';
 
 const PAGE_SIZE = 1000;
 
+/** Vast aantal voorbeeldleads in het pre-pay portaal (template `bron = demo`). */
+export const DEMO_PORTAL_ASSIGNMENT_CAP = 4;
+
 const DEMO_STATUS_DISTRIBUTION: { status: string; notities: string | null }[] = [
   { status: 'nieuw', notities: null },
   { status: 'nieuw', notities: null },
@@ -97,6 +100,13 @@ export async function syncDemoLeadAssignmentsForCustomer(
   const demoLeads = await fetchDemoTemplateLeadsForBranches(supabase, branches);
   if (demoLeads.length === 0) return 0;
 
+  const sorted = [...demoLeads].sort((a, b) => {
+    const byBranch = String(a.branch).localeCompare(String(b.branch), 'nl');
+    if (byBranch !== 0) return byBranch;
+    return a.id.localeCompare(b.id);
+  });
+  const capped = sorted.slice(0, DEMO_PORTAL_ASSIGNMENT_CAP);
+
   const { error: delErr } = await supabase
     .from('lead_assignments')
     .delete()
@@ -107,7 +117,7 @@ export async function syncDemoLeadAssignmentsForCustomer(
     return 0;
   }
 
-  const rows = demoLeads.map((lead, i) => {
+  const rows = capped.map((lead, i) => {
     const preset = DEMO_STATUS_DISTRIBUTION[i % DEMO_STATUS_DISTRIBUTION.length];
     return {
       lead_id: lead.id,
@@ -161,6 +171,11 @@ export async function repairDemoAssignmentsIfNeeded(
     .eq('source', 'demo');
 
   if (!rawCount) {
+    await syncDemoLeadAssignmentsForCustomer(supabase, customerId, customerBranches);
+    return;
+  }
+
+  if ((rawCount ?? 0) > DEMO_PORTAL_ASSIGNMENT_CAP) {
     await syncDemoLeadAssignmentsForCustomer(supabase, customerId, customerBranches);
     return;
   }
