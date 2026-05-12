@@ -38,6 +38,11 @@ import {
 } from '@heroicons/react/24/outline';
 import { AdminContext, type AdminUser } from './adminContext';
 import { adminFetch } from '@/lib/adminAuth';
+import {
+  adminAuthDebugClient,
+  adminAuthDebugClientEnabled,
+  redactEmail,
+} from '@/lib/adminAuthDebug';
 import { GlobalComposeButton } from './_components/GlobalComposeButton';
 
 type NavRole = 'superadmin' | 'admin' | 'accountmanager';
@@ -93,6 +98,10 @@ function LoginScreen({ onLogin }: { onLogin: (u: AdminUser) => void }) {
     e.preventDefault();
     setLoading(true);
     setError('');
+    const t0 = typeof performance !== 'undefined' ? performance.now() : 0;
+    console.info('[WL Admin]', 'login: POST /api/admin/auth/login start', {
+      email: redactEmail(email),
+    });
     try {
       const res = await fetch('/api/admin/auth/login', {
         method: 'POST',
@@ -100,10 +109,32 @@ function LoginScreen({ onLogin }: { onLogin: (u: AdminUser) => void }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       });
-      const data = await res.json();
+      const ms = typeof performance !== 'undefined' ? Math.round(performance.now() - t0) : null;
+      let data: { error?: string; user?: AdminUser } = {};
+      try {
+        data = await res.json();
+      } catch {
+        console.info('[WL Admin]', 'login: response body is geen JSON', { status: res.status, durationMs: ms });
+        throw new Error('Ongeldig antwoord van server');
+      }
+      console.info('[WL Admin]', 'login: response', {
+        status: res.status,
+        ok: res.ok,
+        durationMs: ms,
+        hasUser: !!data.user,
+      });
+      if (adminAuthDebugClientEnabled()) {
+        adminAuthDebugClient('login: volledige response payload (geen wachtwoord)', {
+          keys: data && typeof data === 'object' ? Object.keys(data) : [],
+        });
+      }
       if (!res.ok) throw new Error(data.error || 'Login mislukt');
+      if (!data.user) throw new Error('Geen gebruikersdata in antwoord');
       onLogin(data.user);
     } catch (err: unknown) {
+      console.info('[WL Admin]', 'login: fout', {
+        message: err instanceof Error ? err.message : String(err),
+      });
       setError(err instanceof Error ? err.message : 'Login mislukt');
     } finally {
       setLoading(false);
@@ -380,11 +411,64 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const [pendingTasks, setPendingTasks] = useState(0);
 
   useEffect(() => {
+    try {
+      const q = new URLSearchParams(window.location.search);
+      if (q.get('debugAuth') === '1') {
+        sessionStorage.setItem('wl_admin_auth_debug', '1');
+        console.info(
+          '[WL Admin] Uitgebreide auth-debug staat aan voor deze tab (sessionStorage). Server: zet NEXT_PUBLIC_ADMIN_AUTH_DEBUG=1 in Vercel en redeploy.',
+        );
+      }
+    } catch {
+      /* noop */
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+    void navigator.serviceWorker
+      .getRegistrations()
+      .then((regs) => {
+        if (regs.length === 0) {
+          console.info('[WL Admin] Geen service worker-registraties (chunks gaan direct naar netwerk).');
+          return;
+        }
+        console.info('[WL Admin] Service worker(s) verwijderen voor stabiele admin-chunks…', { count: regs.length });
+        return Promise.all(regs.map((r) => r.unregister()));
+      })
+      .then(() => {
+        if ('caches' in window) {
+          return caches.keys().then((names) => {
+            const wl = names.filter((n) => n.startsWith('warmeleads-'));
+            if (wl.length > 0) {
+              console.info('[WL Admin] Verwijderen oude warmeleads browser-caches', { names: wl });
+            }
+            return Promise.all(wl.map((n) => caches.delete(n)));
+          });
+        }
+        return undefined;
+      })
+      .catch((err) => {
+        console.info('[WL Admin] Service worker unregister mislukt', {
+          message: err instanceof Error ? err.message : String(err),
+        });
+      });
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
     (async () => {
+      const t0 = typeof performance !== 'undefined' ? performance.now() : 0;
+      console.info('[WL Admin] Sessiecheck: GET /api/admin/me start');
       try {
         const res = await fetch('/api/admin/me', { credentials: 'include' });
+        const ms = typeof performance !== 'undefined' ? Math.round(performance.now() - t0) : null;
         if (cancelled) return;
+        console.info('[WL Admin] Sessiecheck: GET /api/admin/me klaar', {
+          status: res.status,
+          ok: res.ok,
+          durationMs: ms,
+        });
         if (res.ok) {
           const data = await res.json();
           const u = data.user;
@@ -396,10 +480,32 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
             is_account_manager: !!u.is_account_manager,
             avatar_url: u.avatar_url ?? null,
           });
+          if (adminAuthDebugClientEnabled()) {
+            adminAuthDebugClient('Sessiecheck: gebruiker ingelogd', {
+              id: u.id,
+              role: u.role,
+              email: redactEmail(u.email),
+            });
+          }
         } else {
+          let preview = '';
+          try {
+            preview = (await res.clone().text()).slice(0, 180);
+          } catch {
+            /* noop */
+          }
+          if (adminAuthDebugClientEnabled()) {
+            adminAuthDebugClient('Sessiecheck: niet ingelogd of fout', { status: res.status, bodyPreview: preview });
+          }
           localStorage.removeItem('warmeleads-admin-auth');
         }
-      } catch {
+      } catch (err) {
+        console.info('[WL Admin] Sessiecheck: netwerkfout', {
+          message: err instanceof Error ? err.message : String(err),
+        });
+        if (adminAuthDebugClientEnabled()) {
+          adminAuthDebugClient('Sessiecheck: exception', { error: err instanceof Error ? err.message : String(err) });
+        }
         localStorage.removeItem('warmeleads-admin-auth');
       } finally {
         if (!cancelled) setLoading(false);

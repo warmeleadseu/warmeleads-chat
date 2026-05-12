@@ -1,10 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
+import { adminAuthDebugServer, adminAuthDebugServerEnabled } from '@/lib/adminAuthDebug';
 
 export async function GET(request: NextRequest) {
+  if (adminAuthDebugServerEnabled()) {
+    adminAuthDebugServer('GET /api/admin/me: start');
+  }
   const admin = await verifyAdmin(request);
-  if (!admin) return unauthorized();
+  if (!admin) {
+    if (adminAuthDebugServerEnabled()) {
+      adminAuthDebugServer('GET /api/admin/me: 401 (geen geldige sessie)');
+    }
+    return unauthorized();
+  }
 
   const supabase = createServerClient();
   const { data, error } = await supabase
@@ -16,7 +25,16 @@ export async function GET(request: NextRequest) {
     .single();
 
   if (error || !data) {
+    if (adminAuthDebugServerEnabled()) {
+      adminAuthDebugServer('GET /api/admin/me: profiel-query mislukt', {
+        message: error?.message ?? null,
+      });
+    }
     return NextResponse.json({ error: 'Profiel ophalen mislukt' }, { status: 500 });
+  }
+
+  if (adminAuthDebugServerEnabled()) {
+    adminAuthDebugServer('GET /api/admin/me: OK', { id: data.id, role: data.role });
   }
 
   return NextResponse.json({ user: data });
