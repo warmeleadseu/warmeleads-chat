@@ -13,7 +13,39 @@ const REASSIGNMENT_COOLDOWN_DAYS = 30;
 
 const ASSIGNMENT_PAGE_SIZE = 1000;
 
+/** Max leads per cron-run: voorkomt full-table scans en Nano overload. */
+const DISTRIBUTE_CRON_LEAD_LIMIT = 400;
+
+/** PostgREST veilige chunk voor .in('lead_id', …) */
+const LEAD_ID_IN_CHUNK = 400;
+
+/** Max leads uit DB voor één backfill-scan (voorkomt gigantische arrays op Nano). */
+const BACKFILL_LEAD_SCAN_LIMIT = 2000;
+
 type SupabaseClient = ReturnType<typeof createServerClient>;
+
+async function fetchAssignmentsForLeadIds(
+  supabase: SupabaseClient,
+  leadIds: string[],
+): Promise<{ lead_id: string; assigned_at: string }[]> {
+  if (leadIds.length === 0) return [];
+  const out: { lead_id: string; assigned_at: string }[] = [];
+  for (let i = 0; i < leadIds.length; i += LEAD_ID_IN_CHUNK) {
+    const chunk = leadIds.slice(i, i + LEAD_ID_IN_CHUNK);
+    const { data, error } = await supabase
+      .from('lead_assignments')
+      .select('lead_id, assigned_at')
+      .in('lead_id', chunk);
+    if (error) {
+      console.error('[distribution] fetchAssignmentsForLeadIds:', error.message);
+      continue;
+    }
+    for (const row of data || []) {
+      if (row.lead_id && row.assigned_at) out.push({ lead_id: row.lead_id, assigned_at: row.assigned_at });
+    }
+  }
+  return out;
+}
 
 /**
  * Alle lead_id's die ooit aan deze klant zijn gekoppeld (alle batches).
@@ -559,7 +591,7 @@ export async function backfillBatch(batchId: string, lookbackDays: number): Prom
     leadsQuery = leadsQuery.not('lat', 'is', null).not('lng', 'is', null);
   }
 
-  const { data: leads } = await leadsQuery;
+  const { data: leads } = await leadsQuery.limit(BACKFILL_LEAD_SCAN_LIMIT);
 
   if (!leads || leads.length === 0) return { assigned: 0 };
 
@@ -570,12 +602,14 @@ export async function backfillBatch(batchId: string, lookbackDays: number): Prom
 
   const backfillExternal = (batch as any).leads_delivered_external || 0;
 
+  const { count: initialAssignCount } = await supabase
+    .from('lead_assignments')
+    .select('id', { count: 'exact', head: true })
+    .eq('batch_id', batch.id);
+  let runningAssignCount = initialAssignCount ?? 0;
+
   for (const lead of leads) {
-    const { count: currentCount } = await supabase
-      .from('lead_assignments')
-      .select('id', { count: 'exact', head: true })
-      .eq('batch_id', batch.id);
-    if ((currentCount || 0) + backfillExternal >= batch.batch_size) break;
+    if (runningAssignCount + backfillExternal >= batch.batch_size) break;
 
     if (alreadyAssigned.has(lead.id)) continue;
     if (excludedLeadIds.has(lead.id)) continue;
@@ -603,6 +637,7 @@ export async function backfillBatch(batchId: string, lookbackDays: number): Prom
 
     if (!error) {
       assigned++;
+      runningAssignCount++;
       alreadyAssigned.add(lead.id);
 
       // Auto-assign to portal user if rules match
@@ -649,21 +684,19 @@ export async function distributeUnassignedLeads(): Promise<{ distributed: number
     .not('lat', 'is', null)
     .not('lng', 'is', null)
     .gte('created_at', cutoff.toISOString())
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false })
+    .limit(DISTRIBUTE_CRON_LEAD_LIMIT);
 
   if (!leads || leads.length === 0) return { distributed: 0, assignments: 0, avgAssignments: 0 };
 
-  const { data: existingAssignments } = await supabase
-    .from('lead_assignments')
-    .select('lead_id, assigned_at');
+  const leadIds = leads.map(l => l.id);
+  const existingAssignments = await fetchAssignmentsForLeadIds(supabase, leadIds);
 
   const reassignWindowCutoff = new Date(Date.now() - REASSIGNMENT_COOLDOWN_DAYS * 24 * 60 * 60 * 1000);
 
   const recentAssignmentCounts: Record<string, number> = {};
-  const allAssignmentCounts: Record<string, number> = {};
   const lastAssignedAt: Record<string, Date> = {};
-  (existingAssignments || []).forEach(a => {
-    allAssignmentCounts[a.lead_id] = (allAssignmentCounts[a.lead_id] || 0) + 1;
+  existingAssignments.forEach(a => {
     const d = new Date(a.assigned_at);
     if (d >= reassignWindowCutoff) {
       recentAssignmentCounts[a.lead_id] = (recentAssignmentCounts[a.lead_id] || 0) + 1;
@@ -687,7 +720,7 @@ export async function distributeUnassignedLeads(): Promise<{ distributed: number
     totalAssignments += r.assignments;
   }
 
-  // Recalculate average after pass 1
+  // Recalculate average after pass 1 (zelfde benadering als voorheen; alleen op deze lead-set)
   let leadsWithAssignments = 0;
   let sumAssignments = 0;
   const updatedCounts = { ...recentAssignmentCounts };
@@ -724,16 +757,10 @@ export async function distributeUnassignedLeads(): Promise<{ distributed: number
     }
   }
 
-  // Final average calculation
-  const finalTotalAssignments = (existingAssignments || []).length + totalAssignments;
-  const finalUniqueLeads = new Set([
-    ...Object.keys(recentAssignmentCounts),
-    ...leads.filter(l => !recentAssignmentCounts[l.id]).map(l => l.id),
-  ].filter(id => (recentAssignmentCounts[id] || 0) > 0 || totalAssignments > 0));
-
-  const avgAssignments = finalUniqueLeads.size > 0
-    ? Math.round((finalTotalAssignments / finalUniqueLeads.size) * 100) / 100
-    : 0;
+  const rowsForCandidates = existingAssignments.length + totalAssignments;
+  const distinctCandidateLeads = new Set(leads.map(l => l.id)).size;
+  const avgAssignments =
+    distinctCandidateLeads > 0 ? Math.round((rowsForCandidates / distinctCandidateLeads) * 100) / 100 : 0;
 
   return { distributed: totalDistributed, assignments: totalAssignments, avgAssignments };
 }

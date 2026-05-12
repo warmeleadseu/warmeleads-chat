@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/cron/distribute",
-      "schedule": "*/5 * * * *"
+      "schedule": "*/15 * * * *"
     },
     {
       "path": "/api/cron/weekly-report",

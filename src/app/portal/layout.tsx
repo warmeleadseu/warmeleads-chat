@@ -726,12 +726,12 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
     };
 
     syncAccount();
-    const interval = setInterval(syncAccount, 30_000);
+    const interval = setInterval(syncAccount, 90_000);
     return () => clearInterval(interval);
   // eslint-disable-next-line react-hooks/exhaustive-deps -- alleen klant-id; volledige customer wijzigt via deze sync
   }, [customer?.id, isAdminView]);
 
-  // Heartbeat: update last_seen_at every 2 minutes so admin sees "online" status
+  // Heartbeat: update last_seen_at (lager frequent = minder DB-load op Nano)
   useEffect(() => {
     if (!customer || isAdminView) return;
 
@@ -747,7 +747,7 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
     void sendHeartbeat();
     const interval = setInterval(() => {
       void sendHeartbeat();
-    }, 2 * 60 * 1000);
+    }, 5 * 60 * 1000);
 
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') void sendHeartbeat();

@@ -10,7 +10,7 @@ const MAX_LEAD_AGE_DAYS = 3;
 
 /**
  * Cron job: enrich + distribute leads ≤ 3 days old.
- * Runs every 5 minutes via Vercel Cron.
+ * Runs every 15 minutes via Vercel Cron (Nano-tier vriendelijk).
  */
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get('authorization');
@@ -32,7 +32,8 @@ export async function GET(request: NextRequest) {
     .not('postcode', 'is', null)
     .not('postcode', 'eq', '')
     .not('huisnummer', 'is', null)
-    .not('huisnummer', 'eq', '');
+    .not('huisnummer', 'eq', '')
+    .limit(2500);
 
   let enriched = 0;
   const toEnrich = (leads || []).filter(
@@ -85,10 +86,16 @@ export async function GET(request: NextRequest) {
     .limit(500);
 
   if (unvalidated && unvalidated.length > 0) {
-    for (const lead of unvalidated) {
-      const valid = isPhoneValid(lead.telefoonnummer);
-      await supabase.from('leads').update({ phone_valid: valid }).eq('id', lead.id);
-      phonesValidated++;
+    const PHONE_BATCH = 25;
+    for (let i = 0; i < unvalidated.length; i += PHONE_BATCH) {
+      const slice = unvalidated.slice(i, i + PHONE_BATCH);
+      await Promise.all(
+        slice.map(async (lead) => {
+          const valid = isPhoneValid(lead.telefoonnummer);
+          const { error } = await supabase.from('leads').update({ phone_valid: valid }).eq('id', lead.id);
+          if (!error) phonesValidated++;
+        }),
+      );
     }
   }
 
