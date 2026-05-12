@@ -69,17 +69,51 @@ function parseWKTPoint(wkt: string): { lat: number; lng: number } | null {
   return { lng: parseFloat(m[1]), lat: parseFloat(m[2]) };
 }
 
-/**
- * Detect country from phone number.
- * +31/0031/06... → NL, +32/0032/04... → BE
- */
-function detectCountryFromPhone(phone: string | undefined): 'NL' | 'BE' | null {
+/** Publiek voor filters / validatie; zelfde logica als interne adres-resolver (+31/+32, 06/04, 316…/32…). */
+export function detectCountryFromPhone(phone: string | undefined): 'NL' | 'BE' | null {
   if (!phone) return null;
   const cleaned = phone.replace(/[\s\-().]/g, '');
   if (/^(\+31|0031)/.test(cleaned)) return 'NL';
   if (/^(\+32|0032)/.test(cleaned)) return 'BE';
   if (/^06\d{8}$/.test(cleaned)) return 'NL';
   if (/^04\d{8}$/.test(cleaned)) return 'BE';
+  // Import zonder +: 316… (NL), 324… / 322… / 323… (BE) — E.164 zonder leading +
+  if (/^31[67]\d{8}$/.test(cleaned)) return 'NL';
+  // BE: landcode 32 + nationaal nummer (meestal 9 cijfers; soms korter/langer in imports)
+  if (/^32[1-9]\d{6,11}$/.test(cleaned)) return 'BE';
+  return null;
+}
+
+function detectCountryFromEmail(email: string | undefined): 'NL' | 'BE' | null {
+  if (!email || !email.includes('@')) return null;
+  const domain = email.split('@')[1]?.toLowerCase().trim() ?? '';
+  if (domain.endsWith('.be')) return 'BE';
+  if (domain.endsWith('.nl')) return 'NL';
+  return null;
+}
+
+/**
+ * Bepaalt welk land we voor adres-lookup gebruiken.
+ * Belangrijk: bij postcodes die alleen 4 cijfers zijn (BE-vorm, maar ambigu t.o.v. NL)
+ * gaat telefoon/e-mail vóór een (fout) opgeslagen `land` in de database.
+ */
+function resolveEffectiveCountry(
+  postcode: string,
+  storedLand: 'NL' | 'BE' | null | undefined,
+  telefoonnummer: string | undefined,
+  email: string | undefined
+): 'NL' | 'BE' | null {
+  const fromFormat = detectCountry(postcode);
+  if (fromFormat === 'NL' || fromFormat === 'BE') return fromFormat;
+
+  const fromPhone = detectCountryFromPhone(telefoonnummer);
+  if (fromPhone) return fromPhone;
+
+  const fromEmail = detectCountryFromEmail(email);
+  if (fromEmail) return fromEmail;
+
+  if (storedLand === 'NL' || storedLand === 'BE') return storedLand;
+
   return null;
 }
 
@@ -102,21 +136,14 @@ export function detectCountry(postcode: string): 'NL' | 'BE' | null {
 
 /**
  * Smart country detection using all available lead data.
- * Priority: explicit land > postcode format > phone number > try both
+ * Priority: postcode-formaat (1234AB / duidelijk BE) > telefoon > expliciet land
+ * Voor ambigue 4-cijfer-postcodes: gebruik `resolveEffectiveCountry` in resolveAddress.
  */
 export function smartDetectCountry(
   postcode: string,
-  opts?: { land?: string; telefoonnummer?: string }
+  opts?: { land?: string; telefoonnummer?: string; email?: string }
 ): 'NL' | 'BE' | null {
-  if (opts?.land === 'NL' || opts?.land === 'BE') return opts.land;
-
-  const fromPostcode = detectCountry(postcode);
-  if (fromPostcode) return fromPostcode;
-
-  const fromPhone = detectCountryFromPhone(opts?.telefoonnummer);
-  if (fromPhone) return fromPhone;
-
-  return null;
+  return resolveEffectiveCountry(postcode, opts?.land as 'NL' | 'BE' | undefined, opts?.telefoonnummer, opts?.email);
 }
 
 const BE_PROVINCE_MAP: [number, number, string][] = [
@@ -148,7 +175,24 @@ function beProvincie(postcode: string): string {
 async function resolveAddressNL(postcode: string, huisnummer: string): Promise<AddressResult | null> {
   const clean = extractPostcodeNL(postcode);
   const hnr = extractHuisnummer(huisnummer);
-  if (!hnr) return null;
+  // Zonder huisnummer: alleen postcodedistrict (woonplaats/provincie op 4 cijfers + letters indien aanwezig)
+  if (!hnr) {
+    const digits = extract4Digits(postcode);
+    if (clean) {
+      const r = await pdokSearch(clean, 'postcode');
+      if (r) return r;
+    }
+    if (digits) {
+      const r = await pdokSearch(digits, 'postcode');
+      if (r) return r;
+    }
+    const compact = postcode.replace(/\s+/g, '').trim();
+    if (compact) {
+      const r = await pdokSearch(compact, 'postcode');
+      if (r) return r;
+    }
+    return null;
+  }
 
   // Strategy 1: full postcode + huisnummer
   if (clean) {
@@ -202,41 +246,129 @@ async function pdokSearch(query: string, type: 'adres' | 'postcode'): Promise<Ad
 
 // ─── BE address resolution ───────────────────────────────────────────────
 
+/** Geen strikte rate limit als OSM Nominatim; postcodes[] matcht exacte BE-PC. */
+async function resolveAddressBE_OpenMeteo(postcode: string): Promise<AddressResult | null> {
+  const clean = extractPostcodeBE(postcode);
+  if (!clean) return null;
+  try {
+    const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(clean)}&countryCode=BE&count=25`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(6000) });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const list = data?.results as
+      | Array<{ name: string; latitude: number; longitude: number; postcodes?: string[]; population?: number }>
+      | undefined;
+    if (!list?.length) return null;
+    const withPc = list.filter(r => r.postcodes?.includes(clean));
+    const pool = withPc.length ? withPc : list;
+    pool.sort((a, b) => (b.population ?? 0) - (a.population ?? 0));
+    const hit = pool[0];
+    if (!hit?.name) return null;
+    return {
+      plaatsnaam: hit.name,
+      provincie: beProvincie(clean),
+      lat: hit.latitude,
+      lng: hit.longitude,
+      land: 'BE',
+    };
+  } catch {
+    return null;
+  }
+}
+
 async function resolveAddressBE(postcode: string, huisnummer: string): Promise<AddressResult | null> {
   const clean = extractPostcodeBE(postcode);
   if (!clean) return null;
   const hnr = extractHuisnummer(huisnummer);
-  if (!hnr) return null;
 
-  // Strategy 1: postcode + huisnummer
-  const r1 = await nominatimSearch({ postalcode: clean, street: hnr, country: 'be' });
-  if (r1) return { ...r1, land: 'BE', provincie: beProvincie(clean) || r1.provincie };
+  const withBeProv = (r: AddressResult): AddressResult => ({
+    ...r,
+    land: 'BE',
+    provincie: beProvincie(clean) || r.provincie,
+  });
 
-  // Strategy 2: just postcode (center of area)
-  const r2 = await nominatimSearch({ postalcode: clean, country: 'be' });
-  if (r2) return { ...r2, land: 'BE', provincie: beProvincie(clean) || r2.provincie };
+  const om = await resolveAddressBE_OpenMeteo(postcode);
+  if (om?.plaatsnaam) return withBeProv(om);
 
-  return null;
+  if (!hnr) {
+    const r2 = await nominatimSearch({ postalcode: clean, country: 'be' });
+    if (r2) return withBeProv(r2);
+    const r2b = await nominatimSearchQ(`postcode ${clean}, Belgium`, 'be');
+    return r2b ? withBeProv(r2b) : null;
+  }
+
+  const rPc = await nominatimSearch({ postalcode: clean, country: 'be' });
+  if (rPc?.plaatsnaam) return withBeProv(rPc);
+
+  const rQ = await nominatimSearchQ(`${hnr} ${clean}, Belgium`, 'be');
+  return rQ ? withBeProv(rQ) : null;
+}
+
+const NOMINATIM_HEADERS = {
+  'User-Agent': 'WarmeLeads-CRM/1.0 (info@warmeleads.eu)',
+  Accept: 'application/json',
+};
+
+async function nominatimFetch(url: string): Promise<Response> {
+  const maxAttempts = 4;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const res = await fetch(url, {
+      signal: AbortSignal.timeout(8000),
+      headers: NOMINATIM_HEADERS,
+    });
+    if (res.status === 429 && attempt < maxAttempts - 1) {
+      const wait = 1250 * 2 ** attempt;
+      await new Promise(r => setTimeout(r, wait));
+      continue;
+    }
+    return res;
+  }
+  return fetch(url, { signal: AbortSignal.timeout(8000), headers: NOMINATIM_HEADERS });
+}
+
+function nominatimDocToResult(doc: { lat?: string; lon?: string; address?: Record<string, string> }): AddressResult | null {
+  const addr = doc.address || {};
+  const plaatsnaam =
+    addr.city || addr.town || addr.village || addr.municipality || addr.city_district || addr.hamlet || '';
+  const provincie = normalizeProvincie(addr.state);
+  const lat = doc.lat ? parseFloat(doc.lat) : undefined;
+  const lng = doc.lon ? parseFloat(doc.lon) : undefined;
+  if (!plaatsnaam && !provincie && (lat == null || lng == null)) return null;
+  return { plaatsnaam, provincie, lat, lng };
 }
 
 async function nominatimSearch(params: Record<string, string>): Promise<AddressResult | null> {
   try {
     const searchParams = new URLSearchParams({ ...params, format: 'json', addressdetails: '1', limit: '1' });
-    const res = await fetch(`${NOMINATIM_URL}?${searchParams}`, {
-      signal: AbortSignal.timeout(5000),
-      headers: { 'User-Agent': 'WarmeLeads-CRM/1.0 (info@warmeleads.eu)' },
-    });
+    const res = await nominatimFetch(`${NOMINATIM_URL}?${searchParams}`);
     if (!res.ok) return null;
+    const ct = res.headers.get('content-type') || '';
+    if (!ct.includes('application/json')) return null;
     const data = await res.json();
     if (!data || data.length === 0) return null;
-    const doc = data[0];
-    const addr = doc.address || {};
-    return {
-      plaatsnaam: addr.city || addr.town || addr.village || addr.municipality || addr.city_district || '',
-      provincie: normalizeProvincie(addr.state),
-      lat: doc.lat ? parseFloat(doc.lat) : undefined,
-      lng: doc.lon ? parseFloat(doc.lon) : undefined,
-    };
+    return nominatimDocToResult(data[0]);
+  } catch {
+    return null;
+  }
+}
+
+/** Vrije tekst; `countrycodes` is ISO 3166-1 alpha2 (comma-separated). */
+async function nominatimSearchQ(q: string, countrycodes: string): Promise<AddressResult | null> {
+  try {
+    const searchParams = new URLSearchParams({
+      q,
+      format: 'json',
+      addressdetails: '1',
+      limit: '1',
+      countrycodes,
+    });
+    const res = await nominatimFetch(`${NOMINATIM_URL}?${searchParams}`);
+    if (!res.ok) return null;
+    const ct = res.headers.get('content-type') || '';
+    if (!ct.includes('application/json')) return null;
+    const data = await res.json();
+    if (!data || data.length === 0) return null;
+    return nominatimDocToResult(data[0]);
   } catch {
     return null;
   }
@@ -244,15 +376,20 @@ async function nominatimSearch(params: Record<string, string>): Promise<AddressR
 
 // ─── Smart resolve: tries both NL and BE when ambiguous ──────────────────
 
+function isStrictFourDigitPostcode(postcode: string): boolean {
+  return /^\d{4}$/.test(postcode.replace(/\s+/g, ''));
+}
+
 export async function resolveAddress(
   postcode: string,
   huisnummer: string,
   country?: 'NL' | 'BE' | null,
-  telefoonnummer?: string
+  telefoonnummer?: string,
+  email?: string
 ): Promise<AddressResult | null> {
-  if (!postcode || !huisnummer) return null;
+  if (!postcode?.trim()) return null;
 
-  const detectedCountry = country || smartDetectCountry(postcode, { telefoonnummer });
+  const detectedCountry = resolveEffectiveCountry(postcode, country ?? undefined, telefoonnummer, email);
 
   if (detectedCountry === 'NL') {
     const r = await resolveAddressNL(postcode, huisnummer);
@@ -261,26 +398,25 @@ export async function resolveAddress(
   }
 
   if (detectedCountry === 'BE') {
-    const r = await resolveAddressBE(postcode, huisnummer);
-    if (r) return r;
-    return resolveAddressNL(postcode, huisnummer);
+    // Nooit PDOK/NL als fallback: bij 4-cijfer-postcode levert dat bijna altijd foute NL-plaatsen.
+    return (await resolveAddressBE(postcode, huisnummer)) ?? null;
   }
 
-  // Ambiguous (4-digit postcode, no phone hint): try both in parallel
+  // Geen uniek land: parallel NL + BE (typisch ambigue invoer)
   const [nlResult, beResult] = await Promise.all([
     resolveAddressNL(postcode, huisnummer),
     resolveAddressBE(postcode, huisnummer),
   ]);
 
-  // Prefer the one that found coordinates
   if (nlResult?.lat && !beResult?.lat) return nlResult;
   if (beResult?.lat && !nlResult?.lat) return beResult;
 
-  // Both found results, prefer the one with a more specific match (plaatsnaam set)
   if (nlResult?.plaatsnaam && !beResult?.plaatsnaam) return nlResult;
   if (beResult?.plaatsnaam && !nlResult?.plaatsnaam) return beResult;
 
-  // Both have results, default to NL (more common usage)
+  // Exact 4 cijfers zonder letters: in deze markt vaker BE; PDOK geeft anders foutieve NL-plaatsen
+  if (isStrictFourDigitPostcode(postcode)) return beResult || nlResult || null;
+
   return nlResult || beResult || null;
 }
 
@@ -318,11 +454,10 @@ export async function resolveCity(
       addressdetails: '1',
       limit: '1',
     });
-    const res = await fetch(`${NOMINATIM_URL}?${params}`, {
-      signal: AbortSignal.timeout(5000),
-      headers: { 'User-Agent': 'WarmeLeads-CRM/1.0 (info@warmeleads.eu)' },
-    });
+    const res = await nominatimFetch(`${NOMINATIM_URL}?${params}`);
     if (!res.ok) return null;
+    const ct = res.headers.get('content-type') || '';
+    if (!ct.includes('application/json')) return null;
     const data = await res.json();
     if (!data || data.length === 0) return null;
     const doc = data[0];
@@ -338,7 +473,17 @@ export async function resolveCity(
 // ─── Lead enrichment ─────────────────────────────────────────────────────
 
 export async function enrichLeadAddress<
-  T extends { postcode?: string; huisnummer?: string; plaatsnaam?: string; provincie?: string; lat?: number; lng?: number; land?: string; telefoonnummer?: string }
+  T extends {
+    postcode?: string;
+    huisnummer?: string;
+    plaatsnaam?: string;
+    provincie?: string;
+    lat?: number;
+    lng?: number;
+    land?: string;
+    telefoonnummer?: string;
+    email?: string;
+  }
 >(lead: T): Promise<T> {
   const needsPlace = !isValidPlace(lead.plaatsnaam);
   const needsProv = !isValidPlace(lead.provincie);
@@ -347,7 +492,7 @@ export async function enrichLeadAddress<
   // verrijken; dat voorkomt dat handmatige inserts of webhooks 'Fryslân'
   // doorlaten.
   const normalizedExisting = normalizeProvincie(lead.provincie);
-  if ((!needsPlace && !needsProv && !needsCoords) || !lead.postcode || !lead.huisnummer) {
+  if ((!needsPlace && !needsProv && !needsCoords) || !lead.postcode) {
     if (normalizedExisting !== lead.provincie) {
       return { ...lead, provincie: normalizedExisting };
     }
@@ -356,9 +501,10 @@ export async function enrichLeadAddress<
 
   const result = await resolveAddress(
     lead.postcode,
-    lead.huisnummer,
+    lead.huisnummer ?? '',
     lead.land as 'NL' | 'BE' | undefined,
-    lead.telefoonnummer
+    lead.telefoonnummer,
+    lead.email
   );
   if (!result) {
     if (normalizedExisting !== lead.provincie) {
@@ -373,12 +519,22 @@ export async function enrichLeadAddress<
     provincie: needsProv && result.provincie ? result.provincie : normalizedExisting,
     lat: needsCoords && result.lat ? result.lat : lead.lat,
     lng: needsCoords && result.lng ? result.lng : lead.lng,
-    land: !lead.land && result.land ? result.land : lead.land,
+    land: result.land ?? lead.land,
   };
 }
 
 export async function enrichLeadsAddress<
-  T extends { postcode?: string; huisnummer?: string; plaatsnaam?: string; provincie?: string; lat?: number; lng?: number; land?: string; telefoonnummer?: string }
+  T extends {
+    postcode?: string;
+    huisnummer?: string;
+    plaatsnaam?: string;
+    provincie?: string;
+    lat?: number;
+    lng?: number;
+    land?: string;
+    telefoonnummer?: string;
+    email?: string;
+  }
 >(leads: T[]): Promise<T[]> {
   const CONCURRENCY = 5;
   const results: T[] = [...leads];

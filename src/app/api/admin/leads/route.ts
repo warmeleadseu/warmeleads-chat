@@ -7,6 +7,12 @@ import { isPhoneValid } from '@/lib/phoneValidation';
 import { checkLeadProfanity } from '@/lib/profanityFilter';
 import { calculateQualityScore } from '@/lib/leadQuality';
 import { logAudit } from '@/lib/audit';
+import {
+  PARTNER_PROSPECT_BRANCH_SLUG,
+  findRecentPartnerProspectByEmail,
+  insertPartnerProspectFromEnrichedLeadRow,
+  isPartnerProspectBranch,
+} from '@/lib/partnerProspectIngest';
 
 export async function GET(request: NextRequest) {
   const admin = await verifyAdmin(request);
@@ -33,6 +39,10 @@ export async function GET(request: NextRequest) {
   let query = supabase
     .from('leads')
     .select('*, customers(id, name)', { count: 'exact' });
+
+  if (!branch) {
+    query = query.neq('branch', PARTNER_PROSPECT_BRANCH_SLUG);
+  }
 
   if (branch) {
     const vals = branch.split(',').filter(Boolean);
@@ -148,17 +158,74 @@ export async function POST(request: NextRequest) {
       if (clean.length === 0) {
         return NextResponse.json({ success: true, count: 0, profanitySkipped });
       }
-      const { data, error } = await supabase.from('leads').insert(clean).select();
-      if (error) {
-        console.error('Bulk insert error:', error);
-        return NextResponse.json({ error: 'Import mislukt', details: error.message }, { status: 500 });
+
+      const partnerRows = clean.filter((l: any) => isPartnerProspectBranch(l.branch)) as any[];
+      const leadRows = clean.filter((l: any) => !isPartnerProspectBranch(l.branch)) as any[];
+
+      let prospectCount = 0;
+      const prospectIds: string[] = [];
+      let deduplicatedPartner = 0;
+
+      for (const l of partnerRows) {
+        if (!l.naam_klant) continue;
+        const cf = (l.custom_fields as Record<string, string>) || {};
+        if (l.email) {
+          const dup = await findRecentPartnerProspectByEmail(supabase, l.email as string);
+          if (dup) {
+            deduplicatedPartner++;
+            continue;
+          }
+        }
+        const pr = await insertPartnerProspectFromEnrichedLeadRow(
+          supabase,
+          l as Record<string, unknown>,
+          cf,
+          { title: 'Bulk import (partner)', adminUserId: admin.id, type: 'import' },
+        );
+        if (pr) {
+          prospectCount++;
+          prospectIds.push(pr.id);
+        }
       }
-      const withCoords = (data || []).filter((l: { lat?: number; lng?: number }) => l.lat && l.lng);
-      if (withCoords.length > 0) {
-        try { await distributeLeads(withCoords); } catch { /* non-blocking */ }
+
+      let insertedLeads: any[] = [];
+      if (leadRows.length > 0) {
+        const { data, error } = await supabase.from('leads').insert(leadRows).select();
+        if (error) {
+          console.error('Bulk insert error:', error);
+          return NextResponse.json({ error: 'Import mislukt', details: error.message }, { status: 500 });
+        }
+        insertedLeads = data || [];
+        const withCoords = insertedLeads.filter((l: { lat?: number; lng?: number }) => l.lat && l.lng);
+        if (withCoords.length > 0) {
+          try { await distributeLeads(withCoords); } catch { /* non-blocking */ }
+        }
       }
-      logAudit({ adminId: admin.id, adminName: admin.name, action: 'import_leads', entityType: 'lead', details: { count: data?.length || 0, profanitySkipped } });
-      return NextResponse.json({ success: true, count: data?.length || 0, profanitySkipped });
+
+      const total = insertedLeads.length + prospectCount;
+      logAudit({
+        adminId: admin.id,
+        adminName: admin.name,
+        action: 'import_leads',
+        entityType: 'lead',
+        details: {
+          count: total,
+          profanitySkipped,
+          prospect_count: prospectCount,
+          lead_count: insertedLeads.length,
+          prospect_ids: prospectIds.length ? prospectIds : undefined,
+        },
+      });
+      return NextResponse.json({
+        success: true,
+        count: total,
+        profanitySkipped,
+        prospect_count: prospectCount,
+        lead_count: insertedLeads.length,
+        deduplicated_partner: deduplicatedPartner,
+        ingest:
+          partnerRows.length && leadRows.length ? 'mixed' : partnerRows.length ? 'prospect' : 'lead',
+      });
     }
 
     const enriched = await enrichLeadAddress(body);
@@ -167,6 +234,50 @@ export async function POST(request: NextRequest) {
     const profanity = checkLeadProfanity(enriched as Record<string, unknown>);
     if (profanity.blocked) {
       return NextResponse.json({ error: `Lead bevat ongepaste taal in veld "${profanity.field}"` }, { status: 422 });
+    }
+
+    if (isPartnerProspectBranch(enriched.branch)) {
+      if (!enriched.naam_klant) {
+        return NextResponse.json({ error: 'Naam is verplicht' }, { status: 400 });
+      }
+      const cf = (enriched.custom_fields as Record<string, string>) || {};
+      if (enriched.email) {
+        const dup = await findRecentPartnerProspectByEmail(supabase, enriched.email);
+        if (dup) {
+          logAudit({
+            adminId: admin.id,
+            adminName: admin.name,
+            action: 'create_lead',
+            entityType: 'prospect',
+            entityId: dup.id,
+            details: { deduplicated: true, branch: enriched.branch, ingest: 'prospect' },
+          });
+          return NextResponse.json({
+            success: true,
+            prospect_id: dup.id,
+            deduplicated: true,
+            ingest: 'prospect',
+          });
+        }
+      }
+      const pr = await insertPartnerProspectFromEnrichedLeadRow(
+        supabase,
+        enriched as Record<string, unknown>,
+        cf,
+        { title: 'Handmatig aangemaakt (partner)', adminUserId: admin.id, type: 'created' },
+      );
+      if (!pr?.id) {
+        return NextResponse.json({ error: 'Prospect aanmaken mislukt' }, { status: 500 });
+      }
+      logAudit({
+        adminId: admin.id,
+        adminName: admin.name,
+        action: 'create_lead',
+        entityType: 'prospect',
+        entityId: pr.id,
+        details: { naam: enriched.naam_klant, branch: enriched.branch, ingest: 'prospect' },
+      });
+      return NextResponse.json({ success: true, prospect: { id: pr.id }, ingest: 'prospect' });
     }
 
     const quality_score = calculateQualityScore(enriched);

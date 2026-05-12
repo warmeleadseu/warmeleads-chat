@@ -6,6 +6,12 @@ import { isPhoneValid } from '@/lib/phoneValidation';
 import { checkLeadProfanity } from '@/lib/profanityFilter';
 import { calculateQualityScore } from '@/lib/leadQuality';
 import { logAudit } from '@/lib/audit';
+import {
+  buildPartnerProspectInsertRow,
+  insertPartnerProspect,
+  isPartnerProspectBranch,
+  type PartnerProspectPayload,
+} from '@/lib/partnerProspectIngest';
 
 const ENRICH_CONCURRENCY = 8;
 
@@ -72,6 +78,19 @@ export async function POST(request: NextRequest) {
           .from('leads')
           .select('email')
           .eq('branch', branch)
+          .in('email', chunk);
+        (data || []).forEach(r => { if (r.email) existingEmails.add(r.email.toLowerCase()); });
+      }
+    }
+
+    if (isPartnerProspectBranch(branch) && emails.length > 0) {
+      const CHUNK = 200;
+      for (let i = 0; i < emails.length; i += CHUNK) {
+        const chunk = emails.slice(i, i + CHUNK);
+        const { data } = await supabase
+          .from('prospects')
+          .select('email')
+          .contains('branches', [branch])
           .in('email', chunk);
         (data || []).forEach(r => { if (r.email) existingEmails.add(r.email.toLowerCase()); });
       }
@@ -165,6 +184,7 @@ export async function POST(request: NextRequest) {
 
     // Pass 2: Enrich addresses in parallel batches (the slow part, now concurrent)
     const BATCH_INSERT: Record<string, unknown>[] = [];
+    let prospectsInserted = 0;
 
     for (let i = 0; i < prepared.length; i += ENRICH_CONCURRENCY) {
       const batch = prepared.slice(i, i + ENRICH_CONCURRENCY);
@@ -181,43 +201,85 @@ export async function POST(request: NextRequest) {
 
       for (const e of enriched) {
         const row = e as Record<string, unknown>;
+        if (isPartnerProspectBranch(branch)) {
+          const cf =
+            row.custom_fields &&
+            typeof row.custom_fields === 'object' &&
+            !Array.isArray(row.custom_fields)
+              ? (row.custom_fields as Record<string, string>)
+              : {};
+          const insRow = buildPartnerProspectInsertRow(
+            row as unknown as PartnerProspectPayload,
+            cf,
+            {
+              plaatsnaam: row.plaatsnaam as string | undefined,
+              provincie: row.provincie as string | undefined,
+              postcode: row.postcode as string | undefined,
+              land: row.land as string | undefined,
+            },
+          );
+          const pr = await insertPartnerProspect(supabase, insRow, {
+            title: 'Spreadsheet import (Thuisbatterij Partners)',
+            body: 'Geïmporteerd via admin spreadsheet-import.',
+            type: 'import',
+            adminUserId: admin.id,
+          });
+          if (pr) prospectsInserted++;
+          else {
+            errors++;
+            if (errorDetails.length < 5) errorDetails.push('Prospect-insert mislukt');
+          }
+          continue;
+        }
         row.quality_score = calculateQualityScore(row);
         BATCH_INSERT.push(row);
         imported++;
       }
     }
 
-    // Bulk insert in chunks, collect inserted IDs
+    // Bulk insert in chunks, collect inserted IDs (alleen consumentenleads)
     let dbErrors = 0;
     const insertedIds: string[] = [];
     const CHUNK = 100;
-    for (let i = 0; i < BATCH_INSERT.length; i += CHUNK) {
-      const chunk = BATCH_INSERT.slice(i, i + CHUNK);
-      const { data: inserted, error: insertError } = await supabase.from('leads').insert(chunk).select('id');
-      if (insertError) {
-        dbErrors += chunk.length;
-        if (errorDetails.length < 5) {
-          errorDetails.push(`DB insert fout: ${insertError.message}`);
+    if (!isPartnerProspectBranch(branch)) {
+      for (let i = 0; i < BATCH_INSERT.length; i += CHUNK) {
+        const chunk = BATCH_INSERT.slice(i, i + CHUNK);
+        const { data: inserted, error: insertError } = await supabase.from('leads').insert(chunk).select('id');
+        if (insertError) {
+          dbErrors += chunk.length;
+          if (errorDetails.length < 5) {
+            errorDetails.push(`DB insert fout: ${insertError.message}`);
+          }
+        } else if (inserted) {
+          insertedIds.push(...inserted.map(r => r.id));
         }
-      } else if (inserted) {
-        insertedIds.push(...inserted.map(r => r.id));
+      }
+
+      if (dbErrors > 0) {
+        imported = Math.max(0, imported - dbErrors);
+        errors += dbErrors;
       }
     }
 
-    if (dbErrors > 0) {
-      imported = Math.max(0, imported - dbErrors);
-      errors += dbErrors;
-    }
+    const totalImported = isPartnerProspectBranch(branch) ? prospectsInserted : imported;
 
     logAudit({
       adminId: admin.id,
       adminName: admin.name,
       action: 'spreadsheet_import',
-      entityType: 'lead',
-      details: { branch, imported, skipped, duplicates, errors },
+      entityType: isPartnerProspectBranch(branch) ? 'prospect' : 'lead',
+      details: { branch, imported: totalImported, skipped, duplicates, errors },
     });
 
-    return NextResponse.json({ imported, skipped, duplicates, errors, errorDetails, insertedIds });
+    return NextResponse.json({
+      imported: totalImported,
+      skipped,
+      duplicates,
+      errors,
+      errorDetails,
+      insertedIds,
+      ...(isPartnerProspectBranch(branch) ? { ingest: 'prospect' as const } : {}),
+    });
   } catch (err) {
     console.error('Import error:', err);
     return NextResponse.json(

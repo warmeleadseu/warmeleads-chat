@@ -45,6 +45,8 @@ export const PROSPECT_SOURCES = [
   'website',
   'referral',
   'other',
+  /** Meta/Zapier Thuisbatterij Partners — eigen acquisitie, geen consumentenlead. */
+  'meta_partner',
 ] as const;
 
 export type ProspectSource = (typeof PROSPECT_SOURCES)[number];

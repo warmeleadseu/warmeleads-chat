@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
   // Phase 1: Enrich recent leads missing coordinates (skip spreadsheet imports and demo leads)
   const { data: leads } = await supabase
     .from('leads')
-    .select('id, postcode, huisnummer, plaatsnaam, provincie, lat, lng, land, telefoonnummer')
+    .select('id, postcode, huisnummer, plaatsnaam, provincie, lat, lng, land, telefoonnummer, email')
     .neq('bron', 'excel_import')
     .neq('bron', 'demo')
     .gte('created_at', cutoff.toISOString())
@@ -48,7 +48,8 @@ export async function GET(request: NextRequest) {
           lead.postcode,
           lead.huisnummer,
           lead.land as 'NL' | 'BE' | null,
-          lead.telefoonnummer
+          lead.telefoonnummer,
+          lead.email ?? undefined
         );
         if (!result) return null;
 
@@ -59,7 +60,7 @@ export async function GET(request: NextRequest) {
           updates.lat = result.lat;
           updates.lng = result.lng;
         }
-        if (result.land && !lead.land) updates.land = result.land;
+        if (result.land) updates.land = result.land;
         if (Object.keys(updates).length === 0) return null;
         return { id: lead.id, updates };
       })

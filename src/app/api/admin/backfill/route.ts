@@ -8,6 +8,11 @@ import { checkLeadProfanity } from '@/lib/profanityFilter';
 import { calculateQualityScore } from '@/lib/leadQuality';
 import { distributeLead } from '@/lib/distribution';
 import { syncBatchDelivered } from '@/lib/batchSync';
+import {
+  findRecentPartnerProspectByEmail,
+  insertPartnerProspectFromEnrichedLeadRow,
+  isPartnerProspectBranch,
+} from '@/lib/partnerProspectIngest';
 
 const META_GRAPH_URL = 'https://graph.facebook.com/v21.0';
 
@@ -299,6 +304,16 @@ export async function POST(request: NextRequest) {
   const existingEmails = new Set(
     (existingLeads || []).map(l => l.email?.toLowerCase()).filter(Boolean),
   );
+  if (isPartnerProspectBranch(branch)) {
+    const { data: existingProspects } = await supabase
+      .from('prospects')
+      .select('email')
+      .contains('branches', [branch])
+      .gte('created_at', thirtyDaysAgo);
+    (existingProspects || []).forEach(p => {
+      if (p.email) existingEmails.add(p.email.toLowerCase());
+    });
+  }
 
   let imported = 0;
   let skipped = 0;
@@ -353,6 +368,38 @@ export async function POST(request: NextRequest) {
 
       if (!lead.naam_klant) { skipped++; continue; }
 
+      if (isPartnerProspectBranch(branch)) {
+        if (lead.email) {
+          const dup = await findRecentPartnerProspectByEmail(supabase, lead.email);
+          if (dup) {
+            skipped++;
+            continue;
+          }
+        }
+        const profanity = checkLeadProfanity(lead as Record<string, unknown>);
+        if (profanity.blocked) { profanityBlocked++; skipped++; continue; }
+
+        const pr = await insertPartnerProspectFromEnrichedLeadRow(
+          supabase,
+          lead as Record<string, unknown>,
+          customFields,
+          {
+            title: 'Meta Lead Ads (Thuisbatterij Partners)',
+            body: 'Geïmporteerd via admin backfill.',
+            type: 'import',
+          },
+        );
+        if (!pr) {
+          errors++;
+          if (errorSamples.length < 3) errorSamples.push(`Prospect insert (${parsed.email || parsed.naam_klant || 'onbekend'})`);
+          continue;
+        }
+        imported++;
+        importedIds.push(pr.id);
+        if (parsed.email) existingEmails.add(parsed.email.toLowerCase());
+        continue;
+      }
+
       const profanity = checkLeadProfanity(lead as Record<string, unknown>);
       if (profanity.blocked) { profanityBlocked++; skipped++; continue; }
 
@@ -383,7 +430,9 @@ export async function POST(request: NextRequest) {
     await supabase.from('app_settings').upsert({
       key: runId,
       value: JSON.stringify({
-        lead_ids: importedIds,
+        ...(isPartnerProspectBranch(branch)
+          ? { prospect_ids: importedIds, ingest: 'prospect' as const }
+          : { lead_ids: importedIds }),
         webhook_key_id: webhook_key_id || null,
         branch, form_id,
         date_from: dateFrom || null, date_to: dateTo || null,

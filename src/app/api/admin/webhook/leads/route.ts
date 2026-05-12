@@ -6,6 +6,13 @@ import { isPhoneValid } from '@/lib/phoneValidation';
 import { checkLeadProfanity } from '@/lib/profanityFilter';
 import { checkRateLimit } from '@/lib/rateLimit';
 import { calculateQualityScore } from '@/lib/leadQuality';
+import {
+  buildPartnerProspectInsertRow,
+  findRecentPartnerProspectByEmail,
+  insertPartnerProspect,
+  isPartnerProspectBranch,
+  type PartnerProspectPayload,
+} from '@/lib/partnerProspectIngest';
 
 const COMMON_KEYS = new Set([
   'branch', 'customer_id', 'naam_klant', 'name', 'email', 'telefoonnummer', 'phone',
@@ -13,6 +20,7 @@ const COMMON_KEYS = new Set([
   'status', 'bron', 'notities', 'land',
   'meta_campaign_id', 'meta_adset_id', 'meta_ad_id',
   'campaign_id', 'adset_id', 'ad_id',
+  'bedrijfsnaam', 'company_name',
 ]);
 
 export async function POST(request: NextRequest) {
@@ -87,6 +95,76 @@ export async function POST(request: NextRequest) {
 
     if (!lead.naam_klant) {
       return NextResponse.json({ error: 'naam_klant is verplicht' }, { status: 400 });
+    }
+
+    /* ── Thuisbatterij Partners → prospects (geen lead-pool / distributie) ── */
+    if (isPartnerProspectBranch(branchSlug)) {
+      if (lead.email) {
+        const dup = await findRecentPartnerProspectByEmail(supabase, lead.email);
+        if (dup) {
+          await supabase
+            .from('webhook_keys')
+            .update({
+              last_used_at: new Date().toISOString(),
+              request_count: (keyRecord.request_count || 0) + 1,
+            })
+            .eq('id', keyRecord.id);
+          return NextResponse.json({
+            success: true,
+            prospect_id: dup.id,
+            deduplicated: true,
+            ingest: 'prospect',
+          });
+        }
+      }
+
+      const payload: PartnerProspectPayload = {
+        ...body,
+        naam_klant: lead.naam_klant,
+        email: lead.email,
+        telefoonnummer: lead.telefoonnummer,
+        postcode: lead.postcode,
+        huisnummer: lead.huisnummer,
+        plaatsnaam: lead.plaatsnaam,
+        provincie: lead.provincie,
+        land: lead.land,
+        meta_campaign_id: lead.meta_campaign_id as string | undefined,
+        meta_adset_id: lead.meta_adset_id as string | undefined,
+        meta_ad_id: lead.meta_ad_id as string | undefined,
+        notities: lead.notities,
+        custom_fields: lead.custom_fields as Record<string, unknown> | undefined,
+      };
+
+      const row = buildPartnerProspectInsertRow(payload, customFields, {
+        plaatsnaam: lead.plaatsnaam,
+        provincie: lead.provincie,
+        postcode: lead.postcode,
+        land: lead.land,
+      });
+
+      const pr = await insertPartnerProspect(supabase, row, {
+        title: 'Ingekomen via partner-webhook',
+        body: 'Thuisbatterij Partners (Zapier/Meta).',
+        type: 'created',
+      });
+
+      if (!pr) {
+        return NextResponse.json({ error: 'Prospect opslaan mislukt' }, { status: 500 });
+      }
+
+      await supabase
+        .from('webhook_keys')
+        .update({
+          last_used_at: new Date().toISOString(),
+          request_count: (keyRecord.request_count || 0) + 1,
+        })
+        .eq('id', keyRecord.id);
+
+      return NextResponse.json({
+        success: true,
+        prospect_id: pr.id,
+        ingest: 'prospect',
+      });
     }
 
     // Deduplication: if same email+branch exists within 30 days, don't create
