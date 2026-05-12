@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
 
   const { data: customer } = await supabase
     .from('customers')
-    .select('id, name, email, street, house_number, postcode, city, vat_id, country, account_manager_id')
+    .select('id, name, email, street, house_number, postcode, city, vat_id, account_manager_id')
     .eq('id', customer_id)
     .single();
 
@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
   const sub = Number(subtotal);
   const vat = computeInvoiceVat({
     subtotalExclBtw: sub,
-    country: customer.country,
+    country: (customer as { country?: string | null }).country ?? 'NL',
     customerVatId: customer.vat_id,
   });
   const { btw_percentage: btwPct, btw_amount: btwAmount, total_incl_btw: totalInclBtw, vat_mode: vatMode } = vat;
@@ -170,14 +170,14 @@ export async function PUT(request: NextRequest) {
 
     const { data: cust } = await supabase
       .from('customers')
-      .select('country, vat_id')
+      .select('vat_id')
       .eq('id', existing.customer_id)
       .maybeSingle();
 
     const sub = Number(updates.subtotal ?? existing.subtotal);
     const vat = computeInvoiceVat({
       subtotalExclBtw: sub,
-      country: cust?.country,
+      country: (cust as { country?: string | null } | null | undefined)?.country ?? 'NL',
       customerVatId: cust?.vat_id,
     });
     updates.subtotal = sub;

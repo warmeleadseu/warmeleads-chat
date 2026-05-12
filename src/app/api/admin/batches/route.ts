@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
 
     const { data: custRow, error: custErr } = await supabase
       .from('customers')
-      .select('name, account_manager_id, country, vat_id')
+      .select('name, account_manager_id, vat_id')
       .eq('id', customer_id)
       .single();
     if (custErr || !custRow) {
@@ -123,7 +123,7 @@ export async function POST(request: NextRequest) {
       source: 'admin',
       batch_kind: 'niche_research',
       niche_title: nicheTitle,
-      billing_country: custRow.country,
+      billing_country: (custRow as { country?: string | null }).country ?? 'NL',
       billing_vat_id: custRow.vat_id,
     }).catch(() => {});
 
@@ -161,7 +161,7 @@ export async function POST(request: NextRequest) {
 
   const startsAtValue = starts_at ? new Date(starts_at).toISOString() : null;
 
-  const { data: custRow } = await supabase.from('customers').select('name, account_manager_id, country, vat_id').eq('id', customer_id).single();
+  const { data: custRow } = await supabase.from('customers').select('name, account_manager_id, vat_id').eq('id', customer_id).single();
 
   const { data, error } = await supabase
     .from('customer_batches')
@@ -206,7 +206,7 @@ export async function POST(request: NextRequest) {
     is_paid: batchIsPaid,
     source: 'admin',
     batch_kind,
-    billing_country: custRow?.country,
+    billing_country: (custRow as { country?: string | null } | undefined)?.country ?? 'NL',
     billing_vat_id: custRow?.vat_id,
   }).catch(() => {});
 

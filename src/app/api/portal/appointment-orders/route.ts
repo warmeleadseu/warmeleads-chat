@@ -48,11 +48,13 @@ export async function POST(request: NextRequest) {
 
     const { data: custData } = await supabase
       .from('customers')
-      .select('id, name, email, country, vat_id')
+      .select('id, name, email, vat_id')
       .eq('id', customer.id)
       .single();
 
     if (!custData) return NextResponse.json({ error: 'Klant niet gevonden' }, { status: 404 });
+
+    const billingCountry = customer.country ?? 'NL';
 
     const [{ data: branchData }, { data: customPricing }] = await Promise.all([
       supabase
@@ -98,7 +100,7 @@ export async function POST(request: NextRequest) {
     const total_price = Number((price_per_appointment * batch_size).toFixed(2));
     const apptVat = computeInvoiceVat({
       subtotalExclBtw: total_price,
-      country: custData.country,
+      country: billingCountry,
       customerVatId: custData.vat_id,
     });
     const total_incl_btw = apptVat.total_incl_btw;

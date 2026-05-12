@@ -75,7 +75,7 @@ export async function createInvoice(params: CreateInvoiceParams) {
 
   const { data: customer, error: custErr } = await supabase
     .from('customers')
-    .select('id, name, email, contact_person, street, house_number, postcode, city, vat_id, kvk_nummer, country')
+    .select('id, name, email, contact_person, street, house_number, postcode, city, vat_id, kvk_nummer')
     .eq('id', params.customer_id)
     .single();
 
@@ -91,7 +91,7 @@ export async function createInvoice(params: CreateInvoiceParams) {
   const subtotal = Number(params.total_price);
   const vat = computeInvoiceVat({
     subtotalExclBtw: subtotal,
-    country: customer.country,
+    country: (customer as { country?: string | null }).country ?? 'NL',
     customerVatId: customer.vat_id,
   });
   const { vat_mode: vatMode, btw_percentage: btwPercentage, btw_amount: btwAmount, total_incl_btw: totalInclBtw } = vat;

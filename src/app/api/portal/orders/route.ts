@@ -50,11 +50,13 @@ export async function POST(request: NextRequest) {
 
     const { data: custData } = await supabase
       .from('customers')
-      .select('id, name, email, contact_person, welcome_offer_used, welcome_offer_expires_at, country, vat_id')
+      .select('id, name, email, contact_person, welcome_offer_used, welcome_offer_expires_at, vat_id')
       .eq('id', customer.id)
       .single();
 
     if (!custData) return NextResponse.json({ error: 'Klant niet gevonden' }, { status: 404 });
+
+    const billingCountry = customer.country ?? 'NL';
 
     if (batchKind === 'niche_research') {
       const nicheTitle = typeof rawNicheTitle === 'string' ? rawNicheTitle.trim() : '';
@@ -72,7 +74,7 @@ export async function POST(request: NextRequest) {
       const total_price = RESEARCH_EXCL;
       const nicheVat = computeInvoiceVat({
         subtotalExclBtw: total_price,
-        country: custData.country,
+        country: billingCountry,
         customerVatId: custData.vat_id,
       });
       const total_incl_btw = nicheVat.total_incl_btw;
@@ -254,7 +256,7 @@ export async function POST(request: NextRequest) {
     const total_price = subtotalBeforeDiscount - discountAmount;
     const leadsVat = computeInvoiceVat({
       subtotalExclBtw: total_price,
-      country: custData.country,
+      country: billingCountry,
       customerVatId: custData.vat_id,
     });
     const total_incl_btw = leadsVat.total_incl_btw;

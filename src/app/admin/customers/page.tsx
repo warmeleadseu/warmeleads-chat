@@ -30,8 +30,16 @@ import {
   EnvelopeIcon,
   ChevronUpDownIcon,
   CalendarDaysIcon,
+  ArrowTopRightOnSquareIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
+import {
+  belgianKboDigitsToVatId,
+  customerRegistryShortLabel,
+  isNlKvkEightDigits,
+  normalizeBelgianKboDigits,
+  digitsOnly,
+} from '@/lib/beEnterprise';
 import { useAdmin } from '../adminContext';
 import { ComposeMailDrawer } from '../_components/ComposeMailDrawer';
 import { MailHistory } from '../_components/MailHistory';
@@ -1065,7 +1073,10 @@ function CustomerDetailPanel({
               {/* Additional info */}
               <div className="space-y-1.5 text-xs">
                 {c.kvk_nummer && (
-                  <div className="flex justify-between"><span className="text-slate-400">KVK</span><span className="font-medium text-slate-600">{c.kvk_nummer}</span></div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">{c.country === 'BE' ? 'KBO' : customerRegistryShortLabel(c.kvk_nummer)}</span>
+                    <span className="font-medium text-slate-600">{c.kvk_nummer}</span>
+                  </div>
                 )}
                 {c.city && (
                   <div className="flex justify-between"><span className="text-slate-400">Locatie</span><span className="font-medium text-slate-600">{[c.street, c.house_number, c.postcode, c.city].filter(Boolean).join(', ')}</span></div>
@@ -1295,7 +1306,9 @@ function CustomerForm({ customer, branchOptions, allCustomers, accountManagers, 
   const [kvkResults, setKvkResults] = useState<KvkResult[]>([]);
   const [kvkSearching, setKvkSearching] = useState(false);
   const [kvkLoading, setKvkLoading] = useState(false);
-  const [kvkLinked, setKvkLinked] = useState(!!customer?.kvk_nummer);
+  const [kvkLinked, setKvkLinked] = useState(
+    !!customer?.kvk_nummer && customer?.country !== 'BE' && isNlKvkEightDigits(customer.kvk_nummer),
+  );
   const [kvkOpen, setKvkOpen] = useState(false);
   const [kvkError, setKvkError] = useState('');
   const kvkRef = useRef<HTMLDivElement>(null);
@@ -1319,7 +1332,18 @@ function CustomerForm({ customer, branchOptions, allCustomers, accountManagers, 
     };
   }, []);
 
+  useEffect(() => {
+    if (form.country === 'BE') {
+      setKvkLinked(false);
+      setKvkQuery('');
+      setKvkResults([]);
+      setKvkOpen(false);
+      setKvkError('');
+    }
+  }, [form.country]);
+
   const searchKvk = useCallback((q: string) => {
+    if (form.country !== 'NL') return;
     if (kvkTimer.current) clearTimeout(kvkTimer.current);
     if (kvkAbort.current) kvkAbort.current.abort();
     setKvkError('');
@@ -1359,7 +1383,7 @@ function CustomerForm({ customer, branchOptions, allCustomers, accountManagers, 
         setKvkSearching(false);
       }
     }, 500);
-  }, []);
+  }, [form.country]);
 
   const fmtPc = (pc: string) => { const raw = pc.replace(/\s/g, ''); return /^\d{4}[A-Za-z]{2}$/.test(raw) ? `${raw.slice(0, 4)} ${raw.slice(4).toUpperCase()}` : pc; };
 
@@ -1423,7 +1447,12 @@ function CustomerForm({ customer, branchOptions, allCustomers, accountManagers, 
       const payload: Record<string, unknown> = { ...rest };
       if (password) payload.password = password;
       payload.bulk_price_per_lead = bulkStr ? parseFloat(bulkStr) : null;
-      payload.kvk_nummer = kvk_nummer || null;
+      if (billingCountry === 'BE' && kvk_nummer) {
+        const kbo = normalizeBelgianKboDigits(kvk_nummer);
+        payload.kvk_nummer = kbo || digitsOnly(kvk_nummer).slice(0, 10) || null;
+      } else {
+        payload.kvk_nummer = kvk_nummer || null;
+      }
       payload.street = street || null;
       payload.house_number = house_number || null;
       payload.postcode = postcode || null;
@@ -1460,84 +1489,139 @@ function CustomerForm({ customer, branchOptions, allCustomers, accountManagers, 
         <div className="space-y-4 p-5">
           {error && <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-2.5 text-sm text-red-600">{error}</div>}
 
-          {/* KVK Zoeken */}
-          <div ref={kvkRef} className="rounded-lg border border-purple-200 bg-purple-50/30 p-3">
-            {kvkLinked && form.kvk_nummer ? (
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 min-w-0">
-                  <CheckCircleIcon className="h-5 w-5 flex-shrink-0 text-emerald-500" />
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-slate-800">{form.name}</p>
-                    <p className="text-[11px] text-slate-500">KVK {form.kvk_nummer}</p>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-500">Facturatie-land</label>
+            <select
+              value={form.country}
+              onChange={e => setForm(f => ({ ...f, country: e.target.value === 'BE' ? 'BE' : 'NL' }))}
+              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50"
+            >
+              <option value="NL">Nederland (NL-BTW, KVK-zoeken)</option>
+              <option value="BE">België (BTW verlegd mits geldig BE-BTW-nr; KBO handmatig)</option>
+            </select>
+            <p className="mt-1 text-[11px] text-slate-400">
+              Voor Belgische B2B met geldig BE-BTW-nummer wordt op facturen geen Nederlandse BTW berekend. KVK-API is alleen voor Nederlandse ondernemingen.
+            </p>
+          </div>
+
+          {form.country === 'NL' ? (
+            <div ref={kvkRef} className="rounded-lg border border-purple-200 bg-purple-50/30 p-3">
+              {kvkLinked && form.kvk_nummer ? (
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <CheckCircleIcon className="h-5 w-5 flex-shrink-0 text-emerald-500" />
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-slate-800">{form.name}</p>
+                      <p className="text-[11px] text-slate-500">KVK {form.kvk_nummer}</p>
+                    </div>
                   </div>
+                  <button type="button" onClick={unlinkKvk}
+                    className="rounded-md px-2 py-1 text-[11px] font-medium text-purple-600 hover:bg-purple-100 transition">
+                    Ontkoppelen
+                  </button>
                 </div>
-                <button type="button" onClick={unlinkKvk}
-                  className="rounded-md px-2 py-1 text-[11px] font-medium text-purple-600 hover:bg-purple-100 transition">
-                  Ontkoppelen
-                </button>
-              </div>
-            ) : (
-              <>
-                <p className="mb-1.5 text-xs font-medium text-purple-700">KVK Zoeken</p>
-                <div className="relative">
+              ) : (
+                <>
+                  <p className="mb-1.5 text-xs font-medium text-purple-700">KVK Zoeken</p>
                   <div className="relative">
-                    <MagnifyingGlassIcon className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-purple-400" />
-                    {kvkSearching && (
-                      <ArrowPathIcon className="absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-purple-400" />
-                    )}
-                    <input
-                      type="text"
-                      value={kvkQuery}
-                      onChange={e => { setKvkQuery(e.target.value); searchKvk(e.target.value); }}
-                      onFocus={() => { if (kvkResults.length > 0) setKvkOpen(true); }}
-                      placeholder="Zoek op bedrijfsnaam of KVK-nummer..."
-                      className="w-full rounded-lg border border-purple-200 bg-white py-2 pl-8 pr-8 text-sm text-slate-900 outline-none focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/20"
-                    />
-                  </div>
-                  {kvkOpen && !kvkLoading && (
-                    <div className="absolute left-0 right-0 z-20 mt-1 max-h-60 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg">
-                      {kvkResults.length > 0 ? kvkResults.map(r => (
-                        <button key={`${r.kvkNummer}-${r.vestigingsnummer}`} type="button"
-                          onClick={() => selectKvkResult(r)}
-                          className="flex w-full flex-col gap-0.5 border-b border-slate-50 px-3 py-2.5 text-left hover:bg-purple-50/50 last:border-0"
-                        >
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-sm font-semibold text-slate-800">{r.naam}</span>
-                            {r.type && (
-                              <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
-                                r.type === 'hoofdvestiging' ? 'bg-brand-purple/10 text-brand-purple' : 'bg-slate-100 text-slate-500'
-                              }`}>
-                                {r.type === 'hoofdvestiging' ? 'Hoofdvestiging' : r.type === 'nevenvestiging' ? 'Nevenvestiging' : r.type}
-                              </span>
-                            )}
-                            {!r.actief && (
-                              <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">Uitgeschreven</span>
-                            )}
-                          </div>
-                          <span className="text-[11px] text-slate-500">
-                            KVK {r.kvkNummer}{r.plaats ? ` · ${r.plaats}` : ''}{r.straatnaam ? ` · ${r.straatnaam} ${r.huisnummer}` : ''}
-                          </span>
-                        </button>
-                      )) : (
-                        <p className="px-3 py-2.5 text-xs text-slate-400">
-                          Geen bedrijven gevonden voor &ldquo;{kvkQuery}&rdquo;
-                        </p>
+                    <div className="relative">
+                      <MagnifyingGlassIcon className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-purple-400" />
+                      {kvkSearching && (
+                        <ArrowPathIcon className="absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-purple-400" />
                       )}
+                      <input
+                        type="text"
+                        value={kvkQuery}
+                        onChange={e => { setKvkQuery(e.target.value); searchKvk(e.target.value); }}
+                        onFocus={() => { if (kvkResults.length > 0) setKvkOpen(true); }}
+                        placeholder="Zoek op bedrijfsnaam of KVK-nummer..."
+                        className="w-full rounded-lg border border-purple-200 bg-white py-2 pl-8 pr-8 text-sm text-slate-900 outline-none focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/20"
+                      />
+                    </div>
+                    {kvkOpen && !kvkLoading && (
+                      <div className="absolute left-0 right-0 z-20 mt-1 max-h-60 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg">
+                        {kvkResults.length > 0 ? kvkResults.map(r => (
+                          <button key={`${r.kvkNummer}-${r.vestigingsnummer}`} type="button"
+                            onClick={() => selectKvkResult(r)}
+                            className="flex w-full flex-col gap-0.5 border-b border-slate-50 px-3 py-2.5 text-left hover:bg-purple-50/50 last:border-0"
+                          >
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-sm font-semibold text-slate-800">{r.naam}</span>
+                              {r.type && (
+                                <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                                  r.type === 'hoofdvestiging' ? 'bg-brand-purple/10 text-brand-purple' : 'bg-slate-100 text-slate-500'
+                                }`}>
+                                  {r.type === 'hoofdvestiging' ? 'Hoofdvestiging' : r.type === 'nevenvestiging' ? 'Nevenvestiging' : r.type}
+                                </span>
+                              )}
+                              {!r.actief && (
+                                <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">Uitgeschreven</span>
+                              )}
+                            </div>
+                            <span className="text-[11px] text-slate-500">
+                              KVK {r.kvkNummer}{r.plaats ? ` · ${r.plaats}` : ''}{r.straatnaam ? ` · ${r.straatnaam} ${r.huisnummer}` : ''}
+                            </span>
+                          </button>
+                        )) : (
+                          <p className="px-3 py-2.5 text-xs text-slate-400">
+                            Geen bedrijven gevonden voor &ldquo;{kvkQuery}&rdquo;
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  {kvkLoading && (
+                    <div className="mt-2 flex items-center gap-2 text-xs text-purple-600">
+                      <ArrowPathIcon className="h-3.5 w-3.5 animate-spin" />
+                      Bedrijfsgegevens ophalen...
                     </div>
                   )}
-                </div>
-                {kvkLoading && (
-                  <div className="mt-2 flex items-center gap-2 text-xs text-purple-600">
-                    <ArrowPathIcon className="h-3.5 w-3.5 animate-spin" />
-                    Bedrijfsgegevens ophalen...
-                  </div>
-                )}
-                {kvkError && (
-                  <p className="mt-1.5 text-[11px] text-red-500">{kvkError}</p>
-                )}
-              </>
-            )}
-          </div>
+                  {kvkError && (
+                    <p className="mt-1.5 text-[11px] text-red-500">{kvkError}</p>
+                  )}
+                </>
+              )}
+            </div>
+          ) : (
+            <div className="rounded-lg border border-amber-200 bg-amber-50/40 p-3">
+              <p className="mb-1.5 text-xs font-medium text-amber-900">Belgische onderneming (KBO)</p>
+              <p className="mb-2 text-[11px] leading-relaxed text-amber-900/80">
+                Er is geen ingebouwde Belgische bedrijfszoekfunctie (de KVK-API dekt alleen Nederland). Vul bedrijfsnaam, adres en ondernemingsnummer handmatig in.
+                Je kunt gegevens opzoeken in het officiële KBO-publieksportaal en hier overnemen.
+              </p>
+              <div className="flex flex-col gap-1.5">
+                <a
+                  href="https://kbopub.economie.fgov.be/kbopub/zoeknaamfonetischform.html"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-[11px] font-medium text-amber-900 underline decoration-amber-600/40 hover:decoration-amber-900"
+                >
+                  Zoeken op naam (KBO)
+                  <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5 flex-shrink-0" />
+                </a>
+                <a
+                  href="https://kbopub.economie.fgov.be/kbopub/zoeknummerform.html"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-[11px] font-medium text-amber-900 underline decoration-amber-600/40 hover:decoration-amber-900"
+                >
+                  Zoeken op ondernemingsnummer (KBO)
+                  <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5 flex-shrink-0" />
+                </a>
+              </div>
+              <button
+                type="button"
+                className="mt-3 w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-[11px] font-medium text-amber-950 transition hover:bg-amber-50"
+                onClick={() => {
+                  const kbo = normalizeBelgianKboDigits(form.kvk_nummer);
+                  if (!kbo) return;
+                  setForm(f => ({ ...f, vat_id: belgianKboDigitsToVatId(kbo) }));
+                }}
+              >
+                Vul BE-BTW-nummer vanuit KBO (10 cijfers in het veld hieronder)
+              </button>
+            </div>
+          )}
 
           <div>
             <label className="mb-1 block text-xs font-medium text-slate-500">Bedrijfsnaam *</label>
@@ -1579,39 +1663,30 @@ function CustomerForm({ customer, branchOptions, allCustomers, accountManagers, 
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-500">Postcode</label>
               <input value={form.postcode} onChange={e => setForm(f => ({ ...f, postcode: e.target.value }))}
-                placeholder="1234 AB" maxLength={7}
+                placeholder={form.country === 'BE' ? '9000' : '1234 AB'}
+                maxLength={form.country === 'BE' ? 4 : 7}
                 className="w-28 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
             </div>
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-500">Plaats</label>
               <input value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))}
-                placeholder="Amsterdam"
+                placeholder={form.country === 'BE' ? 'Gent' : 'Amsterdam'}
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
             </div>
           </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500">Facturatie-land</label>
-            <select
-              value={form.country}
-              onChange={e => setForm(f => ({ ...f, country: e.target.value === 'BE' ? 'BE' : 'NL' }))}
-              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50"
-            >
-              <option value="NL">Nederland (NL-BTW)</option>
-              <option value="BE">België (BTW verlegd mits geldig BE-BTW-nr)</option>
-            </select>
-            <p className="mt-1 text-[11px] text-slate-400">Voor Belgische B2B met geldig BE-BTW-nummer wordt op facturen geen Nederlandse BTW berekend.</p>
-          </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1 block text-xs font-medium text-slate-500">KVK-nummer</label>
+              <label className="mb-1 block text-xs font-medium text-slate-500">
+                {form.country === 'BE' ? 'KBO / ondernemingsnr.' : 'KVK-nummer'}
+              </label>
               <input value={form.kvk_nummer}
-                onChange={kvkLinked ? undefined : e => setForm(f => ({ ...f, kvk_nummer: e.target.value }))}
-                readOnly={kvkLinked}
-                maxLength={8}
+                onChange={form.country === 'NL' && kvkLinked ? undefined : e => setForm(f => ({ ...f, kvk_nummer: e.target.value }))}
+                readOnly={form.country === 'NL' && kvkLinked}
+                maxLength={form.country === 'BE' ? 14 : 8}
                 inputMode="numeric" autoComplete="off"
-                placeholder="12345678"
+                placeholder={form.country === 'BE' ? '0123456789' : '12345678'}
                 className={`w-full rounded-lg border px-3 py-2 text-sm outline-none ${
-                  kvkLinked
+                  form.country === 'NL' && kvkLinked
                     ? 'border-purple-200 bg-purple-50/50 text-purple-700 cursor-not-allowed'
                     : 'border-slate-200 text-slate-900 focus:border-brand-purple/50'
                 }`} />
@@ -1619,7 +1694,8 @@ function CustomerForm({ customer, branchOptions, allCustomers, accountManagers, 
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-500">BTW-nummer</label>
               <input value={form.vat_id} onChange={e => setForm(f => ({ ...f, vat_id: e.target.value }))}
-                placeholder="NL123456789B01 of BE0123456789" autoComplete="off"
+                placeholder={form.country === 'BE' ? 'BE0123456789' : 'NL123456789B01 of BE0123456789'}
+                autoComplete="off"
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
             </div>
           </div>

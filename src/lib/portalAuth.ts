@@ -10,8 +10,9 @@ import { qualifiesBelgiumReverseCharge } from '@/lib/invoiceVat';
 
 export type { PortalSession };
 
+/** Zonder `country`: oude databases vóór migratie 100 (customers.country) blijven werken. */
 const CUSTOMER_SELECT =
-  'id, name, email, contact_person, branches, portal_active, demo_mode, signup_source, is_active, country, vat_id';
+  'id, name, email, contact_person, branches, portal_active, demo_mode, signup_source, is_active, vat_id';
 
 const PORTAL_USER_SELECT =
   'id, customer_id, name, email, role, is_active, permissions, assignment_rules, last_login_at, last_seen_at, login_count, phone, created_at';
@@ -31,7 +32,10 @@ function mapSessionCustomer(row: {
   country?: string | null;
   vat_id?: string | null;
 }): PortalSession['customer'] {
-  const reverse_charge = qualifiesBelgiumReverseCharge({ country: row.country, vat_id: row.vat_id });
+  const reverse_charge = qualifiesBelgiumReverseCharge({
+    country: row.country ?? 'NL',
+    vat_id: row.vat_id,
+  });
   return {
     id: row.id,
     name: row.name,

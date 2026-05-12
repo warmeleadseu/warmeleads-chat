@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
 
     const { data: custData } = await supabase
       .from('customers')
-      .select('id, name, email, country, vat_id')
+      .select('id, name, email, vat_id')
       .eq('id', customer.id)
       .single();
 
@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
     const totalExBtw = Number(batch.total_price || 0);
     const payVat = computeInvoiceVat({
       subtotalExclBtw: totalExBtw,
-      country: custData.country,
+      country: customer.country ?? 'NL',
       customerVatId: custData.vat_id,
     });
     const totalInclBtw = payVat.total_incl_btw;

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Document, Page, Text, View, Image, StyleSheet } from '@react-pdf/renderer';
 import type { InvoiceVatMode } from '@/lib/invoiceVat';
+import { customerRegistryShortLabel } from '@/lib/beEnterprise';
 
 const BRAND = '#7C3AED';
 const BRAND_LIGHT = '#F5F3FF';
@@ -131,7 +132,11 @@ export function InvoicePdf({ data }: { data: InvoiceData }) {
             <Text style={s.value}>{data.customer_name}</Text>
             {data.customer_address ? <Text style={s.value}>{data.customer_address}</Text> : null}
             <Text style={s.value}>{data.customer_email}</Text>
-            {data.customer_kvk ? <Text style={s.value}>KvK: {data.customer_kvk}</Text> : null}
+            {data.customer_kvk ? (
+              <Text style={s.value}>
+                {customerRegistryShortLabel(data.customer_kvk)}: {data.customer_kvk}
+              </Text>
+            ) : null}
             {data.customer_vat_id ? <Text style={s.value}>BTW: {data.customer_vat_id}</Text> : null}
           </View>
         </View>

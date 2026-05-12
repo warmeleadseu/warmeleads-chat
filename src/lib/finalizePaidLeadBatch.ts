@@ -34,7 +34,7 @@ export async function finalizePaidBulkLeadBatch(
 ): Promise<void> {
   const { data: cust } = await supabase
     .from('customers')
-    .select('id, name, email, contact_person, account_manager_id, country, vat_id')
+    .select('id, name, email, contact_person, account_manager_id, vat_id')
     .eq('id', claimed.customer_id)
     .single();
 
@@ -90,7 +90,7 @@ export async function finalizePaidBulkLeadBatch(
     is_paid: true,
     source: 'portal_pay',
     batch_kind: 'bulk_leads',
-    billing_country: cust?.country,
+    billing_country: (cust as { country?: string | null } | null | undefined)?.country ?? 'NL',
     billing_vat_id: cust?.vat_id,
   }).catch(() => {});
 
@@ -119,7 +119,7 @@ export async function finalizePaidLeadBatch(
 ): Promise<void> {
   const { data: cust } = await supabase
     .from('customers')
-    .select('id, name, email, contact_person, account_manager_id, country, vat_id')
+    .select('id, name, email, contact_person, account_manager_id, vat_id')
     .eq('id', claimed.customer_id)
     .single();
 
@@ -202,7 +202,7 @@ export async function finalizePaidLeadBatch(
     price_per_lead: Number(claimed.price_per_lead || 0),
     is_paid: true,
     source: 'portal_pay',
-    billing_country: cust?.country,
+    billing_country: (cust as { country?: string | null } | null | undefined)?.country ?? 'NL',
     billing_vat_id: cust?.vat_id,
   }).catch(() => {});
 
