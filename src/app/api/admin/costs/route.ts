@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
 
+/** Na zware wijzigingen: Supabase → Query Performance + advisors (indexes i.c.m. costs-vensters). */
+
 export async function GET(request: NextRequest) {
   const admin = await verifyAdmin(request);
   if (!admin) return unauthorized();
@@ -13,56 +15,84 @@ export async function GET(request: NextRequest) {
   const supabase = createServerClient();
   const now = new Date();
   const today = now.toISOString().split('T')[0];
+  const t0 = Date.now();
+
+  const COSTS_LOOKBACK_DAYS = 730;
+  const COSTS_LEADS_MAX_PAGES = 60;
+  const COSTS_ASSIGN_MAX_PAGES = 80;
+  const PAGE = 1000;
+
+  const costsSinceIso = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() - COSTS_LOOKBACK_DAYS);
+    return d.toISOString();
+  })();
 
   interface LeadRow { id: string; branch: string; meta_campaign_id: string | null; wervingsdatum: string | null; lead_cost: number | null }
   interface AssignRow { id: string; lead_id: string; customer_id: string; batch_id: string | null }
 
-  // Paginated fetch to avoid PostgREST 1000-row default limit
-  async function fetchAllLeads(): Promise<LeadRow[]> {
-    const PAGE = 1000;
-    let all: LeadRow[] = [];
+  async function fetchLeadsBounded(): Promise<{ rows: LeadRow[]; truncated: boolean }> {
+    const rows: LeadRow[] = [];
+    let truncated = false;
     let offset = 0;
-    while (true) {
-      const { data } = await supabase.from('leads').select('id, branch, meta_campaign_id, wervingsdatum, lead_cost').neq('bron', 'excel_import').range(offset, offset + PAGE - 1);
-      if (!data || data.length === 0) break;
-      all = all.concat(data as LeadRow[]);
+    for (let p = 0; p < COSTS_LEADS_MAX_PAGES; p++) {
+      const { data } = await supabase
+        .from('leads')
+        .select('id, branch, meta_campaign_id, wervingsdatum, lead_cost')
+        .neq('bron', 'excel_import')
+        .gte('created_at', costsSinceIso)
+        .range(offset, offset + PAGE - 1);
+      if (!data?.length) break;
+      rows.push(...(data as LeadRow[]));
       if (data.length < PAGE) break;
       offset += PAGE;
+      if (p === COSTS_LEADS_MAX_PAGES - 1) truncated = true;
     }
-    return all;
+    return { rows, truncated };
   }
 
-  async function fetchAllAssignments(): Promise<AssignRow[]> {
-    const PAGE = 1000;
-    let all: AssignRow[] = [];
+  async function fetchAssignmentsBounded(): Promise<{ rows: AssignRow[]; truncated: boolean }> {
+    const rows: AssignRow[] = [];
+    let truncated = false;
     let offset = 0;
-    while (true) {
-      const { data } = await supabase.from('lead_assignments').select('id, lead_id, customer_id, batch_id').range(offset, offset + PAGE - 1);
-      if (!data || data.length === 0) break;
-      all = all.concat(data as AssignRow[]);
+    for (let p = 0; p < COSTS_ASSIGN_MAX_PAGES; p++) {
+      const { data } = await supabase
+        .from('lead_assignments')
+        .select('id, lead_id, customer_id, batch_id')
+        .gte('assigned_at', costsSinceIso)
+        .range(offset, offset + PAGE - 1);
+      if (!data?.length) break;
+      rows.push(...(data as AssignRow[]));
       if (data.length < PAGE) break;
       offset += PAGE;
+      if (p === COSTS_ASSIGN_MAX_PAGES - 1) truncated = true;
     }
-    return all;
+    return { rows, truncated };
   }
 
   /* ── Wave 1: fetch batches + lastSync (small) + paginated leads & assignments ── */
-  const [batchesRes, lastSyncRes, allLeads, allAssignments] = await Promise.all([
+  const [batchesRes, lastSyncRes, leadBundle, assignBundle] = await Promise.all([
     supabase
       .from('customer_batches')
       .select('id, customer_id, branch, batch_size, leads_delivered, price_per_lead, total_price, status, leads_per_week, created_at, is_paid, customers(name)')
       .in('status', ['active', 'completed'])
       .neq('is_paid', false)
-      .order('created_at', { ascending: false }),
+      .order('created_at', { ascending: false })
+      .limit(2500),
     supabase
       .from('meta_ad_spend')
       .select('synced_at')
       .order('synced_at', { ascending: false })
       .limit(1)
       .single(),
-    fetchAllLeads(),
-    fetchAllAssignments(),
+    fetchLeadsBounded(),
+    fetchAssignmentsBounded(),
   ]);
+
+  const allLeads = leadBundle.rows;
+  const allAssignments = assignBundle.rows;
+  const leadsTruncated = leadBundle.truncated;
+  const assignmentsTruncated = assignBundle.truncated;
 
   const allBatches = batchesRes.data || [];
   const lastSync = lastSyncRes.data;
@@ -307,6 +337,14 @@ export async function GET(request: NextRequest) {
     dailyTrend[row.date].leads += row.leads_count || 0;
   }
 
+  console.info('[admin/costs]', {
+    computeMs: Date.now() - t0,
+    leadsRows: allLeads.length,
+    assignRows: allAssignments.length,
+    leadsTruncated,
+    assignmentsTruncated,
+  });
+
   return NextResponse.json({
     weekSpend: Math.round(weekSpend * 100) / 100,
     monthSpend: Math.round(totalAdSpend * 100) / 100,
@@ -330,5 +368,17 @@ export async function GET(request: NextRequest) {
     batchFinancials: batchFinancials.sort((a, b) => b.profit - a.profit),
     lastSyncAt: lastSync?.synced_at || null,
     dailyTrend: Object.entries(dailyTrend).map(([date, data]) => ({ date, ...data })).sort((a, b) => a.date.localeCompare(b.date)),
+    _costsScope: {
+      lookbackDays: COSTS_LOOKBACK_DAYS,
+      leadsSampled: allLeads.length,
+      assignmentsSampled: allAssignments.length,
+      leadsTruncated,
+      assignmentsTruncated,
+      maxLeadPages: COSTS_LEADS_MAX_PAGES,
+      maxAssignmentPages: COSTS_ASSIGN_MAX_PAGES,
+      batchesCappedAt: 2500,
+      note:
+        'Lead- en assignment-aggregaties zijn begrensd op het lookback-venster; zeer oude data kan ontbreken in CPL/marges.',
+    },
   });
 }

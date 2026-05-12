@@ -74,6 +74,7 @@ export async function GET(request: NextRequest) {
   }
 
   const supabase = createServerClient();
+  const t0 = Date.now();
   const now = new Date();
   const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
   const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
@@ -91,6 +92,7 @@ export async function GET(request: NextRequest) {
         .order('sort_order', { ascending: true });
       const bm: Record<string, { slug: string; name: string; color: string }> = {};
       (brData || []).forEach((b: any) => { bm[b.slug] = b; });
+      console.info('[admin/dashboard]', { computeMs: Date.now() - t0, isAM, earlyEmpty: true });
       return NextResponse.json({
         total: 0, thisWeek: 0, thisMonth: 0, customerCount: 0, assignmentCount: 0,
         byStatus: {}, byBranch: {}, byCustomer: {}, recentLeads: [],
@@ -226,11 +228,17 @@ export async function GET(request: NextRequest) {
 
   // Evict stale entries periodically
   if (dashboardCache.size > 50) {
-    const now = Date.now();
+    const nowMs = Date.now();
     for (const [k, v] of dashboardCache) {
-      if (now > v.expires) dashboardCache.delete(k);
+      if (nowMs > v.expires) dashboardCache.delete(k);
     }
   }
+
+  console.info('[admin/dashboard]', {
+    computeMs: Date.now() - t0,
+    isAM,
+    assignmentJoinRows: allAssignments.length,
+  });
 
   return NextResponse.json(payload);
 }

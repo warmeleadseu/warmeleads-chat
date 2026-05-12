@@ -8,7 +8,8 @@ import { adminFetch } from '@/lib/adminAuth';
 import { getSupabaseBrowserClient } from '@/lib/supabaseBrowser';
 import { audioManager } from '@/lib/celebrationSounds';
 
-const REFRESH_INTERVAL = 30_000;
+/** Langzamer pollen = minder Supabase-load bij open Live-tab (Pro of niet). */
+const REFRESH_INTERVAL = 90_000;
 
 interface CelebrationEvent {
   id: string;
@@ -1063,7 +1064,7 @@ export default function LiveDashboard() {
           processCelebration(ce);
         }
       } catch { /* silent */ }
-    }, 5000);
+    }, 20_000);
 
     return () => {
       mounted = false;

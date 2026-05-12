@@ -7,19 +7,28 @@ import { getHasPaidCustomerBatch, shouldUseDemoPortalExperience } from '@/lib/de
 
 const PAGE_SIZE = 1000;
 const IN_CHUNK = 500;
+const PORTAL_PAGINATE_MAX_ROWS = 25_000;
+const PORTAL_STATS_MAX_LEAD_DETAIL = 25_000;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function paginateQuery<T>(query: any): Promise<T[]> {
+async function paginateQuery<T>(query: any, maxRows = PORTAL_PAGINATE_MAX_ROWS): Promise<{ rows: T[]; truncated: boolean }> {
   const all: T[] = [];
   let offset = 0;
-  while (true) {
-    const { data } = await query.range(offset, offset + PAGE_SIZE - 1);
-    if (!data || data.length === 0) break;
+  let truncated = false;
+  while (all.length < maxRows) {
+    const room = maxRows - all.length;
+    const take = Math.min(PAGE_SIZE, room);
+    const { data } = await query.range(offset, offset + take - 1);
+    if (!data?.length) break;
     all.push(...(data as T[]));
-    if (data.length < PAGE_SIZE) break;
+    if (data.length < take) break;
     offset += data.length;
+    if (all.length >= maxRows) {
+      truncated = true;
+      break;
+    }
   }
-  return all;
+  return { rows: all, truncated };
 }
 
 export async function GET(request: NextRequest) {
@@ -29,6 +38,7 @@ export async function GET(request: NextRequest) {
 
   const { customer } = session;
   const supabase = createServerClient();
+  const t0 = Date.now();
 
   const { data: custData } = await supabase
     .from('customers')
@@ -49,7 +59,9 @@ export async function GET(request: NextRequest) {
   } else {
     assignQuery = assignQuery.neq('source', 'demo');
   }
-  let assignments = await paginateQuery<{ lead_id: string; status: string | null }>(assignQuery);
+  let assignRes = await paginateQuery<{ lead_id: string; status: string | null }>(assignQuery);
+  let assignments = assignRes.rows;
+  let partial = assignRes.truncated;
 
   if (demoMode && assignments.length === 0) {
     await repairDemoAssignmentsIfNeeded(supabase, customer.id, customerBranches);
@@ -59,14 +71,16 @@ export async function GET(request: NextRequest) {
       .eq('customer_id', customer.id)
       .eq('source', 'demo')
       .order('assigned_at', { ascending: false });
-    assignments = await paginateQuery<{ lead_id: string; status: string | null }>(retryQ);
+    const retryRes = await paginateQuery<{ lead_id: string; status: string | null }>(retryQ);
+    assignments = retryRes.rows;
+    partial ||= retryRes.truncated;
   }
 
-  const directLeads = demoMode
-    ? []
-    : await paginateQuery<{ id: string }>(
-        supabase.from('leads').select('id').eq('customer_id', customer.id),
-      );
+  const directRes = demoMode
+    ? { rows: [] as { id: string }[], truncated: false }
+    : await paginateQuery<{ id: string }>(supabase.from('leads').select('id').eq('customer_id', customer.id));
+  const directLeads = directRes.rows;
+  partial ||= directRes.truncated;
 
   const assignmentStatusMap: Record<string, string> = {};
   const leadIds = new Set<string>();
@@ -81,15 +95,22 @@ export async function GET(request: NextRequest) {
   const allIds = Array.from(leadIds);
 
   if (allIds.length === 0) {
+    console.info('[portal/stats]', { computeMs: Date.now() - t0, partial: false, totalLeads: 0 });
     return NextResponse.json({
       totalLeads: 0, newThisWeek: 0, contacted: 0, sold: 0,
       bulkLeads: 0, statusBreakdown: {}, branchBreakdown: {},
+      partial: false,
+      maxPaginateRows: PORTAL_PAGINATE_MAX_ROWS,
+      maxLeadDetailRows: PORTAL_STATS_MAX_LEAD_DETAIL,
     });
   }
 
+  const idList = allIds.length > PORTAL_STATS_MAX_LEAD_DETAIL ? allIds.slice(0, PORTAL_STATS_MAX_LEAD_DETAIL) : allIds;
+  if (allIds.length > PORTAL_STATS_MAX_LEAD_DETAIL) partial = true;
+
   const leads: { id: string; status: string; branch: string; created_at: string }[] = [];
-  for (let i = 0; i < allIds.length; i += IN_CHUNK) {
-    const chunk = allIds.slice(i, i + IN_CHUNK);
+  for (let i = 0; i < idList.length; i += IN_CHUNK) {
+    const chunk = idList.slice(i, i + IN_CHUNK);
     const { data } = await supabase
       .from('leads')
       .select('id, status, branch, created_at')
@@ -122,6 +143,13 @@ export async function GET(request: NextRequest) {
     .eq('customer_id', customer.id)
     .eq('source', 'bulk_export')).count || 0;
 
+  console.info('[portal/stats]', {
+    computeMs: Date.now() - t0,
+    partial,
+    totalLeads,
+    idSampleSize: idList.length,
+  });
+
   return NextResponse.json({
     totalLeads,
     newThisWeek,
@@ -130,5 +158,8 @@ export async function GET(request: NextRequest) {
     bulkLeads: bulkLeads || 0,
     statusBreakdown: statusCounts,
     branchBreakdown: branchCounts,
+    partial,
+    maxPaginateRows: PORTAL_PAGINATE_MAX_ROWS,
+    maxLeadDetailRows: PORTAL_STATS_MAX_LEAD_DETAIL,
   });
 }

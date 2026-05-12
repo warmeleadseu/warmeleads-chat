@@ -397,11 +397,13 @@ export function ComposeMailDrawer({
     }
   }
 
-  // Job-poller voor bulk-jobs (>100 ontvangers).
+  // Job-poller voor bulk-jobs: backoff om DB/API niet te spammen.
   useEffect(() => {
     if (!sendResult?.job_id) return;
     let active = true;
     const jobId = sendResult.job_id;
+    let delayMs = 4000;
+    const MAX_DELAY_MS = 20_000;
     const poll = async () => {
       try {
         const res = await adminFetch(`/api/admin/emails/jobs/${jobId}`);
@@ -413,7 +415,8 @@ export function ComposeMailDrawer({
       } catch {
         /* swallow */
       }
-      setTimeout(poll, 2000);
+      delayMs = Math.min(MAX_DELAY_MS, Math.round(delayMs * 1.6));
+      setTimeout(poll, delayMs);
     };
     void poll();
     return () => {

@@ -2,6 +2,24 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { requireSuperAdmin } from '@/lib/adminAuth';
 
+const BREAKDOWN_LOOKBACK_DAYS = 90;
+/** Max rijen voor provincie/tak in JS-aggregatie (voorkomt full-table reads). */
+const BREAKDOWN_MAX_ROWS = 12_000;
+const META_CAMPAIGN_LOOKBACK_DAYS = 180;
+const META_CAMPAIGN_PAGE = 1000;
+const META_CAMPAIGN_MAX_PAGES = 50;
+const BATCHES_LIST_LIMIT = 1_500;
+const BULK_ASSIGNMENTS_MAX_PAGES = 80;
+
+const LIVE_STATS_CACHE_TTL_MS = 45_000;
+const LIVE_STATS_CACHE_KEY = 'live-stats-v1';
+
+interface LiveStatsCacheEntry {
+  data: unknown;
+  expires: number;
+}
+const liveStatsCache = new Map<string, LiveStatsCacheEntry>();
+
 function todayMidnight(): Date {
   const now = new Date();
   return new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -11,9 +29,19 @@ export async function GET(request: NextRequest) {
   const { error } = await requireSuperAdmin(request);
   if (error) return error;
 
+  const t0 = Date.now();
+  const cached = liveStatsCache.get(LIVE_STATS_CACHE_KEY);
+  if (cached && Date.now() < cached.expires) {
+    return NextResponse.json(cached.data);
+  }
+
   const supabase = createServerClient();
 
   const todayStart = todayMidnight().toISOString();
+
+  const breakdownSince = new Date();
+  breakdownSince.setDate(breakdownSince.getDate() - BREAKDOWN_LOOKBACK_DAYS);
+  const breakdownSinceIso = breakdownSince.toISOString();
 
   const [
     totalLeadsRes,
@@ -28,13 +56,45 @@ export async function GET(request: NextRequest) {
   ] = await Promise.all([
     supabase.from('leads').select('id', { count: 'exact', head: true }).neq('bron', 'excel_import'),
     supabase.from('customers').select('id, name, is_active'),
-    supabase.from('customer_batches').select('*, customers(name)').order('created_at', { ascending: false }),
-    supabase.from('leads').select('id, naam_klant, branch, plaatsnaam, provincie, created_at').neq('bron', 'excel_import').order('created_at', { ascending: false }).limit(12),
-    supabase.from('lead_assignments').select('id, lead_id, customer_id, batch_id, assigned_at, customers(name)').order('assigned_at', { ascending: false }).limit(500),
-    supabase.from('leads').select('provincie, postcode').neq('bron', 'excel_import').not('provincie', 'is', null).not('provincie', 'eq', ''),
-    supabase.from('leads').select('branch').neq('bron', 'excel_import').not('branch', 'is', null).not('branch', 'eq', ''),
+    supabase
+      .from('customer_batches')
+      .select('*, customers(name)')
+      .order('created_at', { ascending: false })
+      .limit(BATCHES_LIST_LIMIT),
+    supabase
+      .from('leads')
+      .select('id, naam_klant, branch, plaatsnaam, provincie, created_at')
+      .neq('bron', 'excel_import')
+      .order('created_at', { ascending: false })
+      .limit(12),
+    supabase
+      .from('lead_assignments')
+      .select('id, lead_id, customer_id, batch_id, assigned_at, customers(name)')
+      .order('assigned_at', { ascending: false })
+      .limit(500),
+    supabase
+      .from('leads')
+      .select('provincie, postcode')
+      .neq('bron', 'excel_import')
+      .not('provincie', 'is', null)
+      .not('provincie', 'eq', '')
+      .gte('created_at', breakdownSinceIso)
+      .limit(BREAKDOWN_MAX_ROWS),
+    supabase
+      .from('leads')
+      .select('branch')
+      .neq('bron', 'excel_import')
+      .not('branch', 'is', null)
+      .not('branch', 'eq', '')
+      .gte('created_at', breakdownSinceIso)
+      .limit(BREAKDOWN_MAX_ROWS),
     supabase.from('leads').select('id', { count: 'exact', head: true }).neq('bron', 'excel_import').gte('created_at', todayStart),
-    supabase.from('leads').select('id', { count: 'exact', head: true }).neq('bron', 'excel_import').gte('created_at', todayStart).eq('phone_valid', false),
+    supabase
+      .from('leads')
+      .select('id', { count: 'exact', head: true })
+      .neq('bron', 'excel_import')
+      .gte('created_at', todayStart)
+      .eq('phone_valid', false),
   ]);
 
   const PROVINCE_ALIASES: Record<string, string> = {
@@ -44,11 +104,11 @@ export async function GET(request: NextRequest) {
   };
 
   const provinceBreakdown: Record<string, number> = {};
-  for (const r of (provincesRes.data || [])) {
+  for (const r of provincesRes.data || []) {
     let p = r.provincie as string;
     p = PROVINCE_ALIASES[p] || p;
     if (p === 'Limburg') {
-      const pc = (r.postcode as string || '').replace(/\s/g, '');
+      const pc = ((r.postcode as string) || '').replace(/\s/g, '');
       const isBelgian = /^\d{4}$/.test(pc);
       if (isBelgian) p = 'Limburg (BE)';
     }
@@ -56,45 +116,72 @@ export async function GET(request: NextRequest) {
   }
 
   const branchBreakdown: Record<string, number> = {};
-  for (const r of (branchRes.data || [])) {
+  for (const r of branchRes.data || []) {
     const b = r.branch as string;
     branchBreakdown[b] = (branchBreakdown[b] || 0) + 1;
   }
 
   const phoneTodayTotal = phoneTodayRes.count || 0;
   const phoneInvalidToday = phoneInvalidTodayRes.count || 0;
-  const phoneValidPct = phoneTodayTotal > 0 ? Math.round(((phoneTodayTotal - phoneInvalidToday) / phoneTodayTotal) * 100) : 100;
+  const phoneValidPct =
+    phoneTodayTotal > 0 ? Math.round(((phoneTodayTotal - phoneInvalidToday) / phoneTodayTotal) * 100) : 100;
 
   const batches = batchesRes.data || [];
   const activeBatches = batches.filter(b => b.status === 'active');
   const completedBatches = batches.filter(b => b.status === 'completed');
   const activeCustomers = (customersRes.data || []).filter(c => c.is_active);
 
-  // Cost metrics: use RPC to avoid PostgREST 1000-row default limit
   const [revenueStatsRes, batchStartRes] = await Promise.all([
     supabase.rpc('live_revenue_stats'),
-    supabase.from('customer_batches').select('branch, created_at').in('status', ['active', 'completed']),
+    supabase
+      .from('customer_batches')
+      .select('branch, created_at')
+      .in('status', ['active', 'completed'])
+      .limit(3000),
   ]);
 
-  // Paginate leads with campaign IDs to avoid 1000-row cap
+  const metaSince = new Date();
+  metaSince.setDate(metaSince.getDate() - META_CAMPAIGN_LOOKBACK_DAYS);
+  const metaSinceIso = metaSince.toISOString();
+
   let relevantAdsData: { meta_campaign_id: string; branch: string }[] = [];
+  let metaCampaignPagesFetched = 0;
+  let metaCampaignTruncated = false;
   {
-    const PAGE = 1000;
     let offset = 0;
-    while (true) {
-      const { data } = await supabase.from('leads').select('meta_campaign_id, branch').neq('bron', 'excel_import').not('meta_campaign_id', 'is', null).range(offset, offset + PAGE - 1);
+    for (let page = 0; page < META_CAMPAIGN_MAX_PAGES; page++) {
+      const { data } = await supabase
+        .from('leads')
+        .select('meta_campaign_id, branch')
+        .neq('bron', 'excel_import')
+        .not('meta_campaign_id', 'is', null)
+        .gte('created_at', metaSinceIso)
+        .range(offset, offset + META_CAMPAIGN_PAGE - 1);
+      metaCampaignPagesFetched++;
       if (!data || data.length === 0) break;
       relevantAdsData = relevantAdsData.concat(data as { meta_campaign_id: string; branch: string }[]);
-      if (data.length < PAGE) break;
-      offset += PAGE;
+      if (data.length < META_CAMPAIGN_PAGE) break;
+      offset += META_CAMPAIGN_PAGE;
+      if (page === META_CAMPAIGN_MAX_PAGES - 1) {
+        metaCampaignTruncated = true;
+      }
     }
   }
 
-  const revenueStats = (revenueStatsRes.data as {
-    batch_revenue: number; bulk_revenue: number;
-    total_assignments: number; unique_assigned_leads: number;
-    bulk_assignment_count: number;
-  } | null) || { batch_revenue: 0, bulk_revenue: 0, total_assignments: 0, unique_assigned_leads: 0, bulk_assignment_count: 0 };
+  const revenueStats =
+    (revenueStatsRes.data as {
+      batch_revenue: number;
+      bulk_revenue: number;
+      total_assignments: number;
+      unique_assigned_leads: number;
+      bulk_assignment_count: number;
+    } | null) || {
+      batch_revenue: 0,
+      bulk_revenue: 0,
+      total_assignments: 0,
+      unique_assigned_leads: 0,
+      bulk_assignment_count: 0,
+    };
 
   const branchStart = new Map<string, string>();
   for (const b of batchStartRes.data || []) {
@@ -102,7 +189,8 @@ export async function GET(request: NextRequest) {
     const existing = branchStart.get(b.branch);
     if (!existing || d < existing) branchStart.set(b.branch, d);
   }
-  const globalStart = branchStart.size > 0 ? [...branchStart.values()].sort()[0] : new Date().toISOString().split('T')[0];
+  const globalStart =
+    branchStart.size > 0 ? [...branchStart.values()].sort()[0] : new Date().toISOString().split('T')[0];
 
   const campaignBranch = new Map<string, string>();
   for (const l of relevantAdsData) {
@@ -113,7 +201,11 @@ export async function GET(request: NextRequest) {
 
   let monthAdSpend = 0;
   if (relevantCampaignIds.length > 0) {
-    const { data: spendRows } = await supabase.from('meta_ad_spend').select('campaign_id, date, spend').in('campaign_id', relevantCampaignIds).gte('date', globalStart);
+    const { data: spendRows } = await supabase
+      .from('meta_ad_spend')
+      .select('campaign_id, date, spend')
+      .in('campaign_id', relevantCampaignIds)
+      .gte('date', globalStart);
     for (const r of spendRows || []) {
       const branch = campaignBranch.get(r.campaign_id);
       const startDate = branch ? branchStart.get(branch) : globalStart;
@@ -124,29 +216,42 @@ export async function GET(request: NextRequest) {
 
   const brutoCpl = totalOurLeads > 0 ? monthAdSpend / totalOurLeads : 0;
 
-  const avgAssignments = revenueStats.unique_assigned_leads > 0
-    ? Math.round((revenueStats.total_assignments / revenueStats.unique_assigned_leads) * 100) / 100
-    : 0;
-  const effectieveCpl = brutoCpl > 0 && avgAssignments > 0
-    ? Math.round((brutoCpl / avgAssignments) * 100) / 100
-    : 0;
+  const avgAssignments =
+    revenueStats.unique_assigned_leads > 0
+      ? Math.round((revenueStats.total_assignments / revenueStats.unique_assigned_leads) * 100) / 100
+      : 0;
+  const effectieveCpl =
+    brutoCpl > 0 && avgAssignments > 0 ? Math.round((brutoCpl / avgAssignments) * 100) / 100 : 0;
 
   const batchRevenue = Number(revenueStats.batch_revenue) || 0;
   const bulkRevenue = Number(revenueStats.bulk_revenue) || 0;
   const totalRevenue = batchRevenue + bulkRevenue;
   const totalProfit = totalRevenue - monthAdSpend;
 
-  // ── Recently paid batches (last 10 min) for celebration detection ──
   const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
   const { data: recentPaidOrders } = await supabase
     .from('batch_orders')
-    .select('id, batch_id, total_price, paid_at, customer_batches!batch_orders_batch_id_fkey(account_manager_id, customer_id, branch, customers(name, account_manager_id))')
+    .select(
+      'id, batch_id, total_price, paid_at, customer_batches!batch_orders_batch_id_fkey(account_manager_id, customer_id, branch, customers(name, account_manager_id))',
+    )
     .eq('status', 'paid')
     .gte('paid_at', tenMinAgo)
     .order('paid_at', { ascending: false })
     .limit(5);
 
-  const recentPaidBatches: { id: string; batchId: string; customer: string; branch: string; amount: number; paidAt: string; amId: string | null; amName: string | null; celebrationVideoUrl: string | null; videoStart: number | null; videoEnd: number | null }[] = [];
+  const recentPaidBatches: {
+    id: string;
+    batchId: string;
+    customer: string;
+    branch: string;
+    amount: number;
+    paidAt: string;
+    amId: string | null;
+    amName: string | null;
+    celebrationVideoUrl: string | null;
+    videoStart: number | null;
+    videoEnd: number | null;
+  }[] = [];
 
   if (recentPaidOrders && recentPaidOrders.length > 0) {
     const amIds = new Set<string>();
@@ -156,14 +261,27 @@ export async function GET(request: NextRequest) {
       if (resolvedAmId) amIds.add(resolvedAmId);
     }
 
-    const amMap = new Map<string, { name: string; celebration_video_url: string | null; celebration_video_start: number | null; celebration_video_end: number | null }>();
+    const amMap = new Map<
+      string,
+      {
+        name: string;
+        celebration_video_url: string | null;
+        celebration_video_start: number | null;
+        celebration_video_end: number | null;
+      }
+    >();
     if (amIds.size > 0) {
       const { data: ams } = await supabase
         .from('admin_users')
         .select('id, name, celebration_video_url, celebration_video_start, celebration_video_end')
         .in('id', [...amIds]);
       for (const am of ams || []) {
-        amMap.set(am.id, { name: am.name, celebration_video_url: am.celebration_video_url, celebration_video_start: am.celebration_video_start, celebration_video_end: am.celebration_video_end });
+        amMap.set(am.id, {
+          name: am.name,
+          celebration_video_url: am.celebration_video_url,
+          celebration_video_start: am.celebration_video_start,
+          celebration_video_end: am.celebration_video_end,
+        });
       }
     }
 
@@ -187,9 +305,6 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // ── AM Leaderboard (monthly revenue) ──
-  // Use customer_batches directly (source of truth for is_paid) instead of
-  // batch_orders, which only exist for Mollie payments and miss admin-marked batches.
   const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
   const { data: monthlyPaidBatches } = await supabase
     .from('customer_batches')
@@ -207,13 +322,13 @@ export async function GET(request: NextRequest) {
     amBatchCount.set(amId, (amBatchCount.get(amId) || 0) + 1);
   }
 
-  // ── Bulk revenue per AM (assignments without batch, priced via customer bulk_price_per_lead) ──
   const { data: bulkCustomers } = await supabase
     .from('customers')
     .select('id, bulk_price_per_lead, account_manager_id')
     .not('bulk_price_per_lead', 'is', null);
 
   const amBulkRevenue = new Map<string, number>();
+  let bulkAssignmentsTruncated = false;
   if (bulkCustomers && bulkCustomers.length > 0) {
     const bulkMap = new Map<string, { price: number; amId: string | null }>();
     for (const c of bulkCustomers) {
@@ -224,7 +339,7 @@ export async function GET(request: NextRequest) {
     let bulkAssignments: { customer_id: string }[] = [];
     const PAGE = 1000;
     let offset = 0;
-    while (true) {
+    for (let p = 0; p < BULK_ASSIGNMENTS_MAX_PAGES; p++) {
       const { data } = await supabase
         .from('lead_assignments')
         .select('customer_id')
@@ -236,6 +351,10 @@ export async function GET(request: NextRequest) {
       bulkAssignments = bulkAssignments.concat(data);
       if (data.length < PAGE) break;
       offset += PAGE;
+      if (p === BULK_ASSIGNMENTS_MAX_PAGES - 1) {
+        bulkAssignmentsTruncated = true;
+        break;
+      }
     }
 
     for (const a of bulkAssignments) {
@@ -251,19 +370,33 @@ export async function GET(request: NextRequest) {
     .eq('is_account_manager', true)
     .eq('is_active', true);
 
-  const amLeaderboard = (allAMs || []).map(am => ({
-    id: am.id,
-    name: am.name,
-    revenue: amRevenue.get(am.id) || 0,
-    bulkRevenue: Math.round((amBulkRevenue.get(am.id) || 0) * 100) / 100,
-    batches: amBatchCount.get(am.id) || 0,
-    celebrationVideoUrl: am.celebration_video_url,
-    avatarUrl: am.avatar_url,
-  })).sort((a, b) => (b.revenue + b.bulkRevenue) - (a.revenue + a.bulkRevenue));
+  const amLeaderboard = (allAMs || [])
+    .map(am => ({
+      id: am.id,
+      name: am.name,
+      revenue: amRevenue.get(am.id) || 0,
+      bulkRevenue: Math.round((amBulkRevenue.get(am.id) || 0) * 100) / 100,
+      batches: amBatchCount.get(am.id) || 0,
+      celebrationVideoUrl: am.celebration_video_url,
+      avatarUrl: am.avatar_url,
+    }))
+    .sort((a, b) => b.revenue + b.bulkRevenue - (a.revenue + a.bulkRevenue));
 
-  // All period stats (leads, assignments, revenue, ad spend, profit) from a single RPC
-  // to ensure consistent timestamps and eliminate timezone mismatches
-  const periodStats: Record<string, { leads: number; prevLeads: number; assigned: number; prevAssigned: number; revenue: number; prevRevenue: number; adSpend: number; prevAdSpend: number; profit: number; prevProfit: number }> = {};
+  const periodStats: Record<
+    string,
+    {
+      leads: number;
+      prevLeads: number;
+      assigned: number;
+      prevAssigned: number;
+      revenue: number;
+      prevRevenue: number;
+      adSpend: number;
+      prevAdSpend: number;
+      profit: number;
+      prevProfit: number;
+    }
+  > = {};
 
   const { data: profitData } = await supabase.rpc('period_profit_stats');
   if (profitData) {
@@ -286,13 +419,18 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  return NextResponse.json({
+  const provinceSampleSize = (provincesRes.data || []).length;
+  const branchSampleSize = (branchRes.data || []).length;
+  const provinceBranchCapped =
+    provinceSampleSize >= BREAKDOWN_MAX_ROWS || branchSampleSize >= BREAKDOWN_MAX_ROWS;
+
+  const payload = {
     totalLeads: totalLeadsRes.count || 0,
     activeCustomers: activeCustomers.length,
     totalCustomers: (customersRes.data || []).length,
     activeBatches: activeBatches.map(b => ({
       id: b.id,
-      customer: b.customers?.name || '-',
+      customer: (b.customers as { name?: string } | null)?.name || '-',
       branch: b.branch,
       batchSize: b.batch_size,
       delivered: b.leads_delivered,
@@ -328,5 +466,35 @@ export async function GET(request: NextRequest) {
     recentPaidBatches,
     amLeaderboard,
     timestamp: new Date().toISOString(),
+    _liveStatsScope: {
+      breakdownLookbackDays: BREAKDOWN_LOOKBACK_DAYS,
+      breakdownMaxRows: BREAKDOWN_MAX_ROWS,
+      provinceSampleRows: provinceSampleSize,
+      branchSampleRows: branchSampleSize,
+      provinceBranchCapped,
+      metaCampaignLookbackDays: META_CAMPAIGN_LOOKBACK_DAYS,
+      metaCampaignPagesFetched,
+      metaCampaignTruncated,
+      batchesListLimit: BATCHES_LIST_LIMIT,
+      bulkAssignmentsMaxPages: BULK_ASSIGNMENTS_MAX_PAGES,
+      bulkAssignmentsTruncated,
+      cacheTtlMs: LIVE_STATS_CACHE_TTL_MS,
+      computeMs: Date.now() - t0,
+    },
+  };
+
+  liveStatsCache.set(LIVE_STATS_CACHE_KEY, {
+    data: payload,
+    expires: Date.now() + LIVE_STATS_CACHE_TTL_MS,
   });
+
+  console.info('[live-stats]', {
+    computeMs: Date.now() - t0,
+    metaCampaignPagesFetched,
+    metaCampaignTruncated,
+    provinceSampleRows: provinceSampleSize,
+    branchSampleRows: branchSampleSize,
+  });
+
+  return NextResponse.json(payload);
 }

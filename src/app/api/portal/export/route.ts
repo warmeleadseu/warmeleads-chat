@@ -46,19 +46,28 @@ const DEFAULT_COLUMNS = [
 
 const PAGE_SIZE = 1000;
 const IN_CHUNK = 500;
+/** Max rows collected for export; exceeding returns 413 to avoid accidental heavy exports. */
+const EXPORT_PAGINATE_MAX_ROWS = 15_000;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function paginateQuery<T>(query: any): Promise<T[]> {
+async function paginateQuery<T>(query: any, maxRows = EXPORT_PAGINATE_MAX_ROWS): Promise<{ rows: T[]; truncated: boolean }> {
   const all: T[] = [];
   let offset = 0;
-  while (true) {
-    const { data } = await query.range(offset, offset + PAGE_SIZE - 1);
-    if (!data || data.length === 0) break;
+  let truncated = false;
+  while (all.length < maxRows) {
+    const room = maxRows - all.length;
+    const take = Math.min(PAGE_SIZE, room);
+    const { data } = await query.range(offset, offset + take - 1);
+    if (!data?.length) break;
     all.push(...(data as T[]));
-    if (data.length < PAGE_SIZE) break;
+    if (data.length < take) break;
     offset += data.length;
+    if (all.length >= maxRows) {
+      truncated = true;
+      break;
+    }
   }
-  return all;
+  return { rows: all, truncated };
 }
 
 interface AssignmentMeta {
@@ -74,36 +83,40 @@ async function getCustomerLeadData(
   customerId: string,
   leadSource: 'all' | 'fresh' | 'bulk' = 'all',
   demoMode = false,
-): Promise<{ ids: string[]; metaMap: Record<string, AssignmentMeta> }> {
+): Promise<{ ids: string[]; metaMap: Record<string, AssignmentMeta>; partial: boolean; maxExportRows: number }> {
   const ids = new Set<string>();
   const metaMap: Record<string, AssignmentMeta> = {};
+  let partial = false;
   const selectFields = 'lead_id, assigned_at, status, notities, batch_id, distance_km';
 
   if (demoMode) {
-    const demoLeads = await paginateQuery<{ lead_id: string; assigned_at: string; status: string | null; notities: string | null; batch_id: string | null; distance_km: number | null }>(
+    const demoRes = await paginateQuery<{ lead_id: string; assigned_at: string; status: string | null; notities: string | null; batch_id: string | null; distance_km: number | null }>(
       supabase.from('lead_assignments').select(selectFields).eq('customer_id', customerId).eq('source', 'demo').order('assigned_at', { ascending: false }),
     );
-    demoLeads.forEach(a => {
+    partial ||= demoRes.truncated;
+    demoRes.rows.forEach(a => {
       ids.add(a.lead_id);
       if (!metaMap[a.lead_id]) {
         metaMap[a.lead_id] = { assigned_at: a.assigned_at, status: a.status, notities: a.notities, batch_id: a.batch_id, distance_km: a.distance_km };
       }
     });
-    return { ids: Array.from(ids), metaMap };
+    return { ids: Array.from(ids), metaMap, partial, maxExportRows: EXPORT_PAGINATE_MAX_ROWS };
   }
 
   if (leadSource !== 'bulk') {
-    const directLeads = await paginateQuery<{ id: string }>(
+    const directRes = await paginateQuery<{ id: string }>(
       supabase.from('leads').select('id').eq('customer_id', customerId),
     );
-    directLeads.forEach(l => ids.add(l.id));
+    partial ||= directRes.truncated;
+    directRes.rows.forEach(l => ids.add(l.id));
   }
 
   if (leadSource === 'bulk') {
-    const bulkLeads = await paginateQuery<{ lead_id: string; assigned_at: string; status: string | null; notities: string | null; batch_id: string | null; distance_km: number | null }>(
+    const bulkRes = await paginateQuery<{ lead_id: string; assigned_at: string; status: string | null; notities: string | null; batch_id: string | null; distance_km: number | null }>(
       supabase.from('lead_assignments').select(selectFields).eq('customer_id', customerId).eq('source', 'bulk_export').order('assigned_at', { ascending: false }),
     );
-    bulkLeads.forEach(a => {
+    partial ||= bulkRes.truncated;
+    bulkRes.rows.forEach(a => {
       ids.add(a.lead_id);
       if (!metaMap[a.lead_id]) {
         metaMap[a.lead_id] = { assigned_at: a.assigned_at, status: a.status, notities: a.notities, batch_id: a.batch_id, distance_km: a.distance_km };
@@ -117,8 +130,9 @@ async function getCustomerLeadData(
       .neq('source', 'demo')
       .order('assigned_at', { ascending: false });
     if (leadSource === 'fresh') assignQuery = assignQuery.neq('source', 'bulk_export');
-    const assignedLeads = await paginateQuery<{ lead_id: string; assigned_at: string; status: string | null; notities: string | null; batch_id: string | null; distance_km: number | null }>(assignQuery);
-    assignedLeads.forEach(a => {
+    const assignedRes = await paginateQuery<{ lead_id: string; assigned_at: string; status: string | null; notities: string | null; batch_id: string | null; distance_km: number | null }>(assignQuery);
+    partial ||= assignedRes.truncated;
+    assignedRes.rows.forEach(a => {
       ids.add(a.lead_id);
       if (!metaMap[a.lead_id]) {
         metaMap[a.lead_id] = { assigned_at: a.assigned_at, status: a.status, notities: a.notities, batch_id: a.batch_id, distance_km: a.distance_km };
@@ -126,7 +140,7 @@ async function getCustomerLeadData(
     });
   }
 
-  return { ids: Array.from(ids), metaMap };
+  return { ids: Array.from(ids), metaMap, partial, maxExportRows: EXPORT_PAGINATE_MAX_ROWS };
 }
 
 function fmtDate(value: string | null, dateFormat: string): string {
@@ -185,6 +199,7 @@ export async function GET(request: NextRequest) {
 
   const { customer } = session;
   const supabase = createServerClient();
+  const t0 = Date.now();
   const url = request.nextUrl;
 
   const format = url.searchParams.get('format') || 'csv';
@@ -216,8 +231,22 @@ export async function GET(request: NextRequest) {
     hasPaidCustomerBatch,
   });
 
-  const { ids: leadIds, metaMap } = await getCustomerLeadData(supabase, customer.id, leadSource, demoMode);
+  const { ids: leadIds, metaMap, partial: exportPartial, maxExportRows } = await getCustomerLeadData(supabase, customer.id, leadSource, demoMode);
+
+  if (exportPartial) {
+    console.info('[portal/export]', { computeMs: Date.now() - t0, rejected: true, reason: 'paginate_cap' });
+    return NextResponse.json(
+      {
+        error: 'Te veel leads voor deze export. Gebruik filters (datum, branche, status) of neem contact op voor een grotere export.',
+        partial: true,
+        maxExportRows,
+      },
+      { status: 413 },
+    );
+  }
+
   if (leadIds.length === 0) {
+    console.info('[portal/export]', { computeMs: Date.now() - t0, rowCount: 0, format });
     if (format === 'vcf') return buildVcf([]);
     if (format === 'xlsx') return buildXlsx([], [], includeHeaders);
     return buildCsv([], [], separator, includeHeaders);
@@ -242,8 +271,8 @@ export async function GET(request: NextRequest) {
     if (branch && branch !== 'all') q = q.eq('branch', branch);
     if (from) q = q.gte('wervingsdatum', from);
     if (to) q = q.lte('wervingsdatum', to);
-    const batch = await paginateQuery<Record<string, unknown>>(q);
-    rawLeads.push(...batch);
+    const batchRes = await paginateQuery<Record<string, unknown>>(q);
+    rawLeads.push(...batchRes.rows);
   }
 
   const leads: Record<string, unknown>[] = rawLeads.map(l => {
@@ -301,6 +330,13 @@ export async function GET(request: NextRequest) {
   const rows = filtered.map(l =>
     selectedColumns.map(col => getCellValue(l, col, dateFormat, batchMap)),
   );
+
+  console.info('[portal/export]', {
+    computeMs: Date.now() - t0,
+    format,
+    rowCount: filtered.length,
+    candidateLeads: leadIds.length,
+  });
 
   if (format === 'vcf') return buildVcf(filtered);
   if (format === 'xlsx') return buildXlsx(columnLabels, rows, includeHeaders);

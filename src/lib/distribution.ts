@@ -197,11 +197,53 @@ interface DistributionResult {
   assignments: { customer_id: string; batch_id: string; distance_km: number }[];
 }
 
+/** Row shape from customer_batches select in distribution (PostgREST nested customers). */
+type ActiveCustomerBatch = {
+  id: string;
+  customer_id: string;
+  branch: string;
+  batch_size: number;
+  leads_delivered: number | null;
+  leads_delivered_external?: number | null;
+  leads_per_week: number | null;
+  leads_per_day: number | null;
+  lead_filters: unknown;
+  created_at: string;
+  is_paid: boolean | null;
+  starts_at: string | null;
+  customers: { id: string; is_active: boolean; portal_active: boolean };
+};
+
+async function fetchActiveBatchesForBranch(
+  supabase: SupabaseClient,
+  branch: string,
+): Promise<ActiveCustomerBatch[]> {
+  const { data } = await supabase
+    .from('customer_batches')
+    .select('id, customer_id, branch, batch_size, leads_delivered, leads_delivered_external, leads_per_week, leads_per_day, lead_filters, created_at, is_paid, starts_at, customers!inner(id, is_active, portal_active)')
+    .eq('branch', branch)
+    .eq('status', 'active')
+    .eq('batch_kind', 'leads')
+    .eq('customers.is_active', true)
+    .neq('is_paid', false)
+    .order('created_at', { ascending: true });
+  return (data || []) as unknown as ActiveCustomerBatch[];
+}
+
+export type DistributeLeadContext = {
+  supabase?: SupabaseClient;
+  /** When set (e.g. from distributeLeads), avoids one customer_batches query per lead for that branch. */
+  activeBatchesByBranch?: Map<string, ActiveCustomerBatch[]>;
+};
+
 /**
  * Distribute a single lead to ONE matching customer (max 1 per run).
  * Respects 12h cooldown: if this lead was assigned to anyone in the last 12 hours, skip.
  */
-export async function distributeLead(lead: LeadForDistribution): Promise<DistributionResult> {
+export async function distributeLead(
+  lead: LeadForDistribution,
+  ctx?: DistributeLeadContext,
+): Promise<DistributionResult> {
   const result: DistributionResult = { lead_id: lead.id, assignments: [] };
   const hasCoords = !!(lead.lat && lead.lng);
   const hasProv = !!(lead as any).provincie;
@@ -210,7 +252,7 @@ export async function distributeLead(lead: LeadForDistribution): Promise<Distrib
   // Never distribute demo leads to real customers (early check before DB fetch)
   if (lead.bron === 'demo') return result;
 
-  const supabase = createServerClient();
+  const supabase = ctx?.supabase ?? createServerClient();
 
   let fullLead = lead;
   if (!lead.custom_fields) {
@@ -242,15 +284,11 @@ export async function distributeLead(lead: LeadForDistribution): Promise<Distrib
     if (cooldownHit) return result;
   }
 
-  const { data: activeBatches } = await supabase
-    .from('customer_batches')
-    .select('id, customer_id, branch, batch_size, leads_delivered, leads_delivered_external, leads_per_week, leads_per_day, lead_filters, created_at, is_paid, starts_at, customers!inner(id, is_active, portal_active)')
-    .eq('branch', lead.branch)
-    .eq('status', 'active')
-    .eq('batch_kind', 'leads')
-    .eq('customers.is_active', true)
-    .neq('is_paid', false)
-    .order('created_at', { ascending: true });
+  let activeBatches = ctx?.activeBatchesByBranch?.get(lead.branch);
+  if (activeBatches === undefined) {
+    activeBatches = await fetchActiveBatchesForBranch(supabase, lead.branch);
+    ctx?.activeBatchesByBranch?.set(lead.branch, activeBatches);
+  }
 
   if (!activeBatches || activeBatches.length === 0) return result;
 
@@ -331,7 +369,7 @@ export async function distributeLead(lead: LeadForDistribution): Promise<Distrib
   const matches: Match[] = [];
 
   for (const batch of fifoActiveBatches) {
-    if (batch.leads_delivered >= batch.batch_size) continue;
+    if (Number(batch.leads_delivered ?? 0) >= batch.batch_size) continue;
     if (recentAssignedIds.has(batch.customer_id)) continue;
     if (batch.starts_at && new Date(batch.starts_at) > now) continue;
 
@@ -479,13 +517,26 @@ export async function distributeLead(lead: LeadForDistribution): Promise<Distrib
 
 /**
  * Distribute multiple leads (max 1 assignment per lead per run).
+ * Prefetches active batches per distinct branch to cut repeated customer_batches queries.
  */
 export async function distributeLeads(leads: LeadForDistribution[]): Promise<{ distributed: number; assignments: number }> {
   let distributed = 0;
   let assignments = 0;
 
+  const supabase = createServerClient();
+  const branches = [...new Set(leads.map(l => l.branch).filter((b): b is string => !!b))];
+  const activeBatchesByBranch = new Map<string, ActiveCustomerBatch[]>();
+  await Promise.all(
+    branches.map(async b => {
+      const rows = await fetchActiveBatchesForBranch(supabase, b);
+      activeBatchesByBranch.set(b, rows);
+    }),
+  );
+
+  const ctx: DistributeLeadContext = { supabase, activeBatchesByBranch };
+
   for (const lead of leads) {
-    const result = await distributeLead(lead);
+    const result = await distributeLead(lead, ctx);
     if (result.assignments.length > 0) {
       distributed++;
       assignments += result.assignments.length;

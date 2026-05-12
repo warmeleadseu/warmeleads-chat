@@ -8,19 +8,28 @@ import { buildPhoneSearchIlikeClauses, sanitizePostgrestIlike } from '@/lib/phon
 
 const PAGE_SIZE = 1000;
 const IN_CHUNK = 500;
+/** Hard cap on rows read via paginateQuery per customer request (DB safety). */
+const PORTAL_PAGINATE_MAX_ROWS = 25_000;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function paginateQuery<T>(query: any): Promise<T[]> {
+async function paginateQuery<T>(query: any, maxRows = PORTAL_PAGINATE_MAX_ROWS): Promise<{ rows: T[]; truncated: boolean }> {
   const all: T[] = [];
   let offset = 0;
-  while (true) {
-    const { data } = await query.range(offset, offset + PAGE_SIZE - 1);
-    if (!data || data.length === 0) break;
+  let truncated = false;
+  while (all.length < maxRows) {
+    const room = maxRows - all.length;
+    const take = Math.min(PAGE_SIZE, room);
+    const { data } = await query.range(offset, offset + take - 1);
+    if (!data?.length) break;
     all.push(...(data as T[]));
-    if (data.length < PAGE_SIZE) break;
+    if (data.length < take) break;
     offset += data.length;
+    if (all.length >= maxRows) {
+      truncated = true;
+      break;
+    }
   }
-  return all;
+  return { rows: all, truncated };
 }
 
 interface AssignmentMeta {
@@ -58,9 +67,10 @@ async function getCustomerLeadData(
   statusFilter?: string | null,
   agentFilter?: { portalUserId: string; viewAll: boolean } | null,
   customerBranches: string[] = [],
-): Promise<{ ids: string[]; metaMap: Record<string, AssignmentMeta>; bulkCount: number }> {
+): Promise<{ ids: string[]; metaMap: Record<string, AssignmentMeta>; bulkCount: number; partial: boolean; maxPaginateRows: number }> {
   const ids = new Set<string>();
   const metaMap: Record<string, AssignmentMeta> = {};
+  let partial = false;
   const selectFields = 'lead_id, assigned_at, distance_km, status, notities, portal_user_id';
 
   type AssignRow = { lead_id: string; assigned_at: string; distance_km: number | null; status: string | null; notities: string | null; portal_user_id: string | null };
@@ -84,33 +94,39 @@ async function getCustomerLeadData(
     let q = supabase.from('lead_assignments').select(selectFields).eq('customer_id', customerId).eq('source', 'demo').order('assigned_at', { ascending: false });
     if (statusFilter && statusFilter !== 'all') q = q.eq('status', statusFilter);
     q = applyAgentScope(q);
-    let demoLeads = await paginateQuery<AssignRow>(q);
+    let demoRes = await paginateQuery<AssignRow>(q);
+    partial ||= demoRes.truncated;
+    let demoLeads = demoRes.rows;
 
     // Re-seed / repair demo assignments when none visible with status=all (empty seed, branch mismatch, etc.)
     if (demoLeads.length === 0 && (!statusFilter || statusFilter === 'all')) {
       await repairDemoAssignmentsIfNeeded(supabase, customerId, customerBranches);
       let retryQ = supabase.from('lead_assignments').select(selectFields).eq('customer_id', customerId).eq('source', 'demo').order('assigned_at', { ascending: false });
       retryQ = applyAgentScope(retryQ);
-      demoLeads = await paginateQuery<AssignRow>(retryQ);
+      const retryRes = await paginateQuery<AssignRow>(retryQ);
+      partial ||= retryRes.truncated;
+      demoLeads = retryRes.rows;
     }
 
     demoLeads.forEach(pushRow);
-    return { ids: Array.from(ids), metaMap, bulkCount: 0 };
+    return { ids: Array.from(ids), metaMap, bulkCount: 0, partial, maxPaginateRows: PORTAL_PAGINATE_MAX_ROWS };
   }
 
   if (leadSource !== 'bulk' && (!agentFilter || agentFilter.viewAll)) {
     let directQuery = supabase.from('leads').select('id').eq('customer_id', customerId);
     if (statusFilter && statusFilter !== 'all') directQuery = directQuery.eq('status', statusFilter);
-    const directLeads = await paginateQuery<{ id: string }>(directQuery);
-    directLeads.forEach(l => ids.add(l.id));
+    const directRes = await paginateQuery<{ id: string }>(directQuery);
+    partial ||= directRes.truncated;
+    directRes.rows.forEach(l => ids.add(l.id));
   }
 
   if (leadSource === 'bulk') {
     let q = supabase.from('lead_assignments').select(selectFields).eq('customer_id', customerId).eq('source', 'bulk_export').order('assigned_at', { ascending: false });
     if (statusFilter && statusFilter !== 'all') q = q.eq('status', statusFilter);
     q = applyAgentScope(q);
-    const bulkLeads = await paginateQuery<AssignRow>(q);
-    bulkLeads.forEach(pushRow);
+    const bulkRes = await paginateQuery<AssignRow>(q);
+    partial ||= bulkRes.truncated;
+    bulkRes.rows.forEach(pushRow);
   } else {
     let assignQuery = supabase
       .from('lead_assignments')
@@ -121,8 +137,9 @@ async function getCustomerLeadData(
     if (leadSource === 'fresh') assignQuery = assignQuery.neq('source', 'bulk_export');
     if (statusFilter && statusFilter !== 'all') assignQuery = assignQuery.eq('status', statusFilter);
     assignQuery = applyAgentScope(assignQuery);
-    const assignedLeads = await paginateQuery<AssignRow>(assignQuery);
-    assignedLeads.forEach(pushRow);
+    const assignedRes = await paginateQuery<AssignRow>(assignQuery);
+    partial ||= assignedRes.truncated;
+    assignedRes.rows.forEach(pushRow);
   }
 
   const { count: bulkCount } = await supabase
@@ -131,7 +148,7 @@ async function getCustomerLeadData(
     .eq('customer_id', customerId)
     .eq('source', 'bulk_export');
 
-  return { ids: Array.from(ids), metaMap, bulkCount: bulkCount || 0 };
+  return { ids: Array.from(ids), metaMap, bulkCount: bulkCount || 0, partial, maxPaginateRows: PORTAL_PAGINATE_MAX_ROWS };
 }
 
 export async function GET(request: NextRequest) {
@@ -141,6 +158,7 @@ export async function GET(request: NextRequest) {
 
   const { customer } = session;
   const supabase = createServerClient();
+  const t0 = Date.now();
   const url = request.nextUrl;
 
   const status = url.searchParams.get('status');
@@ -161,7 +179,15 @@ export async function GET(request: NextRequest) {
     ? { portalUserId: session.portalUser.id, viewAll: false }
     : null;
 
-  let { ids: leadIds, metaMap, bulkCount } = await getCustomerLeadData(supabase, customer.id, leadSource, demoMode, status, agentFilter, customerBranches);
+  let { ids: leadIds, metaMap, bulkCount, partial: leadDataPartial, maxPaginateRows } = await getCustomerLeadData(
+    supabase,
+    customer.id,
+    leadSource,
+    demoMode,
+    status,
+    agentFilter,
+    customerBranches,
+  );
 
   // Orphaned demo assignments (lead row removed): assignments exist but no matching demo leads
   if (demoMode && leadIds.length > 0) {
@@ -181,6 +207,8 @@ export async function GET(request: NextRequest) {
       leadIds = refreshed.ids;
       metaMap = refreshed.metaMap;
       bulkCount = refreshed.bulkCount;
+      leadDataPartial = refreshed.partial;
+      maxPaginateRows = refreshed.maxPaginateRows;
     }
   }
 
@@ -208,7 +236,16 @@ export async function GET(request: NextRequest) {
   }
 
   if (filteredLeadIds.length === 0) {
-    return NextResponse.json({ leads: [], total: 0, page, totalPages: 0, bulkCount });
+    console.info('[portal/leads]', { computeMs: Date.now() - t0, partial: leadDataPartial, poolSize: 0, page });
+    return NextResponse.json({
+      leads: [],
+      total: 0,
+      page,
+      totalPages: 0,
+      bulkCount,
+      partial: leadDataPartial,
+      maxPaginateRows,
+    });
   }
 
   const allowedSorts = ['received_at', 'created_at', 'naam_klant', 'email', 'status', 'wervingsdatum', 'plaatsnaam', 'provincie', 'branch', 'distance_km'];
@@ -268,12 +305,15 @@ export async function GET(request: NextRequest) {
       };
     });
 
+    console.info('[portal/leads]', { computeMs: Date.now() - t0, partial: leadDataPartial, poolSize: filteredLeadIds.length, page, path: 'db_sort' });
     return NextResponse.json({
       leads: enrichedLeads,
       total,
       page,
       totalPages: Math.ceil(total / limit),
       bulkCount,
+      partial: leadDataPartial,
+      maxPaginateRows,
     });
   }
 
@@ -327,12 +367,15 @@ export async function GET(request: NextRequest) {
   const startIdx = (page - 1) * limit;
   const enrichedLeads = enrichedAll.slice(startIdx, startIdx + limit);
 
+  console.info('[portal/leads]', { computeMs: Date.now() - t0, partial: leadDataPartial, poolSize: filteredLeadIds.length, page, path: 'mem_sort' });
   return NextResponse.json({
     leads: enrichedLeads,
     total: totalCount,
     page,
     totalPages: Math.ceil(totalCount / limit),
     bulkCount,
+    partial: leadDataPartial,
+    maxPaginateRows,
   });
 }
 
