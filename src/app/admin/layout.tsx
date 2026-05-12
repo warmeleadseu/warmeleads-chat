@@ -103,12 +103,25 @@ function LoginScreen({ onLogin }: { onLogin: (u: AdminUser) => void }) {
       email: redactEmail(email),
     });
     try {
-      const res = await fetch('/api/admin/auth/login', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
+      const controller = new AbortController();
+      const LOGIN_TIMEOUT_MS = 28_000;
+      const timeoutId = window.setTimeout(() => {
+        controller.abort();
+        console.info('[WL Admin]', 'login: fetch nog bezig — timeout getriggerd', { ms: LOGIN_TIMEOUT_MS });
+      }, LOGIN_TIMEOUT_MS);
+
+      let res: Response;
+      try {
+        res = await fetch('/api/admin/auth/login', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+          signal: controller.signal,
+        });
+      } finally {
+        window.clearTimeout(timeoutId);
+      }
       const ms = typeof performance !== 'undefined' ? Math.round(performance.now() - t0) : null;
       let data: { error?: string; user?: AdminUser } = {};
       try {
@@ -132,10 +145,18 @@ function LoginScreen({ onLogin }: { onLogin: (u: AdminUser) => void }) {
       if (!data.user) throw new Error('Geen gebruikersdata in antwoord');
       onLogin(data.user);
     } catch (err: unknown) {
+      const aborted = err instanceof Error && err.name === 'AbortError';
       console.info('[WL Admin]', 'login: fout', {
         message: err instanceof Error ? err.message : String(err),
+        aborted,
       });
-      setError(err instanceof Error ? err.message : 'Login mislukt');
+      setError(
+        aborted
+          ? 'Server reageert te traag (timeout). Probeer opnieuw of controleer Supabase/Vercel-status.'
+          : err instanceof Error
+            ? err.message
+            : 'Login mislukt',
+      );
     } finally {
       setLoading(false);
     }

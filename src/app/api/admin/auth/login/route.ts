@@ -13,6 +13,9 @@ import { adminAuthDebugServer, adminAuthDebugServerEnabled, redactEmail } from '
 const MAX_ATTEMPTS = 5;
 const WINDOW_MS = 15 * 60 * 1000;
 
+/** Ruimte voor bcrypt + Supabase user lookup + JWT (Vercel serverless). */
+export const maxDuration = 30;
+
 export async function POST(request: NextRequest) {
   try {
     const ip = getClientIp(request);
@@ -65,20 +68,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Ongeldige inloggegevens' }, { status: 401 });
     }
 
-    await supabase
-      .from('admin_users')
-      .update({ last_login: new Date().toISOString() })
-      .eq('id', user.id);
-
-    await logAudit({
-      adminId: user.id,
-      adminName: user.name,
-      action: 'login',
-      entityType: 'admin_user',
-      entityId: user.id,
-      ipAddress: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || null,
-    });
-
     const sessionJwt = await signAdminSession(user.id);
 
     const res = NextResponse.json({
@@ -103,6 +92,30 @@ export async function POST(request: NextRequest) {
         jwtLength: sessionJwt.length,
       });
     }
+
+    // Niet awaiten: bij trage/overbelaste Supabase bleef de browser anders op "Inloggen..." hangen.
+    const ipAddress = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || null;
+    void (async () => {
+      try {
+        const s = createServerClient();
+        const { error: upErr } = await s
+          .from('admin_users')
+          .update({ last_login: new Date().toISOString() })
+          .eq('id', user.id);
+        if (upErr) console.error('[admin-login] last_login async:', upErr.message);
+      } catch (e) {
+        console.error('[admin-login] last_login async:', e);
+      }
+    })();
+
+    void logAudit({
+      adminId: user.id,
+      adminName: user.name,
+      action: 'login',
+      entityType: 'admin_user',
+      entityId: user.id,
+      ipAddress,
+    });
 
     return res;
   } catch (err) {
