@@ -1,5 +1,5 @@
-const CACHE_NAME = 'warmeleads-v3.1';
-const STATIC_CACHE = 'warmeleads-static-v3.1';
+const CACHE_NAME = 'warmeleads-v3.2';
+const STATIC_CACHE = 'warmeleads-static-v3.2';
 
 const CRITICAL_RESOURCES = [
   '/portal',
@@ -10,6 +10,18 @@ const CRITICAL_RESOURCES = [
 ];
 
 const OFFLINE_PAGE = '/portal';
+
+/**
+ * Next.js chunks, RSC payloads, image optimizer, etc. must not go through
+ * custom SW caching — stale caches across deployments cause failed chunk
+ * loads, rejected FetchEvent promises, and browser resource exhaustion.
+ */
+function shouldBypassServiceWorker(url) {
+  const p = url.pathname;
+  if (p.startsWith('/_next/')) return true;
+  if (p.startsWith('/__nextjs')) return true;
+  return false;
+}
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -38,6 +50,7 @@ self.addEventListener('fetch', (event) => {
 
   if (request.method !== 'GET') return;
   if (url.origin !== self.location.origin) return;
+  if (shouldBypassServiceWorker(url)) return;
   if (url.pathname.startsWith('/api/')) return;
   if (url.pathname.startsWith('/admin')) return;
 
@@ -59,9 +72,8 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Static assets: cache-first
+  // Static assets (same-origin, non-Next): cache-first, never leave fetch() rejected
   if (
-    url.pathname.startsWith('/_next/static/') ||
     url.pathname.includes('/favicon') ||
     url.pathname.includes('/manifest.json') ||
     /\.(png|jpg|jpeg|svg|webp|avif|ico|woff2?)$/.test(url.pathname)
@@ -69,30 +81,15 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       caches.match(request).then((cached) => {
         if (cached) return cached;
-        return fetch(request).then((response) => {
-          if (response.ok) {
-            const clone = response.clone();
-            caches.open(STATIC_CACHE).then((c) => c.put(request, clone));
-          }
-          return response;
-        });
-      })
-    );
-    return;
-  }
-
-  // _next/data (RSC payloads): stale-while-revalidate
-  if (url.pathname.startsWith('/_next/data/')) {
-    event.respondWith(
-      caches.match(request).then((cached) => {
-        const fetched = fetch(request).then((response) => {
-          if (response.ok) {
-            const clone = response.clone();
-            caches.open(CACHE_NAME).then((c) => c.put(request, clone));
-          }
-          return response;
-        });
-        return cached || fetched;
+        return fetch(request)
+          .then((response) => {
+            if (response.ok) {
+              const clone = response.clone();
+              caches.open(STATIC_CACHE).then((c) => c.put(request, clone));
+            }
+            return response;
+          })
+          .catch(() => Response.error());
       })
     );
     return;
