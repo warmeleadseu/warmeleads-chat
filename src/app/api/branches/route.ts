@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 
+// Voorkomt build-time static generation: Supabase-call mag alleen runtime, niet bij `next build`.
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   const supabase = createServerClient();
   const { data, error } = await supabase
