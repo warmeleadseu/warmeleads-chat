@@ -13,6 +13,7 @@ import {
   isPartnerProspectBranch,
   type PartnerProspectPayload,
 } from '@/lib/partnerProspectIngest';
+import { resolvePartnerProspectAccountManagerId } from '@/lib/partnerProspectAssignment';
 
 const COMMON_KEYS = new Set([
   'branch', 'customer_id', 'naam_klant', 'name', 'email', 'telefoonnummer', 'phone',
@@ -118,6 +119,8 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      const quality_score = calculateQualityScore(lead);
+
       const payload: PartnerProspectPayload = {
         ...body,
         naam_klant: lead.naam_klant,
@@ -128,19 +131,29 @@ export async function POST(request: NextRequest) {
         plaatsnaam: lead.plaatsnaam,
         provincie: lead.provincie,
         land: lead.land,
+        wervingsdatum: lead.wervingsdatum as string | undefined,
+        bron: lead.bron as string | undefined,
         meta_campaign_id: lead.meta_campaign_id as string | undefined,
         meta_adset_id: lead.meta_adset_id as string | undefined,
         meta_ad_id: lead.meta_ad_id as string | undefined,
         notities: lead.notities,
         custom_fields: lead.custom_fields as Record<string, unknown> | undefined,
+        lat: lead.lat as number | undefined,
+        lng: lead.lng as number | undefined,
+        phone_valid: lead.phone_valid as boolean | undefined,
+        quality_score,
+        lead_status: lead.status as string | undefined,
+        lead_customer_id: lead.customer_id != null ? String(lead.customer_id) : undefined,
       };
+
+      const accountManagerId = await resolvePartnerProspectAccountManagerId(supabase, branchSlug);
 
       const row = buildPartnerProspectInsertRow(payload, customFields, {
         plaatsnaam: lead.plaatsnaam,
         provincie: lead.provincie,
         postcode: lead.postcode,
         land: lead.land,
-      });
+      }, accountManagerId);
 
       const pr = await insertPartnerProspect(supabase, row, {
         title: 'Ingekomen via partner-webhook',

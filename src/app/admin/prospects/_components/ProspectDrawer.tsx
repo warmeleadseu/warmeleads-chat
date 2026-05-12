@@ -73,6 +73,8 @@ export interface ProspectDetail {
   last_contacted_at: string | null;
   created_at: string;
   updated_at: string;
+  /** Extra lead-context (o.a. Meta-partner) — zelfde JSON als in de database. */
+  source_metadata?: Record<string, unknown> | null;
 }
 
 export interface AdminUserOption {
@@ -538,6 +540,148 @@ function normalizeTelLink(phone: string): string {
   return cleaned;
 }
 
+const META_SNAPSHOT_LABELS: Record<string, string> = {
+  wervingsdatum: 'Wervingsdatum',
+  bron: 'Bron (lead)',
+  lead_status: 'Leadstatus (voorheen)',
+  lead_customer_id: 'Lead klant-id',
+  straat: 'Straat',
+  huisnummer: 'Huisnummer',
+  provincie: 'Provincie',
+  lat: 'Breedtegraad',
+  lng: 'Lengtegraad',
+  phone_valid: 'Telefoon geldig',
+  quality_score: 'Kwaliteitsscore',
+  meta_campaign_id: 'Meta campaign',
+  meta_adset_id: 'Meta adset',
+  meta_ad_id: 'Meta advertentie',
+  migrated_from_lead_id: 'Gemigreerd van lead-id',
+};
+
+function formatMetaSnapshotValue(key: string, v: unknown): string {
+  if (v === null || v === undefined) return '—';
+  if (typeof v === 'boolean') return v ? 'Ja' : 'Nee';
+  if (typeof v === 'number') return Number.isFinite(v) ? String(v) : '—';
+  if (typeof v === 'string') {
+    if ((key === 'wervingsdatum' || key.endsWith('_at')) && /^\d{4}-\d{2}-\d{2}/.test(v)) {
+      try {
+        return new Date(v).toLocaleDateString('nl-NL', { timeZone: 'Europe/Amsterdam' });
+      } catch {
+        return v;
+      }
+    }
+    return v;
+  }
+  return JSON.stringify(v);
+}
+
+function MetaPartnerLeadContext({ meta }: { meta: Record<string, unknown> | null | undefined }) {
+  const snap = (meta?.lead_ingest_snapshot as Record<string, unknown> | undefined) || {};
+  const rows: { key: string; label: string; value: string }[] = [];
+  const order = [
+    'wervingsdatum',
+    'bron',
+    'lead_status',
+    'lead_customer_id',
+    'straat',
+    'huisnummer',
+    'provincie',
+    'lat',
+    'lng',
+    'phone_valid',
+    'quality_score',
+    'meta_campaign_id',
+    'meta_adset_id',
+    'meta_ad_id',
+    'migrated_from_lead_id',
+  ];
+  for (const key of order) {
+    if (!(key in snap) || snap[key] === null || snap[key] === undefined || snap[key] === '') continue;
+    rows.push({
+      key,
+      label: META_SNAPSHOT_LABELS[key] || key,
+      value: formatMetaSnapshotValue(key, snap[key]),
+    });
+  }
+  const rootMeta = ['meta_campaign_id', 'meta_adset_id', 'meta_ad_id'] as const;
+  for (const key of rootMeta) {
+    if (rows.some(r => r.key === key)) continue;
+    const raw = meta?.[key];
+    if (raw === null || raw === undefined || raw === '') continue;
+    rows.push({
+      key,
+      label: META_SNAPSHOT_LABELS[key] || key,
+      value: formatMetaSnapshotValue(key, raw),
+    });
+  }
+
+  const origCf = meta?.orig_custom_fields;
+  const extraEntries =
+    origCf && typeof origCf === 'object' && !Array.isArray(origCf)
+      ? Object.entries(origCf as Record<string, unknown>).filter(
+          ([k]) => !['bedrijfsnaam', 'company_name', 'naam_klant', 'name'].includes(k),
+        )
+      : [];
+
+  const cfsRaw = meta?.custom_fields_snapshot;
+  const cfs =
+    cfsRaw != null && typeof cfsRaw === 'object' && !Array.isArray(cfsRaw)
+      ? (cfsRaw as Record<string, unknown>)
+      : null;
+
+  if (rows.length === 0 && extraEntries.length === 0 && !cfs) {
+    return null;
+  }
+
+  return (
+    <div className="rounded-xl border border-indigo-100 bg-indigo-50/40 p-4">
+      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-indigo-800">
+        Partner / lead-context (Meta)
+      </h3>
+      {rows.length > 0 && (
+        <dl className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
+          {rows.map(r => (
+            <div key={r.key} className="min-w-0">
+              <dt className="text-[11px] font-medium uppercase tracking-wide text-indigo-600/80">{r.label}</dt>
+              <dd className="truncate text-slate-800" title={r.value}>
+                {r.value}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      {cfs && (
+        <details className="mt-3 rounded-lg border border-indigo-100 bg-white/80 px-3 py-2 text-sm">
+          <summary className="cursor-pointer font-medium text-indigo-900">Formulier (snapshot)</summary>
+          <dl className="mt-2 grid max-h-48 grid-cols-1 gap-1.5 overflow-y-auto text-xs">
+            {Object.entries(cfs).map(([k, v]) => (
+              <div key={k} className="flex gap-2">
+                <dt className="w-28 shrink-0 font-medium text-slate-500">{k}</dt>
+                <dd className="min-w-0 break-words text-slate-800">{v != null ? String(v) : '—'}</dd>
+              </div>
+            ))}
+          </dl>
+        </details>
+      )}
+      {extraEntries.length > 0 && (
+        <details className="mt-3 rounded-lg border border-indigo-100 bg-white/80 px-3 py-2 text-sm">
+          <summary className="cursor-pointer font-medium text-indigo-900">Alle opgeslagen formulierwaarden (archief)</summary>
+          <dl className="mt-2 grid max-h-48 grid-cols-1 gap-1.5 overflow-y-auto text-xs">
+            {extraEntries.map(([k, v]) => (
+              <div key={k} className="flex gap-2">
+                <dt className="w-28 shrink-0 font-medium text-slate-500">{k}</dt>
+                <dd className="min-w-0 break-words text-slate-800">
+                  {typeof v === 'object' && v !== null ? JSON.stringify(v) : v != null ? String(v as string | number | boolean) : '—'}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </details>
+      )}
+    </div>
+  );
+}
+
 function Overview({
   prospect,
   am,
@@ -704,6 +848,10 @@ function Overview({
             ))}
           </div>
         </div>
+      )}
+
+      {prospect.source === 'meta_partner' && (
+        <MetaPartnerLeadContext meta={prospect.source_metadata} />
       )}
 
       {prospect.notes && (

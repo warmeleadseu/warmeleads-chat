@@ -8,11 +8,11 @@ import { checkLeadProfanity } from '@/lib/profanityFilter';
 import { calculateQualityScore } from '@/lib/leadQuality';
 import { logAudit } from '@/lib/audit';
 import {
-  PARTNER_PROSPECT_BRANCH_SLUG,
   findRecentPartnerProspectByEmail,
   insertPartnerProspectFromEnrichedLeadRow,
   isPartnerProspectBranch,
 } from '@/lib/partnerProspectIngest';
+import { PARTNER_PROSPECT_BRANCH_SLUG } from '@/lib/partnerProspectConstants';
 import { buildPhoneSearchIlikeClauses, sanitizePostgrestIlike } from '@/lib/phoneSearch';
 
 export async function GET(request: NextRequest) {

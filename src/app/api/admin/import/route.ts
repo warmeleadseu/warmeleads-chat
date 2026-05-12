@@ -12,6 +12,7 @@ import {
   isPartnerProspectBranch,
   type PartnerProspectPayload,
 } from '@/lib/partnerProspectIngest';
+import { resolvePartnerProspectAccountManagerId } from '@/lib/partnerProspectAssignment';
 
 const ENRICH_CONCURRENCY = 8;
 
@@ -208,6 +209,7 @@ export async function POST(request: NextRequest) {
             !Array.isArray(row.custom_fields)
               ? (row.custom_fields as Record<string, string>)
               : {};
+          const accountManagerId = await resolvePartnerProspectAccountManagerId(supabase, branch);
           const insRow = buildPartnerProspectInsertRow(
             row as unknown as PartnerProspectPayload,
             cf,
@@ -217,6 +219,7 @@ export async function POST(request: NextRequest) {
               postcode: row.postcode as string | undefined,
               land: row.land as string | undefined,
             },
+            accountManagerId,
           );
           const pr = await insertPartnerProspect(supabase, insRow, {
             title: 'Spreadsheet import (Thuisbatterij Partners)',
