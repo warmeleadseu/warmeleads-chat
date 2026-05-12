@@ -86,9 +86,9 @@ export async function GET(request: NextRequest) {
   const total = totalCount || 0;
   const customerIds = (customers || []).map(c => c.id);
 
-  let leadCounts: Record<string, number> = {};
-  let bulkCounts: Record<string, number> = {};
-  let batchCounts: Record<string, number> = {};
+  const leadCounts: Record<string, number> = {};
+  const bulkCounts: Record<string, number> = {};
+  const batchCounts: Record<string, number> = {};
 
   if (customerIds.length > 0) {
     const [assignRes, batchRes] = await Promise.all([
@@ -255,11 +255,20 @@ export async function PUT(request: NextRequest) {
     }
 
     let recalcedInvoices: Awaited<ReturnType<typeof recalcOpenInvoicesForCustomer>> = [];
+    // Vergelijk de feitelijke kolomwaarden vóór/na de update om strikte tekst-mismatches
+    // (case, whitespace, undefined-vs-null) te omzeilen. Recalc is goedkoop en idempotent.
+    const after = data as { country?: string | null; vat_id?: string | null } | null;
+    const normCountry = (v: unknown) => {
+      const s = typeof v === 'string' ? v.trim().toUpperCase() : '';
+      return s === 'BE' ? 'BE' : 'NL';
+    };
+    const normVatId = (v: unknown) => {
+      const s = typeof v === 'string' ? v.trim() : '';
+      return s.length > 0 ? s.toUpperCase() : null;
+    };
     const countryChanged = hasCountryColumn
-      && Object.prototype.hasOwnProperty.call(updates, 'country')
-      && (before?.country ?? null) !== ((updates as Record<string, unknown>).country ?? null);
-    const vatIdChanged = Object.prototype.hasOwnProperty.call(updates, 'vat_id')
-      && (before?.vat_id ?? null) !== ((updates as Record<string, unknown>).vat_id ?? null);
+      && normCountry(before?.country) !== normCountry(after?.country);
+    const vatIdChanged = normVatId(before?.vat_id) !== normVatId(after?.vat_id);
     if (countryChanged || vatIdChanged) {
       try {
         recalcedInvoices = await recalcOpenInvoicesForCustomer(supabase, id);

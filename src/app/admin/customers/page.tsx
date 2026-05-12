@@ -40,6 +40,7 @@ import {
   normalizeBelgianKboDigits,
   digitsOnly,
 } from '@/lib/beEnterprise';
+import { isValidBelgianVatFormat } from '@/lib/invoiceVat';
 import { useAdmin } from '../adminContext';
 import { ComposeMailDrawer } from '../_components/ComposeMailDrawer';
 import { MailHistory } from '../_components/MailHistory';
@@ -457,12 +458,21 @@ export default function CustomersPage() {
                               {c.contact_person && <p className="truncate text-xs text-slate-500">{c.contact_person}</p>}
                             </div>
                             {c.country === 'BE' && (
-                              <span
-                                className="shrink-0 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800"
-                                title="Belgische klant — facturen met BTW verlegd"
-                              >
-                                BE
-                              </span>
+                              isValidBelgianVatFormat(c.vat_id) ? (
+                                <span
+                                  className="shrink-0 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800"
+                                  title="Belgische B2B-klant met geldig BE-BTW-nummer — facturen met BTW verlegd"
+                                >
+                                  BE
+                                </span>
+                              ) : (
+                                <span
+                                  className="shrink-0 rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700"
+                                  title="Belgische klant zonder geldig BE-BTW-nummer — facturen krijgen 21% NL-BTW"
+                                >
+                                  BE · NL-BTW
+                                </span>
+                              )
                             )}
                             {Date.now() - new Date(c.created_at).getTime() < 7 * 24 * 60 * 60 * 1000 && (
                               <span className="shrink-0 rounded-full bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-600">Nieuw</span>
@@ -566,12 +576,21 @@ export default function CustomersPage() {
                       <div className="flex items-center gap-1.5">
                         <p className="truncate font-semibold text-slate-900">{c.name}</p>
                         {c.country === 'BE' && (
-                          <span
-                            className="shrink-0 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800"
-                            title="Belgische klant — facturen met BTW verlegd"
-                          >
-                            BE
-                          </span>
+                          isValidBelgianVatFormat(c.vat_id) ? (
+                            <span
+                              className="shrink-0 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800"
+                              title="Belgische B2B-klant met geldig BE-BTW-nummer — facturen met BTW verlegd"
+                            >
+                              BE
+                            </span>
+                          ) : (
+                            <span
+                              className="shrink-0 rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700"
+                              title="Belgische klant zonder geldig BE-BTW-nummer — facturen krijgen 21% NL-BTW"
+                            >
+                              BE · NL-BTW
+                            </span>
+                          )
                         )}
                       </div>
                       {c.contact_person && <p className="truncate text-xs text-slate-500">{c.contact_person}</p>}
@@ -847,12 +866,21 @@ function CustomerDetailPanel({
                   {c.is_active ? 'Actief' : 'Inactief'}
                 </span>
                 {c.country === 'BE' && (
-                  <span
-                    className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800"
-                    title="Belgische B2B-klant: facturen met BTW verlegd (intracommunautair) mits geldig BE-BTW-nummer."
-                  >
-                    BE · BTW verlegd
-                  </span>
+                  isValidBelgianVatFormat(c.vat_id) ? (
+                    <span
+                      className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800"
+                      title="Belgische B2B-klant met geldig BE-BTW-nummer: facturen met BTW verlegd (intracommunautair)."
+                    >
+                      BE · BTW verlegd
+                    </span>
+                  ) : (
+                    <span
+                      className="shrink-0 rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-700"
+                      title="Belgische klant zonder geldig BE-BTW-nummer: op facturen wordt 21% NL-BTW gerekend."
+                    >
+                      BE · 21% NL-BTW
+                    </span>
+                  )
                 )}
                 <span className={`flex shrink-0 items-center gap-1 text-[11px] font-medium ${activity.color}`}>
                   <span className={`inline-block h-1.5 w-1.5 rounded-full ${activity.dotColor} ${activity.sort === 0 ? 'animate-pulse' : ''}`} />
@@ -1725,6 +1753,14 @@ function CustomerForm({ customer, branchOptions, allCustomers, accountManagers, 
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
             </div>
           </div>
+          {form.country === 'BE' && !isValidBelgianVatFormat(form.vat_id) && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50/80 px-3 py-2 text-[12px] leading-relaxed text-amber-900">
+              <p className="font-semibold">BTW verlegd vereist een geldig BE-BTW-nummer</p>
+              <p className="mt-0.5">
+                Zonder geldig Belgisch BTW-nummer (formaat <span className="font-mono">BE</span> + 10 cijfers, bv. <span className="font-mono">BE0123456789</span>) wordt op facturen 21% Nederlandse BTW gerekend. Vul het correcte BE-BTW-nummer in om intracommunautaire reverse charge toe te passen.
+              </p>
+            </div>
+          )}
           <div>
             <label className="mb-1.5 block text-xs font-medium text-slate-500">Branches</label>
             <div className="flex flex-wrap gap-2">

@@ -185,7 +185,7 @@ export function InvoicePdf({ data }: { data: InvoiceData }) {
               </View>
               <View style={{ marginTop: 6, marginBottom: 4, padding: 8, backgroundColor: '#F8FAFC', borderRadius: 4 }}>
                 <Text style={{ fontSize: 7.5, color: '#475569', lineHeight: 1.45 }}>
-                  Intracommunautaire levering conform artikel 2a lid 1 Wet OB 1968. BTW verlegd naar de afnemer in België (reverse charge). U verlegt de Belgische BTW naar uw lokale belastingdienst.
+                  Intracommunautaire B2B-levering. BTW verlegd naar de afnemer in België (reverse charge, art. 6 lid 2 Wet OB 1968 / art. 138 Richtlijn 2006/112/EG). De afnemer dient de Belgische BTW zelf aan te geven via de Belgische BTW-aangifte.
                 </Text>
               </View>
             </>

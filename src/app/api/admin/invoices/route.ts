@@ -161,11 +161,13 @@ export async function PUT(request: NextRequest) {
     }
   }
 
-  // Herbereken BTW en vat_mode o.b.v. actuele klantgegevens bij subtotaal- of btw-wijziging
+  // Herbereken BTW en vat_mode o.b.v. actuele klantgegevens bij subtotaal- of btw-wijziging.
+  // Als de openstaande factuur al een Mollie-sessie heeft op het oude bedrag, dan
+  // wordt die ook geleegd zodat een verse checkout met het nieuwe bedrag ontstaat.
   if (updates.subtotal !== undefined || updates.btw_percentage !== undefined) {
     const { data: existing } = await supabase
       .from('invoices')
-      .select('subtotal, btw_percentage, customer_id')
+      .select('subtotal, btw_percentage, total_incl_btw, customer_id, status, mollie_payment_id')
       .eq('id', id)
       .single();
 
@@ -188,6 +190,11 @@ export async function PUT(request: NextRequest) {
     updates.btw_amount = vat.btw_amount;
     updates.total_incl_btw = vat.total_incl_btw;
     updates.vat_mode = vat.vat_mode;
+
+    const totalChanged = Math.abs(vat.total_incl_btw - Number(existing.total_incl_btw ?? 0)) > 0.005;
+    if (existing.status === 'open' && existing.mollie_payment_id && totalChanged) {
+      updates.mollie_payment_id = null;
+    }
   }
 
   // Only allow safe fields
@@ -195,6 +202,7 @@ export async function PUT(request: NextRequest) {
     'customer_name', 'customer_email', 'customer_address', 'customer_vat_id',
     'description', 'line_items', 'subtotal', 'btw_percentage', 'btw_amount',
     'total_incl_btw', 'vat_mode', 'status', 'paid_at', 'uploaded_pdf_path',
+    'mollie_payment_id',
   ];
   const safeUpdates: Record<string, unknown> = {};
   for (const key of allowed) {

@@ -1,5 +1,3 @@
-export const BTW_RATE = 0.21;
-
 export function formatCurrency(value: number): string {
   return new Intl.NumberFormat('nl-NL', {
     style: 'currency',

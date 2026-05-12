@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
 
   let orderQuery = supabase
     .from('batch_orders')
-    .select('*, customers(name, email, contact_person)')
+    .select('*, customers(name, email, contact_person, country, vat_id)')
     .order('created_at', { ascending: false });
 
   if (admin.role === 'accountmanager') {
@@ -39,6 +39,8 @@ export async function GET(request: NextRequest) {
     branch_name: branchMap[o.branch] || o.branch,
     customer_name: o.customers?.name || 'Onbekend',
     customer_email: o.customers?.email || '',
+    customer_country: o.customers?.country || 'NL',
+    customer_vat_id: o.customers?.vat_id || null,
   }));
 
   return NextResponse.json(enriched);

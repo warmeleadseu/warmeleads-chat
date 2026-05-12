@@ -13,12 +13,15 @@ import {
   ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
+import { portalBtwRate } from '@/lib/invoiceVat';
 
 interface Order {
   id: string;
   customer_id: string;
   customer_name: string;
   customer_email: string;
+  customer_country?: string | null;
+  customer_vat_id?: string | null;
   branch: string;
   branch_name: string;
   batch_size: number;
@@ -202,7 +205,13 @@ export default function AdminOrdersPage() {
                           <span className="font-medium text-slate-900">&euro;{Number(o.total_price).toFixed(2)}</span>
                           <span className="ml-1 text-[10px] text-slate-400">excl.</span>
                         </div>
-                        <span className="text-[10px] text-slate-400">&euro;{(Number(o.total_price) * 1.21).toFixed(2)} incl.</span>
+                        {(() => {
+                          const rate = portalBtwRate({ country: o.customer_country, vat_id: o.customer_vat_id });
+                          const total = Number(o.total_price) * (1 + rate);
+                          return (
+                            <span className="text-[10px] text-slate-400">&euro;{total.toFixed(2)} {rate === 0 ? '(BTW verlegd)' : 'incl.'}</span>
+                          );
+                        })()}
                       </td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${s.color}`}>
