@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
 import { resendOpenInvoiceWithPaymentLinks } from '@/lib/invoice';
+import { computeInvoiceVat } from '@/lib/invoiceVat';
 
 export async function GET(request: NextRequest) {
   const admin = await verifyAdmin(request);
@@ -35,7 +36,7 @@ export async function POST(request: NextRequest) {
   const supabase = createServerClient();
   const body = await request.json();
 
-  const { customer_id, description, line_items, subtotal, btw_percentage, paid_at, status } = body;
+  const { customer_id, description, line_items, subtotal, paid_at, status } = body;
 
   if (!customer_id || !description || subtotal == null) {
     return NextResponse.json({ error: 'Verplichte velden ontbreken' }, { status: 400 });
@@ -43,7 +44,7 @@ export async function POST(request: NextRequest) {
 
   const { data: customer } = await supabase
     .from('customers')
-    .select('id, name, email, street, house_number, postcode, city, vat_id, account_manager_id')
+    .select('id, name, email, street, house_number, postcode, city, vat_id, country, account_manager_id')
     .eq('id', customer_id)
     .single();
 
@@ -59,9 +60,12 @@ export async function POST(request: NextRequest) {
   }
 
   const sub = Number(subtotal);
-  const btwPct = Number(btw_percentage ?? 21);
-  const btwAmount = Math.round(sub * (btwPct / 100) * 100) / 100;
-  const totalInclBtw = sub + btwAmount;
+  const vat = computeInvoiceVat({
+    subtotalExclBtw: sub,
+    country: customer.country,
+    customerVatId: customer.vat_id,
+  });
+  const { btw_percentage: btwPct, btw_amount: btwAmount, total_incl_btw: totalInclBtw, vat_mode: vatMode } = vat;
 
   // Generate invoice number via sequence
   const year = new Date().getFullYear();
@@ -116,6 +120,7 @@ export async function POST(request: NextRequest) {
       btw_percentage: btwPct,
       btw_amount: btwAmount,
       total_incl_btw: totalInclBtw,
+      vat_mode: vatMode,
       status: invStatus,
       paid_at: paidAtValue,
     })
@@ -153,29 +158,40 @@ export async function PUT(request: NextRequest) {
     }
   }
 
-  // Recalculate BTW when subtotal or btw_percentage changes
+  // Herbereken BTW en vat_mode o.b.v. actuele klantgegevens bij subtotaal- of btw-wijziging
   if (updates.subtotal !== undefined || updates.btw_percentage !== undefined) {
     const { data: existing } = await supabase
       .from('invoices')
-      .select('subtotal, btw_percentage')
+      .select('subtotal, btw_percentage, customer_id')
       .eq('id', id)
       .single();
 
     if (!existing) return NextResponse.json({ error: 'Factuur niet gevonden' }, { status: 404 });
 
+    const { data: cust } = await supabase
+      .from('customers')
+      .select('country, vat_id')
+      .eq('id', existing.customer_id)
+      .maybeSingle();
+
     const sub = Number(updates.subtotal ?? existing.subtotal);
-    const btwPct = Number(updates.btw_percentage ?? existing.btw_percentage);
+    const vat = computeInvoiceVat({
+      subtotalExclBtw: sub,
+      country: cust?.country,
+      customerVatId: cust?.vat_id,
+    });
     updates.subtotal = sub;
-    updates.btw_percentage = btwPct;
-    updates.btw_amount = Math.round(sub * (btwPct / 100) * 100) / 100;
-    updates.total_incl_btw = sub + updates.btw_amount;
+    updates.btw_percentage = vat.btw_percentage;
+    updates.btw_amount = vat.btw_amount;
+    updates.total_incl_btw = vat.total_incl_btw;
+    updates.vat_mode = vat.vat_mode;
   }
 
   // Only allow safe fields
   const allowed = [
     'customer_name', 'customer_email', 'customer_address', 'customer_vat_id',
     'description', 'line_items', 'subtotal', 'btw_percentage', 'btw_amount',
-    'total_incl_btw', 'status', 'paid_at', 'uploaded_pdf_path',
+    'total_incl_btw', 'vat_mode', 'status', 'paid_at', 'uploaded_pdf_path',
   ];
   const safeUpdates: Record<string, unknown> = {};
   for (const key of allowed) {

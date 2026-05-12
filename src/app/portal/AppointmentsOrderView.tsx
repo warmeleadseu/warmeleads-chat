@@ -12,7 +12,9 @@ import {
 } from '@heroicons/react/24/outline';
 import { motion, AnimatePresence } from 'framer-motion';
 import { portalFetch } from '@/lib/portalAuth';
-import { BTW_RATE, formatCurrency, formatDateNl, roundMoney } from '@/lib/portalFormat';
+import type { PortalCustomer } from './portalContext';
+import { portalBtwRate } from '@/lib/invoiceVat';
+import { formatCurrency, formatDateNl, roundMoney } from '@/lib/portalFormat';
 import {
   ChoicePill,
   ChoiceTile,
@@ -77,8 +79,10 @@ const SPEED_OPTIONS: { value: number | null; label: string; days: string }[] = [
 
 export default function AppointmentsOrderView({
   customerBranches,
+  customer,
 }: {
   customerBranches: string[];
+  customer: PortalCustomer;
 }) {
   const toast = useToast();
 
@@ -180,9 +184,14 @@ export default function AppointmentsOrderView({
     return findTierPrice(pricingData?.tiers, effectiveSize, 0);
   }, [pricingData, effectiveSize]);
 
+  const btwRate = useMemo(
+    () => portalBtwRate({ country: customer.country, vat_id: customer.vat_id, reverse_charge: customer.reverse_charge }),
+    [customer.country, customer.vat_id, customer.reverse_charge],
+  );
   const subtotal = roundMoney(dynamicPrice * effectiveSize);
-  const btw = roundMoney(subtotal * BTW_RATE);
+  const btw = roundMoney(subtotal * btwRate);
   const total = subtotal + btw;
+  const btwSummaryLabel = btwRate === 0 ? 'BTW (verlegd)' : 'BTW 21%';
 
   const QUICK_SIZES = useMemo(() => computeQuickSizes(minBatchSize, [5, 10, 20, 50]), [minBatchSize]);
 
@@ -381,7 +390,7 @@ export default function AppointmentsOrderView({
               {QUICK_SIZES.map(size => {
                 const isActive = !useCustom && batchSize === size;
                 const sizePrice = findTierPrice(pricingData.tiers, size, dynamicPrice);
-                const price = roundMoney(size * sizePrice * (1 + BTW_RATE));
+                const price = roundMoney(size * sizePrice * (1 + btwRate));
                 return (
                   <ChoiceTile
                     key={size}
@@ -460,7 +469,7 @@ export default function AppointmentsOrderView({
                 value: <>{formatCurrency(subtotal)}</>,
                 tone: 'default',
               },
-              { label: 'BTW 21%', value: <>{formatCurrency(btw)}</>, tone: 'muted' },
+              { label: btwSummaryLabel, value: <>{formatCurrency(btw)}</>, tone: 'muted' },
             ]}
             total={total}
             onCheckout={handleOrder}

@@ -14,6 +14,9 @@ export interface PortalCustomer {
   /** Server-berekend: demo-ervaring tot eerste betaalde customer_batch */
   show_demo_portal?: boolean;
   has_paid_customer_batch?: boolean;
+  country?: string;
+  vat_id?: string | null;
+  reverse_charge?: boolean;
 }
 
 /** Demo-banner en lead-API: server stuurt `show_demo_portal`; fallback lekt geen echte leads vóór betaling. */

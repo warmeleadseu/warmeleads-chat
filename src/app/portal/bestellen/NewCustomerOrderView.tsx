@@ -6,7 +6,8 @@ import {
   BoltIcon,
 } from '@heroicons/react/24/outline';
 import { portalFetch } from '@/lib/portalAuth';
-import { BTW_RATE, formatCurrency, formatDateNl, roundMoney } from '@/lib/portalFormat';
+import { portalBtwRate } from '@/lib/invoiceVat';
+import { formatCurrency, formatDateNl, roundMoney } from '@/lib/portalFormat';
 import {
   ChoicePill,
   ChoiceTile,
@@ -28,7 +29,7 @@ export default function NewCustomerOrderView({
   welcomeDiscount,
   embedded = false,
 }: {
-  customer: { id: string; name: string; email: string; contact_person: string; branches: string[] };
+  customer: { id: string; name: string; email: string; contact_person: string; branches: string[]; country?: string | null; vat_id?: string | null; reverse_charge?: boolean };
   welcomeDiscount: WelcomeDiscountState;
   /** Gezet vanuit bestellen/page wanneer PageHeader + tabs al buiten staat */
   embedded?: boolean;
@@ -78,8 +79,13 @@ export default function NewCustomerOrderView({
   const subtotalBefore = effectiveSize * dynamicPrice;
   const discount = welcomeDiscount.active ? roundMoney(subtotalBefore * 0.20) : 0;
   const subtotal = subtotalBefore - discount;
-  const btw = roundMoney(subtotal * BTW_RATE);
+  const btwRate = useMemo(
+    () => portalBtwRate({ country: customer.country, vat_id: customer.vat_id, reverse_charge: customer.reverse_charge }),
+    [customer.country, customer.vat_id, customer.reverse_charge],
+  );
+  const btw = roundMoney(subtotal * btwRate);
   const total = subtotal + btw;
+  const btwSummaryLabel = btwRate === 0 ? 'BTW (verlegd)' : 'BTW 21%';
 
   const QUICK_SIZES = useMemo(() => computeQuickSizes(minBatchSize), [minBatchSize]);
 
@@ -179,7 +185,7 @@ export default function NewCustomerOrderView({
               const sizePrice = findTierPrice(pricingData?.tiers, size, dynamicPrice);
               const raw = size * sizePrice;
               const disc = welcomeDiscount.active ? raw * 0.20 : 0;
-              const price = roundMoney((raw - disc) * (1 + BTW_RATE));
+              const price = roundMoney((raw - disc) * (1 + btwRate));
               return (
                 <ChoiceTile
                   key={size}
@@ -243,7 +249,7 @@ export default function NewCustomerOrderView({
             ...(welcomeDiscount.active
               ? [{ label: 'Welkomstkorting -20%', value: <>-&euro;{discount.toFixed(2)}</>, tone: 'positive' as const }]
               : []),
-            { label: 'BTW 21%', value: <>&euro;{btw.toFixed(2)}</>, tone: 'muted' },
+            { label: btwSummaryLabel, value: <>&euro;{btw.toFixed(2)}</>, tone: 'muted' },
           ]}
           total={total}
           onCheckout={handleOrder}

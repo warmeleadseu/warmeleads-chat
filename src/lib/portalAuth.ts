@@ -6,11 +6,12 @@ import {
   verifyPortalSessionJwt,
 } from '@/lib/portalSession';
 import { looksLikeJwt } from '@/lib/jwtFormat';
+import { qualifiesBelgiumReverseCharge } from '@/lib/invoiceVat';
 
 export type { PortalSession };
 
 const CUSTOMER_SELECT =
-  'id, name, email, contact_person, branches, portal_active, demo_mode, signup_source, is_active';
+  'id, name, email, contact_person, branches, portal_active, demo_mode, signup_source, is_active, country, vat_id';
 
 const PORTAL_USER_SELECT =
   'id, customer_id, name, email, role, is_active, permissions, assignment_rules, last_login_at, last_seen_at, login_count, phone, created_at';
@@ -27,7 +28,10 @@ function mapSessionCustomer(row: {
   portal_active: boolean;
   demo_mode?: boolean | null;
   signup_source?: string | null;
+  country?: string | null;
+  vat_id?: string | null;
 }): PortalSession['customer'] {
+  const reverse_charge = qualifiesBelgiumReverseCharge({ country: row.country, vat_id: row.vat_id });
   return {
     id: row.id,
     name: row.name,
@@ -37,6 +41,9 @@ function mapSessionCustomer(row: {
     portal_active: row.portal_active,
     demo_mode: row.demo_mode ?? undefined,
     signup_source: row.signup_source ?? undefined,
+    country: row.country ?? 'NL',
+    vat_id: row.vat_id ?? undefined,
+    reverse_charge,
   };
 }
 
@@ -115,7 +122,7 @@ export async function verifyCustomer(request: NextRequest): Promise<PortalSessio
 
   const { data: customer } = await supabase
     .from('customers')
-    .select('id, name, email, contact_person, branches, portal_active, demo_mode, signup_source')
+    .select(CUSTOMER_SELECT)
     .eq('id', raw)
     .eq('is_active', true)
     .eq('portal_active', true)

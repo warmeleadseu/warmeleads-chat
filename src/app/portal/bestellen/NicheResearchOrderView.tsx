@@ -3,7 +3,9 @@
 import { useMemo, useState } from 'react';
 import { MagnifyingGlassCircleIcon } from '@heroicons/react/24/outline';
 import { portalFetch } from '@/lib/portalAuth';
-import { BTW_RATE, roundMoney } from '@/lib/portalFormat';
+import { usePortal } from '../portalContext';
+import { portalBtwRate } from '@/lib/invoiceVat';
+import { roundMoney } from '@/lib/portalFormat';
 import {
   OrderSummaryCard,
   PageHeader,
@@ -17,13 +19,19 @@ const RESEARCH_EXCL = 1000;
 
 export default function NicheResearchOrderView() {
   const toast = useToast();
+  const { customer } = usePortal();
   const [nicheTitle, setNicheTitle] = useState('');
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   const subtotal = RESEARCH_EXCL;
-  const btw = roundMoney(subtotal * BTW_RATE);
+  const btwRate = useMemo(
+    () => portalBtwRate({ country: customer.country, vat_id: customer.vat_id, reverse_charge: customer.reverse_charge }),
+    [customer.country, customer.vat_id, customer.reverse_charge],
+  );
+  const btw = roundMoney(subtotal * btwRate);
   const total = subtotal + btw;
+  const btwSummaryLabel = btwRate === 0 ? 'BTW (verlegd)' : 'BTW 21%';
 
   const canSubmit = useMemo(() => nicheTitle.trim().length >= 3, [nicheTitle]);
 
@@ -112,7 +120,7 @@ export default function NicheResearchOrderView() {
             value: <>&euro;{subtotal.toFixed(2)}</>,
             tone: 'default',
           },
-          { label: 'BTW 21%', value: <>&euro;{btw.toFixed(2)}</>, tone: 'muted' },
+          { label: btwSummaryLabel, value: <>&euro;{btw.toFixed(2)}</>, tone: 'muted' },
         ]}
         total={total}
         onCheckout={handleOrder}

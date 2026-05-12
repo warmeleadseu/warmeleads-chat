@@ -3,6 +3,7 @@ import { verifyCustomer, portalUnauthorized } from '@/lib/portalAuth';
 import { createServerClient } from '@/lib/supabase';
 import { hasPermission, forbidden, PERMISSIONS } from '@/lib/portalPermissions';
 import { createBatchPayment } from '@/lib/mollie';
+import { computeInvoiceVat, mollieBtwLabel } from '@/lib/invoiceVat';
 
 export async function POST(request: NextRequest) {
   const session = await verifyCustomer(request);
@@ -52,14 +53,20 @@ export async function POST(request: NextRequest) {
 
     const { data: custData } = await supabase
       .from('customers')
-      .select('id, name, email')
+      .select('id, name, email, country, vat_id')
       .eq('id', customer.id)
       .single();
 
     if (!custData) return NextResponse.json({ error: 'Klant niet gevonden' }, { status: 404 });
 
     const totalExBtw = Number(batch.total_price || 0);
-    const totalInclBtw = Math.round(totalExBtw * 1.21 * 100) / 100;
+    const payVat = computeInvoiceVat({
+      subtotalExclBtw: totalExBtw,
+      country: custData.country,
+      customerVatId: custData.vat_id,
+    });
+    const totalInclBtw = payVat.total_incl_btw;
+    const molliePayVatPhrase = mollieBtwLabel(payVat.vat_mode);
 
     if (totalInclBtw <= 0) {
       return NextResponse.json({ error: 'Geen geldig bedrag voor deze batch' }, { status: 400 });
@@ -72,7 +79,7 @@ export async function POST(request: NextRequest) {
     const payment = await createBatchPayment({
       orderId: `batch:${batch.id}`,
       amount: totalInclBtw,
-      description: `WarmeLeads batch: ${batch.batch_size} ${branchName} leads (incl. 21% BTW)`,
+      description: `WarmeLeads batch: ${batch.batch_size} ${branchName} leads (${molliePayVatPhrase})`,
       redirectUrl: `${baseUrl}/portal?paid=${batch.id}`,
       webhookUrl: `${baseUrl}/api/webhooks/mollie`,
       customerEmail: custData.email,

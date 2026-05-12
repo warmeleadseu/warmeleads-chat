@@ -3,6 +3,7 @@ import { verifyCustomer, portalUnauthorized } from '@/lib/portalAuth';
 import { createServerClient } from '@/lib/supabase';
 import { getHasPaidCustomerBatch, shouldUseDemoPortalExperience } from '@/lib/demoPortalEligibility';
 import type { ClientPortalUser, PortalCustomer } from '@/app/portal/portalContext';
+import { qualifiesBelgiumReverseCharge } from '@/lib/invoiceVat';
 
 export async function GET(request: NextRequest) {
   const session = await verifyCustomer(request);
@@ -11,7 +12,7 @@ export async function GET(request: NextRequest) {
   const supabase = createServerClient();
   const { data: row, error } = await supabase
     .from('customers')
-    .select('id, name, email, contact_person, branches, demo_mode, signup_source')
+    .select('id, name, email, contact_person, branches, demo_mode, signup_source, country, vat_id')
     .eq('id', session.customer.id)
     .single();
 
@@ -26,6 +27,7 @@ export async function GET(request: NextRequest) {
     hasPaidCustomerBatch,
   });
 
+  const reverse_charge = qualifiesBelgiumReverseCharge({ country: row.country, vat_id: row.vat_id });
   const customer: PortalCustomer = {
     id: row.id,
     name: row.name,
@@ -34,6 +36,9 @@ export async function GET(request: NextRequest) {
     branches: row.branches ?? [],
     demo_mode: !!row.demo_mode,
     signup_source: row.signup_source,
+    country: row.country ?? 'NL',
+    vat_id: row.vat_id ?? undefined,
+    reverse_charge,
     show_demo_portal,
     has_paid_customer_batch: hasPaidCustomerBatch,
   };

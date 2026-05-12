@@ -54,6 +54,7 @@ interface Customer {
   postcode?: string | null;
   city?: string | null;
   vat_id?: string | null;
+  country?: string | null;
   signup_source?: string | null;
   welcome_offer_used?: boolean | null;
   welcome_offer_expires_at?: string | null;
@@ -1281,6 +1282,7 @@ function CustomerForm({ customer, branchOptions, allCustomers, accountManagers, 
     postcode: customer?.postcode || '',
     city: customer?.city || '',
     vat_id: customer?.vat_id || '',
+    country: customer?.country === 'BE' ? 'BE' : 'NL',
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -1417,7 +1419,7 @@ function CustomerForm({ customer, branchOptions, allCustomers, accountManagers, 
     setSaving(true);
     setError('');
     try {
-      const { password, bulk_price_per_lead: bulkStr, kvk_nummer, street, house_number, postcode, city, vat_id: vat, ...rest } = form;
+      const { password, bulk_price_per_lead: bulkStr, kvk_nummer, street, house_number, postcode, city, vat_id: vat, country: billingCountry, ...rest } = form;
       const payload: Record<string, unknown> = { ...rest };
       if (password) payload.password = password;
       payload.bulk_price_per_lead = bulkStr ? parseFloat(bulkStr) : null;
@@ -1427,6 +1429,7 @@ function CustomerForm({ customer, branchOptions, allCustomers, accountManagers, 
       payload.postcode = postcode || null;
       payload.city = city || null;
       payload.vat_id = vat || null;
+      payload.country = billingCountry === 'BE' ? 'BE' : 'NL';
       const body = isEdit ? { id: customer!.id, ...payload } : payload;
       const res = await adminFetch('/api/admin/customers', {
         method: isEdit ? 'PUT' : 'POST',
@@ -1586,6 +1589,18 @@ function CustomerForm({ customer, branchOptions, allCustomers, accountManagers, 
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
             </div>
           </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-500">Facturatie-land</label>
+            <select
+              value={form.country}
+              onChange={e => setForm(f => ({ ...f, country: e.target.value === 'BE' ? 'BE' : 'NL' }))}
+              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50"
+            >
+              <option value="NL">Nederland (NL-BTW)</option>
+              <option value="BE">België (BTW verlegd mits geldig BE-BTW-nr)</option>
+            </select>
+            <p className="mt-1 text-[11px] text-slate-400">Voor Belgische B2B met geldig BE-BTW-nummer wordt op facturen geen Nederlandse BTW berekend.</p>
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-500">KVK-nummer</label>
@@ -1604,7 +1619,7 @@ function CustomerForm({ customer, branchOptions, allCustomers, accountManagers, 
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-500">BTW-nummer</label>
               <input value={form.vat_id} onChange={e => setForm(f => ({ ...f, vat_id: e.target.value }))}
-                placeholder="NL123456789B01" autoComplete="off"
+                placeholder="NL123456789B01 of BE0123456789" autoComplete="off"
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
             </div>
           </div>

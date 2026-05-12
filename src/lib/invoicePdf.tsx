@@ -1,5 +1,6 @@
 import React from 'react';
 import { Document, Page, Text, View, Image, StyleSheet } from '@react-pdf/renderer';
+import type { InvoiceVatMode } from '@/lib/invoiceVat';
 
 const BRAND = '#7C3AED';
 const BRAND_LIGHT = '#F5F3FF';
@@ -72,6 +73,8 @@ export interface InvoiceData {
   btw_percentage: number;
   btw_amount: number;
   total_incl_btw: number;
+  /** Standaard domestic_nl (bestaande facturen zonder kolom). */
+  vat_mode?: InvoiceVatMode;
   mollie_payment_id: string | null;
 }
 
@@ -86,6 +89,8 @@ function eur(n: number): string {
 }
 
 export function InvoicePdf({ data }: { data: InvoiceData }) {
+  const vatMode: InvoiceVatMode = data.vat_mode ?? 'domestic_nl';
+  const isReverseBe = vatMode === 'reverse_charge_be';
   return (
     <Document>
       <Page size="A4" style={s.page}>
@@ -167,12 +172,26 @@ export function InvoicePdf({ data }: { data: InvoiceData }) {
             <Text style={s.totalsLabel}>Subtotaal excl. BTW</Text>
             <Text style={s.totalsValue}>{eur(data.subtotal)}</Text>
           </View>
-          <View style={s.totalsRow}>
-            <Text style={s.totalsLabel}>BTW {data.btw_percentage}%</Text>
-            <Text style={s.totalsValue}>{eur(data.btw_amount)}</Text>
-          </View>
+          {isReverseBe ? (
+            <>
+              <View style={s.totalsRow}>
+                <Text style={s.totalsLabel}>BTW Nederland (0% — verlegd)</Text>
+                <Text style={s.totalsValue}>{eur(0)}</Text>
+              </View>
+              <View style={{ marginTop: 6, marginBottom: 4, padding: 8, backgroundColor: '#F8FAFC', borderRadius: 4 }}>
+                <Text style={{ fontSize: 7.5, color: '#475569', lineHeight: 1.45 }}>
+                  Intracommunautaire levering conform artikel 2a lid 1 Wet OB 1968. BTW verlegd naar de afnemer in België (reverse charge). U verlegt de Belgische BTW naar uw lokale belastingdienst.
+                </Text>
+              </View>
+            </>
+          ) : (
+            <View style={s.totalsRow}>
+              <Text style={s.totalsLabel}>BTW {data.btw_percentage}%</Text>
+              <Text style={s.totalsValue}>{eur(data.btw_amount)}</Text>
+            </View>
+          )}
           <View style={s.totalsFinal}>
-            <Text style={s.totalsFinalLabel}>Totaal incl. BTW</Text>
+            <Text style={s.totalsFinalLabel}>{isReverseBe ? 'Totaal te voldoen' : 'Totaal incl. BTW'}</Text>
             <Text style={s.totalsFinalValue}>{eur(data.total_incl_btw)}</Text>
           </View>
         </View>

@@ -11,6 +11,7 @@ import {
   signPortalOwnerSession,
   signPortalUserSession,
 } from '@/lib/portalSession';
+import { qualifiesBelgiumReverseCharge } from '@/lib/invoiceVat';
 
 const MAX_ATTEMPTS = 10;
 const WINDOW_MS = 15 * 60 * 1000;
@@ -35,7 +36,7 @@ export async function POST(request: NextRequest) {
 
     const { data: customerRows, error: customerLookupErr } = await supabase
       .from('customers')
-      .select('id, name, email, contact_person, branches, is_active, portal_active, password_hash, login_count, demo_mode, signup_source')
+      .select('id, name, email, contact_person, branches, is_active, portal_active, password_hash, login_count, demo_mode, signup_source, country, vat_id')
       .ilike('email', emailPattern)
       .limit(5);
 
@@ -86,12 +87,14 @@ export async function POST(request: NextRequest) {
         .then(() => {});
 
       const { password_hash: _, ...safeCustomer } = customer;
+      const reverse_charge = qualifiesBelgiumReverseCharge({ country: safeCustomer.country, vat_id: safeCustomer.vat_id });
 
       const portalJwt = await signPortalOwnerSession(customer.id);
       const res = NextResponse.json({
         success: true,
         customer: {
           ...safeCustomer,
+          reverse_charge,
           show_demo_portal,
           has_paid_customer_batch: hasPaidCustomerBatch,
         },
@@ -131,7 +134,7 @@ export async function POST(request: NextRequest) {
     // Verify parent customer is still active
     const { data: parentCustomer } = await supabase
       .from('customers')
-      .select('id, name, email, contact_person, branches, is_active, portal_active, demo_mode, signup_source')
+      .select('id, name, email, contact_person, branches, is_active, portal_active, demo_mode, signup_source, country, vat_id')
       .eq('id', portalUser.customer_id)
       .eq('is_active', true)
       .eq('portal_active', true)
@@ -166,6 +169,7 @@ export async function POST(request: NextRequest) {
 
     const { password_hash: __, ...safePortalUser } = portalUser;
     const { demo_mode, ...safeParent } = parentCustomer;
+    const reverse_charge = qualifiesBelgiumReverseCharge({ country: safeParent.country, vat_id: safeParent.vat_id });
 
     const portalJwt = await signPortalUserSession(portalUser.id, portalUser.customer_id);
     const res = NextResponse.json({
@@ -173,6 +177,7 @@ export async function POST(request: NextRequest) {
       customer: {
         ...safeParent,
         demo_mode,
+        reverse_charge,
         show_demo_portal,
         has_paid_customer_batch: hasPaidCustomerBatch,
       },

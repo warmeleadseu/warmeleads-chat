@@ -21,7 +21,8 @@ import {
 } from '@heroicons/react/24/outline';
 import AppointmentsOrderView from '../AppointmentsOrderView';
 import { CheckCircleIcon as CheckCircleSolid } from '@heroicons/react/24/solid';
-import { BTW_RATE, formatCurrency, formatDateNl, roundMoney } from '@/lib/portalFormat';
+import { portalBtwRate } from '@/lib/invoiceVat';
+import { roundMoney, formatCurrency, formatDateNl } from '@/lib/portalFormat';
 import {
   ChoicePill,
   ChoiceTile,
@@ -223,8 +224,13 @@ export default function BestellenPage() {
   const subtotalBeforeDiscount = effectiveSize * pricePerLead;
   const discountAmount = welcomeDiscount.active ? roundMoney(subtotalBeforeDiscount * 0.20) : 0;
   const subtotal = subtotalBeforeDiscount - discountAmount;
-  const btwAmount = roundMoney(subtotal * BTW_RATE);
+  const btwRate = useMemo(
+    () => portalBtwRate({ country: customer.country, vat_id: customer.vat_id, reverse_charge: customer.reverse_charge }),
+    [customer.country, customer.vat_id, customer.reverse_charge],
+  );
+  const btwAmount = roundMoney(subtotal * btwRate);
   const totalInclBtw = subtotal + btwAmount;
+  const btwSummaryLabel = btwRate === 0 ? 'BTW (verlegd)' : 'BTW 21%';
   const minBatchSize = pricingData?.min_batch_size || 10;
   const QUICK_SIZES = useMemo(() => computeQuickSizes(minBatchSize), [minBatchSize]);
   const pricingReady = !!pricingData && (!selectedBranch || pricingData.branch === selectedBranch);
@@ -296,6 +302,7 @@ export default function BestellenPage() {
     return (
       <RedirectResultView
         redirectOrder={redirectOrder}
+        btwRate={btwRate}
         onContinue={() => router.push('/portal')}
         onRetry={() => { setRedirectOrder(null); router.replace('/portal/bestellen'); }}
       />
@@ -338,7 +345,7 @@ export default function BestellenPage() {
       <div className={`space-y-6 ${T.pagePaddingForSticky}`}>
         <PageHeader title="Bestellen" subtitle="Bestel afspraken en vul je agenda" />
         {productTabs}
-        <AppointmentsOrderView customerBranches={customer.branches || []} />
+        <AppointmentsOrderView customerBranches={customer.branches || []} customer={customer} />
       </div>
     );
   }
@@ -404,6 +411,7 @@ export default function BestellenPage() {
           >
             <OrdersPanel
               orders={orders}
+              btwRate={btwRate}
               onCancel={(id) => setPendingCancelOrderId(id)}
             />
           </motion.div>
@@ -499,7 +507,7 @@ export default function BestellenPage() {
               {QUICK_SIZES.map(size => {
                 const isActive = !useCustom && batchSize === size;
                 const sizePrice = findTierPrice(pricingData?.tiers, size, pricePerLead);
-                const price = roundMoney(size * sizePrice * (1 + BTW_RATE));
+                const price = roundMoney(size * sizePrice * (1 + btwRate));
                 return (
                   <ChoiceTile
                     key={size}
@@ -637,7 +645,7 @@ export default function BestellenPage() {
           ...(welcomeDiscount.active
             ? [{ label: 'Welkomstkorting -20%', value: <>-&euro;{discountAmount.toFixed(2)}</>, tone: 'positive' as const }]
             : []),
-          { label: 'BTW 21%', value: <>&euro;{btwAmount.toFixed(2)}</>, tone: 'muted' },
+          { label: btwSummaryLabel, value: <>&euro;{btwAmount.toFixed(2)}</>, tone: 'muted' },
         ]}
         total={totalInclBtw}
         onCheckout={handleOrder}
@@ -689,7 +697,7 @@ export default function BestellenPage() {
         <div className="mt-5 flex items-center gap-2 text-[11px] text-slate-400">
           <CheckCircleSolid className="h-3.5 w-3.5 text-emerald-400" />
           {paidOrders.length} eerdere {paidOrders.length === 1 ? 'bestelling' : 'bestellingen'} &middot;
-          &euro;{(paidOrders.reduce((s, o) => s + Number(o.total_price) * 1.21, 0)).toFixed(2)} totaal incl. BTW
+          &euro;{(paidOrders.reduce((s, o) => s + Number(o.total_price) * (1 + btwRate), 0)).toFixed(2)} {btwRate === 0 ? 'totaal' : 'totaal incl. BTW'}
         </div>
       )}
 
@@ -738,7 +746,7 @@ export default function BestellenPage() {
   );
 }
 
-function OrdersPanel({ orders, onCancel }: { orders: Order[]; onCancel: (id: string) => void }) {
+function OrdersPanel({ orders, btwRate, onCancel }: { orders: Order[]; btwRate: number; onCancel: (id: string) => void }) {
   return (
     <div className={`${T.card} p-3 sm:p-4`}>
       <div className="space-y-2">
@@ -757,7 +765,7 @@ function OrdersPanel({ orders, onCancel }: { orders: Order[]; onCancel: (id: str
               </div>
               <p className="mt-0.5 text-xs text-slate-400">
                 {formatDateNl(o.created_at)}
-                {o.status === 'paid' && <> &middot; &euro;{(Number(o.total_price) * 1.21).toFixed(2)} incl. BTW</>}
+                {o.status === 'paid' && <> &middot; &euro;{(Number(o.total_price) * (1 + btwRate)).toFixed(2)} {btwRate === 0 ? 'totaal' : 'incl. BTW'}</>}
               </p>
             </div>
             {o.status !== 'paid' && (
@@ -781,10 +789,12 @@ function OrdersPanel({ orders, onCancel }: { orders: Order[]; onCancel: (id: str
 
 function RedirectResultView({
   redirectOrder,
+  btwRate,
   onContinue,
   onRetry,
 }: {
   redirectOrder: Order;
+  btwRate: number;
   onContinue: () => void;
   onRetry: () => void;
 }) {
@@ -843,7 +853,7 @@ function RedirectResultView({
             <div className="flex items-center gap-2">
               <CheckCircleSolid className="h-5 w-5 text-emerald-500" />
               <p className="text-sm font-semibold text-emerald-800">
-              {redirectOrder.batch_size} leads &middot; {formatCurrency(Number(redirectOrder.total_price) * 1.21)} incl. BTW
+              {redirectOrder.batch_size} leads &middot; {formatCurrency(Number(redirectOrder.total_price) * (1 + btwRate))} {btwRate === 0 ? 'totaal' : 'incl. BTW'}
               </p>
             </div>
           <p className="mt-1 text-xs text-emerald-600">Je batch is direct actief en leads worden automatisch toegewezen</p>

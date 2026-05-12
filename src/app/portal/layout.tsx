@@ -699,6 +699,9 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
               signup_source: c.signup_source ?? prev.signup_source,
               show_demo_portal: c.show_demo_portal,
               has_paid_customer_batch: c.has_paid_customer_batch,
+              country: c.country ?? prev.country,
+              vat_id: c.vat_id ?? prev.vat_id,
+              reverse_charge: c.reverse_charge ?? prev.reverse_charge,
             };
           });
           try {
@@ -711,6 +714,9 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
                 signup_source: c.signup_source ?? parsed.customer?.signup_source,
                 show_demo_portal: c.show_demo_portal,
                 has_paid_customer_batch: c.has_paid_customer_batch,
+                country: c.country ?? parsed.customer?.country,
+                vat_id: c.vat_id ?? parsed.customer?.vat_id,
+                reverse_charge: c.reverse_charge ?? parsed.customer?.reverse_charge,
               };
               localStorage.setItem('warmeleads-portal-auth', JSON.stringify(parsed));
             }

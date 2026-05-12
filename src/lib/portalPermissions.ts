@@ -125,6 +125,11 @@ export interface PortalSession {
     portal_active: boolean;
     demo_mode?: boolean;
     signup_source?: string | null;
+    /** Facturatie-land (NL/BE); default NL. */
+    country?: string;
+    vat_id?: string | null;
+    /** BE + geldig BE-BTW-nummer: intracommunautair, geen NL-BTW op factuur. */
+    reverse_charge?: boolean;
   };
   portalUser?: PortalUser;
   isOwner: boolean;

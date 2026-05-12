@@ -16,6 +16,7 @@ import {
   PaperClipIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch, adminHeaders } from '@/lib/adminAuth';
+import { computeInvoiceVat } from '@/lib/invoiceVat';
 
 interface Invoice {
   id: string;
@@ -31,6 +32,7 @@ interface Invoice {
   btw_percentage: number;
   btw_amount: number;
   total_incl_btw: number;
+  vat_mode?: string;
   mollie_payment_id: string | null;
   status: string;
   paid_at: string | null;
@@ -40,7 +42,7 @@ interface Invoice {
   uploaded_pdf_path: string | null;
 }
 
-interface Customer { id: string; name: string; email: string }
+interface Customer { id: string; name: string; email: string; country?: string | null; vat_id?: string | null }
 
 export default function AdminInvoicesPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -66,7 +68,13 @@ export default function AdminInvoicesPage() {
       if (res.ok) {
         const data = await res.json();
         const list = data.customers || (Array.isArray(data) ? data : []);
-        setCustomers(list.map((c: Record<string, string>) => ({ id: c.id, name: c.name, email: c.email })));
+        setCustomers(list.map((c: Record<string, unknown>) => ({
+          id: String(c.id),
+          name: String(c.name),
+          email: String(c.email),
+          country: (c.country as string) ?? 'NL',
+          vat_id: (c.vat_id as string) || null,
+        })));
       }
     } catch { /* ignore */ }
   }, []);
@@ -195,6 +203,9 @@ export default function AdminInvoicesPage() {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5">
                         <span className="rounded bg-brand-purple/10 px-2 py-0.5 text-xs font-bold text-brand-purple">{inv.invoice_number}</span>
+                        {inv.vat_mode === 'reverse_charge_be' && (
+                          <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold text-sky-800" title="Intracommunautair">BE verlegd</span>
+                        )}
                         {inv.uploaded_pdf_path && <PaperClipIcon className="h-3.5 w-3.5 text-amber-500" title="Geüploade PDF" />}
                       </div>
                     </td>
@@ -290,6 +301,7 @@ export default function AdminInvoicesPage() {
           <EditInvoicePanel
             key="edit"
             invoice={editInvoice}
+            customers={customers}
             onClose={() => setEditInvoice(null)}
             onSaved={() => { setEditInvoice(null); fetchInvoices(); showToast('Factuur bijgewerkt'); }}
           />
@@ -321,7 +333,6 @@ function InvoicePanel({ customers, onClose, onSaved }: {
     customer_id: '',
     description: '',
     subtotal: '',
-    btw_percentage: '21',
     status: 'paid',
     paid_at: new Date().toISOString().split('T')[0],
   });
@@ -329,9 +340,20 @@ function InvoicePanel({ customers, onClose, onSaved }: {
   const [saving, setSaving] = useState(false);
 
   const sub = Number(form.subtotal) || 0;
-  const btwPct = Number(form.btw_percentage) || 21;
-  const btwAmount = Math.round(sub * (btwPct / 100) * 100) / 100;
-  const total = sub + btwAmount;
+  const selectedCustomer = useMemo(() => customers.find(c => c.id === form.customer_id), [customers, form.customer_id]);
+  const vatPrev = useMemo(
+    () =>
+      computeInvoiceVat({
+        subtotalExclBtw: sub,
+        country: selectedCustomer?.country,
+        customerVatId: selectedCustomer?.vat_id,
+      }),
+    [sub, selectedCustomer?.country, selectedCustomer?.vat_id],
+  );
+  const btwAmount = vatPrev.btw_amount;
+  const total = vatPrev.total_incl_btw;
+  const btwLabel = vatPrev.vat_mode === 'reverse_charge_be' ? 'BTW (verlegd)' : `BTW ${vatPrev.btw_percentage}%`;
+  const totalLabel = vatPrev.vat_mode === 'reverse_charge_be' ? 'Totaal' : 'Totaal incl. BTW';
 
   const save = async () => {
     if (!form.customer_id || !form.description || sub <= 0) return;
@@ -343,7 +365,6 @@ function InvoicePanel({ customers, onClose, onSaved }: {
           customer_id: form.customer_id,
           description: form.description,
           subtotal: sub,
-          btw_percentage: btwPct,
           status: form.status,
           paid_at: form.paid_at ? new Date(form.paid_at).toISOString() : null,
         }),
@@ -405,21 +426,14 @@ function InvoicePanel({ customers, onClose, onSaved }: {
               className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="mb-1 block text-xs font-medium text-slate-500">Bedrag excl. BTW *</label>
-              <input type="number" step="0.01" min="0" value={form.subtotal}
-                onChange={e => setForm(f => ({ ...f, subtotal: e.target.value }))}
-                placeholder="0.00"
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-slate-500">BTW %</label>
-              <input type="number" step="0.01" value={form.btw_percentage}
-                onChange={e => setForm(f => ({ ...f, btw_percentage: e.target.value }))}
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
-            </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-500">Bedrag excl. BTW *</label>
+            <input type="number" step="0.01" min="0" value={form.subtotal}
+              onChange={e => setForm(f => ({ ...f, subtotal: e.target.value }))}
+              placeholder="0.00"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
           </div>
+          <p className="text-[11px] text-slate-400 -mt-2">BTW wordt automatisch bepaald o.b.v. het facturatie-land en BTW-nummer van de klant in het klantenbestand.</p>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -470,11 +484,11 @@ function InvoicePanel({ customers, onClose, onSaved }: {
                 <span>&euro;{sub.toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-sm text-slate-600">
-                <span>BTW {btwPct}%</span>
+                <span>{btwLabel}</span>
                 <span>&euro;{btwAmount.toFixed(2)}</span>
               </div>
               <div className="flex justify-between border-t border-slate-200 pt-1.5 text-sm font-bold text-slate-900">
-                <span>Totaal incl. BTW</span>
+                <span>{totalLabel}</span>
                 <span>&euro;{total.toFixed(2)}</span>
               </div>
             </div>
@@ -494,8 +508,9 @@ function InvoicePanel({ customers, onClose, onSaved }: {
 
 /* ─── Edit Invoice Panel ──────────────────────────────── */
 
-function EditInvoicePanel({ invoice, onClose, onSaved }: {
+function EditInvoicePanel({ invoice, customers, onClose, onSaved }: {
   invoice: Invoice;
+  customers: Customer[];
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -506,7 +521,6 @@ function EditInvoicePanel({ invoice, onClose, onSaved }: {
     customer_address: invoice.customer_address || '',
     customer_vat_id: invoice.customer_vat_id || '',
     subtotal: String(invoice.subtotal),
-    btw_percentage: String(invoice.btw_percentage),
     status: invoice.status,
     paid_at: invoice.paid_at ? invoice.paid_at.split('T')[0] : '',
   });
@@ -516,9 +530,20 @@ function EditInvoicePanel({ invoice, onClose, onSaved }: {
   const [uploading, setUploading] = useState(false);
 
   const sub = Number(form.subtotal) || 0;
-  const btwPct = Number(form.btw_percentage) || 21;
-  const btwAmount = Math.round(sub * (btwPct / 100) * 100) / 100;
-  const total = sub + btwAmount;
+  const linkedCustomer = useMemo(() => customers.find(c => c.id === invoice.customer_id), [customers, invoice.customer_id]);
+  const vatPrev = useMemo(
+    () =>
+      computeInvoiceVat({
+        subtotalExclBtw: sub,
+        country: linkedCustomer?.country,
+        customerVatId: linkedCustomer?.vat_id,
+      }),
+    [sub, linkedCustomer?.country, linkedCustomer?.vat_id],
+  );
+  const btwAmount = vatPrev.btw_amount;
+  const total = vatPrev.total_incl_btw;
+  const btwLabel = vatPrev.vat_mode === 'reverse_charge_be' ? 'BTW (verlegd)' : `BTW ${vatPrev.btw_percentage}%`;
+  const totalLabel = vatPrev.vat_mode === 'reverse_charge_be' ? 'Totaal' : 'Totaal incl. BTW';
 
   const save = async () => {
     setSaving(true);
@@ -533,7 +558,6 @@ function EditInvoicePanel({ invoice, onClose, onSaved }: {
           customer_address: form.customer_address || null,
           customer_vat_id: form.customer_vat_id || null,
           subtotal: sub,
-          btw_percentage: btwPct,
           status: form.status,
           paid_at: form.paid_at ? new Date(form.paid_at).toISOString() : null,
         }),
@@ -634,20 +658,13 @@ function EditInvoicePanel({ invoice, onClose, onSaved }: {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="mb-1 block text-xs font-medium text-slate-500">Bedrag excl. BTW</label>
-              <input type="number" step="0.01" min="0" value={form.subtotal}
-                onChange={e => setForm(f => ({ ...f, subtotal: e.target.value }))}
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-slate-500">BTW %</label>
-              <input type="number" step="0.01" value={form.btw_percentage}
-                onChange={e => setForm(f => ({ ...f, btw_percentage: e.target.value }))}
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
-            </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-500">Bedrag excl. BTW</label>
+            <input type="number" step="0.01" min="0" value={form.subtotal}
+              onChange={e => setForm(f => ({ ...f, subtotal: e.target.value }))}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
           </div>
+          <p className="text-[11px] text-slate-400 -mt-2">BTW herberekend server-side o.b.v. klant in klantenbestand (land + BTW-nummer).</p>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -673,11 +690,11 @@ function EditInvoicePanel({ invoice, onClose, onSaved }: {
               <span>&euro;{sub.toFixed(2)}</span>
             </div>
             <div className="flex justify-between text-sm text-slate-600">
-              <span>BTW {btwPct}%</span>
+              <span>{btwLabel}</span>
               <span>&euro;{btwAmount.toFixed(2)}</span>
             </div>
             <div className="flex justify-between border-t border-slate-200 pt-1.5 text-sm font-bold text-slate-900">
-              <span>Totaal incl. BTW</span>
+              <span>{totalLabel}</span>
               <span>&euro;{total.toFixed(2)}</span>
             </div>
           </div>

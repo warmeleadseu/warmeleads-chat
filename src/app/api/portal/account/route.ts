@@ -4,6 +4,7 @@ import { createServerClient } from '@/lib/supabase';
 import { hasPermission, forbidden, PERMISSIONS } from '@/lib/portalPermissions';
 import bcrypt from 'bcryptjs';
 import { getHasPaidCustomerBatch, shouldUseDemoPortalExperience } from '@/lib/demoPortalEligibility';
+import { qualifiesBelgiumReverseCharge } from '@/lib/invoiceVat';
 
 export async function GET(request: NextRequest) {
   const session = await verifyCustomer(request);
@@ -15,7 +16,7 @@ export async function GET(request: NextRequest) {
 
   const { data, error } = await supabase
     .from('customers')
-    .select('name, contact_person, email, phone, branches, email_notifications, notification_frequency, created_at, account_manager_id, demo_mode, signup_source')
+    .select('name, contact_person, email, phone, branches, email_notifications, notification_frequency, created_at, account_manager_id, demo_mode, signup_source, country, vat_id')
     .eq('id', customer.id)
     .single();
 
@@ -41,10 +42,14 @@ export async function GET(request: NextRequest) {
     if (am) accountManager = am;
   }
 
-  const { account_manager_id: _amId, ...customerData } = data;
+  const { account_manager_id: _amId, country, vat_id, ...customerData } = data;
+  const reverse_charge = qualifiesBelgiumReverseCharge({ country, vat_id });
   return NextResponse.json({
     customer: {
       ...customerData,
+      country: country ?? 'NL',
+      vat_id: vat_id ?? null,
+      reverse_charge,
       has_paid_customer_batch: hasPaidCustomerBatch,
       show_demo_portal,
     },
@@ -138,7 +143,7 @@ export async function PUT(request: NextRequest) {
 
     const { data: updated } = await supabase
       .from('customers')
-      .select('name, contact_person, email, phone, branches, email_notifications, notification_frequency, created_at, demo_mode, signup_source')
+      .select('name, contact_person, email, phone, branches, email_notifications, notification_frequency, created_at, demo_mode, signup_source, country, vat_id')
       .eq('id', customer.id)
       .single();
 
@@ -153,9 +158,11 @@ export async function PUT(request: NextRequest) {
       hasPaidCustomerBatch,
     });
 
+    const reverse_charge = qualifiesBelgiumReverseCharge({ country: updated.country, vat_id: updated.vat_id });
     return NextResponse.json({
       customer: {
         ...updated,
+        reverse_charge,
         has_paid_customer_batch: hasPaidCustomerBatch,
         show_demo_portal,
       },

@@ -4,6 +4,7 @@ import { createServerClient } from '@/lib/supabase';
 import { hasPermission, forbidden, PERMISSIONS } from '@/lib/portalPermissions';
 import { createBatchPayment } from '@/lib/mollie';
 import { calculatePricePerLead, mergeCustomTiers } from '@/lib/pricing';
+import { computeInvoiceVat, mollieBtwLabel } from '@/lib/invoiceVat';
 
 export async function GET(request: NextRequest) {
   const session = await verifyCustomer(request);
@@ -49,7 +50,7 @@ export async function POST(request: NextRequest) {
 
     const { data: custData } = await supabase
       .from('customers')
-      .select('id, name, email, contact_person, welcome_offer_used, welcome_offer_expires_at')
+      .select('id, name, email, contact_person, welcome_offer_used, welcome_offer_expires_at, country, vat_id')
       .eq('id', customer.id)
       .single();
 
@@ -69,8 +70,13 @@ export async function POST(request: NextRequest) {
       const branch = 'niche_research';
       const price_per_lead = RESEARCH_EXCL;
       const total_price = RESEARCH_EXCL;
-      const btw_amount = Math.round(total_price * 0.21 * 100) / 100;
-      const total_incl_btw = total_price + btw_amount;
+      const nicheVat = computeInvoiceVat({
+        subtotalExclBtw: total_price,
+        country: custData.country,
+        customerVatId: custData.vat_id,
+      });
+      const total_incl_btw = nicheVat.total_incl_btw;
+      const mollieVatPhrase = mollieBtwLabel(nicheVat.vat_mode);
 
       const combinedNotes = [
         `[Onderzoeksbatch] ${nicheTitle}`,
@@ -112,7 +118,7 @@ export async function POST(request: NextRequest) {
         payment = await createBatchPayment({
           orderId: order.id,
           amount: total_incl_btw,
-          description: `WarmeLeads onderzoeksbatch: ${nicheTitle} (incl. 21% BTW)`,
+          description: `WarmeLeads onderzoeksbatch: ${nicheTitle} (${mollieVatPhrase})`,
           redirectUrl: `${baseUrl}/portal/bestellen?order=${order.id}&status=redirect`,
           webhookUrl: `${baseUrl}/api/webhooks/mollie`,
           customerEmail: custData.email,
@@ -246,8 +252,13 @@ export async function POST(request: NextRequest) {
     const subtotalBeforeDiscount = Number(price_per_lead) * batch_size;
     const discountAmount = welcomeEligible ? Math.round(subtotalBeforeDiscount * 0.20 * 100) / 100 : 0;
     const total_price = subtotalBeforeDiscount - discountAmount;
-    const btw_amount = Math.round(total_price * 0.21 * 100) / 100;
-    const total_incl_btw = total_price + btw_amount;
+    const leadsVat = computeInvoiceVat({
+      subtotalExclBtw: total_price,
+      country: custData.country,
+      customerVatId: custData.vat_id,
+    });
+    const total_incl_btw = leadsVat.total_incl_btw;
+    const mollieLeadsVatPhrase = mollieBtwLabel(leadsVat.vat_mode);
 
     const { data: order, error: orderErr } = await supabase
       .from('batch_orders')
@@ -285,7 +296,7 @@ export async function POST(request: NextRequest) {
       payment = await createBatchPayment({
         orderId: order.id,
         amount: total_incl_btw,
-        description: `WarmeLeads batch: ${batch_size} ${branchName} leads${discountLabel} (incl. 21% BTW)`,
+        description: `WarmeLeads batch: ${batch_size} ${branchName} leads${discountLabel} (${mollieLeadsVatPhrase})`,
         redirectUrl: `${baseUrl}/portal/bestellen?order=${order.id}&status=redirect`,
         webhookUrl: `${baseUrl}/api/webhooks/mollie`,
         customerEmail: custData.email,

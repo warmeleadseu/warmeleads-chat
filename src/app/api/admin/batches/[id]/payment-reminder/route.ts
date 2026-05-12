@@ -44,7 +44,7 @@ export async function POST(
   const [{ data: customer, error: customerError }, { data: branchRow }] = await Promise.all([
     supabase
       .from('customers')
-      .select('id, name, email, contact_person')
+      .select('id, name, email, contact_person, country, vat_id')
       .eq('id', batch.customer_id)
       .single(),
     supabase

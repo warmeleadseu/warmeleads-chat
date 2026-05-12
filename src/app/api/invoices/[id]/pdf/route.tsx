@@ -84,6 +84,7 @@ export async function GET(
     btw_percentage: Number(invoice.btw_percentage),
     btw_amount: Number(invoice.btw_amount),
     total_incl_btw: Number(invoice.total_incl_btw),
+    vat_mode: (invoice as { vat_mode?: string }).vat_mode === 'reverse_charge_be' ? 'reverse_charge_be' : 'domestic_nl',
     mollie_payment_id: invoice.mollie_payment_id,
   };
 

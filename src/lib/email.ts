@@ -1,5 +1,6 @@
 import { Resend } from 'resend';
 import { createServerClient } from '@/lib/supabase';
+import { computeInvoiceVat } from '@/lib/invoiceVat';
 
 let _resend: Resend | null = null;
 function getResend(): Resend | null {
@@ -158,6 +159,8 @@ interface Customer {
   name: string;
   email: string;
   contact_person?: string;
+  country?: string | null;
+  vat_id?: string | null;
 }
 
 interface LeadInfo {
@@ -568,15 +571,22 @@ export async function sendUnpaidBatchReminderEmail(
   const greeting = customer.contact_person || customer.name;
   const portalAccountInvoicesUrl = `${BASE_URL}/portal/account?tab=invoices`;
   const subtotal = Number(batch.total_price || 0);
-  const btwAmount = Math.round(subtotal * 0.21 * 100) / 100;
-  const totalInclBtw = subtotal + btwAmount;
+  const vat = computeInvoiceVat({
+    subtotalExclBtw: subtotal,
+    country: customer.country,
+    customerVatId: customer.vat_id,
+  });
+  const btwAmount = vat.btw_amount;
+  const totalInclBtw = vat.total_incl_btw;
+  const btwRowLabel = vat.vat_mode === 'reverse_charge_be' ? 'BTW (verlegd)' : 'BTW 21%';
+  const totalRowLabel = vat.vat_mode === 'reverse_charge_be' ? 'Totaal' : 'Totaal incl. BTW';
 
   const pricingRows = batch.price_per_lead
     ? row('Prijs per lead (excl. BTW)', `&euro;${Number(batch.price_per_lead).toFixed(2)}`) +
       row('Subtotaal excl. BTW', `&euro;${subtotal.toFixed(2)}`) +
-      row('BTW 21%', `&euro;${btwAmount.toFixed(2)}`) +
+      row(btwRowLabel, `&euro;${btwAmount.toFixed(2)}`) +
       `<tr>
-        <td style="padding:16px 20px;font-size:15px;color:#3B2F75;font-weight:700;border-bottom:none">Totaal incl. BTW</td>
+        <td style="padding:16px 20px;font-size:15px;color:#3B2F75;font-weight:700;border-bottom:none">${totalRowLabel}</td>
         <td style="padding:16px 20px;font-size:18px;color:#3B2F75;font-weight:800;text-align:right;border-bottom:none">&euro;${totalInclBtw.toFixed(2)}</td>
       </tr>`
     : row('Prijs', 'Bekijk bedrag in je portaal');
@@ -621,8 +631,19 @@ export async function sendOrderConfirmationEmail(
   const branchLabel = order.branch_name || order.branch;
   const greeting = customer.contact_person || customer.name;
   const subtotal = Number(order.total_price);
-  const btwAmount = Math.round(subtotal * 0.21 * 100) / 100;
-  const totalInclBtw = subtotal + btwAmount;
+  const vat = computeInvoiceVat({
+    subtotalExclBtw: subtotal,
+    country: customer.country,
+    customerVatId: customer.vat_id,
+  });
+  const btwAmount = vat.btw_amount;
+  const totalInclBtw = vat.total_incl_btw;
+  const btwRowLabel = vat.vat_mode === 'reverse_charge_be' ? 'BTW (verlegd)' : 'BTW 21%';
+  const totalRowLabel = vat.vat_mode === 'reverse_charge_be' ? 'Totaal' : 'Totaal incl. BTW';
+  const reverseNote =
+    vat.vat_mode === 'reverse_charge_be'
+      ? `<p style="margin:12px 0 0;font-size:12px;color:#64748b;line-height:1.5">Intracommunautaire levering: Nederlandse BTW is verlegd naar u als Belgische ondernemer (reverse charge).</p>`
+      : '';
 
   const content = `
     <p style="margin:0 0 20px">${statusBadge('&#10003; BEVESTIGD', 'green')}</p>
@@ -633,13 +654,14 @@ export async function sendOrderConfirmationEmail(
       row('Batch grootte', `<strong style="color:#0f172a">${order.batch_size}</strong> leads`) +
       (order.price_per_lead ? row('Prijs per lead (excl. BTW)', `&euro;${Number(order.price_per_lead).toFixed(2)}`) : '') +
       row('Subtotaal excl. BTW', `&euro;${subtotal.toFixed(2)}`) +
-      row('BTW 21%', `&euro;${btwAmount.toFixed(2)}`) +
+      row(btwRowLabel, `&euro;${btwAmount.toFixed(2)}`) +
       `<tr>
-        <td style="padding:16px 20px;font-size:15px;color:#3B2F75;font-weight:700;border-bottom:none">Totaal incl. BTW</td>
+        <td style="padding:16px 20px;font-size:15px;color:#3B2F75;font-weight:700;border-bottom:none">${totalRowLabel}</td>
         <td style="padding:16px 20px;font-size:18px;color:#3B2F75;font-weight:800;text-align:right;border-bottom:none">&euro;${totalInclBtw.toFixed(2)}</td>
       </tr>`,
       'Bestelgegevens',
     )}
+    ${reverseNote}
     ${cta('Bekijk in portaal &rarr;', `${BASE_URL}/portal`)}`;
 
   return sendEmail(

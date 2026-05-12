@@ -2,6 +2,7 @@ import { createServerClient } from '@/lib/supabase';
 import { sendEmail } from '@/lib/email';
 import type { InvoiceLineItem } from '@/lib/invoicePdf';
 import { ensureInvoiceMollieCheckout } from '@/lib/invoiceCheckout';
+import { computeInvoiceVat } from '@/lib/invoiceVat';
 
 const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.warmeleads.eu';
 
@@ -74,7 +75,7 @@ export async function createInvoice(params: CreateInvoiceParams) {
 
   const { data: customer, error: custErr } = await supabase
     .from('customers')
-    .select('id, name, email, contact_person, street, house_number, postcode, city, vat_id, kvk_nummer')
+    .select('id, name, email, contact_person, street, house_number, postcode, city, vat_id, kvk_nummer, country')
     .eq('id', params.customer_id)
     .single();
 
@@ -88,17 +89,20 @@ export async function createInvoice(params: CreateInvoiceParams) {
   ].filter(Boolean).join('\n') || null;
 
   const subtotal = Number(params.total_price);
-  const btwPercentage = 21;
-  const btwAmount = Math.round(subtotal * (btwPercentage / 100) * 100) / 100;
-  const totalInclBtw = subtotal + btwAmount;
+  const vat = computeInvoiceVat({
+    subtotalExclBtw: subtotal,
+    country: customer.country,
+    customerVatId: customer.vat_id,
+  });
+  const { vat_mode: vatMode, btw_percentage: btwPercentage, btw_amount: btwAmount, total_incl_btw: totalInclBtw } = vat;
 
   const isNiche = params.invoice_product === 'niche_research';
   const isBulk = params.invoice_product === 'bulk_leads';
   const nicheLabel = (params.niche_title || '').trim();
   const lineDescription = isNiche
-    ? `Onderzoeksbatch niche-onderzoek${nicheLabel ? `: ${nicheLabel}` : ''} (€${subtotal.toFixed(2).replace('.', ',')} excl. btw)`
+    ? `Onderzoeksbatch niche-onderzoek${nicheLabel ? `: ${nicheLabel}` : ''} (€${subtotal.toFixed(2).replace('.', ',')} excl. btw${vatMode === 'reverse_charge_be' ? ', BTW verlegd' : ''})`
     : isBulk
-      ? `Bulk-leads pakket ${params.branch_name}: ${params.batch_size} leads (€${subtotal.toFixed(2).replace('.', ',')} excl. btw)`
+      ? `Bulk-leads pakket ${params.branch_name}: ${params.batch_size} leads (€${subtotal.toFixed(2).replace('.', ',')} excl. btw${vatMode === 'reverse_charge_be' ? ', BTW verlegd' : ''})`
       : `${params.branch_name} leads`;
 
   const invoiceSummaryDescription = isNiche
@@ -138,6 +142,7 @@ export async function createInvoice(params: CreateInvoiceParams) {
       btw_percentage: btwPercentage,
       btw_amount: btwAmount,
       total_incl_btw: totalInclBtw,
+      vat_mode: vatMode,
       mollie_payment_id: params.mollie_payment_id || null,
       status: invoiceStatus,
       paid_at: isPaid ? (params.paid_at || now) : null,
@@ -291,7 +296,7 @@ export async function resendOpenInvoiceWithPaymentLinks(invoiceId: string): Prom
 
 export async function sendOpenInvoiceEmail(
   customer: { name: string; email: string; contact_person?: string },
-  invoice: { invoice_number: string; total_incl_btw: number; description: string; id: string },
+  invoice: { invoice_number: string; total_incl_btw: number; description: string; id: string; vat_mode?: string },
   directCheckoutUrl?: string,
   options?: SendOpenInvoiceEmailOptions,
 ): Promise<boolean> {
@@ -309,6 +314,11 @@ export async function sendOpenInvoiceEmail(
     ? `<p style="margin:0 0 12px;font-size:15px;color:#475569;line-height:1.7">We hebben zojuist een <strong>nieuwe lead-batch</strong> voor je aangemaakt: <strong>${nb.batch_size} leads</strong> voor <strong>${esc(nb.branch_name)}</strong>.</p>
               <p style="margin:0 0 28px;font-size:15px;color:#475569;line-height:1.7">Hieronder vind je de bijbehorende openstaande factuur. Betaal direct via de oranje knop (iDEAL / kaart), of open je portaal onder het tabblad Facturen — allebei dezelfde veilige Mollie-betaallink.</p>`
     : `<p style="margin:0 0 28px;font-size:15px;color:#475569;line-height:1.7">Er staat een nieuwe factuur voor je klaar.</p>`;
+
+  const openReverseNote =
+    invoice.vat_mode === 'reverse_charge_be'
+      ? '<p style="margin:0 0 16px;font-size:12px;color:#64748b;line-height:1.6">Op deze factuur is <strong>geen Nederlandse BTW</strong> verschuldigd (intracommunautaire levering; BTW verlegd naar de Belgische afnemer).</p>'
+      : '';
 
   const fullHtml = `<!DOCTYPE html>
 <html lang="nl">
@@ -346,6 +356,7 @@ export async function sendOpenInvoiceEmail(
                   </table>
                 </td></tr>
               </table>
+              ${openReverseNote}
               <p style="margin:0 0 24px;font-size:14px;color:#64748b;line-height:1.7">Betaal veilig online via de knop hieronder, of open je portaal onder het tabblad Facturen. Na betaling wordt een gekoppelde lead-batch direct geactiveerd.</p>
               ${directCheckoutUrl ? `
               <table cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom:12px">
@@ -393,13 +404,46 @@ export async function sendOpenInvoiceEmail(
 
 function sendInvoiceEmail(
   customer: { name: string; email: string; contact_person?: string },
-  invoice: { invoice_number: string; total_incl_btw: number; description: string; id: string },
+  invoice: {
+    invoice_number: string;
+    total_incl_btw: number;
+    description: string;
+    id: string;
+    subtotal?: number;
+    btw_amount?: number;
+    btw_percentage?: number;
+    vat_mode?: string;
+  },
 ) {
   const portalUrl = `${BASE_URL}/portal/account`;
   const logoUrl = `${BASE_URL}/warmeleads-logo-2026.png`;
   const greeting = customer.contact_person || customer.name;
   const year = new Date().getFullYear();
-
+  const isReverse = invoice.vat_mode === 'reverse_charge_be';
+  const sub = Number(invoice.subtotal ?? invoice.total_incl_btw);
+  const btw = Number(invoice.btw_amount ?? 0);
+  const btwPct = Number(invoice.btw_percentage ?? (isReverse ? 0 : 21));
+  const totalLabel = isReverse ? 'Totaal' : 'Totaal incl. BTW';
+  const amountRows = isReverse
+    ? `<tr>
+                      <td colspan="2" style="padding:12px 20px;font-size:11px;color:#64748b;line-height:1.5;border-bottom:1px solid #f1f5f9">Intracommunautaire levering: BTW verlegd naar de Belgische afnemer (reverse charge).</td>
+                    </tr>
+                    <tr>
+                      <td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">Subtotaal excl. BTW</td>
+                      <td style="padding:12px 20px;font-size:14px;color:#0f172a;border-bottom:1px solid #f1f5f9">&euro;${sub.toFixed(2)}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">BTW (verlegd)</td>
+                      <td style="padding:12px 20px;font-size:14px;color:#0f172a;border-bottom:1px solid #f1f5f9">&euro;0,00</td>
+                    </tr>`
+    : `<tr>
+                      <td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">Subtotaal excl. BTW</td>
+                      <td style="padding:12px 20px;font-size:14px;color:#0f172a;border-bottom:1px solid #f1f5f9">&euro;${sub.toFixed(2)}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">BTW ${btwPct}%</td>
+                      <td style="padding:12px 20px;font-size:14px;color:#0f172a;border-bottom:1px solid #f1f5f9">&euro;${btw.toFixed(2)}</td>
+                    </tr>`;
   const fullHtml = `<!DOCTYPE html>
 <html lang="nl">
 <head>
@@ -459,8 +503,9 @@ function sendInvoiceEmail(
                       <td style="padding:14px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">Status</td>
                       <td style="padding:14px 20px;font-size:14px;border-bottom:1px solid #f1f5f9"><span style="color:#059669;font-weight:600">Betaald</span></td>
                     </tr>
+                    ${amountRows}
                     <tr>
-                      <td style="padding:16px 20px;font-size:15px;color:#3B2F75;font-weight:700">Totaal incl. BTW</td>
+                      <td style="padding:16px 20px;font-size:15px;color:#3B2F75;font-weight:700">${totalLabel}</td>
                       <td style="padding:16px 20px;font-size:18px;color:#3B2F75;font-weight:800;text-align:right">&euro;${Number(invoice.total_incl_btw).toFixed(2)}</td>
                     </tr>
                   </table>
@@ -517,10 +562,20 @@ export async function sendNewBatchAdminEmail(params: {
   /** Optioneel: onderzoeksbatch (€1.000 pakket) — duidelijkere onderwerpregel en tabel. */
   batch_kind?: 'leads' | 'niche_research' | 'bulk_leads';
   niche_title?: string | null;
+  /** Voor correcte BTW-regel in admin-mail (standaard NL). */
+  billing_country?: string | null;
+  billing_vat_id?: string | null;
 }) {
   const subtotal = Number(params.total_price);
-  const btwAmount = Math.round(subtotal * 0.21 * 100) / 100;
-  const totalInclBtw = subtotal + btwAmount;
+  const vat = computeInvoiceVat({
+    subtotalExclBtw: subtotal,
+    country: params.billing_country,
+    customerVatId: params.billing_vat_id,
+  });
+  const btwAmount = vat.btw_amount;
+  const totalInclBtw = vat.total_incl_btw;
+  const btwRowLabel = vat.vat_mode === 'reverse_charge_be' ? 'BTW (verlegd)' : 'BTW 21%';
+  const totalRowLabel = vat.vat_mode === 'reverse_charge_be' ? 'Totaal' : 'Totaal incl. BTW';
   const logoUrl = `${BASE_URL}/warmeleads-logo-2026.png`;
   const year = new Date().getFullYear();
   const isNiche = params.batch_kind === 'niche_research';
@@ -567,8 +622,8 @@ export async function sendNewBatchAdminEmail(params: {
                     <tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">${isNiche ? 'Omvang' : 'Batch grootte'}</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;font-weight:600;border-bottom:1px solid #f1f5f9">${isNiche ? '1 onderzoekspakket (geen lead-staffel)' : `${params.batch_size} leads`}</td></tr>
                     <tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">${isNiche ? 'Pakketprijs excl. btw' : 'Prijs per lead'}</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;border-bottom:1px solid #f1f5f9">&euro;${Number(params.price_per_lead).toFixed(2)}${isNiche ? ' <span style="font-size:12px;color:#64748b;font-weight:400">(vast tarief)</span>' : ''}</td></tr>
                     <tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">Subtotaal excl. BTW</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;border-bottom:1px solid #f1f5f9">&euro;${subtotal.toFixed(2)}</td></tr>
-                    <tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">BTW 21%</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;border-bottom:1px solid #f1f5f9">&euro;${btwAmount.toFixed(2)}</td></tr>
-                    <tr><td style="padding:16px 20px;font-size:15px;color:#3B2F75;font-weight:700;border-bottom:1px solid #f1f5f9">Totaal incl. BTW</td><td style="padding:16px 20px;font-size:18px;color:#3B2F75;font-weight:800;text-align:right;border-bottom:1px solid #f1f5f9">&euro;${totalInclBtw.toFixed(2)}</td></tr>
+                    <tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">${btwRowLabel}</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;border-bottom:1px solid #f1f5f9">&euro;${btwAmount.toFixed(2)}</td></tr>
+                    <tr><td style="padding:16px 20px;font-size:15px;color:#3B2F75;font-weight:700;border-bottom:1px solid #f1f5f9">${totalRowLabel}</td><td style="padding:16px 20px;font-size:18px;color:#3B2F75;font-weight:800;text-align:right;border-bottom:1px solid #f1f5f9">&euro;${totalInclBtw.toFixed(2)}</td></tr>
                     <tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">Bron</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;border-bottom:1px solid #f1f5f9">${sourceLabel}</td></tr>
                     <tr><td style="padding:12px 20px;font-size:14px;color:#64748b">Betaalstatus</td><td style="padding:12px 20px;font-size:14px;font-weight:700;color:${params.is_paid ? '#059669' : '#dc2626'}">${params.is_paid ? 'Betaald' : 'Onbetaald'}</td></tr>
                   </table>
