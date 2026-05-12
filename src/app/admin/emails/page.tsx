@@ -66,6 +66,7 @@ const TYPE_LABELS: Record<string, string> = {
   booking_admin: 'Afspraak (admin)',
   booking_cancelled: 'Afspraak geannuleerd',
   portal_reminder: 'Portaal herinnering',
+  am_portal_reminder: 'Portaal herinnering',
   test_resend: 'Test verzending',
   unknown: 'Onbekend',
 };
@@ -84,7 +85,7 @@ function typeColor(type: string): string {
   if (type.includes('digest') || type === 'weekly_report') return 'bg-amber-100 text-amber-700';
   if (type === 'mollie_error') return 'bg-red-100 text-red-700';
   if (type === 'test_resend') return 'bg-indigo-100 text-indigo-700';
-  if (type === 'portal_reminder') return 'bg-sky-100 text-sky-700';
+  if (type === 'portal_reminder' || type === 'am_portal_reminder') return 'bg-sky-100 text-sky-700';
   return 'bg-slate-100 text-slate-700';
 }
 

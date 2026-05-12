@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
-import { sendEmail } from '@/lib/email';
+import { dispatchEmail } from '@/lib/email';
 
 export async function POST(request: NextRequest) {
   const admin = await verifyAdmin(request);
@@ -99,14 +99,16 @@ export async function POST(request: NextRequest) {
 </body>
 </html>`;
 
-    const sent = await sendEmail(
-      customer.email,
-      'Je WarmeLeads portaal staat klaar!',
-      html,
-      { type: 'portal_reminder', toName: customer.contact_person || customer.name, metadata: { customer_id: customer.id } },
-    );
+    const result = await dispatchEmail(customer.email, 'Je WarmeLeads portaal staat klaar!', html, {
+      type: 'am_portal_reminder',
+      toName: customer.contact_person || customer.name,
+      customerId: customer.id,
+      fromAdminId: admin.id,
+      metadata: { customer_id: customer.id },
+      bodyText: 'Uitnodiging voor het WarmeLeads klantportaal (inloggegevens in de HTML-versie).',
+    });
 
-    if (!sent) {
+    if (!result.ok) {
       return NextResponse.json({ error: 'E-mail versturen mislukt' }, { status: 500 });
     }
 
