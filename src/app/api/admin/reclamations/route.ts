@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
+import { digitsOnlyPhone, phoneSearchDigitVariants } from '@/lib/phoneSearch';
 
 export async function GET(request: NextRequest) {
   const admin = await verifyAdmin(request);
@@ -57,14 +58,23 @@ export async function GET(request: NextRequest) {
 
   if (search) {
     const s = search.toLowerCase();
+    const phoneVariants = phoneSearchDigitVariants(search);
     const filtered = reclamations.filter(r => {
       const custName = (r.customers as { name?: string })?.name?.toLowerCase() || '';
       const leadName = (r.leads as { naam_klant?: string })?.naam_klant?.toLowerCase() || '';
       const leadPhone = (r.leads as { telefoonnummer?: string })?.telefoonnummer || '';
+      const leadPhoneDigits = digitsOnlyPhone(leadPhone);
+      const phoneHit =
+        leadPhone.toLowerCase().includes(s) ||
+        phoneVariants.some(
+          v =>
+            v.length >= 3 &&
+            (leadPhoneDigits.includes(v) || v.includes(leadPhoneDigits)),
+        );
       return (
         custName.includes(s) ||
         leadName.includes(s) ||
-        leadPhone.includes(s) ||
+        phoneHit ||
         (r.reason || '').toLowerCase().includes(s) ||
         (r.description || '').toLowerCase().includes(s)
       );

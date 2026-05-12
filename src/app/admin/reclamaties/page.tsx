@@ -18,6 +18,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
 import { useAdmin } from '../adminContext';
+import { digitsOnlyPhone, phoneSearchDigitVariants } from '@/lib/phoneSearch';
 
 interface Reclamation {
   id: string;
@@ -90,11 +91,20 @@ export default function AdminReclamatiesPage() {
     if (statusFilter !== 'all') list = list.filter(r => r.status === statusFilter);
     if (search) {
       const s = search.toLowerCase();
+      const phoneVariants = phoneSearchDigitVariants(search);
       list = list.filter(r => {
         const custName = r.customers?.name?.toLowerCase() || '';
         const leadName = r.leads?.naam_klant?.toLowerCase() || '';
         const leadPhone = r.leads?.telefoonnummer || '';
-        return custName.includes(s) || leadName.includes(s) || leadPhone.includes(s) || (r.reason || '').includes(s);
+        const leadPhoneDigits = digitsOnlyPhone(leadPhone);
+        const phoneHit =
+          leadPhone.toLowerCase().includes(s) ||
+          phoneVariants.some(
+            v =>
+              v.length >= 3 &&
+              (leadPhoneDigits.includes(v) || v.includes(leadPhoneDigits)),
+          );
+        return custName.includes(s) || leadName.includes(s) || phoneHit || (r.reason || '').includes(s);
       });
     }
     return list;

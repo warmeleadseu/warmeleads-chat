@@ -4,6 +4,7 @@ import { createServerClient } from '@/lib/supabase';
 import { hasPermission, forbidden, PERMISSIONS } from '@/lib/portalPermissions';
 import { repairDemoAssignmentsIfNeeded } from '@/lib/demoPortalLeads';
 import { getHasPaidCustomerBatch, shouldUseDemoPortalExperience } from '@/lib/demoPortalEligibility';
+import { buildPhoneSearchIlikeClauses, sanitizePostgrestIlike } from '@/lib/phoneSearch';
 
 const PAGE_SIZE = 1000;
 const IN_CHUNK = 500;
@@ -220,7 +221,15 @@ export async function GET(request: NextRequest) {
   function applyFilters(q: any) {
     if (branch && branch !== 'all') q = q.eq('branch', branch);
     if (search) {
-      q = q.or(`naam_klant.ilike.%${search}%,email.ilike.%${search}%,telefoonnummer.ilike.%${search}%,postcode.ilike.%${search}%,plaatsnaam.ilike.%${search}%`);
+      const s = sanitizePostgrestIlike(search);
+      const parts = [
+        `naam_klant.ilike.%${s}%`,
+        `email.ilike.%${s}%`,
+        ...buildPhoneSearchIlikeClauses('telefoonnummer', search),
+        `postcode.ilike.%${s}%`,
+        `plaatsnaam.ilike.%${s}%`,
+      ];
+      q = q.or(parts.join(','));
     }
     // Demo template dates can fall outside a user's date filter; hiding all demos is confusing
     if (!demoMode) {

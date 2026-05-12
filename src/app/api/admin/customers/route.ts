@@ -3,6 +3,7 @@ import { createServerClient } from '@/lib/supabase';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import bcrypt from 'bcryptjs';
 import { logAudit } from '@/lib/audit';
+import { buildPhoneSearchIlikeClauses, sanitizePostgrestIlike } from '@/lib/phoneSearch';
 
 const DEFAULT_LIMIT = 25;
 const MAX_LIMIT = 100;
@@ -34,8 +35,15 @@ export async function GET(request: NextRequest) {
   }
 
   if (search) {
-    const sanitized = search.replace(/[%_\\]/g, c => `\\${c}`);
-    const searchFilter = `name.ilike.%${sanitized}%,contact_person.ilike.%${sanitized}%,email.ilike.%${sanitized}%,city.ilike.%${sanitized}%`;
+    const sanitized = sanitizePostgrestIlike(search);
+    const parts = [
+      `name.ilike.%${sanitized}%`,
+      `contact_person.ilike.%${sanitized}%`,
+      `email.ilike.%${sanitized}%`,
+      `city.ilike.%${sanitized}%`,
+      ...buildPhoneSearchIlikeClauses('phone', search),
+    ];
+    const searchFilter = parts.join(',');
     countQuery = countQuery.or(searchFilter);
     dataQuery = dataQuery.or(searchFilter);
   }

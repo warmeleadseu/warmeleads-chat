@@ -13,6 +13,7 @@ import {
   insertPartnerProspectFromEnrichedLeadRow,
   isPartnerProspectBranch,
 } from '@/lib/partnerProspectIngest';
+import { buildPhoneSearchIlikeClauses, sanitizePostgrestIlike } from '@/lib/phoneSearch';
 
 export async function GET(request: NextRequest) {
   const admin = await verifyAdmin(request);
@@ -83,7 +84,14 @@ export async function GET(request: NextRequest) {
   if (dateFrom) query = query.gte('wervingsdatum', dateFrom);
   if (dateTo) query = query.lte('wervingsdatum', dateTo);
   if (search) {
-    query = query.or(`naam_klant.ilike.%${search}%,email.ilike.%${search}%,telefoonnummer.ilike.%${search}%,postcode.ilike.%${search}%`);
+    const s = sanitizePostgrestIlike(search);
+    const parts = [
+      `naam_klant.ilike.%${s}%`,
+      `email.ilike.%${s}%`,
+      ...buildPhoneSearchIlikeClauses('telefoonnummer', search),
+      `postcode.ilike.%${s}%`,
+    ];
+    query = query.or(parts.join(','));
   }
 
   if (admin.role === 'accountmanager') {

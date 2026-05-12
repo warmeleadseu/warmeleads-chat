@@ -9,26 +9,27 @@ import {
   isValidStatus,
   PROSPECT_STATUSES,
 } from '@/lib/prospects';
+import { buildPhoneSearchIlikeClauses, phoneSearchDigitVariants, sanitizePostgrestIlike } from '@/lib/phoneSearch';
 
 const DEFAULT_LIMIT = 25;
 const MAX_LIMIT = 200;
 
 /**
- * PostgREST `.or()` filter: bedrijf, contact, e-mail, plaats, KVK, ruwe telefoon-string.
- * Genormaliseerde cijfer-match gaat via RPC `prospect_ids_by_phone_digits` (geen phone_digits-kolom vereist).
+ * PostgREST `.or()` filter: bedrijf, contact, e-mail, plaats, KVK, telefoon (NL-varianten 06/316/0031).
+ * Aanvullend: RPC `prospect_ids_by_phone_digits` per cijfer-variant (substring op genormaliseerde cijfers).
  */
 function buildProspectTextSearchOrFilter(searchRaw: string): string {
   const trimmed = searchRaw.trim();
   if (!trimmed) return '';
 
-  const sanitized = trimmed.replace(/[%_\\]/g, c => `\\${c}`);
+  const sanitized = sanitizePostgrestIlike(trimmed);
   return [
     `company_name.ilike.%${sanitized}%`,
     `contact_person.ilike.%${sanitized}%`,
     `email.ilike.%${sanitized}%`,
     `city.ilike.%${sanitized}%`,
     `kvk_nummer.ilike.%${sanitized}%`,
-    `phone.ilike.%${sanitized}%`,
+    ...buildPhoneSearchIlikeClauses('phone', trimmed),
   ].join(',');
 }
 
@@ -74,22 +75,25 @@ export async function GET(request: NextRequest) {
     const textFilter = buildProspectTextSearchOrFilter(search);
     let orFilter = textFilter;
 
-    const digitsOnly = search.replace(/\D/g, '');
-    if (digitsOnly.length >= 3) {
+    const digitIdSet = new Set<string>();
+    for (const variant of phoneSearchDigitVariants(search)) {
+      if (variant.length < 3) continue;
       const { data: digitIdRows, error: rpcErr } = await supabase.rpc('prospect_ids_by_phone_digits', {
-        digits: search,
+        digits: variant,
         p_am_id: isAccountManagerScope(admin) ? admin.id : null,
       });
       if (rpcErr) {
         console.warn('[prospects] prospect_ids_by_phone_digits RPC:', rpcErr.message);
       } else {
-        const digitIds = asUuidStringArray(digitIdRows);
-        if (digitIds.length > 0) {
-          const maxIds = 800;
-          const capped = digitIds.slice(0, maxIds);
-          orFilter = `${textFilter},id.in.(${capped.join(',')})`;
+        for (const id of asUuidStringArray(digitIdRows)) {
+          digitIdSet.add(id);
         }
       }
+    }
+    if (digitIdSet.size > 0) {
+      const maxIds = 800;
+      const capped = [...digitIdSet].slice(0, maxIds);
+      orFilter = `${textFilter},id.in.(${capped.join(',')})`;
     }
 
     if (orFilter) {

@@ -3,6 +3,7 @@ import { createServerClient } from '@/lib/supabase';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { logAudit } from '@/lib/audit';
 import { isBulkLeadsBatchKind, normalizeBatchKind } from '@/lib/batchKind';
+import { buildPhoneSearchIlikeClauses, sanitizePostgrestIlike } from '@/lib/phoneSearch';
 import * as XLSX from 'xlsx';
 
 const COLUMN_HEADERS = [
@@ -143,8 +144,14 @@ export async function POST(request: NextRequest) {
   if (date_from) query = query.gte('wervingsdatum', String(date_from));
   if (date_to) query = query.lte('wervingsdatum', String(date_to));
   if (search) {
-    const s = String(search);
-    query = query.or(`naam_klant.ilike.%${s}%,email.ilike.%${s}%,telefoonnummer.ilike.%${s}%,postcode.ilike.%${s}%`);
+    const s = sanitizePostgrestIlike(String(search));
+    const parts = [
+      `naam_klant.ilike.%${s}%`,
+      `email.ilike.%${s}%`,
+      ...buildPhoneSearchIlikeClauses('telefoonnummer', String(search)),
+      `postcode.ilike.%${s}%`,
+    ];
+    query = query.or(parts.join(','));
   }
   if (bulk_status === 'never') query = query.eq('bulk_export_count', 0);
   else if (bulk_status === 'once') query = query.eq('bulk_export_count', 1);

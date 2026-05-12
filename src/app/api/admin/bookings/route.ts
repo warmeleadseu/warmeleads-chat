@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
 import { sendEmail } from '@/lib/email';
+import { buildPhoneSearchIlikeClauses, sanitizePostgrestIlike } from '@/lib/phoneSearch';
 
 export async function GET(request: NextRequest) {
   const admin = await verifyAdmin(request);
@@ -24,7 +25,14 @@ export async function GET(request: NextRequest) {
   if (dateFrom) q = q.gte('date', dateFrom);
   if (dateTo) q = q.lte('date', dateTo);
   if (search) {
-    q = q.or(`name.ilike.%${search}%,email.ilike.%${search}%,company.ilike.%${search}%,phone.ilike.%${search}%`);
+    const s = sanitizePostgrestIlike(search);
+    const parts = [
+      `name.ilike.%${s}%`,
+      `email.ilike.%${s}%`,
+      `company.ilike.%${s}%`,
+      ...buildPhoneSearchIlikeClauses('phone', search),
+    ];
+    q = q.or(parts.join(','));
   }
 
   const { data, error } = await q;
