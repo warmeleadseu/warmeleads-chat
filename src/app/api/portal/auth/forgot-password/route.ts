@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { sendEmail } from '@/lib/email';
 import { rateLimit, getClientIp } from '@/lib/rateLimit';
+import { escapeForIlikeExact, pickEmailRow } from '@/lib/emailDbLookup';
 import crypto from 'crypto';
 
 const MAX_ATTEMPTS = 3;
@@ -36,11 +37,15 @@ export async function POST(request: NextRequest) {
     let targetEmail = '';
 
     // Check customers table first
-    const { data: customer } = await supabase
+    const emailPattern = escapeForIlikeExact(normalizedEmail);
+
+    const { data: customerRows } = await supabase
       .from('customers')
       .select('id, name, email, contact_person, is_active, portal_active, password_hash')
-      .eq('email', normalizedEmail)
-      .single();
+      .ilike('email', emailPattern)
+      .limit(5);
+
+    const customer = pickEmailRow(customerRows || [], normalizedEmail);
 
     if (customer && customer.is_active && customer.portal_active && customer.password_hash) {
       targetId = customer.id;
@@ -49,14 +54,15 @@ export async function POST(request: NextRequest) {
       targetEmail = customer.email;
     } else {
       // Check portal_users table
-      const { data: portalUser } = await supabase
+      const { data: portalUserRows } = await supabase
         .from('portal_users')
         .select('id, customer_id, name, email, is_active')
-        .eq('email', normalizedEmail)
-        .eq('is_active', true)
-        .single();
+        .ilike('email', emailPattern)
+        .limit(5);
 
-      if (portalUser) {
+      const portalUser = pickEmailRow(portalUserRows || [], normalizedEmail);
+
+      if (portalUser && portalUser.is_active) {
         const { data: parentCustomer } = await supabase
           .from('customers')
           .select('id, is_active, portal_active')

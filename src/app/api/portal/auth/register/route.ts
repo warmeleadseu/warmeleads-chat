@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 import { sendEmail } from '@/lib/email';
 import { rateLimit, getClientIp } from '@/lib/rateLimit';
 import { syncDemoLeadAssignmentsForCustomer } from '@/lib/demoPortalLeads';
+import { escapeForIlikeExact, pickEmailRow } from '@/lib/emailDbLookup';
 
 const MAX_ATTEMPTS = 5;
 const WINDOW_MS = 60 * 60 * 1000;
@@ -36,13 +37,14 @@ export async function POST(request: NextRequest) {
 
     const supabase = createServerClient();
 
-    const { data: existing } = await supabase
-      .from('customers')
-      .select('id')
-      .eq('email', emailLower)
-      .maybeSingle();
+    const emailPattern = escapeForIlikeExact(emailLower);
 
-    if (existing) {
+    const [{ data: existingCustRows }, { data: existingPortalRows }] = await Promise.all([
+      supabase.from('customers').select('id, email').ilike('email', emailPattern).limit(5),
+      supabase.from('portal_users').select('id, email').ilike('email', emailPattern).limit(5),
+    ]);
+
+    if (pickEmailRow(existingCustRows || [], emailLower) || pickEmailRow(existingPortalRows || [], emailLower)) {
       return NextResponse.json({ error: 'Dit e-mailadres is al in gebruik' }, { status: 409 });
     }
 

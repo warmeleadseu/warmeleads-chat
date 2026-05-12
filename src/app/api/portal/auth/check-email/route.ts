@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { rateLimit, getClientIp } from '@/lib/rateLimit';
+import { escapeForIlikeExact, pickEmailRow } from '@/lib/emailDbLookup';
 
 export async function GET(request: NextRequest) {
   const ip = getClientIp(request);
@@ -13,11 +14,15 @@ export async function GET(request: NextRequest) {
   }
 
   const supabase = createServerClient();
-  const { data } = await supabase
-    .from('customers')
-    .select('id')
-    .eq('email', email)
-    .maybeSingle();
+  const pattern = escapeForIlikeExact(email);
 
-  return NextResponse.json({ available: !data });
+  const [{ data: custRows }, { data: portalRows }] = await Promise.all([
+    supabase.from('customers').select('id, email').ilike('email', pattern).limit(5),
+    supabase.from('portal_users').select('id, email').ilike('email', pattern).limit(5),
+  ]);
+
+  const taken =
+    !!pickEmailRow(custRows || [], email) || !!pickEmailRow(portalRows || [], email);
+
+  return NextResponse.json({ available: !taken });
 }

@@ -4,6 +4,7 @@ import { createServerClient } from '@/lib/supabase';
 import { hasPermission, forbidden, PERMISSIONS, ROLE_DEFAULTS } from '@/lib/portalPermissions';
 import bcrypt from 'bcryptjs';
 import { sendEmail } from '@/lib/email';
+import { escapeForIlikeExact, pickEmailRow } from '@/lib/emailDbLookup';
 
 const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.warmeleads.eu';
 
@@ -75,23 +76,25 @@ export async function POST(request: NextRequest) {
     // Check for duplicate email across both tables
     const normalizedEmail = email.toLowerCase().trim();
 
-    const { data: existingCustomer } = await supabase
-      .from('customers')
-      .select('id')
-      .eq('email', normalizedEmail)
-      .maybeSingle();
+    const emailPattern = escapeForIlikeExact(normalizedEmail);
 
-    if (existingCustomer) {
+    const { data: existingCustomerRows } = await supabase
+      .from('customers')
+      .select('id, email')
+      .ilike('email', emailPattern)
+      .limit(5);
+
+    if (pickEmailRow(existingCustomerRows || [], normalizedEmail)) {
       return NextResponse.json({ error: 'Dit e-mailadres is al in gebruik' }, { status: 409 });
     }
 
-    const { data: existingUser } = await supabase
+    const { data: existingUserRows } = await supabase
       .from('portal_users')
-      .select('id')
-      .eq('email', normalizedEmail)
-      .maybeSingle();
+      .select('id, email')
+      .ilike('email', emailPattern)
+      .limit(5);
 
-    if (existingUser) {
+    if (pickEmailRow(existingUserRows || [], normalizedEmail)) {
       return NextResponse.json({ error: 'Dit e-mailadres is al in gebruik' }, { status: 409 });
     }
 

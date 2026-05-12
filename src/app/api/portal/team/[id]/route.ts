@@ -3,6 +3,7 @@ import { verifyCustomer, portalUnauthorized } from '@/lib/portalAuth';
 import { createServerClient } from '@/lib/supabase';
 import { hasPermission, forbidden, PERMISSIONS } from '@/lib/portalPermissions';
 import bcrypt from 'bcryptjs';
+import { escapeForIlikeExact, pickEmailRow } from '@/lib/emailDbLookup';
 
 export async function PUT(
   request: NextRequest,
@@ -54,24 +55,26 @@ export async function PUT(
     // Validate email uniqueness if changed
     if (body.email !== undefined) {
       const normalizedEmail = body.email.toLowerCase().trim();
-      const { data: emailTaken } = await supabase
-        .from('portal_users')
-        .select('id')
-        .eq('email', normalizedEmail)
-        .neq('id', id)
-        .maybeSingle();
+      const emailPattern = escapeForIlikeExact(normalizedEmail);
 
-      if (emailTaken) {
+      const { data: takenRows } = await supabase
+        .from('portal_users')
+        .select('id, email')
+        .ilike('email', emailPattern)
+        .neq('id', id)
+        .limit(5);
+
+      if (pickEmailRow(takenRows || [], normalizedEmail)) {
         return NextResponse.json({ error: 'Dit e-mailadres is al in gebruik' }, { status: 409 });
       }
 
-      const { data: custEmail } = await supabase
+      const { data: custRows } = await supabase
         .from('customers')
-        .select('id')
-        .eq('email', normalizedEmail)
-        .maybeSingle();
+        .select('id, email')
+        .ilike('email', emailPattern)
+        .limit(5);
 
-      if (custEmail) {
+      if (pickEmailRow(custRows || [], normalizedEmail)) {
         return NextResponse.json({ error: 'Dit e-mailadres is al in gebruik' }, { status: 409 });
       }
 

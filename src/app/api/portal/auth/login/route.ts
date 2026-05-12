@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 import { rateLimit, getClientIp } from '@/lib/rateLimit';
 import { repairDemoAssignmentsIfNeeded } from '@/lib/demoPortalLeads';
 import { getHasPaidCustomerBatch, shouldUseDemoPortalExperience } from '@/lib/demoPortalEligibility';
+import { escapeForIlikeExact, pickEmailRow } from '@/lib/emailDbLookup';
 import {
   PORTAL_SESSION_COOKIE,
   portalSessionCookieOptions,
@@ -30,11 +31,20 @@ export async function POST(request: NextRequest) {
     const supabase = createServerClient();
 
     // 1. Try customer (owner) login first
-    const { data: customer } = await supabase
+    const emailPattern = escapeForIlikeExact(normalizedEmail);
+
+    const { data: customerRows, error: customerLookupErr } = await supabase
       .from('customers')
       .select('id, name, email, contact_person, branches, is_active, portal_active, password_hash, login_count, demo_mode, signup_source')
-      .eq('email', normalizedEmail)
-      .single();
+      .ilike('email', emailPattern)
+      .limit(5);
+
+    if (customerLookupErr) {
+      console.error('[portal-login] customer lookup', customerLookupErr);
+      return NextResponse.json({ error: 'Er ging iets mis' }, { status: 500 });
+    }
+
+    const customer = pickEmailRow(customerRows || [], normalizedEmail);
 
     if (customer) {
       if (!customer.is_active) {
@@ -92,11 +102,18 @@ export async function POST(request: NextRequest) {
     }
 
     // 2. Try portal_users (agent/manager) login
-    const { data: portalUser } = await supabase
+    const { data: portalUserRows, error: portalUserLookupErr } = await supabase
       .from('portal_users')
       .select('id, customer_id, name, email, role, is_active, permissions, assignment_rules, password_hash, login_count, phone, created_at')
-      .eq('email', normalizedEmail)
-      .single();
+      .ilike('email', emailPattern)
+      .limit(5);
+
+    if (portalUserLookupErr) {
+      console.error('[portal-login] portal_user lookup', portalUserLookupErr);
+      return NextResponse.json({ error: 'Er ging iets mis' }, { status: 500 });
+    }
+
+    const portalUser = pickEmailRow(portalUserRows || [], normalizedEmail);
 
     if (!portalUser) {
       return NextResponse.json({ error: 'Ongeldige inloggegevens' }, { status: 401 });
