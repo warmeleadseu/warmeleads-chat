@@ -20,6 +20,9 @@ import {
   CalendarDaysIcon,
   MapPinIcon,
   IdentificationIcon,
+  EyeIcon,
+  ArrowPathIcon,
+  BuildingOffice2Icon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
 import {
@@ -33,6 +36,14 @@ import { TaskList, type Task } from './TaskList';
 import { ProspectFormFields, EMPTY_PROSPECT, type ProspectFormState } from './ProspectFormFields';
 import { ComposeMailDrawer } from '../../_components/ComposeMailDrawer';
 import { MailHistory } from '../../_components/MailHistory';
+
+export interface LinkedCustomerPortal {
+  customer_id: string;
+  name: string;
+  portal_active: boolean;
+  has_password: boolean;
+  email: string | null;
+}
 
 export interface ProspectDetail {
   id: string;
@@ -112,12 +123,15 @@ export function ProspectDrawer({
   const [lostReason, setLostReason] = useState('');
   const [drawerError, setDrawerError] = useState<string | null>(null);
   const [composeOpen, setComposeOpen] = useState(false);
+  const [linkedCustomerPortal, setLinkedCustomerPortal] = useState<LinkedCustomerPortal | null>(null);
+  const [openingPortal, setOpeningPortal] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setTab('overzicht');
     setLoading(true);
     setDrawerError(null);
+    setLinkedCustomerPortal(null);
     let cancel = false;
     (async () => {
       try {
@@ -126,6 +140,7 @@ export function ProspectDrawer({
         if (cancel) return;
         if (res.ok) {
           setProspect(data.prospect);
+          setLinkedCustomerPortal(data.linked_customer_portal ?? null);
           setTasks(data.tasks || []);
           setActivities(data.activities || []);
           setAm(data.account_manager || null);
@@ -174,6 +189,30 @@ export function ProspectDrawer({
     const aRes = await adminFetch(`/api/admin/prospects/${id}/activities`);
     const aData = await aRes.json();
     if (aRes.ok) setActivities(aData.activities || []);
+  };
+
+  const openCustomerPortal = async (customerId: string) => {
+    setOpeningPortal(true);
+    setDrawerError(null);
+    try {
+      const res = await adminFetch('/api/admin/impersonate', {
+        method: 'POST',
+        body: JSON.stringify({ customer_id: customerId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setDrawerError(data?.error || 'Portaal openen mislukt');
+        return;
+      }
+      const token = data.token as string | undefined;
+      if (token) {
+        window.open(`/portal?impersonate=${encodeURIComponent(token)}`, '_blank');
+      }
+    } catch {
+      setDrawerError('Portaal openen mislukt');
+    } finally {
+      setOpeningPortal(false);
+    }
   };
 
   const setStatus = async (status: ProspectStatus) => {
@@ -377,6 +416,9 @@ export function ProspectDrawer({
                   ams={ams}
                   branches={branches}
                   canManage={canManage}
+                  linkedCustomerPortal={linkedCustomerPortal}
+                  openingPortal={openingPortal}
+                  onOpenCustomerPortal={openCustomerPortal}
                   onStatus={setStatus}
                   onAssign={setAssignment}
                   onConvert={() => onConvert(prospect)}
@@ -391,7 +433,10 @@ export function ProspectDrawer({
               ) : tab === 'taken' ? (
                 <TaskList prospectId={prospect.id} tasks={tasks} onChange={setTasks} />
               ) : tab === 'mail' ? (
-                <MailHistory prospectId={prospect.id} />
+                <MailHistory
+                  prospectId={linkedCustomerPortal ? undefined : prospect.id}
+                  customerId={linkedCustomerPortal?.customer_id}
+                />
               ) : (
                 <div className="space-y-4">
                   <ProspectFormFields value={editForm} onChange={setEditForm} branches={branches} />
@@ -499,6 +544,9 @@ function Overview({
   ams,
   branches,
   canManage,
+  linkedCustomerPortal,
+  openingPortal,
+  onOpenCustomerPortal,
   onStatus,
   onAssign,
   onConvert,
@@ -509,6 +557,9 @@ function Overview({
   ams: AdminUserOption[];
   branches: BranchOption[];
   canManage: boolean;
+  linkedCustomerPortal: LinkedCustomerPortal | null;
+  openingPortal: boolean;
+  onOpenCustomerPortal: (customerId: string) => void;
   onStatus: (s: ProspectStatus) => void;
   onAssign: (id: string | null) => void;
   onConvert: () => void;
@@ -521,6 +572,11 @@ function Overview({
     ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fullAddress)}`
     : null;
   const branchNameMap: Record<string, string> = Object.fromEntries(branches.map(b => [b.slug, b.name]));
+
+  const portalReady =
+    !!linkedCustomerPortal?.portal_active &&
+    !!linkedCustomerPortal?.has_password &&
+    !!linkedCustomerPortal?.email;
 
   return (
     <div className="space-y-4">
@@ -683,6 +739,60 @@ function Overview({
           )}
         </div>
       </div>
+
+      {prospect.converted_to_customer_id && (
+        <div className="rounded-xl border border-emerald-200 bg-gradient-to-br from-emerald-50/90 to-white p-4">
+          <h3 className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-emerald-800">
+            <BuildingOffice2Icon className="h-4 w-4" />
+            Gekoppelde klant
+          </h3>
+          {linkedCustomerPortal ? (
+            <>
+              <p className="text-sm font-semibold text-slate-900">{linkedCustomerPortal.name}</p>
+              <p className="mt-0.5 text-xs text-slate-500">
+                Klant-ID: <span className="font-mono">{linkedCustomerPortal.customer_id}</span>
+              </p>
+              {!linkedCustomerPortal.portal_active && (
+                <p className="mt-2 text-xs text-amber-700">Het klantportaal staat uit. Zet het portaal aan in het klantenoverzicht.</p>
+              )}
+              {linkedCustomerPortal.portal_active && !linkedCustomerPortal.email && (
+                <p className="mt-2 text-xs text-amber-700">Geen e-mailadres op de klantkaart — portaal openen kan niet.</p>
+              )}
+              {linkedCustomerPortal.portal_active && linkedCustomerPortal.email && !linkedCustomerPortal.has_password && (
+                <p className="mt-2 text-xs text-amber-700">Nog geen portaalwachtwoord ingesteld voor deze klant.</p>
+              )}
+              <div className="mt-3 flex flex-wrap gap-2">
+                {portalReady && (
+                  <button
+                    type="button"
+                    onClick={() => onOpenCustomerPortal(linkedCustomerPortal.customer_id)}
+                    disabled={openingPortal}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 transition hover:bg-amber-100 disabled:opacity-50"
+                  >
+                    {openingPortal ? (
+                      <ArrowPathIcon className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <EyeIcon className="h-4 w-4" />
+                    )}
+                    Bekijk portaal
+                  </button>
+                )}
+                <Link
+                  href="/admin/customers"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+                >
+                  Naar klantenoverzicht
+                </Link>
+              </div>
+            </>
+          ) : (
+            <p className="text-sm text-slate-600">
+              Deze prospect is gemarkeerd als geconverteerd, maar de gekoppelde klant is niet gevonden of je hebt geen
+              toegang.
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="grid gap-2 sm:grid-cols-2">
         <button

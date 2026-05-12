@@ -39,11 +39,37 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       : Promise.resolve({ data: null, error: null }),
   ]);
 
+  let linked_customer_portal: {
+    customer_id: string;
+    name: string;
+    portal_active: boolean;
+    has_password: boolean;
+    email: string | null;
+  } | null = null;
+  const convertedId = access.prospect.converted_to_customer_id;
+  if (convertedId) {
+    const { data: cust } = await supabase
+      .from('customers')
+      .select('id, name, portal_active, email, password_hash')
+      .eq('id', convertedId)
+      .maybeSingle();
+    if (cust) {
+      linked_customer_portal = {
+        customer_id: cust.id,
+        name: cust.name || 'Klant',
+        portal_active: !!cust.portal_active,
+        has_password: !!cust.password_hash,
+        email: cust.email ?? null,
+      };
+    }
+  }
+
   return NextResponse.json({
     prospect: access.prospect,
     tasks: tasksRes.data || [],
     activities: activitiesRes.data || [],
     account_manager: amRes.data || null,
+    linked_customer_portal,
   });
 }
 
