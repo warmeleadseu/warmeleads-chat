@@ -467,6 +467,8 @@ export async function POST(request: NextRequest) {
         price_per_lead: Number(order.price_per_lead),
         is_paid: true,
         source: 'portal',
+        batch_kind: orderBatchKind,
+        niche_title: orderNicheTitle || null,
       }).catch(() => {});
 
       // Celebration event for live dashboard

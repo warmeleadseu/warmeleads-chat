@@ -45,18 +45,109 @@ export async function POST(request: NextRequest) {
   const {
     customer_id, branch, batch_size, price_per_lead, leads_per_week, leads_per_day, notes, lead_filters, lookback_days, starts_at,
     batch_kind: rawBatchKind,
+    niche_title: rawNicheTitle,
   } = body;
   const batch_kind = normalizeBatchKind(typeof rawBatchKind === 'string' ? rawBatchKind : undefined);
-  if (batch_kind === 'niche_research') {
-    return NextResponse.json({ error: 'Onderzoeksbatches worden via het portaal aangemaakt' }, { status: 400 });
-  }
-  if (!customer_id || !branch || !batch_size) {
-    return NextResponse.json({ error: 'Vereiste velden ontbreken' }, { status: 400 });
-  }
 
-  if (admin.role === 'accountmanager') {
+  if (admin.role === 'accountmanager' && customer_id) {
     const { data: myCust } = await supabase.from('customers').select('id').eq('account_manager_id', admin.id).eq('id', customer_id).single();
     if (!myCust) return NextResponse.json({ error: 'Geen toegang tot deze klant' }, { status: 403 });
+  }
+
+  /** Zelfde productregels als portaal: €1.000, batch_size 1, branch `niche_research`. */
+  if (batch_kind === 'niche_research') {
+    if (!customer_id) {
+      return NextResponse.json({ error: 'Vereiste velden ontbreken' }, { status: 400 });
+    }
+    const nicheTitle = typeof rawNicheTitle === 'string' ? rawNicheTitle.trim() : '';
+    if (nicheTitle.length < 3) {
+      return NextResponse.json(
+        { error: 'Geef een duidelijke naam voor de niche (minimaal 3 tekens).' },
+        { status: 400 },
+      );
+    }
+
+    const RESEARCH_EXCL = 1000;
+    const branchSlug = 'niche_research';
+    const nicheBatchSize = 1;
+    const nichePpl = RESEARCH_EXCL;
+    const nicheTotal = RESEARCH_EXCL;
+    const startsAtValue = starts_at ? new Date(starts_at).toISOString() : null;
+    const userNotes = typeof notes === 'string' && notes.trim() ? notes.trim() : '';
+    const combinedNotes = [`[Onderzoeksbatch, admin] ${nicheTitle}`, userNotes].filter(Boolean).join('\n');
+
+    const { data: custRow, error: custErr } = await supabase
+      .from('customers')
+      .select('name, account_manager_id')
+      .eq('id', customer_id)
+      .single();
+    if (custErr || !custRow) {
+      return NextResponse.json({ error: 'Klant niet gevonden' }, { status: 404 });
+    }
+
+    const { data, error } = await supabase
+      .from('customer_batches')
+      .insert({
+        customer_id,
+        branch: branchSlug,
+        batch_size: nicheBatchSize,
+        price_per_lead: nichePpl,
+        total_price: nicheTotal,
+        leads_per_week: null,
+        leads_per_day: null,
+        notes: combinedNotes || null,
+        lead_filters: [],
+        is_paid: body.is_paid === true,
+        lookback_days: 0,
+        starts_at: startsAtValue,
+        account_manager_id: custRow.account_manager_id || null,
+        batch_kind: 'niche_research',
+        niche_title: nicheTitle,
+      })
+      .select()
+      .single();
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    const batchIsPaid = body.is_paid === true;
+    const { data: brRow } = await supabase.from('branches').select('name').eq('slug', branchSlug).maybeSingle();
+    const brName = brRow?.name || 'Niche-onderzoek';
+
+    sendNewBatchAdminEmail({
+      customer_name: custRow.name || 'Onbekend',
+      branch_name: brName,
+      batch_size: nicheBatchSize,
+      total_price: nicheTotal,
+      price_per_lead: nichePpl,
+      is_paid: batchIsPaid,
+      source: 'admin',
+      batch_kind: 'niche_research',
+      niche_title: nicheTitle,
+    }).catch(() => {});
+
+    try {
+      await createInvoice({
+        customer_id,
+        batch_id: data.id,
+        branch_name: brName,
+        batch_size: nicheBatchSize,
+        price_per_lead: nichePpl,
+        total_price: nicheTotal,
+        status: batchIsPaid ? 'paid' : 'open',
+        invoice_product: 'niche_research',
+        niche_title: nicheTitle,
+        ...(batchIsPaid ? { paid_at: new Date().toISOString() } : {}),
+        ...(!batchIsPaid ? { email_context: 'new_batch_order' as const } : {}),
+      });
+    } catch (e) {
+      console.error('[admin/batches] invoice creation failed:', e);
+    }
+
+    return NextResponse.json(data, { status: 201 });
+  }
+
+  if (!customer_id || !branch || !batch_size) {
+    return NextResponse.json({ error: 'Vereiste velden ontbreken' }, { status: 400 });
   }
 
   const total_price = price_per_lead ? price_per_lead * batch_size : null;
@@ -112,6 +203,7 @@ export async function POST(request: NextRequest) {
     price_per_lead: price_per_lead || 0,
     is_paid: batchIsPaid,
     source: 'admin',
+    batch_kind,
   }).catch(() => {});
 
   if (price_per_lead && total_price) {
@@ -167,7 +259,10 @@ export async function PUT(request: NextRequest) {
   if (updates.batch_kind !== undefined) {
     const nextKind = normalizeBatchKind(typeof updates.batch_kind === 'string' ? updates.batch_kind : undefined);
     if (nextKind === 'niche_research') {
-      return NextResponse.json({ error: 'Onderzoeksbatches kunnen niet via admin worden ingesteld' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'Een bestaande batch kan niet naar onderzoeksbatch worden omgezet. Maak een nieuwe onderzoeksbatch aan.' },
+        { status: 400 },
+      );
     }
     updates.batch_kind = nextKind;
   }
@@ -186,8 +281,14 @@ export async function PUT(request: NextRequest) {
     ];
   }
 
+  const isNicheExisting = (existing as { batch_kind?: string }).batch_kind === 'niche_research';
+
+  if (isNicheExisting && updates.batch_size !== undefined && Number(updates.batch_size) !== 1) {
+    return NextResponse.json({ error: 'Onderzoeksbatch heeft altijd omvang 1.' }, { status: 400 });
+  }
+
   // Recalculate total_price - exclude compensation leads (those are free)
-  if (updates.batch_size || updates.price_per_lead) {
+  if (!isNicheExisting && (updates.batch_size || updates.price_per_lead)) {
     const ppl = updates.price_per_lead ?? existing.price_per_lead;
     const totalComps = (updates.compensations || existing.compensations || [])
       .reduce((s: number, c: { amount: number }) => s + (c.amount || 0), 0);
@@ -231,7 +332,7 @@ export async function PUT(request: NextRequest) {
     'batch_size', 'leads_delivered', 'leads_delivered_external', 'is_paid',
     'price_per_lead', 'total_price', 'leads_per_day', 'leads_per_week',
     'notes', 'lead_filters', 'status', 'completed_at', 'lookback_days',
-    'compensations', 'starts_at', 'account_manager_id', 'batch_kind',
+    'compensations', 'starts_at', 'account_manager_id', 'batch_kind', 'niche_title',
   ];
   const safeUpdates: Record<string, unknown> = {};
   for (const key of allowedFields) {

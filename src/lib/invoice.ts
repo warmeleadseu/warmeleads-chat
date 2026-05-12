@@ -514,19 +514,28 @@ export async function sendNewBatchAdminEmail(params: {
   price_per_lead: number;
   is_paid: boolean;
   source: 'portal' | 'admin' | 'portal_pay';
+  /** Optioneel: onderzoeksbatch (€1.000 pakket) — duidelijkere onderwerpregel en tabel. */
+  batch_kind?: 'leads' | 'niche_research' | 'bulk_leads';
+  niche_title?: string | null;
 }) {
   const subtotal = Number(params.total_price);
   const btwAmount = Math.round(subtotal * 0.21 * 100) / 100;
   const totalInclBtw = subtotal + btwAmount;
   const logoUrl = `${BASE_URL}/warmeleads-logo-2026.png`;
   const year = new Date().getFullYear();
+  const isNiche = params.batch_kind === 'niche_research';
+  const nicheLabel = (params.niche_title || '').trim();
+  const esc = (s: string) =>
+    s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
   const sourceLabel =
     params.source === 'portal' ? 'Portal bestelling'
     : params.source === 'portal_pay' ? 'Portal batch betaling'
     : 'Admin aangemaakt';
 
-  const subject = `Nieuwe batch: ${params.customer_name} - ${params.batch_size} ${params.branch_name} leads`;
+  const subject = isNiche
+    ? `Nieuwe onderzoeksbatch: ${params.customer_name} — ${nicheLabel || 'Niche-onderzoek'}`
+    : `Nieuwe batch: ${params.customer_name} - ${params.batch_size} ${params.branch_name} leads`;
 
   const fullHtml = `<!DOCTYPE html>
 <html lang="nl">
@@ -553,9 +562,10 @@ export async function sendNewBatchAdminEmail(params: {
                 <tr><td style="padding:0">
                   <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
                     <tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9;width:160px">Klant</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;font-weight:600;border-bottom:1px solid #f1f5f9">${params.customer_name}</td></tr>
-                    <tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">Branche</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;border-bottom:1px solid #f1f5f9">${params.branch_name}</td></tr>
-                    <tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">Batch grootte</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;font-weight:600;border-bottom:1px solid #f1f5f9">${params.batch_size} leads</td></tr>
-                    <tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">Prijs per lead</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;border-bottom:1px solid #f1f5f9">&euro;${Number(params.price_per_lead).toFixed(2)}</td></tr>
+                    <tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">${isNiche ? 'Product' : 'Branche'}</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;border-bottom:1px solid #f1f5f9">${params.branch_name}</td></tr>
+                    ${isNiche && nicheLabel ? `<tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">Niche / onderwerp</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;font-weight:600;border-bottom:1px solid #f1f5f9">${esc(nicheLabel)}</td></tr>` : ''}
+                    <tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">${isNiche ? 'Omvang' : 'Batch grootte'}</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;font-weight:600;border-bottom:1px solid #f1f5f9">${isNiche ? '1 onderzoekspakket (geen lead-staffel)' : `${params.batch_size} leads`}</td></tr>
+                    <tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">${isNiche ? 'Pakketprijs excl. btw' : 'Prijs per lead'}</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;border-bottom:1px solid #f1f5f9">&euro;${Number(params.price_per_lead).toFixed(2)}${isNiche ? ' <span style="font-size:12px;color:#64748b;font-weight:400">(vast tarief)</span>' : ''}</td></tr>
                     <tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">Subtotaal excl. BTW</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;border-bottom:1px solid #f1f5f9">&euro;${subtotal.toFixed(2)}</td></tr>
                     <tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">BTW 21%</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;border-bottom:1px solid #f1f5f9">&euro;${btwAmount.toFixed(2)}</td></tr>
                     <tr><td style="padding:16px 20px;font-size:15px;color:#3B2F75;font-weight:700;border-bottom:1px solid #f1f5f9">Totaal incl. BTW</td><td style="padding:16px 20px;font-size:18px;color:#3B2F75;font-weight:800;text-align:right;border-bottom:1px solid #f1f5f9">&euro;${totalInclBtw.toFixed(2)}</td></tr>

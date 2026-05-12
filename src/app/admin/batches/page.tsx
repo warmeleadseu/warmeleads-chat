@@ -45,6 +45,7 @@ interface Batch {
   account_manager_id: string | null;
   created_at: string; completed_at: string | null;
   batch_kind?: string | null;
+  niche_title?: string | null;
   customers?: { name: string } | null;
 }
 
@@ -166,6 +167,7 @@ export default function BatchesPage() {
   };
 
   const getBranch = (slug: string) => {
+    if (slug === 'niche_research') return { name: 'Niche-onderzoek', color: 'purple' };
     const br = branches.find(b => b.slug === slug);
     return { name: br?.name || slug, color: br?.color || 'slate' };
   };
@@ -179,7 +181,8 @@ export default function BatchesPage() {
       const s = search.toLowerCase();
       list = list.filter(b => {
         const cName = (b.customers?.name || '').toLowerCase();
-        return cName.includes(s) || b.branch.includes(s) || (b.notes || '').toLowerCase().includes(s);
+        return cName.includes(s) || b.branch.includes(s) || (b.notes || '').toLowerCase().includes(s)
+          || (b.niche_title || '').toLowerCase().includes(s);
       });
     }
     list.sort((a, b) => {
@@ -395,6 +398,9 @@ export default function BatchesPage() {
                           {isBulkLeadsBatch(b) && (
                             <span className="w-fit rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold text-violet-800">Bulk</span>
                           )}
+                          {(b.batch_kind || '') === 'niche_research' && (
+                            <span className="w-fit rounded-full bg-fuchsia-100 px-2 py-0.5 text-[10px] font-semibold text-fuchsia-900">Onderzoek</span>
+                          )}
                           {!b.is_paid && (
                             <span className="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-600">Onbetaald</span>
                           )}
@@ -465,6 +471,9 @@ export default function BatchesPage() {
                         <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${STATUS_COLORS[b.status] || 'bg-slate-100 text-slate-600'}`}>{STATUS_LABELS[b.status] || b.status}</span>
                         {isBulkLeadsBatch(b) && (
                           <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold text-violet-800">Bulk</span>
+                        )}
+                        {(b.batch_kind || '') === 'niche_research' && (
+                          <span className="rounded-full bg-fuchsia-100 px-2 py-0.5 text-[10px] font-semibold text-fuchsia-900">Onderzoek</span>
                         )}
                         {!b.is_paid && <span className="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-600">Onbetaald</span>}
                         {b.starts_at && new Date(b.starts_at) > new Date() && (
@@ -690,6 +699,7 @@ function BatchDetailPanel({ batchId, branches, onClose, onEdit }: {
   };
 
   const getBranch = (slug: string) => {
+    if (slug === 'niche_research') return { name: 'Niche-onderzoek', color: 'purple' };
     const br = branches.find(b => b.slug === slug);
     return { name: br?.name || slug, color: br?.color || 'slate' };
   };
@@ -772,6 +782,9 @@ function BatchDetailPanel({ batchId, branches, onClose, onEdit }: {
                   {isBulkLeadsBatch(batch) && (
                     <span className="rounded-full bg-violet-100 px-2.5 py-1 text-xs font-semibold text-violet-800">Bulk CRM</span>
                   )}
+                  {(batch.batch_kind || '') === 'niche_research' && (
+                    <span className="rounded-full bg-fuchsia-100 px-2.5 py-1 text-xs font-semibold text-fuchsia-900">Niche-onderzoek</span>
+                  )}
                   {batch.is_paid ? (
                     <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
                       <CheckBadgeIcon className="h-3.5 w-3.5" /> Betaald
@@ -810,6 +823,18 @@ function BatchDetailPanel({ batchId, branches, onClose, onEdit }: {
                         Bulk leads uitdelen
                       </Link>
                     )}
+                  </div>
+                )}
+
+                {(batch.batch_kind || '') === 'niche_research' && (
+                  <div className="rounded-lg border border-fuchsia-200 bg-fuchsia-50/60 px-3 py-2.5 text-xs text-fuchsia-950">
+                    <p className="font-medium">Onderzoeksbatch (€1.000 excl. btw)</p>
+                    {batch.niche_title ? (
+                      <p className="mt-1 font-semibold text-fuchsia-900">&ldquo;{batch.niche_title}&rdquo;</p>
+                    ) : null}
+                    <p className="mt-1 text-fuchsia-900/90">
+                      Geen automatische lead-pijplijn. Zelfde product als portaal; bedrag wordt volgens afspraak gecrediteerd in latere leadlevering.
+                    </p>
                   </div>
                 )}
 
@@ -1498,7 +1523,8 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
   const [form, setForm] = useState({
     customer_id: '', branch: '', batch_size: 100, is_paid: false,
     price_per_lead: '', leads_per_day: '', leads_per_week: '', lookback_days: '3', notes: '', lead_filters: [] as LeadFilter[],
-    batch_delivery: 'pipeline' as 'pipeline' | 'bulk',
+    batch_delivery: 'pipeline' as 'pipeline' | 'bulk' | 'niche_research',
+    niche_title: '',
   });
   const [saving, setSaving] = useState(false);
   const [branchFields, setBranchFields] = useState<BranchField[]>([]);
@@ -1509,7 +1535,10 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
   const [startsAtTime, setStartsAtTime] = useState('09:00');
 
   useEffect(() => {
-    if (!form.branch) { setBranchFields([]); return; }
+    if (form.batch_delivery === 'niche_research' || !form.branch) {
+      setBranchFields([]);
+      return;
+    }
     adminFetch(`/api/admin/branches/fields?branch=${form.branch}`)
       .then(r => r.ok ? r.json() : { fields: [] })
       .then(d => setBranchFields(d.fields || []))
@@ -1517,6 +1546,10 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
   }, [form.branch]);
 
   useEffect(() => {
+    if (form.batch_delivery === 'niche_research') {
+      setPricingInfo(null);
+      return;
+    }
     if (!form.branch) { setPricingInfo(null); return; }
     const fetchPricing = async () => {
       const params = new URLSearchParams({ branch: form.branch });
@@ -1563,10 +1596,17 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
       }
     };
     fetchPricing();
-  }, [form.branch, form.customer_id, form.batch_size, priceOverride]);
+  }, [form.branch, form.customer_id, form.batch_size, priceOverride, form.batch_delivery]);
 
   const create = async () => {
-    if (!form.customer_id || !form.branch || !form.batch_size) return;
+    if (form.batch_delivery === 'niche_research') {
+      if (!form.customer_id || form.niche_title.trim().length < 3) {
+        alert('Kies een klant en vul een duidelijke nichenaam in (minimaal 3 tekens).');
+        return;
+      }
+    } else if (!form.customer_id || !form.branch || !form.batch_size) {
+      return;
+    }
     setSaving(true);
     try {
       let startsAtISO: string | null = null;
@@ -1574,6 +1614,23 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
         const nlDateTime = `${startsAtDate}T${startsAtTime || '09:00'}:00`;
         const nlOffset = getNLOffset(new Date(nlDateTime));
         startsAtISO = `${nlDateTime}${nlOffset}`;
+      }
+      if (form.batch_delivery === 'niche_research') {
+        const res = await adminFetch('/api/admin/batches', {
+          method: 'POST',
+          body: JSON.stringify({
+            customer_id: form.customer_id,
+            batch_kind: 'niche_research',
+            niche_title: form.niche_title.trim(),
+            is_paid: form.is_paid,
+            notes: form.notes || null,
+            ...(startsAtISO ? { starts_at: startsAtISO } : {}),
+          }),
+        });
+        if (res.ok) onCreated();
+        else { const d = await res.json(); alert(d.error || 'Aanmaken mislukt'); }
+        setSaving(false);
+        return;
       }
       const res = await adminFetch('/api/admin/batches', {
         method: 'POST',
@@ -1598,6 +1655,7 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
     setSaving(false);
   };
 
+  const isNicheDelivery = form.batch_delivery === 'niche_research';
   const activeCustomers = customers.filter(c => c.is_active);
   const activeBranches = branches.filter(b => b.is_active);
 
@@ -1629,18 +1687,9 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
             </select>
           </div>
 
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500">Branche *</label>
-            <select value={form.branch} onChange={e => setForm(f => ({ ...f, branch: e.target.value, lead_filters: [] }))}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-brand-purple/50">
-              <option value="">Selecteer branche...</option>
-              {activeBranches.map(b => <option key={b.slug} value={b.slug}>{b.name}</option>)}
-            </select>
-          </div>
-
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
             <p className="mb-2 text-xs font-medium text-slate-700">Levering</p>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
               <button
                 type="button"
                 onClick={() => setForm(f => ({ ...f, batch_delivery: 'pipeline' }))}
@@ -1663,11 +1712,55 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
                 }`}
               >
                 Bulk (CRM)
-                <span className="mt-0.5 block font-normal text-[10px] text-slate-500">Alleen factuur/anker; export naar portaal</span>
+                <span className="mt-0.5 block font-normal text-[10px] text-slate-500">Factuur/anker; export naar portaal</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setForm(f => ({ ...f, batch_delivery: 'niche_research' }))}
+                className={`rounded-lg border px-3 py-2 text-left text-xs font-semibold transition ${
+                  form.batch_delivery === 'niche_research'
+                    ? 'border-fuchsia-600 bg-fuchsia-50 text-fuchsia-950'
+                    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                Niche-onderzoek
+                <span className="mt-0.5 block font-normal text-[10px] text-slate-600">€1.000 excl. btw · validatie + voorbereiding</span>
               </button>
             </div>
           </div>
 
+          {!isNicheDelivery ? (
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-500">Branche *</label>
+            <select value={form.branch} onChange={e => setForm(f => ({ ...f, branch: e.target.value, lead_filters: [] }))}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-brand-purple/50">
+              <option value="">Selecteer branche...</option>
+              {activeBranches.map(b => <option key={b.slug} value={b.slug}>{b.name}</option>)}
+            </select>
+          </div>
+          ) : (
+            <div className="space-y-2">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-500">Niche / onderwerp *</label>
+                <input
+                  type="text"
+                  value={form.niche_title}
+                  onChange={e => setForm(f => ({ ...f, niche_title: e.target.value }))}
+                  placeholder="Bijv. elektriciens in regio X"
+                  maxLength={200}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-fuchsia-500/50"
+                />
+                <p className="mt-1 text-[10px] text-slate-500">Minimaal 3 tekens. Zelfde product als in het klantportaal (€1.000 excl. btw, 100% te crediteren in leads).</p>
+              </div>
+              <div className="rounded-lg border border-fuchsia-200 bg-fuchsia-50/50 px-3 py-2 text-[11px] text-fuchsia-950">
+                <p className="font-semibold">Vast pakket</p>
+                <p className="mt-0.5 text-fuchsia-900/90">1 × €1.000 excl. btw · geen lead-staffel · branche <span className="font-mono text-[10px]">niche_research</span> wordt automatisch gezet.</p>
+              </div>
+            </div>
+          )}
+
+          {!isNicheDelivery && (
+          <>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-500">Batch grootte *</label>
@@ -1731,6 +1824,8 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
             </div>
           </div>
+          </>
+          )}
 
           {/* Lookback — alleen zinvol voor pijplijn-batches */}
           {form.batch_delivery === 'pipeline' ? (
@@ -1770,9 +1865,13 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
                 ))}
               </div>
             </div>
-          ) : (
+          ) : form.batch_delivery === 'bulk' ? (
             <div className="rounded-lg border border-violet-200 bg-violet-50/40 p-3 text-[11px] text-violet-900">
               Lookback en automatische backfill gelden niet voor bulk-batches. Leads koppel je later via <span className="font-semibold">Admin → Leads → Bulk export</span> met portaaltoewijzing.
+            </div>
+          ) : (
+            <div className="rounded-lg border border-fuchsia-200 bg-fuchsia-50/40 p-3 text-[11px] text-fuchsia-950">
+              Lookback en automatische lead-toewijzing gelden niet voor onderzoeksbatches. Eenmalig pakket à €1.000 excl. btw (zelfde als portaal).
             </div>
           )}
 
@@ -1784,7 +1883,9 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
                 <p className="text-[11px] text-slate-400">
                   {form.batch_delivery === 'bulk'
                     ? (scheduledStart ? 'Batch wordt actief op het ingestelde tijdstip (zonder automatische lead-toewijzing).' : 'Batch start direct na aanmaken.')
-                    : (scheduledStart ? 'Batch start op het ingestelde tijdstip' : 'Batch start direct na aanmaken')}
+                    : form.batch_delivery === 'niche_research'
+                      ? (scheduledStart ? 'Batch-record actief vanaf dit tijdstip (geen automatische lead-flow).' : 'Batch start direct na aanmaken.')
+                      : (scheduledStart ? 'Batch start op het ingestelde tijdstip' : 'Batch start direct na aanmaken')}
                 </p>
               </div>
               <button type="button" onClick={() => {
@@ -1827,7 +1928,9 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
                 <p className="col-span-2 text-[10px] text-slate-400">
                   {form.batch_delivery === 'bulk'
                     ? 'Batch is direct betaalbaar; bulk-leads worden handmatig via export aan het portaal gekoppeld.'
-                    : 'Batch is direct betaalbaar, maar leads worden pas toegewezen vanaf dit moment. De lookback telt dan ook terug vanaf de startdatum.'}
+                    : form.batch_delivery === 'niche_research'
+                      ? 'Onderzoeksbatch: facturatie en opvolging volgens afspraak met de klant (zelfde product als portaal).'
+                      : 'Batch is direct betaalbaar, maar leads worden pas toegewezen vanaf dit moment. De lookback telt dan ook terug vanaf de startdatum.'}
                 </p>
               </div>
             )}
@@ -1848,7 +1951,9 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
                   ? 'Batch wordt als betaald gemarkeerd'
                   : form.batch_delivery === 'bulk'
                     ? 'Open factuur / betaallink voor het bulk-pakket'
-                    : 'Klant kan via portaal betalen'}
+                    : form.batch_delivery === 'niche_research'
+                      ? 'Open factuur / betaallink voor het onderzoekspakket (€1.000 excl. btw)'
+                      : 'Klant kan via portaal betalen'}
               </p>
             </div>
             <button type="button" onClick={() => setForm(f => ({ ...f, is_paid: !f.is_paid }))}
@@ -1862,7 +1967,7 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
             </button>
           </div>
 
-          {form.branch && (
+          {!isNicheDelivery && form.branch && (
             <div>
               <label className="mb-1.5 block text-xs font-medium text-slate-500">Lead vereisten (filters)</label>
               <FilterEditor
@@ -1876,7 +1981,7 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
         </div>
 
         <div className="shrink-0 border-t border-slate-100 px-5 py-4">
-          <button onClick={create} disabled={saving || !form.customer_id || !form.branch || form.batch_size < 1}
+          <button onClick={create} disabled={saving || !form.customer_id || (isNicheDelivery ? form.niche_title.trim().length < 3 : (!form.branch || form.batch_size < 1))}
             className="flex w-full items-center justify-center gap-2 rounded-lg bg-button-gradient py-2.5 text-sm font-bold text-white disabled:opacity-50">
             {saving ? <><ArrowPathIcon className="h-4 w-4 animate-spin" /> Aanmaken...</> : <><PlusIcon className="h-4 w-4" /> Batch aanmaken</>}
           </button>
