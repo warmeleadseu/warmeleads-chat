@@ -171,10 +171,14 @@ export async function POST(request: NextRequest) {
     query = query.order('wervingsdatum', { ascending: false });
   }
 
-  const hardLimit = max_leads && Number(max_leads) > 0 ? Number(max_leads) : Infinity;
+  /** Veilige bovengrens voor exports zonder expliciete `max_leads`. Voorkomt accidentele full-table-export. */
+  const DEFAULT_EXPORT_CAP = 50_000;
+  const requestedLimit = max_leads && Number(max_leads) > 0 ? Math.min(Number(max_leads), DEFAULT_EXPORT_CAP) : DEFAULT_EXPORT_CAP;
+  const hardLimit = requestedLimit;
   const PAGE_SIZE = 1000;
   const exportedLeads: Record<string, unknown>[] = [];
   let offset = 0;
+  let cappedByLimit = false;
 
   while (exportedLeads.length < hardLimit) {
     const batchSize = Math.min(PAGE_SIZE, hardLimit - exportedLeads.length);
@@ -187,6 +191,10 @@ export async function POST(request: NextRequest) {
     exportedLeads.push(...(batch as Record<string, unknown>[]));
     if (batch.length < batchSize) break;
     offset += batch.length;
+    if (exportedLeads.length >= hardLimit) {
+      cappedByLimit = true;
+      break;
+    }
   }
 
   if (exportedLeads.length === 0) {
@@ -324,7 +332,16 @@ export async function POST(request: NextRequest) {
       format: format === 'xlsx' ? 'xlsx' : 'csv',
       target_customer: customerName,
       added_to_portal: !!add_to_portal && !!target_customer_id,
+      capped_by_limit: cappedByLimit,
+      hard_limit: hardLimit,
     },
+  });
+
+  console.info('[admin/leads/export]', {
+    count: exportedLeads.length,
+    cappedByLimit,
+    hardLimit,
+    format: format === 'xlsx' ? 'xlsx' : 'csv',
   });
 
   return format === 'xlsx' ? buildXlsx(exportedLeads) : buildCsv(exportedLeads);

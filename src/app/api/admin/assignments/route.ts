@@ -24,6 +24,16 @@ export async function GET(request: NextRequest) {
     if (customerId && !amCustomerIds.includes(customerId)) return forbidden();
   }
 
+  /** Default tijdvenster voor superadmin/admin zonder customer-scope. Configureerbaar via ?days=. */
+  const DEFAULT_LOOKBACK_DAYS = 365;
+  const daysParam = parseInt(request.nextUrl.searchParams.get('days') || '');
+  const lookbackDays = Number.isFinite(daysParam) && daysParam > 0 ? Math.min(daysParam, 1825) : DEFAULT_LOOKBACK_DAYS;
+  const lookbackCutoff = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000).toISOString();
+
+  /** Harde paginatie-cap (100 pagina's × 1000 = 100k rijen) als ultieme safety net. */
+  const MAX_PAGES = 100;
+  const PAGE_SIZE = 1000;
+
   let baseQuery = supabase
     .from('lead_assignments')
     .select('*, customers(name), leads(naam_klant, email, branch, postcode, plaatsnaam)')
@@ -33,25 +43,28 @@ export async function GET(request: NextRequest) {
   if (leadId) baseQuery = baseQuery.eq('lead_id', leadId);
   if (customerId) baseQuery = baseQuery.eq('customer_id', customerId);
   if (batchId) baseQuery = baseQuery.eq('batch_id', batchId);
+  // Alleen tijdvenster afdwingen bij brede queries (geen specifieke lead/customer/batch filter).
+  const wideQuery = !leadId && !customerId && !batchId;
+  if (wideQuery) baseQuery = baseQuery.gte('assigned_at', lookbackCutoff);
 
-  const PAGE_SIZE = 1000;
   const results: Record<string, unknown>[] = [];
-  let offset = 0;
-  while (true) {
+  let partial = false;
+  for (let p = 0; p < MAX_PAGES; p++) {
+    const offset = p * PAGE_SIZE;
     const { data: batch, error: batchError } = await baseQuery.range(offset, offset + PAGE_SIZE - 1);
     if (batchError) return NextResponse.json({ error: batchError.message }, { status: 500 });
     if (!batch || batch.length === 0) break;
     results.push(...batch);
     if (batch.length < PAGE_SIZE) break;
-    offset += batch.length;
+    if (p === MAX_PAGES - 1) partial = true;
   }
 
   if (customerId && !batchId) {
     const assignedLeadIds = new Set(results.map(a => String(a.lead_id)));
 
     const directLeads: Record<string, unknown>[] = [];
-    let dlOffset = 0;
-    while (true) {
+    for (let p = 0; p < MAX_PAGES; p++) {
+      const dlOffset = p * PAGE_SIZE;
       const { data: dlBatch } = await supabase
         .from('leads')
         .select('id, naam_klant, email, branch, postcode, plaatsnaam, created_at')
@@ -60,7 +73,7 @@ export async function GET(request: NextRequest) {
       if (!dlBatch || dlBatch.length === 0) break;
       directLeads.push(...dlBatch);
       if (dlBatch.length < PAGE_SIZE) break;
-      dlOffset += dlBatch.length;
+      if (p === MAX_PAGES - 1) partial = true;
     }
 
     const missing = directLeads.filter(l => !assignedLeadIds.has(String(l.id)));
@@ -92,7 +105,21 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  return NextResponse.json(results);
+  if (partial || wideQuery) {
+    console.info('[admin/assignments]', {
+      returned: results.length,
+      wideQuery,
+      lookbackDays: wideQuery ? lookbackDays : null,
+      partial,
+    });
+  }
+
+  return NextResponse.json(results, {
+    headers: {
+      'X-Truncated': partial ? '1' : '0',
+      'X-Lookback-Days': wideQuery ? String(lookbackDays) : '0',
+    },
+  });
 }
 
 export async function DELETE(request: NextRequest) {

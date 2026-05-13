@@ -19,12 +19,32 @@ export async function GET(request: NextRequest) {
 
   const supabase = createServerClient();
 
+  /** Safety caps voor debug-tool. Voorkomt dat een per-ongeluk-geklikte refresh de DB plat trekt. */
+  const DEBUG_LIMIT = 2000;
+
   const [leadsRes, assignRes, batchRes, targetRes, custRes] = await Promise.all([
-    supabase.from('leads').select('id, naam_klant, email, branch, postcode, plaatsnaam, lat, lng, land, provincie, created_at').order('created_at', { ascending: false }),
-    supabase.from('lead_assignments').select('id, lead_id, customer_id, batch_id, distance_km, assigned_at, customers(name)'),
-    supabase.from('customer_batches').select('id, customer_id, branch, batch_size, leads_delivered, leads_per_day, leads_per_week, status, customers(name)'),
-    supabase.from('customer_targets').select('id, customer_id, label, lat, lng, radius_km, is_active, target_type, provinces'),
-    supabase.from('customers').select('id, name, is_active, portal_active'),
+    supabase
+      .from('leads')
+      .select('id, naam_klant, email, branch, postcode, plaatsnaam, lat, lng, land, provincie, created_at')
+      .order('created_at', { ascending: false })
+      .limit(DEBUG_LIMIT),
+    supabase
+      .from('lead_assignments')
+      .select('id, lead_id, customer_id, batch_id, distance_km, assigned_at, customers(name)')
+      .order('assigned_at', { ascending: false })
+      .limit(DEBUG_LIMIT),
+    supabase
+      .from('customer_batches')
+      .select('id, customer_id, branch, batch_size, leads_delivered, leads_per_day, leads_per_week, status, customers(name)')
+      .limit(DEBUG_LIMIT),
+    supabase
+      .from('customer_targets')
+      .select('id, customer_id, label, lat, lng, radius_km, is_active, target_type, provinces')
+      .limit(DEBUG_LIMIT),
+    supabase
+      .from('customers')
+      .select('id, name, is_active, portal_active')
+      .limit(DEBUG_LIMIT),
   ]);
 
   const leads = leadsRes.data || [];
@@ -32,6 +52,16 @@ export async function GET(request: NextRequest) {
   const batches = batchRes.data || [];
   const targets = targetRes.data || [];
   const customers = custRes.data || [];
+
+  const _debugScope = {
+    limitPerTable: DEBUG_LIMIT,
+    leadsTruncated: leads.length >= DEBUG_LIMIT,
+    assignmentsTruncated: assignments.length >= DEBUG_LIMIT,
+    batchesTruncated: batches.length >= DEBUG_LIMIT,
+    targetsTruncated: targets.length >= DEBUG_LIMIT,
+    customersTruncated: customers.length >= DEBUG_LIMIT,
+    note: 'Debug-tool: voor volledige analyses gebruik specifieke routes met filters.',
+  };
 
   const assignmentsByLead: Record<string, typeof assignments> = {};
   for (const a of assignments) {
@@ -253,5 +283,5 @@ export async function GET(request: NextRequest) {
     completed_batches: batches.filter(b => b.status === 'completed').length,
   };
 
-  return NextResponse.json({ summary, leads: leadDetails });
+  return NextResponse.json({ summary, leads: leadDetails, _debugScope });
 }

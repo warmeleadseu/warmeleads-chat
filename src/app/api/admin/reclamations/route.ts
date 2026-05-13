@@ -31,10 +31,20 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ pending_count: count || 0 });
   }
 
+  /** Cap voor reclamaties-fetch om DB-load te beperken. Configureerbaar via ?limit (max 1000). */
+  const DEFAULT_LIMIT = 500;
+  const MAX_LIMIT = 1000;
+  const limitParam = parseInt(url.get('limit') || '');
+  const limit = Number.isFinite(limitParam) && limitParam > 0 ? Math.min(limitParam, MAX_LIMIT) : DEFAULT_LIMIT;
+
   let query = supabase
     .from('lead_reclamations')
-    .select('*, customers(name, email), leads(naam_klant, telefoonnummer, email, postcode, plaatsnaam, provincie, branch)')
-    .order('created_at', { ascending: false });
+    .select(
+      '*, customers(name, email), leads(naam_klant, telefoonnummer, email, postcode, plaatsnaam, provincie, branch)',
+      { count: 'exact' },
+    )
+    .order('created_at', { ascending: false })
+    .limit(limit + 1); // +1 om te detecteren of er meer is dan de cap.
 
   if (status && status !== 'all') {
     query = query.eq('status', status);
@@ -43,18 +53,29 @@ export async function GET(request: NextRequest) {
   if (admin.role === 'accountmanager') {
     const { data: myCustomers } = await supabase.from('customers').select('id').eq('account_manager_id', admin.id);
     const ids = (myCustomers || []).map(c => c.id);
-    if (ids.length === 0) return NextResponse.json({ reclamations: [] });
+    if (ids.length === 0) return NextResponse.json([]);
     query = query.in('customer_id', ids);
   }
 
-  const { data, error } = await query;
+  const { data, error, count } = await query;
 
   if (error) {
     console.error('[admin/reclamations GET]', error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const reclamations = data || [];
+  let reclamations = data || [];
+  const partial = reclamations.length > limit;
+  if (partial) reclamations = reclamations.slice(0, limit);
+
+  if (partial || (count != null && count > limit)) {
+    console.info('[admin/reclamations]', {
+      returned: reclamations.length,
+      total: count ?? null,
+      limit,
+      partial: true,
+    });
+  }
 
   if (search) {
     const s = search.toLowerCase();
@@ -79,10 +100,20 @@ export async function GET(request: NextRequest) {
         (r.description || '').toLowerCase().includes(s)
       );
     });
-    return NextResponse.json(filtered);
+    return NextResponse.json(filtered, {
+      headers: {
+        'X-Total-Count': String(count ?? reclamations.length),
+        'X-Truncated': partial ? '1' : '0',
+      },
+    });
   }
 
-  return NextResponse.json(reclamations);
+  return NextResponse.json(reclamations, {
+    headers: {
+      'X-Total-Count': String(count ?? reclamations.length),
+      'X-Truncated': partial ? '1' : '0',
+    },
+  });
 }
 
 const REASON_LABELS: Record<string, string> = {
