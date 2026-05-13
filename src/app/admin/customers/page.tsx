@@ -2775,7 +2775,7 @@ function BatchesPanel({ customer, branchOptions, onClose, embedded }: { customer
   const [batches, setBatches] = useState<Batch[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState<{ branch: string; batch_size: number; price_per_lead: string; leads_per_day: string; leads_per_week: string; lookback_days: string; notes: string; lead_filters: LeadFilter[]; is_paid: boolean }>({ branch: '', batch_size: 100, price_per_lead: '', leads_per_day: '', leads_per_week: '', lookback_days: '3', notes: '', lead_filters: [], is_paid: false });
+  const [form, setForm] = useState<{ branch: string; batch_size: number; price_per_lead: string; leads_per_day: string; leads_per_week: string; lookback_days: string; notes: string; lead_filters: LeadFilter[]; is_paid: boolean; send_payment_email: boolean }>({ branch: '', batch_size: 100, price_per_lead: '', leads_per_day: '', leads_per_week: '', lookback_days: '3', notes: '', lead_filters: [], is_paid: false, send_payment_email: true });
   const [saving, setSaving] = useState(false);
 
   const fetchBatches = useCallback(async () => {
@@ -2803,6 +2803,7 @@ function BatchesPanel({ customer, branchOptions, onClose, embedded }: { customer
           notes: form.notes || null,
           lead_filters: form.lead_filters.filter(f => f.field && (f.values?.length || 0) > 0),
           is_paid: form.is_paid,
+          ...(form.is_paid ? {} : { send_payment_email: form.send_payment_email }),
         }),
       });
       if (!res.ok) {
@@ -2812,7 +2813,7 @@ function BatchesPanel({ customer, branchOptions, onClose, embedded }: { customer
         return;
       }
       setShowAdd(false);
-      setForm({ branch: '', batch_size: 100, price_per_lead: '', leads_per_day: '', leads_per_week: '', lookback_days: '3', notes: '', lead_filters: [], is_paid: false });
+      setForm({ branch: '', batch_size: 100, price_per_lead: '', leads_per_day: '', leads_per_week: '', lookback_days: '3', notes: '', lead_filters: [], is_paid: false, send_payment_email: true });
       fetchBatches();
     } catch {
       alert('Er ging iets mis');
@@ -2944,6 +2945,28 @@ function BatchesPanel({ customer, branchOptions, onClose, embedded }: { customer
                   }`} />
                 </button>
               </div>
+              {!form.is_paid && (
+                <div className="mb-3 flex items-center justify-between rounded-lg border border-slate-200 bg-white p-3">
+                  <div>
+                    <p className="text-xs font-semibold text-slate-700">Stuur betaallink-mail naar klant</p>
+                    <p className="mt-0.5 text-[11px] text-slate-400">
+                      {form.send_payment_email
+                        ? 'Klant ontvangt direct de open factuur met Mollie-betaallink'
+                        : 'Factuur wordt aangemaakt zonder mail — verstuur later via de batchdetails'}
+                    </p>
+                  </div>
+                  <button type="button" onClick={() => setForm(f => ({ ...f, send_payment_email: !f.send_payment_email }))}
+                    role="switch" aria-checked={form.send_payment_email}
+                    aria-label={form.send_payment_email ? 'Betaallink-mail uitschakelen' : 'Betaallink-mail inschakelen'}
+                    className={`relative inline-flex h-[24px] w-[44px] shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 ${
+                      form.send_payment_email ? 'bg-emerald-500' : 'bg-slate-300'
+                    }`}>
+                    <span className={`pointer-events-none inline-block h-[20px] w-[20px] transform rounded-full bg-white shadow ring-0 transition duration-200 ${
+                      form.send_payment_email ? 'translate-x-[22px]' : 'translate-x-[2px]'
+                    }`} />
+                  </button>
+                </div>
+              )}
               <div className="flex gap-2">
                 <button onClick={() => setShowAdd(false)}
                   className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-500 hover:bg-slate-50">Annuleren</button>

@@ -1525,6 +1525,10 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
     price_per_lead: '', leads_per_day: '', leads_per_week: '', lookback_days: '3', notes: '', lead_filters: [] as LeadFilter[],
     batch_delivery: 'pipeline' as 'pipeline' | 'bulk' | 'niche_research',
     niche_title: '',
+    // Standaard verstuurt het systeem direct een betaallink-mail naar de klant bij
+    // een open factuur. Admin/AM kan dit hier uitvinken om alleen de factuur +
+    // Mollie-checkout aan te maken zonder mail.
+    send_payment_email: true,
   });
   const [saving, setSaving] = useState(false);
   const [branchFields, setBranchFields] = useState<BranchField[]>([]);
@@ -1625,6 +1629,7 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
             is_paid: form.is_paid,
             notes: form.notes || null,
             ...(startsAtISO ? { starts_at: startsAtISO } : {}),
+            ...(form.is_paid ? {} : { send_payment_email: form.send_payment_email }),
           }),
         });
         if (res.ok) onCreated();
@@ -1647,6 +1652,7 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
           lead_filters: form.lead_filters.filter(f => f.field && (f.values?.length || 0) > 0),
           starts_at: startsAtISO,
           batch_kind: form.batch_delivery === 'bulk' ? 'bulk_leads' : 'leads',
+          ...(form.is_paid ? {} : { send_payment_email: form.send_payment_email }),
         }),
       });
       if (res.ok) onCreated();
@@ -1966,6 +1972,29 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
               }`} />
             </button>
           </div>
+
+          {!form.is_paid && (
+            <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <div>
+                <p className="text-sm font-medium text-slate-700">Stuur betaallink-mail naar klant</p>
+                <p className="text-[11px] text-slate-400">
+                  {form.send_payment_email
+                    ? 'Klant ontvangt direct de open factuur met Mollie-betaallink'
+                    : 'Factuur wordt aangemaakt zonder mail — verstuur later via de batchdetails'}
+                </p>
+              </div>
+              <button type="button" onClick={() => setForm(f => ({ ...f, send_payment_email: !f.send_payment_email }))}
+                role="switch" aria-checked={form.send_payment_email}
+                aria-label={form.send_payment_email ? 'Betaallink-mail uitschakelen' : 'Betaallink-mail inschakelen'}
+                className={`relative inline-flex h-[26px] w-[48px] shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 ${
+                  form.send_payment_email ? 'bg-emerald-500' : 'bg-slate-300'
+                }`}>
+                <span className={`pointer-events-none inline-block h-[22px] w-[22px] transform rounded-full bg-white shadow ring-0 transition duration-200 ${
+                  form.send_payment_email ? 'translate-x-[24px]' : 'translate-x-[2px]'
+                }`} />
+              </button>
+            </div>
+          )}
 
           {!isNicheDelivery && form.branch && (
             <div>

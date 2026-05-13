@@ -27,6 +27,14 @@ interface CreateInvoiceParams {
    * (admin → nieuwe batch + factuur met betaallink).
    */
   email_context?: 'new_batch_order';
+  /**
+   * Bij `false` slaan we de open-factuur-/betaallink-mail bewust over (de factuur en
+   * Mollie-checkout worden wél gegenereerd, zodat een AM die later kan versturen via
+   * "Stuur factuur + betaallink" of een betaalherinnering). Default `true`.
+   * Alleen relevant voor open facturen — bij `status: 'paid'` wordt sowieso geen
+   * betaallink verstuurd.
+   */
+  send_payment_email?: boolean;
 }
 
 async function getNextInvoiceNumber(supabase: ReturnType<typeof createServerClient>): Promise<string> {
@@ -183,6 +191,12 @@ export async function createInvoice(params: CreateInvoiceParams) {
     }
     if (!customer.email?.trim()) {
       console.warn('[invoice] Geen klant-e-mail: open factuur (en betaallink-mail) overgeslagen');
+    } else if (params.send_payment_email === false) {
+      console.info('[invoice] open factuur aangemaakt zonder klant-mail (send_payment_email=false)', {
+        invoice_id: invoice.id,
+        invoice_number: invoice.invoice_number,
+        customer_id: invoice.customer_id,
+      });
     } else {
       try {
         await sendOpenInvoiceEmail(

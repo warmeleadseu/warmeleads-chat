@@ -48,6 +48,10 @@ export async function POST(request: NextRequest) {
     niche_title: rawNicheTitle,
   } = body;
   const batch_kind = normalizeBatchKind(typeof rawBatchKind === 'string' ? rawBatchKind : undefined);
+  // Optionele betaallink-mail bij open factuur. Default true (backwards compat); admin/AM
+  // kan in de UI uitvinken zodat alleen de factuur + Mollie-checkout wordt aangemaakt
+  // zonder dat de klant direct gemaild wordt.
+  const sendPaymentEmail = body.send_payment_email !== false;
 
   if (admin.role === 'accountmanager' && customer_id) {
     const { data: myCust } = await supabase.from('customers').select('id').eq('account_manager_id', admin.id).eq('id', customer_id).single();
@@ -139,7 +143,7 @@ export async function POST(request: NextRequest) {
         invoice_product: 'niche_research',
         niche_title: nicheTitle,
         ...(batchIsPaid ? { paid_at: new Date().toISOString() } : {}),
-        ...(!batchIsPaid ? { email_context: 'new_batch_order' as const } : {}),
+        ...(!batchIsPaid ? { email_context: 'new_batch_order' as const, send_payment_email: sendPaymentEmail } : {}),
       });
     } catch (e) {
       console.error('[admin/batches] invoice creation failed:', e);
@@ -222,7 +226,7 @@ export async function POST(request: NextRequest) {
         status: batchIsPaid ? 'paid' : 'open',
         ...(batchIsPaid ? { paid_at: new Date().toISOString() } : {}),
         ...(batch_kind === 'bulk_leads' ? { invoice_product: 'bulk_leads' as const } : {}),
-        ...(!batchIsPaid ? { email_context: 'new_batch_order' as const } : {}),
+        ...(!batchIsPaid ? { email_context: 'new_batch_order' as const, send_payment_email: sendPaymentEmail } : {}),
       });
     } catch (e) {
       console.error('[admin/batches] invoice creation failed:', e);
