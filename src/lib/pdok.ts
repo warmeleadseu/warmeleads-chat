@@ -429,11 +429,13 @@ export async function resolveCity(
   if (!plaatsnaam || plaatsnaam.trim().length < 2) return null;
 
   if (!country || country === 'NL') {
+    // PDOK is af en toe overbelast (Solr "Max requests queued"). Een ruimere timeout
+    // voorkomt dat we te snel naar Nominatim vallen voor doodgewone NL-plaatsen.
     try {
       const q = encodeURIComponent(plaatsnaam.trim());
       const res = await fetch(
         `${PDOK_URL}?q=${q}&fq=type:woonplaats&rows=1&fl=woonplaatsnaam,centroide_ll`,
-        { signal: AbortSignal.timeout(4000) }
+        { signal: AbortSignal.timeout(6000) }
       );
       if (res.ok) {
         const data = await res.json();
@@ -446,10 +448,13 @@ export async function resolveCity(
     } catch { /* fall through */ }
   }
 
+  // Fallback: Nominatim. Belangrijk: bij vrije-tekst-zoek (`q`) moet het filter
+  // `countrycodes` heten — `country` is alleen geldig in een structured query
+  // en geeft anders een 400 ("cannot be used together with 'q' parameter").
   try {
     const params = new URLSearchParams({
       q: plaatsnaam.trim(),
-      country: country === 'BE' ? 'be' : 'be,nl',
+      countrycodes: country === 'BE' ? 'be' : 'be,nl',
       format: 'json',
       addressdetails: '1',
       limit: '1',
