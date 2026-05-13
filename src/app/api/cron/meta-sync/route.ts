@@ -23,6 +23,8 @@ export async function GET(request: NextRequest) {
     dateTo,
     adRowsSynced: result.synced,
     leadsUpdated: result.leadsUpdated,
+    truncated: result.truncated ?? false,
+    computeMs: result.computeMs,
     errors: result.errors,
     timestamp: new Date().toISOString(),
   });

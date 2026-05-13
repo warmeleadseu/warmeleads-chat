@@ -22,65 +22,92 @@ export async function GET(request: NextRequest) {
   }
 
   const supabase = createServerClient();
+  const t0 = Date.now();
   const mondayISO = getMondayMidnight();
   const todayISO = getTodayMidnight();
 
-  // --- Gather weekly stats ---
+  /** Hardcap voor week-leads scan: voorkomt full-table-fetch in topBranches. Bij groei blijft accuraat want fallback is per-branch count. */
+  const WEEK_LEADS_SCAN_CAP = 10_000;
 
-  const { count: totalLeads } = await supabase
-    .from('leads')
-    .select('id', { count: 'exact', head: true });
+  // --- Gather weekly stats (counts parallel) ---
 
-  const { count: newLeadsThisWeek } = await supabase
-    .from('leads')
-    .select('id', { count: 'exact', head: true })
-    .neq('bron', 'excel_import')
-    .gte('created_at', mondayISO);
+  const [
+    totalLeadsRes,
+    newLeadsThisWeekRes,
+    assignedThisWeekRes,
+    activeCustomersRes,
+    activeBatchesRes,
+    completedBatchesRes,
+  ] = await Promise.all([
+    supabase.from('leads').select('id', { count: 'exact', head: true }),
+    supabase
+      .from('leads')
+      .select('id', { count: 'exact', head: true })
+      .neq('bron', 'excel_import')
+      .gte('created_at', mondayISO),
+    supabase
+      .from('lead_assignments')
+      .select('id', { count: 'exact', head: true })
+      .gte('assigned_at', mondayISO),
+    supabase.from('customers').select('id', { count: 'exact', head: true }).eq('is_active', true),
+    supabase.from('customer_batches').select('id', { count: 'exact', head: true }).eq('status', 'active'),
+    supabase
+      .from('customer_batches')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'completed')
+      .gte('completed_at', mondayISO),
+  ]);
 
-  const { count: assignedThisWeek } = await supabase
-    .from('lead_assignments')
-    .select('id', { count: 'exact', head: true })
-    .gte('assigned_at', mondayISO);
-
-  const { count: activeCustomers } = await supabase
-    .from('customers')
-    .select('id', { count: 'exact', head: true })
-    .eq('is_active', true);
-
-  const { count: activeBatches } = await supabase
-    .from('customer_batches')
-    .select('id', { count: 'exact', head: true })
-    .eq('status', 'active');
-
-  const { count: completedBatches } = await supabase
-    .from('customer_batches')
-    .select('id', { count: 'exact', head: true })
-    .eq('status', 'completed')
-    .gte('completed_at', mondayISO);
-
+  // Bounded scan voor branch-counts; bij overschrijding fallen we terug op per-branch counts (geen full-table-scan).
   const { data: branchData } = await supabase
     .from('leads')
     .select('branch')
     .neq('bron', 'excel_import')
-    .gte('created_at', mondayISO);
+    .gte('created_at', mondayISO)
+    .limit(WEEK_LEADS_SCAN_CAP + 1);
 
-  const branchCounts: Record<string, number> = {};
-  (branchData || []).forEach(l => {
-    if (l.branch) branchCounts[l.branch] = (branchCounts[l.branch] || 0) + 1;
-  });
-  const topBranches = Object.entries(branchCounts)
-    .map(([name, count]) => ({ name, count }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 10);
+  const branchScanTruncated = (branchData?.length || 0) > WEEK_LEADS_SCAN_CAP;
+  let topBranches: { name: string; count: number }[];
+
+  if (branchScanTruncated) {
+    // Fallback: per actieve branche een head-count. Vast aantal branches → klein vast aantal queries.
+    const { data: activeBranchRows } = await supabase
+      .from('branches')
+      .select('slug')
+      .eq('hidden_from_admin', false);
+    const slugs = (activeBranchRows || []).map(b => b.slug as string);
+    const counts = await Promise.all(
+      slugs.map(async slug => {
+        const { count } = await supabase
+          .from('leads')
+          .select('id', { count: 'exact', head: true })
+          .neq('bron', 'excel_import')
+          .gte('created_at', mondayISO)
+          .eq('branch', slug);
+        return { name: slug, count: count ?? 0 };
+      }),
+    );
+    topBranches = counts.filter(c => c.count > 0).sort((a, b) => b.count - a.count).slice(0, 10);
+  } else {
+    const branchCounts: Record<string, number> = {};
+    (branchData || []).forEach(l => {
+      if (l.branch) branchCounts[l.branch] = (branchCounts[l.branch] || 0) + 1;
+    });
+    topBranches = Object.entries(branchCounts)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+  }
 
   const stats = {
-    totalLeads: totalLeads ?? 0,
-    newLeadsThisWeek: newLeadsThisWeek ?? 0,
-    assignedThisWeek: assignedThisWeek ?? 0,
-    activeCustomers: activeCustomers ?? 0,
-    activeBatches: activeBatches ?? 0,
-    completedBatches: completedBatches ?? 0,
+    totalLeads: totalLeadsRes.count ?? 0,
+    newLeadsThisWeek: newLeadsThisWeekRes.count ?? 0,
+    assignedThisWeek: assignedThisWeekRes.count ?? 0,
+    activeCustomers: activeCustomersRes.count ?? 0,
+    activeBatches: activeBatchesRes.count ?? 0,
+    completedBatches: completedBatchesRes.count ?? 0,
     topBranches,
+    branchScanTruncated,
   };
 
   // --- Send weekly report to all active admins ---
@@ -97,6 +124,7 @@ export async function GET(request: NextRequest) {
   }
 
   // --- Send daily lead digests ---
+  // Voorheen N+1 (per klant 2 queries). Nu: 1 bulk-query assignments + 1 bulk-query leads, daarna in JS groeperen.
 
   const { data: notifyCustomers } = await supabase
     .from('customers')
@@ -106,32 +134,76 @@ export async function GET(request: NextRequest) {
     .eq('notification_frequency', 'daily');
 
   let digestsSent = 0;
-  for (const customer of notifyCustomers || []) {
-    const { data: assignments } = await supabase
-      .from('lead_assignments')
-      .select('lead_id')
-      .eq('customer_id', customer.id)
-      .gte('assigned_at', todayISO);
+  const digestCustomers = notifyCustomers || [];
 
-    const leadIds = (assignments || []).map(a => a.lead_id);
-    if (leadIds.length === 0) continue;
+  if (digestCustomers.length > 0) {
+    const ASSIGN_IN_CHUNK = 200;
+    const LEAD_IN_CHUNK = 500;
+    const customerIds = digestCustomers.map(c => c.id);
 
-    const { data: leads } = await supabase
-      .from('leads')
-      .select('naam_klant, email, telefoonnummer, postcode, huisnummer, plaatsnaam, provincie, branch, wervingsdatum, notities')
-      .in('id', leadIds);
+    // 1) Bulk assignments fetch (gechunkt op customer-ids om PostgREST IN-grootte te respecteren).
+    type AssignRow = { customer_id: string; lead_id: string };
+    const allAssign: AssignRow[] = [];
+    for (let i = 0; i < customerIds.length; i += ASSIGN_IN_CHUNK) {
+      const chunk = customerIds.slice(i, i + ASSIGN_IN_CHUNK);
+      const { data } = await supabase
+        .from('lead_assignments')
+        .select('customer_id, lead_id')
+        .in('customer_id', chunk)
+        .gte('assigned_at', todayISO);
+      if (data?.length) allAssign.push(...(data as AssignRow[]));
+    }
 
-    if (leads && leads.length > 0) {
-      const ok = await sendDailyLeadDigest(customer, leads);
+    // Groepeer lead-ids per klant; verzamel ook de hele uniqueset voor 1 leads-fetch.
+    const leadIdsByCustomer = new Map<string, string[]>();
+    const allLeadIds = new Set<string>();
+    for (const a of allAssign) {
+      if (!leadIdsByCustomer.has(a.customer_id)) leadIdsByCustomer.set(a.customer_id, []);
+      leadIdsByCustomer.get(a.customer_id)!.push(a.lead_id);
+      allLeadIds.add(a.lead_id);
+    }
+
+    // 2) Bulk leads fetch (gechunkt). Type loose houden — sendDailyLeadDigest accepteert optionele velden.
+    type LeadRow = Record<string, unknown> & { id: string };
+    const leadMap = new Map<string, LeadRow>();
+    const allLeadIdArr = Array.from(allLeadIds);
+    for (let i = 0; i < allLeadIdArr.length; i += LEAD_IN_CHUNK) {
+      const chunk = allLeadIdArr.slice(i, i + LEAD_IN_CHUNK);
+      const { data } = await supabase
+        .from('leads')
+        .select('id, naam_klant, email, telefoonnummer, postcode, huisnummer, plaatsnaam, provincie, branch, wervingsdatum, notities')
+        .in('id', chunk);
+      for (const l of (data || []) as LeadRow[]) leadMap.set(l.id, l);
+    }
+
+    // 3) Sequentieel digest sturen per klant (Resend-vriendelijk; voorheen ook sequentieel).
+    for (const customer of digestCustomers) {
+      const leadIds = leadIdsByCustomer.get(customer.id);
+      if (!leadIds?.length) continue;
+      const leads = leadIds
+        .map(id => leadMap.get(id))
+        .filter((l): l is LeadRow => !!l);
+      if (leads.length === 0) continue;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ok = await sendDailyLeadDigest(customer, leads as any);
       if (ok) digestsSent++;
     }
   }
+
+  console.info('[cron/weekly-report]', {
+    computeMs: Date.now() - t0,
+    branchScanTruncated,
+    weeklyEmailsSent,
+    digestCustomers: digestCustomers.length,
+    digestsSent,
+  });
 
   return NextResponse.json({
     ok: true,
     weeklyEmailsSent,
     digestsSent,
     stats,
+    truncated: branchScanTruncated,
     timestamp: new Date().toISOString(),
   });
 }

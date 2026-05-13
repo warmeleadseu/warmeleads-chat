@@ -99,7 +99,9 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // Phase 3: Delete profanity leads (recent, skip spreadsheet imports and demo leads) and sync affected batch counters
+  // Phase 3: Delete profanity leads (recent, skip spreadsheet imports and demo leads) and sync affected batch counters.
+  // Voorheen: per geblokte lead aparte select + delete = N+1. Nu: 1 .in()-select + chunked .in()-deletes.
+  const profanityT0 = Date.now();
   let profanityDeleted = 0;
   const affectedBatchIds = new Set<string>();
   const { data: recentLeads } = await supabase
@@ -110,26 +112,55 @@ export async function GET(request: NextRequest) {
     .gte('created_at', cutoff.toISOString())
     .limit(2000);
 
-  if (recentLeads) {
-    for (const lead of recentLeads) {
-      if (checkLeadProfanity(lead as Record<string, unknown>).blocked) {
-        const { data: assignments } = await supabase
-          .from('lead_assignments')
-          .select('batch_id')
-          .eq('lead_id', lead.id);
-        for (const a of assignments || []) {
-          if (a.batch_id) affectedBatchIds.add(a.batch_id);
-        }
-        await supabase.from('lead_assignments').delete().eq('lead_id', lead.id);
-        await supabase.from('leads').delete().eq('id', lead.id);
-        profanityDeleted++;
+  const blockedIds: string[] = [];
+  for (const lead of recentLeads || []) {
+    if (checkLeadProfanity(lead as Record<string, unknown>).blocked) {
+      blockedIds.push(lead.id);
+    }
+  }
+
+  if (blockedIds.length > 0) {
+    const PROFANITY_CHUNK = 300;
+    // 1) Verzamel betrokken batch_ids in 1 (gechunkt) select i.p.v. per lead.
+    for (let i = 0; i < blockedIds.length; i += PROFANITY_CHUNK) {
+      const chunk = blockedIds.slice(i, i + PROFANITY_CHUNK);
+      const { data: assignments } = await supabase
+        .from('lead_assignments')
+        .select('batch_id')
+        .in('lead_id', chunk);
+      for (const a of assignments || []) {
+        if (a.batch_id) affectedBatchIds.add(a.batch_id);
       }
+    }
+
+    // 2) Delete assignments + leads in chunks.
+    for (let i = 0; i < blockedIds.length; i += PROFANITY_CHUNK) {
+      const chunk = blockedIds.slice(i, i + PROFANITY_CHUNK);
+      const { error: aErr } = await supabase.from('lead_assignments').delete().in('lead_id', chunk);
+      if (aErr) {
+        console.warn('[cron/distribute] profanity assignments delete error:', aErr.message);
+        continue;
+      }
+      const { error: lErr } = await supabase.from('leads').delete().in('id', chunk);
+      if (lErr) {
+        console.warn('[cron/distribute] profanity leads delete error:', lErr.message);
+        continue;
+      }
+      profanityDeleted += chunk.length;
     }
   }
 
   for (const batchId of affectedBatchIds) {
     await syncBatchDelivered(supabase, batchId);
   }
+
+  console.info('[cron/distribute:profanity]', {
+    computeMs: Date.now() - profanityT0,
+    scanned: recentLeads?.length || 0,
+    blocked: blockedIds.length,
+    deleted: profanityDeleted,
+    affectedBatches: affectedBatchIds.size,
+  });
 
   // Phase 4: Distribute (uses 3-day limit internally)
   const distResult = await distributeUnassignedLeads();
