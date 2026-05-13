@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useCallback, useContext, useRef, useState, ReactNode } from 'react';
+import { createContext, useCallback, useContext, useMemo, useRef, useState, ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CheckCircleIcon, InformationCircleIcon, XCircleIcon } from '@heroicons/react/24/outline';
 
@@ -36,12 +36,16 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     }, AUTO_DISMISS_MS);
   }, []);
 
-  const api: ToastApi = {
-    show,
-    success: msg => show(msg, 'success'),
-    error: msg => show(msg, 'error'),
-    info: msg => show(msg, 'info'),
-  };
+  const success = useCallback((msg: string) => show(msg, 'success'), [show]);
+  const error = useCallback((msg: string) => show(msg, 'error'), [show]);
+  const info = useCallback((msg: string) => show(msg, 'info'), [show]);
+
+  // Stabiele referentie naar het toast-API zodat consumenten (zoals portal/page.tsx)
+  // niet bij elke ToastProvider-render een nieuwe `showToast`-callback krijgen.
+  const api = useMemo<ToastApi>(
+    () => ({ show, success, error, info }),
+    [show, success, error, info],
+  );
 
   return (
     <ToastContext.Provider value={api}>
