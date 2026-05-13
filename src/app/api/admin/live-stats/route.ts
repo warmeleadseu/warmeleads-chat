@@ -127,7 +127,7 @@ export async function GET(request: NextRequest) {
     phoneTodayTotal > 0 ? Math.round(((phoneTodayTotal - phoneInvalidToday) / phoneTodayTotal) * 100) : 100;
 
   const batches = batchesRes.data || [];
-  const activeBatches = batches.filter(b => b.status === 'active');
+  const activeBatches = batches.filter(b => b.status === 'active' && b.is_paid === true);
   const completedBatches = batches.filter(b => b.status === 'completed');
   const activeCustomers = (customersRes.data || []).filter(c => c.is_active);
 
