@@ -4,6 +4,7 @@ import { sendNewLeadPush } from './pushNotification';
 import { syncBatchDelivered } from './batchSync';
 import { isPipelineBatchKind } from './batchKind';
 
+/** Hard plafond in het product (gedeelde leads). */
 const MAX_ASSIGNMENTS = 3;
 const TARGET_AVG_ASSIGNMENTS = 2;
 const MAX_LEAD_AGE_DAYS = 3;
@@ -140,6 +141,21 @@ interface LeadForDistribution {
   [key: string]: unknown;
 }
 
+/** Optioneel per lead: `custom_fields.max_customer_assignments` (1–3). */
+function effectiveMaxAssignments(lead: LeadForDistribution): number {
+  const cf = lead.custom_fields;
+  if (!cf || typeof cf !== 'object') return MAX_ASSIGNMENTS;
+  const raw = (cf as Record<string, unknown>).max_customer_assignments;
+  const n =
+    typeof raw === 'number'
+      ? raw
+      : typeof raw === 'string'
+        ? parseInt(raw, 10)
+        : NaN;
+  if (!Number.isFinite(n) || n < 1) return MAX_ASSIGNMENTS;
+  return Math.min(MAX_ASSIGNMENTS, Math.max(1, Math.floor(n)));
+}
+
 interface LeadFilter {
   field: string;
   operator: string;
@@ -273,7 +289,7 @@ export async function distributeLead(
   const reassignmentCutoff = new Date(Date.now() - REASSIGNMENT_COOLDOWN_DAYS * 24 * 60 * 60 * 1000);
   const recentAssignments = (existingAssignments || []).filter(a => new Date(a.assigned_at) >= reassignmentCutoff);
   const recentAssignedIds = new Set(recentAssignments.map(a => a.customer_id));
-  if (recentAssignedIds.size >= MAX_ASSIGNMENTS) return result;
+  if (recentAssignedIds.size >= effectiveMaxAssignments(fullLead as LeadForDistribution)) return result;
 
   // 12-hour cooldown: skip if assigned to anyone in the last COOLDOWN_HOURS
   if (existingAssignments && existingAssignments.length > 0) {
@@ -890,7 +906,8 @@ export async function distributeUnassignedLeads(): Promise<{ distributed: number
   if (currentAvg < TARGET_AVG_ASSIGNMENTS) {
     const reAssignCandidates = leads.filter(l => {
       const count = recentAssignmentCounts[l.id] || 0;
-      if (count === 0 || count >= MAX_ASSIGNMENTS) return false;
+      const cap = effectiveMaxAssignments(l as LeadForDistribution);
+      if (count === 0 || count >= cap) return false;
       const last = lastAssignedAt[l.id];
       if (last && last > cooldownCutoff) return false;
       return true;
