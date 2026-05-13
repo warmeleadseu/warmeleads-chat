@@ -4,7 +4,33 @@ import { createServerClient } from '@/lib/supabase';
 import { hasPermission, forbidden, PERMISSIONS } from '@/lib/portalPermissions';
 import { getHasPaidCustomerBatch, shouldUseDemoPortalExperience } from '@/lib/demoPortalEligibility';
 
+const PAGE_SIZE = 1000;
 const IN_CHUNK = 500;
+/** Hardcap voor onbegrensde portal reads — gelijk aan portal/stats voor consistentie. */
+const PORTAL_PAGINATE_MAX_ROWS = 25_000;
+/** Cap op aantal lead-details dat we daadwerkelijk uit `leads` ophalen. */
+const PORTAL_INSIGHTS_MAX_LEAD_DETAIL = 25_000;
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function paginateQuery<T>(query: any, maxRows = PORTAL_PAGINATE_MAX_ROWS): Promise<{ rows: T[]; truncated: boolean }> {
+  const all: T[] = [];
+  let offset = 0;
+  let truncated = false;
+  while (all.length < maxRows) {
+    const room = maxRows - all.length;
+    const take = Math.min(PAGE_SIZE, room);
+    const { data } = await query.range(offset, offset + take - 1);
+    if (!data?.length) break;
+    all.push(...(data as T[]));
+    if (data.length < take) break;
+    offset += data.length;
+    if (all.length >= maxRows) {
+      truncated = true;
+      break;
+    }
+  }
+  return { rows: all, truncated };
+}
 
 export async function GET(request: NextRequest) {
   const session = await verifyCustomer(request);
@@ -14,6 +40,7 @@ export async function GET(request: NextRequest) {
   const { customer } = session;
 
   const supabase = createServerClient();
+  const t0 = Date.now();
 
   const { data: custData } = await supabase
     .from('customers')
@@ -27,29 +54,47 @@ export async function GET(request: NextRequest) {
     hasPaidCustomerBatch,
   });
 
-  const directLeads = demoMode
-    ? []
-    : ((await supabase.from('leads').select('id').eq('customer_id', customer.id)).data || []);
+  // Direct geclaimde leads (alleen niet-demo); gepagineerd met cap.
+  let partial = false;
+  let directRows: { id: string }[] = [];
+  if (!demoMode) {
+    const directRes = await paginateQuery<{ id: string }>(
+      supabase.from('leads').select('id').eq('customer_id', customer.id),
+    );
+    directRows = directRes.rows;
+    partial ||= directRes.truncated;
+  }
 
-  let assignQuery = supabase.from('lead_assignments').select('lead_id, status').eq('customer_id', customer.id).order('assigned_at', { ascending: false });
+  let assignQuery = supabase
+    .from('lead_assignments')
+    .select('lead_id, status')
+    .eq('customer_id', customer.id)
+    .order('assigned_at', { ascending: false });
   if (demoMode) {
     assignQuery = assignQuery.eq('source', 'demo');
   } else {
     assignQuery = assignQuery.neq('source', 'demo');
   }
-  const { data: assignedLeads } = await assignQuery;
+  const assignRes = await paginateQuery<{ lead_id: string; status: string | null }>(assignQuery);
+  const assignedLeads = assignRes.rows;
+  partial ||= assignRes.truncated;
 
   const leadIds = new Set<string>();
   const assignmentStatusMap: Record<string, string> = {};
-  (directLeads || []).forEach((l: { id: string }) => leadIds.add(l.id));
-  (assignedLeads || []).forEach(a => {
+  directRows.forEach(l => leadIds.add(l.id));
+  assignedLeads.forEach(a => {
     leadIds.add(a.lead_id);
     if (!assignmentStatusMap[a.lead_id]) {
       assignmentStatusMap[a.lead_id] = a.status || 'nieuw';
     }
   });
 
-  const allIds = Array.from(leadIds);
+  // Cap op lead-detail fetch — bij erg veel leads truncaten we (recente eerst).
+  let allIds = Array.from(leadIds);
+  if (allIds.length > PORTAL_INSIGHTS_MAX_LEAD_DETAIL) {
+    allIds = allIds.slice(0, PORTAL_INSIGHTS_MAX_LEAD_DETAIL);
+    partial = true;
+  }
 
   if (allIds.length === 0) {
     return NextResponse.json({
@@ -61,6 +106,9 @@ export async function GET(request: NextRequest) {
       topLocations: [],
       topProvinces: [],
       periodComparison: { thisWeek: 0, lastWeek: 0, thisMonth: 0, lastMonth: 0 },
+      partial: false,
+      maxPaginateRows: PORTAL_PAGINATE_MAX_ROWS,
+      maxLeadDetailRows: PORTAL_INSIGHTS_MAX_LEAD_DETAIL,
     });
   }
 
@@ -81,7 +129,6 @@ export async function GET(request: NextRequest) {
   }));
   const total = leads.length;
 
-  // Conversion funnel
   const nieuw = leads.filter(l => l.status === 'nieuw').length;
   const gecontacteerd = leads.filter(l => l.status === 'gecontacteerd').length;
   const geen_gehoor = leads.filter(l => l.status === 'geen_gehoor').length;
@@ -90,7 +137,6 @@ export async function GET(request: NextRequest) {
   const afgewezen = leads.filter(l => l.status === 'afgewezen').length;
   const conversionRate = total > 0 ? Math.round((verkocht / total) * 10000) / 100 : 0;
 
-  // Quality metrics
   const withScore = leads.filter(l => l.quality_score != null);
   const averageScore = withScore.length > 0
     ? Math.round(withScore.reduce((sum, l) => sum + l.quality_score, 0) / withScore.length * 10) / 10
@@ -98,7 +144,6 @@ export async function GET(request: NextRequest) {
   const phoneValidCount = leads.filter(l => l.phone_valid === true).length;
   const phoneValidPct = total > 0 ? Math.round((phoneValidCount / total) * 10000) / 100 : 0;
 
-  // Response speed: average hours between created_at and updated_at for non-'nieuw' leads
   const respondedLeads = leads.filter(l => l.status !== 'nieuw' && l.updated_at && l.created_at);
   let averageHours: number | null = null;
   if (respondedLeads.length > 0) {
@@ -109,7 +154,6 @@ export async function GET(request: NextRequest) {
     averageHours = Math.round((totalHours / respondedLeads.length) * 10) / 10;
   }
 
-  // Top locations
   const cityCounts: Record<string, number> = {};
   leads.forEach(l => {
     if (l.plaatsnaam) {
@@ -121,7 +165,6 @@ export async function GET(request: NextRequest) {
     .sort((a, b) => b.count - a.count)
     .slice(0, 10);
 
-  // Province breakdown
   const provinceCounts: Record<string, number> = {};
   leads.forEach(l => {
     if (l.provincie) {
@@ -132,7 +175,6 @@ export async function GET(request: NextRequest) {
     .map(([provincie, count]) => ({ provincie, count }))
     .sort((a, b) => b.count - a.count);
 
-  // Period comparison
   const now = new Date();
   const thisMonday = new Date(now);
   thisMonday.setDate(now.getDate() - ((now.getDay() + 6) % 7));
@@ -156,6 +198,16 @@ export async function GET(request: NextRequest) {
     return d >= lastMonthStart && d <= lastMonthEnd;
   }).length;
 
+  if (partial) {
+    console.info('[portal/insights]', {
+      computeMs: Date.now() - t0,
+      customerId: customer.id,
+      uniqueLeadIds: leadIds.size,
+      leadsAnalyzed: leads.length,
+      partial,
+    });
+  }
+
   return NextResponse.json({
     conversionFunnel: {
       nieuw, gecontacteerd, geen_gehoor, offerte, verkocht, afgewezen, conversionRate,
@@ -165,5 +217,8 @@ export async function GET(request: NextRequest) {
     topLocations,
     topProvinces,
     periodComparison: { thisWeek, lastWeek, thisMonth, lastMonth },
+    partial,
+    maxPaginateRows: PORTAL_PAGINATE_MAX_ROWS,
+    maxLeadDetailRows: PORTAL_INSIGHTS_MAX_LEAD_DETAIL,
   });
 }

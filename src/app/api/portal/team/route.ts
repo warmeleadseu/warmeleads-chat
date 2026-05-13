@@ -26,19 +26,22 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Teamleden ophalen mislukt' }, { status: 500 });
   }
 
-  // Count leads per agent
+  // Count leads per agent — gebruik per-user head:true count (vast aantal teamleden, klein).
+  // Voorheen werd de volledige assignments-set opgehaald en in JS geteld.
   const userIds = (data || []).map(u => u.id);
   const leadCounts: Record<string, number> = {};
   if (userIds.length > 0) {
-    const { data: counts } = await supabase
-      .from('lead_assignments')
-      .select('portal_user_id')
-      .eq('customer_id', customer.id)
-      .in('portal_user_id', userIds);
-
-    (counts || []).forEach((row: { portal_user_id: string }) => {
-      leadCounts[row.portal_user_id] = (leadCounts[row.portal_user_id] || 0) + 1;
-    });
+    const results = await Promise.all(
+      userIds.map(async uid => {
+        const { count } = await supabase
+          .from('lead_assignments')
+          .select('id', { count: 'exact', head: true })
+          .eq('customer_id', customer.id)
+          .eq('portal_user_id', uid);
+        return { uid, count: count ?? 0 };
+      }),
+    );
+    for (const r of results) leadCounts[r.uid] = r.count;
   }
 
   const members = (data || []).map(u => ({

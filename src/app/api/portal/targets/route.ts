@@ -33,18 +33,31 @@ export async function GET(request: NextRequest) {
 
   const hasProvinceTargets = (targets || []).some(t => t.target_type === 'province');
 
-  const { data: assignments } = await supabase
-    .from('lead_assignments')
-    .select(`lead_id, leads!inner(lat, lng${hasProvinceTargets ? ', provincie' : ''})`)
-    .eq('customer_id', customer.id);
+  /** Hardcap voor assignments-join (zelfde stijl als portal/stats). */
+  const PORTAL_TARGETS_MAX_ROWS = 25_000;
+  const PAGE_SIZE = 1000;
 
   interface LeadGeo { lead_id: string; lat: number | null; lng: number | null; provincie?: string }
   const leadsGeo: LeadGeo[] = [];
-  for (const row of (assignments || []) as unknown as { lead_id: string; leads: { lat: number | null; lng: number | null; provincie?: string } }[]) {
-    const lead = row.leads;
-    if (lead) {
-      leadsGeo.push({ lead_id: row.lead_id, lat: lead.lat, lng: lead.lng, provincie: lead.provincie });
+  let partial = false;
+  for (let offset = 0; offset < PORTAL_TARGETS_MAX_ROWS; offset += PAGE_SIZE) {
+    const take = Math.min(PAGE_SIZE, PORTAL_TARGETS_MAX_ROWS - offset);
+    const { data: assignments } = await supabase
+      .from('lead_assignments')
+      .select(`lead_id, leads!inner(lat, lng${hasProvinceTargets ? ', provincie' : ''})`)
+      .eq('customer_id', customer.id)
+      .order('assigned_at', { ascending: false })
+      .range(offset, offset + take - 1);
+
+    if (!assignments?.length) break;
+    for (const row of assignments as unknown as { lead_id: string; leads: { lat: number | null; lng: number | null; provincie?: string } }[]) {
+      const lead = row.leads;
+      if (lead) {
+        leadsGeo.push({ lead_id: row.lead_id, lat: lead.lat, lng: lead.lng, provincie: lead.provincie });
+      }
     }
+    if (assignments.length < take) break;
+    if (offset + take >= PORTAL_TARGETS_MAX_ROWS) partial = true;
   }
 
   const enriched = (targets || []).map(target => {
@@ -65,5 +78,18 @@ export async function GET(request: NextRequest) {
     return { ...target, leads_count: count };
   });
 
-  return NextResponse.json({ targets: enriched });
+  if (partial) {
+    console.info('[portal/targets]', {
+      customerId: customer.id,
+      leadsGeoCount: leadsGeo.length,
+      cap: PORTAL_TARGETS_MAX_ROWS,
+      partial,
+    });
+  }
+
+  return NextResponse.json({
+    targets: enriched,
+    partial,
+    maxAssignmentsScanned: PORTAL_TARGETS_MAX_ROWS,
+  });
 }

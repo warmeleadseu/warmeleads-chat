@@ -12,17 +12,22 @@ export async function GET(request: NextRequest) {
 
   const supabase = createServerClient();
 
+  /** Cap voor customer_batches. Een klant heeft realistisch nooit duizenden batches; veilig. */
+  const BATCHES_CAP = 500;
   const { data: batches, error } = await supabase
     .from('customer_batches')
     .select('*')
     .eq('customer_id', customer.id)
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false })
+    .limit(BATCHES_CAP + 1);
 
   if (error) {
     return NextResponse.json({ error: 'Kon batches niet ophalen' }, { status: 500 });
   }
 
-  const allBatches = batches || [];
+  const fetched = batches || [];
+  const batchesPartial = fetched.length > BATCHES_CAP;
+  const allBatches = batchesPartial ? fetched.slice(0, BATCHES_CAP) : fetched;
 
   const branchSlugs = [...new Set(allBatches.map(b => b.branch).filter(Boolean))];
   const { data: branchRows } = branchSlugs.length > 0
@@ -45,14 +50,26 @@ export async function GET(request: NextRequest) {
 
   const activeBatchIds = activeBatches.map(b => b.id);
 
+  /** Cap voor week-assignments scan. Voldoende voor avg-berekening; voorkomt onbegrensde lees. */
+  const WEEK_ASSIGN_CAP = 25_000;
   let weekAssignments: { batch_id: string; created_at: string }[] = [];
+  let assignmentsPartial = false;
   if (activeBatchIds.length > 0) {
-    const { data } = await supabase
-      .from('lead_assignments')
-      .select('batch_id, created_at')
-      .in('batch_id', activeBatchIds)
-      .gte('created_at', sevenDaysAgo.toISOString());
-    weekAssignments = data || [];
+    const PAGE_SIZE = 1000;
+    for (let offset = 0; offset < WEEK_ASSIGN_CAP; offset += PAGE_SIZE) {
+      const take = Math.min(PAGE_SIZE, WEEK_ASSIGN_CAP - offset);
+      const { data } = await supabase
+        .from('lead_assignments')
+        .select('batch_id, created_at')
+        .in('batch_id', activeBatchIds)
+        .gte('created_at', sevenDaysAgo.toISOString())
+        .order('created_at', { ascending: false })
+        .range(offset, offset + take - 1);
+      if (!data?.length) break;
+      weekAssignments.push(...data);
+      if (data.length < take) break;
+      if (offset + take >= WEEK_ASSIGN_CAP) assignmentsPartial = true;
+    }
   }
 
   const active = activeBatches.map(batch => {
@@ -95,5 +112,24 @@ export async function GET(request: NextRequest) {
     };
   });
 
-  return NextResponse.json({ active, completed });
+  const partial = batchesPartial || assignmentsPartial;
+  if (partial) {
+    console.info('[portal/batches]', {
+      customerId: customer.id,
+      batches: allBatches.length,
+      batchesPartial,
+      weekAssignments: weekAssignments.length,
+      assignmentsPartial,
+    });
+  }
+
+  return NextResponse.json({
+    active,
+    completed,
+    partial,
+    batchesPartial,
+    assignmentsPartial,
+    maxBatches: BATCHES_CAP,
+    maxWeekAssignments: WEEK_ASSIGN_CAP,
+  });
 }
