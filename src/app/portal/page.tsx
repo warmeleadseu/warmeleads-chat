@@ -96,6 +96,8 @@ interface Lead {
   bron: string;
   distance_km?: number | null;
   custom_fields?: Record<string, string>;
+  reclamation_status?: string | null;
+  reclamation_reason?: string | null;
   [key: string]: unknown;
 }
 
@@ -215,6 +217,34 @@ function formatCurrencyEUR(amount: number) {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(amount);
+}
+
+const RECLAMATION_REASONS = [
+  { value: 'foutief_telefoonnummer', label: 'Foutief telefoonnummer' },
+  { value: 'dubbele_lead', label: 'Dubbele lead binnen 30 dagen' },
+  { value: 'buiten_doelgebied', label: 'Buiten mijn afgesproken gebied' },
+] as const;
+
+const RECLAMATION_STATUS_MAP: Record<string, { label: string; cls: string }> = {
+  pending: { label: 'In behandeling', cls: 'bg-amber-50 text-amber-700 ring-1 ring-amber-200/80' },
+  approved: { label: 'Goedgekeurd', cls: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/80' },
+  rejected: { label: 'Afgewezen', cls: 'bg-red-50 text-red-600 ring-1 ring-red-200/80' },
+};
+
+function ReclamationListBadge({ status, reason }: { status: string; reason?: string | null }) {
+  const st = RECLAMATION_STATUS_MAP[status] || RECLAMATION_STATUS_MAP.pending;
+  const reasonLabel = reason
+    ? (RECLAMATION_REASONS.find(r => r.value === reason)?.label ?? reason)
+    : null;
+  return (
+    <span
+      className={`inline-flex max-w-full shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${st.cls}`}
+      title={reasonLabel ? `${st.label} — ${reasonLabel}` : st.label}
+    >
+      <FlagIcon className="h-3 w-3 shrink-0 opacity-90" />
+      <span className="truncate">Reclamatie · {st.label}</span>
+    </span>
+  );
 }
 
 export default function PortalPage() {
@@ -1031,8 +1061,13 @@ export default function PortalPage() {
                       className="cursor-pointer transition hover:bg-slate-50"
                     >
                       <td className="px-4 py-3">
-                        <div>
-                          <p className="font-medium text-slate-900">{lead.naam_klant || '-'}</p>
+                        <div className="min-w-0 space-y-1">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <p className="font-medium text-slate-900">{lead.naam_klant || '-'}</p>
+                            {lead.reclamation_status ? (
+                              <ReclamationListBadge status={lead.reclamation_status} reason={lead.reclamation_reason} />
+                            ) : null}
+                          </div>
                           {lead.telefoonnummer && (
                             <p className="text-xs text-slate-400">{lead.telefoonnummer}</p>
                           )}
@@ -1115,7 +1150,12 @@ export default function PortalPage() {
               >
                 <div className="mb-2 flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
-                    <p className="truncate font-semibold text-slate-900">{lead.naam_klant || '-'}</p>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <p className="truncate font-semibold text-slate-900">{lead.naam_klant || '-'}</p>
+                      {lead.reclamation_status ? (
+                        <ReclamationListBadge status={lead.reclamation_status} reason={lead.reclamation_reason} />
+                      ) : null}
+                    </div>
                     {(lead.plaatsnaam || lead.postcode) && (
                       <p className="flex flex-wrap items-center gap-1 text-xs text-slate-500">
                         <MapPinIcon className="h-3 w-3 shrink-0" />
@@ -1342,12 +1382,17 @@ function LeadDetailPanel({
         {/* Header */}
         <div className="shrink-0 border-b border-slate-100 bg-white">
           <div className="h-[3px] bg-warmeleads-gradient" />
-          <div className="flex items-center justify-between px-5 py-4">
-            <div>
+          <div className="flex items-center justify-between gap-3 px-5 py-4">
+            <div className="min-w-0">
               <h2 className="text-lg font-bold text-slate-900">{lead.naam_klant || 'Lead details'}</h2>
               <p className="text-xs text-slate-500">
                 {bInfo.name} &middot; {formatDateLong(lead.received_at || lead.wervingsdatum)}
               </p>
+              {lead.reclamation_status ? (
+                <div className="mt-2">
+                  <ReclamationListBadge status={lead.reclamation_status} reason={lead.reclamation_reason} />
+                </div>
+              ) : null}
             </div>
             <button onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100">
               <XMarkIcon className="h-5 w-5" />
@@ -2127,17 +2172,6 @@ function LeadFeedback({ leadId, showToast }: { leadId: string; showToast: (m: st
 }
 
 /* ─── Lead Reclamation ─────────────────────────────────────── */
-const RECLAMATION_REASONS = [
-  { value: 'foutief_telefoonnummer', label: 'Foutief telefoonnummer' },
-  { value: 'dubbele_lead', label: 'Dubbele lead binnen 30 dagen' },
-  { value: 'buiten_doelgebied', label: 'Buiten mijn afgesproken gebied' },
-] as const;
-
-const RECLAMATION_STATUS_MAP: Record<string, { label: string; cls: string }> = {
-  pending: { label: 'In behandeling', cls: 'bg-amber-50 text-amber-700' },
-  approved: { label: 'Goedgekeurd', cls: 'bg-emerald-50 text-emerald-700' },
-  rejected: { label: 'Afgewezen', cls: 'bg-red-50 text-red-600' },
-};
 
 function LeadReclamation({ leadId, showToast }: { leadId: string; showToast: (m: string) => void }) {
   const [existing, setExisting] = useState<{ id: string; reason: string; description?: string; status: string; created_at: string } | null>(null);

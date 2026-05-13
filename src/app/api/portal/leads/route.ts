@@ -32,6 +32,34 @@ async function paginateQuery<T>(query: any, maxRows = PORTAL_PAGINATE_MAX_ROWS):
   return { rows: all, truncated };
 }
 
+async function attachReclamationFieldsToLeads(
+  supabase: ReturnType<typeof createServerClient>,
+  customerId: string,
+  leads: Record<string, unknown>[],
+) {
+  const ids = leads.map(l => l.id as string).filter(Boolean);
+  if (ids.length === 0) return;
+  const recByLead: Record<string, { status: string; reason: string }> = {};
+  for (let i = 0; i < ids.length; i += IN_CHUNK) {
+    const chunk = ids.slice(i, i + IN_CHUNK);
+    const { data } = await supabase
+      .from('lead_reclamations')
+      .select('lead_id, status, reason')
+      .eq('customer_id', customerId)
+      .in('lead_id', chunk);
+    for (const row of data || []) {
+      recByLead[row.lead_id as string] = { status: row.status as string, reason: row.reason as string };
+    }
+  }
+  for (const lead of leads) {
+    const r = recByLead[lead.id as string];
+    if (r) {
+      lead.reclamation_status = r.status;
+      lead.reclamation_reason = r.reason;
+    }
+  }
+}
+
 interface AssignmentMeta {
   assigned_at: string;
   distance_km: number | null;
@@ -305,6 +333,8 @@ export async function GET(request: NextRequest) {
       };
     });
 
+    await attachReclamationFieldsToLeads(supabase, customer.id, enrichedLeads as Record<string, unknown>[]);
+
     console.info('[portal/leads]', { computeMs: Date.now() - t0, partial: leadDataPartial, poolSize: filteredLeadIds.length, page, path: 'db_sort' });
     return NextResponse.json({
       leads: enrichedLeads,
@@ -366,6 +396,8 @@ export async function GET(request: NextRequest) {
   const totalCount = enrichedAll.length;
   const startIdx = (page - 1) * limit;
   const enrichedLeads = enrichedAll.slice(startIdx, startIdx + limit);
+
+  await attachReclamationFieldsToLeads(supabase, customer.id, enrichedLeads as Record<string, unknown>[]);
 
   console.info('[portal/leads]', { computeMs: Date.now() - t0, partial: leadDataPartial, poolSize: filteredLeadIds.length, page, path: 'mem_sort' });
   return NextResponse.json({
