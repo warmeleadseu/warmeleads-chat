@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import {
   ChartBarSquareIcon,
@@ -87,6 +87,15 @@ const PERIOD_LABELS: Record<string, string> = {
   day: 'Vandaag', week: 'Week', month: 'Maand', quarter: 'Kwartaal', year: 'Jaar',
 };
 
+/** Korte zin voor kostenblok ("deze maand", "dit kwartaal", …). */
+const COST_PERIOD_PHRASE: Record<string, string> = {
+  day: 'vandaag',
+  week: 'deze week',
+  month: 'deze maand',
+  quarter: 'dit kwartaal',
+  year: 'dit jaar',
+};
+
 function TrendBadge({ current, previous }: { current: number; previous: number }) {
   if (previous === 0 && current === 0) return null;
   if (previous === 0) return <span className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-emerald-600">nieuw</span>;
@@ -127,6 +136,10 @@ function DashboardSkeleton() {
 }
 
 interface CostData {
+  period?: string;
+  periodStart?: string;
+  periodSpend?: number;
+  rollingWeekSpend?: number;
   weekSpend: number;
   monthSpend: number;
   monthBrutoCpl: number | null;
@@ -156,6 +169,7 @@ export default function AdminDashboard() {
   const [myTargets, setMyTargets] = useState<AMTarget[]>([]);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState<string>('week');
+  const metaSyncAttempted = useRef(false);
 
   const isAM = user.role === 'accountmanager' || !!user.is_account_manager;
 
@@ -172,25 +186,6 @@ export default function AdminDashboard() {
       adminFetch('/api/admin/dashboard').then(r => r.json()),
       adminFetch('/api/admin/batches').then(r => r.ok ? r.json() : []),
     ]);
-
-    /* Phase 2 (non-blocking): costs starts in parallel, populates when ready (skip for AMs) */
-    if (user.role !== 'accountmanager') adminFetch('/api/admin/costs')
-      .then(r => r.ok ? r.json() : null)
-      .catch(() => null)
-      .then(async (costsData: CostData | null) => {
-        if (costsData) {
-          setCostData(costsData);
-          if (!costsData.lastSyncAt) {
-            try {
-              const syncRes = await adminFetch('/api/admin/meta-sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ days: 90 }) });
-              if (syncRes.ok) {
-                const freshCosts = await adminFetch('/api/admin/costs').then(r => r.ok ? r.json() : null);
-                if (freshCosts) setCostData(freshCosts);
-              }
-            } catch { /* silent */ }
-          }
-        }
-      });
 
     phase1.then(([dashData, batchData]) => {
       setStats({
@@ -211,6 +206,36 @@ export default function AdminDashboard() {
     }).catch(() => setLoading(false));
   }, []);
 
+  /* Kosten/CPL volgen dezelfde periode als Periodeoverzicht (vandaag / week / …). */
+  useEffect(() => {
+    if (user.role === 'accountmanager') return;
+    let cancelled = false;
+    const q = encodeURIComponent(period);
+    (async () => {
+      try {
+        const r = await adminFetch(`/api/admin/costs?period=${q}`);
+        const costsData: CostData | null = r.ok ? await r.json() : null;
+        if (cancelled || !costsData) return;
+        setCostData(costsData);
+        if (!costsData.lastSyncAt && !metaSyncAttempted.current) {
+          metaSyncAttempted.current = true;
+          try {
+            const syncRes = await adminFetch('/api/admin/meta-sync', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ days: 90 }),
+            });
+            if (cancelled || !syncRes.ok) return;
+            const r2 = await adminFetch(`/api/admin/costs?period=${q}`);
+            const fresh = r2.ok ? await r2.json() : null;
+            if (!cancelled && fresh) setCostData(fresh);
+          } catch { /* silent */ }
+        }
+      } catch { /* silent */ }
+    })();
+    return () => { cancelled = true; };
+  }, [period, user.role]);
+
   const getBranch = (slug: string) => {
     const b = branchMeta[slug];
     const c = BRANCH_COLOR_MAP[b?.color || 'slate'] || BRANCH_COLOR_MAP.slate;
@@ -227,6 +252,9 @@ export default function AdminDashboard() {
   const batchDelivered = activeBatches.reduce((s, b) => s + (b.leads_delivered || 0), 0);
   const batchTotal = activeBatches.reduce((s, b) => s + (b.batch_size || 0), 0);
   const ps = stats.periodStats?.[period];
+  const costPhrase = COST_PERIOD_PHRASE[period] || 'deze periode';
+  const periodAdSpend = costData?.periodSpend ?? costData?.monthSpend ?? 0;
+  const rolling7d = costData?.rollingWeekSpend ?? costData?.weekSpend ?? 0;
 
   return (
     <div>
@@ -381,7 +409,7 @@ export default function AdminDashboard() {
             )}
           </div>
 
-          {costData.monthSpend === 0 && costData.leadsWithCost === 0 && (
+          {periodAdSpend === 0 && costData.leadsWithCost === 0 && (
             <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 p-6 text-center">
               <CurrencyEuroIcon className="mx-auto h-8 w-8 text-slate-300" />
               <p className="mt-2 text-sm font-medium text-slate-600">Nog geen kostendata beschikbaar</p>
@@ -397,12 +425,12 @@ export default function AdminDashboard() {
           )}
 
           {/* KPI Cards (6 cards in 2 rows on mobile, 3+3 or 6 on desktop) */}
-          {(costData.monthSpend > 0 || costData.leadsWithCost > 0) && <>
+          {(periodAdSpend > 0 || costData.leadsWithCost > 0) && <>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
             <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <p className="text-xl font-bold text-slate-900">&euro;{costData.monthSpend.toFixed(0)}</p>
-              <p className="mt-0.5 text-[11px] text-slate-500">Ad spend maand</p>
-              <p className="text-[11px] text-slate-400">Week: &euro;{costData.weekSpend.toFixed(0)}</p>
+              <p className="text-xl font-bold text-slate-900">&euro;{periodAdSpend.toFixed(0)}</p>
+              <p className="mt-0.5 text-[11px] text-slate-500">Ad spend ({costPhrase})</p>
+              <p className="text-[11px] text-slate-400">Laatste 7 dagen: &euro;{rolling7d.toFixed(0)}</p>
             </div>
             <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
               <p className="text-xl font-bold text-slate-900">&euro;{costData.monthBrutoCpl?.toFixed(2) ?? '-'}</p>
@@ -416,14 +444,14 @@ export default function AdminDashboard() {
             </div>
             <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
               <p className="text-xl font-bold text-slate-900">&euro;{costData.totalRevenue.toFixed(0)}</p>
-              <p className="mt-0.5 text-[11px] text-slate-500">Omzet (maand)</p>
+              <p className="mt-0.5 text-[11px] text-slate-500">Omzet ({costPhrase})</p>
               <p className="text-[11px] text-slate-400">{costData.totalAssignments} toewijzingen</p>
             </div>
             <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
               <p className={`text-xl font-bold ${costData.totalProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                 {costData.totalProfit >= 0 ? '+' : ''}&euro;{costData.totalProfit.toFixed(0)}
               </p>
-              <p className="mt-0.5 text-[11px] text-slate-500">Winst (maand)</p>
+              <p className="mt-0.5 text-[11px] text-slate-500">Winst ({costPhrase})</p>
               <p className="text-[11px] text-slate-400">Kosten: &euro;{costData.totalCost.toFixed(0)}</p>
             </div>
             <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -439,7 +467,7 @@ export default function AdminDashboard() {
           <div className="grid gap-4 lg:grid-cols-2">
             {Object.keys(costData.branchCosts).length > 0 && (
               <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-                <h3 className="mb-3 text-xs font-semibold text-slate-600">CPL per branche (maand)</h3>
+                <h3 className="mb-3 text-xs font-semibold text-slate-600">CPL per branche ({costPhrase})</h3>
                 <div className="space-y-2">
                   {Object.entries(costData.branchCosts).sort((a, b) => b[1].spend - a[1].spend).map(([slug, data]) => {
                     const b = getBranch(slug);
@@ -468,7 +496,7 @@ export default function AdminDashboard() {
 
             {costData.customerMargins.length > 0 && (
               <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-                <h3 className="mb-3 text-xs font-semibold text-slate-600">Marge per klant (maand)</h3>
+                <h3 className="mb-3 text-xs font-semibold text-slate-600">Marge per klant ({costPhrase})</h3>
                 <div className="space-y-2">
                   {costData.customerMargins.slice(0, 8).map((cm, i) => (
                     <div key={i} className="rounded-lg bg-slate-50 px-3 py-2.5">
@@ -590,7 +618,7 @@ export default function AdminDashboard() {
           {/* Daily trend mini chart */}
           {costData.dailyTrend.length > 0 && (
             <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-              <h3 className="mb-2 text-xs font-semibold text-slate-600">Dagelijkse ad spend (14 dagen)</h3>
+              <h3 className="mb-2 text-xs font-semibold text-slate-600">Dagelijkse ad spend ({costPhrase})</h3>
               <div className="flex items-end gap-1 h-[72px] sm:h-[80px]">
                 {(() => {
                   const maxSpend = Math.max(...costData.dailyTrend.map(d => d.spend), 1);
