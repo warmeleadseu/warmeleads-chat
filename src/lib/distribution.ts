@@ -250,6 +250,15 @@ export type DistributeLeadContext = {
   supabase?: SupabaseClient;
   /** When set (e.g. from distributeLeads), avoids one customer_batches query per lead for that branch. */
   activeBatchesByBranch?: Map<string, ActiveCustomerBatch[]>;
+  /** Bij meerdere matches eerst deze klant (bv. backfill). */
+  preferCustomerId?: string;
+  /**
+   * Alleen voor admin/backfill: `phone_valid === false` mag tóch verdeeld worden,
+   * maar uitsluitend naar deze klant-id's (doorgaans één vaste partij).
+   */
+  allowInvalidPhoneForCustomerIds?: string[];
+  /** Alleen administratieve backfill: negeer leads_per_day (contract / leveringsbelofte — voorzichtig gebruiken). */
+  ignoreBatchDailyCap?: boolean;
 };
 
 /**
@@ -279,7 +288,10 @@ export async function distributeLead(
   // Double-check after DB fetch in case bron wasn't passed by caller
   if (fullLead.bron === 'demo') return result;
 
-  if (fullLead.phone_valid === false) return result;
+  if (fullLead.phone_valid === false) {
+    const allow = ctx?.allowInvalidPhoneForCustomerIds;
+    if (!allow?.length) return result;
+  }
 
   const { data: existingAssignments } = await supabase
     .from('lead_assignments')
@@ -389,6 +401,14 @@ export async function distributeLead(
     if (recentAssignedIds.has(batch.customer_id)) continue;
     if (batch.starts_at && new Date(batch.starts_at) > now) continue;
 
+    if (
+      fullLead.phone_valid === false &&
+      ctx?.allowInvalidPhoneForCustomerIds?.length &&
+      !ctx.allowInvalidPhoneForCustomerIds.includes(batch.customer_id)
+    ) {
+      continue;
+    }
+
     // Bidirectional exclusion: skip if this lead is already assigned to an excluded customer
     const candidateExcludes = excludeMap[batch.customer_id] || [];
     let excluded = false;
@@ -404,7 +424,7 @@ export async function distributeLead(
       if (thisWeekCount >= batch.leads_per_week) continue;
     }
 
-    if (batch.leads_per_day && batch.leads_per_day > 0) {
+    if (!ctx?.ignoreBatchDailyCap && batch.leads_per_day && batch.leads_per_day > 0) {
       const todayCount = dailyCountByBatch[batch.id] || 0;
       if (todayCount >= batch.leads_per_day) continue;
     }
@@ -470,7 +490,13 @@ export async function distributeLead(
     }
   }
 
+  const prefer = ctx?.preferCustomerId;
   matches.sort((a, b) => {
+    if (prefer) {
+      const aPref = a.customer_id === prefer;
+      const bPref = b.customer_id === prefer;
+      if (aPref !== bPref) return aPref ? -1 : 1;
+    }
     // 1. Smallest target radius wins (specific area > broad area)
     if (a.min_radius !== b.min_radius) return a.min_radius - b.min_radius;
     // 2. Fewest recent assignments wins (fairness round-robin)
