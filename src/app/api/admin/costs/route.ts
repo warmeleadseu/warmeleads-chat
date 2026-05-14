@@ -71,8 +71,8 @@ export async function GET(request: NextRequest) {
     return { rows, truncated };
   }
 
-  /* ── Wave 1: fetch batches + lastSync (small) + paginated leads & assignments ── */
-  const [batchesRes, lastSyncRes, leadBundle, assignBundle] = await Promise.all([
+  /* ── Wave 1: fetch batches + lastSync + bulk-prijzen + paginated leads & assignments ── */
+  const [batchesRes, lastSyncRes, bulkCustRes, leadBundle, assignBundle] = await Promise.all([
     supabase
       .from('customer_batches')
       .select('id, customer_id, branch, batch_size, leads_delivered, price_per_lead, total_price, status, leads_per_week, created_at, is_paid, customers(name)')
@@ -86,6 +86,10 @@ export async function GET(request: NextRequest) {
       .order('synced_at', { ascending: false })
       .limit(1)
       .single(),
+    supabase
+      .from('customers')
+      .select('id, name, bulk_price_per_lead')
+      .not('bulk_price_per_lead', 'is', null),
     fetchLeadsBounded(),
     fetchAssignmentsBounded(),
   ]);
@@ -107,6 +111,18 @@ export async function GET(request: NextRequest) {
 
   const allBatches = batchesRes.data || [];
   const lastSync = lastSyncRes.data;
+  const bulkCustomers = bulkCustRes.data || [];
+
+  const batchById = new Map(allBatches.map((b: { id: string }) => [b.id, b]));
+  const leadIdToBranch = new Map(allLeads.map(l => [l.id, l.branch]));
+
+  function branchForAssignment(a: AssignRow): string | null {
+    if (a.batch_id) {
+      const bch = batchById.get(a.batch_id) as { branch?: string } | undefined;
+      return bch?.branch ?? null;
+    }
+    return leadIdToBranch.get(a.lead_id) ?? null;
+  }
 
   // ── Batch start dates per branch ──
   const branchStartDate = new Map<string, string>();
@@ -170,28 +186,24 @@ export async function GET(request: NextRequest) {
     ? Math.round((totalAdSpend / totalOurLeads) * 100) / 100
     : null;
 
-  const assignmentsByLead = new Map<string, number>();
-  let batchAssignmentCount = 0;
-  for (const a of assignmentsInPeriod) {
-    if (a.batch_id) {
-      assignmentsByLead.set(a.lead_id, (assignmentsByLead.get(a.lead_id) || 0) + 1);
-      batchAssignmentCount++;
-    }
-  }
+  /** Zelfde definitie als periodeoverzicht: elke rij in lead_assignments telt mee (batch én bulk). */
+  const totalAssignmentCount = assignmentsInPeriod.length;
+  const uniqueAssignedLeads = new Set(assignmentsInPeriod.map(a => a.lead_id)).size;
+  const totalAssignments = totalAssignmentCount;
 
-  const totalAssignments = batchAssignmentCount;
-  const uniqueAssignedLeads = assignmentsByLead.size;
-  const avgAssignments = uniqueAssignedLeads > 0
-    ? Math.round((totalAssignments / uniqueAssignedLeads) * 100) / 100
-    : 0;
+  /** Hoe vaak gemiddeld uitgedeeld per geworven Meta-lead in deze periode (≈ bruto / effectieve CPL). */
+  const avgAssignments =
+    totalOurLeads > 0 && totalAssignmentCount > 0
+      ? Math.round((totalAssignmentCount / totalOurLeads) * 100) / 100
+      : 0;
 
-  const effectieveCpl = brutoCpl && avgAssignments > 0
-    ? Math.round((brutoCpl / avgAssignments) * 100) / 100
-    : null;
+  /** Advertentiekosten per toewijzing in de periode (sluit aan op bruto ÷ deze factor). */
+  const costPerAssignment = totalAssignmentCount > 0 ? totalAdSpend / totalAssignmentCount : 0;
 
-  const costPerLead = totalOurLeads > 0 ? totalAdSpend / totalOurLeads : 0;
-
-  const batchById = new Map(allBatches.map(b => [b.id, b]));
+  const effectieveCpl =
+    totalAssignmentCount > 0
+      ? Math.round((totalAdSpend / totalAssignmentCount) * 100) / 100
+      : null;
 
   // ── Branch-level costs ──
   const branchLeads = new Map<string, number>();
@@ -211,36 +223,26 @@ export async function GET(request: NextRequest) {
   }
 
   const branchAssignmentsCount = new Map<string, number>();
-  const branchUniqueAssignLeads = new Map<string, Set<string>>();
   for (const a of assignmentsInPeriod) {
-    if (!a.batch_id) continue;
-    const bch = batchById.get(a.batch_id);
-    if (!bch) continue;
-    branchAssignmentsCount.set(bch.branch, (branchAssignmentsCount.get(bch.branch) || 0) + 1);
-    if (!branchUniqueAssignLeads.has(bch.branch)) branchUniqueAssignLeads.set(bch.branch, new Set());
-    branchUniqueAssignLeads.get(bch.branch)!.add(a.lead_id);
+    const br = branchForAssignment(a);
+    if (!br) continue;
+    branchAssignmentsCount.set(br, (branchAssignmentsCount.get(br) || 0) + 1);
   }
 
   const branchCosts: Record<string, { spend: number; count: number; avgCpl: number; effectieveCpl: number; assignments: number }> = {};
   for (const [branch, count] of branchLeads) {
     const spend = branchSpend.get(branch) || 0;
     const avgCpl = count > 0 ? Math.round((spend / count) * 100) / 100 : 0;
-    const u = branchUniqueAssignLeads.get(branch);
     const branchTot = branchAssignmentsCount.get(branch) || 0;
-    const branchAvgAssign = u && u.size > 0 ? branchTot / u.size : 1;
+    const effectieveBr =
+      branchTot > 0 ? Math.round((spend / branchTot) * 100) / 100 : avgCpl;
     branchCosts[branch] = {
       spend: Math.round(spend * 100) / 100,
       count,
       avgCpl,
-      effectieveCpl: avgCpl > 0 && branchAvgAssign > 0 ? Math.round((avgCpl / branchAvgAssign) * 100) / 100 : avgCpl,
+      effectieveCpl: effectieveBr,
       assignments: branchTot,
     };
-  }
-
-  // ── Lead cost lookup ──
-  const leadCostMap: Record<string, number> = {};
-  for (const l of leadsWithMetaInPeriod) {
-    if (l.meta_campaign_id) leadCostMap[l.id] = costPerLead;
   }
 
   // ── Batch-level financials ──
@@ -272,12 +274,9 @@ export async function GET(request: NextRequest) {
     let cost = 0;
     let leadsWithCost = 0;
     if (ba) {
-      for (const lid of ba.lead_ids) {
-        const lc = leadCostMap[lid];
-        if (lc !== undefined) {
-          cost += lc;
-          leadsWithCost++;
-        }
+      for (const _lid of ba.lead_ids) {
+        cost += costPerAssignment;
+        leadsWithCost++;
       }
     }
 
@@ -301,23 +300,46 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  // ── Customer margins (omzet = toewijzingen in periode × ppl) ──
+  // ── Customer margins + omzet bulk/batch (zelfde kostentoewijzing: spend / alle toewijzingen) ──
+  const bulkPriceMap = new Map<string, { price: number; name: string }>();
+  for (const c of bulkCustomers) {
+    bulkPriceMap.set(c.id, { price: Number(c.bulk_price_per_lead), name: c.name });
+  }
+
   const customerMargins: Record<string, { name: string; revenue: number; cost: number; margin: number; leads: number; marginPct: number }> = {};
+  let batchRevenue = 0;
+  let bulkRevenue = 0;
+  const bulkByCustomer: Record<string, { name: string; count: number; revenue: number }> = {};
 
   for (const a of assignmentsInPeriod) {
-    if (!a.batch_id) continue;
-    const b = batchById.get(a.batch_id);
-    if (!b?.price_per_lead) continue;
-    const cust = b.customers as unknown as { name: string } | { name: string }[] | null;
-    const custName = Array.isArray(cust) ? cust[0]?.name : cust?.name || 'Onbekend';
-    if (!customerMargins[b.customer_id]) {
-      customerMargins[b.customer_id] = { name: custName, revenue: 0, cost: 0, margin: 0, leads: 0, marginPct: 0 };
+    if (a.batch_id) {
+      const b = batchById.get(a.batch_id) as { price_per_lead?: number; customers?: unknown; customer_id: string } | undefined;
+      if (!b?.price_per_lead) continue;
+      const cust = b.customers as unknown as { name: string } | { name: string }[] | null;
+      const custName = Array.isArray(cust) ? cust[0]?.name : cust?.name || 'Onbekend';
+      if (!customerMargins[b.customer_id]) {
+        customerMargins[b.customer_id] = { name: custName, revenue: 0, cost: 0, margin: 0, leads: 0, marginPct: 0 };
+      }
+      const cm = customerMargins[b.customer_id];
+      cm.revenue += Number(b.price_per_lead);
+      cm.leads += 1;
+      cm.cost += costPerAssignment;
+      batchRevenue += Number(b.price_per_lead);
+    } else {
+      const bp = bulkPriceMap.get(a.customer_id);
+      if (!bp) continue;
+      if (!customerMargins[a.customer_id]) {
+        customerMargins[a.customer_id] = { name: bp.name, revenue: 0, cost: 0, margin: 0, leads: 0, marginPct: 0 };
+      }
+      const cm = customerMargins[a.customer_id];
+      cm.revenue += bp.price;
+      cm.leads += 1;
+      cm.cost += costPerAssignment;
+      bulkRevenue += bp.price;
+      if (!bulkByCustomer[a.customer_id]) bulkByCustomer[a.customer_id] = { name: bp.name, count: 0, revenue: 0 };
+      bulkByCustomer[a.customer_id].count++;
+      bulkByCustomer[a.customer_id].revenue += bp.price;
     }
-    const cm = customerMargins[b.customer_id];
-    cm.revenue += Number(b.price_per_lead);
-    cm.leads += 1;
-    const lc = leadCostMap[a.lead_id];
-    if (lc !== undefined) cm.cost += lc;
   }
 
   for (const cm of Object.values(customerMargins)) {
@@ -325,30 +347,7 @@ export async function GET(request: NextRequest) {
     cm.marginPct = cm.revenue > 0 ? Math.round(((cm.revenue - cm.cost) / cm.revenue) * 100) : 0;
   }
 
-  // ── Bulk revenue (assignments without batch, priced via customer bulk_price_per_lead) ──
-  const { data: bulkCustomers } = await supabase
-    .from('customers')
-    .select('id, name, bulk_price_per_lead')
-    .not('bulk_price_per_lead', 'is', null);
-  const bulkPriceMap = new Map<string, { price: number; name: string }>();
-  for (const c of bulkCustomers || []) {
-    bulkPriceMap.set(c.id, { price: Number(c.bulk_price_per_lead), name: c.name });
-  }
-
-  let bulkRevenue = 0;
-  const bulkByCustomer: Record<string, { name: string; count: number; revenue: number }> = {};
-  for (const a of assignmentsInPeriod) {
-    if (a.batch_id) continue;
-    const bp = bulkPriceMap.get(a.customer_id);
-    if (!bp) continue;
-    bulkRevenue += bp.price;
-    if (!bulkByCustomer[a.customer_id]) bulkByCustomer[a.customer_id] = { name: bp.name, count: 0, revenue: 0 };
-    bulkByCustomer[a.customer_id].count++;
-    bulkByCustomer[a.customer_id].revenue += bp.price;
-  }
-
   // ── Totals ──
-  const batchRevenue = Object.values(customerMargins).reduce((s, cm) => s + cm.revenue, 0);
   const totalRevenue = batchRevenue + bulkRevenue;
   const totalProfit = totalRevenue - totalAdSpend;
   const roi = totalAdSpend > 0 ? Math.round(((totalRevenue - totalAdSpend) / totalAdSpend) * 100) : 0;
