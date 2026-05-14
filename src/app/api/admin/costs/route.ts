@@ -29,8 +29,23 @@ export async function GET(request: NextRequest) {
     return d.toISOString();
   })();
 
-  interface LeadRow { id: string; branch: string; meta_campaign_id: string | null; wervingsdatum: string | null; lead_cost: number | null; created_at: string }
-  interface AssignRow { id: string; lead_id: string; customer_id: string; batch_id: string | null; assigned_at: string }
+  interface LeadRow {
+    id: string;
+    branch: string;
+    bron: string;
+    meta_campaign_id: string | null;
+    wervingsdatum: string | null;
+    lead_cost: number | null;
+    created_at: string;
+  }
+  interface AssignRow {
+    id: string;
+    lead_id: string;
+    customer_id: string;
+    batch_id: string | null;
+    assigned_at: string;
+    source: string;
+  }
 
   async function fetchLeadsBounded(): Promise<{ rows: LeadRow[]; truncated: boolean }> {
     const rows: LeadRow[] = [];
@@ -39,8 +54,9 @@ export async function GET(request: NextRequest) {
     for (let p = 0; p < COSTS_LEADS_MAX_PAGES; p++) {
       const { data } = await supabase
         .from('leads')
-        .select('id, branch, meta_campaign_id, wervingsdatum, lead_cost, created_at')
+        .select('id, branch, bron, meta_campaign_id, wervingsdatum, lead_cost, created_at')
         .neq('bron', 'excel_import')
+        .neq('bron', 'demo')
         .gte('created_at', costsSinceIso)
         .range(offset, offset + PAGE - 1);
       if (!data?.length) break;
@@ -59,7 +75,7 @@ export async function GET(request: NextRequest) {
     for (let p = 0; p < COSTS_ASSIGN_MAX_PAGES; p++) {
       const { data } = await supabase
         .from('lead_assignments')
-        .select('id, lead_id, customer_id, batch_id, assigned_at')
+        .select('id, lead_id, customer_id, batch_id, assigned_at, source')
         .gte('assigned_at', costsSinceIso)
         .range(offset, offset + PAGE - 1);
       if (!data?.length) break;
@@ -105,8 +121,22 @@ export async function GET(request: NextRequest) {
   const periodStartDateStr = periodStartIso.split('T')[0];
 
   const assignmentsInPeriod = allAssignments.filter(a => a.assigned_at >= periodStartIso);
+
+  const leadBronById = new Map(allLeads.map(l => [l.id, l.bron]));
+
+  /** Bulk-export en demo/test: buiten Meta-CPL en buiten ad-kostentoewijzing. */
+  function isCplPoolAssignment(a: AssignRow): boolean {
+    const src = a.source || 'distribution';
+    if (src === 'bulk_export' || src === 'demo') return false;
+    const bron = leadBronById.get(a.lead_id);
+    if (bron === 'demo') return false;
+    return true;
+  }
+
+  const assignmentsForCpl = assignmentsInPeriod.filter(isCplPoolAssignment);
+
   const leadsWithMetaInPeriod = allLeads.filter(
-    l => !!l.meta_campaign_id && l.created_at >= periodStartIso,
+    l => !!l.meta_campaign_id && l.created_at >= periodStartIso && l.bron !== 'demo',
   ) as (LeadRow & { meta_campaign_id: string })[];
 
   const allBatches = batchesRes.data || [];
@@ -134,7 +164,9 @@ export async function GET(request: NextRequest) {
   const globalStartDate = branchStartDate.size > 0 ? [...branchStartDate.values()].sort()[0] : today;
 
   // ── Campaign mapping from all tracked leads in sample (nodig voor spend-fetch) ──
-  const leadsWithCampaignAll = allLeads.filter((l): l is LeadRow & { meta_campaign_id: string } => !!l.meta_campaign_id);
+  const leadsWithCampaignAll = allLeads.filter(
+    (l): l is LeadRow & { meta_campaign_id: string } => !!l.meta_campaign_id && l.bron !== 'demo',
+  );
   const campaignBranchMap = new Map<string, string>();
   for (const l of leadsWithCampaignAll) {
     if (!campaignBranchMap.has(l.meta_campaign_id)) {
@@ -186,9 +218,9 @@ export async function GET(request: NextRequest) {
     ? Math.round((totalAdSpend / totalOurLeads) * 100) / 100
     : null;
 
-  /** Zelfde definitie als periodeoverzicht: elke rij in lead_assignments telt mee (batch én bulk). */
-  const totalAssignmentCount = assignmentsInPeriod.length;
-  const uniqueAssignedLeads = new Set(assignmentsInPeriod.map(a => a.lead_id)).size;
+  /** Alleen distributie-/batch-toewijzingen (geen bulk-export, geen demo). */
+  const totalAssignmentCount = assignmentsForCpl.length;
+  const uniqueAssignedLeads = new Set(assignmentsForCpl.map(a => a.lead_id)).size;
   const totalAssignments = totalAssignmentCount;
 
   /** Hoe vaak gemiddeld uitgedeeld per geworven Meta-lead in deze periode (≈ bruto / effectieve CPL). */
@@ -197,7 +229,7 @@ export async function GET(request: NextRequest) {
       ? Math.round((totalAssignmentCount / totalOurLeads) * 100) / 100
       : 0;
 
-  /** Advertentiekosten per toewijzing in de periode (sluit aan op bruto ÷ deze factor). */
+  /** Advertentiekosten per relevante toewijzing (bulk/demo vallen buiten de pool). */
   const costPerAssignment = totalAssignmentCount > 0 ? totalAdSpend / totalAssignmentCount : 0;
 
   const effectieveCpl =
@@ -223,7 +255,7 @@ export async function GET(request: NextRequest) {
   }
 
   const branchAssignmentsCount = new Map<string, number>();
-  for (const a of assignmentsInPeriod) {
+  for (const a of assignmentsForCpl) {
     const br = branchForAssignment(a);
     if (!br) continue;
     branchAssignmentsCount.set(br, (branchAssignmentsCount.get(br) || 0) + 1);
@@ -254,7 +286,7 @@ export async function GET(request: NextRequest) {
 
   const batchFinancials: BatchFinancial[] = [];
   const batchAssignments = new Map<string, { lead_ids: string[] }>();
-  for (const a of assignmentsInPeriod) {
+  for (const a of assignmentsForCpl) {
     if (!a.batch_id) continue;
     if (!batchAssignments.has(a.batch_id)) batchAssignments.set(a.batch_id, { lead_ids: [] });
     batchAssignments.get(a.batch_id)!.lead_ids.push(a.lead_id);
@@ -300,7 +332,7 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  // ── Customer margins + omzet bulk/batch (zelfde kostentoewijzing: spend / alle toewijzingen) ──
+  // ── Customer margins: batch (met ad-kosten uit CPL-pool) vs bulk (omzet apart, geen Meta-ad-kosten) ──
   const bulkPriceMap = new Map<string, { price: number; name: string }>();
   for (const c of bulkCustomers) {
     bulkPriceMap.set(c.id, { price: Number(c.bulk_price_per_lead), name: c.name });
@@ -312,20 +344,10 @@ export async function GET(request: NextRequest) {
   const bulkByCustomer: Record<string, { name: string; count: number; revenue: number }> = {};
 
   for (const a of assignmentsInPeriod) {
-    if (a.batch_id) {
-      const b = batchById.get(a.batch_id) as { price_per_lead?: number; customers?: unknown; customer_id: string } | undefined;
-      if (!b?.price_per_lead) continue;
-      const cust = b.customers as unknown as { name: string } | { name: string }[] | null;
-      const custName = Array.isArray(cust) ? cust[0]?.name : cust?.name || 'Onbekend';
-      if (!customerMargins[b.customer_id]) {
-        customerMargins[b.customer_id] = { name: custName, revenue: 0, cost: 0, margin: 0, leads: 0, marginPct: 0 };
-      }
-      const cm = customerMargins[b.customer_id];
-      cm.revenue += Number(b.price_per_lead);
-      cm.leads += 1;
-      cm.cost += costPerAssignment;
-      batchRevenue += Number(b.price_per_lead);
-    } else {
+    const src = a.source || 'distribution';
+    if (src === 'demo') continue;
+
+    if (src === 'bulk_export') {
       const bp = bulkPriceMap.get(a.customer_id);
       if (!bp) continue;
       if (!customerMargins[a.customer_id]) {
@@ -334,12 +356,42 @@ export async function GET(request: NextRequest) {
       const cm = customerMargins[a.customer_id];
       cm.revenue += bp.price;
       cm.leads += 1;
-      cm.cost += costPerAssignment;
       bulkRevenue += bp.price;
       if (!bulkByCustomer[a.customer_id]) bulkByCustomer[a.customer_id] = { name: bp.name, count: 0, revenue: 0 };
       bulkByCustomer[a.customer_id].count++;
       bulkByCustomer[a.customer_id].revenue += bp.price;
+      continue;
     }
+
+    if (a.batch_id) {
+      const b = batchById.get(a.batch_id) as { price_per_lead?: number; customers?: unknown; customer_id: string } | undefined;
+      if (!b?.price_per_lead) continue;
+      if (leadBronById.get(a.lead_id) === 'demo') continue;
+      const cust = b.customers as unknown as { name: string } | { name: string }[] | null;
+      const custName = Array.isArray(cust) ? cust[0]?.name : cust?.name || 'Onbekend';
+      if (!customerMargins[b.customer_id]) {
+        customerMargins[b.customer_id] = { name: custName, revenue: 0, cost: 0, margin: 0, leads: 0, marginPct: 0 };
+      }
+      const cm = customerMargins[b.customer_id];
+      cm.revenue += Number(b.price_per_lead);
+      cm.leads += 1;
+      if (isCplPoolAssignment(a)) cm.cost += costPerAssignment;
+      batchRevenue += Number(b.price_per_lead);
+      continue;
+    }
+
+    const bp = bulkPriceMap.get(a.customer_id);
+    if (!bp) continue;
+    if (!customerMargins[a.customer_id]) {
+      customerMargins[a.customer_id] = { name: bp.name, revenue: 0, cost: 0, margin: 0, leads: 0, marginPct: 0 };
+    }
+    const cm = customerMargins[a.customer_id];
+    cm.revenue += bp.price;
+    cm.leads += 1;
+    bulkRevenue += bp.price;
+    if (!bulkByCustomer[a.customer_id]) bulkByCustomer[a.customer_id] = { name: bp.name, count: 0, revenue: 0 };
+    bulkByCustomer[a.customer_id].count++;
+    bulkByCustomer[a.customer_id].revenue += bp.price;
   }
 
   for (const cm of Object.values(customerMargins)) {
@@ -423,7 +475,7 @@ export async function GET(request: NextRequest) {
       maxAssignmentPages: COSTS_ASSIGN_MAX_PAGES,
       batchesCappedAt: 2500,
       note:
-        'Lead- en assignment-aggregaties zijn begrensd op het lookback-venster; zeer oude data kan ontbreken in CPL/marges.',
+        'CPL en ad-kosten: alleen distributie-toewijzingen (geen bulk_export, geen demo). Leads: geen excel_import of demo. Lookback begrensd; oude data kan ontbreken.',
     },
   });
 }
