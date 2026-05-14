@@ -123,6 +123,7 @@ interface Batch {
   leads_delivered: number;
   leads_per_day?: number | null;
   is_paid?: boolean | null;
+  status?: string | null;
   total_price?: number | null;
 }
 
@@ -254,7 +255,11 @@ export default function PortalPage() {
 
   const [stats, setStats] = useState<Stats>({ totalLeads: 0, newThisWeek: 0, contacted: 0, sold: 0 });
   const [statsLoading, setStatsLoading] = useState(true);
-  const [batches, setBatches] = useState<{ active: Batch[]; completed: Batch[] }>({ active: [], completed: [] });
+  const [batches, setBatches] = useState<{
+    active: Batch[];
+    pending_payment: Batch[];
+    completed: Batch[];
+  }>({ active: [], pending_payment: [], completed: [] });
   const [batchesLoading, setBatchesLoading] = useState(true);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [total, setTotal] = useState(0);
@@ -318,13 +323,22 @@ export default function PortalPage() {
   const conversionRate = stats.totalLeads > 0
     ? Math.round((stats.sold / stats.totalLeads) * 100)
     : 0;
+  const liveAndPendingBatches = useMemo(
+    () => [...(batches.pending_payment || []), ...batches.active],
+    [batches.pending_payment, batches.active],
+  );
   const hasUnpaidBatch = useMemo(
-    () => batches.active.some((b) => b.is_paid === false),
-    [batches.active],
+    () =>
+      liveAndPendingBatches.some(
+        (b) => b.is_paid === false || b.status === 'pending_payment',
+      ),
+    [liveAndPendingBatches],
   );
   const primaryBatch = useMemo(() => {
-    if (batches.active.length === 0) return null;
-    const unpaid = batches.active.find((b) => b.is_paid === false);
+    if (liveAndPendingBatches.length === 0) return null;
+    const unpaid = liveAndPendingBatches.find(
+      (b) => b.is_paid === false || b.status === 'pending_payment',
+    );
     if (unpaid) return unpaid;
     const sorted = [...batches.active].sort((a, b) => {
       const aSize = Number(a.batch_size);
@@ -334,14 +348,16 @@ export default function PortalPage() {
       return bPct - aPct;
     });
     return sorted[0];
-  }, [batches.active]);
+  }, [liveAndPendingBatches, batches.active]);
   const primaryBatchProgressPct = useMemo(() => {
     if (!primaryBatch) return 0;
     const size = Number(primaryBatch.batch_size);
     const delivered = Number(primaryBatch.leads_delivered);
     return size > 0 ? Math.min(100, Math.round((delivered / size) * 100)) : 0;
   }, [primaryBatch]);
-  const primaryBatchIsUnpaid = primaryBatch ? primaryBatch.is_paid === false : false;
+  const primaryBatchIsUnpaid = primaryBatch
+    ? primaryBatch.is_paid === false || primaryBatch.status === 'pending_payment'
+    : false;
   const primaryBatchShouldUpsell = !!primaryBatch && !primaryBatchIsUnpaid && primaryBatchProgressPct >= 80;
   const latestHistoricalBatchId = useMemo(() => {
     if (batches.completed.length > 0 && typeof batches.completed[0].id === 'string') {
@@ -427,7 +443,11 @@ export default function PortalPage() {
       const res = await portalFetch('/api/portal/batches');
       if (res.ok) {
         const d = await res.json();
-        setBatches({ active: d.active || [], completed: d.completed || [] });
+        setBatches({
+          active: d.active || [],
+          pending_payment: d.pending_payment || [],
+          completed: d.completed || [],
+        });
       } else {
         showToast('Batches konden niet geladen worden', 'error');
       }

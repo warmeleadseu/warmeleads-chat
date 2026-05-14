@@ -43,6 +43,7 @@ interface Batch {
   leads_per_day: number | null;
   leads_per_week: number | null;
   status: string;
+  is_paid?: boolean | null;
   price_per_lead: number | null;
   total_price: number | null;
   notes: string | null;
@@ -198,7 +199,7 @@ export default function VerdelingPage() {
     return { total: entries.reduce((s, e) => s + e.amount, 0), entries };
   };
 
-  const activeBatches = batches.filter(b => b.status === 'active');
+  const activeBatches = batches.filter(b => b.status === 'active' && b.is_paid !== false);
   const totalToDeliver = activeBatches.reduce((s, b) => s + b.batch_size, 0);
   const totalDelivered = activeBatches.reduce((s, b) => s + b.leads_delivered, 0);
   const overallPct = totalToDeliver > 0 ? Math.round((totalDelivered / totalToDeliver) * 100) : 0;
@@ -495,11 +496,22 @@ export default function VerdelingPage() {
       )}
 
       {tab === 'batches' && (() => {
-        const active = batches.filter(b => b.status === 'active');
+        const pendingPay = batches.filter(b => b.status === 'pending_payment');
+        const active = batches.filter(b => b.status === 'active' && b.is_paid !== false);
         const paused = batches.filter(b => b.status === 'paused');
         const completed = batches.filter(b => b.status === 'completed');
-        const statusColors: Record<string, string> = { active: 'bg-emerald-100 text-emerald-700', paused: 'bg-amber-100 text-amber-700', completed: 'bg-blue-100 text-blue-700' };
-        const statusLabels: Record<string, string> = { active: 'Actief', paused: 'Gepauzeerd', completed: 'Voltooid' };
+        const statusColors: Record<string, string> = {
+          active: 'bg-emerald-100 text-emerald-700',
+          pending_payment: 'bg-orange-100 text-orange-800',
+          paused: 'bg-amber-100 text-amber-700',
+          completed: 'bg-blue-100 text-blue-700',
+        };
+        const statusLabels: Record<string, string> = {
+          active: 'Actief',
+          pending_payment: 'Wacht op betaling',
+          paused: 'Gepauzeerd',
+          completed: 'Voltooid',
+        };
 
         const completedRevenue = completed.reduce((s, b) => s + Number(b.total_price || 0), 0);
         const completedLeads = completed.reduce((s, b) => s + b.leads_delivered, 0);
@@ -619,10 +631,10 @@ export default function VerdelingPage() {
               </div>
             )}
 
-            {/* Active + paused batches table */}
-            {(active.length > 0 || paused.length > 0) && (
+            {/* Active + paused + awaiting payment batches table */}
+            {(pendingPay.length > 0 || active.length > 0 || paused.length > 0) && (
               <div>
-                <h3 className="mb-3 text-sm font-semibold text-slate-700">Actieve &amp; gepauzeerde batches</h3>
+                <h3 className="mb-3 text-sm font-semibold text-slate-700">Actieve, in afwachting van betaling &amp; gepauzeerde batches</h3>
                 <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
@@ -638,7 +650,7 @@ export default function VerdelingPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {[...active, ...paused].map(b => {
+                        {[...pendingPay, ...active, ...paused].map(b => {
                           const pct = Math.min(100, Math.round((b.leads_delivered / b.batch_size) * 100));
                           const br = getBranch(b.branch);
                           const c = COLOR_MAP[br?.color || 'slate'] || COLOR_MAP.slate;

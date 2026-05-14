@@ -5,6 +5,7 @@ import { backfillBatch, distributeUnassignedLeads } from '@/lib/distribution';
 import { checkBatchMilestones } from '@/lib/batchNotifications';
 import { createInvoice, markInvoicePaid, sendNewBatchAdminEmail } from '@/lib/invoice';
 import { isPipelineBatchKind, normalizeBatchKind } from '@/lib/batchKind';
+import { initialPipelineBatchStatus } from '@/lib/customerBatchStatus';
 
 export async function GET(request: NextRequest) {
   const admin = await verifyAdmin(request);
@@ -89,6 +90,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Klant niet gevonden' }, { status: 404 });
     }
 
+    const nichePaid = body.is_paid === true;
     const { data, error } = await supabase
       .from('customer_batches')
       .insert({
@@ -101,7 +103,8 @@ export async function POST(request: NextRequest) {
         leads_per_day: null,
         notes: combinedNotes || null,
         lead_filters: [],
-        is_paid: body.is_paid === true,
+        status: initialPipelineBatchStatus(nichePaid),
+        is_paid: nichePaid,
         lookback_days: 0,
         starts_at: startsAtValue,
         account_manager_id: custRow.account_manager_id || null,
@@ -113,7 +116,7 @@ export async function POST(request: NextRequest) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-    const batchIsPaid = body.is_paid === true;
+    const batchIsPaid = nichePaid;
     const { data: brRow } = await supabase.from('branches').select('name').eq('slug', branchSlug).maybeSingle();
     const brName = brRow?.name || 'Niche-onderzoek';
 
@@ -167,6 +170,7 @@ export async function POST(request: NextRequest) {
 
   const { data: custRow } = await supabase.from('customers').select('name, account_manager_id, country, vat_id').eq('id', customer_id).single();
 
+  const batchIsPaid = body.is_paid === true;
   const { data, error } = await supabase
     .from('customer_batches')
     .insert({
@@ -179,7 +183,8 @@ export async function POST(request: NextRequest) {
       leads_per_day: leads_per_day || null,
       notes,
       lead_filters: sanitizedFilters,
-      is_paid: body.is_paid === true,
+      status: initialPipelineBatchStatus(batchIsPaid),
+      is_paid: batchIsPaid,
       lookback_days: lookback,
       starts_at: startsAtValue,
       account_manager_id: custRow?.account_manager_id || null,
@@ -192,12 +197,11 @@ export async function POST(request: NextRequest) {
 
   // Targeted backfill: only if starts_at is NULL or in the past
   const startsInFuture = startsAtValue && new Date(startsAtValue) > new Date();
-  if (lookback > 0 && !startsInFuture && isPipelineBatchKind(batch_kind)) {
+  if (lookback > 0 && !startsInFuture && batchIsPaid && isPipelineBatchKind(batch_kind)) {
     try { backfillBatch(data.id, lookback); } catch { /* non-blocking */ }
   }
 
   // Admin notification email + invoice if paid with pricing
-  const batchIsPaid = body.is_paid === true;
   const { data: brRow } = await supabase.from('branches').select('name').eq('slug', branch).single();
   const brName = brRow?.name || branch;
 
@@ -323,13 +327,18 @@ export async function PUT(request: NextRequest) {
     updates.leads_delivered_external = external;
 
     const batchSize = updates.batch_size ?? existing.batch_size;
+    const paidForLifecycle =
+      updates.is_paid !== undefined ? updates.is_paid === true : existing.is_paid === true;
 
     if (!updates.status) {
-      if (updates.leads_delivered >= batchSize && existing.status !== 'completed') {
+      if (
+        updates.leads_delivered >= batchSize &&
+        (existing.status === 'active' || existing.status === 'paused')
+      ) {
         updates.status = 'completed';
         updates.completed_at = new Date().toISOString();
       } else if (updates.leads_delivered < batchSize && existing.status === 'completed') {
-        updates.status = 'active';
+        updates.status = paidForLifecycle ? 'active' : 'pending_payment';
         updates.completed_at = null;
       }
     }
@@ -346,6 +355,28 @@ export async function PUT(request: NextRequest) {
   for (const key of allowedFields) {
     if (key in updates) safeUpdates[key] = updates[key];
   }
+
+  const ex = existing as { status: string; is_paid: boolean | null };
+  const nextPaid =
+    safeUpdates.is_paid !== undefined ? safeUpdates.is_paid === true : ex.is_paid === true;
+  let nextStatus = safeUpdates.status !== undefined ? String(safeUpdates.status) : ex.status;
+
+  if (safeUpdates.is_paid === true && ex.is_paid !== true) {
+    if (nextStatus === 'pending_payment') nextStatus = 'active';
+  }
+  if (safeUpdates.is_paid === false && ex.is_paid === true) {
+    if (nextStatus === 'active' || nextStatus === 'paused') nextStatus = 'pending_payment';
+  }
+  if (nextStatus === 'paused' && !nextPaid) {
+    return NextResponse.json(
+      { error: 'Pauzeren is alleen mogelijk voor betaalde batches.' },
+      { status: 400 },
+    );
+  }
+  if (nextStatus === 'active' && !nextPaid) {
+    nextStatus = 'pending_payment';
+  }
+  safeUpdates.status = nextStatus;
 
   const { data, error } = await supabase
     .from('customer_batches')
@@ -374,7 +405,7 @@ export async function PUT(request: NextRequest) {
 
   // When batch_size grew and backfill requested, fill the extra slots
   const batchGrew = trigger_backfill && updates.batch_size && updates.batch_size > existing.batch_size;
-  if (batchGrew && isPipelineBatchKind(effectiveBatchKind)) {
+  if (batchGrew && isPipelineBatchKind(effectiveBatchKind) && data.is_paid === true) {
     const lookback = existing.lookback_days ?? 3;
     try { backfillBatch(id, Math.max(lookback, 3)); } catch { /* non-blocking */ }
   }
@@ -384,8 +415,9 @@ export async function PUT(request: NextRequest) {
     markInvoicePaid(id, 'admin-manual').catch(e => console.error('[admin/batches] markInvoicePaid failed:', e));
   }
 
-  // When a batch is (re)activated, trigger distribution
-  if (updates.status === 'active' && !batchGrew) {
+  const liveAfter = data.status === 'active' && data.is_paid === true;
+  const wasLive = existing.status === 'active' && existing.is_paid === true;
+  if (liveAfter && !wasLive && !batchGrew) {
     try { distributeUnassignedLeads(); } catch { /* non-blocking */ }
   }
 

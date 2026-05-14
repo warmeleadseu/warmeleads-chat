@@ -83,6 +83,7 @@ function startsAtInFuture(iso: string | null): boolean {
 const STATUS_OPTS = [
   { value: 'all', label: 'Alle' },
   { value: 'active', label: 'Actief' },
+  { value: 'pending_payment', label: 'Betaling' },
   { value: 'paused', label: 'Gepauzeerd' },
   { value: 'completed', label: 'Afgerond' },
 ];
@@ -109,13 +110,18 @@ const COLOR_MAP: Record<string, { light: string; text: string; bar: string }> = 
 
 const STATUS_COLORS: Record<string, string> = {
   active: 'bg-emerald-100 text-emerald-700',
+  pending_payment: 'bg-orange-100 text-orange-800',
   paused: 'bg-amber-100 text-amber-700',
   completed: 'bg-blue-100 text-blue-700',
   cancelled: 'bg-red-100 text-red-700',
 };
 
 const STATUS_LABELS: Record<string, string> = {
-  active: 'Actief', paused: 'Gepauzeerd', completed: 'Afgerond', cancelled: 'Geannuleerd',
+  active: 'Actief',
+  pending_payment: 'Wacht op betaling',
+  paused: 'Gepauzeerd',
+  completed: 'Afgerond',
+  cancelled: 'Geannuleerd',
 };
 
 export default function BatchesPage() {
@@ -152,6 +158,10 @@ export default function BatchesPage() {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const toggleStatus = async (b: Batch) => {
+    if (b.status === 'pending_payment' || b.is_paid === false) {
+      showToast('Deze batch wacht op betaling. Pauzeren/heractiveren kan na betaling.');
+      return;
+    }
     const newStatus = b.status === 'active' ? 'paused' : 'active';
     await adminFetch('/api/admin/batches', { method: 'PUT', body: JSON.stringify({ id: b.id, status: newStatus, completed_at: null }) });
     showToast(`Batch ${newStatus === 'active' ? 'geactiveerd' : 'gepauzeerd'}`);
@@ -199,6 +209,7 @@ export default function BatchesPage() {
   }, [batches, statusFilter, branchFilter, customerFilter, search, sortBy]);
 
   const activeCount = batches.filter(b => b.status === 'active').length;
+  const pendingPayCount = batches.filter(b => b.status === 'pending_payment').length;
   const totalRemaining = batches.filter(b => b.status === 'active').reduce((s, b) => s + Math.max(0, b.batch_size - b.leads_delivered), 0);
   const totalDelivered = batches.reduce((s, b) => s + b.leads_delivered, 0);
   const avgProgress = batches.length > 0
@@ -235,9 +246,10 @@ export default function BatchesPage() {
       </div>
 
       {/* KPI cards */}
-      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         {[
           { label: 'Actieve batches', value: activeCount, color: 'text-emerald-600' },
+          { label: 'Wacht op betaling', value: pendingPayCount, color: 'text-orange-600' },
           { label: 'Te leveren', value: totalRemaining, color: 'text-amber-600' },
           { label: 'Totaal geleverd', value: totalDelivered, color: 'text-brand-purple' },
           { label: 'Gem. voortgang', value: `${avgProgress}%`, color: 'text-blue-600' },
@@ -435,7 +447,7 @@ export default function BatchesPage() {
                             className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-brand-purple">
                             <PencilSquareIcon className="h-4 w-4" />
                           </button>
-                          {b.status !== 'completed' && (
+                          {b.status !== 'completed' && b.status !== 'pending_payment' && (
                             <button onClick={e => { e.stopPropagation(); toggleStatus(b); }} title={b.status === 'active' ? 'Pauzeren' : 'Heractiveren'}
                               className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-amber-600">
                               {b.status === 'active' ? <PauseIcon className="h-4 w-4" /> : <PlayIcon className="h-4 w-4" />}
@@ -462,7 +474,7 @@ export default function BatchesPage() {
               const c = COLOR_MAP[br.color] || COLOR_MAP.slate;
               const mobileCompTotal = (Array.isArray(b.compensations) ? b.compensations : []).reduce((s: number, x: Compensation) => s + x.amount, 0);
               return (
-                <div key={b.id} onClick={() => setDetailBatchId(b.id)} className={`cursor-pointer rounded-xl border p-4 shadow-sm transition hover:shadow-md ${b.status === 'completed' ? 'border-blue-100 bg-blue-50/30' : b.status === 'paused' ? 'border-amber-100 bg-amber-50/20' : 'border-slate-200 bg-white'}`}>
+                <div key={b.id} onClick={() => setDetailBatchId(b.id)} className={`cursor-pointer rounded-xl border p-4 shadow-sm transition hover:shadow-md ${b.status === 'completed' ? 'border-blue-100 bg-blue-50/30' : b.status === 'paused' ? 'border-amber-100 bg-amber-50/20' : b.status === 'pending_payment' ? 'border-orange-100 bg-orange-50/25' : 'border-slate-200 bg-white'}`}>
                   <div className="mb-2 flex items-start justify-between">
                     <div>
                       <p className="font-semibold text-slate-900">{b.customers?.name || 'Onbekend'}</p>
@@ -488,7 +500,7 @@ export default function BatchesPage() {
                       <button onClick={e => { e.stopPropagation(); setEditBatch(b); }} className="rounded-lg p-2.5 text-slate-400 hover:bg-slate-100 hover:text-brand-purple">
                         <PencilSquareIcon className="h-4 w-4" />
                       </button>
-                      {b.status !== 'completed' && (
+                      {b.status !== 'completed' && b.status !== 'pending_payment' && (
                         <button onClick={e => { e.stopPropagation(); toggleStatus(b); }} className="rounded-lg p-2.5 text-slate-400 hover:bg-slate-100 hover:text-amber-600">
                           {b.status === 'active' ? <PauseIcon className="h-4 w-4" /> : <PlayIcon className="h-4 w-4" />}
                         </button>
@@ -1237,7 +1249,14 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
   const livePct = effectiveBatchSize > 0 ? Math.min(100, Math.round((form.leads_delivered / effectiveBatchSize) * 100)) : 0;
   const deliveredChanged = form.leads_delivered !== batch.leads_delivered;
   const sizeChanged = effectiveBatchSize !== batch.batch_size;
-  const autoStatus = form.leads_delivered >= effectiveBatchSize ? 'completed' : form.leads_delivered < effectiveBatchSize && batch.status === 'completed' ? 'active' : batch.status;
+  const reopenStatus =
+    form.leads_delivered < effectiveBatchSize && batch.status === 'completed'
+      ? batch.is_paid
+        ? 'active'
+        : 'pending_payment'
+      : null;
+  const autoStatus =
+    form.leads_delivered >= effectiveBatchSize ? 'completed' : reopenStatus ?? batch.status;
 
   return (
     <>

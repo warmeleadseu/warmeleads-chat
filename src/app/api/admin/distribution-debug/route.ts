@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
       .limit(DEBUG_LIMIT),
     supabase
       .from('customer_batches')
-      .select('id, customer_id, branch, batch_size, leads_delivered, leads_per_day, leads_per_week, status, customers(name)')
+      .select('id, customer_id, branch, batch_size, leads_delivered, leads_per_day, leads_per_week, status, is_paid, customers(name)')
       .limit(DEBUG_LIMIT),
     supabase
       .from('customer_targets')
@@ -72,6 +72,7 @@ export async function GET(request: NextRequest) {
   const activeBatchesByBranch: Record<string, typeof batches> = {};
   for (const b of batches) {
     if (b.status !== 'active') continue;
+    if (b.is_paid === false) continue;
     if (!activeBatchesByBranch[b.branch]) activeBatchesByBranch[b.branch] = [];
     activeBatchesByBranch[b.branch].push(b);
   }

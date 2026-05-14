@@ -46,6 +46,7 @@ export async function GET(request: NextRequest) {
   sevenDaysAgo.setDate(now.getDate() - 7);
 
   const activeBatches = allBatches.filter(b => b.status === 'active');
+  const pendingPaymentBatches = allBatches.filter(b => b.status === 'pending_payment');
   const completedBatches = allBatches.filter(b => b.status === 'completed');
 
   const activeBatchIds = activeBatches.map(b => b.id);
@@ -123,8 +124,17 @@ export async function GET(request: NextRequest) {
     });
   }
 
+  const pending = pendingPaymentBatches.map(batch => ({
+    ...batch,
+    branch_name: branchMap[batch.branch] || batch.branch,
+    avg_leads_per_day: 0,
+    estimated_completion: null as string | null,
+    this_week_count: 0,
+  }));
+
   return NextResponse.json({
     active,
+    pending_payment: pending,
     completed,
     partial,
     batchesPartial,

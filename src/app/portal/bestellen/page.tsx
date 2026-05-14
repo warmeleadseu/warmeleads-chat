@@ -63,7 +63,11 @@ export default function BestellenPage() {
         ? 'research'
         : 'leads';
 
-  const [batches, setBatches] = useState<{ active: Batch[]; completed: Batch[] }>({ active: [], completed: [] });
+  const [batches, setBatches] = useState<{
+    active: Batch[];
+    pending_payment: Batch[];
+    completed: Batch[];
+  }>({ active: [], pending_payment: [], completed: [] });
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -97,10 +101,14 @@ export default function BestellenPage() {
           ? portalFetch(`/api/portal/pricing?branch=${guessBranch}`).catch(() => null)
           : Promise.resolve(null),
       ]);
-      const batchRes = batchRaw.ok ? await batchRaw.json() : { active: [], completed: [] };
+      const batchRes = batchRaw.ok ? await batchRaw.json() : { active: [], pending_payment: [], completed: [] };
       const orderRes = orderRaw.ok ? await orderRaw.json() : [];
       if (!batchRaw.ok || !orderRaw.ok) toast.error('Gegevens konden niet volledig geladen worden');
-    setBatches({ active: batchRes.active || [], completed: batchRes.completed || [] });
+    setBatches({
+      active: batchRes.active || [],
+      pending_payment: batchRes.pending_payment || [],
+      completed: batchRes.completed || [],
+    });
     setOrders(Array.isArray(orderRes) ? orderRes : []);
 
       if (welcomeRaw && 'ok' in welcomeRaw && welcomeRaw.ok) {
@@ -192,7 +200,10 @@ export default function BestellenPage() {
       .catch(() => {});
   }, [selectedBranch, product, pricingData]);
 
-  const allBatches = useMemo(() => [...batches.active, ...batches.completed], [batches]);
+  const allBatches = useMemo(
+    () => [...(batches.pending_payment || []), ...batches.active, ...batches.completed],
+    [batches],
+  );
 
   const branchGroups = useMemo(() => {
     const map = new Map<string, { branch: string; name: string; batches: Batch[] }>();
@@ -201,7 +212,12 @@ export default function BestellenPage() {
       if (!map.has(key)) map.set(key, { branch: key, name: b.branch_name || b.branch, batches: [] });
       map.get(key)!.batches.push(b);
     });
-    return Array.from(map.values());
+    const statusOrder = (s: string) =>
+      s === 'active' ? 0 : s === 'paused' ? 1 : s === 'pending_payment' ? 2 : s === 'completed' ? 3 : 4;
+    return Array.from(map.values()).map(g => ({
+      ...g,
+      batches: [...g.batches].sort((a, b) => statusOrder(a.status) - statusOrder(b.status)),
+    }));
   }, [allBatches]);
 
   const activeBranch = useMemo(() => branchGroups.find(g => g.branch === selectedBranch), [branchGroups, selectedBranch]);
@@ -426,7 +442,9 @@ export default function BestellenPage() {
             <div className="hide-scrollbar flex gap-2 overflow-x-auto pb-1.5">
               {branchGroups.map(g => {
                 const isSelected = selectedBranch === g.branch;
-                const activeBatch = g.batches.find(b => b.status === 'active');
+                const activeBatch =
+                  g.batches.find(b => b.status === 'active') ??
+                  g.batches.find(b => b.status === 'pending_payment');
                 const pct = activeBatch && activeBatch.batch_size > 0 ? Math.round((activeBatch.leads_delivered / activeBatch.batch_size) * 100) : null;
                 return (
                   <ChoicePill
@@ -460,10 +478,12 @@ export default function BestellenPage() {
         </section>
       )}
 
-      {sourceBatch && sourceBatch.status === 'active' && (
+      {sourceBatch && (sourceBatch.status === 'active' || sourceBatch.status === 'pending_payment') && (
         <section className={`${T.card} ${T.cardPadding}`}>
           <div className="mb-2 flex items-center justify-between">
-            <span className={T.eyebrow}>Huidige batch</span>
+            <span className={T.eyebrow}>
+              {sourceBatch.status === 'pending_payment' ? 'Batch (betaling open)' : 'Huidige batch'}
+            </span>
             <span className="text-xs font-bold text-slate-600">
               {sourceBatch.leads_delivered}/{sourceBatch.batch_size} leads
             </span>
@@ -474,7 +494,12 @@ export default function BestellenPage() {
               style={{ width: `${Math.min(100, sourceBatch.batch_size > 0 ? (sourceBatch.leads_delivered / sourceBatch.batch_size) * 100 : 0)}%` }}
             />
           </div>
-          {sourceBatch.leads_delivered >= sourceBatch.batch_size * 0.8 && (
+          {sourceBatch.status === 'pending_payment' && (
+            <p className="mt-2 text-xs font-medium text-amber-700">
+              Betaling nog open — automatische lead-toewijzing start na betaling.
+            </p>
+          )}
+          {sourceBatch.status === 'active' && sourceBatch.leads_delivered >= sourceBatch.batch_size * 0.8 && (
             <p className="mt-2 text-xs font-medium text-amber-600">
               <SparklesIcon className="mr-1 inline h-3.5 w-3.5" />
               Bijna vol! Bestel nu een vervolg batch zodat je geen leads mist.

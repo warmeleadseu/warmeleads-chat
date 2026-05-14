@@ -20,7 +20,7 @@ export async function syncBatchDelivered(
 
   const { data: batch } = await supabase
     .from('customer_batches')
-    .select('batch_size, status, leads_delivered_external, batch_kind')
+    .select('batch_size, status, leads_delivered_external, batch_kind, is_paid')
     .eq('id', batchId)
     .single();
 
@@ -31,7 +31,10 @@ export async function syncBatchDelivered(
 
   const updates: Record<string, unknown> = { leads_delivered: delivered };
 
-  if (delivered >= batch.batch_size && batch.status === 'active') {
+  if (
+    delivered >= batch.batch_size &&
+    (batch.status === 'active' || batch.status === 'paused')
+  ) {
     updates.status = 'completed';
     updates.completed_at = new Date().toISOString();
 
@@ -56,7 +59,7 @@ export async function syncBatchDelivered(
       }
     } catch { /* non-critical */ }
   } else if (delivered < batch.batch_size && batch.status === 'completed') {
-    updates.status = 'active';
+    updates.status = batch.is_paid ? 'active' : 'pending_payment';
     updates.completed_at = null;
   }
 

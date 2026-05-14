@@ -46,6 +46,8 @@ export async function finalizePaidBulkLeadBatch(
       .is('account_manager_id', null);
   }
 
+  await supabase.from('customer_batches').update({ status: 'active' }).eq('id', claimed.id);
+
   const { data: branchRow } = await supabase.from('branches').select('name').eq('slug', claimed.branch).single();
   const branchName = branchRow?.name || claimed.branch;
 
@@ -131,6 +133,8 @@ export async function finalizePaidLeadBatch(
       .eq('id', claimed.id)
       .is('account_manager_id', null);
   }
+
+  await supabase.from('customer_batches').update({ status: 'active' }).eq('id', claimed.id);
 
   const { data: branchRow } = await supabase.from('branches').select('name').eq('slug', claimed.branch).single();
   const branchName = branchRow?.name || claimed.branch;

@@ -228,7 +228,7 @@ export async function POST(request: NextRequest) {
           if (inv.batch_id) {
             const { data: batchClaim } = await supabase
               .from('customer_batches')
-              .update({ is_paid: true, mollie_payment_id: paymentId })
+              .update({ is_paid: true, mollie_payment_id: paymentId, status: 'active' })
               .eq('id', inv.batch_id)
               .eq('is_paid', false)
               .select('id, customer_id, branch, batch_size, price_per_lead, total_price, leads_per_week, leads_per_day, lead_filters, starts_at, lookback_days, batch_kind')
@@ -255,7 +255,7 @@ export async function POST(request: NextRequest) {
       if (status === 'paid') {
         const { data: claimed, error: claimErr } = await supabase
           .from('customer_batches')
-          .update({ is_paid: true, mollie_payment_id: paymentId })
+          .update({ is_paid: true, mollie_payment_id: paymentId, status: 'active' })
           .eq('id', batchId)
           .eq('is_paid', false)
           .select('id, customer_id, branch, batch_size, price_per_lead, total_price, leads_per_week, leads_per_day, lead_filters, starts_at, lookback_days')

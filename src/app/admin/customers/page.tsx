@@ -146,7 +146,7 @@ interface Batch {
   id: string; customer_id: string; branch: string; batch_size: number;
   price_per_lead: number | null; total_price: number | null;
   leads_per_day: number | null; leads_per_week: number | null;
-  leads_delivered: number; status: string; notes: string | null;
+  leads_delivered: number; status: string; is_paid?: boolean | null; notes: string | null;
   lead_filters: LeadFilter[];
   created_at: string; completed_at: string | null;
 }
@@ -835,7 +835,7 @@ function CustomerDetailPanel({
     { key: 'mail', label: 'Mail', icon: EnvelopeIcon },
   ];
 
-  const activeBatches = allBatches.filter(b => b.status === 'active');
+  const activeBatches = allBatches.filter(b => b.status === 'active' && b.is_paid !== false);
 
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -2822,6 +2822,10 @@ function BatchesPanel({ customer, branchOptions, onClose, embedded }: { customer
   };
 
   const toggleBatchStatus = async (b: Batch) => {
+    if (b.status === 'pending_payment' || b.is_paid === false) {
+      alert('Deze batch wacht op betaling. Pauzeren/heractiveren kan na betaling.');
+      return;
+    }
     const newStatus = b.status === 'active' ? 'paused' : 'active';
     await adminFetch('/api/admin/batches', {
       method: 'PUT',
@@ -2845,12 +2849,14 @@ function BatchesPanel({ customer, branchOptions, onClose, embedded }: { customer
 
   const statusColors: Record<string, string> = {
     active: 'bg-emerald-100 text-emerald-700',
+    pending_payment: 'bg-orange-100 text-orange-800',
     paused: 'bg-amber-100 text-amber-700',
     completed: 'bg-blue-100 text-blue-700',
   };
 
   const statusLabels: Record<string, string> = {
     active: 'Actief',
+    pending_payment: 'Wacht op betaling',
     paused: 'Gepauzeerd',
     completed: 'Voltooid',
   };
@@ -2998,7 +3004,7 @@ function BatchesPanel({ customer, branchOptions, onClose, embedded }: { customer
                 const pct = b.batch_size > 0 ? Math.min(100, Math.round((b.leads_delivered / b.batch_size) * 100)) : 0;
                 const bo = branchOptions.find(x => x.slug === b.branch);
                 return (
-                  <div key={b.id} className={`rounded-xl border p-4 transition ${b.status === 'completed' ? 'border-blue-100 bg-blue-50/30' : b.status === 'paused' ? 'border-amber-100 bg-amber-50/20' : 'border-slate-200 bg-white'}`}>
+                  <div key={b.id} className={`rounded-xl border p-4 transition ${b.status === 'completed' ? 'border-blue-100 bg-blue-50/30' : b.status === 'paused' ? 'border-amber-100 bg-amber-50/20' : b.status === 'pending_payment' ? 'border-orange-100 bg-orange-50/25' : 'border-slate-200 bg-white'}`}>
                     <div className="mb-2 flex items-start justify-between">
                       <div className="flex items-center gap-2">
                         <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${colorMap[bo?.color || 'slate'] || colorMap.slate}`}>
@@ -3009,7 +3015,7 @@ function BatchesPanel({ customer, branchOptions, onClose, embedded }: { customer
                         </span>
                       </div>
                       <div className="flex items-center gap-1">
-                        {b.status !== 'completed' && (
+                        {b.status !== 'completed' && b.status !== 'pending_payment' && (
                           <button onClick={() => toggleBatchStatus(b)}
                             className="rounded-lg px-2 py-1 text-[11px] font-medium text-slate-500 transition hover:bg-slate-100">
                             {b.status === 'active' ? 'Pauzeer' : 'Heractiveer'}

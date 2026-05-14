@@ -54,6 +54,7 @@ interface BranchMeta { slug: string; name: string; color: string; }
 interface BatchInfo {
   id: string; customer_id: string; branch: string;
   batch_size: number; leads_delivered: number; leads_per_week: number | null; status: string;
+  is_paid?: boolean | null;
   customers?: { name: string };
 }
 
@@ -220,7 +221,9 @@ export default function AdminDashboard() {
   if (!stats) return <p className="py-20 text-center text-slate-400">Kon statistieken niet laden.</p>;
 
   const maxStatus = Math.max(...Object.values(stats.byStatus), 1);
-  const activeBatches = batches.filter((b: BatchInfo) => b.status === 'active');
+  const activeBatches = batches.filter(
+    (b: BatchInfo) => b.status === 'active' && b.is_paid !== false,
+  );
   const batchDelivered = activeBatches.reduce((s, b) => s + (b.leads_delivered || 0), 0);
   const batchTotal = activeBatches.reduce((s, b) => s + (b.batch_size || 0), 0);
   const ps = stats.periodStats?.[period];

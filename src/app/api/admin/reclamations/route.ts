@@ -148,6 +148,7 @@ async function findTargetBatch(
     .select('*')
     .eq('customer_id', customerId)
     .in('status', ['active', 'completed'])
+    .neq('is_paid', false)
     .order('created_at', { ascending: false })
     .limit(1)
     .single();
@@ -191,7 +192,7 @@ async function addCompensation(
 
   let reactivated = false;
   if (targetBatch.status === 'completed') {
-    batchUpdate.status = 'active';
+    batchUpdate.status = targetBatch.is_paid === true ? 'active' : 'pending_payment';
     batchUpdate.completed_at = null;
     reactivated = true;
   }
