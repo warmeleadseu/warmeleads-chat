@@ -12,7 +12,7 @@ const BATCHES_LIST_LIMIT = 1_500;
 const BULK_ASSIGNMENTS_MAX_PAGES = 80;
 
 const LIVE_STATS_CACHE_TTL_MS = 45_000;
-const LIVE_STATS_CACHE_KEY = 'live-stats-v1';
+const LIVE_STATS_CACHE_KEY = 'live-stats-v2';
 
 interface LiveStatsCacheEntry {
   data: unknown;
@@ -48,13 +48,12 @@ export async function GET(request: NextRequest) {
     customersRes,
     batchesRes,
     recentLeadsRes,
-    assignmentsRes,
     provincesRes,
     branchRes,
     phoneTodayRes,
     phoneInvalidTodayRes,
   ] = await Promise.all([
-    supabase.from('leads').select('id', { count: 'exact', head: true }).neq('bron', 'excel_import'),
+    supabase.from('leads').select('id', { count: 'exact', head: true }).neq('bron', 'excel_import').neq('bron', 'demo'),
     supabase.from('customers').select('id, name, is_active'),
     supabase
       .from('customer_batches')
@@ -65,17 +64,14 @@ export async function GET(request: NextRequest) {
       .from('leads')
       .select('id, naam_klant, branch, plaatsnaam, provincie, created_at')
       .neq('bron', 'excel_import')
+      .neq('bron', 'demo')
       .order('created_at', { ascending: false })
       .limit(12),
-    supabase
-      .from('lead_assignments')
-      .select('id, lead_id, customer_id, batch_id, assigned_at, customers(name)')
-      .order('assigned_at', { ascending: false })
-      .limit(500),
     supabase
       .from('leads')
       .select('provincie, postcode')
       .neq('bron', 'excel_import')
+      .neq('bron', 'demo')
       .not('provincie', 'is', null)
       .not('provincie', 'eq', '')
       .gte('created_at', breakdownSinceIso)
@@ -84,15 +80,22 @@ export async function GET(request: NextRequest) {
       .from('leads')
       .select('branch')
       .neq('bron', 'excel_import')
+      .neq('bron', 'demo')
       .not('branch', 'is', null)
       .not('branch', 'eq', '')
       .gte('created_at', breakdownSinceIso)
       .limit(BREAKDOWN_MAX_ROWS),
-    supabase.from('leads').select('id', { count: 'exact', head: true }).neq('bron', 'excel_import').gte('created_at', todayStart),
     supabase
       .from('leads')
       .select('id', { count: 'exact', head: true })
       .neq('bron', 'excel_import')
+      .neq('bron', 'demo')
+      .gte('created_at', todayStart),
+    supabase
+      .from('leads')
+      .select('id', { count: 'exact', head: true })
+      .neq('bron', 'excel_import')
+      .neq('bron', 'demo')
       .gte('created_at', todayStart)
       .eq('phone_valid', false),
   ]);
@@ -154,6 +157,7 @@ export async function GET(request: NextRequest) {
         .from('leads')
         .select('meta_campaign_id, branch')
         .neq('bron', 'excel_import')
+        .neq('bron', 'demo')
         .not('meta_campaign_id', 'is', null)
         .gte('created_at', metaSinceIso)
         .range(offset, offset + META_CAMPAIGN_PAGE - 1);
@@ -216,12 +220,16 @@ export async function GET(request: NextRequest) {
 
   const brutoCpl = totalOurLeads > 0 ? monthAdSpend / totalOurLeads : 0;
 
+  /** Zelfde logica als admin kosten: distributie-toewijzingen / Meta-leads in venster. */
+  const distributionAssignTotal = Number(revenueStats.total_assignments) || 0;
   const avgAssignments =
-    revenueStats.unique_assigned_leads > 0
-      ? Math.round((revenueStats.total_assignments / revenueStats.unique_assigned_leads) * 100) / 100
+    totalOurLeads > 0 && distributionAssignTotal > 0
+      ? Math.round((distributionAssignTotal / totalOurLeads) * 100) / 100
       : 0;
   const effectieveCpl =
-    brutoCpl > 0 && avgAssignments > 0 ? Math.round((brutoCpl / avgAssignments) * 100) / 100 : 0;
+    distributionAssignTotal > 0
+      ? Math.round((monthAdSpend / distributionAssignTotal) * 100) / 100
+      : 0;
 
   const batchRevenue = Number(revenueStats.batch_revenue) || 0;
   const bulkRevenue = Number(revenueStats.bulk_revenue) || 0;
@@ -458,6 +466,7 @@ export async function GET(request: NextRequest) {
       brutoCpl: Math.round(brutoCpl * 100) / 100,
       effectieveCpl,
       avgAssignments,
+      distributionAssignmentTotal: distributionAssignTotal,
       batchRevenue: Math.round(batchRevenue * 100) / 100,
       bulkRevenue: Math.round(bulkRevenue * 100) / 100,
       bulkAssignmentCount: revenueStats.bulk_assignment_count,
