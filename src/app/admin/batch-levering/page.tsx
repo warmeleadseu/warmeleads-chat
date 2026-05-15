@@ -109,7 +109,8 @@ export default function BatchLeveringPage() {
           </p>
           {dagen.length > 0 && (
             <p className="mt-2 text-xs text-slate-500">
-              Gecontroleerde dagen: {dagen.map(d => d.replace(/-/g, '/')).join(' → ')}
+              Gecontroleerde dagen (datavenster): {dagen.map(d => d.replace(/-/g, '/')).join(' → ')}. Per kaart tellen
+              alleen voltooide dagen mee vanaf eerste betaling (of aanmaak als die ontbreekt).
             </p>
           )}
         </div>

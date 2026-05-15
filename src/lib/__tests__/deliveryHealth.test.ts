@@ -27,7 +27,7 @@ describe('beoordeelBatchLevering', () => {
     vi.useRealTimers();
   });
 
-  it('tijdens opstartfase: drie dagen ruim onder cap → actie, geen vals “op schema”', () => {
+  it('tijdens opstartfase: meetdagen vanaf aanmaak; 12 mei telt niet mee → twee dagen onder cap → let_op', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-05-15T12:00:00.000Z'));
 
@@ -39,9 +39,9 @@ describe('beoordeelBatchLevering', () => {
       countsByDay: counts(0, 5, 2),
     });
 
-    expect(row.badge).toBe('actie');
+    expect(row.badge).toBe('let_op');
     expect(row.kop).toContain('opstartfase');
-    expect(row.kop).toContain('achter');
+    expect(row.dagen.map(d => d.datum)).toEqual(['2026-05-13', '2026-05-14']);
   });
 
   it('na opstartfase: zelfde cijfers blijven actie met standaardkop', () => {
@@ -92,7 +92,7 @@ describe('beoordeelBatchLevering', () => {
     expect(row.kop).toContain('opstartfase');
   });
 
-  it('opstart telt vanaf betaaldatum, niet vanaf oude aanmaak', () => {
+  it('opstart telt vanaf betaaldatum, niet vanaf oude aanmaak; dagen vóór betaling tellen niet mee', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-05-15T12:00:00.000Z'));
 
@@ -108,9 +108,32 @@ describe('beoordeelBatchLevering', () => {
       countsByDay: counts(0, 5, 2),
     });
 
-    expect(row.badge).toBe('actie');
+    expect(row.badge).toBe('let_op');
     expect(row.kop).toContain('opstartfase');
     expect(row.uitleg).toContain('kort betaald');
+    expect(row.dagen.map(d => d.datum)).toEqual(['2026-05-13', '2026-05-14']);
+  });
+
+  it('eerste betaling vandaag: geen voltooide meetdag in venster → goed, Net gestart', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-05-15T12:00:00.000Z'));
+
+    const row = beoordeelBatchLevering({
+      batch: {
+        ...baseBatch,
+        created_at: '2026-05-10T08:00:00.000Z',
+        paid_at: '2026-05-15T10:00:00.000Z',
+      },
+      customerName: 'LBS',
+      branchLabel: 'Thuisbatterij',
+      dagenYmd: ['2026-05-12', '2026-05-13', '2026-05-14'],
+      countsByDay: counts(0, 0, 0),
+    });
+
+    expect(row.badge).toBe('goed');
+    expect(row.kop).toBe('Net gestart');
+    expect(row.dagen).toHaveLength(0);
+    expect(row.uitleg).toContain('eerste betaling');
   });
 
   it('meer dan vier kalenderdagen na betaling: geen opstart-kop meer', () => {

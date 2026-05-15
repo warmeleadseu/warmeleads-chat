@@ -140,12 +140,6 @@ export function beoordeelBatchLevering(input: {
   const totaal = Number(input.batch.batch_size ?? 0);
   const rest = Math.max(0, totaal - geleverd);
 
-  const dagen: BatchLeveringDag[] = input.dagenYmd.map(d => ({
-    datum: d,
-    label: dagLabelNl(d),
-    aantal: input.countsByDay.get(d) ?? 0,
-  }));
-
   const basisZonderDagen: Omit<BatchLeveringRij, 'dagen' | 'badge' | 'kop' | 'uitleg' | 'tips'> = {
     batch_id: input.batch.id,
     customer_id: input.batch.customer_id,
@@ -169,14 +163,11 @@ export function beoordeelBatchLevering(input: {
     };
   }
 
-  const basis: Omit<BatchLeveringRij, 'badge' | 'kop' | 'uitleg' | 'tips'> = {
-    ...basisZonderDagen,
-    dagen,
-  };
-
   if (rest <= 0) {
+    const dagenLeeg: BatchLeveringDag[] = [];
     return {
-      ...basis,
+      ...basisZonderDagen,
+      dagen: dagenLeeg,
       badge: 'goed',
       kop: 'Batch is vol',
       uitleg: 'Deze batch heeft zijn bestelde aantal leads bereikt. Er is geen dagelijkse levering meer nodig.',
@@ -186,7 +177,8 @@ export function beoordeelBatchLevering(input: {
 
   if (cap <= 0) {
     return {
-      ...basis,
+      ...basisZonderDagen,
+      dagen: [],
       badge: 'goed',
       kop: 'Geen maximum per dag',
       uitleg: 'Er is geen daglimiet ingesteld; we verdelen zoveel als de pijplijn en regels toelaten.',
@@ -194,7 +186,34 @@ export function beoordeelBatchLevering(input: {
     };
   }
 
+  /** Alleen voltooide kalenderdagen ≥ eerste betaling (Amsterdam); oudere dagen horen niet bij deze batch. */
   const metingVanafIso = input.batch.paid_at?.trim() || input.batch.created_at;
+  const metingStartYmd = amsterdamYmd(metingVanafIso);
+  const dagenYmdNarrow = input.dagenYmd.filter(d => d >= metingStartYmd);
+
+  if (dagenYmdNarrow.length === 0) {
+    return {
+      ...basisZonderDagen,
+      dagen: [],
+      badge: 'goed',
+      kop: 'Net gestart',
+      uitleg:
+        'We meten per batch alleen afgelopen kalenderdagen vanaf de eerste betaling (of vanaf aanmaak als er nog geen betaaldatum in het systeem staat). In het huidige venster valt er voor deze batch nog geen volledige meetdag; zodra de eerste dagen voorbij zijn, zie je hier de tellingen.',
+      tips: [],
+    };
+  }
+
+  const dagen: BatchLeveringDag[] = dagenYmdNarrow.map(d => ({
+    datum: d,
+    label: dagLabelNl(d),
+    aantal: input.countsByDay.get(d) ?? 0,
+  }));
+
+  const basis: Omit<BatchLeveringRij, 'badge' | 'kop' | 'uitleg' | 'tips'> = {
+    ...basisZonderDagen,
+    dagen,
+  };
+
   const leeftijdDagen = kalenderdagenSindsReferentieAmsterdam(metingVanafIso);
   const inOpstart = leeftijdDagen < MIN_DAGEN_NA_METING_START;
   const metingVanafBetaling = Boolean(input.batch.paid_at?.trim());
@@ -218,12 +237,19 @@ export function beoordeelBatchLevering(input: {
       : 'Deze batch bestaat nog maar korte tijd; op basis van de meetdagen hieronder wijkt de levering nu al af van het afgesproken maximum. ';
   };
 
+  const laatsteDagenTekst =
+    dagen.length >= 3
+      ? 'Op de laatste drie dagen zat je telkens ruim onder dat maximum, terwijl deze batch nog ruimte heeft voor meer leads.'
+      : dagen.length === 2
+        ? 'Op beide meetdagen zat je ruim onder dat maximum, terwijl deze batch nog ruimte heeft voor meer leads.'
+        : 'Op de meetdag zat je ruim onder dat maximum, terwijl deze batch nog ruimte heeft voor meer leads.';
+
   if (laagAantal >= 3) {
     return {
       ...basis,
       badge: 'actie',
       kop: inOpstart ? 'Nog opstartfase · levering achter' : 'Duidelijk minder leads per dag dan afgesproken',
-      uitleg: `${opstartVoorvoegsel('actie')}${basisUitleg} Op de laatste drie dagen zat je telkens ruim onder dat maximum, terwijl deze batch nog ruimte heeft voor meer leads.`,
+      uitleg: `${opstartVoorvoegsel('actie')}${basisUitleg} ${laatsteDagenTekst}`,
       tips: standaardTipsActie(),
     };
   }
