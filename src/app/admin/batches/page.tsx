@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -1369,12 +1369,77 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
   const [editStartTime, setEditStartTime] = useState(
     initStartsAt ? initStartsAt.toLocaleTimeString('nl-NL', { timeZone: 'Europe/Amsterdam', hour: '2-digit', minute: '2-digit', hour12: false }) : '09:00'
   );
-  const [metaCampaignIdsText, setMetaCampaignIdsText] = useState(() =>
+  const [metaCampaignPicks, setMetaCampaignPicks] = useState<{ id: string; name: string }[]>(() =>
     Array.isArray(batch.meta_campaign_ids) && batch.meta_campaign_ids.length > 0
-      ? batch.meta_campaign_ids.join('\n')
-      : '',
+      ? batch.meta_campaign_ids.map(id => ({ id, name: id }))
+      : [],
   );
   const [metaSyncEnabled, setMetaSyncEnabled] = useState(() => batch.meta_campaign_sync_enabled !== false);
+  const [metaSearchQuery, setMetaSearchQuery] = useState('');
+  const [metaSearchResults, setMetaSearchResults] = useState<{ id: string; name: string; effective_status?: string }[]>(
+    [],
+  );
+  const [metaSearchLoading, setMetaSearchLoading] = useState(false);
+  const [metaSearchError, setMetaSearchError] = useState<string | null>(null);
+  const [metaSearchOpen, setMetaSearchOpen] = useState(false);
+  const [manualMetaId, setManualMetaId] = useState('');
+  const metaSearchWrapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isPipelineBatchKind(batch.batch_kind) || !batch.meta_campaign_ids?.length) return;
+    const ids = batch.meta_campaign_ids.join(',');
+    adminFetch(`/api/admin/meta-campaigns/lookup?ids=${encodeURIComponent(ids)}`)
+      .then(r => (r.ok ? r.json() : Promise.reject(new Error('lookup failed'))))
+      .then((d: { campaigns?: { id: string; name: string }[] }) => {
+        if (d.campaigns?.length) setMetaCampaignPicks(d.campaigns);
+      })
+      .catch(() => {});
+  }, [batch.id, batch.meta_campaign_ids]);
+
+  useEffect(() => {
+    if (!isPipelineBatchKind(batch.batch_kind)) {
+      setMetaSearchResults([]);
+      setMetaSearchLoading(false);
+      return;
+    }
+    const q = metaSearchQuery.trim();
+    if (q.length < 2) {
+      setMetaSearchResults([]);
+      setMetaSearchError(null);
+      setMetaSearchLoading(false);
+      return;
+    }
+    setMetaSearchLoading(true);
+    setMetaSearchError(null);
+    const t = window.setTimeout(() => {
+      adminFetch(`/api/admin/meta-campaigns/search?q=${encodeURIComponent(q)}`)
+        .then(async r => {
+          const d = await r.json().catch(() => ({}));
+          if (!r.ok) throw new Error(d.error || 'Zoeken mislukt');
+          return d as { campaigns?: { id: string; name: string; effective_status?: string }[] };
+        })
+        .then(d => {
+          setMetaSearchResults(d.campaigns || []);
+        })
+        .catch(e => {
+          setMetaSearchResults([]);
+          setMetaSearchError(e instanceof Error ? e.message : 'Zoeken mislukt');
+        })
+        .finally(() => setMetaSearchLoading(false));
+    }, 400);
+    return () => window.clearTimeout(t);
+  }, [metaSearchQuery, batch.batch_kind]);
+
+  useEffect(() => {
+    if (!metaSearchOpen) return;
+    const close = (e: MouseEvent) => {
+      if (metaSearchWrapRef.current && !metaSearchWrapRef.current.contains(e.target as Node)) {
+        setMetaSearchOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [metaSearchOpen]);
 
   useEffect(() => {
     adminFetch(`/api/admin/branches/fields?branch=${batch.branch}`)
@@ -1409,11 +1474,7 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
         starts_at: startsAtISO,
       };
       if (isPipelineBatchKind(batch.batch_kind)) {
-        const metaIds = metaCampaignIdsText
-          .split(/[\s,;\n]+/)
-          .map(s => s.trim())
-          .filter(s => /^\d+$/.test(s));
-        payload.meta_campaign_ids = [...new Set(metaIds)].slice(0, 10);
+        payload.meta_campaign_ids = metaCampaignPicks.map(p => p.id).slice(0, 10);
         payload.meta_campaign_sync_enabled = metaSyncEnabled;
       }
       if (extraLeads > 0) {
@@ -1598,16 +1659,115 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
             <div className="rounded-lg border border-indigo-200 bg-indigo-50/40 p-3">
               <p className="mb-2 text-sm font-semibold text-indigo-900">Meta campagnes (batch)</p>
               <p className="mb-2 text-[11px] text-indigo-800/90">
-                Facebook-campagne-ID&apos;s (numeriek). Status ACTIVE alleen als de batch <strong>betaald</strong>, <strong>actief</strong>, nog <strong>niet vol</strong> is, en het <strong>startmoment</strong> (<code className="rounded bg-white/80 px-1">starts_at</code>) bereikt is — ook als de klant eerder betaalt.
+                Zoek op <strong>campagnenaam</strong> zoals in Meta Ads Manager. Gekoppelde campagnes gaan op{' '}
+                <strong>ACTIVE</strong> pas als de batch betaald en actief is, nog niet vol, het <strong>startmoment</strong> bereikt is, en sync aan staat.
               </p>
-              <label className="mb-1 block text-[11px] font-medium text-indigo-900/80">Campagne-ID&apos;s (één per regel)</label>
-              <textarea
-                value={metaCampaignIdsText}
-                onChange={e => setMetaCampaignIdsText(e.target.value)}
-                rows={3}
-                placeholder="bijv. 12000000000000001"
-                className="mb-3 w-full rounded-lg border border-indigo-200 bg-white px-3 py-2 font-mono text-xs text-slate-900 outline-none focus:border-indigo-400"
-              />
+
+              <div ref={metaSearchWrapRef} className="relative mb-3">
+                <label className="mb-1 block text-[11px] font-medium text-indigo-900/80">Campagne zoeken</label>
+                <input
+                  type="text"
+                  value={metaSearchQuery}
+                  onChange={e => {
+                    setMetaSearchQuery(e.target.value);
+                    setMetaSearchOpen(true);
+                  }}
+                  onFocus={() => setMetaSearchOpen(true)}
+                  placeholder="Bijv. Thuisbatterij leads Q2"
+                  autoComplete="off"
+                  className="w-full rounded-lg border border-indigo-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-400"
+                />
+                {metaSearchOpen && (metaSearchQuery.trim().length >= 2 || metaSearchLoading || metaSearchError) && (
+                  <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-52 overflow-auto rounded-lg border border-indigo-200 bg-white py-1 shadow-lg">
+                    {metaSearchLoading && (
+                      <p className="px-3 py-2 text-xs text-slate-500">Zoeken in Meta…</p>
+                    )}
+                    {!metaSearchLoading && metaSearchError && (
+                      <p className="px-3 py-2 text-xs text-rose-600">{metaSearchError}</p>
+                    )}
+                    {!metaSearchLoading &&
+                      !metaSearchError &&
+                      metaSearchResults.length === 0 &&
+                      metaSearchQuery.trim().length >= 2 && (
+                        <p className="px-3 py-2 text-xs text-slate-500">Geen campagnes gevonden (max. doorzocht in je ad account).</p>
+                      )}
+                    {!metaSearchLoading &&
+                      metaSearchResults.map(c => {
+                        const already = metaCampaignPicks.some(p => p.id === c.id);
+                        return (
+                          <button
+                            key={c.id}
+                            type="button"
+                            disabled={already || metaCampaignPicks.length >= 10}
+                            onClick={() => {
+                              if (already || metaCampaignPicks.length >= 10) return;
+                              setMetaCampaignPicks(prev => [...prev, { id: c.id, name: c.name }]);
+                              setMetaSearchQuery('');
+                              setMetaSearchResults([]);
+                              setMetaSearchOpen(false);
+                            }}
+                            className="flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left text-sm hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            <span className="font-medium text-slate-900">{c.name}</span>
+                            <span className="font-mono text-[10px] text-slate-500">
+                              {c.id}
+                              {c.effective_status ? ` · ${c.effective_status}` : ''}
+                            </span>
+                          </button>
+                        );
+                      })}
+                  </div>
+                )}
+              </div>
+
+              {metaCampaignPicks.length > 0 && (
+                <div className="mb-3 flex flex-wrap gap-1.5">
+                  {metaCampaignPicks.map(p => (
+                    <span
+                      key={p.id}
+                      className="inline-flex max-w-full items-center gap-1 rounded-full border border-indigo-200 bg-white px-2.5 py-1 text-[11px] text-indigo-950"
+                    >
+                      <span className="truncate font-medium" title={p.name}>{p.name}</span>
+                      <span className="shrink-0 font-mono text-[10px] text-slate-500">({p.id})</span>
+                      <button
+                        type="button"
+                        onClick={() => setMetaCampaignPicks(prev => prev.filter(x => x.id !== p.id))}
+                        className="shrink-0 rounded p-0.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+                        aria-label="Verwijderen"
+                      >
+                        <XMarkIcon className="h-3.5 w-3.5" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              <div className="mb-3 rounded-md border border-dashed border-indigo-200/80 bg-white/60 px-2 py-2">
+                <p className="mb-1 text-[10px] font-medium text-indigo-900/70">Handmatig campagne-ID (fallback)</p>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={manualMetaId}
+                    onChange={e => setManualMetaId(e.target.value.replace(/\D/g, ''))}
+                    placeholder="Alleen cijfers"
+                    className="min-w-0 flex-1 rounded border border-indigo-100 px-2 py-1 font-mono text-xs text-slate-900"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const id = manualMetaId.trim();
+                      if (!/^\d+$/.test(id) || metaCampaignPicks.length >= 10) return;
+                      if (metaCampaignPicks.some(p => p.id === id)) return;
+                      setMetaCampaignPicks(prev => [...prev, { id, name: id }]);
+                      setManualMetaId('');
+                    }}
+                    className="shrink-0 rounded bg-indigo-600 px-2 py-1 text-xs font-semibold text-white hover:bg-indigo-700"
+                  >
+                    Toevoegen
+                  </button>
+                </div>
+              </div>
+
               <label className="flex cursor-pointer items-center gap-2 text-sm text-indigo-950">
                 <input
                   type="checkbox"
