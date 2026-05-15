@@ -1677,6 +1677,7 @@ interface PricingInfo {
   min_batch_size: number;
   is_custom: boolean;
   computed_price?: number | null;
+  product: 'leads' | 'appointments';
 }
 
 function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
@@ -1685,7 +1686,9 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
 }) {
   const [form, setForm] = useState({
     customer_id: '', branch: '', batch_size: 100, is_paid: false,
-    price_per_lead: '', leads_per_day: '', leads_per_week: '', lookback_days: '3', notes: '', lead_filters: [] as LeadFilter[],
+    batch_product: 'leads' as 'leads' | 'appointments',
+    price_per_lead: '', price_per_appointment: '', appointments_per_day: '', appointments_per_week: '',
+    leads_per_day: '', leads_per_week: '', lookback_days: '3', notes: '', lead_filters: [] as LeadFilter[],
     batch_delivery: 'pipeline' as 'pipeline' | 'bulk' | 'niche_research',
     niche_title: '',
     // Standaard verstuurt het systeem direct een betaallink-mail naar de klant bij
@@ -1702,7 +1705,7 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
   const [startsAtTime, setStartsAtTime] = useState('09:00');
 
   useEffect(() => {
-    if (form.batch_delivery === 'niche_research' || !form.branch) {
+    if ((form.batch_product === 'leads' && form.batch_delivery === 'niche_research') || !form.branch) {
       setBranchFields([]);
       return;
     }
@@ -1710,18 +1713,72 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
       .then(r => r.ok ? r.json() : { fields: [] })
       .then(d => setBranchFields(d.fields || []))
       .catch(() => {});
-  }, [form.branch]);
+  }, [form.branch, form.batch_delivery, form.batch_product]);
 
   useEffect(() => {
+    setPriceOverride(false);
+  }, [form.batch_product]);
+
+  useEffect(() => {
+    if (form.batch_product === 'appointments') {
+      if (!form.branch) {
+        setPricingInfo(null);
+        return;
+      }
+      const fetchPricing = async () => {
+        const branchRes = await adminFetch('/api/admin/branches');
+        if (!branchRes.ok) return;
+        const branchData = await branchRes.json();
+        const br = (branchData.branches || []).find((b: { slug: string }) => b.slug === form.branch);
+        if (!br) return;
+
+        const branchTiers: PricingTierData[] = br.appointment_pricing_tiers || [];
+        let tiers: PricingTierData[] = branchTiers;
+        let nationwideDiscount = Number(br.appointment_nationwide_discount) || 0;
+        let isCustom = false;
+
+        if (form.customer_id) {
+          const cpRes = await adminFetch(
+            `/api/admin/customer-pricing?customer_id=${form.customer_id}&product=appointments`,
+          );
+          if (cpRes.ok) {
+            const cpData = await cpRes.json();
+            const custom = (cpData.pricing || []).find((p: { branch_slug: string }) => p.branch_slug === form.branch);
+            if (custom && custom.pricing_tiers && custom.pricing_tiers.length > 0) {
+              tiers = mergeCustomTiers(branchTiers, custom.pricing_tiers);
+              if (custom.nationwide_discount != null) nationwideDiscount = Number(custom.nationwide_discount);
+              isCustom = true;
+            }
+          }
+        }
+
+        const sorted = [...tiers].sort((a: PricingTierData, b: PricingTierData) => b.min_leads - a.min_leads);
+        const tier = sorted.find((t: PricingTierData) => form.batch_size >= t.min_leads);
+        const computedPrice = tier ? tier.price_per_lead : null;
+
+        setPricingInfo({
+          tiers,
+          nationwide_discount: nationwideDiscount,
+          min_batch_size: Number(br.appointment_min_batch_size) || 5,
+          is_custom: isCustom,
+          computed_price: computedPrice,
+          product: 'appointments',
+        });
+
+        if (!priceOverride && computedPrice !== null) {
+          setForm(f => ({ ...f, price_per_appointment: String(computedPrice) }));
+        }
+      };
+      fetchPricing();
+      return;
+    }
+
     if (form.batch_delivery === 'niche_research') {
       setPricingInfo(null);
       return;
     }
     if (!form.branch) { setPricingInfo(null); return; }
     const fetchPricing = async () => {
-      const params = new URLSearchParams({ branch: form.branch });
-      if (form.customer_id) params.set('customer_id', form.customer_id);
-
       const branchRes = await adminFetch('/api/admin/branches');
       if (!branchRes.ok) return;
       const branchData = await branchRes.json();
@@ -1756,6 +1813,7 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
         min_batch_size: br.min_batch_size || 10,
         is_custom: isCustom,
         computed_price: computedPrice,
+        product: 'leads',
       });
 
       if (!priceOverride && computedPrice !== null) {
@@ -1763,9 +1821,55 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
       }
     };
     fetchPricing();
-  }, [form.branch, form.customer_id, form.batch_size, priceOverride, form.batch_delivery]);
+  }, [form.branch, form.customer_id, form.batch_size, priceOverride, form.batch_delivery, form.batch_product]);
 
   const create = async () => {
+    if (form.batch_product === 'appointments') {
+      if (!form.customer_id || !form.branch || !form.batch_size) {
+        alert('Vul klant, branche en batchgrootte in.');
+        return;
+      }
+      const ppa = form.price_per_appointment ? parseFloat(form.price_per_appointment) : NaN;
+      if (!Number.isFinite(ppa) || ppa <= 0) {
+        alert('Vul een geldige prijs per afspraak in (groter dan 0).');
+        return;
+      }
+      setSaving(true);
+      try {
+        let startsAtISO: string | null = null;
+        if (scheduledStart && startsAtDate) {
+          const nlDateTime = `${startsAtDate}T${startsAtTime || '09:00'}:00`;
+          const nlOffset = getNLOffset(new Date(nlDateTime));
+          startsAtISO = `${nlDateTime}${nlOffset}`;
+        }
+        const res = await adminFetch('/api/admin/appointment-batches', {
+          method: 'POST',
+          body: JSON.stringify({
+            customer_id: form.customer_id,
+            branch: form.branch,
+            batch_size: form.batch_size,
+            price_per_appointment: ppa,
+            appointments_per_day: form.appointments_per_day ? parseInt(form.appointments_per_day, 10) : null,
+            appointments_per_week: form.appointments_per_week ? parseInt(form.appointments_per_week, 10) : null,
+            notes: form.notes || null,
+            lead_filters: form.lead_filters.filter(f => f.field && (f.values?.length || 0) > 0),
+            is_paid: form.is_paid,
+            ...(startsAtISO ? { starts_at: startsAtISO } : {}),
+            ...(form.is_paid ? {} : { send_payment_email: form.send_payment_email }),
+          }),
+        });
+        if (res.ok) onCreated();
+        else {
+          const d = await res.json();
+          alert(d.error || 'Aanmaken mislukt');
+        }
+      } catch {
+        alert('Er ging iets mis');
+      }
+      setSaving(false);
+      return;
+    }
+
     if (form.batch_delivery === 'niche_research') {
       if (!form.customer_id || form.niche_title.trim().length < 3) {
         alert('Kies een klant en vul een duidelijke nichenaam in (minimaal 3 tekens).');
@@ -1824,7 +1928,8 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
     setSaving(false);
   };
 
-  const isNicheDelivery = form.batch_delivery === 'niche_research';
+  const isNicheDelivery = form.batch_product === 'leads' && form.batch_delivery === 'niche_research';
+  const isAppointments = form.batch_product === 'appointments';
   const activeCustomers = customers.filter(c => c.is_active);
   const activeBranches = branches.filter(b => b.is_active);
 
@@ -1840,7 +1945,9 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
           <div className="flex items-center justify-between px-5 py-4">
             <div>
               <h2 className="text-lg font-bold text-slate-900">Nieuwe batch</h2>
-              <p className="mt-0.5 text-xs text-slate-500">Maak een lead batch aan voor een klant</p>
+              <p className="mt-0.5 text-xs text-slate-500">
+                {isAppointments ? 'Afspraak-batch voor een klant (parallel aan lead-batches)' : 'Lead-batch voor een klant'}
+              </p>
             </div>
             <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><XMarkIcon className="h-5 w-5" /></button>
           </div>
@@ -1856,6 +1963,32 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
             </select>
           </div>
 
+          <div className="flex rounded-lg border border-slate-200 bg-slate-50 p-0.5">
+            <button
+              type="button"
+              onClick={() => setForm(f => ({ ...f, batch_product: 'leads' }))}
+              className={`flex-1 rounded-md py-2 text-xs font-semibold transition ${
+                form.batch_product === 'leads'
+                  ? 'bg-brand-purple text-white shadow-sm'
+                  : 'text-slate-600 hover:bg-white/80'
+              }`}
+            >
+              Leads
+            </button>
+            <button
+              type="button"
+              onClick={() => setForm(f => ({ ...f, batch_product: 'appointments' }))}
+              className={`flex-1 rounded-md py-2 text-xs font-semibold transition ${
+                form.batch_product === 'appointments'
+                  ? 'bg-teal-600 text-white shadow-sm'
+                  : 'text-slate-600 hover:bg-white/80'
+              }`}
+            >
+              Afspraken
+            </button>
+          </div>
+
+          {form.batch_product === 'leads' && (
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
             <p className="mb-2 text-xs font-medium text-slate-700">Levering</p>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
@@ -1897,6 +2030,16 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
               </button>
             </div>
           </div>
+          )}
+
+          {isAppointments && (
+            <div className="rounded-lg border border-teal-200 bg-teal-50/50 p-3 text-[11px] text-teal-900">
+              <p className="font-semibold text-teal-950">Afspraak-batch</p>
+              <p className="mt-0.5 text-teal-900/90">
+                Zelfde product als in het klantportaal: aparte facturatie, minimum batchgrootte per branche, filters optioneel.
+              </p>
+            </div>
+          )}
 
           {!isNicheDelivery ? (
           <div>
@@ -1934,47 +2077,84 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-500">Batch grootte *</label>
               <input type="number" value={form.batch_size} onChange={e => setForm(f => ({ ...f, batch_size: Number(e.target.value) }))} min={1}
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
+                className={`w-full rounded-lg border px-3 py-2 text-sm text-slate-900 outline-none ${
+                  isAppointments && pricingInfo?.product === 'appointments' && form.batch_size > 0 && form.batch_size < pricingInfo.min_batch_size
+                    ? 'border-amber-400 bg-amber-50/40 focus:border-amber-500'
+                    : 'border-slate-200 focus:border-brand-purple/50'
+                }`} />
+              {isAppointments && pricingInfo?.product === 'appointments' && (
+                <p className="mt-0.5 text-[10px] text-slate-500">Minimum in deze branche: {pricingInfo.min_batch_size}</p>
+              )}
             </div>
             <div>
               <label className="mb-1 flex items-center gap-1 text-xs font-medium text-slate-500">
-                €/lead
-                {pricingInfo?.computed_price != null && !priceOverride && (
+                {isAppointments ? '€/afspraak' : '€/lead'}
+                {pricingInfo?.computed_price != null && !priceOverride && pricingInfo.product === (isAppointments ? 'appointments' : 'leads') && (
                   <span className="rounded bg-emerald-50 px-1 py-0.5 text-[9px] font-bold text-emerald-600">AUTO</span>
                 )}
               </label>
-              <input type="number" step="0.01" value={form.price_per_lead}
-                onChange={e => { setPriceOverride(true); setForm(f => ({ ...f, price_per_lead: e.target.value })); }}
-                placeholder="-"
-                className={`w-full rounded-lg border px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50 ${
-                  pricingInfo?.computed_price != null && !priceOverride ? 'border-emerald-300 bg-emerald-50/30' : 'border-slate-200'
-                }`} />
-              {priceOverride && pricingInfo?.computed_price != null && (
-                <button type="button" onClick={() => { setPriceOverride(false); setForm(f => ({ ...f, price_per_lead: String(pricingInfo.computed_price) })); }}
-                  className="mt-0.5 text-[10px] text-brand-purple hover:underline">
-                  Reset naar staffelprijs (€{pricingInfo.computed_price.toFixed(2)})
-                </button>
+              {isAppointments ? (
+                <>
+                  <input type="number" step="0.01" value={form.price_per_appointment}
+                    onChange={e => { setPriceOverride(true); setForm(f => ({ ...f, price_per_appointment: e.target.value })); }}
+                    placeholder="-"
+                    className={`w-full rounded-lg border px-3 py-2 text-sm text-slate-900 outline-none focus:border-teal-600/50 ${
+                      pricingInfo?.computed_price != null && !priceOverride && pricingInfo.product === 'appointments' ? 'border-emerald-300 bg-emerald-50/30' : 'border-slate-200'
+                    }`} />
+                  {priceOverride && pricingInfo?.computed_price != null && pricingInfo.product === 'appointments' && (
+                    <button type="button" onClick={() => { setPriceOverride(false); setForm(f => ({ ...f, price_per_appointment: String(pricingInfo.computed_price) })); }}
+                      className="mt-0.5 text-[10px] text-teal-700 hover:underline">
+                      Reset naar staffelprijs (€{pricingInfo.computed_price.toFixed(2)})
+                    </button>
+                  )}
+                </>
+              ) : (
+                <>
+                  <input type="number" step="0.01" value={form.price_per_lead}
+                    onChange={e => { setPriceOverride(true); setForm(f => ({ ...f, price_per_lead: e.target.value })); }}
+                    placeholder="-"
+                    className={`w-full rounded-lg border px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50 ${
+                      pricingInfo?.computed_price != null && !priceOverride && pricingInfo.product === 'leads' ? 'border-emerald-300 bg-emerald-50/30' : 'border-slate-200'
+                    }`} />
+                  {priceOverride && pricingInfo?.computed_price != null && pricingInfo.product === 'leads' && (
+                    <button type="button" onClick={() => { setPriceOverride(false); setForm(f => ({ ...f, price_per_lead: String(pricingInfo.computed_price) })); }}
+                      className="mt-0.5 text-[10px] text-brand-purple hover:underline">
+                      Reset naar staffelprijs (€{pricingInfo.computed_price.toFixed(2)})
+                    </button>
+                  )}
+                </>
               )}
             </div>
           </div>
 
           {pricingInfo && pricingInfo.tiers.length > 0 && (
-            <div className="rounded-lg border border-slate-200 bg-slate-50/50 p-3">
+            <div className={`rounded-lg border p-3 ${isAppointments ? 'border-teal-200 bg-teal-50/40' : 'border-slate-200 bg-slate-50/50'}`}>
               <div className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                Staffelprijzen {pricingInfo.is_custom && <span className="rounded bg-amber-100 px-1 py-0.5 text-amber-700 normal-case">Klantspecifiek</span>}
+                {isAppointments ? 'Staffel (€/afspraak)' : 'Staffelprijzen'} {pricingInfo.is_custom && <span className="rounded bg-amber-100 px-1 py-0.5 text-amber-700 normal-case">Klantspecifiek</span>}
               </div>
               <div className="flex flex-wrap gap-1">
-                {[...pricingInfo.tiers].sort((a, b) => a.min_leads - b.min_leads).map((t, i) => (
+                {[...pricingInfo.tiers].sort((a, b) => a.min_leads - b.min_leads).map((t, i) => {
+                  const sortedAsc = [...pricingInfo.tiers].sort((a, b) => a.min_leads - b.min_leads);
+                  const active =
+                    form.batch_size >= t.min_leads &&
+                    (i === sortedAsc.length - 1 || form.batch_size < sortedAsc[i + 1]?.min_leads);
+                  const activeCls =
+                    isAppointments
+                      ? 'border-teal-600 bg-teal-100/80 text-teal-900'
+                      : 'border-brand-purple bg-brand-purple/10 text-brand-purple';
+                  return (
                   <span key={i} className={`rounded-md border px-1.5 py-0.5 text-[10px] font-medium shadow-sm ${
-                    form.batch_size >= t.min_leads && (i === pricingInfo.tiers.length - 1 || form.batch_size < [...pricingInfo.tiers].sort((a, b) => a.min_leads - b.min_leads)[i + 1]?.min_leads)
-                      ? 'border-brand-purple bg-brand-purple/10 text-brand-purple' : 'border-slate-100 bg-white text-slate-600'
+                    active ? activeCls : 'border-slate-100 bg-white text-slate-600'
                   }`}>
                     {t.min_leads}+ → €{Number(t.price_per_lead).toFixed(2)}
                   </span>
-                ))}
+                );
+                })}
               </div>
               {Number(pricingInfo.nationwide_discount) > 0 && (
-                <p className="mt-1 text-[10px] text-emerald-600">Landelijke korting: -€{pricingInfo.nationwide_discount.toFixed(2)}/lead</p>
+                <p className="mt-1 text-[10px] text-emerald-600">
+                  Landelijke korting: -€{pricingInfo.nationwide_discount.toFixed(2)}{isAppointments ? '/afspraak' : '/lead'}
+                </p>
               )}
             </div>
           )}
@@ -1982,22 +2162,38 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-500">Max per dag</label>
-              <input type="number" value={form.leads_per_day} onChange={e => setForm(f => ({ ...f, leads_per_day: e.target.value }))}
-                placeholder="∞" min={1}
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
+              {isAppointments ? (
+                <input type="number" value={form.appointments_per_day} onChange={e => setForm(f => ({ ...f, appointments_per_day: e.target.value }))}
+                  placeholder="∞" min={1}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-teal-600/50" />
+              ) : (
+                <input type="number" value={form.leads_per_day} onChange={e => setForm(f => ({ ...f, leads_per_day: e.target.value }))}
+                  placeholder="∞" min={1}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
+              )}
             </div>
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-500">Max per week</label>
-              <input type="number" value={form.leads_per_week} onChange={e => setForm(f => ({ ...f, leads_per_week: e.target.value }))}
-                placeholder="∞" min={1}
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
+              {isAppointments ? (
+                <input type="number" value={form.appointments_per_week} onChange={e => setForm(f => ({ ...f, appointments_per_week: e.target.value }))}
+                  placeholder="∞" min={1}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-teal-600/50" />
+              ) : (
+                <input type="number" value={form.leads_per_week} onChange={e => setForm(f => ({ ...f, leads_per_week: e.target.value }))}
+                  placeholder="∞" min={1}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
+              )}
             </div>
           </div>
           </>
           )}
 
-          {/* Lookback — alleen zinvol voor pijplijn-batches */}
-          {form.batch_delivery === 'pipeline' ? (
+          {/* Lookback — alleen zinvol voor lead pijplijn-batches */}
+          {isAppointments ? (
+            <div className="rounded-lg border border-teal-200 bg-teal-50/30 p-3 text-[11px] text-teal-900">
+              Lookback geldt niet voor afspraak-batches. Startmoment hieronder bepaalt wanneer de batch actief wordt (na betaling).
+            </div>
+          ) : form.batch_delivery === 'pipeline' ? (
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
               <div className="mb-2 flex items-center justify-between">
                 <div>
@@ -2050,7 +2246,11 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
               <div>
                 <p className="text-sm font-medium text-slate-700">Startdatum</p>
                 <p className="text-[11px] text-slate-400">
-                  {form.batch_delivery === 'bulk'
+                  {isAppointments
+                    ? (scheduledStart
+                      ? 'Afspraak-batch wordt actief op het ingestelde tijdstip (na betaling).'
+                      : 'Batch start direct na aanmaken (na betaling).')
+                    : form.batch_delivery === 'bulk'
                     ? (scheduledStart ? 'Batch wordt actief op het ingestelde tijdstip (zonder automatische lead-toewijzing).' : 'Batch start direct na aanmaken.')
                     : form.batch_delivery === 'niche_research'
                       ? (scheduledStart ? 'Batch-record actief vanaf dit tijdstip (geen automatische lead-flow).' : 'Batch start direct na aanmaken.')
@@ -2095,7 +2295,9 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
                   </div>
                 </div>
                 <p className="col-span-2 text-[10px] text-slate-400">
-                  {form.batch_delivery === 'bulk'
+                  {isAppointments
+                    ? 'Batch is direct betaalbaar; afspraken worden volgens jullie proces toegewezen. Geen lead-lookback.'
+                    : form.batch_delivery === 'bulk'
                     ? 'Batch is direct betaalbaar; bulk-leads worden handmatig via export aan het portaal gekoppeld.'
                     : form.batch_delivery === 'niche_research'
                       ? 'Onderzoeksbatch: facturatie en opvolging volgens afspraak met de klant (zelfde product als portaal).'
@@ -2118,7 +2320,9 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
               <p className="text-[11px] text-slate-400">
                 {form.is_paid
                   ? 'Batch wordt als betaald gemarkeerd'
-                  : form.batch_delivery === 'bulk'
+                  : isAppointments
+                    ? 'Klant kan via portaal betalen (afspraken-factuur)'
+                    : form.batch_delivery === 'bulk'
                     ? 'Open factuur / betaallink voor het bulk-pakket'
                     : form.batch_delivery === 'niche_research'
                       ? 'Open factuur / betaallink voor het onderzoekspakket (€1.000 excl. btw)'
@@ -2161,7 +2365,9 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
 
           {!isNicheDelivery && form.branch && (
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-slate-500">Lead vereisten (filters)</label>
+              <label className="mb-1.5 block text-xs font-medium text-slate-500">
+                {isAppointments ? 'Filters (optioneel, zelfde als bij lead-batches)' : 'Lead vereisten (filters)'}
+              </label>
               <FilterEditor
                 filters={form.lead_filters}
                 onChange={filters => setForm(f => ({ ...f, lead_filters: filters }))}
@@ -2173,8 +2379,23 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
         </div>
 
         <div className="shrink-0 border-t border-slate-100 px-5 py-4">
-          <button onClick={create} disabled={saving || !form.customer_id || (isNicheDelivery ? form.niche_title.trim().length < 3 : (!form.branch || form.batch_size < 1))}
-            className="flex w-full items-center justify-center gap-2 rounded-lg bg-button-gradient py-2.5 text-sm font-bold text-white disabled:opacity-50">
+          <button
+            type="button"
+            onClick={create}
+            disabled={
+              saving ||
+              !form.customer_id ||
+              (isNicheDelivery
+                ? form.niche_title.trim().length < 3
+                : !form.branch ||
+                  form.batch_size < 1 ||
+                  (isAppointments &&
+                    (!form.price_per_appointment.trim() ||
+                      !Number.isFinite(parseFloat(form.price_per_appointment)) ||
+                      parseFloat(form.price_per_appointment) <= 0)))
+            }
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-button-gradient py-2.5 text-sm font-bold text-white disabled:opacity-50"
+          >
             {saving ? <><ArrowPathIcon className="h-4 w-4 animate-spin" /> Aanmaken...</> : <><PlusIcon className="h-4 w-4" /> Batch aanmaken</>}
           </button>
         </div>

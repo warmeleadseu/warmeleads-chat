@@ -164,13 +164,14 @@ export async function POST(request: NextRequest) {
         createInvoice({
           customer_id: claimedOrder.customer_id,
           batch_order_id: apptOrderId,
-          batch_id: newBatch.id,
+          appointment_batch_id: newBatch.id,
           branch_name: `${branchName} (afspraken)`,
           batch_size: claimedOrder.batch_size,
           price_per_lead: Number(claimedOrder.price_per_appointment),
           total_price: Number(claimedOrder.total_price),
           mollie_payment_id: paymentId,
           paid_at: new Date().toISOString(),
+          invoice_product: 'appointments',
         }).catch(e => {
           console.error('[mollie-webhook] appointment invoice creation failed:', e);
         });
@@ -183,6 +184,7 @@ export async function POST(request: NextRequest) {
           price_per_lead: Number(claimedOrder.price_per_appointment),
           is_paid: true,
           source: 'portal',
+          is_appointments: true,
           billing_country: (orderCust?.country as string | null | undefined) ?? 'NL',
           billing_vat_id: orderCust?.vat_id,
         }).catch(() => {});
@@ -241,6 +243,13 @@ export async function POST(request: NextRequest) {
                 await finalizePaidLeadBatch(supabase, batchClaim, paymentId, { skipInvoiceHandling: true });
               }
             }
+          } else if ((inv as { appointment_batch_id?: string | null }).appointment_batch_id) {
+            const apptBid = (inv as { appointment_batch_id: string }).appointment_batch_id;
+            await supabase
+              .from('appointment_batches')
+              .update({ is_paid: true, mollie_payment_id: paymentId, status: 'active' })
+              .eq('id', apptBid)
+              .eq('is_paid', false);
           }
         }
       }

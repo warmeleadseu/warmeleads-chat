@@ -153,6 +153,23 @@ interface Batch {
   created_at: string; completed_at: string | null;
 }
 
+interface AppointmentBatchRow {
+  id: string;
+  customer_id: string;
+  branch: string;
+  batch_size: number;
+  appointments_delivered: number;
+  price_per_appointment: number;
+  total_price: number;
+  appointments_per_day: number | null;
+  appointments_per_week: number | null;
+  status: string;
+  is_paid?: boolean | null;
+  notes: string | null;
+  lead_filters?: LeadFilter[];
+  created_at: string;
+}
+
 interface BranchField {
   id: string; key: string; label: string; field_type: string; options: string[];
 }
@@ -2845,20 +2862,71 @@ function FilterBuilder({ filters, onChange, branchSlug }: { filters: LeadFilter[
 
 function BatchesPanel({ customer, branchOptions, onClose, embedded }: { customer: Customer; branchOptions: BranchOption[]; onClose: () => void; embedded?: boolean }) {
   const [batches, setBatches] = useState<Batch[]>([]);
+  const [apptBatches, setApptBatches] = useState<AppointmentBatchRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
+  const [newBatchKind, setNewBatchKind] = useState<'leads' | 'appointments'>('leads');
   const [form, setForm] = useState<{ branch: string; batch_size: number; price_per_lead: string; leads_per_day: string; leads_per_week: string; lookback_days: string; notes: string; lead_filters: LeadFilter[]; is_paid: boolean; send_payment_email: boolean }>({ branch: '', batch_size: 100, price_per_lead: '', leads_per_day: '', leads_per_week: '', lookback_days: '3', notes: '', lead_filters: [], is_paid: false, send_payment_email: true });
+  const [apptForm, setApptForm] = useState<{ branch: string; batch_size: number; price_per_appointment: string; appointments_per_day: string; appointments_per_week: string; notes: string; lead_filters: LeadFilter[]; is_paid: boolean; send_payment_email: boolean }>({ branch: '', batch_size: 10, price_per_appointment: '', appointments_per_day: '', appointments_per_week: '', notes: '', lead_filters: [], is_paid: false, send_payment_email: true });
   const [saving, setSaving] = useState(false);
 
+  const resetLeadForm = () =>
+    setForm({ branch: '', batch_size: 100, price_per_lead: '', leads_per_day: '', leads_per_week: '', lookback_days: '3', notes: '', lead_filters: [], is_paid: false, send_payment_email: true });
+  const resetApptForm = () =>
+    setApptForm({ branch: '', batch_size: 10, price_per_appointment: '', appointments_per_day: '', appointments_per_week: '', notes: '', lead_filters: [], is_paid: false, send_payment_email: true });
+
   const fetchBatches = useCallback(async () => {
-    const res = await adminFetch(`/api/admin/batches?customer_id=${customer.id}`);
-    if (res.ok) setBatches(await res.json());
+    setLoading(true);
+    const [r1, r2] = await Promise.all([
+      adminFetch(`/api/admin/batches?customer_id=${customer.id}`),
+      adminFetch(`/api/admin/appointment-batches?customer_id=${customer.id}`),
+    ]);
+    if (r1.ok) setBatches(await r1.json());
+    else setBatches([]);
+    if (r2.ok) setApptBatches(await r2.json());
+    else setApptBatches([]);
     setLoading(false);
   }, [customer.id]);
 
   useEffect(() => { fetchBatches(); }, [fetchBatches]);
 
   const addBatch = async () => {
+    if (newBatchKind === 'appointments') {
+      if (!apptForm.branch || !apptForm.batch_size || !apptForm.price_per_appointment) return;
+      setSaving(true);
+      try {
+        const res = await adminFetch('/api/admin/appointment-batches', {
+          method: 'POST',
+          body: JSON.stringify({
+            customer_id: customer.id,
+            branch: apptForm.branch,
+            batch_size: apptForm.batch_size,
+            price_per_appointment: parseFloat(apptForm.price_per_appointment),
+            appointments_per_day: apptForm.appointments_per_day ? parseInt(apptForm.appointments_per_day, 10) : null,
+            appointments_per_week: apptForm.appointments_per_week ? parseInt(apptForm.appointments_per_week, 10) : null,
+            notes: apptForm.notes || null,
+            lead_filters: apptForm.lead_filters.filter(f => f.field && (f.values?.length || 0) > 0),
+            is_paid: apptForm.is_paid,
+            ...(apptForm.is_paid ? {} : { send_payment_email: apptForm.send_payment_email }),
+          }),
+        });
+        if (!res.ok) {
+          const d = await res.json();
+          alert(d.error || 'Afspraak-batch aanmaken mislukt');
+          setSaving(false);
+          return;
+        }
+        setShowAdd(false);
+        setNewBatchKind('leads');
+        resetApptForm();
+        fetchBatches();
+      } catch {
+        alert('Er ging iets mis');
+      }
+      setSaving(false);
+      return;
+    }
+
     if (!form.branch || !form.batch_size) return;
     setSaving(true);
     try {
@@ -2885,7 +2953,7 @@ function BatchesPanel({ customer, branchOptions, onClose, embedded }: { customer
         return;
       }
       setShowAdd(false);
-      setForm({ branch: '', batch_size: 100, price_per_lead: '', leads_per_day: '', leads_per_week: '', lookback_days: '3', notes: '', lead_filters: [], is_paid: false, send_payment_email: true });
+      resetLeadForm();
       fetchBatches();
     } catch {
       alert('Er ging iets mis');
@@ -2906,9 +2974,28 @@ function BatchesPanel({ customer, branchOptions, onClose, embedded }: { customer
     fetchBatches();
   };
 
+  const toggleApptBatchStatus = async (b: AppointmentBatchRow) => {
+    if (b.status === 'pending_payment' || b.is_paid === false) {
+      alert('Deze batch wacht op betaling. Pauzeren/heractiveren kan na betaling.');
+      return;
+    }
+    const newStatus = b.status === 'active' ? 'paused' : 'active';
+    await adminFetch(`/api/admin/appointment-batches/${b.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: newStatus }),
+    });
+    fetchBatches();
+  };
+
   const removeBatch = async (id: string) => {
     if (!confirm('Deze batch verwijderen?')) return;
     await adminFetch(`/api/admin/batches?id=${id}`, { method: 'DELETE' });
+    fetchBatches();
+  };
+
+  const removeApptBatch = async (id: string) => {
+    if (!confirm('Deze afspraak-batch verwijderen?')) return;
+    await adminFetch(`/api/admin/appointment-batches/${id}`, { method: 'DELETE' });
     fetchBatches();
   };
 
@@ -2924,6 +3011,7 @@ function BatchesPanel({ customer, branchOptions, onClose, embedded }: { customer
     pending_payment: 'bg-orange-100 text-orange-800',
     paused: 'bg-amber-100 text-amber-700',
     completed: 'bg-blue-100 text-blue-700',
+    cancelled: 'bg-slate-100 text-slate-600',
   };
 
   const statusLabels: Record<string, string> = {
@@ -2931,13 +3019,44 @@ function BatchesPanel({ customer, branchOptions, onClose, embedded }: { customer
     pending_payment: 'Wacht op betaling',
     paused: 'Gepauzeerd',
     completed: 'Voltooid',
+    cancelled: 'Geannuleerd',
   };
+
+  const hasAnyBatches = batches.length > 0 || apptBatches.length > 0;
+  const addDisabled =
+    saving ||
+    (newBatchKind === 'leads'
+      ? !form.branch || !form.batch_size
+      : !apptForm.branch || !apptForm.batch_size || !apptForm.price_per_appointment);
 
   const batchContentJSX = (
         <div className={embedded ? 'p-5' : 'flex-1 overflow-y-auto p-5'}>
           {showAdd ? (
             <div className="mb-5 rounded-xl border border-brand-purple/20 bg-brand-purple/5 p-4">
               <h3 className="mb-3 text-sm font-semibold text-slate-800">Nieuwe batch</h3>
+              <div className="mb-3 flex rounded-lg border border-slate-200 bg-white p-0.5">
+                <button
+                  type="button"
+                  onClick={() => setNewBatchKind('leads')}
+                  className={`flex-1 rounded-md py-2 text-xs font-semibold transition ${
+                    newBatchKind === 'leads' ? 'bg-brand-purple text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  Leads
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setNewBatchKind('appointments')}
+                  className={`flex-1 rounded-md py-2 text-xs font-semibold transition ${
+                    newBatchKind === 'appointments' ? 'bg-brand-purple text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  Afspraken
+                </button>
+              </div>
+
+              {newBatchKind === 'leads' ? (
+                <>
               <div className="mb-3">
                 <label className="mb-1 block text-xs font-medium text-slate-500">Branche *</label>
                 <select value={form.branch} onChange={e => setForm(f => ({ ...f, branch: e.target.value }))}
@@ -3045,17 +3164,110 @@ function BatchesPanel({ customer, branchOptions, onClose, embedded }: { customer
                   </button>
                 </div>
               )}
+                </>
+              ) : (
+                <>
+              <div className="mb-3">
+                <label className="mb-1 block text-xs font-medium text-slate-500">Branche *</label>
+                <select value={apptForm.branch} onChange={e => setApptForm(f => ({ ...f, branch: e.target.value }))}
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50">
+                  <option value="">Kies branche...</option>
+                  {branchOptions.filter(b => b.is_active).map(b => (
+                    <option key={b.slug} value={b.slug}>{b.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="mb-3 grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-500">Batch grootte *</label>
+                  <input type="number" value={apptForm.batch_size} onChange={e => setApptForm(f => ({ ...f, batch_size: Number(e.target.value) }))} min={1}
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-500">Prijs/afspraak *</label>
+                  <input type="number" step="0.01" value={apptForm.price_per_appointment} onChange={e => setApptForm(f => ({ ...f, price_per_appointment: e.target.value }))}
+                    placeholder="€" className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
+                </div>
+              </div>
+              <div className="mb-3 grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-500">Max per dag</label>
+                  <input type="number" value={apptForm.appointments_per_day} onChange={e => setApptForm(f => ({ ...f, appointments_per_day: e.target.value }))}
+                    placeholder="Onbeperkt" min={1}
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-500">Max per week</label>
+                  <input type="number" value={apptForm.appointments_per_week} onChange={e => setApptForm(f => ({ ...f, appointments_per_week: e.target.value }))}
+                    placeholder="Onbeperkt" min={1}
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
+                </div>
+              </div>
+              <div className="mb-3">
+                <label className="mb-1 block text-xs font-medium text-slate-500">Notities</label>
+                <input value={apptForm.notes} onChange={e => setApptForm(f => ({ ...f, notes: e.target.value }))}
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
+              </div>
+              {apptForm.branch && (
+                <FilterBuilder
+                  filters={apptForm.lead_filters}
+                  onChange={filters => setApptForm(f => ({ ...f, lead_filters: filters }))}
+                  branchSlug={apptForm.branch}
+                />
+              )}
+              <div className="mb-3 flex items-center justify-between rounded-lg border border-slate-200 bg-white p-3">
+                <div>
+                  <p className="text-xs font-semibold text-slate-700">Betaalstatus</p>
+                  <p className="mt-0.5 text-[11px] text-slate-400">
+                    {apptForm.is_paid ? 'Batch wordt als betaald gemarkeerd' : 'Klant kan via portaal betalen'}
+                  </p>
+                </div>
+                <button type="button" onClick={() => setApptForm(f => ({ ...f, is_paid: !f.is_paid }))}
+                  role="switch" aria-checked={apptForm.is_paid}
+                  aria-label={apptForm.is_paid ? 'Markeren als onbetaald' : 'Markeren als betaald'}
+                  className={`relative inline-flex h-[24px] w-[44px] shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 ${
+                    apptForm.is_paid ? 'bg-emerald-500' : 'bg-red-400'
+                  }`}>
+                  <span className={`pointer-events-none inline-block h-[20px] w-[20px] transform rounded-full bg-white shadow ring-0 transition duration-200 ${
+                    apptForm.is_paid ? 'translate-x-[22px]' : 'translate-x-[2px]'
+                  }`} />
+                </button>
+              </div>
+              {!apptForm.is_paid && (
+                <div className="mb-3 flex items-center justify-between rounded-lg border border-slate-200 bg-white p-3">
+                  <div>
+                    <p className="text-xs font-semibold text-slate-700">Stuur betaallink-mail naar klant</p>
+                    <p className="mt-0.5 text-[11px] text-slate-400">
+                      {apptForm.send_payment_email
+                        ? 'Klant ontvangt direct de open factuur met Mollie-betaallink'
+                        : 'Factuur wordt aangemaakt zonder mail — verstuur later via de batchdetails'}
+                    </p>
+                  </div>
+                  <button type="button" onClick={() => setApptForm(f => ({ ...f, send_payment_email: !f.send_payment_email }))}
+                    role="switch" aria-checked={apptForm.send_payment_email}
+                    aria-label={apptForm.send_payment_email ? 'Betaallink-mail uitschakelen' : 'Betaallink-mail inschakelen'}
+                    className={`relative inline-flex h-[24px] w-[44px] shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 ${
+                      apptForm.send_payment_email ? 'bg-emerald-500' : 'bg-slate-300'
+                    }`}>
+                    <span className={`pointer-events-none inline-block h-[20px] w-[20px] transform rounded-full bg-white shadow ring-0 transition duration-200 ${
+                      apptForm.send_payment_email ? 'translate-x-[22px]' : 'translate-x-[2px]'
+                    }`} />
+                  </button>
+                </div>
+              )}
+                </>
+              )}
               <div className="flex gap-2">
-                <button onClick={() => setShowAdd(false)}
+                <button type="button" onClick={() => { setShowAdd(false); setNewBatchKind('leads'); resetLeadForm(); resetApptForm(); }}
                   className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-500 hover:bg-slate-50">Annuleren</button>
-                <button onClick={addBatch} disabled={!form.branch || !form.batch_size || saving}
+                <button type="button" onClick={addBatch} disabled={addDisabled}
                   className="rounded-lg bg-button-gradient px-4 py-2 text-xs font-bold text-white disabled:opacity-50">
                   {saving ? 'Opslaan...' : 'Toevoegen'}
                 </button>
               </div>
             </div>
           ) : (
-            <button onClick={() => setShowAdd(true)} className="mb-5 inline-flex items-center gap-1.5 rounded-lg bg-button-gradient px-3.5 py-2 text-sm font-bold text-white shadow-sm">
+            <button type="button" onClick={() => setShowAdd(true)} className="mb-5 inline-flex items-center gap-1.5 rounded-lg bg-button-gradient px-3.5 py-2 text-sm font-bold text-white shadow-sm">
               <PlusIcon className="h-4 w-4" /> Nieuwe batch
             </button>
           )}
@@ -3064,36 +3276,40 @@ function BatchesPanel({ customer, branchOptions, onClose, embedded }: { customer
             <div className="space-y-3">
               {[1, 2].map(i => <div key={i} className="h-28 animate-pulse rounded-xl bg-slate-100" />)}
             </div>
-          ) : batches.length === 0 ? (
+          ) : !hasAnyBatches ? (
             <div className="rounded-xl border border-dashed border-slate-200 py-10 text-center">
               <ChartBarIcon className="mx-auto mb-2 h-8 w-8 text-slate-300" />
               <p className="text-sm text-slate-500">Nog geen batches</p>
-              <p className="text-xs text-slate-400">Maak een batch aan om leads automatisch te distribueren</p>
+              <p className="text-xs text-slate-400">Maak een lead- of afspraak-batch aan om automatisch te distribueren</p>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-6">
+              {batches.length > 0 && (
+                <div className="space-y-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Lead-batches</p>
               {batches.map(b => {
                 const pct = b.batch_size > 0 ? Math.min(100, Math.round((b.leads_delivered / b.batch_size) * 100)) : 0;
                 const bo = branchOptions.find(x => x.slug === b.branch);
                 return (
                   <div key={b.id} className={`rounded-xl border p-4 transition ${b.status === 'completed' ? 'border-blue-100 bg-blue-50/30' : b.status === 'paused' ? 'border-amber-100 bg-amber-50/20' : b.status === 'pending_payment' ? 'border-orange-100 bg-orange-50/25' : 'border-slate-200 bg-white'}`}>
                     <div className="mb-2 flex items-start justify-between">
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${colorMap[bo?.color || 'slate'] || colorMap.slate}`}>
                           {bo?.name || b.branch}
                         </span>
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">Leads</span>
                         <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${statusColors[b.status] || statusColors.active}`}>
                           {statusLabels[b.status] || b.status}
                         </span>
                       </div>
                       <div className="flex items-center gap-1">
                         {b.status !== 'completed' && b.status !== 'pending_payment' && (
-                          <button onClick={() => toggleBatchStatus(b)}
+                          <button type="button" onClick={() => toggleBatchStatus(b)}
                             className="rounded-lg px-2 py-1 text-[11px] font-medium text-slate-500 transition hover:bg-slate-100">
                             {b.status === 'active' ? 'Pauzeer' : 'Heractiveer'}
                           </button>
                         )}
-                        <button onClick={() => removeBatch(b.id)}
+                        <button type="button" onClick={() => removeBatch(b.id)}
                           className="rounded-lg p-1.5 text-slate-400 transition hover:bg-red-50 hover:text-red-500">
                           <TrashIcon className="h-3.5 w-3.5" />
                         </button>
@@ -3151,6 +3367,91 @@ function BatchesPanel({ customer, branchOptions, onClose, embedded }: { customer
                   </div>
                 );
               })}
+                </div>
+              )}
+
+              {apptBatches.length > 0 && (
+                <div className="space-y-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Afspraak-batches</p>
+              {apptBatches.map(b => {
+                const pct = b.batch_size > 0 ? Math.min(100, Math.round((b.appointments_delivered / b.batch_size) * 100)) : 0;
+                const bo = branchOptions.find(x => x.slug === b.branch);
+                return (
+                  <div key={b.id} className={`rounded-xl border p-4 transition ${b.status === 'completed' ? 'border-blue-100 bg-blue-50/30' : b.status === 'paused' ? 'border-amber-100 bg-amber-50/20' : b.status === 'pending_payment' ? 'border-orange-100 bg-orange-50/25' : b.status === 'cancelled' ? 'border-slate-200 bg-slate-50/50' : 'border-teal-100 bg-teal-50/20'}`}>
+                    <div className="mb-2 flex items-start justify-between">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${colorMap[bo?.color || 'slate'] || colorMap.slate}`}>
+                          {bo?.name || b.branch}
+                        </span>
+                        <span className="rounded-full bg-teal-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-teal-800">Afspraken</span>
+                        <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${statusColors[b.status] || statusColors.active}`}>
+                          {statusLabels[b.status] || b.status}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {b.status !== 'completed' && b.status !== 'pending_payment' && b.status !== 'cancelled' && (
+                          <button type="button" onClick={() => toggleApptBatchStatus(b)}
+                            className="rounded-lg px-2 py-1 text-[11px] font-medium text-slate-500 transition hover:bg-slate-100">
+                            {b.status === 'active' ? 'Pauzeer' : 'Heractiveer'}
+                          </button>
+                        )}
+                        <button type="button" onClick={() => removeApptBatch(b.id)}
+                          className="rounded-lg p-1.5 text-slate-400 transition hover:bg-red-50 hover:text-red-500">
+                          <TrashIcon className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="mb-2">
+                      <div className="mb-1 flex items-baseline justify-between">
+                        <span className="text-sm font-bold text-slate-800">{b.appointments_delivered} / {b.batch_size}</span>
+                        <span className="text-xs font-medium text-slate-500">{pct}%</span>
+                      </div>
+                      <div className="h-2.5 overflow-hidden rounded-full bg-slate-100">
+                        <div
+                          className={`h-full rounded-full transition-all duration-500 ${
+                            pct >= 100 ? 'bg-blue-500' : pct >= 75 ? 'bg-emerald-500' : pct >= 50 ? 'bg-amber-500' : 'bg-teal-500'
+                          }`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
+                      {b.appointments_per_day != null && b.appointments_per_day > 0 && (
+                        <span className="font-medium text-teal-700">{b.appointments_per_day}/dag</span>
+                      )}
+                      {b.appointments_per_week != null && b.appointments_per_week > 0 && (
+                        <span className="font-medium text-teal-700">{b.appointments_per_week}/week</span>
+                      )}
+                      {b.price_per_appointment != null && (
+                        <span>€{Number(b.price_per_appointment).toFixed(2)}/afspraak</span>
+                      )}
+                      {b.total_price != null && (
+                        <span>Totaal: €{Number(b.total_price).toFixed(2)}</span>
+                      )}
+                      <span>{new Date(b.created_at).toLocaleDateString('nl-NL')}</span>
+                      {b.notes && <span className="italic">{b.notes}</span>}
+                    </div>
+
+                    {b.lead_filters && b.lead_filters.length > 0 && (
+                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                        <AdjustmentsHorizontalIcon className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+                        {b.lead_filters.map((f, i) => {
+                          const count = f.values?.length || (f.value ? 1 : 0);
+                          return (
+                            <span key={i} className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                              {f.field}: {count} {count === 1 ? 'waarde' : 'waarden'}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -3168,8 +3469,8 @@ function BatchesPanel({ customer, branchOptions, onClose, embedded }: { customer
       >
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
           <div>
-            <h2 className="text-lg font-bold text-slate-900">Lead batches</h2>
-            <p className="text-xs text-slate-500">{customer.name}</p>
+            <h2 className="text-lg font-bold text-slate-900">Batches</h2>
+            <p className="text-xs text-slate-500">{customer.name} · leads en afspraken</p>
           </div>
           <button onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"><XMarkIcon className="h-5 w-5" /></button>
         </div>

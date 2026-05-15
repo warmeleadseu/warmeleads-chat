@@ -5,3 +5,8 @@
 export function initialPipelineBatchStatus(isPaid: boolean): 'active' | 'pending_payment' {
   return isPaid ? 'active' : 'pending_payment';
 }
+
+/** appointment_batches: zelfde patroon als lead-pijplijn na migratie 104. */
+export function initialAppointmentBatchStatus(isPaid: boolean): 'active' | 'pending_payment' {
+  return isPaid ? 'active' : 'pending_payment';
+}

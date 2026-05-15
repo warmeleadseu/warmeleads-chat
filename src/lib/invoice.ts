@@ -11,6 +11,8 @@ interface CreateInvoiceParams {
   customer_id: string;
   batch_order_id?: string;
   batch_id?: string;
+  /** Afspraak-batch (niet combineren met batch_id voor dezelfde factuur). */
+  appointment_batch_id?: string;
   branch_name: string;
   batch_size: number;
   price_per_lead: number;
@@ -19,7 +21,7 @@ interface CreateInvoiceParams {
   paid_at?: string;
   status?: 'paid' | 'open';
   /** Onderzoeksbatch: factuurregels spreken over onderzoek i.p.v. "X leads" */
-  invoice_product?: 'leads' | 'niche_research' | 'bulk_leads';
+  invoice_product?: 'leads' | 'niche_research' | 'bulk_leads' | 'appointments';
   /** Titel van de te onderzoeken niche (alleen bij niche_research) */
   niche_title?: string | null;
   /**
@@ -82,6 +84,22 @@ export async function createInvoice(params: CreateInvoiceParams) {
     }
   }
 
+  if (params.appointment_batch_id) {
+    const { data: existingAppt } = await supabase
+      .from('invoices')
+      .select('id, invoice_number, status')
+      .eq('appointment_batch_id', params.appointment_batch_id)
+      .neq('status', 'credit_note')
+      .limit(1)
+      .maybeSingle();
+    if (existingAppt) {
+      console.warn(
+        `[invoice] skipping duplicate: invoice ${existingAppt.invoice_number} already exists for appointment batch ${params.appointment_batch_id}`,
+      );
+      return existingAppt;
+    }
+  }
+
   const { data: customer, error: custErr } = await supabase
     .from('customers')
     .select('id, name, email, contact_person, street, house_number, postcode, city, country, vat_id, kvk_nummer')
@@ -107,18 +125,23 @@ export async function createInvoice(params: CreateInvoiceParams) {
 
   const isNiche = params.invoice_product === 'niche_research';
   const isBulk = params.invoice_product === 'bulk_leads';
+  const isAppointments = params.invoice_product === 'appointments';
   const nicheLabel = (params.niche_title || '').trim();
   const lineDescription = isNiche
     ? `Onderzoeksbatch niche-onderzoek${nicheLabel ? `: ${nicheLabel}` : ''} (€${subtotal.toFixed(2).replace('.', ',')} excl. btw${vatMode === 'reverse_charge_be' ? ', BTW verlegd' : ''})`
     : isBulk
       ? `Bulk-leads pakket ${params.branch_name}: ${params.batch_size} leads (€${subtotal.toFixed(2).replace('.', ',')} excl. btw${vatMode === 'reverse_charge_be' ? ', BTW verlegd' : ''})`
-      : `${params.branch_name} leads`;
+      : isAppointments
+        ? `Afspraken-batch ${params.branch_name}: ${params.batch_size} afspraken (€${subtotal.toFixed(2).replace('.', ',')} excl. btw${vatMode === 'reverse_charge_be' ? ', BTW verlegd' : ''})`
+        : `${params.branch_name} leads`;
 
   const invoiceSummaryDescription = isNiche
     ? `Onderzoeksbatch niche-onderzoek${nicheLabel ? ` (${nicheLabel})` : ''}`
     : isBulk
       ? `Bulk-leads: ${params.batch_size} × ${params.branch_name}`
-      : `${params.batch_size} ${params.branch_name} leads`;
+      : isAppointments
+        ? `Afspraken: ${params.batch_size} × ${params.branch_name}`
+        : `${params.batch_size} ${params.branch_name} leads`;
 
   const lineItems: InvoiceLineItem[] = [{
     description: lineDescription,
@@ -138,6 +161,7 @@ export async function createInvoice(params: CreateInvoiceParams) {
     customer_id: params.customer_id,
     batch_order_id: params.batch_order_id || null,
     batch_id: params.batch_id || null,
+    appointment_batch_id: params.appointment_batch_id || null,
     customer_name: customer.name,
     customer_email: customer.email,
     customer_address: customerAddress,
@@ -250,6 +274,57 @@ export async function markInvoicePaid(batchId: string, molliePaymentId: string) 
 
   if (error) {
     console.error('[invoice] markInvoicePaid failed:', error);
+    return null;
+  }
+
+  const { data: customer } = await supabase
+    .from('customers')
+    .select('id, name, email, contact_person')
+    .eq('id', existing.customer_id)
+    .single();
+
+  if (customer) {
+    sendInvoiceEmail(customer, updated).catch(e => console.error('[invoice] paid email send failed:', e));
+  }
+
+  return updated;
+}
+
+/** Markeert de open factuur voor een afspraak-batch als betaald (zelfde patroon als markInvoicePaid). */
+export async function markInvoicePaidByAppointmentBatch(appointmentBatchId: string, molliePaymentId: string) {
+  const supabase = createServerClient();
+
+  const { data: existing } = await supabase
+    .from('invoices')
+    .select('id, invoice_number, total_incl_btw, description, customer_id, status')
+    .eq('appointment_batch_id', appointmentBatchId)
+    .in('status', ['open'])
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!existing) {
+    const { data: alreadyPaid } = await supabase
+      .from('invoices')
+      .select('id')
+      .eq('appointment_batch_id', appointmentBatchId)
+      .eq('status', 'paid')
+      .limit(1)
+      .maybeSingle();
+    if (alreadyPaid) return alreadyPaid;
+    return null;
+  }
+
+  const now = new Date().toISOString();
+  const { data: updated, error } = await supabase
+    .from('invoices')
+    .update({ status: 'paid', paid_at: now, mollie_payment_id: molliePaymentId })
+    .eq('id', existing.id)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('[invoice] markInvoicePaidByAppointmentBatch failed:', error);
     return null;
   }
 
@@ -578,6 +653,8 @@ export async function sendNewBatchAdminEmail(params: {
   source: 'portal' | 'admin' | 'portal_pay';
   /** Optioneel: onderzoeksbatch (€1.000 pakket) — duidelijkere onderwerpregel en tabel. */
   batch_kind?: 'leads' | 'niche_research' | 'bulk_leads';
+  /** Afspraak-batch i.p.v. lead-batch (onderwerpregel + tabelteksten). */
+  is_appointments?: boolean;
   niche_title?: string | null;
   /** Voor correcte BTW-regel in admin-mail (standaard NL). */
   billing_country?: string | null;
@@ -596,6 +673,7 @@ export async function sendNewBatchAdminEmail(params: {
   const logoUrl = `${BASE_URL}/warmeleads-logo-2026.png`;
   const year = new Date().getFullYear();
   const isNiche = params.batch_kind === 'niche_research';
+  const isAppt = params.is_appointments === true;
   const nicheLabel = (params.niche_title || '').trim();
   const esc = (s: string) =>
     s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -607,7 +685,9 @@ export async function sendNewBatchAdminEmail(params: {
 
   const subject = isNiche
     ? `Nieuwe onderzoeksbatch: ${params.customer_name} — ${nicheLabel || 'Niche-onderzoek'}`
-    : `Nieuwe batch: ${params.customer_name} - ${params.batch_size} ${params.branch_name} leads`;
+    : isAppt
+      ? `Nieuwe afspraak-batch: ${params.customer_name} — ${params.batch_size} afspraken (${params.branch_name})`
+      : `Nieuwe batch: ${params.customer_name} - ${params.batch_size} ${params.branch_name} leads`;
 
   const fullHtml = `<!DOCTYPE html>
 <html lang="nl">
@@ -636,8 +716,8 @@ export async function sendNewBatchAdminEmail(params: {
                     <tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9;width:160px">Klant</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;font-weight:600;border-bottom:1px solid #f1f5f9">${params.customer_name}</td></tr>
                     <tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">${isNiche ? 'Product' : 'Branche'}</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;border-bottom:1px solid #f1f5f9">${params.branch_name}</td></tr>
                     ${isNiche && nicheLabel ? `<tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">Niche / onderwerp</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;font-weight:600;border-bottom:1px solid #f1f5f9">${esc(nicheLabel)}</td></tr>` : ''}
-                    <tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">${isNiche ? 'Omvang' : 'Batch grootte'}</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;font-weight:600;border-bottom:1px solid #f1f5f9">${isNiche ? '1 onderzoekspakket (geen lead-staffel)' : `${params.batch_size} leads`}</td></tr>
-                    <tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">${isNiche ? 'Pakketprijs excl. btw' : 'Prijs per lead'}</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;border-bottom:1px solid #f1f5f9">&euro;${Number(params.price_per_lead).toFixed(2)}${isNiche ? ' <span style="font-size:12px;color:#64748b;font-weight:400">(vast tarief)</span>' : ''}</td></tr>
+                    <tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">${isNiche ? 'Omvang' : isAppt ? 'Aantal afspraken' : 'Batch grootte'}</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;font-weight:600;border-bottom:1px solid #f1f5f9">${isNiche ? '1 onderzoekspakket (geen lead-staffel)' : isAppt ? `${params.batch_size} afspraken` : `${params.batch_size} leads`}</td></tr>
+                    <tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">${isNiche ? 'Pakketprijs excl. btw' : isAppt ? 'Prijs per afspraak' : 'Prijs per lead'}</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;border-bottom:1px solid #f1f5f9">&euro;${Number(params.price_per_lead).toFixed(2)}${isNiche ? ' <span style="font-size:12px;color:#64748b;font-weight:400">(vast tarief)</span>' : ''}</td></tr>
                     <tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">Subtotaal excl. BTW</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;border-bottom:1px solid #f1f5f9">&euro;${subtotal.toFixed(2)}</td></tr>
                     <tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">${btwRowLabel}</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;border-bottom:1px solid #f1f5f9">&euro;${btwAmount.toFixed(2)}</td></tr>
                     <tr><td style="padding:16px 20px;font-size:15px;color:#3B2F75;font-weight:700;border-bottom:1px solid #f1f5f9">${totalRowLabel}</td><td style="padding:16px 20px;font-size:18px;color:#3B2F75;font-weight:800;text-align:right;border-bottom:1px solid #f1f5f9">&euro;${totalInclBtw.toFixed(2)}</td></tr>
