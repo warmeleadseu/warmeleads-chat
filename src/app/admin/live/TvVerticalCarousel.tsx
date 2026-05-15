@@ -70,7 +70,7 @@ export function TvVerticalCarousel({
       if (stoppedRef.current) return;
 
       const loopH = first.offsetHeight;
-      const viewH = outer.clientHeight;
+      const viewH = scroll.clientHeight;
       const needScroll = loopH > viewH + 2;
 
       if (!needScroll) {

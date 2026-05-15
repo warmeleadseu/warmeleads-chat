@@ -1835,11 +1835,11 @@ export default function LiveDashboard() {
         {/* Main content + AM sidebar wrapper */}
         <div className="flex min-h-0 flex-1 gap-3">
         {/* Main content column */}
-        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overflow-x-hidden">
-        {/* Middle section: actieve batches + wacht op betaling + kaart */}
-        <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-7 lg:items-start">
-          {/* Active batches - 3 cols (max-h zodat interne carousel kan scrollen i.p.v. mee te rekken met kaart-kolom) */}
-          <div className="flex min-h-0 max-h-[min(560px,calc(100svh-9.5rem))] flex-col overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 backdrop-blur-sm sm:max-h-[min(600px,calc(100svh-10rem))] lg:col-span-3">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-x-hidden overflow-y-auto lg:min-h-0 lg:overflow-y-auto">
+        {/* Middle section: actieve batches + wacht op betaling + kaart — één max-h op lg zodat kolommen gelijk blijven en niets onder/achter elkaar doorloopt */}
+        <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-7 lg:grid-rows-1 lg:items-stretch lg:gap-3 lg:overflow-hidden lg:min-h-0 lg:max-h-[min(580px,calc(100svh-12.25rem))]">
+          {/* Active batches - 3 cols */}
+          <div className="flex min-h-0 max-h-[min(560px,calc(100svh-9.5rem))] flex-col overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 backdrop-blur-sm sm:max-h-[min(600px,calc(100svh-10rem))] lg:col-span-3 lg:max-h-none lg:h-full">
             <div className="mb-2 flex shrink-0 items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
@@ -1935,8 +1935,8 @@ export default function LiveDashboard() {
             )}
           </div>
 
-          {/* Onbetaalde batches - 2 cols */}
-          <div className="flex min-h-0 max-h-[min(560px,calc(100svh-9.5rem))] flex-col overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 backdrop-blur-sm sm:max-h-[min(600px,calc(100svh-10rem))] lg:col-span-2">
+          {/* Onbetaalde batches - 2 cols (zelfde flex-structuur als actieve batches zodat carousel een echte viewport-hoogte krijgt) */}
+          <div className="flex min-h-0 max-h-[min(560px,calc(100svh-9.5rem))] flex-col overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 backdrop-blur-sm sm:max-h-[min(600px,calc(100svh-10rem))] lg:col-span-2 lg:max-h-none lg:h-full">
             <div className="mb-2 flex shrink-0 items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <div className="relative">
@@ -1948,14 +1948,13 @@ export default function LiveDashboard() {
               <span className="text-[10px] font-semibold tabular-nums text-amber-200/80">{unpaidList.length}</span>
             </div>
 
-            <div className="min-h-0 flex-1">
-              {unpaidList.length === 0 ? (
-                <div className="flex flex-1 flex-col items-center justify-center py-8 text-center">
-                  <p className="text-sm text-white/25">Geen openstaande batches</p>
-                  <p className="mt-1 text-[11px] text-white/15">Leads en afspraken met open factuur verschijnen hier</p>
-                </div>
-              ) : (
-                <TvVerticalCarousel
+            {unpaidList.length === 0 ? (
+              <div className="flex min-h-[10rem] flex-1 flex-col items-center justify-center py-8 text-center">
+                <p className="text-sm text-white/25">Geen openstaande batches</p>
+                <p className="mt-1 text-[11px] text-white/15">Leads en afspraken met open factuur verschijnen hier</p>
+              </div>
+            ) : (
+              <TvVerticalCarousel
                   reducedMotion={reducedMotion}
                   contentKey={unpaidList.map(r => `${r.product}-${r.id}:${r.status}:${r.totalPrice}:${(r.targetAreaLabels || []).join(',')}`).join('|')}
                   gapClassName="space-y-2"
@@ -1977,7 +1976,7 @@ export default function LiveDashboard() {
                       return (
                         <motion.div
                           key={sk ? `${sk}-${row.product}-${row.id}` : `${row.product}-${row.id}`}
-                          layout={sk === 'a'}
+                          layout={false}
                           initial={sk === 'a' ? { opacity: 0, y: -20, scale: 0.95 } : false}
                           animate={{ opacity: 1, y: 0, scale: 1 }}
                           exit={sk === 'a' ? { opacity: 0, scale: 0.95 } : undefined}
@@ -2030,13 +2029,12 @@ export default function LiveDashboard() {
                     if (sk === 'b') return <>{rows}</>;
                     return <AnimatePresence initial={false}>{rows}</AnimatePresence>;
                   }}
-                </TvVerticalCarousel>
-              )}
-            </div>
+              </TvVerticalCarousel>
+            )}
           </div>
 
           {/* Right sidebar: Map + Branch donut - 2 cols */}
-          <div className="flex flex-col gap-3 overflow-hidden lg:col-span-2">
+          <div className="flex min-h-0 max-h-[min(560px,calc(100svh-9.5rem))] flex-col gap-3 overflow-hidden sm:max-h-[min(600px,calc(100svh-10rem))] lg:col-span-2 lg:max-h-none lg:h-full">
             {/* Province heatmap */}
             <div className="min-h-0 flex-1 overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.02] p-3 backdrop-blur-sm">
               <div className="mb-1 flex items-center gap-2">
