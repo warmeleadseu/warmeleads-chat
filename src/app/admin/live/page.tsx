@@ -36,7 +36,17 @@ const DEFAULT_BRANCH = { bar: 'from-purple-400 to-purple-500', glow: 'shadow-pur
 
 interface PeriodStat { leads: number; prevLeads: number; assigned: number; prevAssigned: number; revenue: number; prevRevenue: number; adSpend: number; prevAdSpend: number; profit: number; prevProfit: number; }
 interface BatchInfo { id: string; customer: string; branch: string; batchSize: number; delivered: number; pricePerLead: number | null; leadsPerWeek: number | null; notes: string | null; }
-interface RecentLead { id: string; name: string; branch: string; city: string; province: string; createdAt: string; }
+interface UnpaidBatchFeedItem {
+  id: string;
+  product: 'leads' | 'appointments';
+  customer: string;
+  branch: string;
+  batchSize: number;
+  totalPrice: number;
+  unitPrice: number | null;
+  status: string;
+  createdAt: string;
+}
 interface CostMetrics { monthAdSpend: number; brutoCpl: number; effectieveCpl: number; avgAssignments: number; distributionAssignmentTotal?: number; batchRevenue: number; bulkRevenue: number; bulkAssignmentCount: number; totalProfit: number; }
 interface PaidBatch { id: string; batchId: string; customer: string; branch: string; amount: number; paidAt: string; amId: string | null; amName: string | null; amAvatarUrl?: string | null; celebrationVideoUrl: string | null; videoStart?: number | null; videoEnd?: number | null; }
 interface AMLeaderboardEntry { id: string; name: string; revenue: number; bulkRevenue: number; batches: number; celebrationVideoUrl: string | null; avatarUrl?: string | null; }
@@ -48,7 +58,7 @@ interface LiveData {
   activeBatches: BatchInfo[];
   completedBatchCount: number;
   totalRevenue: number;
-  recentLeads: RecentLead[];
+  unpaidBatches: UnpaidBatchFeedItem[];
   periodStats: Record<string, PeriodStat>;
   provinceBreakdown: Record<string, number>;
   branchBreakdown: Record<string, number>;
@@ -824,7 +834,7 @@ export default function LiveDashboard() {
   const [data, setData] = useState<LiveData | null>(null);
   const [clock, setClock] = useState(new Date());
   const [refreshIn, setRefreshIn] = useState(REFRESH_INTERVAL / 1000);
-  const [newLeadIds, setNewLeadIds] = useState<Set<string>>(new Set());
+  const [newUnpaidBatchIds, setNewUnpaidBatchIds] = useState<Set<string>>(new Set());
   const [celebratingBatch, setCelebratingBatch] = useState<{ id: string; customer?: string; branch?: string; batchSize?: number } | null>(null);
   const [amTargets, setAmTargets] = useState<AMTargetLive[]>([]);
   const [salesToasts, setSalesToasts] = useState<PaidBatch[]>([]);
@@ -849,11 +859,11 @@ export default function LiveDashboard() {
         const d: LiveData = await res.json();
         setData(prev => {
           if (prev) {
-            const oldIds = new Set(prev.recentLeads.map(l => l.id));
-            const fresh = d.recentLeads.filter(l => !oldIds.has(l.id)).map(l => l.id);
+            const oldIds = new Set(prev.unpaidBatches.map(b => b.id));
+            const fresh = (d.unpaidBatches || []).filter(b => !oldIds.has(b.id)).map(b => b.id);
             if (fresh.length > 0) {
-              setNewLeadIds(new Set(fresh));
-              setTimeout(() => setNewLeadIds(new Set()), 3000);
+              setNewUnpaidBatchIds(new Set(fresh));
+              setTimeout(() => setNewUnpaidBatchIds(new Set()), 3000);
             }
           }
 
@@ -1142,26 +1152,28 @@ export default function LiveDashboard() {
   const batchTotal = data.activeBatches.reduce((s, b) => s + b.batchSize, 0);
   const overallPct = batchTotal > 0 ? Math.round((batchDelivered / batchTotal) * 100) : 0;
 
-  // Speed/streak metrics
-  const sortedLeads = [...data.recentLeads].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  const lastLeadTime = sortedLeads[0]?.createdAt;
-  const lastLeadAgo = lastLeadTime ? timeAgo(lastLeadTime) : '-';
+  const unpaidList = data.unpaidBatches || [];
+  const sortedUnpaid = [...unpaidList].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  );
+  const lastUnpaidTime = sortedUnpaid[0]?.createdAt;
+  const lastUnpaidAgo = lastUnpaidTime ? timeAgo(lastUnpaidTime) : '-';
 
-  let avgInterval = '-';
-  if (sortedLeads.length >= 2) {
-    const todayLeads = sortedLeads.filter(l => {
-      const d = new Date(l.createdAt);
+  let avgUnpaidInterval = '-';
+  if (sortedUnpaid.length >= 2) {
+    const todayUnpaid = sortedUnpaid.filter(b => {
+      const d = new Date(b.createdAt);
       const now = new Date();
       return d.getDate() === now.getDate() && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
     });
-    if (todayLeads.length >= 2) {
-      const newest = new Date(todayLeads[0].createdAt).getTime();
-      const oldest = new Date(todayLeads[todayLeads.length - 1].createdAt).getTime();
+    if (todayUnpaid.length >= 2) {
+      const newest = new Date(todayUnpaid[0].createdAt).getTime();
+      const oldest = new Date(todayUnpaid[todayUnpaid.length - 1].createdAt).getTime();
       const totalMinutes = (newest - oldest) / 60000;
-      const avg = totalMinutes / (todayLeads.length - 1);
-      if (avg < 1) avgInterval = `${Math.round(avg * 60)}s`;
-      else if (avg < 60) avgInterval = `${Math.round(avg)}m`;
-      else avgInterval = `${Math.round(avg / 60)}u`;
+      const avg = totalMinutes / (todayUnpaid.length - 1);
+      if (avg < 1) avgUnpaidInterval = `${Math.round(avg * 60)}s`;
+      else if (avg < 60) avgUnpaidInterval = `${Math.round(avg)}m`;
+      else avgUnpaidInterval = `${Math.round(avg / 60)}u`;
     }
   }
 
@@ -1675,13 +1687,20 @@ export default function LiveDashboard() {
             {/* Speed metrics */}
             <div className="hidden items-center gap-4 lg:flex">
               <div className="text-right">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-white/25">Laatste lead</p>
-                <p className="text-sm font-black tabular-nums text-white/70">{lastLeadAgo} geleden</p>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-white/25">Openstaand</p>
+                <p className="text-sm font-black tabular-nums text-amber-300/90">
+                  {unpaidList.length} batch{unpaidList.length === 1 ? '' : 'es'}
+                </p>
               </div>
               <div className="h-6 w-px bg-white/[0.06]" />
               <div className="text-right">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-white/25">Gem. interval</p>
-                <p className="text-sm font-black tabular-nums text-white/70">elke {avgInterval}</p>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-white/25">Laatste (onbetaald)</p>
+                <p className="text-sm font-black tabular-nums text-white/70">{lastUnpaidAgo === '-' ? '—' : `${lastUnpaidAgo} geleden`}</p>
+              </div>
+              <div className="h-6 w-px bg-white/[0.06]" />
+              <div className="text-right">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-white/25">Tempo vandaag</p>
+                <p className="text-sm font-black tabular-nums text-white/70">{avgUnpaidInterval === '-' ? '—' : `elke ${avgUnpaidInterval}`}</p>
               </div>
               <div className="h-6 w-px bg-white/[0.06]" />
               {/* Phone quality ring */}
@@ -1803,7 +1822,7 @@ export default function LiveDashboard() {
         <div className="flex min-h-0 flex-1 gap-3">
         {/* Main content column */}
         <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overflow-x-hidden">
-        {/* Middle section: Batches + Live Feed + Map */}
+        {/* Middle section: actieve batches + wacht op betaling + kaart */}
         <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-7">
           {/* Active batches - 3 cols */}
           <div className="flex flex-col overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 backdrop-blur-sm lg:col-span-3">
@@ -1888,24 +1907,43 @@ export default function LiveDashboard() {
             )}
           </div>
 
-          {/* Live feed - 2 cols */}
+          {/* Onbetaalde batches - 2 cols */}
           <div className="flex flex-col overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 backdrop-blur-sm lg:col-span-2">
-            <div className="mb-2 flex shrink-0 items-center gap-2">
-              <div className="relative">
-                <div className="h-2 w-2 rounded-full bg-red-500" />
-                <div className="absolute inset-0 h-2 w-2 animate-ping rounded-full bg-red-500/50" />
+            <div className="mb-2 flex shrink-0 items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <div className="relative">
+                  <div className="h-2 w-2 rounded-full bg-amber-400" />
+                  <div className="absolute inset-0 h-2 w-2 animate-ping rounded-full bg-amber-400/50" />
+                </div>
+                <h2 className="text-sm font-bold text-white/70">Wacht op betaling</h2>
               </div>
-              <h2 className="text-sm font-bold text-white/70">Live feed</h2>
+              <span className="text-[10px] font-semibold tabular-nums text-amber-200/80">{unpaidList.length}</span>
             </div>
 
             <div className="min-h-0 flex-1 space-y-2 overflow-y-auto">
+              {unpaidList.length === 0 ? (
+                <div className="flex flex-1 flex-col items-center justify-center py-8 text-center">
+                  <p className="text-sm text-white/25">Geen openstaande batches</p>
+                  <p className="mt-1 text-[11px] text-white/15">Leads en afspraken met open factuur verschijnen hier</p>
+                </div>
+              ) : (
               <AnimatePresence initial={false}>
-                {data.recentLeads.map((lead) => {
-                  const isNew = newLeadIds.has(lead.id);
-                  const bc = BRANCH_COLORS[lead.branch] || DEFAULT_BRANCH;
+                {unpaidList.map((row) => {
+                  const isNew = newUnpaidBatchIds.has(row.id);
+                  const bc = BRANCH_COLORS[row.branch] || DEFAULT_BRANCH;
+                  const productLabel = row.product === 'appointments' ? 'Afspraken' : 'Leads';
+                  const unitLabel = row.product === 'appointments' ? 'afspraak' : 'lead';
+                  const statusNl =
+                    row.status === 'pending_payment'
+                      ? 'Betaling open'
+                      : row.status === 'paused'
+                        ? 'Gepauzeerd'
+                        : row.status === 'active'
+                          ? 'Actief (onbetaald)'
+                          : row.status;
                   return (
                     <motion.div
-                      key={lead.id}
+                      key={`${row.product}-${row.id}`}
                       layout
                       initial={{ opacity: 0, y: -20, scale: 0.95 }}
                       animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -1913,39 +1951,48 @@ export default function LiveDashboard() {
                       transition={{ duration: 0.3 }}
                       className={`rounded-lg border p-3 transition-all ${
                         isNew
-                          ? 'border-emerald-500/30 bg-emerald-500/[0.08] shadow-lg shadow-emerald-500/10'
+                          ? 'border-amber-500/35 bg-amber-500/[0.08] shadow-lg shadow-amber-500/10'
                           : 'border-white/[0.04] bg-white/[0.02]'
                       }`}
                     >
-                      <div className="flex items-start justify-between">
+                      <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
                             {isNew && (
                               <motion.span
                                 initial={{ scale: 0 }}
                                 animate={{ scale: 1 }}
-                                className="shrink-0 rounded bg-emerald-500 px-1.5 py-0.5 text-[9px] font-black uppercase text-white"
+                                className="shrink-0 rounded bg-amber-500 px-1.5 py-0.5 text-[9px] font-black uppercase text-slate-900"
                               >
                                 Nieuw
                               </motion.span>
                             )}
-                            <p className="truncate text-sm font-semibold text-white/80">{lead.name || '-'}</p>
+                            <p className="truncate text-sm font-semibold text-white/90">{row.customer}</p>
                           </div>
-                          <div className="mt-0.5 flex items-center gap-2 text-[11px] text-white/30">
-                            {lead.city && <span>{lead.city}</span>}
-                            {lead.province && <span className="text-white/15">·</span>}
-                            {lead.province && <span>{lead.province}</span>}
-                          </div>
+                          <p className="mt-1 text-[11px] text-white/35">
+                            {row.batchSize} × {productLabel.toLowerCase()}
+                            {row.unitPrice != null && (
+                              <> · €{row.unitPrice.toLocaleString('nl-NL', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}/{unitLabel}</>
+                            )}
+                          </p>
+                          <p className="mt-0.5 text-[11px] font-medium text-amber-200/70">{statusNl}</p>
                         </div>
-                        <div className="ml-2 flex shrink-0 flex-col items-end gap-1">
-                          <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${bc.badge}`}>{lead.branch}</span>
-                          <span className="text-[10px] tabular-nums text-white/20">{timeAgo(lead.createdAt)}</span>
+                        <div className="ml-1 flex shrink-0 flex-col items-end gap-1.5 text-right">
+                          <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${bc.badge}`}>{row.branch}</span>
+                          <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${row.product === 'appointments' ? 'bg-teal-500/25 text-teal-200' : 'bg-brand-purple/25 text-purple-200'}`}>
+                            {productLabel}
+                          </span>
+                          <span className="text-[11px] font-bold tabular-nums text-white/50">
+                            €{row.totalPrice.toLocaleString('nl-NL', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} excl.
+                          </span>
+                          <span className="text-[10px] tabular-nums text-white/20">{timeAgo(row.createdAt)}</span>
                         </div>
                       </div>
                     </motion.div>
                   );
                 })}
               </AnimatePresence>
+              )}
             </div>
           </div>
 
@@ -1969,18 +2016,23 @@ export default function LiveDashboard() {
               <BranchDonut data={data.branchBreakdown} />
             </div>
 
-            {/* Mobile: Speed + Phone quality */}
+            {/* Mobile: openstaande batches + telefoonkwaliteit */}
             <div className="grid grid-cols-2 gap-3 lg:hidden">
               <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 backdrop-blur-sm">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-white/25">Snelheid</p>
-                <p className="mt-1 text-lg font-black tabular-nums text-white/80">{lastLeadAgo}</p>
-                <p className="text-[10px] text-white/25">elke {avgInterval}</p>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-white/25">Openstaand</p>
+                <p className="mt-1 text-lg font-black tabular-nums text-amber-300/90">{unpaidList.length}</p>
+                <p className="text-[10px] text-white/25">onbetaalde batches</p>
               </div>
               <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 backdrop-blur-sm">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-white/25">Tel. kwaliteit</p>
-                <p className={`mt-1 text-lg font-black ${phoneColor}`}>{phoneQuality.validPct}%</p>
-                <p className="text-[10px] text-white/25">{phoneQuality.invalid} verdacht vandaag</p>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-white/25">Laatste</p>
+                <p className="mt-1 text-lg font-black tabular-nums text-white/80">{lastUnpaidAgo === '-' ? '—' : lastUnpaidAgo}</p>
+                <p className="text-[10px] text-white/25">{avgUnpaidInterval === '-' ? '—' : `~${avgUnpaidInterval} vandaag`}</p>
               </div>
+            </div>
+            <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 backdrop-blur-sm lg:hidden">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-white/25">Tel. kwaliteit (vandaag)</p>
+              <p className={`mt-1 text-lg font-black ${phoneColor}`}>{phoneQuality.validPct}%</p>
+              <p className="text-[10px] text-white/25">{phoneQuality.invalid} verdacht</p>
             </div>
           </div>
         </div>

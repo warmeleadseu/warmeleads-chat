@@ -12,7 +12,8 @@ const BATCHES_LIST_LIMIT = 1_500;
 const BULK_ASSIGNMENTS_MAX_PAGES = 80;
 
 const LIVE_STATS_CACHE_TTL_MS = 45_000;
-const LIVE_STATS_CACHE_KEY = 'live-stats-v2';
+const LIVE_STATS_CACHE_KEY = 'live-stats-v3';
+const UNPAID_BATCH_FEED_LIMIT = 18;
 
 interface LiveStatsCacheEntry {
   data: unknown;
@@ -47,7 +48,6 @@ export async function GET(request: NextRequest) {
     totalLeadsRes,
     customersRes,
     batchesRes,
-    recentLeadsRes,
     provincesRes,
     branchRes,
     phoneTodayRes,
@@ -60,13 +60,6 @@ export async function GET(request: NextRequest) {
       .select('*, customers(name)')
       .order('created_at', { ascending: false })
       .limit(BATCHES_LIST_LIMIT),
-    supabase
-      .from('leads')
-      .select('id, naam_klant, branch, plaatsnaam, provincie, created_at')
-      .neq('bron', 'excel_import')
-      .neq('bron', 'demo')
-      .order('created_at', { ascending: false })
-      .limit(12),
     supabase
       .from('leads')
       .select('provincie, postcode')
@@ -133,6 +126,62 @@ export async function GET(request: NextRequest) {
   const activeBatches = batches.filter(b => b.status === 'active' && b.is_paid === true);
   const completedBatches = batches.filter(b => b.status === 'completed');
   const activeCustomers = (customersRes.data || []).filter(c => c.is_active);
+
+  const { data: apptBatchRows } = await supabase
+    .from('appointment_batches')
+    .select('id, branch, batch_size, total_price, price_per_appointment, status, is_paid, created_at, customers(name)')
+    .eq('is_paid', false)
+    .order('created_at', { ascending: false })
+    .limit(200);
+
+  type UnpaidFeed = {
+    id: string;
+    product: 'leads' | 'appointments';
+    customer: string;
+    branch: string;
+    batchSize: number;
+    totalPrice: number;
+    unitPrice: number | null;
+    status: string;
+    createdAt: string;
+  };
+
+  const unpaidLeadItems: UnpaidFeed[] = batches
+    .filter(
+      b =>
+        b.is_paid === false &&
+        b.status !== 'completed' &&
+        b.status !== 'cancelled',
+    )
+    .map(b => ({
+      id: String(b.id),
+      product: 'leads' as const,
+      customer: (b.customers as { name?: string } | null)?.name || '-',
+      branch: String(b.branch || ''),
+      batchSize: Number(b.batch_size) || 0,
+      totalPrice: Math.round((Number(b.total_price) || 0) * 100) / 100,
+      unitPrice: b.price_per_lead != null ? Math.round(Number(b.price_per_lead) * 100) / 100 : null,
+      status: String(b.status || ''),
+      createdAt: String(b.created_at || ''),
+    }));
+
+  const unpaidApptItems: UnpaidFeed[] = (apptBatchRows || [])
+    .filter(b => b.status !== 'completed' && b.status !== 'cancelled')
+    .map(b => ({
+      id: String(b.id),
+      product: 'appointments' as const,
+      customer: (b.customers as { name?: string } | null)?.name || '-',
+      branch: String(b.branch || ''),
+      batchSize: Number(b.batch_size) || 0,
+      totalPrice: Math.round((Number(b.total_price) || 0) * 100) / 100,
+      unitPrice: b.price_per_appointment != null ? Math.round(Number(b.price_per_appointment) * 100) / 100 : null,
+      status: String(b.status || ''),
+      createdAt: String(b.created_at || ''),
+    }));
+
+  const unpaidBatches = [...unpaidLeadItems, ...unpaidApptItems]
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .slice(0, UNPAID_BATCH_FEED_LIMIT);
 
   const [revenueStatsRes, batchStartRes] = await Promise.all([
     supabase.rpc('live_revenue_stats'),
@@ -449,14 +498,7 @@ export async function GET(request: NextRequest) {
     })),
     completedBatchCount: completedBatches.length,
     totalRevenue: Math.round(totalRevenue * 100) / 100,
-    recentLeads: (recentLeadsRes.data || []).map(l => ({
-      id: l.id,
-      name: l.naam_klant,
-      branch: l.branch,
-      city: l.plaatsnaam,
-      province: PROVINCE_ALIASES[l.provincie as string] || l.provincie,
-      createdAt: l.created_at,
-    })),
+    unpaidBatches,
     periodStats,
     provinceBreakdown,
     branchBreakdown,
