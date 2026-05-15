@@ -8,6 +8,7 @@ import { isPipelineBatchKind, normalizeBatchKind } from '@/lib/batchKind';
 import { initialPipelineBatchStatus } from '@/lib/customerBatchStatus';
 import { reconcileBatchMetaCampaigns, normalizeCampaignIds } from '@/lib/metaBatchCampaignSync';
 import { adminBatchListSelect } from '@/lib/adminBatchQueries';
+import { resolveMetaCampaignFieldsForNewLeadBatch, upsertCustomerBranchMetaDefaults } from '@/lib/metaCampaignInheritance';
 
 function sanitizeMetaCampaignIdsInput(raw: unknown): string[] | undefined {
   if (raw === undefined) return undefined;
@@ -218,6 +219,17 @@ export async function POST(request: NextRequest) {
     if (body.meta_campaign_sync_enabled !== undefined) {
       insertPayload.meta_campaign_sync_enabled = body.meta_campaign_sync_enabled === true;
     }
+    if (body.meta_campaign_ids === undefined) {
+      const resolved = await resolveMetaCampaignFieldsForNewLeadBatch(supabase, {
+        customerId: customer_id,
+        branch,
+        sourceBatchId: typeof body.source_batch_id === 'string' ? body.source_batch_id : null,
+      });
+      if (resolved.meta_campaign_ids.length > 0) {
+        insertPayload.meta_campaign_ids = resolved.meta_campaign_ids;
+        insertPayload.meta_campaign_sync_enabled = resolved.meta_campaign_sync_enabled;
+      }
+    }
   }
 
   const { data, error } = await supabase.from('customer_batches').insert(insertPayload).select().single();
@@ -266,7 +278,7 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  if (isPipelineBatchKind(batch_kind) && normalizeCampaignIds((data as { meta_campaign_ids?: unknown }).meta_campaign_ids).length > 0) {
+  if (isPipelineBatchKind(batch_kind)) {
     reconcileBatchMetaCampaigns(supabase, data.id, 'admin').catch(e =>
       console.error('[admin/batches POST] meta reconcile:', e),
     );
@@ -281,7 +293,7 @@ export async function PUT(request: NextRequest) {
 
   const supabase = createServerClient();
   const body = await request.json();
-  const { id, trigger_backfill, compensation, ...updates } = body;
+  const { id, trigger_backfill, compensation, save_branch_meta_default, ...updates } = body;
 
   if (!id) return NextResponse.json({ error: 'ID ontbreekt' }, { status: 400 });
 
@@ -467,6 +479,28 @@ export async function PUT(request: NextRequest) {
   reconcileBatchMetaCampaigns(supabase, id, 'admin').catch(e =>
     console.error('[admin/batches PUT] meta reconcile:', e),
   );
+
+  if (save_branch_meta_default === true && isPipelineBatchKind(effectiveBatchKind)) {
+    try {
+      const idsForDefault =
+        safeUpdates.meta_campaign_ids !== undefined
+          ? normalizeCampaignIds(safeUpdates.meta_campaign_ids)
+          : normalizeCampaignIds(existing.meta_campaign_ids);
+      const syncForDefault =
+        safeUpdates.meta_campaign_sync_enabled !== undefined
+          ? safeUpdates.meta_campaign_sync_enabled === true
+          : existing.meta_campaign_sync_enabled !== false;
+      await upsertCustomerBranchMetaDefaults(supabase, {
+        customerId: existing.customer_id,
+        branch: String(data.branch),
+        meta_campaign_ids: idsForDefault,
+        meta_campaign_sync_enabled: syncForDefault,
+        updatedBy: admin.id,
+      });
+    } catch (e) {
+      console.error('[admin/batches PUT] branch meta defaults:', e);
+    }
+  }
 
   return NextResponse.json(data);
 }

@@ -665,6 +665,7 @@ function BatchDetailMetaBlock({
   );
   const [metaSyncEnabled, setMetaSyncEnabled] = useState(() => batch.meta_campaign_sync_enabled !== false);
   const [savingMeta, setSavingMeta] = useState(false);
+  const [saveBranchMetaDefault, setSaveBranchMetaDefault] = useState(false);
 
   useEffect(() => {
     if (!isPipelineBatchKind(batch.batch_kind)) return;
@@ -686,12 +687,14 @@ function BatchDetailMetaBlock({
           id: batch.id,
           meta_campaign_ids: metaCampaignPicks.map(p => p.id).slice(0, 10),
           meta_campaign_sync_enabled: metaSyncEnabled,
+          ...(saveBranchMetaDefault ? { save_branch_meta_default: true } : {}),
         }),
       });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
         throw new Error(d.error || 'Opslaan mislukt');
       }
+      setSaveBranchMetaDefault(false);
       await onReload();
       onListRefresh?.();
     } catch (e) {
@@ -729,6 +732,19 @@ function BatchDetailMetaBlock({
           ) : null
         }
       />
+
+      <label className="mt-2 flex cursor-pointer items-start gap-2 rounded-lg border border-indigo-100 bg-white px-3 py-2 text-[11px] leading-snug text-indigo-950">
+        <input
+          type="checkbox"
+          checked={saveBranchMetaDefault}
+          onChange={e => setSaveBranchMetaDefault(e.target.checked)}
+          className="mt-0.5 shrink-0"
+        />
+        <span>
+          <strong>Standaard voor nieuwe batches</strong> — na opslaan wordt deze koppeling bewaard voor deze klant + branche
+          (herbestel via portaal pakt dit automatisch op).
+        </span>
+      </label>
 
       <button
         type="button"
@@ -1535,6 +1551,7 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
     editServerMetaIds.map(id => ({ id, name: id })),
   );
   const [metaSyncEnabled, setMetaSyncEnabled] = useState(() => batch.meta_campaign_sync_enabled !== false);
+  const [saveBranchMetaDefault, setSaveBranchMetaDefault] = useState(false);
 
   useEffect(() => {
     if (!isPipelineBatchKind(batch.batch_kind)) return;
@@ -1578,6 +1595,7 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
       if (isPipelineBatchKind(batch.batch_kind)) {
         payload.meta_campaign_ids = metaCampaignPicks.map(p => p.id).slice(0, 10);
         payload.meta_campaign_sync_enabled = metaSyncEnabled;
+        if (saveBranchMetaDefault) payload.save_branch_meta_default = true;
       }
       if (extraLeads > 0) {
         payload.compensation = { amount: extraLeads, reason: extraReason };
@@ -1586,7 +1604,10 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
         method: 'PUT',
         body: JSON.stringify(payload),
       });
-      if (res.ok) onSaved();
+      if (res.ok) {
+        setSaveBranchMetaDefault(false);
+        onSaved();
+      }
       else { const d = await res.json(); alert(d.error || 'Opslaan mislukt'); }
     } catch { alert('Er ging iets mis'); }
     setSaving(false);
@@ -1758,6 +1779,7 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
           </div>
 
           {isPipelineBatchKind(batch.batch_kind) && (
+            <>
             <MetaCampaignLinkerFields
               title="Meta campagnes (batch)"
               helpText={
@@ -1786,6 +1808,20 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
                 ) : null
               }
             />
+            <label className="mt-2 flex cursor-pointer items-start gap-2 rounded-lg border border-indigo-100 bg-white/80 px-3 py-2 text-[11px] leading-snug text-indigo-950">
+              <input
+                type="checkbox"
+                checked={saveBranchMetaDefault}
+                onChange={e => setSaveBranchMetaDefault(e.target.checked)}
+                className="mt-0.5 shrink-0"
+              />
+              <span>
+                <strong>Standaard voor nieuwe batches</strong> — sla deze Meta-koppeling op voor{' '}
+                <strong>{cust?.name || 'deze klant'}</strong> + <strong>{br?.name || batch.branch}</strong>. Bij een nieuwe
+                leads-batch (portaal of admin zonder handmatige Meta-IDs) worden deze campagnes automatisch overgenomen.
+              </span>
+            </label>
+            </>
           )}
 
           {/* Lookback info (read-only) */}

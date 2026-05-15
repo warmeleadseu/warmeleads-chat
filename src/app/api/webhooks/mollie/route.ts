@@ -7,7 +7,9 @@ import { sendPushToCustomer } from '@/lib/pushNotification';
 import { createInvoice, notifyCustomerInvoicePaid, sendNewBatchAdminEmail } from '@/lib/invoice';
 import { insertCelebrationEvent } from '@/lib/celebrationInsert';
 import { finalizePaidLeadBatch, finalizePaidBulkLeadBatch } from '@/lib/finalizePaidLeadBatch';
-import { isBulkLeadsBatchKind } from '@/lib/batchKind';
+import { isBulkLeadsBatchKind, isPipelineBatchKind } from '@/lib/batchKind';
+import { reconcileBatchMetaCampaigns } from '@/lib/metaBatchCampaignSync';
+import { metaInheritanceNoteSuffix, resolveMetaCampaignFieldsForNewLeadBatch } from '@/lib/metaCampaignInheritance';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.warmeleads.eu';
 
@@ -343,26 +345,53 @@ export async function POST(request: NextRequest) {
             }
           : { status: 'active' as const, leads_delivered: 0, completed_at: null as string | null };
 
+      const orderSourceBatchId =
+        typeof (order as { source_batch_id?: string | null }).source_batch_id === 'string'
+          ? String((order as { source_batch_id: string }).source_batch_id).trim()
+          : null;
+
+      let leadMetaResolved: Awaited<ReturnType<typeof resolveMetaCampaignFieldsForNewLeadBatch>> | null = null;
+      if (isPipelineBatchKind(orderBatchKind)) {
+        leadMetaResolved = await resolveMetaCampaignFieldsForNewLeadBatch(supabase, {
+          customerId: order.customer_id,
+          branch: order.branch,
+          sourceBatchId: orderSourceBatchId,
+        });
+      }
+
+      const portalNoteBase = order.notes ? `[Portal bestelling] ${order.notes}` : '[Portal bestelling]';
+      const metaAudit =
+        leadMetaResolved && leadMetaResolved.inheritance_source !== 'none'
+          ? metaInheritanceNoteSuffix(leadMetaResolved.inheritance_source)
+          : '';
+
+      const batchInsertPayload: Record<string, unknown> = {
+        customer_id: order.customer_id,
+        branch: order.branch,
+        batch_size: order.batch_size,
+        price_per_lead: order.price_per_lead,
+        total_price: order.total_price,
+        leads_per_week: order.leads_per_week,
+        leads_per_day: order.leads_per_day,
+        lead_filters: order.lead_filters || [],
+        notes: metaAudit ? `${portalNoteBase}${metaAudit}` : portalNoteBase,
+        status: researchCompleted.status,
+        leads_delivered: researchCompleted.leads_delivered,
+        completed_at: researchCompleted.completed_at,
+        is_paid: true,
+        account_manager_id: orderCust?.account_manager_id || null,
+        batch_kind: orderBatchKind,
+        niche_title: orderNicheTitle || null,
+      };
+
+      if (isPipelineBatchKind(orderBatchKind) && leadMetaResolved) {
+        batchInsertPayload.meta_campaign_ids = leadMetaResolved.meta_campaign_ids;
+        batchInsertPayload.meta_campaign_sync_enabled = leadMetaResolved.meta_campaign_sync_enabled;
+      }
+
       const { data: newBatch, error: batchError } = await supabase
         .from('customer_batches')
-        .insert({
-          customer_id: order.customer_id,
-          branch: order.branch,
-          batch_size: order.batch_size,
-          price_per_lead: order.price_per_lead,
-          total_price: order.total_price,
-          leads_per_week: order.leads_per_week,
-          leads_per_day: order.leads_per_day,
-          lead_filters: order.lead_filters || [],
-          notes: order.notes ? `[Portal bestelling] ${order.notes}` : '[Portal bestelling]',
-          status: researchCompleted.status,
-          leads_delivered: researchCompleted.leads_delivered,
-          completed_at: researchCompleted.completed_at,
-          is_paid: true,
-          account_manager_id: orderCust?.account_manager_id || null,
-          batch_kind: orderBatchKind,
-          niche_title: orderNicheTitle || null,
-        })
+        .insert(batchInsertPayload)
         .select()
         .single();
 
@@ -492,6 +521,12 @@ export async function POST(request: NextRequest) {
 
       if (orderBatchKind === 'leads') {
         backfillBatch(newBatch.id, 3).catch(() => {});
+      }
+
+      if (isPipelineBatchKind(orderBatchKind)) {
+        reconcileBatchMetaCampaigns(supabase, newBatch.id, 'finalize').catch(err =>
+          console.error('[mollie-webhook] meta reconcile portal batch:', err),
+        );
       }
 
     } else if (status === 'failed') {
