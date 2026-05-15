@@ -13,6 +13,6 @@ COMMENT ON COLUMN public.customer_batches.meta_campaign_sync_enabled IS 'Uit = c
 COMMENT ON COLUMN public.customer_batches.meta_sync_last_error IS 'Laatste fouttekst van Meta sync (geen secrets); truncatie in applicatie.';
 
 CREATE INDEX IF NOT EXISTS idx_customer_batches_meta_reconcile
-  ON public.customer_batches (updated_at DESC)
+  ON public.customer_batches (created_at DESC)
   WHERE cardinality(meta_campaign_ids) > 0
     AND (batch_kind IS NULL OR batch_kind = 'leads');

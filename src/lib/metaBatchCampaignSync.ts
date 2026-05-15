@@ -221,7 +221,7 @@ export async function reconcileMetaCampaignsForCron(supabase: SupabaseClient, li
   const { data: rows, error } = await supabase
     .from('customer_batches')
     .select('id, meta_campaign_ids, batch_kind')
-    .order('updated_at', { ascending: false })
+    .order('created_at', { ascending: false })
     .limit(300);
 
   if (error) {
