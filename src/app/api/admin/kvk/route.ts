@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
+import { humanizeKvkError } from '@/lib/kvkApiErrors';
 
 const KVK_API_KEY = process.env.KVK_API_KEY || '';
 const BASE = 'https://api.kvk.nl/api';
@@ -11,14 +12,17 @@ async function kvkFetch(url: string) {
   });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
-    throw new Error(`KVK ${res.status}: ${text.slice(0, 200)}`);
+    throw new Error(humanizeKvkError(res.status, text));
   }
   return res.json();
 }
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('KVK API timeout')), ms);
+    const timer = setTimeout(
+      () => reject(new Error('De KVK-dienst reageert te traag. Probeer het zo opnieuw.')),
+      ms,
+    );
     promise.then(resolve, reject).finally(() => clearTimeout(timer));
   });
 }
@@ -47,7 +51,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Geef ?q=zoekterm of ?kvk=nummer mee' }, { status: 400 });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'KVK API fout';
-    console.error('[kvk]', msg);
+    console.error('[kvk]', err);
     return NextResponse.json({ error: msg }, { status: 502 });
   }
 }

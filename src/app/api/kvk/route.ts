@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { humanizeKvkError } from '@/lib/kvkApiErrors';
 
 const KVK_API_KEY = process.env.KVK_API_KEY || '';
 const BASE = 'https://api.kvk.nl/api';
@@ -26,14 +27,17 @@ async function kvkFetch(url: string) {
   const res = await fetch(url, { headers: { apikey: KVK_API_KEY } });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
-    throw new Error(`KVK ${res.status}: ${text.slice(0, 200)}`);
+    throw new Error(humanizeKvkError(res.status, text));
   }
   return res.json();
 }
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('KVK API timeout')), ms);
+    const timer = setTimeout(
+      () => reject(new Error('De KVK-dienst reageert te traag. Probeer het zo opnieuw.')),
+      ms,
+    );
     promise.then(resolve, reject).finally(() => clearTimeout(timer));
   });
 }
@@ -78,7 +82,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ resultaten, totaal: data.totaal || 0 });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'KVK API fout';
-    console.error('[kvk-public]', msg);
+    console.error('[kvk-public]', err);
     return NextResponse.json({ error: msg }, { status: 502 });
   }
 }
