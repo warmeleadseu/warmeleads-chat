@@ -217,7 +217,7 @@ export function beoordeelBatchLevering(input: {
     kop: inOpstart ? 'Nog opstartfase' : 'Levering op schema',
     uitleg: `${opstartVoorvoegsel('goed')}${basisUitleg}${
       inOpstart
-        ? 'Als de telling de komende dagen rond het maximum blijft hangen, zit je goed. Zakt het structureel lager, dan wordt dat hier zichtbaar.'
+        ? ' Als de telling de komende dagen rond het maximum blijft hangen, zit je goed. Zakt het structureel lager, dan wordt dat hier zichtbaar.'
         : ' De laatste dagen sluiten aan bij wat je mag verwachten bij dit maximum (rekening houdend met normale schommelingen).'
     }`,
     tips: [],
