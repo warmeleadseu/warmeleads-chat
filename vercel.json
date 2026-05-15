@@ -5,6 +5,10 @@
       "schedule": "*/15 * * * *"
     },
     {
+      "path": "/api/cron/meta-batch-campaign-sync",
+      "schedule": "*/15 * * * *"
+    },
+    {
       "path": "/api/cron/weekly-report",
       "schedule": "0 8 * * 1"
     },

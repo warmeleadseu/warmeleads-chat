@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { checkBatchMilestones } from './batchNotifications';
 import { isPipelineBatchKind } from './batchKind';
+import { reconcileBatchMetaCampaigns } from './metaBatchCampaignSync';
 
 /**
  * Count actual lead_assignments for a batch, add external offset,
@@ -67,6 +68,8 @@ export async function syncBatchDelivered(
     .from('customer_batches')
     .update(updates)
     .eq('id', batchId);
+
+  reconcileBatchMetaCampaigns(supabase, batchId, 'batch_sync').catch(() => {});
 
   if (isPipelineBatchKind((batch as { batch_kind?: string }).batch_kind)) {
     checkBatchMilestones(supabase, batchId, delivered, batch.batch_size).catch(() => {});

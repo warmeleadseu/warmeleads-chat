@@ -4,6 +4,7 @@ import { sendOrderConfirmationEmail } from '@/lib/email';
 import { sendPushToCustomer } from '@/lib/pushNotification';
 import { createInvoice, markInvoicePaid, sendNewBatchAdminEmail } from '@/lib/invoice';
 import { insertCelebrationEvent } from '@/lib/celebrationInsert';
+import { reconcileBatchMetaCampaigns } from '@/lib/metaBatchCampaignSync';
 
 type Supabase = ReturnType<typeof createServerClient>;
 
@@ -108,6 +109,10 @@ export async function finalizePaidBulkLeadBatch(
 
   await supabase.from('lead_assignments').delete().eq('customer_id', claimed.customer_id).eq('source', 'demo');
   await supabase.from('customers').update({ demo_mode: false }).eq('id', claimed.customer_id);
+
+  reconcileBatchMetaCampaigns(supabase, claimed.id, 'finalize').catch(err =>
+    console.error('[finalizePaidBulkLeadBatch] meta reconcile:', err),
+  );
 }
 
 /**
@@ -223,6 +228,10 @@ export async function finalizePaidLeadBatch(
 
   await supabase.from('lead_assignments').delete().eq('customer_id', claimed.customer_id).eq('source', 'demo');
   await supabase.from('customers').update({ demo_mode: false }).eq('id', claimed.customer_id);
+
+  reconcileBatchMetaCampaigns(supabase, claimed.id, 'finalize').catch(err =>
+    console.error('[finalizePaidLeadBatch] meta reconcile:', err),
+  );
 
   const startsInFuture = claimed.starts_at && new Date(claimed.starts_at) > new Date();
   if (!startsInFuture) {

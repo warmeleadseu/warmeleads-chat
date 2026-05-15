@@ -1,6 +1,6 @@
 import { createServerClient } from '@/lib/supabase';
 
-const META_GRAPH_URL = 'https://graph.facebook.com/v21.0';
+export const META_GRAPH_URL = 'https://graph.facebook.com/v21.0';
 
 interface MetaCredentials {
   accessToken: string;

@@ -6,6 +6,26 @@ import { checkBatchMilestones } from '@/lib/batchNotifications';
 import { createInvoice, markInvoicePaid, sendNewBatchAdminEmail } from '@/lib/invoice';
 import { isPipelineBatchKind, normalizeBatchKind } from '@/lib/batchKind';
 import { initialPipelineBatchStatus } from '@/lib/customerBatchStatus';
+import { reconcileBatchMetaCampaigns } from '@/lib/metaBatchCampaignSync';
+
+function sanitizeMetaCampaignIdsInput(raw: unknown): string[] | undefined {
+  if (raw === undefined) return undefined;
+  const list: string[] = [];
+  if (Array.isArray(raw)) {
+    for (const x of raw) list.push(String(x).trim());
+  } else if (typeof raw === 'string') {
+    list.push(...raw.split(/[\s,;\n]+/).map(s => s.trim()));
+  } else return undefined;
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const s of list) {
+    if (!/^\d+$/.test(s) || seen.has(s)) continue;
+    seen.add(s);
+    out.push(s);
+    if (out.length >= 10) break;
+  }
+  return out;
+}
 
 export async function GET(request: NextRequest) {
   const admin = await verifyAdmin(request);
@@ -279,6 +299,13 @@ export async function PUT(request: NextRequest) {
     updates.batch_kind = nextKind;
   }
 
+  if (updates.meta_campaign_ids !== undefined) {
+    updates.meta_campaign_ids = sanitizeMetaCampaignIdsInput(updates.meta_campaign_ids) ?? [];
+  }
+  if (updates.meta_campaign_sync_enabled !== undefined) {
+    updates.meta_campaign_sync_enabled = updates.meta_campaign_sync_enabled === true;
+  }
+
   if (admin.role === 'accountmanager') {
     const { data: myCust } = await supabase.from('customers').select('id').eq('account_manager_id', admin.id).eq('id', existing.customer_id).single();
     if (!myCust) return NextResponse.json({ error: 'Geen toegang tot deze batch' }, { status: 403 });
@@ -350,6 +377,7 @@ export async function PUT(request: NextRequest) {
     'price_per_lead', 'total_price', 'leads_per_day', 'leads_per_week',
     'notes', 'lead_filters', 'status', 'completed_at', 'lookback_days',
     'compensations', 'starts_at', 'account_manager_id', 'batch_kind', 'niche_title',
+    'meta_campaign_ids', 'meta_campaign_sync_enabled',
   ];
   const safeUpdates: Record<string, unknown> = {};
   for (const key of allowedFields) {
@@ -420,6 +448,10 @@ export async function PUT(request: NextRequest) {
   if (liveAfter && !wasLive && !batchGrew) {
     try { distributeUnassignedLeads(); } catch { /* non-blocking */ }
   }
+
+  reconcileBatchMetaCampaigns(supabase, id, 'admin').catch(e =>
+    console.error('[admin/batches PUT] meta reconcile:', e),
+  );
 
   return NextResponse.json(data);
 }

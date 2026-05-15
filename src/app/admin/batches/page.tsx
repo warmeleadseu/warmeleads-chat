@@ -36,6 +36,7 @@ import { adminFetch } from '@/lib/adminAuth';
 import { openCustomerPortalAsAdmin } from '@/lib/adminOpenPortal';
 import { useAdmin } from '../adminContext';
 import { mergeCustomTiers } from '@/lib/pricing';
+import { isPipelineBatchKind } from '@/lib/batchKind';
 
 interface LeadFilter { field: string; operator: string; value: string; values?: string[] }
 interface Compensation { amount: number; reason: string; date: string }
@@ -51,6 +52,11 @@ interface Batch {
   created_at: string; completed_at: string | null;
   batch_kind?: string | null;
   niche_title?: string | null;
+  meta_campaign_ids?: string[] | null;
+  meta_campaign_sync_enabled?: boolean | null;
+  meta_sync_last_attempt_at?: string | null;
+  meta_sync_last_success_at?: string | null;
+  meta_sync_last_error?: string | null;
   customers?: {
     id?: string;
     name: string;
@@ -1292,6 +1298,29 @@ function BatchDetailPanel({ batchId, branches, onClose, onEdit }: {
                         <p className="text-sm text-slate-600">{batch.notes}</p>
                       </div>
                     )}
+                    {isPipelineBatchKind(batch.batch_kind) && (
+                      <div className="mt-3 border-t border-slate-200 pt-3">
+                        <p className="mb-1 text-[11px] font-medium text-slate-400">Meta campagnes</p>
+                        {batch.meta_campaign_ids && batch.meta_campaign_ids.length > 0 ? (
+                          <ul className="space-y-1 font-mono text-[11px] text-slate-700">
+                            {batch.meta_campaign_ids.map(id => (
+                              <li key={id}>{id}</li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="text-xs text-slate-400">Geen campagne-ID&apos;s gekoppeld</p>
+                        )}
+                        <p className="mt-1 text-[10px] text-slate-400">
+                          Sync: {batch.meta_campaign_sync_enabled === false ? 'uit' : 'aan'}
+                          {batch.starts_at && new Date(batch.starts_at) > new Date() && (
+                            <> · ACTIVE pas vanaf geplande start</>
+                          )}
+                        </p>
+                        {batch.meta_sync_last_error && (
+                          <p className="mt-1 text-[10px] text-rose-600">{batch.meta_sync_last_error}</p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               </>
@@ -1340,6 +1369,12 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
   const [editStartTime, setEditStartTime] = useState(
     initStartsAt ? initStartsAt.toLocaleTimeString('nl-NL', { timeZone: 'Europe/Amsterdam', hour: '2-digit', minute: '2-digit', hour12: false }) : '09:00'
   );
+  const [metaCampaignIdsText, setMetaCampaignIdsText] = useState(() =>
+    Array.isArray(batch.meta_campaign_ids) && batch.meta_campaign_ids.length > 0
+      ? batch.meta_campaign_ids.join('\n')
+      : '',
+  );
+  const [metaSyncEnabled, setMetaSyncEnabled] = useState(() => batch.meta_campaign_sync_enabled !== false);
 
   useEffect(() => {
     adminFetch(`/api/admin/branches/fields?branch=${batch.branch}`)
@@ -1373,6 +1408,14 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
         trigger_backfill: batchSizeGrew,
         starts_at: startsAtISO,
       };
+      if (isPipelineBatchKind(batch.batch_kind)) {
+        const metaIds = metaCampaignIdsText
+          .split(/[\s,;\n]+/)
+          .map(s => s.trim())
+          .filter(s => /^\d+$/.test(s));
+        payload.meta_campaign_ids = [...new Set(metaIds)].slice(0, 10);
+        payload.meta_campaign_sync_enabled = metaSyncEnabled;
+      }
       if (extraLeads > 0) {
         payload.compensation = { amount: extraLeads, reason: extraReason };
       }
@@ -1550,6 +1593,42 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
             <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={2}
               className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
           </div>
+
+          {isPipelineBatchKind(batch.batch_kind) && (
+            <div className="rounded-lg border border-indigo-200 bg-indigo-50/40 p-3">
+              <p className="mb-2 text-sm font-semibold text-indigo-900">Meta campagnes (batch)</p>
+              <p className="mb-2 text-[11px] text-indigo-800/90">
+                Facebook-campagne-ID&apos;s (numeriek). Status ACTIVE alleen als de batch <strong>betaald</strong>, <strong>actief</strong>, nog <strong>niet vol</strong> is, en het <strong>startmoment</strong> (<code className="rounded bg-white/80 px-1">starts_at</code>) bereikt is — ook als de klant eerder betaalt.
+              </p>
+              <label className="mb-1 block text-[11px] font-medium text-indigo-900/80">Campagne-ID&apos;s (één per regel)</label>
+              <textarea
+                value={metaCampaignIdsText}
+                onChange={e => setMetaCampaignIdsText(e.target.value)}
+                rows={3}
+                placeholder="bijv. 12000000000000001"
+                className="mb-3 w-full rounded-lg border border-indigo-200 bg-white px-3 py-2 font-mono text-xs text-slate-900 outline-none focus:border-indigo-400"
+              />
+              <label className="flex cursor-pointer items-center gap-2 text-sm text-indigo-950">
+                <input
+                  type="checkbox"
+                  checked={metaSyncEnabled}
+                  onChange={e => setMetaSyncEnabled(e.target.checked)}
+                  className="rounded border-indigo-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                Meta sync aan (uit = campagnes naar gepauzeerd)
+              </label>
+              {(batch.meta_sync_last_error || batch.meta_sync_last_success_at) && (
+                <div className="mt-2 space-y-1 border-t border-indigo-200/60 pt-2 text-[10px] text-indigo-900/70">
+                  {batch.meta_sync_last_success_at && (
+                    <p>Laatste sync OK: {new Date(batch.meta_sync_last_success_at).toLocaleString('nl-NL', { timeZone: 'Europe/Amsterdam' })}</p>
+                  )}
+                  {batch.meta_sync_last_error && (
+                    <p className="text-rose-700">Fout: {batch.meta_sync_last_error}</p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Lookback info (read-only) */}
           {batch.lookback_days !== null && batch.lookback_days !== undefined && (
