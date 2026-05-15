@@ -12,6 +12,7 @@
     "test": "vitest run",
     "type-check": "tsc --noEmit",
     "fix:lead-addresses": "npx tsx scripts/fix-lead-addresses-from-postcode.ts",
+    "fix:reassign-bulk-export": "npx tsx scripts/reassign-bulk-export-leads.ts",
     "preview": "npm run build && npm run start",
     "clean": "rm -rf .next node_modules/.cache",
     "restart": "npm run clean && npm run dev",
