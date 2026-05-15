@@ -15,7 +15,9 @@ export async function GET(
   const [batchRes, ordersRes, invoicesRes] = await Promise.all([
     supabase
       .from('customer_batches')
-      .select('*, customers(name)')
+      .select(
+        '*, customers(id, name, contact_person, email, phone, city, postcode, country)',
+      )
       .eq('id', id)
       .single(),
     supabase

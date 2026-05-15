@@ -306,7 +306,10 @@ export default function CustomersPage() {
         if (d.kpis) setKpis(d.kpis);
         setSelectedCustomer(prev => {
           if (!prev) return null;
-          return newCustomers.find(c => c.id === prev.id) || null;
+          const fromPage = newCustomers.find(c => c.id === prev.id);
+          // Deep link / selectie buiten huidige pagina: niet weggooien (was: || null → drawer ging dicht).
+          if (fromPage) return fromPage;
+          return prev;
         });
       }
     } catch { /* ignore */ }

@@ -29,6 +29,8 @@ import {
   ShoppingCartIcon,
   ArrowTopRightOnSquareIcon,
   GlobeAltIcon,
+  PhoneIcon,
+  UserIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
 import { openCustomerPortalAsAdmin } from '@/lib/adminOpenPortal';
@@ -49,7 +51,16 @@ interface Batch {
   created_at: string; completed_at: string | null;
   batch_kind?: string | null;
   niche_title?: string | null;
-  customers?: { name: string } | null;
+  customers?: {
+    id?: string;
+    name: string;
+    contact_person?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    city?: string | null;
+    postcode?: string | null;
+    country?: string | null;
+  } | null;
 }
 
 function isBulkLeadsBatch(b: Pick<Batch, 'batch_kind'>): boolean {
@@ -869,6 +880,77 @@ function BatchDetailPanel({ batchId, branches, onClose, onEdit }: {
                     <> &middot; <span className="font-medium text-amber-600">Start {formatStartsAt(batch.starts_at)}</span></>
                   )}
                 </div>
+
+                {(() => {
+                  const cu = batch.customers;
+                  const hasContact =
+                    !!(cu?.contact_person?.trim()) ||
+                    !!(cu?.email?.trim()) ||
+                    !!(cu?.phone?.trim()) ||
+                    !!(cu?.postcode?.trim()) ||
+                    !!(cu?.city?.trim());
+                  if (!hasContact) return null;
+                  const cityLine = [cu?.postcode?.trim(), cu?.city?.trim()].filter(Boolean).join(' ').trim();
+                  return (
+                    <div className="rounded-xl border border-slate-200 bg-slate-50/90 p-3.5">
+                      <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Contact klant</p>
+                      <div className="space-y-2 text-sm">
+                        {cu?.contact_person?.trim() && (
+                          <div className="flex items-start gap-2">
+                            <UserIcon className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" aria-hidden />
+                            <span className="font-medium text-slate-800">{cu.contact_person.trim()}</span>
+                          </div>
+                        )}
+                        {cu?.email?.trim() && (
+                          <div className="flex items-start gap-2">
+                            <EnvelopeIcon className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" aria-hidden />
+                            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                              <a href={`mailto:${cu.email.trim()}`} className="break-all font-medium text-brand-purple hover:underline">
+                                {cu.email.trim()}
+                              </a>
+                              <button
+                                type="button"
+                                onClick={() => copyToClipboard(cu.email!.trim(), 'email')}
+                                className="shrink-0 rounded p-1 text-slate-400 hover:bg-white hover:text-slate-600"
+                                title="E-mail kopiëren"
+                              >
+                                <DocumentDuplicateIcon className="h-3.5 w-3.5" />
+                              </button>
+                              {copied === 'email' && <span className="text-[10px] text-emerald-600">Gekopieerd</span>}
+                            </div>
+                          </div>
+                        )}
+                        {cu?.phone?.trim() && (
+                          <div className="flex items-start gap-2">
+                            <PhoneIcon className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" aria-hidden />
+                            <div className="flex flex-wrap items-center gap-2">
+                              <a href={`tel:${cu.phone.replace(/\s/g, '')}`} className="font-medium text-brand-purple hover:underline">
+                                {cu.phone.trim()}
+                              </a>
+                              <button
+                                type="button"
+                                onClick={() => copyToClipboard(cu.phone!.trim(), 'phone')}
+                                className="shrink-0 rounded p-1 text-slate-400 hover:bg-white hover:text-slate-600"
+                                title="Telefoon kopiëren"
+                              >
+                                <DocumentDuplicateIcon className="h-3.5 w-3.5" />
+                              </button>
+                              {copied === 'phone' && <span className="text-[10px] text-emerald-600">Gekopieerd</span>}
+                            </div>
+                          </div>
+                        )}
+                        {cityLine && (
+                          <p className="pl-6 text-xs text-slate-600">
+                            {cityLine}
+                            {cu?.country?.trim() && (
+                              <span className="text-slate-400"> · {cu.country.trim()}</span>
+                            )}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {isBulkLeadsBatch(batch) && (
                   <div className="space-y-2">
