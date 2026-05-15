@@ -694,7 +694,6 @@ function BatchDetailMetaBlock({
         const d = await res.json().catch(() => ({}));
         throw new Error(d.error || 'Opslaan mislukt');
       }
-      setSaveBranchMetaDefault(false);
       await onReload();
       onListRefresh?.();
     } catch (e) {
@@ -1604,10 +1603,7 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
         method: 'PUT',
         body: JSON.stringify(payload),
       });
-      if (res.ok) {
-        setSaveBranchMetaDefault(false);
-        onSaved();
-      }
+      if (res.ok) onSaved();
       else { const d = await res.json(); alert(d.error || 'Opslaan mislukt'); }
     } catch { alert('Er ging iets mis'); }
     setSaving(false);
