@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { requireSuperAdmin } from '@/lib/adminAuth';
-import { adminCustomerTargetsOnly } from '@/lib/adminBatchQueries';
+import { adminCustomerLiveUnpaidEmbed, adminCustomerTargetsOnly } from '@/lib/adminBatchQueries';
 import { activeTargetSummariesFromUnknown } from '@/lib/batchTargetAreas';
 
 const BREAKDOWN_LOOKBACK_DAYS = 90;
@@ -14,7 +14,7 @@ const BATCHES_LIST_LIMIT = 1_500;
 const BULK_ASSIGNMENTS_MAX_PAGES = 80;
 
 const LIVE_STATS_CACHE_TTL_MS = 45_000;
-const LIVE_STATS_CACHE_KEY = 'live-stats-v4';
+const LIVE_STATS_CACHE_KEY = 'live-stats-v5';
 const UNPAID_BATCH_FEED_LIMIT = 18;
 
 interface LiveStatsCacheEntry {
@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
     supabase.from('customers').select('id, name, is_active'),
     supabase
       .from('customer_batches')
-      .select(`*, ${adminCustomerTargetsOnly}`)
+      .select(`*, ${adminCustomerLiveUnpaidEmbed}`)
       .order('created_at', { ascending: false })
       .limit(BATCHES_LIST_LIMIT),
     supabase
@@ -132,7 +132,7 @@ export async function GET(request: NextRequest) {
   const { data: apptBatchRows } = await supabase
     .from('appointment_batches')
     .select(
-      `id, branch, batch_size, total_price, price_per_appointment, status, is_paid, created_at, ${adminCustomerTargetsOnly}`,
+      `id, branch, batch_size, total_price, price_per_appointment, status, is_paid, created_at, account_manager_id, ${adminCustomerLiveUnpaidEmbed}`,
     )
     .eq('is_paid', false)
     .order('created_at', { ascending: false })
@@ -149,9 +149,14 @@ export async function GET(request: NextRequest) {
     status: string;
     createdAt: string;
     targetAreaLabels: string[];
+    accountManagerName: string | null;
   };
 
-  const unpaidLeadItems: UnpaidFeed[] = batches
+  type UnpaidBatchDraft = Omit<UnpaidFeed, 'accountManagerName'> & { accountManagerId: string | null };
+
+  type CustUnpaid = { name?: string; account_manager_id?: string | null; customer_targets?: unknown } | null;
+
+  const unpaidLeadItems: UnpaidBatchDraft[] = batches
     .filter(
       b =>
         b.is_paid === false &&
@@ -159,7 +164,11 @@ export async function GET(request: NextRequest) {
         b.status !== 'cancelled',
     )
     .map(b => {
-      const cust = b.customers as { name?: string; customer_targets?: unknown } | null;
+      const cust = b.customers as CustUnpaid;
+      const batchAm = (b as { account_manager_id?: string | null }).account_manager_id;
+      const custAm = cust?.account_manager_id;
+      const accountManagerId =
+        batchAm && String(batchAm).trim() ? String(batchAm) : custAm && String(custAm).trim() ? String(custAm) : null;
       return {
         id: String(b.id),
         product: 'leads' as const,
@@ -171,13 +180,18 @@ export async function GET(request: NextRequest) {
         status: String(b.status || ''),
         createdAt: String(b.created_at || ''),
         targetAreaLabels: activeTargetSummariesFromUnknown(cust?.customer_targets),
+        accountManagerId,
       };
     });
 
-  const unpaidApptItems: UnpaidFeed[] = (apptBatchRows || [])
+  const unpaidApptItems: UnpaidBatchDraft[] = (apptBatchRows || [])
     .filter(b => b.status !== 'completed' && b.status !== 'cancelled')
     .map(b => {
-      const cust = b.customers as { name?: string; customer_targets?: unknown } | null;
+      const cust = b.customers as CustUnpaid;
+      const batchAm = (b as { account_manager_id?: string | null }).account_manager_id;
+      const custAm = cust?.account_manager_id;
+      const accountManagerId =
+        batchAm && String(batchAm).trim() ? String(batchAm) : custAm && String(custAm).trim() ? String(custAm) : null;
       return {
         id: String(b.id),
         product: 'appointments' as const,
@@ -189,12 +203,26 @@ export async function GET(request: NextRequest) {
         status: String(b.status || ''),
         createdAt: String(b.created_at || ''),
         targetAreaLabels: activeTargetSummariesFromUnknown(cust?.customer_targets),
+        accountManagerId,
       };
     });
 
-  const unpaidBatches = [...unpaidLeadItems, ...unpaidApptItems]
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    .slice(0, UNPAID_BATCH_FEED_LIMIT);
+  const unpaidMerged = [...unpaidLeadItems, ...unpaidApptItems].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  );
+  const unpaidSliced = unpaidMerged.slice(0, UNPAID_BATCH_FEED_LIMIT);
+  const unpaidAmIds = [...new Set(unpaidSliced.map(u => u.accountManagerId).filter((id): id is string => !!id))];
+  let amNameById: Record<string, string> = {};
+  if (unpaidAmIds.length > 0) {
+    const { data: amRows } = await supabase.from('admin_users').select('id, name').in('id', unpaidAmIds);
+    for (const row of amRows || []) {
+      if (row.id && row.name) amNameById[row.id] = row.name;
+    }
+  }
+  const unpaidBatches: UnpaidFeed[] = unpaidSliced.map(({ accountManagerId, ...rest }) => ({
+    ...rest,
+    accountManagerName: accountManagerId ? amNameById[accountManagerId] ?? null : null,
+  }));
 
   const [revenueStatsRes, batchStartRes] = await Promise.all([
     supabase.rpc('live_revenue_stats'),

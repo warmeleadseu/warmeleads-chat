@@ -60,6 +60,7 @@ interface UnpaidBatchFeedItem {
   status: string;
   createdAt: string;
   targetAreaLabels?: string[];
+  accountManagerName?: string | null;
 }
 interface CostMetrics { monthAdSpend: number; brutoCpl: number; effectieveCpl: number; avgAssignments: number; distributionAssignmentTotal?: number; batchRevenue: number; bulkRevenue: number; bulkAssignmentCount: number; totalProfit: number; }
 interface PaidBatch { id: string; batchId: string; customer: string; branch: string; amount: number; paidAt: string; amId: string | null; amName: string | null; amAvatarUrl?: string | null; celebrationVideoUrl: string | null; videoStart?: number | null; videoEnd?: number | null; }
@@ -1956,7 +1957,7 @@ export default function LiveDashboard() {
             ) : (
               <TvVerticalCarousel
                   reducedMotion={reducedMotion}
-                  contentKey={unpaidList.map(r => `${r.product}-${r.id}:${r.status}:${r.totalPrice}:${(r.targetAreaLabels || []).join(',')}`).join('|')}
+                  contentKey={unpaidList.map(r => `${r.product}-${r.id}:${r.status}:${r.totalPrice}:${r.accountManagerName || ''}:${(r.targetAreaLabels || []).join(',')}`).join('|')}
                   gapClassName="space-y-2"
                 >
                   {(sk) => {
@@ -2001,6 +2002,11 @@ export default function LiveDashboard() {
                                 )}
                                 <p className="truncate text-sm font-semibold text-white/90">{row.customer}</p>
                               </div>
+                              {row.accountManagerName && (
+                                <p className="mt-0.5 truncate text-[10px] font-medium text-white/28" title={`Accountmanager: ${row.accountManagerName}`}>
+                                  AM · {row.accountManagerName}
+                                </p>
+                              )}
                               <p className="mt-1 text-[11px] text-white/35">
                                 {row.batchSize} × {productLabel.toLowerCase()}
                                 {row.unitPrice != null && (
