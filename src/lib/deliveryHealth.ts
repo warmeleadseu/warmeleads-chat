@@ -174,16 +174,7 @@ export function beoordeelBatchLevering(input: {
   }
 
   const leeftijdDagen = kalenderdagenSindsAanmaakAmsterdam(input.batch.created_at);
-  if (leeftijdDagen < MIN_DAGEN_NA_AANMAAK) {
-    return {
-      ...basis,
-      badge: 'goed',
-      kop: 'Nog opstartfase',
-      uitleg:
-        'Deze batch bestaat nog maar korte tijd. Vanaf een paar dagen na aanmaak zie je hier of de levering rond het afgesproken maximum per dag blijft hangen.',
-      tips: [],
-    };
-  }
+  const inOpstart = leeftijdDagen < MIN_DAGEN_NA_AANMAAK;
 
   const drempel = cap * LAAG_TEN_OPZICHTE_VAN_CAP;
   const lageDagen = dagen.filter(d => d.aantal < drempel);
@@ -192,12 +183,20 @@ export function beoordeelBatchLevering(input: {
   const voorbeeld = dagen.map(d => `${d.label}: ${d.aantal}`).join(' · ');
   const basisUitleg = `Afgesproken maximum per dag: ${cap} leads (Nederlandse kalenderdag). Recent gemeten: ${voorbeeld}.`;
 
+  const opstartVoorvoegsel = (badge: LeveringBadge): string => {
+    if (!inOpstart) return '';
+    if (badge === 'goed') {
+      return 'Deze batch bestaat nog maar korte tijd; de eerste dagen kunnen nog bijtrekken. ';
+    }
+    return 'Deze batch bestaat nog maar korte tijd; op basis van de meetdagen hieronder wijkt de levering nu al af van het afgesproken maximum. ';
+  };
+
   if (laagAantal >= 3) {
     return {
       ...basis,
       badge: 'actie',
-      kop: 'Duidelijk minder leads per dag dan afgesproken',
-      uitleg: `${basisUitleg} Op de laatste drie dagen zat je telkens ruim onder dat maximum, terwijl deze batch nog ruimte heeft voor meer leads.`,
+      kop: inOpstart ? 'Nog opstartfase · levering achter' : 'Duidelijk minder leads per dag dan afgesproken',
+      uitleg: `${opstartVoorvoegsel('actie')}${basisUitleg} Op de laatste drie dagen zat je telkens ruim onder dat maximum, terwijl deze batch nog ruimte heeft voor meer leads.`,
       tips: standaardTipsActie(),
     };
   }
@@ -206,8 +205,8 @@ export function beoordeelBatchLevering(input: {
     return {
       ...basis,
       badge: 'let_op',
-      kop: 'Iets minder leads per dag dan afgesproken',
-      uitleg: `${basisUitleg} Op meerdere recente dagen ligt de telling merkbaar onder het afgesproken maximum.`,
+      kop: inOpstart ? 'Nog opstartfase · houd in de gaten' : 'Iets minder leads per dag dan afgesproken',
+      uitleg: `${opstartVoorvoegsel('let_op')}${basisUitleg} Op meerdere recente dagen ligt de telling merkbaar onder het afgesproken maximum.`,
       tips: standaardTipsLetOp(),
     };
   }
@@ -215,8 +214,12 @@ export function beoordeelBatchLevering(input: {
   return {
     ...basis,
     badge: 'goed',
-    kop: 'Levering op schema',
-    uitleg: `${basisUitleg} De laatste dagen sluiten aan bij wat je mag verwachten bij dit maximum (rekening houdend met normale schommelingen).`,
+    kop: inOpstart ? 'Nog opstartfase' : 'Levering op schema',
+    uitleg: `${opstartVoorvoegsel('goed')}${basisUitleg}${
+      inOpstart
+        ? 'Als de telling de komende dagen rond het maximum blijft hangen, zit je goed. Zakt het structureel lager, dan wordt dat hier zichtbaar.'
+        : ' De laatste dagen sluiten aan bij wat je mag verwachten bij dit maximum (rekening houdend met normale schommelingen).'
+    }`,
     tips: [],
   };
 }
