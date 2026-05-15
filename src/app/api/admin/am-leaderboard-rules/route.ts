@@ -6,6 +6,7 @@ import { leaderboardYearMonthFromDate, leaderboardMonthStartIsoFromYearMonth } f
 import {
   computeLeaderboardMapsFromDbRows,
   fetchMonthlyPaidBatchesForLeaderboard,
+  isAmLeaderboardMigrationMissingError,
   loadLeaderboardExcludedBatchIds,
   loadLeaderboardManualLines,
   resolveBatchAmId,
@@ -60,8 +61,18 @@ export async function GET(request: NextRequest) {
       supabase.from('customers').select('id, name, bulk_price_per_lead, account_manager_id').not('bulk_price_per_lead', 'is', null),
     ]);
 
-    if (exclusionsRows.error) throw new Error(exclusionsRows.error.message);
-    if (manualRows.error) throw new Error(manualRows.error.message);
+    if (exclusionsRows.error) {
+      if (isAmLeaderboardMigrationMissingError(exclusionsRows.error.message)) {
+        throw new Error('AM_LEADERBOARD_MIGRATION_107_MISSING');
+      }
+      throw new Error(exclusionsRows.error.message);
+    }
+    if (manualRows.error) {
+      if (isAmLeaderboardMigrationMissingError(manualRows.error.message)) {
+        throw new Error('AM_LEADERBOARD_MIGRATION_107_MISSING');
+      }
+      throw new Error(manualRows.error.message);
+    }
 
     const { amRevenue, amBatchCount } = computeLeaderboardMapsFromDbRows(batches, excludedIds, manualRows.data || []);
 
@@ -280,9 +291,18 @@ export async function GET(request: NextRequest) {
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Onbekende fout';
-    if (msg.includes('relation') && msg.includes('does not exist')) {
+    if (
+      msg === 'AM_LEADERBOARD_MIGRATION_107_MISSING' ||
+      isAmLeaderboardMigrationMissingError(msg) ||
+      (msg.includes('relation') && msg.includes('does not exist'))
+    ) {
       return NextResponse.json(
-        { error: 'Database-migratie 107 (am leaderboard) ontbreekt. Voer migraties uit.' },
+        {
+          error:
+            'De leaderboard-tabellen ontbreken nog. Voer database-migratie 107 uit (één keer per omgeving).',
+          hint:
+            'Lokaal met CLI: `supabase link` + `supabase db push`. Of in Supabase Dashboard → SQL → plak de inhoud van `supabase/migrations/107_am_leaderboard_overrides.sql` en run.',
+        },
         { status: 503 },
       );
     }

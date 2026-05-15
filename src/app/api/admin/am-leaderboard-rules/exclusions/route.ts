@@ -3,6 +3,7 @@ import { createServerClient } from '@/lib/supabase';
 import { requireSuperAdmin } from '@/lib/adminAuth';
 import { logAudit } from '@/lib/audit';
 import { leaderboardMonthStartIsoFromYearMonth } from '@/lib/amLeaderboardRules';
+import { isAmLeaderboardMigrationMissingError } from '@/lib/amLeaderboardServer';
 
 const YM_RE = /^\d{4}-\d{2}$/;
 
@@ -73,8 +74,13 @@ export async function POST(request: NextRequest) {
     if (insErr.code === '23505') {
       return NextResponse.json({ error: 'Deze batch is al uitgesloten voor deze maand' }, { status: 409 });
     }
-    if (insErr.message?.includes('does not exist')) {
-      return NextResponse.json({ error: 'Migratie 107 ontbreekt' }, { status: 503 });
+    if (isAmLeaderboardMigrationMissingError(insErr.message || '')) {
+      return NextResponse.json(
+        {
+          error: 'Migratie 107 ontbreekt: voer `supabase db push` uit of run het SQL-bestand in het Supabase-dashboard.',
+        },
+        { status: 503 },
+      );
     }
     return NextResponse.json({ error: insErr.message }, { status: 500 });
   }

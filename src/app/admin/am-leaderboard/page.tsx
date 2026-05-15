@@ -104,7 +104,9 @@ export default function AmLeaderboardPage() {
       const res = await adminFetch(`/api/admin/am-leaderboard-rules?year_month=${encodeURIComponent(yearMonth)}`);
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError((data as { error?: string }).error || 'Laden mislukt');
+        const err = (data as { error?: string }).error || 'Laden mislukt';
+        const hint = (data as { hint?: string }).hint;
+        setError(hint ? `${err}\n\n${hint}` : err);
         setRows([]);
         return;
       }
@@ -270,7 +272,11 @@ export default function AmLeaderboardPage() {
         {bulkTrunc && <span className="text-xs font-medium text-amber-700">Bulk-telling afgekapt (veiligheid)</span>}
       </div>
 
-      {error && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</div>}
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 whitespace-pre-wrap">
+          {error}
+        </div>
+      )}
 
       <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <h2 className="text-sm font-bold text-slate-800">Handmatige regel toevoegen</h2>
