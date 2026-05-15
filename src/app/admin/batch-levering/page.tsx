@@ -104,7 +104,8 @@ export default function BatchLeveringPage() {
           <p className="mt-1 max-w-2xl text-sm text-slate-600">
             Hier zie je of actieve betaalde batches hun <strong>afgesproken maximum per dag</strong> halen. Meetperiode: de
             laatste drie <strong>afgelopen</strong> kalenderdagen (Nederlandse tijd), niet vandaag — zodat een halve dag
-            je beeld niet scheef trekt.
+            je beeld niet scheef trekt. De zachte opstartperiode telt vanaf de <strong>eerste betaling</strong> (factuur of
+            bestelling); ontbreekt die datum, dan vanaf aanmaak.
           </p>
           {dagen.length > 0 && (
             <p className="mt-2 text-xs text-slate-500">

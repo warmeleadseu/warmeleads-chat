@@ -27,15 +27,16 @@ export interface BatchLeveringRij {
 }
 
 const LAAG_TEN_OPZICHTE_VAN_CAP = 0.65;
-/** Minimaal zoveel kalenderdagen na aanmaak voordat we onder-cap signalen tonen (Amsterdam-datum). */
-const MIN_DAGEN_NA_AANMAAK = 4;
+/** Minimaal zoveel kalenderdagen na eerste betaling (Amsterdam) voordat de “opstart”-teksten verdwijnen. Zonder bekende betaaldatum: sinds aanmaak. */
+const MIN_DAGEN_NA_METING_START = 4;
 
 function amsterdamYmd(iso: string): string {
   return new Date(iso).toLocaleDateString('sv-SE', { timeZone: 'Europe/Amsterdam' });
 }
 
-function kalenderdagenSindsAanmaakAmsterdam(createdAtIso: string): number {
-  const start = amsterdamYmd(createdAtIso);
+/** Verschil in hele kalenderdagen (Europe/Amsterdam) tussen referentie-moment en vandaag. */
+function kalenderdagenSindsReferentieAmsterdam(refIso: string): number {
+  const start = amsterdamYmd(refIso);
   const vandaag = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Amsterdam' });
   const [y1, m1, d1] = start.split('-').map(Number);
   const [y2, m2, d2] = vandaag.split('-').map(Number);
@@ -97,12 +98,32 @@ function standaardTipsLetOp(): string[] {
   ];
 }
 
+/**
+ * Vroegste `paid_at` per batch over facturen en portal-bestellingen;
+ * dat is het moment waarop levering in de praktijk kan starten.
+ */
+export function mergeEarliestPaidAtByBatchId(
+  rows: { batch_id: string | null | undefined; paid_at: string | null | undefined }[],
+): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const row of rows) {
+    const bid = row.batch_id;
+    const pa = row.paid_at;
+    if (!bid || !pa) continue;
+    const prev = map.get(bid);
+    if (!prev || new Date(pa).getTime() < new Date(prev).getTime()) map.set(bid, pa);
+  }
+  return map;
+}
+
 export function beoordeelBatchLevering(input: {
   batch: {
     id: string;
     customer_id: string;
     branch: string;
     created_at: string;
+    /** Eerste betaling (factuur/bestelling); bepaalt meet-start i.p.v. aanmaakdatum. */
+    paid_at?: string | null;
     leads_per_day: number | null;
     leads_delivered: number | null;
     batch_size: number;
@@ -173,8 +194,10 @@ export function beoordeelBatchLevering(input: {
     };
   }
 
-  const leeftijdDagen = kalenderdagenSindsAanmaakAmsterdam(input.batch.created_at);
-  const inOpstart = leeftijdDagen < MIN_DAGEN_NA_AANMAAK;
+  const metingVanafIso = input.batch.paid_at?.trim() || input.batch.created_at;
+  const leeftijdDagen = kalenderdagenSindsReferentieAmsterdam(metingVanafIso);
+  const inOpstart = leeftijdDagen < MIN_DAGEN_NA_METING_START;
+  const metingVanafBetaling = Boolean(input.batch.paid_at?.trim());
 
   const drempel = cap * LAAG_TEN_OPZICHTE_VAN_CAP;
   const lageDagen = dagen.filter(d => d.aantal < drempel);
@@ -186,9 +209,13 @@ export function beoordeelBatchLevering(input: {
   const opstartVoorvoegsel = (badge: LeveringBadge): string => {
     if (!inOpstart) return '';
     if (badge === 'goed') {
-      return 'Deze batch bestaat nog maar korte tijd; de eerste dagen kunnen nog bijtrekken. ';
+      return metingVanafBetaling
+        ? 'Deze batch is nog maar kort betaald; de eerste leverdagen kunnen nog bijtrekken. '
+        : 'Deze batch bestaat nog maar korte tijd; de eerste dagen kunnen nog bijtrekken. ';
     }
-    return 'Deze batch bestaat nog maar korte tijd; op basis van de meetdagen hieronder wijkt de levering nu al af van het afgesproken maximum. ';
+    return metingVanafBetaling
+      ? 'Deze batch is nog maar kort betaald; op basis van de meetdagen hieronder wijkt de levering nu al af van het afgesproken maximum. '
+      : 'Deze batch bestaat nog maar korte tijd; op basis van de meetdagen hieronder wijkt de levering nu al af van het afgesproken maximum. ';
   };
 
   if (laagAantal >= 3) {

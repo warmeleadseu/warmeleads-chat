@@ -2,7 +2,7 @@
  * @vitest-environment node
  */
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { beoordeelBatchLevering } from '@/lib/deliveryHealth';
+import { beoordeelBatchLevering, mergeEarliestPaidAtByBatchId } from '@/lib/deliveryHealth';
 
 const baseBatch = {
   id: 'b1',
@@ -12,6 +12,7 @@ const baseBatch = {
   leads_delivered: 7,
   batch_size: 42,
   starts_at: null as string | null,
+  created_at: '2026-05-13T08:00:00.000Z',
 };
 
 function counts(...vals: number[]) {
@@ -89,5 +90,59 @@ describe('beoordeelBatchLevering', () => {
 
     expect(row.badge).toBe('let_op');
     expect(row.kop).toContain('opstartfase');
+  });
+
+  it('opstart telt vanaf betaaldatum, niet vanaf oude aanmaak', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-05-15T12:00:00.000Z'));
+
+    const row = beoordeelBatchLevering({
+      batch: {
+        ...baseBatch,
+        created_at: '2026-01-01T08:00:00.000Z',
+        paid_at: '2026-05-13T08:00:00.000Z',
+      },
+      customerName: 'X',
+      branchLabel: 'Y',
+      dagenYmd: ['2026-05-12', '2026-05-13', '2026-05-14'],
+      countsByDay: counts(0, 5, 2),
+    });
+
+    expect(row.badge).toBe('actie');
+    expect(row.kop).toContain('opstartfase');
+    expect(row.uitleg).toContain('kort betaald');
+  });
+
+  it('meer dan vier kalenderdagen na betaling: geen opstart-kop meer', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-05-15T12:00:00.000Z'));
+
+    const row = beoordeelBatchLevering({
+      batch: {
+        ...baseBatch,
+        created_at: '2026-01-01T08:00:00.000Z',
+        paid_at: '2026-05-10T08:00:00.000Z',
+      },
+      customerName: 'X',
+      branchLabel: 'Y',
+      dagenYmd: ['2026-05-12', '2026-05-13', '2026-05-14'],
+      countsByDay: counts(0, 5, 2),
+    });
+
+    expect(row.badge).toBe('actie');
+    expect(row.kop).toBe('Duidelijk minder leads per dag dan afgesproken');
+    expect(row.uitleg).not.toContain('kort betaald');
+  });
+});
+
+describe('mergeEarliestPaidAtByBatchId', () => {
+  it('kiest vroegste paid_at per batch', () => {
+    const m = mergeEarliestPaidAtByBatchId([
+      { batch_id: 'a', paid_at: '2026-05-14T10:00:00.000Z' },
+      { batch_id: 'a', paid_at: '2026-05-12T08:00:00.000Z' },
+      { batch_id: 'b', paid_at: '2026-05-10T00:00:00.000Z' },
+    ]);
+    expect(m.get('a')).toBe('2026-05-12T08:00:00.000Z');
+    expect(m.get('b')).toBe('2026-05-10T00:00:00.000Z');
   });
 });

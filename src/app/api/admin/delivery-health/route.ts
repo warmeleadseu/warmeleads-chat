@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
 import { isPipelineBatchKind } from '@/lib/batchKind';
-import { beoordeelBatchLevering, fifoHeadBatchIdsVoorLevering } from '@/lib/deliveryHealth';
+import { beoordeelBatchLevering, fifoHeadBatchIdsVoorLevering, mergeEarliestPaidAtByBatchId } from '@/lib/deliveryHealth';
 
 export async function GET(request: NextRequest) {
   const admin = await verifyAdmin(request);
@@ -91,6 +91,26 @@ export async function GET(request: NextRequest) {
   }
 
   const headIds = heads.map(b => b.id);
+
+  let paidAtByBatch = new Map<string, string>();
+  if (headIds.length > 0) {
+    const [{ data: invPaid }, { data: ordPaid }] = await Promise.all([
+      supabase
+        .from('invoices')
+        .select('batch_id, paid_at')
+        .in('batch_id', headIds)
+        .not('paid_at', 'is', null)
+        .neq('status', 'credit_note'),
+      supabase
+        .from('batch_orders')
+        .select('batch_id, paid_at')
+        .in('batch_id', headIds)
+        .eq('status', 'paid')
+        .not('paid_at', 'is', null),
+    ]);
+    paidAtByBatch = mergeEarliestPaidAtByBatchId([...(invPaid || []), ...(ordPaid || [])]);
+  }
+
   const countsByBatch = new Map<string, Map<string, number>>();
   for (const id of headIds) countsByBatch.set(id, new Map());
 
@@ -112,8 +132,9 @@ export async function GET(request: NextRequest) {
 
   const items = heads.map(batch => {
     const m = countsByBatch.get(batch.id) || new Map();
+    const paidAt = paidAtByBatch.get(batch.id) ?? null;
     return beoordeelBatchLevering({
-      batch,
+      batch: { ...batch, paid_at: paidAt },
       customerName: batch.customers?.name || 'Onbekend',
       branchLabel: branchLabel.get(batch.branch) || batch.branch,
       dagenYmd,
