@@ -9,6 +9,7 @@ import {
   TrashIcon,
   DocumentTextIcon,
   ArrowPathIcon,
+  CreditCardIcon,
 } from '@heroicons/react/24/outline';
 import { motion, AnimatePresence } from 'framer-motion';
 import { portalFetch } from '@/lib/portalAuth';
@@ -103,6 +104,7 @@ export default function AppointmentsOrderView({
   const [cancelling, setCancelling] = useState(false);
 
   const [pricingData, setPricingData] = useState<PricingData | null>(null);
+  const [payingBatchId, setPayingBatchId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -195,6 +197,11 @@ export default function AppointmentsOrderView({
 
   const QUICK_SIZES = useMemo(() => computeQuickSizes(minBatchSize, [5, 10, 20, 50]), [minBatchSize]);
 
+  const pendingPaymentBatches = useMemo(
+    () => batches.filter(b => b.status === 'pending_payment' && !b.is_paid),
+    [batches],
+  );
+
   const activeBatches = useMemo(() => batches.filter(b => b.status === 'active' && b.is_paid), [batches]);
   const sourceBatch = activeBatches.find(b => b.branch === selectedBranch) || activeBatches[0] || null;
 
@@ -223,6 +230,28 @@ export default function AppointmentsOrderView({
       toast.error('Er is iets misgegaan');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const payPendingBatch = async (batchId: string) => {
+    setPayingBatchId(batchId);
+    try {
+      const res = await portalFetch('/api/portal/pay-batch', {
+        method: 'POST',
+        body: JSON.stringify({ batch_id: batchId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(typeof data.error === 'string' ? data.error : 'Betaling starten mislukt');
+        return;
+      }
+      if (data.checkoutUrl) {
+        window.location.href = data.checkoutUrl;
+      }
+    } catch {
+      toast.error('Er is iets misgegaan');
+    } finally {
+      setPayingBatchId(null);
     }
   };
 
@@ -261,6 +290,46 @@ export default function AppointmentsOrderView({
 
   return (
     <div className="space-y-6">
+      {pendingPaymentBatches.length > 0 && (
+        <div className="rounded-2xl border border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50/80 p-4 shadow-sm">
+          <p className="text-sm font-bold text-amber-950">Betaling openstaand</p>
+          <p className="mt-0.5 text-xs text-amber-900/90">
+            Je accountmanager heeft een afspraak-batch voor je klaargezet. Betaal hieronder om te starten.
+          </p>
+          <ul className="mt-3 space-y-2">
+            {pendingPaymentBatches.map(b => {
+              const ex = Number(b.total_price || 0);
+              const incl = roundMoney(ex * (1 + btwRate));
+              return (
+                <li
+                  key={b.id}
+                  className="flex flex-col gap-2 rounded-xl border border-amber-100 bg-white/90 p-3 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-slate-900">
+                      {branchNames[b.branch] || b.branch} · {b.batch_size} afspraken
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      {formatCurrency(Number(b.price_per_appointment))} per stuk excl. BTW ·{' '}
+                      <span className="font-medium text-slate-700">{formatCurrency(incl)} incl. BTW</span>
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => payPendingBatch(b.id)}
+                    disabled={payingBatchId === b.id}
+                    className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-brand-orange to-brand-pink px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:shadow-md disabled:opacity-50"
+                  >
+                    <CreditCardIcon className="h-4 w-4" />
+                    {payingBatchId === b.id ? 'Bezig...' : 'Nu betalen'}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+
       {orders.length > 0 && (
         <div className="flex justify-end">
           <button

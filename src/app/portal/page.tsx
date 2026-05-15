@@ -125,6 +125,8 @@ interface Batch {
   is_paid?: boolean | null;
   status?: string | null;
   total_price?: number | null;
+  /** Aanwezig wanneer batch uit appointment_batches komt (parallel aan leads). */
+  batch_product?: 'leads' | 'appointments';
 }
 
 function StatsSkeleton() {
@@ -1659,6 +1661,7 @@ function BatchConversionCard({
 
   const batchId = typeof primaryBatch.id === 'string' ? primaryBatch.id : null;
   const branchLabel = String(primaryBatch.branch_name || primaryBatch.branch || 'Batch');
+  const isApptProduct = primaryBatch.batch_product === 'appointments';
   const delivered = Math.min(
     Number(primaryBatch.leads_delivered || 0),
     Number(primaryBatch.batch_size || 0),
@@ -1689,7 +1692,9 @@ function BatchConversionCard({
         {showDemoPortal && (
           <div className="rounded-lg border border-brand-purple/25 bg-white/90 px-3 py-2 text-[11px] leading-relaxed text-slate-600">
             <span className="font-semibold text-brand-purple">Demo modus:</span>{' '}
-            Je ziet nog voorbeeldleads in het overzicht. Na betaling van deze batch start levering met echte leads.
+            {isApptProduct
+              ? 'Je ziet nog voorbeeldleads op het Leads-tabblad. Betaal je afspraak-batch om live te gaan met afspraken.'
+              : 'Je ziet nog voorbeeldleads in het overzicht. Na betaling van deze batch start levering met echte leads.'}
           </div>
         )}
         <div className="flex items-start justify-between gap-3">
@@ -1699,19 +1704,38 @@ function BatchConversionCard({
               {branchLabel}
             </div>
             <p className="mt-2 text-sm font-semibold text-slate-900">
-              {isUnpaid ? 'Batch staat klaar voor betaling' : shouldUpsell ? 'Batch bijna afgerond' : 'Batch actief'}
+              {isUnpaid
+                ? isApptProduct
+                  ? 'Afspraak-batch staat klaar voor betaling'
+                  : 'Batch staat klaar voor betaling'
+                : shouldUpsell
+                  ? isApptProduct
+                    ? 'Afspraak-batch bijna vol'
+                    : 'Batch bijna afgerond'
+                  : isApptProduct
+                    ? 'Afspraak-batch actief'
+                    : 'Batch actief'}
             </p>
             <p className="mt-0.5 text-xs text-slate-600">
               {isUnpaid
-                ? 'Na betaling start levering direct.'
+                ? isApptProduct
+                  ? 'Na betaling wordt je afspraak-batch actief in het portaal.'
+                  : 'Na betaling start levering direct.'
                 : shouldUpsell
-                  ? 'Bijna klaar - voorkom een gat in je instroom.'
-                  : 'Volg je voortgang en houd grip op je planning.'}
+                  ? isApptProduct
+                    ? 'Plan tijdig een vervolg zodat je agenda gevuld blijft.'
+                    : 'Bijna klaar - voorkom een gat in je instroom.'
+                  : isApptProduct
+                    ? 'Volg je voortgang in Agenda / Bestellen (afspraken).'
+                    : 'Volg je voortgang en houd grip op je planning.'}
             </p>
           </div>
           <div className="text-right">
             <p className="text-xs font-medium text-slate-500">Voortgang</p>
-            <p className="text-base font-bold text-slate-900">{delivered} / {size}</p>
+            <p className="text-base font-bold text-slate-900">
+              {delivered} / {size}{' '}
+              <span className="text-xs font-semibold text-slate-500">{isApptProduct ? 'afspraken' : 'leads'}</span>
+            </p>
           </div>
         </div>
 
@@ -1740,7 +1764,9 @@ function BatchConversionCard({
               <CreditCardIcon className="h-4 w-4" />
               {payingBatch === batchId
                 ? 'Betaling openen...'
-                : `Batch betalen${amountLabel ? ` - ${amountLabel}` : ''}`}
+                : isApptProduct
+                  ? `Afspraak-batch betalen${amountLabel ? ` - ${amountLabel}` : ''}`
+                  : `Batch betalen${amountLabel ? ` - ${amountLabel}` : ''}`}
             </button>
           ) : shouldUpsell ? (
             <Link
@@ -1987,7 +2013,7 @@ function OverviewDetailPanel({
 
           {hasUnpaidBatch && (
             <div className="rounded-xl border border-red-100 bg-red-50 p-3 text-xs text-red-700">
-              Je hebt minimaal één onbetaalde batch. Betaal deze om levering te hervatten.
+              Je hebt minimaal één onbetaalde batch (leads of afspraken). Betaal deze om levering te hervatten.
             </div>
           )}
         </div>

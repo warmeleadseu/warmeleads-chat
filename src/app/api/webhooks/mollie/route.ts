@@ -282,6 +282,18 @@ export async function POST(request: NextRequest) {
               { type: 'mollie_error', metadata: { batch_id: claimed.id, error_type: 'finalize_failed' } },
             ).catch(() => {});
           }
+        } else {
+          const { data: claimedAppt, error: apptClaimErr } = await supabase
+            .from('appointment_batches')
+            .update({ is_paid: true, mollie_payment_id: paymentId, status: 'active' })
+            .eq('id', batchId)
+            .eq('is_paid', false)
+            .select('id')
+            .single();
+
+          if (!apptClaimErr && claimedAppt) {
+            // Factuur (indien aanwezig) via invoice-webhook; geen dubbele finalize nodig
+          }
         }
       }
 

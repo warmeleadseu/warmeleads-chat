@@ -29,7 +29,46 @@ export async function GET(request: NextRequest) {
   const batchesPartial = fetched.length > BATCHES_CAP;
   const allBatches = batchesPartial ? fetched.slice(0, BATCHES_CAP) : fetched;
 
-  const branchSlugs = [...new Set(allBatches.map(b => b.branch).filter(Boolean))];
+  const { data: apptRows, error: apptErr } = await supabase
+    .from('appointment_batches')
+    .select('*')
+    .eq('customer_id', customer.id)
+    .order('created_at', { ascending: false })
+    .limit(BATCHES_CAP);
+
+  if (apptErr) {
+    return NextResponse.json({ error: 'Kon batches niet ophalen' }, { status: 500 });
+  }
+
+  /** Zelfde vorm als customer_batches in het portaal (leads_delivered = eenheden geleverd). */
+  const mapAppointmentToPortalBatch = (ab: Record<string, unknown>) => ({
+    id: ab.id as string,
+    customer_id: ab.customer_id as string,
+    branch: ab.branch as string,
+    batch_size: Number(ab.batch_size),
+    leads_delivered: Number(ab.appointments_delivered ?? 0),
+    leads_per_day: (ab.appointments_per_day as number | null) ?? null,
+    leads_per_week: (ab.appointments_per_week as number | null) ?? null,
+    price_per_lead: Number(ab.price_per_appointment ?? 0),
+    total_price: ab.total_price != null ? Number(ab.total_price) : null,
+    status: ab.status as string,
+    is_paid: ab.is_paid as boolean,
+    notes: (ab.notes as string | null) ?? null,
+    lead_filters: (ab.lead_filters as unknown[]) || [],
+    starts_at: (ab.starts_at as string | null) ?? null,
+    created_at: ab.created_at as string,
+    completed_at: (ab.completed_at as string | null) ?? null,
+    batch_product: 'appointments' as const,
+    /** Originele velden (optioneel voor toekomstige UI) */
+    appointments_delivered: Number(ab.appointments_delivered ?? 0),
+    price_per_appointment: Number(ab.price_per_appointment ?? 0),
+  });
+
+  const appointmentPortalBatches = (apptRows || []).map(mapAppointmentToPortalBatch);
+
+  const branchSlugs = [
+    ...new Set([...allBatches.map(b => b.branch), ...appointmentPortalBatches.map(b => b.branch)].filter(Boolean)),
+  ];
   const { data: branchRows } = branchSlugs.length > 0
     ? await supabase.from('branches').select('slug, name').in('slug', branchSlugs)
     : { data: [] };
@@ -48,6 +87,10 @@ export async function GET(request: NextRequest) {
   const activeBatches = allBatches.filter(b => b.status === 'active');
   const pendingPaymentBatches = allBatches.filter(b => b.status === 'pending_payment');
   const completedBatches = allBatches.filter(b => b.status === 'completed');
+
+  const apptActive = appointmentPortalBatches.filter(b => b.status === 'active');
+  const apptPending = appointmentPortalBatches.filter(b => b.status === 'pending_payment');
+  const apptCompleted = appointmentPortalBatches.filter(b => b.status === 'completed');
 
   const activeBatchIds = activeBatches.map(b => b.id);
 
@@ -73,7 +116,7 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const active = activeBatches.map(batch => {
+  const activeFromLeads = activeBatches.map(batch => {
     const batchAssignments = weekAssignments.filter(a => a.batch_id === batch.id);
     const avg_leads_per_day = batchAssignments.length / 7;
 
@@ -99,6 +142,18 @@ export async function GET(request: NextRequest) {
     };
   });
 
+  const activeFromAppointments = apptActive.map(batch => ({
+    ...batch,
+    branch_name: branchMap[batch.branch] || batch.branch,
+    avg_leads_per_day: 0,
+    estimated_completion: null as string | null,
+    this_week_count: 0,
+  }));
+
+  const active = [...activeFromLeads, ...activeFromAppointments].sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+  );
+
   const completed = completedBatches.map(batch => {
     const created = new Date(batch.created_at);
     const completedAt = batch.completed_at ? new Date(batch.completed_at) : now;
@@ -113,6 +168,21 @@ export async function GET(request: NextRequest) {
     };
   });
 
+  const completedAppointments = apptCompleted.map(batch => {
+    const created = new Date(batch.created_at);
+    const completedAt = batch.completed_at ? new Date(batch.completed_at) : now;
+    const duration_days = Math.max(1, Math.round((completedAt.getTime() - created.getTime()) / (1000 * 60 * 60 * 24)));
+    return {
+      ...batch,
+      branch_name: branchMap[batch.branch] || batch.branch,
+      duration_days,
+    };
+  });
+
+  const completedMerged = [...completed, ...completedAppointments].sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+  );
+
   const partial = batchesPartial || assignmentsPartial;
   if (partial) {
     console.info('[portal/batches]', {
@@ -124,7 +194,7 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  const pending = pendingPaymentBatches.map(batch => ({
+  const pendingFromLeads = pendingPaymentBatches.map(batch => ({
     ...batch,
     branch_name: branchMap[batch.branch] || batch.branch,
     avg_leads_per_day: 0,
@@ -132,10 +202,22 @@ export async function GET(request: NextRequest) {
     this_week_count: 0,
   }));
 
+  const pendingFromAppointments = apptPending.map(batch => ({
+    ...batch,
+    branch_name: branchMap[batch.branch] || batch.branch,
+    avg_leads_per_day: 0,
+    estimated_completion: null as string | null,
+    this_week_count: 0,
+  }));
+
+  const pending = [...pendingFromLeads, ...pendingFromAppointments].sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+  );
+
   return NextResponse.json({
     active,
     pending_payment: pending,
-    completed,
+    completed: completedMerged,
     partial,
     batchesPartial,
     assignmentsPartial,
