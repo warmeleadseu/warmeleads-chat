@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { requireSuperAdmin } from '@/lib/adminAuth';
+import { leaderboardYearMonthFromDate, leaderboardMonthStartIsoFromYearMonth, type ManualLineRow, type MonthlyPaidBatchRow } from '@/lib/amLeaderboardRules';
+import {
+  computeLeaderboardMapsFromDbRows,
+  fetchMonthlyPaidBatchesForLeaderboard,
+  loadLeaderboardExcludedBatchIds,
+  loadLeaderboardManualLines,
+} from '@/lib/amLeaderboardServer';
 import { adminCustomerLiveUnpaidEmbed, adminCustomerTargetsOnly } from '@/lib/adminBatchQueries';
 import { activeTargetSummariesFromUnknown } from '@/lib/batchTargetAreas';
 
@@ -14,7 +21,7 @@ const BATCHES_LIST_LIMIT = 1_500;
 const BULK_ASSIGNMENTS_MAX_PAGES = 80;
 
 const LIVE_STATS_CACHE_TTL_MS = 45_000;
-const LIVE_STATS_CACHE_KEY = 'live-stats-v5';
+const LIVE_STATS_CACHE_KEY = 'live-stats-v6';
 const UNPAID_BATCH_FEED_LIMIT = 18;
 
 interface LiveStatsCacheEntry {
@@ -403,22 +410,35 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
-  const { data: monthlyPaidBatches } = await supabase
-    .from('customer_batches')
-    .select('total_price, account_manager_id, customer_id, customers(account_manager_id)')
-    .eq('is_paid', true)
-    .gte('created_at', monthStart);
-
-  const amRevenue = new Map<string, number>();
-  const amBatchCount = new Map<string, number>();
-  for (const cb of monthlyPaidBatches || []) {
-    const cust = cb.customers as any;
-    const amId = cb.account_manager_id || cust?.account_manager_id;
-    if (!amId) continue;
-    amRevenue.set(amId, (amRevenue.get(amId) || 0) + (Number(cb.total_price) || 0));
-    amBatchCount.set(amId, (amBatchCount.get(amId) || 0) + 1);
+  const yearMonth = leaderboardYearMonthFromDate();
+  const monthStart = leaderboardMonthStartIsoFromYearMonth(yearMonth);
+  let monthlyPaidBatches: MonthlyPaidBatchRow[] = [];
+  let excludedBatchIds = new Set<string>();
+  let manualLeaderboardLines: ManualLineRow[] = [];
+  try {
+    const w = await Promise.all([
+      fetchMonthlyPaidBatchesForLeaderboard(supabase, yearMonth),
+      loadLeaderboardExcludedBatchIds(supabase, yearMonth),
+      loadLeaderboardManualLines(supabase, yearMonth),
+    ]);
+    monthlyPaidBatches = w[0];
+    excludedBatchIds = w[1];
+    manualLeaderboardLines = w[2];
+  } catch (e) {
+    console.warn('[live-stats] leaderboard overrides niet geladen, fallback zonder uitsluitingen:', e);
+    const { data } = await supabase
+      .from('customer_batches')
+      .select('id, total_price, account_manager_id, customer_id, customers(account_manager_id)')
+      .eq('is_paid', true)
+      .gte('created_at', monthStart);
+    monthlyPaidBatches = (data || []) as MonthlyPaidBatchRow[];
   }
+
+  const { amRevenue, amBatchCount } = computeLeaderboardMapsFromDbRows(
+    monthlyPaidBatches,
+    excludedBatchIds,
+    manualLeaderboardLines,
+  );
 
   const { data: bulkCustomers } = await supabase
     .from('customers')

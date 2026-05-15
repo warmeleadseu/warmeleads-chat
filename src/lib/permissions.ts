@@ -27,6 +27,7 @@ const MENU_ACCESS: Record<string, AdminRole[]> = {
   '/admin/audit':       ['superadmin'],
   '/admin/users':       ['superadmin'],
   '/admin/am-targets':  ['superadmin'],
+  '/admin/am-leaderboard': ['superadmin'],
 };
 
 export function canAccess(role: AdminRole, path: string): boolean {

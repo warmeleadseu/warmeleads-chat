@@ -28,6 +28,7 @@ import {
   FlagIcon,
   ShieldCheckIcon,
   TrophyIcon,
+  PresentationChartLineIcon,
   EnvelopeIcon,
   AcademicCapIcon,
   UserCircleIcon,
@@ -80,6 +81,7 @@ const NAV: {
   { label: 'E-mails', href: '/admin/emails', icon: EnvelopeIcon, roles: ['superadmin'] },
   { label: 'Activiteitenlog', href: '/admin/audit', icon: ClipboardDocumentListIcon, roles: ['superadmin'] },
   { label: 'AM Targets', href: '/admin/am-targets', icon: TrophyIcon, roles: ['superadmin'] },
+  { label: 'AM leaderboard', href: '/admin/am-leaderboard', icon: PresentationChartLineIcon, roles: ['superadmin'] },
   { label: 'Testpanel', href: '/admin/testpanel', icon: BeakerIcon, roles: ['superadmin'] },
   { label: 'Gebruikers', href: '/admin/users', icon: UsersIcon, roles: ['superadmin'] },
 ];
