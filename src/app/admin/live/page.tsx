@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { adminFetch } from '@/lib/adminAuth';
 import { getSupabaseBrowserClient } from '@/lib/supabaseBrowser';
 import { audioManager } from '@/lib/celebrationSounds';
+import { TvVerticalCarousel } from './TvVerticalCarousel';
 
 /** Langzamer pollen = minder Supabase-load bij open Live-tab (Pro of niet). */
 const REFRESH_INTERVAL = 90_000;
@@ -1842,68 +1843,79 @@ export default function LiveDashboard() {
                 <p className="text-sm text-white/20">Geen actieve batches</p>
               </div>
             ) : (
-              <div className="min-h-0 flex-1 space-y-2 overflow-y-auto">
-                {data.activeBatches.map((b, i) => {
-                  const pct = b.batchSize > 0 ? Math.min(100, Math.round((b.delivered / b.batchSize) * 100)) : 0;
-                  const bc = BRANCH_COLORS[b.branch] || DEFAULT_BRANCH;
-                  const isCelebrating = celebratingBatch?.id === b.id;
-                  return (
-                    <motion.div
-                      key={b.id}
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: i * 0.05 }}
-                      className={`rounded-xl border p-3 transition-all ${
-                        isCelebrating
-                          ? 'border-emerald-500/40 bg-emerald-500/[0.08] shadow-lg shadow-emerald-500/20'
-                          : 'border-white/[0.04] bg-white/[0.02]'
-                      }`}
-                    >
-                      <div className="mb-2 flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-semibold text-white/80">{b.customer}</span>
-                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${bc.badge}`}>{b.branch}</span>
-                          {isCelebrating && <span className="text-sm">🎉</span>}
-                        </div>
-                        <div className="flex items-baseline gap-1.5">
-                          <span className="text-lg font-black tabular-nums text-white/90">{b.delivered}</span>
-                          <span className="text-xs text-white/25">/ {b.batchSize}</span>
-                        </div>
-                      </div>
-                      <div className="relative h-3 overflow-hidden rounded-full bg-white/[0.06]">
+              <TvVerticalCarousel
+                reducedMotion={reducedMotion}
+                contentKey={data.activeBatches.map(b => `${b.id}:${b.delivered}:${b.batchSize}`).join('|')}
+                gapClassName="space-y-2"
+              >
+                {(sk) => (
+                  <>
+                    {data.activeBatches.map((b, i) => {
+                      const pct = b.batchSize > 0 ? Math.min(100, Math.round((b.delivered / b.batchSize) * 100)) : 0;
+                      const bc = BRANCH_COLORS[b.branch] || DEFAULT_BRANCH;
+                      const isCelebrating = celebratingBatch?.id === b.id;
+                      return (
                         <motion.div
-                          initial={{ width: 0 }}
-                          animate={{ width: `${pct}%` }}
-                          transition={{ duration: 1.5, ease: 'easeOut' }}
-                          className={`absolute inset-y-0 left-0 rounded-full bg-gradient-to-r ${bc.bar} shadow-lg ${bc.glow}`}
+                          key={sk ? `${sk}-${b.id}` : b.id}
+                          initial={sk === 'a' ? { opacity: 0, x: -20 } : false}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={sk === 'a' ? { delay: i * 0.05 } : { duration: 0 }}
+                          className={`rounded-xl border p-3 transition-all ${
+                            isCelebrating
+                              ? 'border-emerald-500/40 bg-emerald-500/[0.08] shadow-lg shadow-emerald-500/20'
+                              : 'border-white/[0.04] bg-white/[0.02]'
+                          }`}
+                        >
+                          <div className="mb-2 flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-semibold text-white/80">{b.customer}</span>
+                              <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${bc.badge}`}>{b.branch}</span>
+                              {isCelebrating && sk === 'a' && <span className="text-sm">🎉</span>}
+                            </div>
+                            <div className="flex items-baseline gap-1.5">
+                              <span className="text-lg font-black tabular-nums text-white/90">{b.delivered}</span>
+                              <span className="text-xs text-white/25">/ {b.batchSize}</span>
+                            </div>
+                          </div>
+                          <div className="relative h-3 overflow-hidden rounded-full bg-white/[0.06]">
+                            <motion.div
+                              initial={sk === 'a' ? { width: 0 } : false}
+                              animate={{ width: `${pct}%` }}
+                              transition={{ duration: sk === 'a' ? 1.5 : 0, ease: 'easeOut' }}
+                              className={`absolute inset-y-0 left-0 rounded-full bg-gradient-to-r ${bc.bar} shadow-lg ${bc.glow}`}
+                            />
+                          </div>
+                          <div className="mt-1.5 flex items-center justify-between text-[11px] text-white/25">
+                            <div className="flex gap-3">
+                              {b.pricePerLead && <span>€{b.pricePerLead}/lead</span>}
+                              {b.leadsPerWeek && <span>{b.leadsPerWeek}/week</span>}
+                            </div>
+                            <span className="font-bold text-white/40">{pct}%</span>
+                          </div>
+                        </motion.div>
+                      );
+                    })}
+
+                    <div
+                      key={sk ? `${sk}-totaal` : 'totaal'}
+                      className="mt-1 shrink-0 rounded-xl border border-white/[0.04] bg-white/[0.02] p-2"
+                    >
+                      <div className="mb-1 flex items-center justify-between text-xs">
+                        <span className="font-medium text-white/40">Totaal voortgang</span>
+                        <span className="font-bold tabular-nums text-white/60">{batchDelivered} / {batchTotal} ({overallPct}%)</span>
+                      </div>
+                      <div className="h-2 overflow-hidden rounded-full bg-white/[0.06]">
+                        <motion.div
+                          initial={sk === 'a' ? { width: 0 } : false}
+                          animate={{ width: `${overallPct}%` }}
+                          transition={{ duration: sk === 'a' ? 2 : 0, ease: 'easeOut' }}
+                          className="h-full rounded-full bg-gradient-to-r from-brand-purple to-brand-pink"
                         />
                       </div>
-                      <div className="mt-1.5 flex items-center justify-between text-[11px] text-white/25">
-                        <div className="flex gap-3">
-                          {b.pricePerLead && <span>€{b.pricePerLead}/lead</span>}
-                          {b.leadsPerWeek && <span>{b.leadsPerWeek}/week</span>}
-                        </div>
-                        <span className="font-bold text-white/40">{pct}%</span>
-                      </div>
-                    </motion.div>
-                  );
-                })}
-
-                <div className="mt-1 shrink-0 rounded-xl border border-white/[0.04] bg-white/[0.02] p-2">
-                  <div className="mb-1 flex items-center justify-between text-xs">
-                    <span className="font-medium text-white/40">Totaal voortgang</span>
-                    <span className="font-bold tabular-nums text-white/60">{batchDelivered} / {batchTotal} ({overallPct}%)</span>
-                  </div>
-                  <div className="h-2 overflow-hidden rounded-full bg-white/[0.06]">
-                    <motion.div
-                      initial={{ width: 0 }}
-                      animate={{ width: `${overallPct}%` }}
-                      transition={{ duration: 2, ease: 'easeOut' }}
-                      className="h-full rounded-full bg-gradient-to-r from-brand-purple to-brand-pink"
-                    />
-                  </div>
-                </div>
-              </div>
+                    </div>
+                  </>
+                )}
+              </TvVerticalCarousel>
             )}
           </div>
 
@@ -1920,78 +1932,86 @@ export default function LiveDashboard() {
               <span className="text-[10px] font-semibold tabular-nums text-amber-200/80">{unpaidList.length}</span>
             </div>
 
-            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto">
+            <div className="min-h-0 flex-1">
               {unpaidList.length === 0 ? (
                 <div className="flex flex-1 flex-col items-center justify-center py-8 text-center">
                   <p className="text-sm text-white/25">Geen openstaande batches</p>
                   <p className="mt-1 text-[11px] text-white/15">Leads en afspraken met open factuur verschijnen hier</p>
                 </div>
               ) : (
-              <AnimatePresence initial={false}>
-                {unpaidList.map((row) => {
-                  const isNew = newUnpaidBatchIds.has(row.id);
-                  const bc = BRANCH_COLORS[row.branch] || DEFAULT_BRANCH;
-                  const productLabel = row.product === 'appointments' ? 'Afspraken' : 'Leads';
-                  const unitLabel = row.product === 'appointments' ? 'afspraak' : 'lead';
-                  const statusNl =
-                    row.status === 'pending_payment'
-                      ? 'Betaling open'
-                      : row.status === 'paused'
-                        ? 'Gepauzeerd'
-                        : row.status === 'active'
-                          ? 'Actief (onbetaald)'
-                          : row.status;
-                  return (
-                    <motion.div
-                      key={`${row.product}-${row.id}`}
-                      layout
-                      initial={{ opacity: 0, y: -20, scale: 0.95 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.95 }}
-                      transition={{ duration: 0.3 }}
-                      className={`rounded-lg border p-3 transition-all ${
-                        isNew
-                          ? 'border-amber-500/35 bg-amber-500/[0.08] shadow-lg shadow-amber-500/10'
-                          : 'border-white/[0.04] bg-white/[0.02]'
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            {isNew && (
-                              <motion.span
-                                initial={{ scale: 0 }}
-                                animate={{ scale: 1 }}
-                                className="shrink-0 rounded bg-amber-500 px-1.5 py-0.5 text-[9px] font-black uppercase text-slate-900"
-                              >
-                                Nieuw
-                              </motion.span>
-                            )}
-                            <p className="truncate text-sm font-semibold text-white/90">{row.customer}</p>
+                <TvVerticalCarousel
+                  reducedMotion={reducedMotion}
+                  contentKey={unpaidList.map(r => `${r.product}-${r.id}:${r.status}:${r.totalPrice}`).join('|')}
+                  gapClassName="space-y-2"
+                >
+                  {(sk) => {
+                    const rows = unpaidList.map((row) => {
+                      const isNew = newUnpaidBatchIds.has(row.id);
+                      const bc = BRANCH_COLORS[row.branch] || DEFAULT_BRANCH;
+                      const productLabel = row.product === 'appointments' ? 'Afspraken' : 'Leads';
+                      const unitLabel = row.product === 'appointments' ? 'afspraak' : 'lead';
+                      const statusNl =
+                        row.status === 'pending_payment'
+                          ? 'Betaling open'
+                          : row.status === 'paused'
+                            ? 'Gepauzeerd'
+                            : row.status === 'active'
+                              ? 'Actief (onbetaald)'
+                              : row.status;
+                      return (
+                        <motion.div
+                          key={sk ? `${sk}-${row.product}-${row.id}` : `${row.product}-${row.id}`}
+                          layout={sk === 'a'}
+                          initial={sk === 'a' ? { opacity: 0, y: -20, scale: 0.95 } : false}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={sk === 'a' ? { opacity: 0, scale: 0.95 } : undefined}
+                          transition={{ duration: 0.3 }}
+                          className={`rounded-lg border p-3 transition-all ${
+                            isNew && sk === 'a'
+                              ? 'border-amber-500/35 bg-amber-500/[0.08] shadow-lg shadow-amber-500/10'
+                              : 'border-white/[0.04] bg-white/[0.02]'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                {isNew && sk === 'a' && (
+                                  <motion.span
+                                    initial={{ scale: 0 }}
+                                    animate={{ scale: 1 }}
+                                    className="shrink-0 rounded bg-amber-500 px-1.5 py-0.5 text-[9px] font-black uppercase text-slate-900"
+                                  >
+                                    Nieuw
+                                  </motion.span>
+                                )}
+                                <p className="truncate text-sm font-semibold text-white/90">{row.customer}</p>
+                              </div>
+                              <p className="mt-1 text-[11px] text-white/35">
+                                {row.batchSize} × {productLabel.toLowerCase()}
+                                {row.unitPrice != null && (
+                                  <> · €{row.unitPrice.toLocaleString('nl-NL', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}/{unitLabel}</>
+                                )}
+                              </p>
+                              <p className="mt-0.5 text-[11px] font-medium text-amber-200/70">{statusNl}</p>
+                            </div>
+                            <div className="ml-1 flex shrink-0 flex-col items-end gap-1.5 text-right">
+                              <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${bc.badge}`}>{row.branch}</span>
+                              <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${row.product === 'appointments' ? 'bg-teal-500/25 text-teal-200' : 'bg-brand-purple/25 text-purple-200'}`}>
+                                {productLabel}
+                              </span>
+                              <span className="text-[11px] font-bold tabular-nums text-white/50">
+                                €{row.totalPrice.toLocaleString('nl-NL', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} excl.
+                              </span>
+                              <span className="text-[10px] tabular-nums text-white/20">{timeAgo(row.createdAt)}</span>
+                            </div>
                           </div>
-                          <p className="mt-1 text-[11px] text-white/35">
-                            {row.batchSize} × {productLabel.toLowerCase()}
-                            {row.unitPrice != null && (
-                              <> · €{row.unitPrice.toLocaleString('nl-NL', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}/{unitLabel}</>
-                            )}
-                          </p>
-                          <p className="mt-0.5 text-[11px] font-medium text-amber-200/70">{statusNl}</p>
-                        </div>
-                        <div className="ml-1 flex shrink-0 flex-col items-end gap-1.5 text-right">
-                          <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${bc.badge}`}>{row.branch}</span>
-                          <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${row.product === 'appointments' ? 'bg-teal-500/25 text-teal-200' : 'bg-brand-purple/25 text-purple-200'}`}>
-                            {productLabel}
-                          </span>
-                          <span className="text-[11px] font-bold tabular-nums text-white/50">
-                            €{row.totalPrice.toLocaleString('nl-NL', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} excl.
-                          </span>
-                          <span className="text-[10px] tabular-nums text-white/20">{timeAgo(row.createdAt)}</span>
-                        </div>
-                      </div>
-                    </motion.div>
-                  );
-                })}
-              </AnimatePresence>
+                        </motion.div>
+                      );
+                    });
+                    if (sk === 'b') return <>{rows}</>;
+                    return <AnimatePresence initial={false}>{rows}</AnimatePresence>;
+                  }}
+                </TvVerticalCarousel>
               )}
             </div>
           </div>

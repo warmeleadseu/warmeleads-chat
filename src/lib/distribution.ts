@@ -3,6 +3,7 @@ import { sendLeadNotification } from './email';
 import { sendNewLeadPush } from './pushNotification';
 import { syncBatchDelivered } from './batchSync';
 import { isPipelineBatchKind } from './batchKind';
+import { getLeadLimitPeriodAnchors } from './batchAssignmentCaps';
 
 /** Hard plafond in het product (gedeelde leads). */
 const MAX_ASSIGNMENTS = 3;
@@ -331,12 +332,7 @@ export async function distributeLead(
   const dailyCountByBatch: Record<string, number> = {};
 
   if (batchesWithWeeklyLimit.length > 0 || batchesWithDailyLimit.length > 0) {
-    const weekStart = new Date(now);
-    weekStart.setDate(weekStart.getDate() - weekStart.getDay() + (weekStart.getDay() === 0 ? -6 : 1));
-    weekStart.setHours(0, 0, 0, 0);
-
-    const dayStart = new Date(now);
-    dayStart.setHours(0, 0, 0, 0);
+    const { dayStart, weekStart } = getLeadLimitPeriodAnchors(now);
 
     const allLimitBatchIds = [...new Set([
       ...batchesWithWeeklyLimit.map(b => b.id),

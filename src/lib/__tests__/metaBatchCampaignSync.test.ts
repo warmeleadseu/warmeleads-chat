@@ -49,4 +49,35 @@ describe('getDesiredMetaCampaignStatus + starts_at', () => {
   it('is PAUSED when batch is full', () => {
     expect(getDesiredMetaCampaignStatus({ ...base, leads_delivered: 10, starts_at: null })).toBe('PAUSED');
   });
+
+  it('is PAUSED at daily cap (assigned_at semantics via capCounts)', () => {
+    expect(
+      getDesiredMetaCampaignStatus({ ...base, leads_per_day: 3, starts_at: null }, { todayCount: 3, weekCount: 1 }),
+    ).toBe('PAUSED');
+  });
+
+  it('is ACTIVE under daily cap', () => {
+    expect(
+      getDesiredMetaCampaignStatus({ ...base, leads_per_day: 3, starts_at: null }, { todayCount: 2, weekCount: 10 }),
+    ).toBe('ACTIVE');
+  });
+
+  it('is PAUSED at weekly cap', () => {
+    expect(
+      getDesiredMetaCampaignStatus({ ...base, leads_per_week: 5, starts_at: null }, { todayCount: 0, weekCount: 5 }),
+    ).toBe('PAUSED');
+  });
+
+  it('is PAUSED when limits are set but capCounts omitted (fail closed)', () => {
+    expect(getDesiredMetaCampaignStatus({ ...base, leads_per_day: 1, starts_at: null })).toBe('PAUSED');
+  });
+
+  it('weekly cap blocks even if daily is under', () => {
+    expect(
+      getDesiredMetaCampaignStatus(
+        { ...base, leads_per_day: 10, leads_per_week: 2, starts_at: null },
+        { todayCount: 0, weekCount: 2 },
+      ),
+    ).toBe('PAUSED');
+  });
 });

@@ -1,8 +1,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { fetchBatchAssignmentCapCounts } from '@/lib/batchAssignmentCaps';
 import { getMetaCredentials, META_GRAPH_URL } from '@/lib/meta';
 import { isPipelineBatchKind } from '@/lib/batchKind';
 
 export type MetaBatchCampaignSyncTrigger = 'finalize' | 'batch_sync' | 'admin' | 'cron';
+
+export type BatchMetaAssignmentCapCounts = { todayCount: number; weekCount: number };
 
 export type BatchMetaSyncRow = {
   id: string;
@@ -12,6 +15,8 @@ export type BatchMetaSyncRow = {
   batch_size: number | null;
   leads_delivered: number | null;
   starts_at?: string | null;
+  leads_per_day?: number | null;
+  leads_per_week?: number | null;
   meta_campaign_ids: string[] | null;
   meta_campaign_sync_enabled: boolean | null;
 };
@@ -29,9 +34,15 @@ export function hasBatchAdvertisingWindowStarted(startsAt: string | null | undef
 
 /**
  * Gewenste Meta campaign status voor alle gekoppelde campagnes van deze batch.
- * PAUSED = veilig default (onbetaald, niet actief, vol, pauze, sync uit, bulk/niche, vóór starts_at).
+ * PAUSED = veilig default (onbetaald, niet actief, vol, pauze, sync uit, bulk/niche, vóór starts_at,
+ * of dag-/weeklimiet bereikt zoals in `distributeLead` op `assigned_at`).
+ *
+ * Bij ingestelde `leads_per_day` / `leads_per_week` moet `capCounts` gezet zijn (anders PAUSED).
  */
-export function getDesiredMetaCampaignStatus(row: BatchMetaSyncRow): 'ACTIVE' | 'PAUSED' {
+export function getDesiredMetaCampaignStatus(
+  row: BatchMetaSyncRow,
+  capCounts?: BatchMetaAssignmentCapCounts | null,
+): 'ACTIVE' | 'PAUSED' {
   const ids = normalizeCampaignIds(row.meta_campaign_ids);
   if (ids.length === 0) return 'PAUSED';
   if (row.meta_campaign_sync_enabled === false) return 'PAUSED';
@@ -44,6 +55,14 @@ export function getDesiredMetaCampaignStatus(row: BatchMetaSyncRow): 'ACTIVE' | 
   if (size > 0 && delivered >= size) return 'PAUSED';
 
   if (!hasBatchAdvertisingWindowStarted(row.starts_at)) return 'PAUSED';
+
+  const lpw = row.leads_per_week != null && Number(row.leads_per_week) > 0 ? Number(row.leads_per_week) : 0;
+  const lpd = row.leads_per_day != null && Number(row.leads_per_day) > 0 ? Number(row.leads_per_day) : 0;
+  if (lpw > 0 || lpd > 0) {
+    if (!capCounts) return 'PAUSED';
+    if (lpw > 0 && capCounts.weekCount >= lpw) return 'PAUSED';
+    if (lpd > 0 && capCounts.todayCount >= lpd) return 'PAUSED';
+  }
 
   return 'ACTIVE';
 }
@@ -132,7 +151,7 @@ export async function reconcileBatchMetaCampaigns(
   const { data: row, error: fetchErr } = await supabase
     .from('customer_batches')
     .select(
-      'id, batch_kind, is_paid, status, batch_size, leads_delivered, starts_at, meta_campaign_ids, meta_campaign_sync_enabled',
+      'id, batch_kind, is_paid, status, batch_size, leads_delivered, starts_at, leads_per_day, leads_per_week, meta_campaign_ids, meta_campaign_sync_enabled',
     )
     .eq('id', batchId)
     .single();
@@ -153,7 +172,14 @@ export async function reconcileBatchMetaCampaigns(
     return;
   }
 
-  const desired = getDesiredMetaCampaignStatus(batch);
+  const lpw = batch.leads_per_week != null && Number(batch.leads_per_week) > 0 ? Number(batch.leads_per_week) : 0;
+  const lpd = batch.leads_per_day != null && Number(batch.leads_per_day) > 0 ? Number(batch.leads_per_day) : 0;
+  let capCounts: BatchMetaAssignmentCapCounts | undefined;
+  if (lpw > 0 || lpd > 0) {
+    capCounts = await fetchBatchAssignmentCapCounts(supabase, batchId);
+  }
+
+  const desired = getDesiredMetaCampaignStatus(batch, capCounts);
   const credentials = await getMetaCredentials();
 
   if (!credentials?.accessToken || !credentials?.adAccountId) {
