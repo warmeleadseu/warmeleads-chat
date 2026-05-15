@@ -20,6 +20,8 @@ import {
 import { adminFetch } from '@/lib/adminAuth';
 import { useAdmin } from './adminContext';
 import { MyPipelineWidget } from './_components/MyPipelineWidget';
+import { BatchTargetAreaBadges } from '@/components/admin/BatchTargetAreaBadges';
+import type { CustomerTargetRow } from '@/lib/batchTargetAreas';
 
 interface AMTarget {
   id: string;
@@ -55,7 +57,7 @@ interface BatchInfo {
   id: string; customer_id: string; branch: string;
   batch_size: number; leads_delivered: number; leads_per_week: number | null; status: string;
   is_paid?: boolean | null;
-  customers?: { name: string };
+  customers?: { name: string; customer_targets?: CustomerTargetRow[] | null } | null;
 }
 
 const BRANCH_COLOR_MAP: Record<string, { dot: string; light: string; text: string; bar: string }> = {
@@ -685,6 +687,9 @@ export default function AdminDashboard() {
                     </div>
                     <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
                       <div className={`h-full rounded-full transition-all duration-500 ${pct >= 100 ? 'bg-blue-500' : br.bar}`} style={{ width: `${pct}%` }} />
+                    </div>
+                    <div className="mt-1.5">
+                      <BatchTargetAreaBadges customers={b.customers} variant="compact" />
                     </div>
                   </div>
                 );

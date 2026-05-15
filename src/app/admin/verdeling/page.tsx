@@ -22,6 +22,8 @@ import {
   ChevronDownIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
+import { BatchTargetAreaBadges } from '@/components/admin/BatchTargetAreaBadges';
+import type { CustomerTargetRow } from '@/lib/batchTargetAreas';
 
 interface Assignment {
   id: string;
@@ -49,7 +51,7 @@ interface Batch {
   notes: string | null;
   created_at: string;
   completed_at: string | null;
-  customers: { name: string } | null;
+  customers: { name: string; customer_targets?: CustomerTargetRow[] | null } | null;
 }
 
 interface BranchOption { slug: string; name: string; color: string; }
@@ -430,6 +432,9 @@ export default function VerdelingPage() {
                         <span>{pct}% compleet</span>
                         <span>Nog {b.batch_size - b.leads_delivered} te leveren</span>
                       </div>
+                      <div className="mt-2 border-t border-slate-100 pt-2">
+                        <BatchTargetAreaBadges customers={b.customers} variant="compact" />
+                      </div>
                     </div>
                   );
                 })}
@@ -574,6 +579,10 @@ export default function VerdelingPage() {
                           </div>
                         </div>
 
+                        <div className="mt-2">
+                          <BatchTargetAreaBadges customers={b.customers} variant="compact" />
+                        </div>
+
                         {compensatingBatch === b.id && (
                           <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50/50 p-3">
                             <p className="mb-2 text-xs font-semibold text-amber-800">Compensatie leads toevoegen</p>
@@ -642,6 +651,7 @@ export default function VerdelingPage() {
                         <tr className="border-b border-slate-100 bg-slate-50/50">
                           <th className="px-4 py-3 text-left text-xs font-medium text-slate-500">Klant</th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-slate-500">Branche</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-slate-500">Gebied</th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-slate-500">Voortgang</th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-slate-500">Status</th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-slate-500">Per week</th>
@@ -676,6 +686,9 @@ export default function VerdelingPage() {
                               </td>
                               <td className="px-4 py-3">
                                 <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${c.light} ${c.text}`}>{br?.name || b.branch}</span>
+                              </td>
+                              <td className="max-w-[12rem] px-4 py-3 align-top">
+                                <BatchTargetAreaBadges customers={b.customers} variant="compact" />
                               </td>
                               <td className="px-4 py-3">
                                 <div className="flex items-center gap-2">

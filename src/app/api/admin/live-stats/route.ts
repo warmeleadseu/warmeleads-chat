@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { requireSuperAdmin } from '@/lib/adminAuth';
+import { adminCustomerTargetsOnly } from '@/lib/adminBatchQueries';
+import { activeTargetSummariesFromUnknown } from '@/lib/batchTargetAreas';
 
 const BREAKDOWN_LOOKBACK_DAYS = 90;
 /** Max rijen voor provincie/tak in JS-aggregatie (voorkomt full-table reads). */
@@ -12,7 +14,7 @@ const BATCHES_LIST_LIMIT = 1_500;
 const BULK_ASSIGNMENTS_MAX_PAGES = 80;
 
 const LIVE_STATS_CACHE_TTL_MS = 45_000;
-const LIVE_STATS_CACHE_KEY = 'live-stats-v3';
+const LIVE_STATS_CACHE_KEY = 'live-stats-v4';
 const UNPAID_BATCH_FEED_LIMIT = 18;
 
 interface LiveStatsCacheEntry {
@@ -57,7 +59,7 @@ export async function GET(request: NextRequest) {
     supabase.from('customers').select('id, name, is_active'),
     supabase
       .from('customer_batches')
-      .select('*, customers(name)')
+      .select(`*, ${adminCustomerTargetsOnly}`)
       .order('created_at', { ascending: false })
       .limit(BATCHES_LIST_LIMIT),
     supabase
@@ -129,7 +131,9 @@ export async function GET(request: NextRequest) {
 
   const { data: apptBatchRows } = await supabase
     .from('appointment_batches')
-    .select('id, branch, batch_size, total_price, price_per_appointment, status, is_paid, created_at, customers(name)')
+    .select(
+      `id, branch, batch_size, total_price, price_per_appointment, status, is_paid, created_at, ${adminCustomerTargetsOnly}`,
+    )
     .eq('is_paid', false)
     .order('created_at', { ascending: false })
     .limit(200);
@@ -144,6 +148,7 @@ export async function GET(request: NextRequest) {
     unitPrice: number | null;
     status: string;
     createdAt: string;
+    targetAreaLabels: string[];
   };
 
   const unpaidLeadItems: UnpaidFeed[] = batches
@@ -153,31 +158,39 @@ export async function GET(request: NextRequest) {
         b.status !== 'completed' &&
         b.status !== 'cancelled',
     )
-    .map(b => ({
-      id: String(b.id),
-      product: 'leads' as const,
-      customer: (b.customers as { name?: string } | null)?.name || '-',
-      branch: String(b.branch || ''),
-      batchSize: Number(b.batch_size) || 0,
-      totalPrice: Math.round((Number(b.total_price) || 0) * 100) / 100,
-      unitPrice: b.price_per_lead != null ? Math.round(Number(b.price_per_lead) * 100) / 100 : null,
-      status: String(b.status || ''),
-      createdAt: String(b.created_at || ''),
-    }));
+    .map(b => {
+      const cust = b.customers as { name?: string; customer_targets?: unknown } | null;
+      return {
+        id: String(b.id),
+        product: 'leads' as const,
+        customer: cust?.name || '-',
+        branch: String(b.branch || ''),
+        batchSize: Number(b.batch_size) || 0,
+        totalPrice: Math.round((Number(b.total_price) || 0) * 100) / 100,
+        unitPrice: b.price_per_lead != null ? Math.round(Number(b.price_per_lead) * 100) / 100 : null,
+        status: String(b.status || ''),
+        createdAt: String(b.created_at || ''),
+        targetAreaLabels: activeTargetSummariesFromUnknown(cust?.customer_targets),
+      };
+    });
 
   const unpaidApptItems: UnpaidFeed[] = (apptBatchRows || [])
     .filter(b => b.status !== 'completed' && b.status !== 'cancelled')
-    .map(b => ({
-      id: String(b.id),
-      product: 'appointments' as const,
-      customer: (b.customers as { name?: string } | null)?.name || '-',
-      branch: String(b.branch || ''),
-      batchSize: Number(b.batch_size) || 0,
-      totalPrice: Math.round((Number(b.total_price) || 0) * 100) / 100,
-      unitPrice: b.price_per_appointment != null ? Math.round(Number(b.price_per_appointment) * 100) / 100 : null,
-      status: String(b.status || ''),
-      createdAt: String(b.created_at || ''),
-    }));
+    .map(b => {
+      const cust = b.customers as { name?: string; customer_targets?: unknown } | null;
+      return {
+        id: String(b.id),
+        product: 'appointments' as const,
+        customer: cust?.name || '-',
+        branch: String(b.branch || ''),
+        batchSize: Number(b.batch_size) || 0,
+        totalPrice: Math.round((Number(b.total_price) || 0) * 100) / 100,
+        unitPrice: b.price_per_appointment != null ? Math.round(Number(b.price_per_appointment) * 100) / 100 : null,
+        status: String(b.status || ''),
+        createdAt: String(b.created_at || ''),
+        targetAreaLabels: activeTargetSummariesFromUnknown(cust?.customer_targets),
+      };
+    });
 
   const unpaidBatches = [...unpaidLeadItems, ...unpaidApptItems]
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
@@ -485,17 +498,21 @@ export async function GET(request: NextRequest) {
     totalLeads: totalLeadsRes.count || 0,
     activeCustomers: activeCustomers.length,
     totalCustomers: (customersRes.data || []).length,
-    activeBatches: activeBatches.map(b => ({
-      id: b.id,
-      customer: (b.customers as { name?: string } | null)?.name || '-',
-      branch: b.branch,
-      batchSize: b.batch_size,
-      delivered: b.leads_delivered,
-      pricePerLead: b.price_per_lead,
-      leadsPerDay: b.leads_per_day,
-      leadsPerWeek: b.leads_per_week,
-      notes: b.notes,
-    })),
+    activeBatches: activeBatches.map(b => {
+      const cust = b.customers as { name?: string; customer_targets?: unknown } | null;
+      return {
+        id: b.id,
+        customer: cust?.name || '-',
+        branch: b.branch,
+        batchSize: b.batch_size,
+        delivered: b.leads_delivered,
+        pricePerLead: b.price_per_lead,
+        leadsPerDay: b.leads_per_day,
+        leadsPerWeek: b.leads_per_week,
+        notes: b.notes,
+        targetAreaLabels: activeTargetSummariesFromUnknown(cust?.customer_targets),
+      };
+    }),
     completedBatchCount: completedBatches.length,
     totalRevenue: Math.round(totalRevenue * 100) / 100,
     unpaidBatches,

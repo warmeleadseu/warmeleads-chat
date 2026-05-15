@@ -17,7 +17,9 @@ export async function GET(request: NextRequest) {
   const supabase = createServerClient();
   let q = supabase
     .from('appointment_batches')
-    .select('*, customers(id, name)')
+    .select(
+      `*, customers(id, name, customer_targets(id, label, lat, lng, radius_km, is_active, target_type, provinces))`,
+    )
     .order('created_at', { ascending: false })
     .limit(500);
 

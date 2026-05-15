@@ -35,6 +35,8 @@ import {
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
 import { openCustomerPortalAsAdmin } from '@/lib/adminOpenPortal';
+import { BatchTargetAreaBadges } from '@/components/admin/BatchTargetAreaBadges';
+import type { CustomerTargetRow } from '@/lib/batchTargetAreas';
 import {
   belgianKboDigitsToVatId,
   customerRegistryShortLabel,
@@ -151,6 +153,7 @@ interface Batch {
   leads_delivered: number; status: string; is_paid?: boolean | null; notes: string | null;
   lead_filters: LeadFilter[];
   created_at: string; completed_at: string | null;
+  customers?: { name?: string; customer_targets?: CustomerTargetRow[] | null } | null;
 }
 
 interface AppointmentBatchRow {
@@ -168,6 +171,7 @@ interface AppointmentBatchRow {
   notes: string | null;
   lead_filters?: LeadFilter[];
   created_at: string;
+  customers?: { id?: string; name?: string; customer_targets?: CustomerTargetRow[] | null } | null;
 }
 
 interface BranchField {
@@ -1090,6 +1094,9 @@ function CustomerDetailPanel({
                           </div>
                           <div className="h-1.5 overflow-hidden rounded-full bg-slate-200">
                             <div className={`h-full rounded-full transition-all duration-500 ${pct >= 100 ? 'bg-blue-500' : barColor}`} style={{ width: `${pct}%` }} />
+                          </div>
+                          <div className="mt-2">
+                            <BatchTargetAreaBadges customers={b.customers} variant="compact" />
                           </div>
                         </div>
                       );
@@ -3364,6 +3371,9 @@ function BatchesPanel({ customer, branchOptions, onClose, embedded }: { customer
                         })}
                       </div>
                     )}
+                    <div className="mt-2 border-t border-slate-100 pt-2">
+                      <BatchTargetAreaBadges customers={b.customers} variant="compact" />
+                    </div>
                   </div>
                 );
               })}
@@ -3447,6 +3457,9 @@ function BatchesPanel({ customer, branchOptions, onClose, embedded }: { customer
                         })}
                       </div>
                     )}
+                    <div className="mt-2 border-t border-slate-100 pt-2">
+                      <BatchTargetAreaBadges customers={b.customers} variant="compact" />
+                    </div>
                   </div>
                 );
               })}

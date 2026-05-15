@@ -7,6 +7,7 @@ import { createInvoice, markInvoicePaid, sendNewBatchAdminEmail } from '@/lib/in
 import { isPipelineBatchKind, normalizeBatchKind } from '@/lib/batchKind';
 import { initialPipelineBatchStatus } from '@/lib/customerBatchStatus';
 import { reconcileBatchMetaCampaigns, normalizeCampaignIds } from '@/lib/metaBatchCampaignSync';
+import { adminBatchListSelect } from '@/lib/adminBatchQueries';
 
 function sanitizeMetaCampaignIdsInput(raw: unknown): string[] | undefined {
   if (raw === undefined) return undefined;
@@ -36,7 +37,7 @@ export async function GET(request: NextRequest) {
 
   let query = supabase
     .from('customer_batches')
-    .select('*, customers(name)')
+    .select(adminBatchListSelect)
     .order('created_at', { ascending: false });
 
   if (customerId) {

@@ -8,6 +8,7 @@ import { adminFetch } from '@/lib/adminAuth';
 import { getSupabaseBrowserClient } from '@/lib/supabaseBrowser';
 import { audioManager } from '@/lib/celebrationSounds';
 import { TvVerticalCarousel } from './TvVerticalCarousel';
+import { BatchTargetAreaBadges } from '@/components/admin/BatchTargetAreaBadges';
 
 /** Langzamer pollen = minder Supabase-load bij open Live-tab (Pro of niet). */
 const REFRESH_INTERVAL = 90_000;
@@ -36,7 +37,18 @@ const BRANCH_COLORS: Record<string, { bar: string; glow: string; badge: string; 
 const DEFAULT_BRANCH = { bar: 'from-purple-400 to-purple-500', glow: 'shadow-purple-500/30', badge: 'bg-purple-500/20 text-purple-300', fill: '#a78bfa' };
 
 interface PeriodStat { leads: number; prevLeads: number; assigned: number; prevAssigned: number; revenue: number; prevRevenue: number; adSpend: number; prevAdSpend: number; profit: number; prevProfit: number; }
-interface BatchInfo { id: string; customer: string; branch: string; batchSize: number; delivered: number; pricePerLead: number | null; leadsPerWeek: number | null; notes: string | null; }
+interface BatchInfo {
+  id: string;
+  customer: string;
+  branch: string;
+  batchSize: number;
+  delivered: number;
+  pricePerLead: number | null;
+  leadsPerDay?: number | null;
+  leadsPerWeek: number | null;
+  notes: string | null;
+  targetAreaLabels?: string[];
+}
 interface UnpaidBatchFeedItem {
   id: string;
   product: 'leads' | 'appointments';
@@ -47,6 +59,7 @@ interface UnpaidBatchFeedItem {
   unitPrice: number | null;
   status: string;
   createdAt: string;
+  targetAreaLabels?: string[];
 }
 interface CostMetrics { monthAdSpend: number; brutoCpl: number; effectieveCpl: number; avgAssignments: number; distributionAssignmentTotal?: number; batchRevenue: number; bulkRevenue: number; bulkAssignmentCount: number; totalProfit: number; }
 interface PaidBatch { id: string; batchId: string; customer: string; branch: string; amount: number; paidAt: string; amId: string | null; amName: string | null; amAvatarUrl?: string | null; celebrationVideoUrl: string | null; videoStart?: number | null; videoEnd?: number | null; }
@@ -1845,7 +1858,7 @@ export default function LiveDashboard() {
             ) : (
               <TvVerticalCarousel
                 reducedMotion={reducedMotion}
-                contentKey={data.activeBatches.map(b => `${b.id}:${b.delivered}:${b.batchSize}`).join('|')}
+                contentKey={data.activeBatches.map(b => `${b.id}:${b.delivered}:${b.batchSize}:${(b.targetAreaLabels || []).join(',')}`).join('|')}
                 gapClassName="space-y-2"
               >
                 {(sk) => (
@@ -1891,6 +1904,9 @@ export default function LiveDashboard() {
                               {b.leadsPerWeek && <span>{b.leadsPerWeek}/week</span>}
                             </div>
                             <span className="font-bold text-white/40">{pct}%</span>
+                          </div>
+                          <div className="mt-1.5 border-t border-white/[0.04] pt-1.5">
+                            <BatchTargetAreaBadges presetLabels={b.targetAreaLabels ?? []} variant="dark" />
                           </div>
                         </motion.div>
                       );
@@ -1941,7 +1957,7 @@ export default function LiveDashboard() {
               ) : (
                 <TvVerticalCarousel
                   reducedMotion={reducedMotion}
-                  contentKey={unpaidList.map(r => `${r.product}-${r.id}:${r.status}:${r.totalPrice}`).join('|')}
+                  contentKey={unpaidList.map(r => `${r.product}-${r.id}:${r.status}:${r.totalPrice}:${(r.targetAreaLabels || []).join(',')}`).join('|')}
                   gapClassName="space-y-2"
                 >
                   {(sk) => {
@@ -1993,6 +2009,9 @@ export default function LiveDashboard() {
                                 )}
                               </p>
                               <p className="mt-0.5 text-[11px] font-medium text-amber-200/70">{statusNl}</p>
+                              <div className="mt-1.5">
+                                <BatchTargetAreaBadges presetLabels={row.targetAreaLabels ?? []} variant="dark" />
+                              </div>
                             </div>
                             <div className="ml-1 flex shrink-0 flex-col items-end gap-1.5 text-right">
                               <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${bc.badge}`}>{row.branch}</span>

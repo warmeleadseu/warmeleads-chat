@@ -39,6 +39,8 @@ import { mergeCustomTiers } from '@/lib/pricing';
 import { isPipelineBatchKind } from '@/lib/batchKind';
 import { coerceCustomerBatchMetaCampaignIds, type MetaCampaignPick } from '@/lib/metaCampaignIds';
 import { MetaCampaignLinkerFields } from './MetaCampaignLinkerFields';
+import { BatchTargetAreaBadges } from '@/components/admin/BatchTargetAreaBadges';
+import type { CustomerTargetRow } from '@/lib/batchTargetAreas';
 
 interface LeadFilter { field: string; operator: string; value: string; values?: string[] }
 interface Compensation { amount: number; reason: string; date: string }
@@ -68,6 +70,7 @@ interface Batch {
     city?: string | null;
     postcode?: string | null;
     country?: string | null;
+    customer_targets?: CustomerTargetRow[] | null;
   } | null;
 }
 
@@ -393,6 +396,7 @@ export default function BatchesPage() {
                 <tr className="border-b border-slate-100 bg-slate-50/80 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
                   <th className="px-4 py-3">Klant</th>
                   <th className="px-4 py-3">Branche</th>
+                  <th className="px-4 py-3">Targetgebieden</th>
                   <th className="px-4 py-3">Voortgang</th>
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3 text-right">€/lead</th>
@@ -417,6 +421,9 @@ export default function BatchesPage() {
                       </td>
                       <td className="px-4 py-3">
                         <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${c.light} ${c.text}`}>{br.name}</span>
+                      </td>
+                      <td className="max-w-[14rem] px-4 py-3 align-top">
+                        <BatchTargetAreaBadges customers={b.customers} variant="compact" />
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
@@ -555,6 +562,9 @@ export default function BatchesPage() {
                         <TrashIcon className="h-4 w-4" />
                       </button>
                     </div>
+                  </div>
+                  <div className="mb-2">
+                    <BatchTargetAreaBadges customers={b.customers} variant="compact" />
                   </div>
                   {/* Progress */}
                   <div className="mb-2">
@@ -1054,6 +1064,10 @@ function BatchDetailPanel({ batchId, branches, onClose, onEdit, onListRefresh }:
                 )}
 
                 <BatchDetailMetaBlock batch={batch} onReload={reloadDetailBatch} onListRefresh={onListRefresh} />
+
+                <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3.5">
+                  <BatchTargetAreaBadges customers={batch.customers} showHeading />
+                </div>
 
                 <div className="text-xs text-slate-400">
                   Aangemaakt op {fmtDate(batch.created_at)}

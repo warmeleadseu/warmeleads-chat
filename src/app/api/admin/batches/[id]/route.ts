@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
+import { adminBatchListSelect } from '@/lib/adminBatchQueries';
 
 export async function GET(
   request: NextRequest,
@@ -15,9 +16,7 @@ export async function GET(
   const [batchRes, ordersRes, invoicesRes] = await Promise.all([
     supabase
       .from('customer_batches')
-      .select(
-        '*, customers(id, name, contact_person, email, phone, city, postcode, country)',
-      )
+      .select(adminBatchListSelect)
       .eq('id', id)
       .single(),
     supabase
