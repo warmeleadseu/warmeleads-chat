@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { requireSuperAdmin } from '@/lib/adminAuth';
+import { calculateAmTargetProgress, calendarMonthDateBounds } from '@/lib/amTargetsProgress';
 import { leaderboardYearMonthFromDate, leaderboardMonthStartIsoFromYearMonth } from '@/lib/amLeaderboardRules';
 import {
   computeLeaderboardMapsFromDbRows,
@@ -171,6 +172,89 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    const { first: rangeFirst, last: rangeLast } = calendarMonthDateBounds(yearMonth);
+    const { data: rawTargets, error: tgtErr } = await supabase
+      .from('am_targets')
+      .select(
+        'id, admin_user_id, label, target_type, target_value, bonus_amount, period_start, period_end, notes, status',
+      )
+      .lte('period_start', rangeLast)
+      .gte('period_end', rangeFirst);
+
+    if (tgtErr) throw new Error(tgtErr.message);
+
+    const TARGET_TYPE_LABELS: Record<string, string> = {
+      revenue: 'Omzet',
+      batches: 'Batches',
+      new_customers: 'Nieuwe klanten',
+      leads_delivered: 'Leads geleverd',
+    };
+
+    type EnrichedTarget = {
+      id: string;
+      admin_user_id: string;
+      label: string;
+      target_type: string;
+      target_type_label: string;
+      target_value: number;
+      bonus_amount: number;
+      period_start: string;
+      period_end: string;
+      notes: string | null;
+      status: string;
+      current_value: number;
+      progress_pct: number;
+    };
+
+    const enrichedTargets: EnrichedTarget[] = await Promise.all(
+      (rawTargets || []).map(
+        async (t: {
+          id: string;
+          admin_user_id: string;
+          label: string;
+          target_type: string;
+          target_value: unknown;
+          bonus_amount: unknown;
+          period_start: string;
+          period_end: string;
+          notes: string | null;
+          status: string;
+        }) => {
+          const current = await calculateAmTargetProgress(
+            supabase,
+            t.admin_user_id,
+            t.target_type,
+            t.period_start,
+            t.period_end,
+          );
+          const tv = Number(t.target_value) || 0;
+          const pct = tv > 0 ? Math.round((current / tv) * 100) : 0;
+          return {
+            id: t.id,
+            admin_user_id: t.admin_user_id,
+            label: t.label,
+            target_type: t.target_type,
+            target_type_label: TARGET_TYPE_LABELS[t.target_type] || t.target_type,
+            target_value: tv,
+            bonus_amount: Number(t.bonus_amount) || 0,
+            period_start: t.period_start,
+            period_end: t.period_end,
+            notes: t.notes,
+            status: t.status,
+            current_value: current,
+            progress_pct: Math.min(pct, 999),
+          };
+        },
+      ),
+    );
+
+    const targetsByAm = new Map<string, EnrichedTarget[]>();
+    for (const t of enrichedTargets) {
+      const arr = targetsByAm.get(t.admin_user_id) || [];
+      arr.push(t);
+      targetsByAm.set(t.admin_user_id, arr);
+    }
+
     const accountManagers = (allAms.data || []).map(am => {
       const pack = byAm[am.id] || { included_batches: [], excluded_batches: [], manual_lines: [] };
       const rev = amRevenue.get(am.id) || 0;
@@ -183,6 +267,7 @@ export async function GET(request: NextRequest) {
         bulk_revenue: bulk,
         leaderboard_total: Math.round((rev + bulk) * 100) / 100,
         leaderboard_batches: batchesN,
+        targets: targetsByAm.get(am.id) || [],
         ...pack,
       };
     });

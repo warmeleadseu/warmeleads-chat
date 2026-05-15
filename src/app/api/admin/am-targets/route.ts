@@ -1,65 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
-
-async function calculateProgress(
-  supabase: ReturnType<typeof createServerClient>,
-  adminUserId: string,
-  targetType: string,
-  periodStart: string,
-  periodEnd: string,
-) {
-  const endPlusOne = new Date(periodEnd);
-  endPlusOne.setDate(endPlusOne.getDate() + 1);
-  const endISO = endPlusOne.toISOString();
-
-  switch (targetType) {
-    case 'revenue': {
-      const { data } = await supabase
-        .from('customer_batches')
-        .select('total_price')
-        .eq('account_manager_id', adminUserId)
-        .gte('created_at', periodStart)
-        .lt('created_at', endISO);
-      return (data || []).reduce((sum: number, b: any) => sum + (Number(b.total_price) || 0), 0);
-    }
-    case 'batches': {
-      const { count } = await supabase
-        .from('customer_batches')
-        .select('id', { count: 'exact', head: true })
-        .eq('account_manager_id', adminUserId)
-        .gte('created_at', periodStart)
-        .lt('created_at', endISO);
-      return count || 0;
-    }
-    case 'new_customers': {
-      const { count } = await supabase
-        .from('customers')
-        .select('id', { count: 'exact', head: true })
-        .eq('account_manager_id', adminUserId)
-        .gte('created_at', periodStart)
-        .lt('created_at', endISO);
-      return count || 0;
-    }
-    case 'leads_delivered': {
-      const { data: custRows } = await supabase
-        .from('customers')
-        .select('id')
-        .eq('account_manager_id', adminUserId);
-      const custIds = (custRows || []).map((c: any) => c.id);
-      if (custIds.length === 0) return 0;
-      const { count } = await supabase
-        .from('lead_assignments')
-        .select('id', { count: 'exact', head: true })
-        .in('customer_id', custIds)
-        .gte('assigned_at', periodStart)
-        .lt('assigned_at', endISO);
-      return count || 0;
-    }
-    default:
-      return 0;
-  }
-}
+import { calculateAmTargetProgress } from '@/lib/amTargetsProgress';
 
 export async function GET(request: NextRequest) {
   const admin = await verifyAdmin(request);
@@ -89,7 +31,7 @@ export async function GET(request: NextRequest) {
 
   const enriched = await Promise.all(
     (targets || []).map(async (t: any) => {
-      const current = await calculateProgress(supabase, t.admin_user_id, t.target_type, t.period_start, t.period_end);
+      const current = await calculateAmTargetProgress(supabase, t.admin_user_id, t.target_type, t.period_start, t.period_end);
       const pct = Number(t.target_value) > 0 ? Math.round((current / Number(t.target_value)) * 100) : 0;
 
       // One-time target-hit celebration

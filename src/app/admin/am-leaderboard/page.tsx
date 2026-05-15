@@ -25,6 +25,21 @@ type ManualLine = {
   created_at: string;
 };
 
+type AmTargetRow = {
+  id: string;
+  label: string;
+  target_type: string;
+  target_type_label: string;
+  target_value: number;
+  bonus_amount: number;
+  period_start: string;
+  period_end: string;
+  notes: string | null;
+  status: string;
+  current_value: number;
+  progress_pct: number;
+};
+
 type AmRow = {
   id: string;
   name: string;
@@ -32,6 +47,7 @@ type AmRow = {
   bulk_revenue: number;
   leaderboard_total: number;
   leaderboard_batches: number;
+  targets: AmTargetRow[];
   included_batches: BatchLine[];
   excluded_batches: BatchLine[];
   manual_lines: ManualLine[];
@@ -47,6 +63,17 @@ function monthOptions(): string[] {
     out.push(`${y}-${String(m).padStart(2, '0')}`);
   }
   return out;
+}
+
+const TARGET_STATUS: Record<string, string> = {
+  active: 'Actief',
+  completed: 'Behaald',
+  missed: 'Niet behaald',
+  cancelled: 'Geannuleerd',
+};
+
+function formatTargetDate(d: string) {
+  return new Date(d + 'T00:00:00').toLocaleDateString('nl-NL', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
 function eur(n: number) {
@@ -81,7 +108,12 @@ export default function AmLeaderboardPage() {
         setRows([]);
         return;
       }
-      setRows((data as { account_managers?: AmRow[] }).account_managers || []);
+      setRows(
+        ((data as { account_managers?: AmRow[] }).account_managers || []).map(r => ({
+          ...r,
+          targets: r.targets ?? [],
+        })),
+      );
       setBulkTrunc(Boolean((data as { bulk_assignments_truncated?: boolean }).bulk_assignments_truncated));
     } catch {
       setError('Netwerkfout');
@@ -201,6 +233,14 @@ export default function AmLeaderboardPage() {
         <p className="mt-1 max-w-3xl text-sm text-slate-600">
           Zelfde bron als het live-dashboard: betaalde batches in de kalendermaand (plus bulk-schatting), met
           superadmin-uitsluitingen en handmatige correcties. Wijzigingen zijn zichtbaar in het activiteitenlog.
+          <span className="mt-1 block text-slate-500">
+            <strong>AM targets</strong> met een periode die deze maand raakt: voortgang volgens de{' '}
+            <a href="/admin/am-targets" className="font-medium text-brand-purple underline">
+              AM-targets
+            </a>
+            -definitie (o.a. omzet/batches op <code className="text-xs">customer_batches.account_manager_id</code>, kan
+            afwijken van leaderboard-attributie).
+          </span>
         </p>
       </div>
 
@@ -309,6 +349,60 @@ export default function AmLeaderboardPage() {
                 </button>
                 {expanded && (
                   <div className="border-t border-slate-100 px-4 py-3 text-sm">
+                    {am.targets.length > 0 && (
+                      <>
+                        <p className="mb-2 text-xs font-bold uppercase tracking-wide text-violet-700">
+                          AM targets (periode raakt {yearMonth})
+                        </p>
+                        <ul className="mb-4 space-y-2">
+                          {am.targets.map(t => (
+                            <li
+                              key={t.id}
+                              className="rounded-lg border border-violet-100 bg-violet-50/40 px-3 py-2 text-xs text-slate-800"
+                            >
+                              <div className="flex flex-wrap items-start justify-between gap-2">
+                                <div>
+                                  <span className="font-semibold text-slate-900">{t.label}</span>
+                                  <span className="ml-2 text-slate-500">
+                                    {t.target_type_label} · {formatTargetDate(t.period_start)} –{' '}
+                                    {formatTargetDate(t.period_end)}
+                                  </span>
+                                  <span
+                                    className={`ml-2 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${
+                                      t.status === 'active'
+                                        ? 'bg-emerald-100 text-emerald-800'
+                                        : t.status === 'completed'
+                                          ? 'bg-sky-100 text-sky-800'
+                                          : 'bg-slate-100 text-slate-600'
+                                    }`}
+                                  >
+                                    {TARGET_STATUS[t.status] || t.status}
+                                  </span>
+                                </div>
+                                <span className="shrink-0 font-bold tabular-nums text-violet-900">{t.progress_pct}%</span>
+                              </div>
+                              <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-slate-600">
+                                <span>
+                                  Stand:{' '}
+                                  <strong className="tabular-nums text-slate-900">
+                                    {t.target_type === 'revenue' ? eur(t.current_value) : t.current_value}
+                                  </strong>{' '}
+                                  / doel{' '}
+                                  <strong className="tabular-nums text-slate-900">
+                                    {t.target_type === 'revenue' ? eur(t.target_value) : t.target_value}
+                                  </strong>
+                                </span>
+                                {t.bonus_amount > 0 && (
+                                  <span className="text-amber-800">Bonus bij halen: {eur(t.bonus_amount)}</span>
+                                )}
+                              </div>
+                              {t.notes && <p className="mt-1 text-[11px] text-slate-500">{t.notes}</p>}
+                            </li>
+                          ))}
+                        </ul>
+                      </>
+                    )}
+
                     <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-400">Meetellende batches</p>
                     {am.included_batches.length === 0 ? (
                       <p className="text-slate-500">Geen.</p>
