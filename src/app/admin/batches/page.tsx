@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -37,6 +37,8 @@ import { openCustomerPortalAsAdmin } from '@/lib/adminOpenPortal';
 import { useAdmin } from '../adminContext';
 import { mergeCustomTiers } from '@/lib/pricing';
 import { isPipelineBatchKind } from '@/lib/batchKind';
+import { coerceCustomerBatchMetaCampaignIds, type MetaCampaignPick } from '@/lib/metaCampaignIds';
+import { MetaCampaignLinkerFields } from './MetaCampaignLinkerFields';
 
 interface LeadFilter { field: string; operator: string; value: string; values?: string[] }
 interface Compensation { amount: number; reason: string; date: string }
@@ -406,6 +408,7 @@ export default function BatchesPage() {
                   const br = getBranch(b.branch);
                   const c = COLOR_MAP[br.color] || COLOR_MAP.slate;
                   const compTotal = (Array.isArray(b.compensations) ? b.compensations : []).reduce((s: number, x: Compensation) => s + x.amount, 0);
+                  const metaLinkCount = coerceCustomerBatchMetaCampaignIds(b.meta_campaign_ids).length;
                   return (
                     <tr key={b.id} onClick={() => setDetailBatchId(b.id)} className="group cursor-pointer transition hover:bg-slate-50/50">
                       <td className="px-4 py-3">
@@ -452,10 +455,10 @@ export default function BatchesPage() {
                               Start {formatStartsAt(b.starts_at)}
                             </span>
                           )}
-                          {isPipelineBatchKind(b.batch_kind) && (b.meta_campaign_ids?.length ?? 0) > 0 && (
+                          {isPipelineBatchKind(b.batch_kind) && metaLinkCount > 0 && (
                             <span className="inline-flex w-fit items-center gap-0.5 rounded-md bg-indigo-50 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-800">
                               <GlobeAltIcon className="h-3 w-3 shrink-0" aria-hidden />
-                              Meta · {b.meta_campaign_ids!.length}
+                              Meta · {metaLinkCount}
                             </span>
                           )}
                         </div>
@@ -509,6 +512,7 @@ export default function BatchesPage() {
               const br = getBranch(b.branch);
               const c = COLOR_MAP[br.color] || COLOR_MAP.slate;
               const mobileCompTotal = (Array.isArray(b.compensations) ? b.compensations : []).reduce((s: number, x: Compensation) => s + x.amount, 0);
+              const metaLinkCount = coerceCustomerBatchMetaCampaignIds(b.meta_campaign_ids).length;
               return (
                 <div key={b.id} onClick={() => setDetailBatchId(b.id)} className={`cursor-pointer rounded-xl border p-4 shadow-sm transition hover:shadow-md ${b.status === 'completed' ? 'border-blue-100 bg-blue-50/30' : b.status === 'paused' ? 'border-amber-100 bg-amber-50/20' : b.status === 'pending_payment' ? 'border-orange-100 bg-orange-50/25' : 'border-slate-200 bg-white'}`}>
                   <div className="mb-2 flex items-start justify-between">
@@ -530,10 +534,10 @@ export default function BatchesPage() {
                             Start {formatStartsAt(b.starts_at)}
                           </span>
                         )}
-                        {isPipelineBatchKind(b.batch_kind) && (b.meta_campaign_ids?.length ?? 0) > 0 && (
+                        {isPipelineBatchKind(b.batch_kind) && metaLinkCount > 0 && (
                           <span className="inline-flex items-center gap-0.5 rounded-md bg-indigo-50 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-800">
                             <GlobeAltIcon className="h-3 w-3 shrink-0" aria-hidden />
-                            Meta · {b.meta_campaign_ids!.length}
+                            Meta · {metaLinkCount}
                           </span>
                         )}
                       </div>
@@ -633,7 +637,7 @@ export default function BatchesPage() {
   );
 }
 
-/** Meta koppeling + zoeken in detail-drawer (zelfde API als batch bewerken). */
+/** Meta koppeling in detail-drawer (zelfde API als batch bewerken). */
 function BatchDetailMetaBlock({
   batch,
   onReload,
@@ -643,87 +647,25 @@ function BatchDetailMetaBlock({
   onReload: () => Promise<void>;
   onListRefresh?: () => void;
 }) {
-  const [metaCampaignPicks, setMetaCampaignPicks] = useState<{ id: string; name: string }[]>(() =>
-    Array.isArray(batch.meta_campaign_ids) && batch.meta_campaign_ids.length > 0
-      ? batch.meta_campaign_ids.map(id => ({ id, name: id }))
-      : [],
+  const serverIds = coerceCustomerBatchMetaCampaignIds(batch.meta_campaign_ids);
+  const serverIdsKey = serverIds.join(',');
+
+  const [metaCampaignPicks, setMetaCampaignPicks] = useState<MetaCampaignPick[]>(() =>
+    serverIds.map(id => ({ id, name: id })),
   );
   const [metaSyncEnabled, setMetaSyncEnabled] = useState(() => batch.meta_campaign_sync_enabled !== false);
-  const [metaSearchQuery, setMetaSearchQuery] = useState('');
-  const [metaSearchResults, setMetaSearchResults] = useState<{ id: string; name: string; effective_status?: string }[]>(
-    [],
-  );
-  const [metaSearchLoading, setMetaSearchLoading] = useState(false);
-  const [metaSearchError, setMetaSearchError] = useState<string | null>(null);
-  const [metaSearchOpen, setMetaSearchOpen] = useState(false);
-  const [manualMetaId, setManualMetaId] = useState('');
   const [savingMeta, setSavingMeta] = useState(false);
-  const metaSearchWrapRef = useRef<HTMLDivElement>(null);
-
-  const idsKey = (batch.meta_campaign_ids || []).join(',');
 
   useEffect(() => {
     if (!isPipelineBatchKind(batch.batch_kind)) return;
-    if (!batch.meta_campaign_ids?.length) {
-      setMetaCampaignPicks([]);
-      return;
-    }
-    adminFetch(`/api/admin/meta-campaigns/lookup?ids=${encodeURIComponent(batch.meta_campaign_ids.join(','))}`)
-      .then(r => (r.ok ? r.json() : Promise.reject(new Error('lookup failed'))))
-      .then((d: { campaigns?: { id: string; name: string }[] }) => {
-        if (d.campaigns?.length) setMetaCampaignPicks(d.campaigns);
-      })
-      .catch(() => {});
-  }, [batch.id, idsKey]);
+    const ids = coerceCustomerBatchMetaCampaignIds(batch.meta_campaign_ids);
+    if (ids.length === 0) setMetaCampaignPicks([]);
+    else setMetaCampaignPicks(ids.map(id => ({ id, name: id })));
+  }, [batch.batch_kind, batch.id, serverIdsKey]);
 
   useEffect(() => {
     setMetaSyncEnabled(batch.meta_campaign_sync_enabled !== false);
   }, [batch.meta_campaign_sync_enabled, batch.id]);
-
-  useEffect(() => {
-    if (!isPipelineBatchKind(batch.batch_kind)) {
-      setMetaSearchResults([]);
-      setMetaSearchLoading(false);
-      return;
-    }
-    const q = metaSearchQuery.trim();
-    if (q.length < 2) {
-      setMetaSearchResults([]);
-      setMetaSearchError(null);
-      setMetaSearchLoading(false);
-      return;
-    }
-    setMetaSearchLoading(true);
-    setMetaSearchError(null);
-    const t = window.setTimeout(() => {
-      adminFetch(`/api/admin/meta-campaigns/search?q=${encodeURIComponent(q)}`)
-        .then(async r => {
-          const d = await r.json().catch(() => ({}));
-          if (!r.ok) throw new Error(d.error || 'Zoeken mislukt');
-          return d as { campaigns?: { id: string; name: string; effective_status?: string }[] };
-        })
-        .then(d => {
-          setMetaSearchResults(d.campaigns || []);
-        })
-        .catch(e => {
-          setMetaSearchResults([]);
-          setMetaSearchError(e instanceof Error ? e.message : 'Zoeken mislukt');
-        })
-        .finally(() => setMetaSearchLoading(false));
-    }, 400);
-    return () => window.clearTimeout(t);
-  }, [metaSearchQuery, batch.batch_kind]);
-
-  useEffect(() => {
-    if (!metaSearchOpen) return;
-    const close = (e: MouseEvent) => {
-      if (metaSearchWrapRef.current && !metaSearchWrapRef.current.contains(e.target as Node)) {
-        setMetaSearchOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', close);
-    return () => document.removeEventListener('mousedown', close);
-  }, [metaSearchOpen]);
 
   const saveMeta = async () => {
     setSavingMeta(true);
@@ -753,145 +695,36 @@ function BatchDetailMetaBlock({
 
   return (
     <div className="rounded-xl border border-indigo-200 bg-indigo-50/50 p-3.5">
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm font-semibold text-indigo-900">Meta campagnes</p>
-        {metaCampaignPicks.length > 0 && (
-          <span className="text-[10px] font-medium text-indigo-700">
-            {metaCampaignPicks.length} gekoppeld
-          </span>
-        )}
-      </div>
-      <p className="mb-2 text-[11px] text-indigo-800/90">
-        Zoek op naam (zoals in Ads Manager). Bij <strong>pauzeren</strong> van de batch worden gekoppelde campagnes in Meta ook gepauzeerd.
-      </p>
-
-      {metaCampaignPicks.length > 0 && (
-        <div className="mb-2 flex flex-wrap gap-1.5">
-          {metaCampaignPicks.map(p => (
-            <span
-              key={p.id}
-              className="inline-flex max-w-full items-center gap-1 rounded-full border border-indigo-200 bg-white px-2.5 py-1 text-[11px] text-indigo-950"
-            >
-              <span className="truncate font-medium" title={p.name}>{p.name}</span>
-              <span className="shrink-0 font-mono text-[10px] text-slate-500">({p.id})</span>
-              <button
-                type="button"
-                onClick={() => setMetaCampaignPicks(prev => prev.filter(x => x.id !== p.id))}
-                className="shrink-0 rounded p-0.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
-                aria-label="Verwijderen"
-              >
-                <XMarkIcon className="h-3.5 w-3.5" />
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
-
-      <div ref={metaSearchWrapRef} className="relative mb-2">
-        <label className="mb-1 block text-[11px] font-medium text-indigo-900/80">Campagne zoeken</label>
-        <input
-          type="text"
-          value={metaSearchQuery}
-          onChange={e => {
-            setMetaSearchQuery(e.target.value);
-            setMetaSearchOpen(true);
-          }}
-          onFocus={() => setMetaSearchOpen(true)}
-          placeholder="Typ een deel van de campagnenaam…"
-          autoComplete="off"
-          className="w-full rounded-lg border border-indigo-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-400"
-        />
-        {metaSearchOpen && (metaSearchQuery.trim().length >= 2 || metaSearchLoading || metaSearchError) && (
-          <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-48 overflow-auto rounded-lg border border-indigo-200 bg-white py-1 shadow-lg">
-            {metaSearchLoading && <p className="px-3 py-2 text-xs text-slate-500">Zoeken…</p>}
-            {!metaSearchLoading && metaSearchError && (
-              <p className="px-3 py-2 text-xs text-rose-600">{metaSearchError}</p>
-            )}
-            {!metaSearchLoading &&
-              !metaSearchError &&
-              metaSearchResults.length === 0 &&
-              metaSearchQuery.trim().length >= 2 && (
-                <p className="px-3 py-2 text-xs text-slate-500">Geen resultaten.</p>
+      <MetaCampaignLinkerFields
+        title="Meta campagnes"
+        helpText={
+          <>
+            Zoek op naam (zoals in Ads Manager). Je kunt <strong>meerdere</strong> campagnes koppelen (zelfde batch, zelfde
+            pauze/active-logica). Bij <strong>pauzeren</strong> van de batch worden alle gekoppelde campagnes in Meta
+            mee gepauzeerd.
+          </>
+        }
+        picks={metaCampaignPicks}
+        setPicks={setMetaCampaignPicks}
+        syncEnabled={metaSyncEnabled}
+        setSyncEnabled={setMetaSyncEnabled}
+        syncStatusSlot={
+          (batch.meta_sync_last_error || batch.meta_sync_last_success_at) ? (
+            <div className="mt-2 space-y-0.5 border-t border-indigo-200/60 pt-2 text-[10px] text-indigo-900/70">
+              {batch.meta_sync_last_success_at && (
+                <p>Laatste sync: {new Date(batch.meta_sync_last_success_at).toLocaleString('nl-NL', { timeZone: 'Europe/Amsterdam' })}</p>
               )}
-            {!metaSearchLoading &&
-              metaSearchResults.map(c => {
-                const already = metaCampaignPicks.some(p => p.id === c.id);
-                return (
-                  <button
-                    key={c.id}
-                    type="button"
-                    disabled={already || metaCampaignPicks.length >= 10}
-                    onClick={() => {
-                      if (already || metaCampaignPicks.length >= 10) return;
-                      setMetaCampaignPicks(prev => [...prev, { id: c.id, name: c.name }]);
-                      setMetaSearchQuery('');
-                      setMetaSearchResults([]);
-                      setMetaSearchOpen(false);
-                    }}
-                    className="flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left text-sm hover:bg-indigo-50 disabled:opacity-40"
-                  >
-                    <span className="font-medium text-slate-900">{c.name}</span>
-                    <span className="font-mono text-[10px] text-slate-500">
-                      {c.id}
-                      {c.effective_status ? ` · ${c.effective_status}` : ''}
-                    </span>
-                  </button>
-                );
-              })}
-          </div>
-        )}
-      </div>
-
-      <div className="mb-2 flex flex-wrap items-end gap-2 rounded-md border border-dashed border-indigo-200/80 bg-white/70 px-2 py-2">
-        <div className="min-w-0 flex-1">
-          <p className="mb-0.5 text-[10px] font-medium text-indigo-900/70">Handmatig ID</p>
-          <input
-            type="text"
-            value={manualMetaId}
-            onChange={e => setManualMetaId(e.target.value.replace(/\D/g, ''))}
-            placeholder="Numeriek ID"
-            className="w-full rounded border border-indigo-100 px-2 py-1 font-mono text-xs text-slate-900"
-          />
-        </div>
-        <button
-          type="button"
-          onClick={() => {
-            const id = manualMetaId.trim();
-            if (!/^\d+$/.test(id) || metaCampaignPicks.length >= 10) return;
-            if (metaCampaignPicks.some(p => p.id === id)) return;
-            setMetaCampaignPicks(prev => [...prev, { id, name: id }]);
-            setManualMetaId('');
-          }}
-          className="shrink-0 rounded bg-indigo-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700"
-        >
-          Toevoegen
-        </button>
-      </div>
-
-      <label className="mb-2 flex cursor-pointer items-center gap-2 text-sm text-indigo-950">
-        <input
-          type="checkbox"
-          checked={metaSyncEnabled}
-          onChange={e => setMetaSyncEnabled(e.target.checked)}
-          className="rounded border-indigo-300 text-indigo-600 focus:ring-indigo-500"
-        />
-        Meta sync aan
-      </label>
-
-      {(batch.meta_sync_last_error || batch.meta_sync_last_success_at) && (
-        <div className="mb-2 space-y-0.5 text-[10px] text-indigo-900/70">
-          {batch.meta_sync_last_success_at && (
-            <p>Laatste sync: {new Date(batch.meta_sync_last_success_at).toLocaleString('nl-NL', { timeZone: 'Europe/Amsterdam' })}</p>
-          )}
-          {batch.meta_sync_last_error && <p className="text-rose-700">{batch.meta_sync_last_error}</p>}
-        </div>
-      )}
+              {batch.meta_sync_last_error && <p className="text-rose-700">{batch.meta_sync_last_error}</p>}
+            </div>
+          ) : null
+        }
+      />
 
       <button
         type="button"
         onClick={saveMeta}
         disabled={savingMeta}
-        className="w-full rounded-lg bg-indigo-600 py-2 text-sm font-bold text-white transition hover:bg-indigo-700 disabled:opacity-50"
+        className="mt-3 w-full rounded-lg bg-indigo-600 py-2 text-sm font-bold text-white transition hover:bg-indigo-700 disabled:opacity-50"
       >
         {savingMeta ? 'Opslaan…' : 'Koppelingen opslaan'}
       </button>
@@ -1681,77 +1514,20 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
   const [editStartTime, setEditStartTime] = useState(
     initStartsAt ? initStartsAt.toLocaleTimeString('nl-NL', { timeZone: 'Europe/Amsterdam', hour: '2-digit', minute: '2-digit', hour12: false }) : '09:00'
   );
-  const [metaCampaignPicks, setMetaCampaignPicks] = useState<{ id: string; name: string }[]>(() =>
-    Array.isArray(batch.meta_campaign_ids) && batch.meta_campaign_ids.length > 0
-      ? batch.meta_campaign_ids.map(id => ({ id, name: id }))
-      : [],
+  const editServerMetaIds = coerceCustomerBatchMetaCampaignIds(batch.meta_campaign_ids);
+  const editServerMetaKey = editServerMetaIds.join(',');
+
+  const [metaCampaignPicks, setMetaCampaignPicks] = useState<MetaCampaignPick[]>(() =>
+    editServerMetaIds.map(id => ({ id, name: id })),
   );
   const [metaSyncEnabled, setMetaSyncEnabled] = useState(() => batch.meta_campaign_sync_enabled !== false);
-  const [metaSearchQuery, setMetaSearchQuery] = useState('');
-  const [metaSearchResults, setMetaSearchResults] = useState<{ id: string; name: string; effective_status?: string }[]>(
-    [],
-  );
-  const [metaSearchLoading, setMetaSearchLoading] = useState(false);
-  const [metaSearchError, setMetaSearchError] = useState<string | null>(null);
-  const [metaSearchOpen, setMetaSearchOpen] = useState(false);
-  const [manualMetaId, setManualMetaId] = useState('');
-  const metaSearchWrapRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!isPipelineBatchKind(batch.batch_kind) || !batch.meta_campaign_ids?.length) return;
-    const ids = batch.meta_campaign_ids.join(',');
-    adminFetch(`/api/admin/meta-campaigns/lookup?ids=${encodeURIComponent(ids)}`)
-      .then(r => (r.ok ? r.json() : Promise.reject(new Error('lookup failed'))))
-      .then((d: { campaigns?: { id: string; name: string }[] }) => {
-        if (d.campaigns?.length) setMetaCampaignPicks(d.campaigns);
-      })
-      .catch(() => {});
-  }, [batch.id, batch.meta_campaign_ids]);
-
-  useEffect(() => {
-    if (!isPipelineBatchKind(batch.batch_kind)) {
-      setMetaSearchResults([]);
-      setMetaSearchLoading(false);
-      return;
-    }
-    const q = metaSearchQuery.trim();
-    if (q.length < 2) {
-      setMetaSearchResults([]);
-      setMetaSearchError(null);
-      setMetaSearchLoading(false);
-      return;
-    }
-    setMetaSearchLoading(true);
-    setMetaSearchError(null);
-    const t = window.setTimeout(() => {
-      adminFetch(`/api/admin/meta-campaigns/search?q=${encodeURIComponent(q)}`)
-        .then(async r => {
-          const d = await r.json().catch(() => ({}));
-          if (!r.ok) throw new Error(d.error || 'Zoeken mislukt');
-          return d as { campaigns?: { id: string; name: string; effective_status?: string }[] };
-        })
-        .then(d => {
-          setMetaSearchResults(d.campaigns || []);
-        })
-        .catch(e => {
-          setMetaSearchResults([]);
-          setMetaSearchError(e instanceof Error ? e.message : 'Zoeken mislukt');
-        })
-        .finally(() => setMetaSearchLoading(false));
-    }, 400);
-    return () => window.clearTimeout(t);
-  }, [metaSearchQuery, batch.batch_kind]);
-
-  useEffect(() => {
-    if (!metaSearchOpen) return;
-    const close = (e: MouseEvent) => {
-      if (metaSearchWrapRef.current && !metaSearchWrapRef.current.contains(e.target as Node)) {
-        setMetaSearchOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', close);
-    return () => document.removeEventListener('mousedown', close);
-  }, [metaSearchOpen]);
+    if (!isPipelineBatchKind(batch.batch_kind)) return;
+    const ids = coerceCustomerBatchMetaCampaignIds(batch.meta_campaign_ids);
+    if (ids.length === 0) setMetaCampaignPicks([]);
+    else setMetaCampaignPicks(ids.map(id => ({ id, name: id })));
+  }, [batch.batch_kind, batch.id, editServerMetaKey]);
 
   useEffect(() => {
     adminFetch(`/api/admin/branches/fields?branch=${batch.branch}`)
@@ -1968,138 +1744,34 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
           </div>
 
           {isPipelineBatchKind(batch.batch_kind) && (
-            <div className="rounded-lg border border-indigo-200 bg-indigo-50/40 p-3">
-              <p className="mb-2 text-sm font-semibold text-indigo-900">Meta campagnes (batch)</p>
-              <p className="mb-2 text-[11px] text-indigo-800/90">
-                Zoek op <strong>campagnenaam</strong> zoals in Meta Ads Manager. Gekoppelde campagnes gaan op{' '}
-                <strong>ACTIVE</strong> pas als de batch betaald en actief is, nog niet vol, het <strong>startmoment</strong> bereikt is, en sync aan staat.
-              </p>
-
-              <div ref={metaSearchWrapRef} className="relative mb-3">
-                <label className="mb-1 block text-[11px] font-medium text-indigo-900/80">Campagne zoeken</label>
-                <input
-                  type="text"
-                  value={metaSearchQuery}
-                  onChange={e => {
-                    setMetaSearchQuery(e.target.value);
-                    setMetaSearchOpen(true);
-                  }}
-                  onFocus={() => setMetaSearchOpen(true)}
-                  placeholder="Bijv. Thuisbatterij leads Q2"
-                  autoComplete="off"
-                  className="w-full rounded-lg border border-indigo-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-400"
-                />
-                {metaSearchOpen && (metaSearchQuery.trim().length >= 2 || metaSearchLoading || metaSearchError) && (
-                  <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-52 overflow-auto rounded-lg border border-indigo-200 bg-white py-1 shadow-lg">
-                    {metaSearchLoading && (
-                      <p className="px-3 py-2 text-xs text-slate-500">Zoeken in Meta…</p>
+            <MetaCampaignLinkerFields
+              title="Meta campagnes (batch)"
+              helpText={
+                <>
+                  Zoek op <strong>campagnenaam</strong> zoals in Meta Ads Manager. Je kunt <strong>meerdere</strong> campagnes
+                  koppelen; die worden samen op <strong>ACTIVE</strong> of <strong>PAUSED</strong> gezet op basis van deze batch
+                  (betaald, actief, niet vol, <strong>startmoment</strong>, sync aan, dag/week-limieten).
+                </>
+              }
+              searchPlaceholder="Bijv. Thuisbatterij leads Q2"
+              picks={metaCampaignPicks}
+              setPicks={setMetaCampaignPicks}
+              syncEnabled={metaSyncEnabled}
+              setSyncEnabled={setMetaSyncEnabled}
+              syncStatusSlot={
+                (batch.meta_sync_last_error || batch.meta_sync_last_success_at) ? (
+                  <div className="mt-2 space-y-1 border-t border-indigo-200/60 pt-2 text-[10px] text-indigo-900/70">
+                    {batch.meta_sync_last_success_at && (
+                      <p>
+                        Laatste sync OK:{' '}
+                        {new Date(batch.meta_sync_last_success_at).toLocaleString('nl-NL', { timeZone: 'Europe/Amsterdam' })}
+                      </p>
                     )}
-                    {!metaSearchLoading && metaSearchError && (
-                      <p className="px-3 py-2 text-xs text-rose-600">{metaSearchError}</p>
-                    )}
-                    {!metaSearchLoading &&
-                      !metaSearchError &&
-                      metaSearchResults.length === 0 &&
-                      metaSearchQuery.trim().length >= 2 && (
-                        <p className="px-3 py-2 text-xs text-slate-500">Geen campagnes gevonden (max. doorzocht in je ad account).</p>
-                      )}
-                    {!metaSearchLoading &&
-                      metaSearchResults.map(c => {
-                        const already = metaCampaignPicks.some(p => p.id === c.id);
-                        return (
-                          <button
-                            key={c.id}
-                            type="button"
-                            disabled={already || metaCampaignPicks.length >= 10}
-                            onClick={() => {
-                              if (already || metaCampaignPicks.length >= 10) return;
-                              setMetaCampaignPicks(prev => [...prev, { id: c.id, name: c.name }]);
-                              setMetaSearchQuery('');
-                              setMetaSearchResults([]);
-                              setMetaSearchOpen(false);
-                            }}
-                            className="flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left text-sm hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-40"
-                          >
-                            <span className="font-medium text-slate-900">{c.name}</span>
-                            <span className="font-mono text-[10px] text-slate-500">
-                              {c.id}
-                              {c.effective_status ? ` · ${c.effective_status}` : ''}
-                            </span>
-                          </button>
-                        );
-                      })}
+                    {batch.meta_sync_last_error && <p className="text-rose-700">Fout: {batch.meta_sync_last_error}</p>}
                   </div>
-                )}
-              </div>
-
-              {metaCampaignPicks.length > 0 && (
-                <div className="mb-3 flex flex-wrap gap-1.5">
-                  {metaCampaignPicks.map(p => (
-                    <span
-                      key={p.id}
-                      className="inline-flex max-w-full items-center gap-1 rounded-full border border-indigo-200 bg-white px-2.5 py-1 text-[11px] text-indigo-950"
-                    >
-                      <span className="truncate font-medium" title={p.name}>{p.name}</span>
-                      <span className="shrink-0 font-mono text-[10px] text-slate-500">({p.id})</span>
-                      <button
-                        type="button"
-                        onClick={() => setMetaCampaignPicks(prev => prev.filter(x => x.id !== p.id))}
-                        className="shrink-0 rounded p-0.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
-                        aria-label="Verwijderen"
-                      >
-                        <XMarkIcon className="h-3.5 w-3.5" />
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              )}
-
-              <div className="mb-3 rounded-md border border-dashed border-indigo-200/80 bg-white/60 px-2 py-2">
-                <p className="mb-1 text-[10px] font-medium text-indigo-900/70">Handmatig campagne-ID (fallback)</p>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={manualMetaId}
-                    onChange={e => setManualMetaId(e.target.value.replace(/\D/g, ''))}
-                    placeholder="Alleen cijfers"
-                    className="min-w-0 flex-1 rounded border border-indigo-100 px-2 py-1 font-mono text-xs text-slate-900"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const id = manualMetaId.trim();
-                      if (!/^\d+$/.test(id) || metaCampaignPicks.length >= 10) return;
-                      if (metaCampaignPicks.some(p => p.id === id)) return;
-                      setMetaCampaignPicks(prev => [...prev, { id, name: id }]);
-                      setManualMetaId('');
-                    }}
-                    className="shrink-0 rounded bg-indigo-600 px-2 py-1 text-xs font-semibold text-white hover:bg-indigo-700"
-                  >
-                    Toevoegen
-                  </button>
-                </div>
-              </div>
-
-              <label className="flex cursor-pointer items-center gap-2 text-sm text-indigo-950">
-                <input
-                  type="checkbox"
-                  checked={metaSyncEnabled}
-                  onChange={e => setMetaSyncEnabled(e.target.checked)}
-                  className="rounded border-indigo-300 text-indigo-600 focus:ring-indigo-500"
-                />
-                Meta sync aan (uit = campagnes naar gepauzeerd)
-              </label>
-              {(batch.meta_sync_last_error || batch.meta_sync_last_success_at) && (
-                <div className="mt-2 space-y-1 border-t border-indigo-200/60 pt-2 text-[10px] text-indigo-900/70">
-                  {batch.meta_sync_last_success_at && (
-                    <p>Laatste sync OK: {new Date(batch.meta_sync_last_success_at).toLocaleString('nl-NL', { timeZone: 'Europe/Amsterdam' })}</p>
-                  )}
-                  {batch.meta_sync_last_error && (
-                    <p className="text-rose-700">Fout: {batch.meta_sync_last_error}</p>
-                  )}
-                </div>
-              )}
-            </div>
+                ) : null
+              }
+            />
           )}
 
           {/* Lookback info (read-only) */}
@@ -2254,6 +1926,8 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
   const [scheduledStart, setScheduledStart] = useState(false);
   const [startsAtDate, setStartsAtDate] = useState('');
   const [startsAtTime, setStartsAtTime] = useState('09:00');
+  const [metaCampaignPicks, setMetaCampaignPicks] = useState<MetaCampaignPick[]>([]);
+  const [metaSyncEnabled, setMetaSyncEnabled] = useState(true);
 
   useEffect(() => {
     if ((form.batch_product === 'leads' && form.batch_delivery === 'niche_research') || !form.branch) {
@@ -2471,6 +2145,12 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
           starts_at: startsAtISO,
           batch_kind: form.batch_delivery === 'bulk' ? 'bulk_leads' : 'leads',
           ...(form.is_paid ? {} : { send_payment_email: form.send_payment_email }),
+          ...(form.batch_delivery === 'pipeline'
+            ? {
+                meta_campaign_ids: metaCampaignPicks.map(p => p.id).slice(0, 10),
+                meta_campaign_sync_enabled: metaSyncEnabled,
+              }
+            : {}),
         }),
       });
       if (res.ok) onCreated();
@@ -2789,6 +2469,23 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
             <div className="rounded-lg border border-fuchsia-200 bg-fuchsia-50/40 p-3 text-[11px] text-fuchsia-950">
               Lookback en automatische lead-toewijzing gelden niet voor onderzoeksbatches. Eenmalig pakket à €1.000 excl. btw (zelfde als portaal).
             </div>
+          )}
+
+          {!isAppointments && form.batch_delivery === 'pipeline' && (
+            <MetaCampaignLinkerFields
+              title="Meta campagnes (optioneel)"
+              helpText={
+                <>
+                  Koppel één of <strong>meerdere</strong> Meta-campagnes. Ze worden samen op <strong>ACTIVE</strong> of{' '}
+                  <strong>PAUSED</strong> gezet volgens deze batch (zoals bij bewerken). Leeg laten kan; je kunt later altijd
+                  alsnog koppelen.
+                </>
+              }
+              picks={metaCampaignPicks}
+              setPicks={setMetaCampaignPicks}
+              syncEnabled={metaSyncEnabled}
+              setSyncEnabled={setMetaSyncEnabled}
+            />
           )}
 
           {/* Startdatum */}

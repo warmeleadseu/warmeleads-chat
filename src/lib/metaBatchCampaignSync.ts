@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { fetchBatchAssignmentCapCounts } from '@/lib/batchAssignmentCaps';
+import { coerceCustomerBatchMetaCampaignIds } from '@/lib/metaCampaignIds';
 import { getMetaCredentials, META_GRAPH_URL } from '@/lib/meta';
 import { isPipelineBatchKind } from '@/lib/batchKind';
 
@@ -67,13 +68,12 @@ export function getDesiredMetaCampaignStatus(
   return 'ACTIVE';
 }
 
-export function normalizeCampaignIds(raw: string[] | null | undefined): string[] {
-  if (!raw || !Array.isArray(raw)) return [];
+/** Graph campaign ID's: ondersteunt array, JSON-string, Postgres `{…}`-literal. */
+export function normalizeCampaignIds(raw: string[] | null | undefined | unknown): string[] {
+  const flat = coerceCustomerBatchMetaCampaignIds(raw);
   const out: string[] = [];
   const seen = new Set<string>();
-  for (const x of raw) {
-    const s = String(x).trim();
-    if (!/^\d+$/.test(s)) continue;
+  for (const s of flat) {
     if (seen.has(s)) continue;
     seen.add(s);
     out.push(s);

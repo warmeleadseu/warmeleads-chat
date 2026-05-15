@@ -6,7 +6,7 @@ import { checkBatchMilestones } from '@/lib/batchNotifications';
 import { createInvoice, markInvoicePaid, sendNewBatchAdminEmail } from '@/lib/invoice';
 import { isPipelineBatchKind, normalizeBatchKind } from '@/lib/batchKind';
 import { initialPipelineBatchStatus } from '@/lib/customerBatchStatus';
-import { reconcileBatchMetaCampaigns } from '@/lib/metaBatchCampaignSync';
+import { reconcileBatchMetaCampaigns, normalizeCampaignIds } from '@/lib/metaBatchCampaignSync';
 
 function sanitizeMetaCampaignIdsInput(raw: unknown): string[] | undefined {
   if (raw === undefined) return undefined;
@@ -191,27 +191,35 @@ export async function POST(request: NextRequest) {
   const { data: custRow } = await supabase.from('customers').select('name, account_manager_id, country, vat_id').eq('id', customer_id).single();
 
   const batchIsPaid = body.is_paid === true;
-  const { data, error } = await supabase
-    .from('customer_batches')
-    .insert({
-      customer_id,
-      branch,
-      batch_size,
-      price_per_lead,
-      total_price,
-      leads_per_week: leads_per_week || null,
-      leads_per_day: leads_per_day || null,
-      notes,
-      lead_filters: sanitizedFilters,
-      status: initialPipelineBatchStatus(batchIsPaid),
-      is_paid: batchIsPaid,
-      lookback_days: lookback,
-      starts_at: startsAtValue,
-      account_manager_id: custRow?.account_manager_id || null,
-      batch_kind,
-    })
-    .select()
-    .single();
+
+  const insertPayload: Record<string, unknown> = {
+    customer_id,
+    branch,
+    batch_size,
+    price_per_lead,
+    total_price,
+    leads_per_week: leads_per_week || null,
+    leads_per_day: leads_per_day || null,
+    notes,
+    lead_filters: sanitizedFilters,
+    status: initialPipelineBatchStatus(batchIsPaid),
+    is_paid: batchIsPaid,
+    lookback_days: lookback,
+    starts_at: startsAtValue,
+    account_manager_id: custRow?.account_manager_id || null,
+    batch_kind,
+  };
+
+  if (isPipelineBatchKind(batch_kind)) {
+    if (body.meta_campaign_ids !== undefined) {
+      insertPayload.meta_campaign_ids = sanitizeMetaCampaignIdsInput(body.meta_campaign_ids) ?? [];
+    }
+    if (body.meta_campaign_sync_enabled !== undefined) {
+      insertPayload.meta_campaign_sync_enabled = body.meta_campaign_sync_enabled === true;
+    }
+  }
+
+  const { data, error } = await supabase.from('customer_batches').insert(insertPayload).select().single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
@@ -255,6 +263,12 @@ export async function POST(request: NextRequest) {
     } catch (e) {
       console.error('[admin/batches] invoice creation failed:', e);
     }
+  }
+
+  if (isPipelineBatchKind(batch_kind) && normalizeCampaignIds((data as { meta_campaign_ids?: unknown }).meta_campaign_ids).length > 0) {
+    reconcileBatchMetaCampaigns(supabase, data.id, 'admin').catch(e =>
+      console.error('[admin/batches POST] meta reconcile:', e),
+    );
   }
 
   return NextResponse.json(data, { status: 201 });
