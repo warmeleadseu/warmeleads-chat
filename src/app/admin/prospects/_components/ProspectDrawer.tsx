@@ -25,6 +25,7 @@ import {
   BuildingOffice2Icon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
+import { openCustomerPortalAsAdmin } from '@/lib/adminOpenPortal';
 import {
   PROSPECT_STATUSES,
   PROSPECT_STATUS_LABELS,
@@ -197,18 +198,10 @@ export function ProspectDrawer({
     setOpeningPortal(true);
     setDrawerError(null);
     try {
-      const res = await adminFetch('/api/admin/impersonate', {
-        method: 'POST',
-        body: JSON.stringify({ customer_id: customerId }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setDrawerError(data?.error || 'Portaal openen mislukt');
+      const r = await openCustomerPortalAsAdmin(customerId);
+      if (!r.ok) {
+        setDrawerError(r.error);
         return;
-      }
-      const token = data.token as string | undefined;
-      if (token) {
-        window.open(`/portal?impersonate=${encodeURIComponent(token)}`, '_blank');
       }
     } catch {
       setDrawerError('Portaal openen mislukt');

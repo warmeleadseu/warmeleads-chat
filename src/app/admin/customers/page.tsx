@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo, Suspense } from 'react';
 import Link from 'next/link';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -33,6 +34,7 @@ import {
   ArrowTopRightOnSquareIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
+import { openCustomerPortalAsAdmin } from '@/lib/adminOpenPortal';
 import {
   belgianKboDigitsToVatId,
   customerRegistryShortLabel,
@@ -170,6 +172,54 @@ interface CustomerWithExtra extends Customer {
   active_batch_count?: number;
 }
 
+const OPEN_CUSTOMER_UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/** Leest `?open=<uuid>`, laadt klant voor het slide-over paneel en ruimt de query op. */
+function CustomerDeepLinkEffect({
+  onDone,
+}: {
+  onDone: (payload: { customer: CustomerWithExtra | null; error: string | null }) => void;
+}) {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const openId = searchParams.get('open');
+
+  useEffect(() => {
+    if (!openId) return;
+
+    const cleanUrl = () => {
+      router.replace('/admin/customers', { scroll: false });
+    };
+
+    if (!OPEN_CUSTOMER_UUID_RE.test(openId)) {
+      onDone({ customer: null, error: 'Ongeldige klantlink' });
+      cleanUrl();
+      return;
+    }
+
+    let cancelled = false;
+
+    (async () => {
+      const res = await adminFetch(`/api/admin/customers/${openId}`);
+      const data = (await res.json().catch(() => ({}))) as { customer?: CustomerWithExtra; error?: string };
+      if (cancelled) return;
+      if (res.ok && data.customer) {
+        onDone({ customer: data.customer, error: null });
+      } else {
+        onDone({ customer: null, error: data.error || 'Klant niet gevonden' });
+      }
+      cleanUrl();
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [openId, router, onDone]);
+
+  return null;
+}
+
 const BRANCH_COLOR_MAP: Record<string, string> = {
   emerald: 'bg-emerald-50 text-emerald-600', sky: 'bg-sky-50 text-sky-600', amber: 'bg-amber-50 text-amber-600',
   purple: 'bg-purple-50 text-purple-600', rose: 'bg-rose-50 text-rose-600', cyan: 'bg-cyan-50 text-cyan-600',
@@ -201,6 +251,7 @@ export default function CustomersPage() {
   const [showNew, setShowNew] = useState(false);
   const [bulkComposeOpen, setBulkComposeOpen] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerWithExtra | null>(null);
+  const [deepLinkError, setDeepLinkError] = useState<string | null>(null);
   const [previewReminder, setPreviewReminder] = useState<Customer | null>(null);
   const [sendingReminder, setSendingReminder] = useState<string | null>(null);
   const [reminderSent, setReminderSent] = useState<Set<string>>(new Set());
@@ -218,6 +269,11 @@ export default function CustomersPage() {
 
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const portalUrl = typeof window !== 'undefined' ? `${window.location.origin}/portal` : 'https://www.warmeleads.eu/portal';
+
+  const onDeepLinkDone = useCallback((payload: { customer: CustomerWithExtra | null; error: string | null }) => {
+    if (payload.customer) setSelectedCustomer(payload.customer);
+    setDeepLinkError(payload.error);
+  }, []);
 
   useEffect(() => {
     if (searchTimer.current) clearTimeout(searchTimer.current);
@@ -306,6 +362,23 @@ export default function CustomersPage() {
 
   return (
     <div>
+      <Suspense fallback={null}>
+        <CustomerDeepLinkEffect onDone={onDeepLinkDone} />
+      </Suspense>
+
+      {deepLinkError && (
+        <div className="mb-4 flex items-start justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          <span>{deepLinkError}</span>
+          <button
+            type="button"
+            onClick={() => setDeepLinkError(null)}
+            className="shrink-0 font-medium text-red-700 underline hover:text-red-900"
+          >
+            Sluiten
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -529,14 +602,10 @@ export default function CustomersPage() {
                           <div className="flex items-center justify-end gap-1" onClick={e => e.stopPropagation()}>
                             {c.portal_active && c.has_password && c.email && (
                               <button
-                                onClick={() => {
-                                  (async () => {
-                                    const res = await adminFetch('/api/admin/impersonate', {
-                                      method: 'POST',
-                                      body: JSON.stringify({ customer_id: c.id }),
-                                    });
-                                    if (res.ok) { const { token } = await res.json(); window.open(`/portal?impersonate=${token}`, '_blank'); }
-                                  })();
+                                onClick={async e => {
+                                  e.stopPropagation();
+                                  const r = await openCustomerPortalAsAdmin(c.id);
+                                  if (!r.ok) alert(r.error);
                                 }}
                                 className="rounded-lg p-1.5 text-slate-400 transition hover:bg-amber-50 hover:text-amber-600"
                                 title="Bekijk portaal"
@@ -701,7 +770,7 @@ export default function CustomersPage() {
             accountManagers={accountManagers}
             portalUrl={portalUrl}
             reminderSent={reminderSent}
-            onClose={() => setSelectedCustomer(null)}
+            onClose={() => { setSelectedCustomer(null); setDeepLinkError(null); }}
             onEdit={(c) => { setSelectedCustomer(null); setEditing(c); }}
             onDelete={async (id, name) => {
               if (!confirm(`${name} verwijderen? Leads van deze klant worden niet verwijderd.`)) return;
@@ -820,8 +889,8 @@ function CustomerDetailPanel({
   const impersonate = async () => {
     setImpersonating(true);
     try {
-      const res = await adminFetch('/api/admin/impersonate', { method: 'POST', body: JSON.stringify({ customer_id: c.id }) });
-      if (res.ok) { const { token } = await res.json(); window.open(`/portal?impersonate=${token}`, '_blank'); }
+      const r = await openCustomerPortalAsAdmin(c.id);
+      if (!r.ok) alert(r.error);
     } catch { /* ignore */ }
     setImpersonating(false);
   };

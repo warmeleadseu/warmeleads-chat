@@ -6,6 +6,7 @@ import { logAudit } from '@/lib/audit';
 import { buildPhoneSearchIlikeClauses, sanitizePostgrestIlike } from '@/lib/phoneSearch';
 import { sanitizeCustomerWritePayload, customersHaveCountryColumn } from '@/lib/customerCountrySupport';
 import { recalcOpenInvoicesForCustomer } from '@/lib/recalcOpenInvoices';
+import { enrichCustomersWithCounts } from '@/lib/adminCustomerEnrichment';
 
 const DEFAULT_LIMIT = 25;
 const MAX_LIMIT = 100;
@@ -84,55 +85,11 @@ export async function GET(request: NextRequest) {
   }
 
   const total = totalCount || 0;
-  const customerIds = (customers || []).map(c => c.id);
 
-  const leadCounts: Record<string, number> = {};
-  const bulkCounts: Record<string, number> = {};
-  const batchCounts: Record<string, number> = {};
-
-  if (customerIds.length > 0) {
-    const [assignRes, batchRes] = await Promise.all([
-      supabase.rpc('count_assignments_by_customer', { customer_ids: customerIds }),
-      supabase
-        .from('customer_batches')
-        .select('customer_id, status')
-        .in('customer_id', customerIds)
-        .eq('status', 'active'),
-    ]);
-
-    if (assignRes.data) {
-      for (const row of assignRes.data) {
-        leadCounts[row.customer_id] = row.total_count || 0;
-        bulkCounts[row.customer_id] = row.bulk_count || 0;
-      }
-    } else {
-      const { data: assignments } = await supabase
-        .from('lead_assignments')
-        .select('customer_id, batch_id')
-        .in('customer_id', customerIds);
-      if (assignments) {
-        for (const a of assignments) {
-          leadCounts[a.customer_id] = (leadCounts[a.customer_id] || 0) + 1;
-          if (!a.batch_id) bulkCounts[a.customer_id] = (bulkCounts[a.customer_id] || 0) + 1;
-        }
-      }
-    }
-
-    if (batchRes.data) {
-      for (const b of batchRes.data) {
-        batchCounts[b.customer_id] = (batchCounts[b.customer_id] || 0) + 1;
-      }
-    }
-  }
-
-  const enriched = (customers || []).map(c => ({
-    ...c,
-    lead_count: leadCounts[c.id] || 0,
-    bulk_lead_count: bulkCounts[c.id] || 0,
-    active_batch_count: batchCounts[c.id] || 0,
-    has_password: !!c.password_hash,
-    password_hash: undefined,
-  }));
+  const enriched = await enrichCustomersWithCounts(
+    supabase,
+    (customers || []) as Array<Record<string, unknown> & { id: string; password_hash?: string | null }>,
+  );
 
   let kpis = undefined;
   if (page === 1) {

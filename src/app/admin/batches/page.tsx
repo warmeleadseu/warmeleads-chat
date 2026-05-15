@@ -27,8 +27,11 @@ import {
   ExclamationCircleIcon,
   InformationCircleIcon,
   ShoppingCartIcon,
+  ArrowTopRightOnSquareIcon,
+  GlobeAltIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
+import { openCustomerPortalAsAdmin } from '@/lib/adminOpenPortal';
 import { useAdmin } from '../adminContext';
 import { mergeCustomTiers } from '@/lib/pricing';
 
@@ -613,6 +616,12 @@ function BatchDetailPanel({ batchId, branches, onClose, onEdit }: {
   const [reminderFeedback, setReminderFeedback] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
   const [sendingInvoice, setSendingInvoice] = useState(false);
   const [invoiceSendFeedback, setInvoiceSendFeedback] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
+  const [openingPortal, setOpeningPortal] = useState(false);
+  const [portalOpenError, setPortalOpenError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setPortalOpenError(null);
+  }, [batchId]);
 
   useEffect(() => {
     setLoading(true);
@@ -710,6 +719,15 @@ function BatchDetailPanel({ batchId, branches, onClose, onEdit }: {
     }
   };
 
+  const openCustomerPortal = async () => {
+    if (!batch?.customer_id) return;
+    setOpeningPortal(true);
+    setPortalOpenError(null);
+    const r = await openCustomerPortalAsAdmin(batch.customer_id);
+    setOpeningPortal(false);
+    if (!r.ok) setPortalOpenError(r.error);
+  };
+
   const getBranch = (slug: string) => {
     if (slug === 'niche_research') return { name: 'Niche-onderzoek', color: 'purple' };
     const br = branches.find(b => b.slug === slug);
@@ -745,16 +763,50 @@ function BatchDetailPanel({ batchId, branches, onClose, onEdit }: {
         {/* Header bar */}
         <div className="shrink-0 border-b border-slate-100">
           <div className="h-[3px] bg-warmeleads-gradient" />
-          <div className="flex items-center justify-between px-5 py-4">
-            <div>
+          <div className="flex items-start justify-between gap-3 px-5 py-4">
+            <div className="min-w-0 flex-1">
               <h2 className="text-lg font-bold text-slate-900">Batch details</h2>
               {batch && (
-                <p className="mt-0.5 text-xs text-slate-500">{batch.customers?.name || 'Onbekend'} &middot; {getBranch(batch.branch).name}</p>
+                <p className="mt-0.5 flex flex-wrap items-center gap-x-1 text-xs text-slate-500">
+                  <Link
+                    href={`/admin/customers?open=${batch.customer_id}`}
+                    className="inline-flex max-w-[min(100%,18rem)] items-center gap-0.5 font-medium text-brand-purple hover:underline"
+                    title="Klant openen in klantenbeheer"
+                  >
+                    <span className="truncate">{batch.customers?.name || 'Onbekend'}</span>
+                    <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
+                  </Link>
+                  <span className="shrink-0">&middot;</span>
+                  <span className="shrink-0">{getBranch(batch.branch).name}</span>
+                </p>
+              )}
+              {portalOpenError && (
+                <p className="mt-1.5 text-[11px] font-medium text-red-600" role="alert">
+                  {portalOpenError}
+                </p>
               )}
             </div>
-            <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100">
-              <XMarkIcon className="h-5 w-5" />
-            </button>
+            <div className="flex shrink-0 items-center gap-1">
+              {batch?.customer_id && (
+                <button
+                  type="button"
+                  onClick={openCustomerPortal}
+                  disabled={loading || openingPortal}
+                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
+                  title="Klantportaal openen (ingelogd als klant)"
+                >
+                  {openingPortal ? (
+                    <ArrowPathIcon className="h-4 w-4 animate-spin text-slate-500" aria-hidden />
+                  ) : (
+                    <GlobeAltIcon className="h-4 w-4 text-slate-500" aria-hidden />
+                  )}
+                  Portaal
+                </button>
+              )}
+              <button type="button" onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100" aria-label="Sluiten">
+                <XMarkIcon className="h-5 w-5" />
+              </button>
+            </div>
           </div>
         </div>
 
