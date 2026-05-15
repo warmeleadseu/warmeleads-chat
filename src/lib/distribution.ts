@@ -74,10 +74,11 @@ async function fetchAllLeadIdsAssignedToCustomer(
 }
 
 /**
- * Pipeline (leads): per klant + branche maximaal één actieve batch ontvangt nieuwe toewijzingen —
- * de oudste batch die nog niet vol is en waarvan starts_at al bereikt is (FIFO / strict queue).
+ * Pipeline (FIFO): per klant + branche maximaal één actieve batch ontvangt nieuwe toewijzingen —
+ * de oudste batch die nog niet vol is en waarvan starts_at al bereikt is.
+ * `isPipelineBatchOpenForInbound`: deze batch mag nog leads ontvangen (niet vol, start bereikt).
  */
-function isPipelineBatchOpenForInbound<T extends {
+export function isPipelineBatchOpenForInbound<T extends {
   leads_delivered: number | null;
   batch_size: number;
   starts_at?: string | null;

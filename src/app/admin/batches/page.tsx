@@ -247,6 +247,16 @@ export default function BatchesPage() {
         )}
       </AnimatePresence>
 
+      <div className="mb-5 flex gap-3 rounded-xl border border-sky-200 bg-sky-50/90 px-4 py-3 text-sm text-sky-950">
+        <InformationCircleIcon className="h-5 w-5 shrink-0 text-sky-600" />
+        <p>
+          <Link href="/admin/batch-levering" className="font-semibold text-sky-900 underline decoration-sky-400/60 hover:decoration-sky-800">
+            Levering batches
+          </Link>
+          {' — '}zie in één oogopslag of klanten hun <strong>afgesproken maximum per dag</strong> halen (incl. tips bij achterstand).
+        </p>
+      </div>
+
       {/* Header */}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
