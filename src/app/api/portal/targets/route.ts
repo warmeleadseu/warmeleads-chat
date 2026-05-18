@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyCustomer, portalUnauthorized } from '@/lib/portalAuth';
 import { createServerClient } from '@/lib/supabase';
+import { leadMatchesAnyProvinceTarget } from '@/lib/provinceTargetMatch';
 
 function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371;
@@ -37,23 +38,40 @@ export async function GET(request: NextRequest) {
   const PORTAL_TARGETS_MAX_ROWS = 25_000;
   const PAGE_SIZE = 1000;
 
-  interface LeadGeo { lead_id: string; lat: number | null; lng: number | null; provincie?: string }
+  interface LeadGeo {
+    lead_id: string;
+    lat: number | null;
+    lng: number | null;
+    provincie?: string;
+    land?: string;
+    postcode?: string;
+  }
   const leadsGeo: LeadGeo[] = [];
   let partial = false;
   for (let offset = 0; offset < PORTAL_TARGETS_MAX_ROWS; offset += PAGE_SIZE) {
     const take = Math.min(PAGE_SIZE, PORTAL_TARGETS_MAX_ROWS - offset);
     const { data: assignments } = await supabase
       .from('lead_assignments')
-      .select(`lead_id, leads!inner(lat, lng${hasProvinceTargets ? ', provincie' : ''})`)
+      .select(`lead_id, leads!inner(lat, lng${hasProvinceTargets ? ', provincie, land, postcode' : ''})`)
       .eq('customer_id', customer.id)
       .order('assigned_at', { ascending: false })
       .range(offset, offset + take - 1);
 
     if (!assignments?.length) break;
-    for (const row of assignments as unknown as { lead_id: string; leads: { lat: number | null; lng: number | null; provincie?: string } }[]) {
+    for (const row of assignments as unknown as {
+      lead_id: string;
+      leads: { lat: number | null; lng: number | null; provincie?: string; land?: string; postcode?: string };
+    }[]) {
       const lead = row.leads;
       if (lead) {
-        leadsGeo.push({ lead_id: row.lead_id, lat: lead.lat, lng: lead.lng, provincie: lead.provincie });
+        leadsGeo.push({
+          lead_id: row.lead_id,
+          lat: lead.lat,
+          lng: lead.lng,
+          provincie: lead.provincie,
+          land: lead.land,
+          postcode: lead.postcode,
+        });
       }
     }
     if (assignments.length < take) break;
@@ -65,7 +83,7 @@ export async function GET(request: NextRequest) {
     if (target.target_type === 'province') {
       const provs: string[] = Array.isArray(target.provinces) ? target.provinces : [];
       for (const lead of leadsGeo) {
-        if (lead.provincie && provs.includes(lead.provincie)) count++;
+        if (leadMatchesAnyProvinceTarget(lead, provs)) count++;
       }
     } else if (target.lat != null && target.lng != null) {
       for (const lead of leadsGeo) {

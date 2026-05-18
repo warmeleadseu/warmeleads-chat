@@ -5,6 +5,7 @@ import { sendEmail } from '@/lib/email';
 import { rateLimit, getClientIp } from '@/lib/rateLimit';
 import { syncDemoLeadAssignmentsForCustomer } from '@/lib/demoPortalLeads';
 import { escapeForIlikeExact, pickEmailRow } from '@/lib/emailDbLookup';
+import { formatProvinceTargetLabel, normalizeProvinceTargetTokens } from '@/lib/provinceTargetMatch';
 
 const MAX_ATTEMPTS = 5;
 const WINDOW_MS = 60 * 60 * 1000;
@@ -83,11 +84,12 @@ export async function POST(request: NextRequest) {
     if (Array.isArray(targets) && targets.length > 0) {
       const targetRows = targets.map((t: { type: string; provinces?: string[]; label?: string; lat?: number; lng?: number; radius_km?: number }) => {
         if (t.type === 'province') {
+          const provinces = normalizeProvinceTargetTokens(t.provinces || [], 'NL');
           return {
             customer_id: customer.id,
-            label: (t.provinces || []).join(', '),
+            label: provinces.map(formatProvinceTargetLabel).join(', '),
             target_type: 'province',
-            provinces: t.provinces || [],
+            provinces,
             lat: null,
             lng: null,
             radius_km: 0,

@@ -1,8 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { PROVINCES_BE, PROVINCES_NL } from './provinces';
+import { PROVINCE_OPTIONS_BE, PROVINCE_OPTIONS_NL, PROVINCES_BE, PROVINCES_NL } from './provinces';
 
 describe('provinces', () => {
-  it('includes Belgian Limburg alongside Dutch Limburg in separate lists', () => {
+  it('lists Limburg separately per country in target options', () => {
+    const nlLimburg = PROVINCE_OPTIONS_NL.find(o => o.name === 'Limburg');
+    const beLimburg = PROVINCE_OPTIONS_BE.find(o => o.name === 'Limburg');
+    expect(nlLimburg?.value).toBe('NL:Limburg');
+    expect(beLimburg?.value).toBe('BE:Limburg');
+    expect(nlLimburg?.label).toBe('Limburg (NL)');
+    expect(beLimburg?.label).toBe('Limburg (BE)');
+  });
+
+  it('keeps canonical province names for lead enrichment', () => {
     expect(PROVINCES_BE).toContain('Limburg');
     expect(PROVINCES_NL).toContain('Limburg');
   });

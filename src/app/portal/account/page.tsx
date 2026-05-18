@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { usePortal } from '../portalContext';
 import { portalBtwRate } from '@/lib/invoiceVat';
 import { portalFetch, portalHeaders } from '@/lib/portalAuth';
+import { formatProvinceTargetLabel } from '@/lib/provinceTargetMatch';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   EyeIcon,
@@ -856,7 +857,9 @@ function AreasTab({
                   {isProvince && area.provinces && area.provinces.length > 0 ? (
                     <div className="mt-1 flex flex-wrap gap-1">
                       {area.provinces.map(p => (
-                        <span key={p} className="rounded-md bg-brand-purple/10 px-1.5 py-0.5 text-[11px] font-medium text-brand-purple">{p}</span>
+                        <span key={p} className="rounded-md bg-brand-purple/10 px-1.5 py-0.5 text-[11px] font-medium text-brand-purple">
+                          {formatProvinceTargetLabel(p)}
+                        </span>
                       ))}
                     </div>
                   ) : !isProvince && area.radius_km < 500 && area.lat && area.lng ? (

@@ -22,7 +22,8 @@ import { portalFetch } from '@/lib/portalAuth';
 import { PERMISSION_GROUPS, ROLE_DEFAULTS, type Permission, type AssignmentRules } from '@/lib/portalPermissions';
 import { EmptyState, PageHeader, Skeleton, T } from '../_ui';
 
-import { PROVINCES_BE, PROVINCES_NL } from '@/data/provinces';
+import { PROVINCE_OPTIONS_BE, PROVINCE_OPTIONS_NL } from '@/data/provinces';
+import { formatProvinceTargetLabel } from '@/lib/provinceTargetMatch';
 
 const MODE_OPTIONS: { value: AssignmentRules['mode']; label: string; desc: string }[] = [
   { value: 'manual', label: 'Handmatig', desc: 'Alleen handmatig toegewezen leads' },
@@ -421,18 +422,18 @@ function AssignmentRulesEditor({
                 <div>
                   <p className="mb-1 text-[10px] font-medium text-slate-400">Nederland</p>
                   <div className="flex flex-wrap gap-1.5">
-                    {PROVINCES_NL.map(p => (
+                    {PROVINCE_OPTIONS_NL.map(opt => (
                       <button
-                        key={p}
+                        key={opt.value}
                         type="button"
-                        onClick={() => toggleProvince(p)}
+                        onClick={() => toggleProvince(opt.value)}
                         className={`rounded-lg border px-2.5 py-1 text-xs font-medium transition ${
-                          regions.values?.includes(p)
+                          regions.values?.includes(opt.value)
                             ? 'border-brand-purple bg-brand-purple/10 text-brand-purple'
                             : 'border-slate-200 text-slate-500 hover:border-slate-300'
                         }`}
                       >
-                        {p}
+                        {opt.label}
                       </button>
                     ))}
                   </div>
@@ -440,18 +441,18 @@ function AssignmentRulesEditor({
                 <div>
                   <p className="mb-1 text-[10px] font-medium text-slate-400">Belgi&euml;</p>
                   <div className="flex flex-wrap gap-1.5">
-                    {PROVINCES_BE.map(p => (
+                    {PROVINCE_OPTIONS_BE.map(opt => (
                       <button
-                        key={p}
+                        key={opt.value}
                         type="button"
-                        onClick={() => toggleProvince(p)}
+                        onClick={() => toggleProvince(opt.value)}
                         className={`rounded-lg border px-2.5 py-1 text-xs font-medium transition ${
-                          regions.values?.includes(p)
+                          regions.values?.includes(opt.value)
                             ? 'border-brand-purple bg-brand-purple/10 text-brand-purple'
                             : 'border-slate-200 text-slate-500 hover:border-slate-300'
                         }`}
                       >
-                        {p}
+                        {opt.label}
                       </button>
                     ))}
                   </div>
@@ -593,7 +594,9 @@ function AssignmentRulesSummary({ rules }: { rules: Record<string, unknown> }) {
             <div className="flex flex-wrap items-center gap-1">
               <span className="text-[11px] text-slate-400">Regio&apos;s:</span>
               {r.regions.values.map(v => (
-                <span key={v} className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-600">{v}</span>
+                <span key={v} className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-600">
+                  {formatProvinceTargetLabel(v)}
+                </span>
               ))}
             </div>
           )}

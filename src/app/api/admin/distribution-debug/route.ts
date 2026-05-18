@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { requireSuperAdmin } from '@/lib/adminAuth';
+import { leadMatchesAnyProvinceTarget } from '@/lib/provinceTargetMatch';
 
 function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371;
@@ -187,7 +188,7 @@ export async function GET(request: NextRequest) {
       for (const t of custTargets) {
         if ((t.target_type || 'radius') === 'province') {
           const provs: string[] = Array.isArray(t.provinces) ? t.provinces : [];
-          if (leadProv && provs.includes(leadProv)) {
+          if (leadMatchesAnyProvinceTarget(lead, provs)) {
             provinceMatch = { label: t.label };
           }
         } else if (hasCoords) {

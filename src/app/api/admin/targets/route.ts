@@ -3,6 +3,25 @@ import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
 import { distributeUnassignedLeads } from '@/lib/distribution';
 import { resolveCity } from '@/lib/pdok';
+import {
+  formatProvinceTargetLabel,
+  normalizeProvinceTargetTokens,
+  type ProvinceLand,
+} from '@/lib/provinceTargetMatch';
+
+async function provinceTokensForCustomer(
+  supabase: ReturnType<typeof createServerClient>,
+  customerId: string,
+  provinces: string[],
+): Promise<string[]> {
+  const { data: customer } = await supabase
+    .from('customers')
+    .select('country')
+    .eq('id', customerId)
+    .single();
+  const defaultLand: ProvinceLand = customer?.country === 'BE' ? 'BE' : 'NL';
+  return normalizeProvinceTargetTokens(provinces, defaultLand);
+}
 
 const KNOWN_PRESETS = ['Heel Nederland', 'Heel België'];
 
@@ -76,9 +95,25 @@ export async function POST(request: NextRequest) {
     if (!Array.isArray(provinces) || provinces.length === 0) {
       return NextResponse.json({ error: 'Selecteer minimaal 1 provincie' }, { status: 400 });
     }
+    const normalized = await provinceTokensForCustomer(supabase, customer_id, provinces);
+    if (normalized.length === 0) {
+      return NextResponse.json({ error: 'Selecteer minimaal 1 provincie' }, { status: 400 });
+    }
+    const resolvedLabel =
+      label && String(label).trim()
+        ? String(label).trim()
+        : normalized.map(formatProvinceTargetLabel).join(', ');
     const { data, error } = await supabase
       .from('customer_targets')
-      .insert({ customer_id, label, target_type: 'province', provinces, lat: null, lng: null, radius_km: 0 })
+      .insert({
+        customer_id,
+        label: resolvedLabel,
+        target_type: 'province',
+        provinces: normalized,
+        lat: null,
+        lng: null,
+        radius_km: 0,
+      })
       .select()
       .single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -121,6 +156,21 @@ export async function PUT(request: NextRequest) {
   const { id, ...updates } = body;
 
   if (!id) return NextResponse.json({ error: 'ID ontbreekt' }, { status: 400 });
+
+  if ('provinces' in updates && Array.isArray(updates.provinces)) {
+    const { data: existing } = await supabase
+      .from('customer_targets')
+      .select('customer_id')
+      .eq('id', id)
+      .single();
+    if (existing?.customer_id) {
+      updates.provinces = await provinceTokensForCustomer(
+        supabase,
+        existing.customer_id,
+        updates.provinces as string[],
+      );
+    }
+  }
 
   if ('label' in updates && 'lat' in updates && 'lng' in updates) {
     const verified = await verifyAndResolveCoords(updates.label, updates.lat, updates.lng);

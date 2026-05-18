@@ -46,7 +46,8 @@ import {
 } from '@/lib/beEnterprise';
 import { isValidBelgianVatFormat } from '@/lib/invoiceVat';
 import { useAdmin } from '../adminContext';
-import { PROVINCES_BE, PROVINCES_NL } from '@/data/provinces';
+import { PROVINCE_OPTIONS_BE, PROVINCE_OPTIONS_NL } from '@/data/provinces';
+import { formatProvinceTargetLabel } from '@/lib/provinceTargetMatch';
 import { ComposeMailDrawer } from '../_components/ComposeMailDrawer';
 import { MailHistory } from '../_components/MailHistory';
 
@@ -2232,7 +2233,8 @@ function TargetsPanel({ customer, onClose, embedded }: { customer: Customer; onC
   const addProvinceTarget = async () => {
     if (selectedProvinces.length === 0) return;
     setSaving(true);
-    const label = provLabel || selectedProvinces.join(', ');
+    const label =
+      provLabel || selectedProvinces.map(formatProvinceTargetLabel).join(', ');
     await adminFetch('/api/admin/targets', {
       method: 'POST',
       body: JSON.stringify({ customer_id: customer.id, label, target_type: 'province', provinces: selectedProvinces }),
@@ -2433,11 +2435,11 @@ function TargetsPanel({ customer, onClose, embedded }: { customer: Customer; onC
               <div className="mb-3">
                 <label className="mb-1.5 block text-xs font-medium text-slate-500">Nederland</label>
                 <div className="flex flex-wrap gap-1.5">
-                  {PROVINCES_NL.map(p => {
-                    const selected = selectedProvinces.includes(p);
-                    const alreadyExists = existingProvs.has(p);
+                  {PROVINCE_OPTIONS_NL.map(opt => {
+                    const selected = selectedProvinces.includes(opt.value);
+                    const alreadyExists = existingProvs.has(opt.value);
                     return (
-                      <button key={p} onClick={() => toggleProvince(p)} disabled={alreadyExists}
+                      <button key={opt.value} onClick={() => toggleProvince(opt.value)} disabled={alreadyExists}
                         className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${
                           alreadyExists
                             ? 'border-slate-100 bg-slate-50 text-slate-300 cursor-not-allowed'
@@ -2445,7 +2447,7 @@ function TargetsPanel({ customer, onClose, embedded }: { customer: Customer; onC
                               ? 'border-brand-purple bg-brand-purple/10 text-brand-purple'
                               : 'border-slate-200 bg-white text-slate-600 hover:border-brand-purple/50'
                         }`}>
-                        {p}
+                        {opt.label}
                         {alreadyExists && <span className="ml-1 text-[10px] text-slate-400">(actief)</span>}
                       </button>
                     );
@@ -2455,11 +2457,11 @@ function TargetsPanel({ customer, onClose, embedded }: { customer: Customer; onC
               <div className="mb-3">
                 <label className="mb-1.5 block text-xs font-medium text-slate-500">België</label>
                 <div className="flex flex-wrap gap-1.5">
-                  {PROVINCES_BE.map(p => {
-                    const selected = selectedProvinces.includes(p);
-                    const alreadyExists = existingProvs.has(p);
+                  {PROVINCE_OPTIONS_BE.map(opt => {
+                    const selected = selectedProvinces.includes(opt.value);
+                    const alreadyExists = existingProvs.has(opt.value);
                     return (
-                      <button key={p} onClick={() => toggleProvince(p)} disabled={alreadyExists}
+                      <button key={opt.value} onClick={() => toggleProvince(opt.value)} disabled={alreadyExists}
                         className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${
                           alreadyExists
                             ? 'border-slate-100 bg-slate-50 text-slate-300 cursor-not-allowed'
@@ -2467,7 +2469,7 @@ function TargetsPanel({ customer, onClose, embedded }: { customer: Customer; onC
                               ? 'border-brand-purple bg-brand-purple/10 text-brand-purple'
                               : 'border-slate-200 bg-white text-slate-600 hover:border-brand-purple/50'
                         }`}>
-                        {p}
+                        {opt.label}
                         {alreadyExists && <span className="ml-1 text-[10px] text-slate-400">(actief)</span>}
                       </button>
                     );
@@ -2476,17 +2478,18 @@ function TargetsPanel({ customer, onClose, embedded }: { customer: Customer; onC
               </div>
               {selectedProvinces.length > 0 && (
                 <p className="mb-3 text-xs text-brand-purple">
-                  {selectedProvinces.length} {selectedProvinces.length === 1 ? 'provincie' : 'provincies'} geselecteerd: {selectedProvinces.join(', ')}
+                  {selectedProvinces.length} {selectedProvinces.length === 1 ? 'provincie' : 'provincies'} geselecteerd:{' '}
+                  {selectedProvinces.map(formatProvinceTargetLabel).join(', ')}
                 </p>
               )}
-              <div className="flex gap-2">
+              <motion.div className="flex gap-2">
                 <button onClick={resetAddForm}
                   className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-500 hover:bg-slate-50">Annuleren</button>
                 <button onClick={addProvinceTarget} disabled={selectedProvinces.length === 0 || saving}
                   className="rounded-lg bg-button-gradient px-4 py-2 text-xs font-bold text-white disabled:opacity-50">
                   {saving ? 'Opslaan...' : 'Toevoegen'}
                 </button>
-              </div>
+              </motion.div>
             </div>
           ) : (
             <div className="mb-5 flex gap-2">
@@ -2572,11 +2575,13 @@ function TargetsPanel({ customer, onClose, embedded }: { customer: Customer; onC
                       <div className="mb-3">
                         <label className="mb-1.5 block text-xs font-medium text-slate-500">Nederland</label>
                         <div className="flex flex-wrap gap-1.5">
-                          {PROVINCES_NL.map(p => {
-                            const selected = editProvinces.includes(p);
-                            const usedByOther = targets.some(ot => ot.id !== t.id && ot.is_active && (ot.provinces || []).includes(p));
+                          {PROVINCE_OPTIONS_NL.map(opt => {
+                            const selected = editProvinces.includes(opt.value);
+                            const usedByOther = targets.some(
+                              ot => ot.id !== t.id && ot.is_active && (ot.provinces || []).includes(opt.value),
+                            );
                             return (
-                              <button key={p} onClick={() => toggleEditProvince(p)} disabled={usedByOther}
+                              <button key={opt.value} onClick={() => toggleEditProvince(opt.value)} disabled={usedByOther}
                                 className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${
                                   usedByOther
                                     ? 'border-slate-100 bg-slate-50 text-slate-300 cursor-not-allowed'
@@ -2584,7 +2589,7 @@ function TargetsPanel({ customer, onClose, embedded }: { customer: Customer; onC
                                       ? 'border-brand-purple bg-brand-purple/10 text-brand-purple'
                                       : 'border-slate-200 bg-white text-slate-600 hover:border-brand-purple/50'
                                 }`}>
-                                {p}
+                                {opt.label}
                               </button>
                             );
                           })}
@@ -2593,11 +2598,13 @@ function TargetsPanel({ customer, onClose, embedded }: { customer: Customer; onC
                       <div className="mb-3">
                         <label className="mb-1.5 block text-xs font-medium text-slate-500">België</label>
                         <div className="flex flex-wrap gap-1.5">
-                          {PROVINCES_BE.map(p => {
-                            const selected = editProvinces.includes(p);
-                            const usedByOther = targets.some(ot => ot.id !== t.id && ot.is_active && (ot.provinces || []).includes(p));
+                          {PROVINCE_OPTIONS_BE.map(opt => {
+                            const selected = editProvinces.includes(opt.value);
+                            const usedByOther = targets.some(
+                              ot => ot.id !== t.id && ot.is_active && (ot.provinces || []).includes(opt.value),
+                            );
                             return (
-                              <button key={p} onClick={() => toggleEditProvince(p)} disabled={usedByOther}
+                              <button key={opt.value} onClick={() => toggleEditProvince(opt.value)} disabled={usedByOther}
                                 className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${
                                   usedByOther
                                     ? 'border-slate-100 bg-slate-50 text-slate-300 cursor-not-allowed'
@@ -2605,7 +2612,7 @@ function TargetsPanel({ customer, onClose, embedded }: { customer: Customer; onC
                                       ? 'border-brand-purple bg-brand-purple/10 text-brand-purple'
                                       : 'border-slate-200 bg-white text-slate-600 hover:border-brand-purple/50'
                                 }`}>
-                                {p}
+                                {opt.label}
                               </button>
                             );
                           })}
@@ -2638,7 +2645,9 @@ function TargetsPanel({ customer, onClose, embedded }: { customer: Customer; onC
                       {(t.target_type || 'radius') === 'province' ? (
                         <div className="mt-1.5 flex flex-wrap gap-1">
                           {(t.provinces || []).map(p => (
-                            <span key={p} className="rounded-md bg-brand-purple/10 px-2 py-0.5 text-[11px] font-medium text-brand-purple">{p}</span>
+                            <span key={p} className="rounded-md bg-brand-purple/10 px-2 py-0.5 text-[11px] font-medium text-brand-purple">
+                              {formatProvinceTargetLabel(p)}
+                            </span>
                           ))}
                         </div>
                       ) : (

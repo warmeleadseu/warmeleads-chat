@@ -32,7 +32,7 @@ import { Car } from '@phosphor-icons/react';
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
 import { SoftGlow } from '@/components/ui/SoftGlow';
-import { PROVINCES_BE as BE_PROVINCES, PROVINCES_NL as NL_PROVINCES } from '@/data/provinces';
+import { PROVINCE_OPTIONS_BE, PROVINCE_OPTIONS_NL } from '@/data/provinces';
 
 interface Branch {
   slug: string;
@@ -219,8 +219,8 @@ export default function GratisAccountPage() {
       return;
     }
     setRegionType(type);
-    if (type === 'nl') setSelectedProvinces([...NL_PROVINCES]);
-    else if (type === 'be') setSelectedProvinces([...BE_PROVINCES]);
+    if (type === 'nl') setSelectedProvinces(PROVINCE_OPTIONS_NL.map(o => o.value));
+    else if (type === 'be') setSelectedProvinces(PROVINCE_OPTIONS_BE.map(o => o.value));
     else setSelectedProvinces([]);
   };
 
@@ -641,13 +641,13 @@ export default function GratisAccountPage() {
                             <div>
                               <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Nederland</p>
                               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                                {NL_PROVINCES.map((p) => {
-                                  const selected = selectedProvinces.includes(p);
+                                {PROVINCE_OPTIONS_NL.map((opt) => {
+                                  const selected = selectedProvinces.includes(opt.value);
                                   return (
                                     <button
                                       type="button"
-                                      key={p}
-                                      onClick={() => toggleProvince(p)}
+                                      key={opt.value}
+                                      onClick={() => toggleProvince(opt.value)}
                                       className={`rounded-lg border px-3 py-2 text-left text-sm transition ${
                                         selected
                                           ? 'border-brand-purple bg-brand-purple/5 font-semibold text-brand-purple'
@@ -655,7 +655,7 @@ export default function GratisAccountPage() {
                                       }`}
                                     >
                                       {selected && <CheckCircleSolid className="mr-1.5 inline h-3.5 w-3.5 text-brand-purple" />}
-                                      {p}
+                                      {opt.label}
                                     </button>
                                   );
                                 })}
@@ -664,13 +664,13 @@ export default function GratisAccountPage() {
                             <div>
                               <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Vlaanderen</p>
                               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                                {BE_PROVINCES.map((p) => {
-                                  const selected = selectedProvinces.includes(p);
+                                {PROVINCE_OPTIONS_BE.map((opt) => {
+                                  const selected = selectedProvinces.includes(opt.value);
                                   return (
                                     <button
                                       type="button"
-                                      key={p}
-                                      onClick={() => toggleProvince(p)}
+                                      key={opt.value}
+                                      onClick={() => toggleProvince(opt.value)}
                                       className={`rounded-lg border px-3 py-2 text-left text-sm transition ${
                                         selected
                                           ? 'border-brand-purple bg-brand-purple/5 font-semibold text-brand-purple'
@@ -678,7 +678,7 @@ export default function GratisAccountPage() {
                                       }`}
                                     >
                                       {selected && <CheckCircleSolid className="mr-1.5 inline h-3.5 w-3.5 text-brand-purple" />}
-                                      {p}
+                                      {opt.label}
                                     </button>
                                   );
                                 })}

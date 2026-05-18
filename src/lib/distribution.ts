@@ -4,6 +4,7 @@ import { sendNewLeadPush } from './pushNotification';
 import { syncBatchDelivered } from './batchSync';
 import { isPipelineBatchKind } from './batchKind';
 import { getLeadLimitPeriodAnchors } from './batchAssignmentCaps';
+import { leadMatchesAnyProvinceTarget } from './provinceTargetMatch';
 
 /** Hard plafond in het product (gedeelde leads). */
 const MAX_ASSIGNMENTS = 3;
@@ -132,6 +133,9 @@ interface LeadForDistribution {
   branch: string;
   lat: number;
   lng: number;
+  provincie?: string | null;
+  land?: string | null;
+  postcode?: string | null;
   bron?: string | null;
   custom_fields?: Record<string, string>;
   quality_score?: number | null;
@@ -430,12 +434,10 @@ export async function distributeLead(
     if (!custTargets) continue;
 
     let bestMatch: { radius: number; distance: number } | null = null;
-    const leadProv = (fullLead as any).provincie as string | undefined;
-
     for (const t of custTargets) {
       if ((t.target_type || 'radius') === 'province') {
         const provs: string[] = Array.isArray(t.provinces) ? t.provinces : [];
-        if (leadProv && provs.includes(leadProv)) {
+        if (provs.length > 0 && leadMatchesAnyProvinceTarget(fullLead, provs)) {
           if (!bestMatch || 999 < bestMatch.radius) {
             bestMatch = { radius: 999, distance: 0 };
           }
@@ -789,7 +791,7 @@ export async function backfillBatch(batchId: string, lookbackDays: number): Prom
     for (const t of targets) {
       if ((t.target_type || 'radius') === 'province') {
         const provs: string[] = Array.isArray(t.provinces) ? t.provinces : [];
-        if (lead.provincie && provs.includes(lead.provincie)) {
+        if (provs.length > 0 && leadMatchesAnyProvinceTarget(lead, provs)) {
           inRange = true;
           bestDist = Math.min(bestDist, 0);
         }
@@ -991,9 +993,8 @@ async function assignToPortalUser(
 
     // Region filter
     if (rules.regions && rules.regions.values && rules.regions.values.length > 0) {
-      const leadProv = (lead as Record<string, unknown>).provincie as string | undefined;
       if (rules.regions.type === 'provinces') {
-        if (!leadProv || !rules.regions.values.includes(leadProv)) return false;
+        if (!leadMatchesAnyProvinceTarget(lead, rules.regions.values)) return false;
       }
     }
 

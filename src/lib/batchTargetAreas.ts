@@ -1,3 +1,5 @@
+import { formatProvinceTargetLabel } from '@/lib/provinceTargetMatch';
+
 /** Rij uit `customer_targets` (PostgREST / admin API). */
 export interface CustomerTargetRow {
   id?: string;
@@ -50,8 +52,9 @@ export function formatCustomerTargetSummary(t: CustomerTargetRow): string {
       return (t.label && String(t.label).trim()) || 'Provincie-target';
     }
     const lab = (t.label && String(t.label).trim()) || 'Provincies';
-    if (provs.length <= 4) return `${lab}: ${provs.join(', ')}`;
-    return `${lab}: ${provs.slice(0, 3).join(', ')} +${provs.length - 3}`;
+    const labels = provs.map(p => formatProvinceTargetLabel(p));
+    if (labels.length <= 4) return `${lab}: ${labels.join(', ')}`;
+    return `${lab}: ${labels.slice(0, 3).join(', ')} +${labels.length - 3}`;
   }
   const r = t.radius_km != null && Number.isFinite(Number(t.radius_km)) ? Number(t.radius_km) : 25;
   const lab = (t.label && String(t.label).trim()) ? String(t.label).trim() : 'Radius';
