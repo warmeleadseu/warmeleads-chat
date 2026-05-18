@@ -1,5 +1,20 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+const ASSIGN_PAGE = 1000;
+const ASSIGN_MAX_PAGES = 200;
+
+/** Alleen verse/warme distributie-leads; geen bulk-export of demo. */
+export function shouldCountAssignmentForAmTargetLead(
+  source: string | null | undefined,
+  batchId: string | null | undefined,
+  bulkBatchIds: ReadonlySet<string>,
+): boolean {
+  const src = source || 'distribution';
+  if (src === 'bulk_export' || src === 'demo') return false;
+  if (batchId && bulkBatchIds.has(batchId)) return false;
+  return true;
+}
+
 /**
  * Zelfde meetlogica als `/api/admin/am-targets` (batch.account_manager_id op customer_batches;
  * geen fallback naar klant-AM — dat kan afwijken van het live leaderboard).
@@ -47,13 +62,55 @@ export async function calculateAmTargetProgress(
       const { data: custRows } = await supabase.from('customers').select('id').eq('account_manager_id', adminUserId);
       const custIds = (custRows || []).map(c => c.id);
       if (custIds.length === 0) return 0;
-      const { count } = await supabase
-        .from('lead_assignments')
-        .select('id', { count: 'exact', head: true })
+
+      const { data: bulkBatchRows } = await supabase
+        .from('customer_batches')
+        .select('id')
         .in('customer_id', custIds)
-        .gte('assigned_at', periodStart)
-        .lt('assigned_at', endISO);
-      return count || 0;
+        .eq('batch_kind', 'bulk_leads');
+      const bulkBatchIds = new Set((bulkBatchRows || []).map(b => b.id as string));
+
+      let pipelineCount = 0;
+      let offset = 0;
+      for (let page = 0; page < ASSIGN_MAX_PAGES; page++) {
+        const { data: rows, error } = await supabase
+          .from('lead_assignments')
+          .select('id, source, batch_id')
+          .in('customer_id', custIds)
+          .gte('assigned_at', periodStart)
+          .lt('assigned_at', endISO)
+          .range(offset, offset + ASSIGN_PAGE - 1);
+        if (error) throw new Error(error.message);
+        if (!rows?.length) break;
+        for (const row of rows) {
+          if (
+            shouldCountAssignmentForAmTargetLead(
+              row.source as string | null,
+              row.batch_id as string | null,
+              bulkBatchIds,
+            )
+          ) {
+            pipelineCount++;
+          }
+        }
+        if (rows.length < ASSIGN_PAGE) break;
+        offset += rows.length;
+      }
+
+      const { data: nicheRows } = await supabase
+        .from('customer_batches')
+        .select('leads_delivered')
+        .eq('account_manager_id', adminUserId)
+        .eq('batch_kind', 'niche_research')
+        .gte('created_at', periodStart)
+        .lt('created_at', endISO);
+
+      const nicheCount = (nicheRows || []).reduce(
+        (sum: number, b: { leads_delivered?: unknown }) => sum + (Number(b.leads_delivered) || 0),
+        0,
+      );
+
+      return pipelineCount + nicheCount;
     }
     default:
       return 0;
