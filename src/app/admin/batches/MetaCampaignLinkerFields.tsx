@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { XMarkIcon } from '@heroicons/react/24/outline';
+import { PauseCircleIcon, PlayCircleIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
 import { mergeMetaCampaignLookupNames, type MetaCampaignPick } from '@/lib/metaCampaignIds';
 
@@ -168,26 +168,60 @@ export function MetaCampaignLinkerFields({
       </div>
 
       {picks.length > 0 && (
-        <div className="mb-3 flex flex-wrap gap-1.5">
-          {picks.map(p => (
-            <span
-              key={p.id}
-              className="inline-flex max-w-full items-center gap-1 rounded-full border border-indigo-200 bg-white px-2.5 py-1 text-[11px] text-indigo-950"
-            >
-              <span className="truncate font-medium" title={p.name}>
-                {p.name}
-              </span>
-              <span className="shrink-0 font-mono text-[10px] text-slate-500">({p.id})</span>
-              <button
-                type="button"
-                onClick={() => setPicks(prev => prev.filter(x => x.id !== p.id))}
-                className="shrink-0 rounded p-0.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
-                aria-label="Verwijderen"
+        <div className="mb-3 flex flex-col gap-1.5">
+          {picks.map(p => {
+            const isPaused = p.paused === true;
+            return (
+              <div
+                key={p.id}
+                className={`flex max-w-full items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] ${
+                  isPaused
+                    ? 'border-slate-200 bg-slate-100 text-slate-600'
+                    : 'border-indigo-200 bg-white text-indigo-950'
+                }`}
               >
-                <XMarkIcon className="h-3.5 w-3.5" />
-              </button>
-            </span>
-          ))}
+                <span className="min-w-0 flex-1 truncate font-medium" title={p.name}>
+                  {p.name}
+                </span>
+                <span className="shrink-0 font-mono text-[10px] text-slate-500">({p.id})</span>
+                {isPaused && (
+                  <span className="shrink-0 rounded bg-slate-200 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-slate-600">
+                    Uit
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={() =>
+                    setPicks(prev =>
+                      prev.map(x => (x.id === p.id ? { ...x, paused: !x.paused } : x)),
+                    )
+                  }
+                  className={`shrink-0 rounded p-0.5 ${
+                    isPaused
+                      ? 'text-emerald-600 hover:bg-emerald-50'
+                      : 'text-amber-600 hover:bg-amber-50'
+                  }`}
+                  title={isPaused ? 'Aanzetten in Meta (na opslaan)' : 'Uitzetten in Meta (na opslaan)'}
+                  aria-label={isPaused ? 'Campagne aanzetten' : 'Campagne uitzetten'}
+                >
+                  {isPaused ? (
+                    <PlayCircleIcon className="h-4 w-4" />
+                  ) : (
+                    <PauseCircleIcon className="h-4 w-4" />
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPicks(prev => prev.filter(x => x.id !== p.id))}
+                  className="shrink-0 rounded p-0.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+                  aria-label="Koppeling verwijderen"
+                  title="Verwijderen en in Meta pauzeren (na opslaan)"
+                >
+                  <XMarkIcon className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -224,7 +258,7 @@ export function MetaCampaignLinkerFields({
           onChange={e => setSyncEnabled(e.target.checked)}
           className="rounded border-indigo-300 text-indigo-600 focus:ring-indigo-500"
         />
-        Meta sync aan (uit = gekoppelde campagnes naar gepauzeerd)
+        Meta sync aan (uit = alle gekoppelde campagnes naar gepauzeerd). Per campagne: pauze/aan-knop; verwijderen = ontkoppelen + pauzeren in Meta.
       </label>
 
       {syncStatusSlot}

@@ -386,6 +386,7 @@ export async function POST(request: NextRequest) {
 
       if (isPipelineBatchKind(orderBatchKind) && leadMetaResolved) {
         batchInsertPayload.meta_campaign_ids = leadMetaResolved.meta_campaign_ids;
+        batchInsertPayload.meta_campaign_paused_ids = leadMetaResolved.meta_campaign_paused_ids;
         batchInsertPayload.meta_campaign_sync_enabled = leadMetaResolved.meta_campaign_sync_enabled;
       }
 

@@ -19,7 +19,13 @@ export type BatchMetaSyncRow = {
   leads_per_day?: number | null;
   leads_per_week?: number | null;
   meta_campaign_ids: string[] | null;
+  meta_campaign_paused_ids?: string[] | null;
   meta_campaign_sync_enabled: boolean | null;
+};
+
+export type ReconcileBatchMetaOptions = {
+  /** Campagnes die niet meer gekoppeld zijn: expliciet naar PAUSED in Meta. */
+  forcePauseCampaignIds?: string[];
 };
 
 const MAX_CAMPAIGNS_PER_BATCH = 10;
@@ -66,6 +72,23 @@ export function getDesiredMetaCampaignStatus(
   }
 
   return 'ACTIVE';
+}
+
+/** Gewenste status voor één gekoppelde campagne (incl. handmatig uit in CRM). */
+export function getDesiredMetaCampaignStatusForCampaign(
+  row: BatchMetaSyncRow,
+  campaignId: string,
+  capCounts?: BatchMetaAssignmentCapCounts | null,
+): 'ACTIVE' | 'PAUSED' {
+  const paused = normalizeCampaignIds(row.meta_campaign_paused_ids);
+  if (paused.includes(campaignId)) return 'PAUSED';
+  return getDesiredMetaCampaignStatus(row, capCounts);
+}
+
+/** Alleen IDs die ook in `linkedIds` staan (paused ⊆ gekoppeld). */
+export function sanitizePausedMetaCampaignIds(linkedIds: string[], raw: unknown): string[] {
+  const linked = new Set(normalizeCampaignIds(linkedIds));
+  return normalizeCampaignIds(raw).filter(id => linked.has(id));
 }
 
 /** Graph campaign ID's: ondersteunt array, JSON-string, Postgres `{…}`-literal. */
@@ -145,13 +168,14 @@ export async function reconcileBatchMetaCampaigns(
   supabase: SupabaseClient,
   batchId: string,
   _trigger: MetaBatchCampaignSyncTrigger,
+  options?: ReconcileBatchMetaOptions,
 ): Promise<void> {
   const nowIso = new Date().toISOString();
 
   const { data: row, error: fetchErr } = await supabase
     .from('customer_batches')
     .select(
-      'id, batch_kind, is_paid, status, batch_size, leads_delivered, starts_at, leads_per_day, leads_per_week, meta_campaign_ids, meta_campaign_sync_enabled',
+      'id, batch_kind, is_paid, status, batch_size, leads_delivered, starts_at, leads_per_day, leads_per_week, meta_campaign_ids, meta_campaign_paused_ids, meta_campaign_sync_enabled',
     )
     .eq('id', batchId)
     .single();
@@ -159,7 +183,10 @@ export async function reconcileBatchMetaCampaigns(
   if (fetchErr || !row) return;
 
   const batch = row as BatchMetaSyncRow;
-  const ids = normalizeCampaignIds(batch.meta_campaign_ids);
+  const linkedIds = normalizeCampaignIds(batch.meta_campaign_ids);
+  const forcePause = normalizeCampaignIds(options?.forcePauseCampaignIds ?? []);
+  const orphanPause = forcePause.filter(id => !linkedIds.includes(id));
+  const ids = [...new Set([...linkedIds, ...orphanPause])];
 
   if (ids.length === 0) {
     await supabase
@@ -179,7 +206,6 @@ export async function reconcileBatchMetaCampaigns(
     capCounts = await fetchBatchAssignmentCapCounts(supabase, batchId);
   }
 
-  const desired = getDesiredMetaCampaignStatus(batch, capCounts);
   const credentials = await getMetaCredentials();
 
   if (!credentials?.accessToken || !credentials?.adAccountId) {
@@ -198,6 +224,10 @@ export async function reconcileBatchMetaCampaigns(
   let okCount = 0;
 
   for (const campaignId of ids) {
+    const desired = orphanPause.includes(campaignId)
+      ? 'PAUSED'
+      : getDesiredMetaCampaignStatusForCampaign(batch, campaignId, capCounts);
+
     const info = await graphGetCampaign(campaignId, credentials.accessToken);
     if (!info.ok) {
       errors.push(`${campaignId}: ${info.message}`);

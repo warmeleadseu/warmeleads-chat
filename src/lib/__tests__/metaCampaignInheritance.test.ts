@@ -14,6 +14,7 @@ describe('applyMetaInheritanceWaterfall', () => {
         branch: orderBranch,
         batch_kind: 'leads',
         meta_campaign_ids: ['111', '222'],
+        meta_campaign_paused_ids: ['222'],
         meta_campaign_sync_enabled: false,
       },
       branchDefault: { meta_campaign_ids: ['999'], meta_campaign_sync_enabled: true },
@@ -21,6 +22,7 @@ describe('applyMetaInheritanceWaterfall', () => {
     });
     expect(r.inheritance_source).toBe('source_batch');
     expect(r.meta_campaign_ids).toEqual(['111', '222']);
+    expect(r.meta_campaign_paused_ids).toEqual(['222']);
     expect(r.meta_campaign_sync_enabled).toBe(false);
   });
 

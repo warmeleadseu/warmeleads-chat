@@ -6,7 +6,11 @@ import { checkBatchMilestones } from '@/lib/batchNotifications';
 import { createInvoice, markInvoicePaid, sendNewBatchAdminEmail } from '@/lib/invoice';
 import { isPipelineBatchKind, normalizeBatchKind } from '@/lib/batchKind';
 import { initialPipelineBatchStatus } from '@/lib/customerBatchStatus';
-import { reconcileBatchMetaCampaigns, normalizeCampaignIds } from '@/lib/metaBatchCampaignSync';
+import {
+  reconcileBatchMetaCampaigns,
+  normalizeCampaignIds,
+  sanitizePausedMetaCampaignIds,
+} from '@/lib/metaBatchCampaignSync';
 import { adminBatchListSelect } from '@/lib/adminBatchQueries';
 import { resolveMetaCampaignFieldsForNewLeadBatch, upsertCustomerBranchMetaDefaults } from '@/lib/metaCampaignInheritance';
 
@@ -219,6 +223,13 @@ export async function POST(request: NextRequest) {
     if (body.meta_campaign_sync_enabled !== undefined) {
       insertPayload.meta_campaign_sync_enabled = body.meta_campaign_sync_enabled === true;
     }
+    if (body.meta_campaign_paused_ids !== undefined) {
+      const linked = normalizeCampaignIds(insertPayload.meta_campaign_ids ?? []);
+      insertPayload.meta_campaign_paused_ids = sanitizePausedMetaCampaignIds(
+        linked,
+        body.meta_campaign_paused_ids,
+      );
+    }
     if (body.meta_campaign_ids === undefined) {
       const resolved = await resolveMetaCampaignFieldsForNewLeadBatch(supabase, {
         customerId: customer_id,
@@ -228,6 +239,7 @@ export async function POST(request: NextRequest) {
       if (resolved.meta_campaign_ids.length > 0) {
         insertPayload.meta_campaign_ids = resolved.meta_campaign_ids;
         insertPayload.meta_campaign_sync_enabled = resolved.meta_campaign_sync_enabled;
+        insertPayload.meta_campaign_paused_ids = resolved.meta_campaign_paused_ids;
       }
     }
   }
@@ -329,9 +341,26 @@ export async function PUT(request: NextRequest) {
   if (updates.meta_campaign_ids !== undefined) {
     updates.meta_campaign_ids = sanitizeMetaCampaignIdsInput(updates.meta_campaign_ids) ?? [];
   }
+  if (updates.meta_campaign_paused_ids !== undefined) {
+    const linked =
+      updates.meta_campaign_ids !== undefined
+        ? (updates.meta_campaign_ids as string[])
+        : normalizeCampaignIds(existing.meta_campaign_ids);
+    updates.meta_campaign_paused_ids = sanitizePausedMetaCampaignIds(
+      linked,
+      updates.meta_campaign_paused_ids,
+    );
+  }
   if (updates.meta_campaign_sync_enabled !== undefined) {
     updates.meta_campaign_sync_enabled = updates.meta_campaign_sync_enabled === true;
   }
+
+  const oldLinkedMetaIds = normalizeCampaignIds(existing.meta_campaign_ids);
+  const newLinkedMetaIds =
+    updates.meta_campaign_ids !== undefined
+      ? normalizeCampaignIds(updates.meta_campaign_ids)
+      : oldLinkedMetaIds;
+  const removedMetaCampaignIds = oldLinkedMetaIds.filter(id => !newLinkedMetaIds.includes(id));
 
   if (admin.role === 'accountmanager') {
     const { data: myCust } = await supabase.from('customers').select('id').eq('account_manager_id', admin.id).eq('id', existing.customer_id).single();
@@ -404,7 +433,7 @@ export async function PUT(request: NextRequest) {
     'price_per_lead', 'total_price', 'leads_per_day', 'leads_per_week',
     'notes', 'lead_filters', 'status', 'completed_at', 'lookback_days',
     'compensations', 'starts_at', 'account_manager_id', 'batch_kind', 'niche_title',
-    'meta_campaign_ids', 'meta_campaign_sync_enabled',
+    'meta_campaign_ids', 'meta_campaign_paused_ids', 'meta_campaign_sync_enabled',
   ];
   const safeUpdates: Record<string, unknown> = {};
   for (const key of allowedFields) {
@@ -476,9 +505,9 @@ export async function PUT(request: NextRequest) {
     try { distributeUnassignedLeads(); } catch { /* non-blocking */ }
   }
 
-  reconcileBatchMetaCampaigns(supabase, id, 'admin').catch(e =>
-    console.error('[admin/batches PUT] meta reconcile:', e),
-  );
+  reconcileBatchMetaCampaigns(supabase, id, 'admin', {
+    forcePauseCampaignIds: removedMetaCampaignIds,
+  }).catch(e => console.error('[admin/batches PUT] meta reconcile:', e));
 
   if (save_branch_meta_default === true && isPipelineBatchKind(effectiveBatchKind)) {
     try {
@@ -486,6 +515,10 @@ export async function PUT(request: NextRequest) {
         safeUpdates.meta_campaign_ids !== undefined
           ? normalizeCampaignIds(safeUpdates.meta_campaign_ids)
           : normalizeCampaignIds(existing.meta_campaign_ids);
+      const pausedForDefault =
+        safeUpdates.meta_campaign_paused_ids !== undefined
+          ? sanitizePausedMetaCampaignIds(idsForDefault, safeUpdates.meta_campaign_paused_ids)
+          : sanitizePausedMetaCampaignIds(idsForDefault, existing.meta_campaign_paused_ids);
       const syncForDefault =
         safeUpdates.meta_campaign_sync_enabled !== undefined
           ? safeUpdates.meta_campaign_sync_enabled === true
@@ -494,6 +527,7 @@ export async function PUT(request: NextRequest) {
         customerId: existing.customer_id,
         branch: String(data.branch),
         meta_campaign_ids: idsForDefault,
+        meta_campaign_paused_ids: pausedForDefault,
         meta_campaign_sync_enabled: syncForDefault,
         updatedBy: admin.id,
       });

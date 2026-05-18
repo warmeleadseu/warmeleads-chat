@@ -39,6 +39,24 @@ import { mergeCustomTiers } from '@/lib/pricing';
 import { isPipelineBatchKind } from '@/lib/batchKind';
 import { coerceCustomerBatchMetaCampaignIds, type MetaCampaignPick } from '@/lib/metaCampaignIds';
 import { MetaCampaignLinkerFields } from './MetaCampaignLinkerFields';
+
+function metaFieldsFromPicks(picks: MetaCampaignPick[]) {
+  const meta_campaign_ids = picks.map(p => p.id).slice(0, 10);
+  const linked = new Set(meta_campaign_ids);
+  const meta_campaign_paused_ids = picks
+    .filter(p => p.paused && linked.has(p.id))
+    .map(p => p.id);
+  return { meta_campaign_ids, meta_campaign_paused_ids };
+}
+
+function picksFromBatchMeta(batch: {
+  meta_campaign_ids?: unknown;
+  meta_campaign_paused_ids?: unknown;
+}): MetaCampaignPick[] {
+  const ids = coerceCustomerBatchMetaCampaignIds(batch.meta_campaign_ids);
+  const paused = new Set(coerceCustomerBatchMetaCampaignIds(batch.meta_campaign_paused_ids));
+  return ids.map(id => ({ id, name: id, paused: paused.has(id) }));
+}
 import { BatchTargetAreaBadges } from '@/components/admin/BatchTargetAreaBadges';
 import type { CustomerTargetRow } from '@/lib/batchTargetAreas';
 
@@ -57,6 +75,7 @@ interface Batch {
   batch_kind?: string | null;
   niche_title?: string | null;
   meta_campaign_ids?: string[] | null;
+  meta_campaign_paused_ids?: string[] | null;
   meta_campaign_sync_enabled?: boolean | null;
   meta_sync_last_attempt_at?: string | null;
   meta_sync_last_success_at?: string | null;
@@ -660,19 +679,15 @@ function BatchDetailMetaBlock({
   const serverIds = coerceCustomerBatchMetaCampaignIds(batch.meta_campaign_ids);
   const serverIdsKey = serverIds.join(',');
 
-  const [metaCampaignPicks, setMetaCampaignPicks] = useState<MetaCampaignPick[]>(() =>
-    serverIds.map(id => ({ id, name: id })),
-  );
+  const [metaCampaignPicks, setMetaCampaignPicks] = useState<MetaCampaignPick[]>(() => picksFromBatchMeta(batch));
   const [metaSyncEnabled, setMetaSyncEnabled] = useState(() => batch.meta_campaign_sync_enabled !== false);
   const [savingMeta, setSavingMeta] = useState(false);
   const [saveBranchMetaDefault, setSaveBranchMetaDefault] = useState(false);
 
   useEffect(() => {
     if (!isPipelineBatchKind(batch.batch_kind)) return;
-    const ids = coerceCustomerBatchMetaCampaignIds(batch.meta_campaign_ids);
-    if (ids.length === 0) setMetaCampaignPicks([]);
-    else setMetaCampaignPicks(ids.map(id => ({ id, name: id })));
-  }, [batch.batch_kind, batch.id, serverIdsKey]);
+    setMetaCampaignPicks(picksFromBatchMeta(batch));
+  }, [batch.batch_kind, batch.id, serverIdsKey, batch.meta_campaign_paused_ids]);
 
   useEffect(() => {
     setMetaSyncEnabled(batch.meta_campaign_sync_enabled !== false);
@@ -685,7 +700,7 @@ function BatchDetailMetaBlock({
         method: 'PUT',
         body: JSON.stringify({
           id: batch.id,
-          meta_campaign_ids: metaCampaignPicks.map(p => p.id).slice(0, 10),
+          ...metaFieldsFromPicks(metaCampaignPicks),
           meta_campaign_sync_enabled: metaSyncEnabled,
           ...(saveBranchMetaDefault ? { save_branch_meta_default: true } : {}),
         }),
@@ -1546,18 +1561,14 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
   const editServerMetaIds = coerceCustomerBatchMetaCampaignIds(batch.meta_campaign_ids);
   const editServerMetaKey = editServerMetaIds.join(',');
 
-  const [metaCampaignPicks, setMetaCampaignPicks] = useState<MetaCampaignPick[]>(() =>
-    editServerMetaIds.map(id => ({ id, name: id })),
-  );
+  const [metaCampaignPicks, setMetaCampaignPicks] = useState<MetaCampaignPick[]>(() => picksFromBatchMeta(batch));
   const [metaSyncEnabled, setMetaSyncEnabled] = useState(() => batch.meta_campaign_sync_enabled !== false);
   const [saveBranchMetaDefault, setSaveBranchMetaDefault] = useState(false);
 
   useEffect(() => {
     if (!isPipelineBatchKind(batch.batch_kind)) return;
-    const ids = coerceCustomerBatchMetaCampaignIds(batch.meta_campaign_ids);
-    if (ids.length === 0) setMetaCampaignPicks([]);
-    else setMetaCampaignPicks(ids.map(id => ({ id, name: id })));
-  }, [batch.batch_kind, batch.id, editServerMetaKey]);
+    setMetaCampaignPicks(picksFromBatchMeta(batch));
+  }, [batch.batch_kind, batch.id, editServerMetaKey, batch.meta_campaign_paused_ids]);
 
   useEffect(() => {
     adminFetch(`/api/admin/branches/fields?branch=${batch.branch}`)
@@ -1592,7 +1603,7 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
         starts_at: startsAtISO,
       };
       if (isPipelineBatchKind(batch.batch_kind)) {
-        payload.meta_campaign_ids = metaCampaignPicks.map(p => p.id).slice(0, 10);
+        Object.assign(payload, metaFieldsFromPicks(metaCampaignPicks));
         payload.meta_campaign_sync_enabled = metaSyncEnabled;
         if (saveBranchMetaDefault) payload.save_branch_meta_default = true;
       }
@@ -2193,7 +2204,7 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
           ...(form.is_paid ? {} : { send_payment_email: form.send_payment_email }),
           ...(form.batch_delivery === 'pipeline'
             ? {
-                meta_campaign_ids: metaCampaignPicks.map(p => p.id).slice(0, 10),
+                ...metaFieldsFromPicks(metaCampaignPicks),
                 meta_campaign_sync_enabled: metaSyncEnabled,
               }
             : {}),

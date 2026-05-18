@@ -48,7 +48,7 @@ function dedupeKeepOrder(ids: string[]): string[] {
   return out;
 }
 
-export type MetaCampaignPick = { id: string; name: string };
+export type MetaCampaignPick = { id: string; name: string; /** Handmatig uit in CRM → PAUSED in Meta */ paused?: boolean };
 
 /** Zelfde volgorde als `orderedIds`; namen uit Meta lookup waar beschikbaar. */
 export function mergeMetaCampaignLookupNames(

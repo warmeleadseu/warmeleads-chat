@@ -1,11 +1,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { isPipelineBatchKind } from '@/lib/batchKind';
-import { normalizeCampaignIds } from '@/lib/metaBatchCampaignSync';
+import { normalizeCampaignIds, sanitizePausedMetaCampaignIds } from '@/lib/metaBatchCampaignSync';
 
 export type MetaInheritanceSource = 'source_batch' | 'branch_default' | 'latest_batch' | 'none';
 
 export type ResolvedCustomerBatchMeta = {
   meta_campaign_ids: string[];
+  meta_campaign_paused_ids: string[];
   meta_campaign_sync_enabled: boolean;
   inheritance_source: MetaInheritanceSource;
 };
@@ -15,16 +16,41 @@ type SourceBatchRow = {
   branch: string;
   batch_kind: string | null;
   meta_campaign_ids: unknown;
+  meta_campaign_paused_ids?: unknown;
   meta_campaign_sync_enabled: boolean | null;
 };
+
+type MetaInheritRow = {
+  batch_kind: string | null;
+  meta_campaign_ids: unknown;
+  meta_campaign_paused_ids?: unknown;
+  meta_campaign_sync_enabled: boolean | null;
+};
+
+function resolvedFromRow(
+  row: { meta_campaign_ids: unknown; meta_campaign_paused_ids?: unknown; meta_campaign_sync_enabled: boolean | null },
+  source: MetaInheritanceSource,
+): ResolvedCustomerBatchMeta {
+  const meta_campaign_ids = normalizeCampaignIds(row.meta_campaign_ids);
+  return {
+    meta_campaign_ids,
+    meta_campaign_paused_ids: sanitizePausedMetaCampaignIds(meta_campaign_ids, row.meta_campaign_paused_ids),
+    meta_campaign_sync_enabled: row.meta_campaign_sync_enabled !== false,
+    inheritance_source: source,
+  };
+}
 
 /** Puur testbare waterfall (async resolver vult de argumenten). */
 export function applyMetaInheritanceWaterfall(input: {
   orderBranch: string;
   customerId: string;
   sourceBatch: SourceBatchRow | null;
-  branchDefault: { meta_campaign_ids: unknown; meta_campaign_sync_enabled: boolean | null } | null;
-  historical: Array<{ batch_kind: string | null; meta_campaign_ids: unknown; meta_campaign_sync_enabled: boolean | null }>;
+  branchDefault: {
+    meta_campaign_ids: unknown;
+    meta_campaign_paused_ids?: unknown;
+    meta_campaign_sync_enabled: boolean | null;
+  } | null;
+  historical: MetaInheritRow[];
 }): ResolvedCustomerBatchMeta {
   const { orderBranch, customerId, sourceBatch, branchDefault, historical } = input;
 
@@ -36,11 +62,7 @@ export function applyMetaInheritanceWaterfall(input: {
     ) {
       const ids = normalizeCampaignIds(sourceBatch.meta_campaign_ids);
       if (ids.length > 0) {
-        return {
-          meta_campaign_ids: ids,
-          meta_campaign_sync_enabled: sourceBatch.meta_campaign_sync_enabled !== false,
-          inheritance_source: 'source_batch',
-        };
+        return resolvedFromRow(sourceBatch, 'source_batch');
       }
     }
   }
@@ -48,11 +70,7 @@ export function applyMetaInheritanceWaterfall(input: {
   if (branchDefault) {
     const ids = normalizeCampaignIds(branchDefault.meta_campaign_ids);
     if (ids.length > 0) {
-      return {
-        meta_campaign_ids: ids,
-        meta_campaign_sync_enabled: branchDefault.meta_campaign_sync_enabled !== false,
-        inheritance_source: 'branch_default',
-      };
+      return resolvedFromRow(branchDefault, 'branch_default');
     }
   }
 
@@ -60,16 +78,13 @@ export function applyMetaInheritanceWaterfall(input: {
     if (!isPipelineBatchKind(row.batch_kind)) continue;
     const ids = normalizeCampaignIds(row.meta_campaign_ids);
     if (ids.length > 0) {
-      return {
-        meta_campaign_ids: ids,
-        meta_campaign_sync_enabled: row.meta_campaign_sync_enabled !== false,
-        inheritance_source: 'latest_batch',
-      };
+      return resolvedFromRow(row, 'latest_batch');
     }
   }
 
   return {
     meta_campaign_ids: [],
+    meta_campaign_paused_ids: [],
     meta_campaign_sync_enabled: true,
     inheritance_source: 'none',
   };
@@ -99,16 +114,20 @@ export async function resolveMetaCampaignFieldsForNewLeadBatch(
   if (sourceBatchId) {
     const { data } = await supabase
       .from('customer_batches')
-      .select('customer_id, branch, batch_kind, meta_campaign_ids, meta_campaign_sync_enabled')
+      .select('customer_id, branch, batch_kind, meta_campaign_ids, meta_campaign_paused_ids, meta_campaign_sync_enabled')
       .eq('id', sourceBatchId)
       .maybeSingle();
     if (data) sourceBatch = data as SourceBatchRow;
   }
 
-  let branchDefault: { meta_campaign_ids: unknown; meta_campaign_sync_enabled: boolean | null } | null = null;
+  let branchDefault: {
+    meta_campaign_ids: unknown;
+    meta_campaign_paused_ids?: unknown;
+    meta_campaign_sync_enabled: boolean | null;
+  } | null = null;
   const { data: defRow } = await supabase
     .from('customer_branch_meta_defaults')
-    .select('meta_campaign_ids, meta_campaign_sync_enabled')
+    .select('meta_campaign_ids, meta_campaign_paused_ids, meta_campaign_sync_enabled')
     .eq('customer_id', customerId)
     .eq('branch', branch)
     .maybeSingle();
@@ -116,7 +135,7 @@ export async function resolveMetaCampaignFieldsForNewLeadBatch(
 
   const { data: histRows } = await supabase
     .from('customer_batches')
-    .select('batch_kind, meta_campaign_ids, meta_campaign_sync_enabled')
+    .select('batch_kind, meta_campaign_ids, meta_campaign_paused_ids, meta_campaign_sync_enabled')
     .eq('customer_id', customerId)
     .eq('branch', branch)
     .order('created_at', { ascending: false })
@@ -127,11 +146,7 @@ export async function resolveMetaCampaignFieldsForNewLeadBatch(
     customerId,
     sourceBatch,
     branchDefault,
-    historical: (histRows || []) as Array<{
-      batch_kind: string | null;
-      meta_campaign_ids: unknown;
-      meta_campaign_sync_enabled: boolean | null;
-    }>,
+    historical: (histRows || []) as MetaInheritRow[],
   });
 }
 
@@ -141,12 +156,15 @@ export async function upsertCustomerBranchMetaDefaults(
     customerId: string;
     branch: string;
     meta_campaign_ids: string[];
+    meta_campaign_paused_ids?: string[];
     meta_campaign_sync_enabled: boolean;
     updatedBy: string | null;
   },
 ): Promise<void> {
-  const { customerId, branch, meta_campaign_ids, meta_campaign_sync_enabled, updatedBy } = input;
+  const { customerId, branch, meta_campaign_ids, meta_campaign_paused_ids, meta_campaign_sync_enabled, updatedBy } =
+    input;
   const ids = normalizeCampaignIds(meta_campaign_ids);
+  const paused = sanitizePausedMetaCampaignIds(ids, meta_campaign_paused_ids ?? []);
 
   if (ids.length === 0) {
     await supabase.from('customer_branch_meta_defaults').delete().eq('customer_id', customerId).eq('branch', branch);
@@ -159,6 +177,7 @@ export async function upsertCustomerBranchMetaDefaults(
       customer_id: customerId,
       branch,
       meta_campaign_ids: ids,
+      meta_campaign_paused_ids: paused,
       meta_campaign_sync_enabled,
       updated_at: now,
       updated_by: updatedBy,

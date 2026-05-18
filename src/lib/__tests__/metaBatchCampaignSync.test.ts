@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   getDesiredMetaCampaignStatus,
+  getDesiredMetaCampaignStatusForCampaign,
   hasBatchAdvertisingWindowStarted,
 } from '../metaBatchCampaignSync';
 
@@ -79,5 +80,28 @@ describe('getDesiredMetaCampaignStatus + starts_at', () => {
         { todayCount: 0, weekCount: 2 },
       ),
     ).toBe('PAUSED');
+  });
+});
+
+describe('getDesiredMetaCampaignStatusForCampaign', () => {
+  const base = {
+    id: '1',
+    batch_kind: 'leads' as const,
+    is_paid: true,
+    status: 'active' as const,
+    batch_size: 10,
+    leads_delivered: 0,
+    meta_campaign_sync_enabled: true,
+    meta_campaign_ids: ['111', '222'],
+    meta_campaign_paused_ids: ['222'],
+    starts_at: null,
+  };
+
+  it('forces PAUSED for manually paused campaign', () => {
+    expect(getDesiredMetaCampaignStatusForCampaign(base, '222')).toBe('PAUSED');
+  });
+
+  it('follows batch rules for non-paused campaign', () => {
+    expect(getDesiredMetaCampaignStatusForCampaign(base, '111')).toBe('ACTIVE');
   });
 });
