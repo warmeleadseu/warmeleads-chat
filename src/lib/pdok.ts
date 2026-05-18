@@ -16,6 +16,8 @@ const PROVINCE_ALIASES: Record<string, string> = {
   'Fryslân': 'Friesland',
   'Fryslan': 'Friesland',
   'Fryslàn': 'Friesland',
+  /** Oud label in gratis-account UI; leads/targets gebruiken `Limburg` (BE-postcode). */
+  'Limburg (BE)': 'Limburg',
 };
 
 export function normalizeProvincie(val: string | undefined | null): string {

@@ -19,6 +19,7 @@ import {
   ArrowUturnLeftIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
+import { PROVINCES_ALL, PROVINCES_BE, PROVINCES_NL } from '@/data/provinces';
 
 /* ── Multi-select dropdown ─────────────────────────────────── */
 
@@ -339,9 +340,8 @@ const STATUS_COLORS: Record<string, string> = {
   verkocht: 'bg-emerald-100 text-emerald-700',
   afgewezen: 'bg-red-100 text-red-700',
 };
-const PROVINCES_NL = ['Drenthe','Flevoland','Friesland','Gelderland','Groningen','Limburg','Noord-Brabant','Noord-Holland','Overijssel','Utrecht','Zeeland','Zuid-Holland'];
-const PROVINCES_BE = ['Antwerpen','Brussels','Henegouwen','Luik','Luxemburg','Namen','Oost-Vlaanderen','Vlaams-Brabant','Waals-Brabant','West-Vlaanderen'];
-const PROVINCES = [...PROVINCES_NL, ...PROVINCES_BE].sort();
+
+const PROVINCES = PROVINCES_ALL;
 
 const COMMON_LABELS: Record<string, string> = {
   naam_klant: 'Naam', email: 'E-mail', telefoonnummer: 'Telefoon', postcode: 'Postcode',

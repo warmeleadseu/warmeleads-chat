@@ -22,8 +22,7 @@ import { portalFetch } from '@/lib/portalAuth';
 import { PERMISSION_GROUPS, ROLE_DEFAULTS, type Permission, type AssignmentRules } from '@/lib/portalPermissions';
 import { EmptyState, PageHeader, Skeleton, T } from '../_ui';
 
-const PROVINCES_NL = ['Drenthe','Flevoland','Friesland','Gelderland','Groningen','Limburg','Noord-Brabant','Noord-Holland','Overijssel','Utrecht','Zeeland','Zuid-Holland'];
-const PROVINCES_BE = ['Antwerpen','Brussels','Henegouwen','Luik','Luxemburg','Namen','Oost-Vlaanderen','Vlaams-Brabant','Waals-Brabant','West-Vlaanderen'];
+import { PROVINCES_BE, PROVINCES_NL } from '@/data/provinces';
 
 const MODE_OPTIONS: { value: AssignmentRules['mode']; label: string; desc: string }[] = [
   { value: 'manual', label: 'Handmatig', desc: 'Alleen handmatig toegewezen leads' },

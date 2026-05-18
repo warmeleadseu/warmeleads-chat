@@ -32,6 +32,7 @@ import { Car } from '@phosphor-icons/react';
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
 import { SoftGlow } from '@/components/ui/SoftGlow';
+import { PROVINCES_BE as BE_PROVINCES, PROVINCES_NL as NL_PROVINCES } from '@/data/provinces';
 
 interface Branch {
   slug: string;
@@ -51,16 +52,6 @@ interface KvkResult {
   postcode: string;
   plaats: string;
 }
-
-const NL_PROVINCES = [
-  'Groningen', 'Friesland', 'Drenthe', 'Overijssel', 'Flevoland',
-  'Gelderland', 'Utrecht', 'Noord-Holland', 'Zuid-Holland', 'Zeeland',
-  'Noord-Brabant', 'Limburg',
-];
-
-const BE_PROVINCES = [
-  'Antwerpen', 'Limburg (BE)', 'Oost-Vlaanderen', 'Vlaams-Brabant', 'West-Vlaanderen',
-];
 
 const BRANCH_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   thuisbatterij: BoltIcon,

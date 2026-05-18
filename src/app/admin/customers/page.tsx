@@ -46,6 +46,7 @@ import {
 } from '@/lib/beEnterprise';
 import { isValidBelgianVatFormat } from '@/lib/invoiceVat';
 import { useAdmin } from '../adminContext';
+import { PROVINCES_BE, PROVINCES_NL } from '@/data/provinces';
 import { ComposeMailDrawer } from '../_components/ComposeMailDrawer';
 import { MailHistory } from '../_components/MailHistory';
 
@@ -2134,9 +2135,6 @@ const COUNTRY_PRESETS = [
   { key: 'heel-nederland', label: 'Heel Nederland', lat: 52.1326, lng: 5.2913, radius: 200 },
   { key: 'heel-belgie', label: 'Heel België', lat: 50.5039, lng: 4.4699, radius: 170 },
 ];
-
-const PROVINCES_NL = ['Drenthe', 'Flevoland', 'Friesland', 'Gelderland', 'Groningen', 'Limburg', 'Noord-Brabant', 'Noord-Holland', 'Overijssel', 'Utrecht', 'Zeeland', 'Zuid-Holland'];
-const PROVINCES_BE = ['Antwerpen', 'Brussels', 'Henegouwen', 'Luik', 'Luxemburg', 'Namen', 'Oost-Vlaanderen', 'Vlaams-Brabant', 'Waals-Brabant', 'West-Vlaanderen'];
 
 function TargetsPanelContent({ customer }: { customer: Customer }) {
   return <TargetsPanel customer={customer} onClose={() => {}} embedded />;
