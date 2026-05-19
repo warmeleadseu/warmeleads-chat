@@ -128,35 +128,24 @@ export async function GET(request: NextRequest) {
     }
 
     // ── Get form details + page binding (parallel) ──────────────────
-    // Bouw eerst een form-id → page-id mapping door per gevonden page de leadgen_forms op te halen.
-    const formToPage = new Map<string, string>();
-    for (const pageId of pageIds) {
-      let formsUrl: string | null = `${pageId}/leadgen_forms?fields=id&limit=200`;
-      while (formsUrl) {
-        const pgData: { data?: { id: string }[]; paging?: { next?: string }; error?: unknown } | null =
-          await metaGet(formsUrl, token).catch(() => null);
-        if (!pgData || pgData.error) break;
-        for (const form of pgData.data || []) {
-          if (formIds.has(form.id)) formToPage.set(form.id, pageId);
-        }
-        formsUrl = pgData.paging?.next ? pgData.paging.next.replace(`${META_GRAPH_URL}/`, '') : null;
-      }
-    }
-
+    // Meta exposeert het page-object direct op een leadgen_form, dus we vragen
+    // het mee in dezelfde call: `?fields=id,name,status,questions{id},page`.
+    // Dat werkt óók voor forms die niet meer in de page's actieve leadgen_forms-lijst staan
+    // (gearchiveerd, of anderszins niet via pageId/leadgen_forms vindbaar).
     const formFetches = [...formIds].map(async (fid): Promise<LeadGenForm> => {
       try {
-        const d = await metaGet(`${fid}?fields=id,name,status,questions{id}`, token);
+        const d = await metaGet(`${fid}?fields=id,name,status,questions{id},page`, token);
         if (!d.error) {
           return {
             id: d.id,
             name: d.name || `Form ${fid}`,
             status: d.status || 'ACTIVE',
-            page_id: formToPage.get(fid),
+            page_id: d.page?.id,
             questions_count: Array.isArray(d.questions?.data) ? d.questions.data.length : undefined,
           };
         }
       } catch { /* ignore */ }
-      return { id: fid, name: `Form ${fid}`, status: 'unknown', page_id: formToPage.get(fid) };
+      return { id: fid, name: `Form ${fid}`, status: 'unknown' };
     });
 
     const forms = await Promise.all(formFetches);
