@@ -30,6 +30,24 @@ export interface Brief {
   isTestMode?: boolean;
 }
 
+/**
+ * Compacte input voor per-adset creative-generatie. Komt rechtstreeks
+ * uit een CampaignStrategy-rij (zie [aiCampaignStrategist.ts](src/lib/aiCampaignStrategist.ts)).
+ */
+export interface AdSetCreativeContext {
+  angle: string;                                  // bv. "ROI/besparing"
+  rationale?: string;                              // waarom deze angle
+  strategy_type: string;                            // broad / interest / lookalike / ...
+  audience_summary: string;                         // korte beschrijving voor wie deze ad set draait
+  style: 'lifestyle' | 'product_closeup' | 'emotional' | 'social_proof' | 'infographic';
+  framework: 'PAS' | 'AIDA' | 'BAB' | 'FAB' | '4U';
+  tone: string;                                     // bv. "warm en feitelijk"
+  hook: string;                                     // openingszin
+  must_include?: string[];
+  must_avoid?: string[];
+  creatives_per_adset: number;                      // hoeveel varianten genereren binnen deze ad set
+}
+
 export interface GeneratedVariant {
   angle: string;
   tone: string;
@@ -41,6 +59,8 @@ export interface GeneratedVariant {
   policy_warnings: string[];
   judge_verdict?: 'safe' | 'risky' | 'block';
   judge_reason?: string;
+  framework?: 'PAS' | 'AIDA' | 'BAB' | 'FAB' | '4U';
+  creative_style?: 'lifestyle' | 'product_closeup' | 'emotional' | 'social_proof' | 'infographic';
 }
 
 export interface GenerationResult {
@@ -331,6 +351,223 @@ export async function judgeVariantPolicy(brief: Brief, variant: GeneratedVariant
   return { ...parsed, costCents };
 }
 
+// ── Image-style cinematic prompts ────────────────────────────
+/**
+ * Per stijl een vast "directing"-blok dat de beeldkwaliteit
+ * substantieel omhoog brengt. We voegen dit aan elke image_prompt
+ * toe zodat GPT-Image-1 consistent foto-grade output levert.
+ */
+export const IMAGE_STYLE_DIRECTION: Record<NonNullable<GeneratedVariant['creative_style']>, string> = {
+  lifestyle:
+    'Cinematic lifestyle photography. Rule-of-thirds composition, warm golden-hour light, shallow depth of field, natural skin tones, ambient interior light. Subject framed at eye level with leading lines into the scene.',
+  product_closeup:
+    'Premium product photography, hero close-up. Soft studio light from upper-left, subtle rim-light, clean uncluttered background in warm neutral tone, macro detail visible, slight bokeh.',
+  emotional:
+    'Emotive documentary photography. Soft window light, muted earth-tone palette, slight grain for warmth. Convey feeling of safety, calm, family — through environment and gesture, not faces.',
+  social_proof:
+    'Editorial real-estate photography style. Modern Dutch/Belgian residential street or suburban home from medium-wide angle, neighborhood context, slight overcast light for honest realism, no people in frame.',
+  infographic:
+    'High-end editorial infographic illustration. Clean isometric or flat composition, restrained palette of three warm colors, subtle gradients, premium magazine-quality layout. No text/numbers — visual metaphor only.',
+};
+
+const SAFETY_TRAILER =
+  'Photorealistic where applicable, natural composition. STRICT: absolutely no on-image text, numbers, words, watermarks or logos. No recognizable human faces. No copyrighted brands or characters. No medical/before-after content.';
+
+export function buildImagePromptFromBrief(
+  baseIdea: string,
+  style: NonNullable<GeneratedVariant['creative_style']>,
+  branchName?: string,
+): string {
+  const direction = IMAGE_STYLE_DIRECTION[style];
+  return [
+    `Subject: ${baseIdea}.`,
+    branchName ? `Context: Dutch/Belgian home market, branche=${branchName}.` : '',
+    direction,
+    SAFETY_TRAILER,
+  ].filter(Boolean).join(' ');
+}
+
+// ── Per-adset creative-generator (Studio v2) ─────────────────
+const PerAdsetVariantSchema = z.object({
+  headline: z.string().min(5).max(40),
+  primary_text: z.string().min(20).max(420),
+  description: z.string().min(5).max(120),
+  cta: z.enum(['LEARN_MORE', 'SIGN_UP', 'GET_QUOTE', 'APPLY_NOW', 'CONTACT_US', 'SUBSCRIBE']),
+  image_prompt: z.string().min(20).max(400),
+});
+
+const PerAdsetVariantsResponseSchema = z.object({
+  variants: z.array(PerAdsetVariantSchema).min(1),
+});
+
+function buildAdSetSystemPrompt(brief: Brief, ctx: AdSetCreativeContext): string {
+  const branchLabel = brief.branchName || brief.branch;
+  const countries = brief.geographicTargeting.countries.join(', ');
+  const targetSummary = Object.entries(brief.targetAudience || {})
+    .map(([k, v]) => `- ${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`)
+    .join('\n');
+
+  return [
+    `Je bent een senior copywriter voor Meta Lead Ads bij WarmeLeads.`,
+    `Branche: ${branchLabel}. Doelgebied: ${countries}.`,
+    '',
+    `BATTLE-PLAN VOOR DEZE AD SET:`,
+    `- Angle: ${ctx.angle}${ctx.rationale ? ` (${ctx.rationale})` : ''}`,
+    `- Targeting-strategie: ${ctx.strategy_type}`,
+    `- Doelgroep-samenvatting: ${ctx.audience_summary}`,
+    `- Persuasion framework: ${ctx.framework}`,
+    `  ${frameworkExplanation(ctx.framework)}`,
+    `- Toon: ${ctx.tone}`,
+    `- Visuele stijl: ${ctx.style}`,
+    `- Hook (verplichte richting): "${ctx.hook}"`,
+    ctx.must_include && ctx.must_include.length > 0 ? `- Moet bevatten / refereren: ${ctx.must_include.join('; ')}` : '',
+    ctx.must_avoid && ctx.must_avoid.length > 0 ? `- Vermijd: ${ctx.must_avoid.join('; ')}` : '',
+    '',
+    `EXTRA CONTEXT VAN BRIEF:`,
+    targetSummary || '- (geen)',
+    '',
+    `SCHRIJFREGELS:`,
+    `- Genereer ${ctx.creatives_per_adset} unieke varianten BINNEN deze angle, varieerend in headline & openingszin maar binnen hetzelfde framework.`,
+    `- Geen anglicismen behalve veelgebruikte.`,
+    `- Headline ≤ 40 tekens; primary_text 80–420 tekens; description ≤ 120 tekens.`,
+    `- CTA: bij voorkeur GET_QUOTE of LEARN_MORE (vrijblijvende lead-flow).`,
+    `- Optimaliseer voor "veel ingevulde formulieren tegen lage CPL", niet voor maximale claims.`,
+    `- Maak realistische, controleerbare beloftes; expliciet GEEN "gegarandeerd", "100%", "klik hier".`,
+    `- image_prompt: visuele beschrijving van scène/onderwerp passend bij de stijl. Hoef GEEN composition/lighting`,
+    `  uit te leggen — die wordt automatisch toegevoegd. Focus op WAT er in beeld is.`,
+    '',
+    brief.specialAdCategory !== 'NONE'
+      ? `LET OP: special_ad_category=${brief.specialAdCategory}. Geen demografische targeting in copy; vermijd persoonlijke attributen.`
+      : '',
+  ].filter(Boolean).join('\n');
+}
+
+function frameworkExplanation(fw: AdSetCreativeContext['framework']): string {
+  switch (fw) {
+    case 'PAS': return '(Problem -> Agitate -> Solution) — open met het probleem, vergroot de pijn, sluit af met onze oplossing.';
+    case 'AIDA': return '(Attention -> Interest -> Desire -> Action) — klassiek: aandacht trekken, nieuwsgierigheid wekken, verlangen opwekken, CTA.';
+    case 'BAB': return '(Before -> After -> Bridge) — schets situatie nu, situatie straks, en hoe we daar samen komen.';
+    case 'FAB': return '(Features -> Advantages -> Benefits) — feiten, voordelen, persoonlijk resultaat — voor goed geïnformeerde doelgroep.';
+    case '4U': return '(Useful, Urgent, Unique, Ultra-specific) — alle 4 in elke variant; goed voor schaarste & FOMO.';
+  }
+}
+
+const PER_ADSET_JSON_SCHEMA = (count: number) => ({
+  type: 'object',
+  additionalProperties: false,
+  required: ['variants'],
+  properties: {
+    variants: {
+      type: 'array',
+      minItems: count,
+      maxItems: count,
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['headline', 'primary_text', 'description', 'cta', 'image_prompt'],
+        properties: {
+          headline: { type: 'string' },
+          primary_text: { type: 'string' },
+          description: { type: 'string' },
+          cta: { type: 'string', enum: ['LEARN_MORE', 'SIGN_UP', 'GET_QUOTE', 'APPLY_NOW', 'CONTACT_US', 'SUBSCRIBE'] },
+          image_prompt: { type: 'string' },
+        },
+      },
+    },
+  },
+});
+
+/**
+ * Genereer N creative-varianten voor één ad set, op basis van de
+ * battle-plan context. Returnt verrijkte GeneratedVariant[] inclusief
+ * framework + creative_style + policy-precheck.
+ */
+export async function generateVariantsForAdSet(
+  brief: Brief,
+  ctx: AdSetCreativeContext,
+): Promise<GenerationResult> {
+  const client = getOpenAIClient();
+  if (!client) {
+    return { variants: [], warnings: ['openai_not_configured'], textCostCents: 0 };
+  }
+
+  const model: SupportedTextModel = 'gpt-4o-mini';
+  const systemPrompt = buildAdSetSystemPrompt(brief, ctx);
+  const userPrompt = `Genereer ${ctx.creatives_per_adset} varianten als JSON (response_format).`;
+
+  const completion = await withOpenAIRetry(() =>
+    client.chat.completions.create({
+      model,
+      temperature: 0.9,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+      response_format: {
+        type: 'json_schema',
+        json_schema: {
+          name: 'adset_variants',
+          strict: true,
+          schema: PER_ADSET_JSON_SCHEMA(ctx.creatives_per_adset),
+        },
+      },
+    }),
+  );
+
+  const raw = completion.choices?.[0]?.message?.content;
+  if (!raw) throw new Error('OpenAI gaf geen content terug');
+  let parsed: { variants: Array<{ headline: string; primary_text: string; description: string; cta: GeneratedVariant['cta']; image_prompt: string }> };
+  try {
+    const json = JSON.parse(raw);
+    parsed = PerAdsetVariantsResponseSchema.parse(json) as typeof parsed;
+  } catch (e) {
+    throw new Error(`Per-adset JSON ongeldig: ${(e as Error).message}`);
+  }
+
+  const usage = completion.usage;
+  const inputTokens = usage?.prompt_tokens ?? 0;
+  const outputTokens = usage?.completion_tokens ?? 0;
+  const textCostCents = estimateTextCostCents(model, inputTokens, outputTokens);
+
+  await logOpenAIUsage({
+    briefId: brief.id,
+    branch: brief.branch,
+    kind: 'copy',
+    model,
+    costCents: textCostCents,
+    inputTokens,
+    outputTokens,
+    metadata: {
+      adset_strategy: ctx.strategy_type,
+      angle: ctx.angle,
+      framework: ctx.framework,
+      style: ctx.style,
+      variant_count: ctx.creatives_per_adset,
+    },
+  });
+
+  const variants: GeneratedVariant[] = parsed.variants.map(v => {
+    // image_prompt verrijken met style-direction zodat alle ads cinematic zijn
+    const richPrompt = buildImagePromptFromBrief(v.image_prompt, ctx.style, brief.branchName);
+    const variant: GeneratedVariant = {
+      angle: ctx.angle,
+      tone: ctx.tone,
+      headline: v.headline,
+      primary_text: v.primary_text,
+      description: v.description,
+      cta: v.cta,
+      image_prompt: richPrompt,
+      policy_warnings: [],
+      framework: ctx.framework,
+      creative_style: ctx.style,
+    };
+    variant.policy_warnings = policyCheckVariant(variant);
+    return variant;
+  });
+
+  return { variants, warnings: [], textCostCents };
+}
+
 // ── Image generation ─────────────────────────────────────────
 export async function generateVariantImage(
   brief: Brief,
@@ -340,10 +577,11 @@ export async function generateVariantImage(
   const client = getOpenAIClient();
   if (!client) return null;
 
-  const safetyPrompt = [
-    imagePrompt,
-    'Photorealistic, natural lighting, no on-image text, no logos, no recognizable faces, no copyrighted material.',
-  ].join(' ');
+  // image_prompt komt al verrijkt uit `generateVariantsForAdSet`. We laten
+  // de safety-trailer voor backwards-compat (oude legacy generator zonder style).
+  const safetyPrompt = imagePrompt.includes('STRICT: absolutely no on-image text')
+    ? imagePrompt
+    : [imagePrompt, SAFETY_TRAILER].join(' ');
 
   const res = await withOpenAIRetry(() =>
     client.images.generate({

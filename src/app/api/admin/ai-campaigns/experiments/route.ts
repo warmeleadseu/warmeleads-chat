@@ -15,15 +15,42 @@ export async function GET(request: NextRequest) {
   const { data: experiments } = await supabase
     .from('ai_campaign_experiments')
     .select('*, brief:ai_campaign_briefs(id, branch, status, target_cpl_cents, daily_budget_cents, is_test_mode, created_at)')
+    .is('deleted_at', null)
     .order('created_at', { ascending: false })
     .limit(50);
 
   const ids = (experiments || []).map(e => e.id);
+
+  // Tree: campaigns -> adsets per experiment
+  let campaignsByExp: Record<string, Array<Record<string, unknown>>> = {};
+  let adsetsByCampaign: Record<string, Array<Record<string, unknown>>> = {};
+  if (ids.length > 0) {
+    const { data: campaigns } = await supabase
+      .from('ai_campaign_meta_campaigns')
+      .select('id, experiment_id, meta_campaign_id, angle, rationale, daily_budget_cents, daily_budget_share, bid_strategy, status')
+      .in('experiment_id', ids);
+    campaignsByExp = {};
+    for (const c of campaigns || []) {
+      (campaignsByExp[c.experiment_id as string] ||= []).push(c);
+    }
+    const campaignRowIds = (campaigns || []).map(c => c.id as string);
+    if (campaignRowIds.length > 0) {
+      const { data: adsets } = await supabase
+        .from('ai_campaign_meta_adsets')
+        .select('id, meta_campaign_row_id, meta_adset_id, name, strategy_type, targeting_summary, daily_budget_cents, predicted_cpl_cents, status')
+        .in('meta_campaign_row_id', campaignRowIds);
+      adsetsByCampaign = {};
+      for (const a of adsets || []) {
+        (adsetsByCampaign[a.meta_campaign_row_id as string] ||= []).push(a);
+      }
+    }
+  }
+
   let variantsByExp: Record<string, unknown[]> = {};
   if (ids.length > 0) {
     const { data: variants } = await supabase
       .from('ai_campaign_variants')
-      .select('id, experiment_id, brief_id, headline, primary_text, description, cta, image_url, meta_ad_id, status, parent_variant_id, scale_count, policy_precheck')
+      .select('id, experiment_id, brief_id, headline, primary_text, description, cta, image_url, meta_ad_id, meta_adset_row_id, angle, creative_style, framework, predicted_cpl_cents, status, parent_variant_id, scale_count, policy_precheck')
       .in('experiment_id', ids);
     variantsByExp = {};
     for (const v of variants || []) {
@@ -55,6 +82,16 @@ export async function GET(request: NextRequest) {
   }
 
   return NextResponse.json({
-    experiments: (experiments || []).map(e => ({ ...e, variants: variantsByExp[e.id] || [] })),
+    experiments: (experiments || []).map(e => {
+      const campaigns = (campaignsByExp[e.id] || []).map(c => ({
+        ...c,
+        adsets: adsetsByCampaign[c.id as string] || [],
+      }));
+      return {
+        ...e,
+        variants: variantsByExp[e.id] || [],
+        campaigns,
+      };
+    }),
   });
 }

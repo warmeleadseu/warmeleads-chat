@@ -130,11 +130,16 @@ export async function uploadAdImage(buffer: Buffer, filename = 'creative.png'): 
 }
 
 // ── Campaign ─────────────────────────────────────────────────
+export type BidStrategy = 'LOWEST_COST_WITHOUT_CAP' | 'COST_CAP' | 'LOWEST_COST_WITH_BID_CAP';
+
 export interface CreateCampaignInput {
   name: string;
   objective?: 'OUTCOME_LEADS';
   specialAdCategory: 'NONE' | 'CREDIT' | 'EMPLOYMENT' | 'HOUSING' | 'ISSUES_ELECTIONS_POLITICS';
   status?: 'PAUSED' | 'ACTIVE';
+  /** Daily budget op campaign-niveau (= CBO/Advantage Budget). Aanbevolen voor Lead Ads met multi-adset. */
+  dailyBudgetCents?: number;
+  bidStrategy?: BidStrategy;
 }
 
 export async function createCampaign(input: CreateCampaignInput): Promise<{ id: string }> {
@@ -147,27 +152,53 @@ export async function createCampaign(input: CreateCampaignInput): Promise<{ id: 
       ? [input.specialAdCategory]
       : [];
 
-  const res = await metaWrite(`${account}/campaigns`, {
+  const params: Record<string, unknown> = {
     name: input.name,
     objective: input.objective || 'OUTCOME_LEADS',
     status: input.status || 'PAUSED',
     special_ad_categories: JSON.stringify(specialAdCategories),
     buying_type: 'AUCTION',
-  }, creds.accessToken);
+    bid_strategy: input.bidStrategy || 'LOWEST_COST_WITHOUT_CAP',
+  };
+  if (input.dailyBudgetCents && input.dailyBudgetCents > 0) {
+    params.daily_budget = String(Math.max(100, input.dailyBudgetCents));
+  }
 
+  const res = await metaWrite(`${account}/campaigns`, params, creds.accessToken);
   if (typeof res.id !== 'string') throw new Error('Meta createCampaign: geen id');
   return { id: res.id };
 }
 
 // ── Adset ────────────────────────────────────────────────────
+export interface FlexibleSpecBlock {
+  interests?: Array<{ id: string; name?: string }>;
+  behaviors?: Array<{ id: string; name?: string }>;
+}
+
+export interface AdSetTargetingSpec {
+  countries: string[];
+  regions?: Array<{ key: string }>;
+  ageMin?: number;
+  ageMax?: number;
+  genders?: number[];
+  flexibleSpec?: FlexibleSpecBlock[];
+  customAudienceIds?: string[];
+  excludedCustomAudienceIds?: string[];
+  locales?: number[];
+  /**
+   * Meta Advantage+ Audience: laat Meta op basis van onze suggesties verbreden.
+   * Niet samen gebruiken met heel beperkte targeting.
+   */
+  advantageAudience?: boolean;
+}
+
 export interface CreateAdSetInput {
   campaignId: string;
   name: string;
   pageId: string;
-  dailyBudgetCents: number;
-  geo: { countries: string[]; regions?: { key: string }[] };
-  ageMin?: number;
-  ageMax?: number;
+  /** Daily budget per ad set. Mag 0 zijn als campagne CBO heeft (campaign-level budget). */
+  dailyBudgetCents?: number;
+  targeting: AdSetTargetingSpec;
   status?: 'PAUSED' | 'ACTIVE';
   startTime?: string;
   /**
@@ -176,6 +207,8 @@ export interface CreateAdSetInput {
    * Lead-form CTA's op de ads geweigerd → 'no_ads_created'.
    */
   destinationType?: 'ON_AD' | 'WEBSITE' | 'MESSENGER' | 'INSTAGRAM_DIRECT' | 'WHATSAPP';
+  /** Override bij niet-CBO campagnes. Wordt verder geërfd van de campagne. */
+  bidStrategy?: BidStrategy;
 }
 
 export async function createAdSet(input: CreateAdSetInput): Promise<{ id: string }> {
@@ -183,30 +216,51 @@ export async function createAdSet(input: CreateAdSetInput): Promise<{ id: string
   if (!creds) throw new Error('Meta credentials niet geconfigureerd');
   const account = normActId(creds.adAccountId);
 
+  const t = input.targeting;
   const targeting: Record<string, unknown> = {
-    geo_locations: input.geo,
-    age_min: input.ageMin || 25,
-    age_max: input.ageMax || 65,
+    geo_locations: {
+      countries: t.countries,
+      ...(t.regions && t.regions.length > 0 ? { regions: t.regions } : {}),
+    },
+    age_min: t.ageMin || 25,
+    age_max: t.ageMax || 65,
     publisher_platforms: ['facebook', 'instagram'],
     facebook_positions: ['feed', 'video_feeds', 'instant_article', 'marketplace'],
     instagram_positions: ['stream', 'story', 'reels'],
     device_platforms: ['mobile', 'desktop'],
   };
+  if (t.genders && t.genders.length > 0) targeting.genders = t.genders;
+  if (t.flexibleSpec && t.flexibleSpec.length > 0) targeting.flexible_spec = t.flexibleSpec;
+  if (t.customAudienceIds && t.customAudienceIds.length > 0) {
+    targeting.custom_audiences = t.customAudienceIds.map(id => ({ id }));
+  }
+  if (t.excludedCustomAudienceIds && t.excludedCustomAudienceIds.length > 0) {
+    targeting.excluded_custom_audiences = t.excludedCustomAudienceIds.map(id => ({ id }));
+  }
+  if (t.locales && t.locales.length > 0) targeting.locales = t.locales;
+  if (t.advantageAudience) {
+    targeting.targeting_automation = { advantage_audience: 1 };
+  }
 
-  const res = await metaWrite(`${account}/adsets`, {
+  const params: Record<string, unknown> = {
     name: input.name,
     campaign_id: input.campaignId,
-    daily_budget: String(Math.max(100, input.dailyBudgetCents)),
     billing_event: 'IMPRESSIONS',
     optimization_goal: 'LEAD_GENERATION',
-    bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
     destination_type: input.destinationType || 'ON_AD',
     promoted_object: JSON.stringify({ page_id: input.pageId }),
     targeting: JSON.stringify(targeting),
     status: input.status || 'PAUSED',
     start_time: input.startTime,
-  }, creds.accessToken);
+  };
+  if (input.dailyBudgetCents && input.dailyBudgetCents > 0) {
+    params.daily_budget = String(Math.max(100, input.dailyBudgetCents));
+  }
+  if (input.bidStrategy) {
+    params.bid_strategy = input.bidStrategy;
+  }
 
+  const res = await metaWrite(`${account}/adsets`, params, creds.accessToken);
   if (typeof res.id !== 'string') throw new Error('Meta createAdSet: geen id');
   return { id: res.id };
 }
@@ -284,7 +338,9 @@ export async function createAd(input: CreateAdInput): Promise<{ id: string }> {
 }
 
 // ── Status updates ───────────────────────────────────────────
-export async function setEntityStatus(entityId: string, status: 'ACTIVE' | 'PAUSED'): Promise<void> {
+export type EntityStatus = 'ACTIVE' | 'PAUSED' | 'ARCHIVED' | 'DELETED';
+
+export async function setEntityStatus(entityId: string, status: EntityStatus): Promise<void> {
   const creds = await getMetaCredentials();
   if (!creds) throw new Error('Meta credentials niet geconfigureerd');
   await metaWrite(entityId, { status }, creds.accessToken);

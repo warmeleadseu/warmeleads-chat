@@ -1,3 +1,17 @@
+/**
+ * Genereer creative-varianten voor een eerder gestrategie'd brief.
+ *
+ * Vereist dat `/strategize` al gedraaid is (brief.strategy_plan + tree
+ * van campagnes/adsets staat in de DB). Per ad set genereert deze
+ * route `creatives_per_adset` copy-varianten op basis van de creative
+ * brief van de strategist. Images worden NIET hier gegenereerd —
+ * dat gaat via `/variants/[id]/generate-image` zodat de UI per kaart
+ * progressief feedback krijgt.
+ *
+ * Backwards compat: als de brief GEEN strategy_plan heeft (oude flow),
+ * valt de route terug op de klassieke `generateCopyVariants` met
+ * `variant_count` totale varianten in één batch.
+ */
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireSuperAdmin } from '@/lib/adminAuth';
@@ -5,41 +19,56 @@ import { createServerClient } from '@/lib/supabase';
 import {
   generateCopyVariants,
   generateVariantImage,
+  generateVariantsForAdSet,
   judgeVariantPolicy,
+  type AdSetCreativeContext,
   type Brief,
 } from '@/lib/aiCreativeGenerator';
 import { uploadAdImage } from '@/lib/metaMarketingApi';
 import { isAiCampaignsEnabled, reserveOpenAIBudget } from '@/lib/aiCampaignBudget';
-import { getBranchDemand } from '@/lib/aiCampaignDemand';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
 
 const BodySchema = z.object({
-  branch: z.string().min(1),
-  target_audience: z.record(z.string(), z.unknown()).default({}),
-  geographic_targeting: z.object({
-    countries: z.array(z.string()).min(1),
-    regions: z.array(z.string()).optional(),
-  }),
-  target_cpl_cents: z.number().int().nonnegative().optional(),
-  daily_budget_cents: z.number().int().min(100),
-  max_total_budget_cents: z.number().int().min(100),
-  lead_form_id: z.string().min(1),
-  page_id: z.string().min(1),
-  special_ad_category: z.enum(['NONE', 'CREDIT', 'EMPLOYMENT', 'HOUSING', 'ISSUES_ELECTIONS_POLITICS']).default('NONE'),
-  is_test_mode: z.boolean().default(true),
-  variant_count: z.number().int().min(1).max(8).default(4),
-  skip_images: z.boolean().default(false),
+  brief_id: z.string().uuid(),
+  skip_images: z.boolean().default(true),  // default: copy first, image later via /variants/[id]/generate-image
   skip_judge: z.boolean().default(false),
 });
+
+interface AdsetRow {
+  id: string;
+  meta_campaign_row_id: string;
+  name: string;
+  strategy_type: string;
+  targeting_summary: Record<string, unknown>;
+}
+
+interface CampaignRow {
+  id: string;
+  experiment_id: string;
+  angle: string;
+  rationale: string | null;
+}
+
+interface BriefRow {
+  id: string;
+  branch: string;
+  target_audience: Record<string, unknown>;
+  geographic_targeting: { countries: string[]; regions?: string[] };
+  special_ad_category: 'NONE' | 'CREDIT' | 'EMPLOYMENT' | 'HOUSING' | 'ISSUES_ELECTIONS_POLITICS';
+  variant_count: number;
+  is_test_mode: boolean;
+  strategy_plan: { campaigns: Array<{ angle: string; adsets: Array<{ strategy_type: string; creative_brief: { style: AdSetCreativeContext['style']; framework: AdSetCreativeContext['framework']; tone: string; hook: string; must_include?: string[]; must_avoid?: string[] }; targeting: Record<string, unknown> }> }> } | null;
+  strategy_params: { creatives_per_adset?: number } | null;
+}
 
 export async function POST(request: NextRequest) {
   const { admin, error: authErr } = await requireSuperAdmin(request);
   if (authErr || !admin) return authErr;
 
   if (!(await isAiCampaignsEnabled())) {
-    return NextResponse.json({ error: 'AI campaigns master switch staat uit (app_settings.ai_campaigns_enabled).' }, { status: 409 });
+    return NextResponse.json({ error: 'AI campaigns master switch staat uit.' }, { status: 409 });
   }
 
   const parse = BodySchema.safeParse(await request.json().catch(() => null));
@@ -47,152 +76,254 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Ongeldige input', details: parse.error.issues }, { status: 400 });
   }
   const body = parse.data;
-
   const supabase = createServerClient();
+
+  const { data: briefData } = await supabase
+    .from('ai_campaign_briefs')
+    .select('*')
+    .eq('id', body.brief_id)
+    .is('deleted_at', null)
+    .maybeSingle();
+  if (!briefData) {
+    return NextResponse.json({ error: 'Brief niet gevonden' }, { status: 404 });
+  }
+  const brief = briefData as unknown as BriefRow;
 
   const { data: branchRow } = await supabase
     .from('branches')
-    .select('slug, name, is_active')
-    .eq('slug', body.branch)
+    .select('slug, name')
+    .eq('slug', brief.branch)
     .maybeSingle();
-  if (!branchRow || branchRow.is_active === false) {
-    return NextResponse.json({ error: 'Onbekende of inactieve branche' }, { status: 400 });
-  }
 
-  const demand = await getBranchDemand(body.branch);
-  if (demand.capacityOpen === 0 && !body.is_test_mode) {
-    return NextResponse.json({
-      error: 'Geen open klantcapaciteit voor deze branche; advertenties zouden geen klant vinden.',
-      demand,
-    }, { status: 409 });
-  }
+  const briefForGen: Brief = {
+    id: brief.id,
+    branch: brief.branch,
+    branchName: branchRow?.name,
+    targetAudience: brief.target_audience,
+    geographicTargeting: brief.geographic_targeting,
+    specialAdCategory: brief.special_ad_category,
+    variantCount: brief.variant_count,
+    isTestMode: brief.is_test_mode,
+  };
 
-  // OpenAI budgetbescherming: gemiddeld <=15ct per variant (copy+image). Conservatief 25 cent.
-  const estimateCents = body.variant_count * 25;
-  const guard = await reserveOpenAIBudget(body.branch, estimateCents);
+  // OpenAI budget reserveren
+  const estimate = brief.variant_count * 25 + 100; // copy + (optioneel) images
+  const guard = await reserveOpenAIBudget(brief.branch, estimate);
   if (!guard.ok) {
     return NextResponse.json({ error: 'OpenAI-budget bereikt', guard }, { status: 402 });
   }
 
-  // ── Brief opslaan ──────────────────────────────────────────
-  const { data: brief, error: briefErr } = await supabase
-    .from('ai_campaign_briefs')
-    .insert({
-      branch: body.branch,
-      status: 'draft',
-      target_audience: body.target_audience,
-      geographic_targeting: body.geographic_targeting,
-      target_cpl_cents: body.target_cpl_cents ?? null,
-      daily_budget_cents: body.daily_budget_cents,
-      max_total_budget_cents: body.max_total_budget_cents,
-      lead_form_id: body.lead_form_id,
-      page_id: body.page_id,
-      special_ad_category: body.special_ad_category,
-      is_test_mode: body.is_test_mode,
-      variant_count: body.variant_count,
-      created_by: admin.id,
-    })
-    .select('*')
-    .single();
-  if (briefErr || !brief) {
-    return NextResponse.json({ error: 'Kon brief niet opslaan', details: briefErr?.message }, { status: 500 });
-  }
+  // ── Tree ophalen (als strategist al heeft gedraaid) ──
+  const { data: experiment } = await supabase
+    .from('ai_campaign_experiments')
+    .select('id')
+    .eq('brief_id', brief.id)
+    .is('deleted_at', null)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
-  const briefForGen: Brief = {
-    id: brief.id,
-    branch: body.branch,
-    branchName: branchRow.name,
-    targetAudience: body.target_audience,
-    geographicTargeting: body.geographic_targeting,
-    specialAdCategory: body.special_ad_category,
-    variantCount: body.variant_count,
-    isTestMode: body.is_test_mode,
-  };
-
-  let copyResult: Awaited<ReturnType<typeof generateCopyVariants>>;
-  try {
-    copyResult = await generateCopyVariants(briefForGen);
-  } catch (e) {
-    await supabase.from('ai_campaign_briefs').update({ status: 'failed' }).eq('id', brief.id);
-    return NextResponse.json({ error: 'Copy-generatie mislukt', details: (e as Error).message }, { status: 502 });
-  }
-
-  if (copyResult.variants.length === 0) {
-    await supabase.from('ai_campaign_briefs').update({ status: 'failed' }).eq('id', brief.id);
-    return NextResponse.json({ error: 'Geen varianten gegenereerd', warnings: copyResult.warnings }, { status: 502 });
-  }
-
-  // ── Policy: regex-precheck en, indien warnings, LLM-judge per variant ──
-  const insertedVariants: Array<{ id: string; meta_image_hash: string | null; image_url: string | null }> = [];
-  for (let i = 0; i < copyResult.variants.length; i++) {
-    const v = copyResult.variants[i];
-
-    let judgeVerdict: 'safe' | 'risky' | 'block' | undefined;
-    let judgeReason: string | undefined;
-    if (!body.skip_judge && v.policy_warnings.length > 0) {
-      try {
-        const judged = await judgeVariantPolicy(briefForGen, v);
-        judgeVerdict = judged.verdict;
-        judgeReason = judged.reason;
-      } catch (e) {
-        judgeReason = `judge_failed: ${(e as Error).message}`;
-      }
+  let plannedAdsets: AdsetRow[] = [];
+  let plannedCampaigns: CampaignRow[] = [];
+  if (experiment) {
+    const { data: cmps } = await supabase
+      .from('ai_campaign_meta_campaigns')
+      .select('id, experiment_id, angle, rationale')
+      .eq('experiment_id', experiment.id);
+    plannedCampaigns = (cmps || []) as CampaignRow[];
+    if (plannedCampaigns.length > 0) {
+      const { data: ads } = await supabase
+        .from('ai_campaign_meta_adsets')
+        .select('id, meta_campaign_row_id, name, strategy_type, targeting_summary')
+        .in('meta_campaign_row_id', plannedCampaigns.map(c => c.id));
+      plannedAdsets = (ads || []) as AdsetRow[];
     }
+  }
 
-    let imageHash: string | null = null;
-    let imageUrl: string | null = null;
-    if (!body.skip_images && judgeVerdict !== 'block') {
-      try {
-        const img = await generateVariantImage(briefForGen, brief.id, v.image_prompt);
-        if (img) {
-          const buf = Buffer.from(img.base64, 'base64');
-          const uploaded = await uploadAdImage(buf, `ai_${brief.id.slice(0, 8)}_v${i + 1}.png`);
-          imageHash = uploaded.hash;
-          imageUrl = uploaded.url;
+  const hasStrategy = brief.strategy_plan && plannedAdsets.length > 0;
+  const insertedVariants: Array<{ id: string; meta_image_hash: string | null; image_url: string | null; meta_adset_row_id: string | null }> = [];
+
+  if (hasStrategy && brief.strategy_plan) {
+    // ── Nieuwe flow: per adset genereren via strategist-context ──
+    const creativesPerAdset = brief.strategy_params?.creatives_per_adset || 3;
+
+    for (const campaignPlan of brief.strategy_plan.campaigns) {
+      const cmpRow = plannedCampaigns.find(c => c.angle === campaignPlan.angle);
+      if (!cmpRow) continue;
+      for (const adsetPlan of campaignPlan.adsets) {
+        const adsetRow = plannedAdsets.find(
+          a => a.meta_campaign_row_id === cmpRow.id && a.strategy_type === adsetPlan.strategy_type,
+        );
+        if (!adsetRow) continue;
+
+        const targetingSpec = (adsetRow.targeting_summary || {}) as Record<string, unknown>;
+        const audienceParts: string[] = [];
+        if (targetingSpec.age_min || targetingSpec.age_max) {
+          audienceParts.push(`leeftijd ${targetingSpec.age_min || '?'}-${targetingSpec.age_max || '?'}`);
         }
-      } catch (e) {
-        console.warn('[ai-campaigns/generate] image failed', e);
+        if (Array.isArray(targetingSpec.interests) && targetingSpec.interests.length > 0) {
+          audienceParts.push(`interesses: ${(targetingSpec.interests as Array<{ name?: string }>).map(i => i.name).filter(Boolean).join(', ')}`);
+        }
+        if (adsetPlan.strategy_type === 'lookalike') audienceParts.push('lookalike van onze bestaande leads');
+        if (adsetPlan.strategy_type === 'broad') audienceParts.push('geen interest-targeting (broad)');
+
+        const ctx: AdSetCreativeContext = {
+          angle: campaignPlan.angle,
+          rationale: undefined,
+          strategy_type: adsetPlan.strategy_type,
+          audience_summary: audienceParts.join('; ') || 'algemene doelgroep',
+          style: adsetPlan.creative_brief.style,
+          framework: adsetPlan.creative_brief.framework,
+          tone: adsetPlan.creative_brief.tone,
+          hook: adsetPlan.creative_brief.hook,
+          must_include: adsetPlan.creative_brief.must_include,
+          must_avoid: adsetPlan.creative_brief.must_avoid,
+          creatives_per_adset: creativesPerAdset,
+        };
+
+        let copyRes;
+        try {
+          copyRes = await generateVariantsForAdSet(briefForGen, ctx);
+        } catch (e) {
+          console.warn('[generate] adset copy failed', adsetRow.name, (e as Error).message);
+          continue;
+        }
+
+        for (const v of copyRes.variants) {
+          // Optional judge
+          let judgeVerdict: 'safe' | 'risky' | 'block' | undefined;
+          let judgeReason: string | undefined;
+          if (!body.skip_judge && v.policy_warnings.length > 0) {
+            try {
+              const judged = await judgeVariantPolicy(briefForGen, v);
+              judgeVerdict = judged.verdict;
+              judgeReason = judged.reason;
+            } catch (e) {
+              judgeReason = `judge_failed: ${(e as Error).message}`;
+            }
+          }
+
+          let imageHash: string | null = null;
+          let imageUrl: string | null = null;
+          if (!body.skip_images && judgeVerdict !== 'block') {
+            try {
+              const img = await generateVariantImage(briefForGen, brief.id, v.image_prompt);
+              if (img) {
+                const buf = Buffer.from(img.base64, 'base64');
+                const up = await uploadAdImage(buf, `ai_${brief.id.slice(0, 8)}_${adsetRow.id.slice(0, 6)}.png`);
+                imageHash = up.hash;
+                imageUrl = up.url;
+              }
+            } catch (e) {
+              console.warn('[generate] image inline failed', (e as Error).message);
+            }
+          }
+
+          const status = judgeVerdict === 'block' ? 'failed' : 'draft';
+          const { data: row } = await supabase
+            .from('ai_campaign_variants')
+            .insert({
+              brief_id: brief.id,
+              experiment_id: experiment?.id,
+              meta_adset_row_id: adsetRow.id,
+              angle: campaignPlan.angle,
+              tone: v.tone,
+              headline: v.headline,
+              primary_text: v.primary_text,
+              description: v.description,
+              cta: v.cta,
+              image_prompt: v.image_prompt,
+              creative_style: v.creative_style,
+              framework: v.framework,
+              meta_image_hash: imageHash,
+              image_url: imageUrl,
+              status,
+              policy_precheck: {
+                regex_warnings: v.policy_warnings,
+                judge_verdict: judgeVerdict ?? null,
+                judge_reason: judgeReason ?? null,
+              },
+              generation: { model: 'gpt-4o-mini', adset_strategy: adsetPlan.strategy_type },
+            })
+            .select('id, meta_image_hash, image_url, meta_adset_row_id')
+            .single();
+          if (row) insertedVariants.push(row);
+        }
       }
     }
-
-    const status = judgeVerdict === 'block' ? 'failed' : 'draft';
-
-    const { data: row, error: vErr } = await supabase
-      .from('ai_campaign_variants')
-      .insert({
-        brief_id: brief.id,
-        angle: v.angle,
-        tone: v.tone,
-        headline: v.headline,
-        primary_text: v.primary_text,
-        description: v.description,
-        cta: v.cta,
-        image_prompt: v.image_prompt,
-        meta_image_hash: imageHash,
-        image_url: imageUrl,
-        status,
-        policy_precheck: {
-          regex_warnings: v.policy_warnings,
-          judge_verdict: judgeVerdict ?? null,
-          judge_reason: judgeReason ?? null,
-        },
-        generation: {
-          model: 'gpt-4o-mini',
-          temperature: 0.9,
-        },
-      })
-      .select('id, meta_image_hash, image_url')
-      .single();
-    if (vErr || !row) {
-      console.warn('[ai-campaigns/generate] variant insert failed', vErr?.message);
-      continue;
+  } else {
+    // ── Legacy flow: één batch zonder strategist ──
+    let copyRes;
+    try {
+      copyRes = await generateCopyVariants(briefForGen);
+    } catch (e) {
+      await supabase.from('ai_campaign_briefs').update({ status: 'failed' }).eq('id', brief.id);
+      return NextResponse.json({ error: 'Copy-generatie mislukt', details: (e as Error).message }, { status: 502 });
     }
-    insertedVariants.push(row);
+    if (copyRes.variants.length === 0) {
+      await supabase.from('ai_campaign_briefs').update({ status: 'failed' }).eq('id', brief.id);
+      return NextResponse.json({ error: 'Geen varianten gegenereerd' }, { status: 502 });
+    }
+    for (let i = 0; i < copyRes.variants.length; i++) {
+      const v = copyRes.variants[i];
+      let judgeVerdict: 'safe' | 'risky' | 'block' | undefined;
+      let judgeReason: string | undefined;
+      if (!body.skip_judge && v.policy_warnings.length > 0) {
+        try {
+          const judged = await judgeVariantPolicy(briefForGen, v);
+          judgeVerdict = judged.verdict;
+          judgeReason = judged.reason;
+        } catch (e) {
+          judgeReason = `judge_failed: ${(e as Error).message}`;
+        }
+      }
+      let imageHash: string | null = null;
+      let imageUrl: string | null = null;
+      if (!body.skip_images && judgeVerdict !== 'block') {
+        try {
+          const img = await generateVariantImage(briefForGen, brief.id, v.image_prompt);
+          if (img) {
+            const buf = Buffer.from(img.base64, 'base64');
+            const up = await uploadAdImage(buf, `ai_${brief.id.slice(0, 8)}_v${i + 1}.png`);
+            imageHash = up.hash;
+            imageUrl = up.url;
+          }
+        } catch (e) {
+          console.warn('[generate] legacy image failed', (e as Error).message);
+        }
+      }
+      const status = judgeVerdict === 'block' ? 'failed' : 'draft';
+      const { data: row } = await supabase
+        .from('ai_campaign_variants')
+        .insert({
+          brief_id: brief.id,
+          experiment_id: experiment?.id,
+          angle: v.angle,
+          tone: v.tone,
+          headline: v.headline,
+          primary_text: v.primary_text,
+          description: v.description,
+          cta: v.cta,
+          image_prompt: v.image_prompt,
+          meta_image_hash: imageHash,
+          image_url: imageUrl,
+          status,
+          policy_precheck: {
+            regex_warnings: v.policy_warnings,
+            judge_verdict: judgeVerdict ?? null,
+            judge_reason: judgeReason ?? null,
+          },
+          generation: { model: 'gpt-4o-mini' },
+        })
+        .select('id, meta_image_hash, image_url, meta_adset_row_id')
+        .single();
+      if (row) insertedVariants.push(row);
+    }
   }
 
   if (insertedVariants.length === 0) {
     await supabase.from('ai_campaign_briefs').update({ status: 'failed' }).eq('id', brief.id);
-    return NextResponse.json({ error: 'Alle varianten gefaald op policy of image-generatie' }, { status: 502 });
+    return NextResponse.json({ error: 'Alle varianten gefaald' }, { status: 502 });
   }
 
   await supabase.from('ai_campaign_briefs').update({ status: 'generated' }).eq('id', brief.id);
@@ -208,8 +339,6 @@ export async function POST(request: NextRequest) {
     brief_id: brief.id,
     brief: { ...brief, status: 'generated' },
     variants: variants || [],
-    text_cost_cents: copyResult.textCostCents,
-    warnings: copyResult.warnings,
-    demand,
+    used_strategy: hasStrategy,
   });
 }

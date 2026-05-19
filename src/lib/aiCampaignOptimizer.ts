@@ -55,6 +55,8 @@ export interface OptimizerSummary {
     no_demand: number;
     iterate: number;
     skipped: number;
+    pause_adset: number;
+    reallocate_budget: number;
   };
   errors: string[];
 }
@@ -89,10 +91,29 @@ interface VariantRow {
   experiment_id: string | null;
   brief_id: string;
   meta_ad_id: string | null;
+  meta_adset_row_id: string | null;
   status: string;
   scale_count: number;
   angle: string | null;
   headline: string;
+}
+
+interface MetaCampaignRow {
+  id: string;
+  meta_campaign_id: string | null;
+  angle: string;
+  daily_budget_cents: number;
+  daily_budget_share: number;
+  status: string;
+}
+
+interface MetaAdsetRow {
+  id: string;
+  meta_campaign_row_id: string;
+  meta_adset_id: string | null;
+  strategy_type: string;
+  daily_budget_cents: number | null;
+  status: string;
 }
 
 interface InsightRow {
@@ -127,7 +148,7 @@ async function logDecision(
 export async function runOptimizerTick(opts: OptimizerOptions = {}): Promise<OptimizerSummary> {
   const summary: OptimizerSummary = {
     experimentsProcessed: 0,
-    actions: { pause_loser: 0, scale_winner: 0, kill_cold_funnel: 0, no_demand: 0, iterate: 0, skipped: 0 },
+    actions: { pause_loser: 0, scale_winner: 0, kill_cold_funnel: 0, no_demand: 0, iterate: 0, skipped: 0, pause_adset: 0, reallocate_budget: 0 },
     errors: [],
   };
 
@@ -172,10 +193,23 @@ export async function runOptimizerTick(opts: OptimizerOptions = {}): Promise<Opt
 
       const { data: variantsRaw } = await supabase
         .from('ai_campaign_variants')
-        .select('id, experiment_id, brief_id, meta_ad_id, status, scale_count, angle, headline')
+        .select('id, experiment_id, brief_id, meta_ad_id, meta_adset_row_id, status, scale_count, angle, headline')
         .eq('experiment_id', exp.id);
       const variants = (variantsRaw || []) as VariantRow[];
       if (variants.length === 0) { summary.actions.skipped++; continue; }
+
+      // Tree: alle campagnes + adsets van dit experiment
+      const { data: cmpsRaw } = await supabase
+        .from('ai_campaign_meta_campaigns')
+        .select('id, meta_campaign_id, angle, daily_budget_cents, daily_budget_share, status')
+        .eq('experiment_id', exp.id);
+      const campaigns = (cmpsRaw || []) as MetaCampaignRow[];
+      const { data: adsetsRaw } = campaigns.length > 0 ? await supabase
+        .from('ai_campaign_meta_adsets')
+        .select('id, meta_campaign_row_id, meta_adset_id, strategy_type, daily_budget_cents, status')
+        .in('meta_campaign_row_id', campaigns.map(c => c.id))
+        : { data: [] };
+      const adsets = (adsetsRaw || []) as MetaAdsetRow[];
 
       // ── (a) demand-check ──
       const demand = await getBranchDemand(briefRow.branch);
@@ -296,6 +330,110 @@ export async function runOptimizerTick(opts: OptimizerOptions = {}): Promise<Opt
 
       summary.actions.pause_loser += pausedCount;
       summary.actions.scale_winner += scaledCount;
+
+      // ── Tree-aware: per-adset rollups + adset pause + campagne-reallocation ──
+      if (adsets.length > 0) {
+        // Group variants by meta_adset_row_id
+        const variantsByAdset = new Map<string, VariantRow[]>();
+        for (const v of variants) {
+          if (!v.meta_adset_row_id) continue;
+          const arr = variantsByAdset.get(v.meta_adset_row_id) || [];
+          arr.push(v);
+          variantsByAdset.set(v.meta_adset_row_id, arr);
+        }
+
+        // Per-adset evaluatie: hele ad set pauzeren als avg-CPL > 2x target én >=10 leads
+        const adsetMetrics = new Map<string, { spend: number; leads: number; cpl: number | null }>();
+        for (const adset of adsets) {
+          if (adset.status === 'archived' || adset.status === 'failed') continue;
+          const adsetVariants = variantsByAdset.get(adset.id) || [];
+          let spend = 0, leads = 0;
+          for (const v of adsetVariants) {
+            if (!v.meta_ad_id) continue;
+            const ins = insightByAd.get(v.meta_ad_id);
+            if (!ins) continue;
+            spend += ins.spend;
+            leads += ins.leads;
+          }
+          const cpl = leads > 0 ? spend / leads : null;
+          adsetMetrics.set(adset.id, { spend, leads, cpl });
+          if (target > 0 && leads >= MIN_LEADS_PER_VARIANT * 2 && cpl != null && cpl > target * (BAD_CPL_RATIO * 1.4)) {
+            if (!opts.dryRun && adset.meta_adset_id) {
+              try { await setEntityStatus(adset.meta_adset_id, 'PAUSED'); } catch (e) { summary.errors.push((e as Error).message); }
+              await supabase.from('ai_campaign_meta_adsets').update({ status: 'paused' }).eq('id', adset.id);
+            }
+            await logDecision(supabase, exp.id, null, 'pause_adset',
+              `Adset CPL €${cpl?.toFixed(2)} > 2× target — pauzeer hele set`,
+              { adset_id: adset.id, strategy_type: adset.strategy_type, spend, leads, cpl, target },
+              !!opts.dryRun);
+            summary.actions.pause_adset++;
+          }
+        }
+
+        // Per-campagne CBO-reallocation: winners krijgen meer budget, losers minder
+        if (campaigns.length > 1) {
+          const cmpMetrics = campaigns.map(c => {
+            const cmpAdsets = adsets.filter(a => a.meta_campaign_row_id === c.id);
+            let spend = 0, leads = 0;
+            for (const a of cmpAdsets) {
+              const m = adsetMetrics.get(a.id);
+              if (m) { spend += m.spend; leads += m.leads; }
+            }
+            return { campaign: c, spend, leads, cpl: leads > 0 ? spend / leads : null };
+          });
+          const hasEnough = cmpMetrics.every(m => m.leads >= MIN_LEADS_PER_VARIANT);
+          if (hasEnough && target > 0) {
+            // Sorteer op CPL (lager = beter), boost top-1, dim worst-1
+            const sorted = [...cmpMetrics].filter(m => m.cpl != null).sort((a, b) => (a.cpl! - b.cpl!));
+            if (sorted.length >= 2) {
+              const winner = sorted[0];
+              const loser = sorted[sorted.length - 1];
+              const winnerBudget = winner.campaign.daily_budget_cents;
+              const loserBudget = loser.campaign.daily_budget_cents;
+              const maxBudget = briefRow.daily_budget_cents * MAX_DAILY_BUDGET_MULT;
+              const transferAmt = Math.min(
+                Math.round(loserBudget * SCALE_BUDGET_PCT),
+                Math.max(0, maxBudget - winnerBudget),
+              );
+              if (transferAmt > 50) {
+                if (!opts.dryRun) {
+                  try {
+                    // Meta CBO daily_budget update
+                    const creds = await getMetaCredentials();
+                    if (creds && winner.campaign.meta_campaign_id) {
+                      await fetch(`https://graph.facebook.com/v21.0/${winner.campaign.meta_campaign_id}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: new URLSearchParams({ daily_budget: String(winnerBudget + transferAmt), access_token: creds.accessToken }).toString(),
+                      });
+                    }
+                    if (creds && loser.campaign.meta_campaign_id) {
+                      await fetch(`https://graph.facebook.com/v21.0/${loser.campaign.meta_campaign_id}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: new URLSearchParams({ daily_budget: String(Math.max(100, loserBudget - transferAmt)), access_token: creds.accessToken }).toString(),
+                      });
+                    }
+                    await supabase.from('ai_campaign_meta_campaigns').update({ daily_budget_cents: winnerBudget + transferAmt }).eq('id', winner.campaign.id);
+                    await supabase.from('ai_campaign_meta_campaigns').update({ daily_budget_cents: Math.max(100, loserBudget - transferAmt) }).eq('id', loser.campaign.id);
+                  } catch (e) {
+                    summary.errors.push((e as Error).message);
+                  }
+                }
+                await logDecision(supabase, exp.id, null, 'reallocate_budget',
+                  `Budget shift €${(transferAmt / 100).toFixed(2)} van "${loser.campaign.angle}" naar "${winner.campaign.angle}"`,
+                  {
+                    winner: { angle: winner.campaign.angle, cpl: winner.cpl, leads: winner.leads },
+                    loser: { angle: loser.campaign.angle, cpl: loser.cpl, leads: loser.leads },
+                    transferCents: transferAmt,
+                  },
+                  !!opts.dryRun);
+                summary.actions.reallocate_budget++;
+              }
+            }
+          }
+        }
+      }
 
       // ── (d) iterate als alle live varianten paused zijn ──
       const stillLive = variants.filter(v => v.status === 'live').length - pausedCount;

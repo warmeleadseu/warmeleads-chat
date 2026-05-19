@@ -65,7 +65,7 @@ describe('createAdSet (Lead Ads payload)', () => {
       name: 'test',
       pageId: 'page_1',
       dailyBudgetCents: 2500,
-      geo: { countries: ['NL'] },
+      targeting: { countries: ['NL'] },
     });
 
     const params = new URLSearchParams(capturedBody);
@@ -86,7 +86,7 @@ describe('createAdSet (Lead Ads payload)', () => {
       name: 'test',
       pageId: 'page_1',
       dailyBudgetCents: 2500,
-      geo: { countries: ['NL'] },
+      targeting: { countries: ['NL'] },
       destinationType: 'WEBSITE',
     });
 
