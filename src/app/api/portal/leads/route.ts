@@ -6,6 +6,7 @@ import { repairDemoAssignmentsIfNeeded } from '@/lib/demoPortalLeads';
 import { getHasPaidCustomerBatch, shouldUseDemoPortalExperience } from '@/lib/demoPortalEligibility';
 import { buildPhoneSearchIlikeClauses, sanitizePostgrestIlike } from '@/lib/phoneSearch';
 import { normalizeProvincie } from '@/lib/pdok';
+import { dispatchCapiForAssignmentStatus } from '@/lib/aiCapiHooks';
 
 const PAGE_SIZE = 1000;
 const IN_CHUNK = 500;
@@ -523,7 +524,7 @@ export async function PUT(request: NextRequest) {
 
     const { data: assignment } = await supabase
       .from('lead_assignments')
-      .select('id')
+      .select('id, status')
       .eq('lead_id', id)
       .eq('customer_id', customer.id)
       .order('assigned_at', { ascending: false })
@@ -571,6 +572,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Geen wijzigingen opgegeven' }, { status: 400 });
     }
 
+    const previousStatus = (assignment as { status?: string | null }).status ?? null;
     const { error: assignError } = await supabase
       .from('lead_assignments')
       .update(updates)
@@ -579,6 +581,10 @@ export async function PUT(request: NextRequest) {
     if (assignError) {
       console.error('[portal/leads PUT] assignment update failed:', assignError.message, { leadId: id, customerId: customer.id, updates });
       return NextResponse.json({ error: 'Kon lead niet bijwerken' }, { status: 500 });
+    }
+
+    if (status !== undefined && status !== previousStatus) {
+      dispatchCapiForAssignmentStatus(assignment.id, previousStatus, status);
     }
 
     const { data: updatedAssignment } = await supabase

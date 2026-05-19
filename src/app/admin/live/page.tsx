@@ -66,6 +66,15 @@ interface CostMetrics { monthAdSpend: number; brutoCpl: number; effectieveCpl: n
 interface PaidBatch { id: string; batchId: string; customer: string; branch: string; amount: number; paidAt: string; amId: string | null; amName: string | null; amAvatarUrl?: string | null; celebrationVideoUrl: string | null; videoStart?: number | null; videoEnd?: number | null; }
 interface AMLeaderboardEntry { id: string; name: string; revenue: number; bulkRevenue: number; batches: number; celebrationVideoUrl: string | null; avatarUrl?: string | null; }
 
+interface AiSpendSummaryUI {
+  enabled: boolean;
+  todayCents: number;
+  monthCents: number;
+  monthCapCents: number;
+  branches: Array<{ branch: string; todayCents: number; monthCents: number }>;
+  activeExperiments: number;
+}
+
 interface LiveData {
   totalLeads: number;
   activeCustomers: number;
@@ -78,6 +87,7 @@ interface LiveData {
   provinceBreakdown: Record<string, number>;
   branchBreakdown: Record<string, number>;
   phoneQuality: { total: number; invalid: number; validPct: number };
+  aiSpend?: AiSpendSummaryUI;
   costMetrics?: CostMetrics;
   recentPaidBatches?: PaidBatch[];
   amLeaderboard?: AMLeaderboardEntry[];
@@ -2088,7 +2098,7 @@ export default function LiveDashboard() {
             transition={{ delay: 0.2 }}
             className="shrink-0 rounded-2xl border border-emerald-500/10 bg-emerald-500/[0.04] p-3 backdrop-blur-sm"
           >
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-6">
               <div className="px-2">
                 <p className="text-[9px] font-bold uppercase tracking-widest text-emerald-400/50">Ad spend</p>
                 <p className="mt-0.5 text-lg font-black tabular-nums text-white/80">&euro;{data.costMetrics.monthAdSpend.toLocaleString('nl-NL', { maximumFractionDigits: 0 })}</p>
@@ -2113,6 +2123,15 @@ export default function LiveDashboard() {
                 <p className="text-[9px] font-bold uppercase tracking-widest text-emerald-400/50">Winst</p>
                 <p className={`mt-0.5 text-lg font-black tabular-nums ${data.costMetrics.totalProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                   {data.costMetrics.totalProfit >= 0 ? '+' : ''}&euro;{data.costMetrics.totalProfit.toLocaleString('nl-NL', { maximumFractionDigits: 0 })}
+                </p>
+              </div>
+              <div className="px-2">
+                <p className="text-[9px] font-bold uppercase tracking-widest text-purple-300/60">AI spend</p>
+                <p className={`mt-0.5 text-lg font-black tabular-nums ${data.aiSpend?.enabled ? 'text-purple-300' : 'text-white/30'}`}>
+                  &euro;{((data.aiSpend?.todayCents || 0) / 100).toLocaleString('nl-NL', { maximumFractionDigits: 2 })}
+                </p>
+                <p className="text-[9px] text-white/25">
+                  {data.aiSpend?.enabled ? `${data.aiSpend.activeExperiments} live · maand €${((data.aiSpend.monthCents || 0)/100).toLocaleString('nl-NL', { maximumFractionDigits: 0 })}` : 'AI uit'}
                 </p>
               </div>
             </div>

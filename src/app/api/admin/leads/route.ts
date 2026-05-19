@@ -6,6 +6,7 @@ import { distributeLead, distributeLeads } from '@/lib/distribution';
 import { isPhoneValid } from '@/lib/phoneValidation';
 import { checkLeadProfanity } from '@/lib/profanityFilter';
 import { calculateQualityScore } from '@/lib/leadQuality';
+import { fireLeadCapi } from '@/lib/aiCapiHooks';
 import { logAudit } from '@/lib/audit';
 import {
   findRecentPartnerProspectByEmail,
@@ -298,6 +299,7 @@ export async function POST(request: NextRequest) {
     if (data.lat && data.lng) {
       try { await distributeLead({ id: data.id, branch: data.branch, lat: data.lat, lng: data.lng }); } catch { /* non-blocking */ }
     }
+    fireLeadCapi(data.id);
     logAudit({ adminId: admin.id, adminName: admin.name, action: 'create_lead', entityType: 'lead', entityId: data.id, details: { naam: data.naam_klant, branch: data.branch } });
     return NextResponse.json({ success: true, lead: data });
   } catch (err) {

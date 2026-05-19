@@ -6,6 +6,7 @@ import { isPhoneValid } from '@/lib/phoneValidation';
 import { checkLeadProfanity } from '@/lib/profanityFilter';
 import { checkRateLimit } from '@/lib/rateLimit';
 import { calculateQualityScore } from '@/lib/leadQuality';
+import { fireLeadCapi } from '@/lib/aiCapiHooks';
 import {
   buildPartnerProspectInsertRow,
   findRecentPartnerProspectByEmail,
@@ -198,6 +199,7 @@ export async function POST(request: NextRequest) {
             await distributeLead({ id: dup.id, branch: dup.branch, lat: dup.lat, lng: dup.lng });
           } catch { /* distribution failure should not block webhook */ }
         }
+        // Dedup-pad: nieuwe Lead-CAPI event is overbodig; oorspronkelijke lead is al verstuurd.
         return NextResponse.json({ success: true, lead_id: dup.id, deduplicated: true });
       }
     }
@@ -229,6 +231,8 @@ export async function POST(request: NextRequest) {
         await distributeLead({ id: data.id, branch: data.branch, lat: data.lat, lng: data.lng });
       } catch { /* distribution failure should not block webhook */ }
     }
+
+    fireLeadCapi(data.id);
 
     return NextResponse.json({ success: true, lead_id: data.id });
   } catch (err) {

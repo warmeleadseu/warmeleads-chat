@@ -21,8 +21,45 @@ const BATCHES_LIST_LIMIT = 1_500;
 const BULK_ASSIGNMENTS_MAX_PAGES = 80;
 
 const LIVE_STATS_CACHE_TTL_MS = 45_000;
-const LIVE_STATS_CACHE_KEY = 'live-stats-v6';
+const LIVE_STATS_CACHE_KEY = 'live-stats-v7';
 const UNPAID_BATCH_FEED_LIMIT = 18;
+
+interface AiSpendSummary {
+  enabled: boolean;
+  todayCents: number;
+  monthCents: number;
+  monthCapCents: number;
+  branches: Array<{ branch: string; todayCents: number; monthCents: number }>;
+  activeExperiments: number;
+}
+
+async function loadAiSpendSummary(supabase: ReturnType<typeof createServerClient>): Promise<AiSpendSummary> {
+  try {
+    const [{ data: setting }, { data: guards }, { count: activeExperiments }] = await Promise.all([
+      supabase.from('app_settings').select('value').eq('key', 'ai_campaigns_enabled').maybeSingle(),
+      supabase.from('ai_campaign_budget_guards').select('branch, spent_today_cents, spent_month_cents, monthly_budget_cents'),
+      supabase.from('ai_campaign_experiments').select('id', { count: 'exact', head: true }).eq('phase', 'running'),
+    ]);
+    const branches = (guards || []).map(g => ({
+      branch: g.branch as string,
+      todayCents: (g.spent_today_cents as number) || 0,
+      monthCents: (g.spent_month_cents as number) || 0,
+    }));
+    const todayCents = branches.reduce((s, g) => s + g.todayCents, 0);
+    const monthCents = branches.reduce((s, g) => s + g.monthCents, 0);
+    const monthCapCents = (guards || []).reduce((s, g) => s + ((g.monthly_budget_cents as number) || 0), 0);
+    return {
+      enabled: String(setting?.value || '').toLowerCase() === 'true',
+      todayCents,
+      monthCents,
+      monthCapCents,
+      branches,
+      activeExperiments: activeExperiments || 0,
+    };
+  } catch {
+    return { enabled: false, todayCents: 0, monthCents: 0, monthCapCents: 0, branches: [], activeExperiments: 0 };
+  }
+}
 
 interface LiveStatsCacheEntry {
   data: unknown;
@@ -579,6 +616,7 @@ export async function GET(request: NextRequest) {
       bulkAssignmentCount: revenueStats.bulk_assignment_count,
       totalProfit: Math.round(totalProfit * 100) / 100,
     },
+    aiSpend: await loadAiSpendSummary(supabase),
     recentPaidBatches,
     amLeaderboard,
     timestamp: new Date().toISOString(),
