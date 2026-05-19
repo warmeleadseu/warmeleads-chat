@@ -170,6 +170,12 @@ export interface CreateAdSetInput {
   ageMax?: number;
   status?: 'PAUSED' | 'ACTIVE';
   startTime?: string;
+  /**
+   * Conversie-locatie. Voor Meta Lead Ads (Instant Form binnen Facebook/Instagram)
+   * MOET dit `ON_AD` zijn, anders defaultet Meta naar 'website' en worden de
+   * Lead-form CTA's op de ads geweigerd → 'no_ads_created'.
+   */
+  destinationType?: 'ON_AD' | 'WEBSITE' | 'MESSENGER' | 'INSTAGRAM_DIRECT' | 'WHATSAPP';
 }
 
 export async function createAdSet(input: CreateAdSetInput): Promise<{ id: string }> {
@@ -181,6 +187,10 @@ export async function createAdSet(input: CreateAdSetInput): Promise<{ id: string
     geo_locations: input.geo,
     age_min: input.ageMin || 25,
     age_max: input.ageMax || 65,
+    publisher_platforms: ['facebook', 'instagram'],
+    facebook_positions: ['feed', 'video_feeds', 'instant_article', 'marketplace'],
+    instagram_positions: ['stream', 'story', 'reels'],
+    device_platforms: ['mobile', 'desktop'],
   };
 
   const res = await metaWrite(`${account}/adsets`, {
@@ -190,6 +200,7 @@ export async function createAdSet(input: CreateAdSetInput): Promise<{ id: string
     billing_event: 'IMPRESSIONS',
     optimization_goal: 'LEAD_GENERATION',
     bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
+    destination_type: input.destinationType || 'ON_AD',
     promoted_object: JSON.stringify({ page_id: input.pageId }),
     targeting: JSON.stringify(targeting),
     status: input.status || 'PAUSED',
@@ -219,7 +230,10 @@ export async function createLeadAdCreative(input: CreateLeadAdCreativeInput): Pr
   const account = normActId(creds.adAccountId);
 
   const cta = input.cta || 'SIGN_UP';
-  const linkUrl = input.linkUrl || 'https://www.facebook.com';
+  // Voor Lead Ads is `link` verplicht in link_data maar wordt nooit gebruikt
+  // (Meta vervangt het door het ingebedde formulier). De page-URL is een
+  // veilige default zodat Meta de creative niet weigert.
+  const linkUrl = input.linkUrl || `https://www.facebook.com/${input.pageId}`;
 
   const objectStorySpec = {
     page_id: input.pageId,

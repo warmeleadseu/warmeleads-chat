@@ -43,18 +43,38 @@ export async function POST(request: NextRequest) {
   if (!brief) return NextResponse.json({ error: 'Brief niet gevonden' }, { status: 404 });
   if (brief.status === 'killed') return NextResponse.json({ error: 'Brief is gekild; resume eerst.' }, { status: 409 });
 
-  // ── Idempotency: bestaat al een experiment voor deze brief? ──
-  const { data: existingExp } = await supabase
+  // ── Idempotency: bestaat al een succesvol experiment voor deze brief? ──
+  // Een 'killed' experiment zonder ads is een mislukte launch — die mag
+  // opnieuw geprobeerd worden met de gefixte adset-config.
+  const { data: existingExps } = await supabase
     .from('ai_campaign_experiments')
-    .select('*')
-    .eq('brief_id', brief.id)
-    .maybeSingle();
-  if (existingExp) {
-    return NextResponse.json({
-      ok: true,
-      idempotent: true,
-      experiment: existingExp,
-    });
+    .select('id, phase')
+    .eq('brief_id', brief.id);
+  if (existingExps && existingExps.length > 0) {
+    const liveExpIds = existingExps.filter(e => e.phase !== 'killed').map(e => e.id);
+    if (liveExpIds.length > 0) {
+      const { data: liveAds } = await supabase
+        .from('ai_campaign_variants')
+        .select('id')
+        .in('experiment_id', liveExpIds)
+        .not('meta_ad_id', 'is', null)
+        .limit(1);
+      if (liveAds && liveAds.length > 0) {
+        const { data: existingExp } = await supabase
+          .from('ai_campaign_experiments')
+          .select('*')
+          .eq('id', liveExpIds[0])
+          .single();
+        return NextResponse.json({ ok: true, idempotent: true, experiment: existingExp });
+      }
+    }
+    // Geen ads gevonden in eerdere experimenten — reset variants naar 'draft'
+    // zodat we opnieuw kunnen lanceren tegen dezelfde brief.
+    await supabase
+      .from('ai_campaign_variants')
+      .update({ status: 'draft', experiment_id: null })
+      .eq('brief_id', brief.id)
+      .in('status', ['failed', 'paused']);
   }
 
   const { data: variants } = await supabase
@@ -106,6 +126,10 @@ export async function POST(request: NextRequest) {
       geo: {
         countries: brief.geographic_targeting.countries || ['NL'],
       },
+      // Cruciaal voor Lead Ads: conversielocatie = Instant Form op de ad zelf.
+      // Zonder ON_AD defaultet Meta naar 'website' en weigert hij de Lead-form
+      // CTA op alle ads → 'no_ads_created'.
+      destinationType: 'ON_AD',
       status: 'PAUSED',
       startTime,
     });
@@ -133,8 +157,9 @@ export async function POST(request: NextRequest) {
 
   // ── Per variant: creative + ad ──
   let createdAds = 0;
-  const errors: string[] = [];
+  const errors: Array<{ variant_id: string; stage: 'creative' | 'ad'; message: string }> = [];
   for (const v of variantsWithImages) {
+    let creativeId: string | null = null;
     try {
       const creative = await createLeadAdCreative({
         pageId: brief.page_id,
@@ -146,37 +171,54 @@ export async function POST(request: NextRequest) {
         description: v.description ?? undefined,
         cta: v.cta as 'LEARN_MORE',
       });
+      creativeId = creative.id;
+    } catch (e) {
+      const msg = (e as Error).message || 'unknown';
+      console.warn('[ai-campaigns/launch] creative_failed', { variant_id: v.id, msg });
+      errors.push({ variant_id: v.id, stage: 'creative', message: msg });
+      await supabase.from('ai_campaign_variants').update({ status: 'failed' }).eq('id', v.id);
+      continue;
+    }
+
+    try {
       const ad = await createAd({
         name: `${naming}-AD-${v.id.slice(0, 6)}`,
         adsetId,
-        creativeId: creative.id,
+        creativeId,
         status: 'PAUSED',
       });
       await supabase
         .from('ai_campaign_variants')
         .update({
           experiment_id: experiment.id,
-          meta_creative_id: creative.id,
+          meta_creative_id: creativeId,
           meta_ad_id: ad.id,
           status: 'paused',
         })
         .eq('id', v.id);
       createdAds++;
     } catch (e) {
-      errors.push(`${v.id.slice(0, 8)}: ${(e as Error).message}`);
+      const msg = (e as Error).message || 'unknown';
+      console.warn('[ai-campaigns/launch] ad_failed', { variant_id: v.id, creative_id: creativeId, msg });
+      errors.push({ variant_id: v.id, stage: 'ad', message: msg });
       await supabase
         .from('ai_campaign_variants')
-        .update({ status: 'failed' })
+        .update({ status: 'failed', meta_creative_id: creativeId })
         .eq('id', v.id);
     }
   }
 
   if (createdAds === 0) {
+    const firstErr = errors[0]?.message || 'onbekende Meta-fout';
     await supabase
       .from('ai_campaign_experiments')
-      .update({ phase: 'killed', ended_at: new Date().toISOString(), stop_reason: 'no_ads_created' })
+      .update({
+        phase: 'killed',
+        ended_at: new Date().toISOString(),
+        stop_reason: `no_ads_created: ${firstErr.slice(0, 180)}`,
+      })
       .eq('id', experiment.id);
-    return NextResponse.json({ error: 'Geen ads aangemaakt', errors }, { status: 502 });
+    return NextResponse.json({ error: `Geen ads aangemaakt: ${firstErr}`, errors }, { status: 502 });
   }
 
   // ── Optioneel direct ACTIVE (alleen non-test + go_live=true) ──
@@ -194,7 +236,7 @@ export async function POST(request: NextRequest) {
         .update({ phase: 'running' })
         .eq('id', experiment.id);
     } catch (e) {
-      errors.push(`activate_failed: ${(e as Error).message}`);
+      errors.push({ variant_id: 'adset', stage: 'ad', message: `activate_failed: ${(e as Error).message}` });
     }
   }
 

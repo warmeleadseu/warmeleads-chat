@@ -70,6 +70,7 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
   const [imgProgress, setImgProgress] = useState<{ done: number; total: number; errors: number }>({ done: 0, total: 0, errors: 0 });
   const [phaseStartedAt, setPhaseStartedAt] = useState<number | null>(null);
   const [elapsedMs, setElapsedMs] = useState<number>(0);
+  const [launchErrors, setLaunchErrors] = useState<Array<{ variant_id: string; stage: string; message: string }>>([]);
 
   // Live elapsed-timer zodat de gebruiker ziet hoe lang AI bezig is.
   useEffect(() => {
@@ -233,12 +234,16 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
     if (!briefId) return;
     setLaunching(true);
     setError(null);
+    setLaunchErrors([]);
     try {
       const res = await adminFetch('/api/admin/ai-campaigns/launch', {
         method: 'POST',
         body: JSON.stringify({ brief_id: briefId, go_live: goLive }),
       });
       const data = await res.json();
+      if (Array.isArray(data.errors) && data.errors.length > 0) {
+        setLaunchErrors(data.errors);
+      }
       if (!res.ok || !data.ok) {
         setError(data.error || 'Launch mislukt');
         return;
@@ -567,6 +572,24 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
                 Direct live (ACTIVE)
               </button>
             </div>
+
+            {launchErrors.length > 0 && (
+              <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs">
+                <p className="font-semibold text-rose-800">
+                  Meta gaf {launchErrors.length} fout{launchErrors.length === 1 ? '' : 'en'} terug:
+                </p>
+                <ul className="mt-1 space-y-1 text-rose-700">
+                  {launchErrors.map((e, i) => (
+                    <li key={i}>
+                      <span className="font-mono text-[10px] text-rose-500">
+                        {e.variant_id.slice(0, 6)} · {e.stage}
+                      </span>{' '}
+                      — {e.message}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         )}
       </div>
