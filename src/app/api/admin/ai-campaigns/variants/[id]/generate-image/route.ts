@@ -70,9 +70,16 @@ export async function POST(
     return NextResponse.json({ error: 'OpenAI-budget bereikt', guard }, { status: 402 });
   }
 
+  const { data: branchRow } = await supabase
+    .from('branches')
+    .select('name')
+    .eq('slug', brief.branch)
+    .maybeSingle();
+
   const briefForGen: Brief = {
     id: brief.id,
     branch: brief.branch,
+    branchName: branchRow?.name,
     targetAudience: brief.target_audience as Record<string, unknown>,
     geographicTargeting: brief.geographic_targeting as { countries: string[]; regions?: string[] },
     specialAdCategory: brief.special_ad_category as Brief['specialAdCategory'],

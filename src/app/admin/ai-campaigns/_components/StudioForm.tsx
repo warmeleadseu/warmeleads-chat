@@ -91,6 +91,12 @@ interface Props {
   onLaunched: () => void;
 }
 
+interface AudienceInfo {
+  lookalike_id: string | null;
+  exclusion_id: string | null;
+  seed_lead_count: number;
+}
+
 type Phase = 'idle' | 'strategizing' | 'strategized' | 'generating_copy' | 'generating_images' | 'generated' | 'launching' | 'launched';
 
 export default function StudioForm({ masterEnabled, onLaunched }: Props) {
@@ -134,7 +140,7 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [briefId, setBriefId] = useState<string | null>(null);
   const [strategy, setStrategy] = useState<CampaignStrategy | null>(null);
-  const [audiences, setAudiences] = useState<{ lookalike_id: string | null; exclusion_id: string | null; seed_lead_count: number } | null>(null);
+  const [audiences, setAudiences] = useState<AudienceInfo | null>(null);
   const [variants, setVariants] = useState<GeneratedVariant[]>([]);
   const [imgProgress, setImgProgress] = useState<{ done: number; total: number; errors: number }>({ done: 0, total: 0, errors: 0 });
   const [phaseStartedAt, setPhaseStartedAt] = useState<number | null>(null);
@@ -648,11 +654,15 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
                 ~CPL EUR {(strategy.predicted_avg_cpl_cents / 100).toFixed(2)}
               </span>
             </h2>
-            {audiences?.lookalike_id && (
+            {audiences?.lookalike_id ? (
               <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
                 Lookalike actief ({audiences.seed_lead_count} seeds)
               </span>
-            )}
+            ) : useLookalike ? (
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                Lookalike niet beschikbaar — strategist slaat het over
+              </span>
+            ) : null}
           </div>
 
           <p className="mb-3 text-xs text-slate-700">{strategy.overall_rationale}</p>
@@ -815,11 +825,17 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
                 <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs">
                   <p className="font-semibold text-rose-800">Meta gaf {launchErrors.length} fouten:</p>
                   <ul className="mt-1 space-y-1 text-rose-700">
-                    {launchErrors.map((e, i) => (
-                      <li key={i}>
-                        <span className="font-mono text-[10px] text-rose-500">{e.level}/{e.ref.slice(0, 8)}</span> {e.message}
-                      </li>
-                    ))}
+                    {launchErrors.map((e, i) => {
+                      // Variant-IDs zijn UUIDs (36 char). Andere refs (angles/names)
+                      // korten we niet af zodat ze leesbaar blijven.
+                      const isUuid = /^[0-9a-f-]{36}$/i.test(e.ref);
+                      const display = isUuid ? e.ref.slice(0, 8) : e.ref;
+                      return (
+                        <li key={i}>
+                          <span className="font-mono text-[10px] text-rose-500">{e.level}/{display}</span>{' '}{e.message}
+                        </li>
+                      );
+                    })}
                   </ul>
                 </div>
               )}

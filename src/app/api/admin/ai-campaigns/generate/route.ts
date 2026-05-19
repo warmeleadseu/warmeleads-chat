@@ -126,16 +126,19 @@ export async function POST(request: NextRequest) {
   let plannedAdsets: AdsetRow[] = [];
   let plannedCampaigns: CampaignRow[] = [];
   if (experiment) {
+    // Order by created_at zodat we per-index kunnen matchen met de strategy_plan
     const { data: cmps } = await supabase
       .from('ai_campaign_meta_campaigns')
       .select('id, experiment_id, angle, rationale')
-      .eq('experiment_id', experiment.id);
+      .eq('experiment_id', experiment.id)
+      .order('created_at', { ascending: true });
     plannedCampaigns = (cmps || []) as CampaignRow[];
     if (plannedCampaigns.length > 0) {
       const { data: ads } = await supabase
         .from('ai_campaign_meta_adsets')
         .select('id, meta_campaign_row_id, name, strategy_type, targeting_summary')
-        .in('meta_campaign_row_id', plannedCampaigns.map(c => c.id));
+        .in('meta_campaign_row_id', plannedCampaigns.map(c => c.id))
+        .order('created_at', { ascending: true });
       plannedAdsets = (ads || []) as AdsetRow[];
     }
   }
@@ -147,13 +150,17 @@ export async function POST(request: NextRequest) {
     // ── Nieuwe flow: per adset genereren via strategist-context ──
     const creativesPerAdset = brief.strategy_params?.creatives_per_adset || 3;
 
-    for (const campaignPlan of brief.strategy_plan.campaigns) {
-      const cmpRow = plannedCampaigns.find(c => c.angle === campaignPlan.angle);
+    // Index-based matching: strategist gaf campaigns in volgorde, wij hebben
+    // ze ook in volgorde opgeslagen. Angle/strategy_type-string-match was
+    // fragiel als de strategist toevallig duplicates produceerde.
+    for (let ci = 0; ci < brief.strategy_plan.campaigns.length; ci++) {
+      const campaignPlan = brief.strategy_plan.campaigns[ci];
+      const cmpRow = plannedCampaigns[ci];
       if (!cmpRow) continue;
-      for (const adsetPlan of campaignPlan.adsets) {
-        const adsetRow = plannedAdsets.find(
-          a => a.meta_campaign_row_id === cmpRow.id && a.strategy_type === adsetPlan.strategy_type,
-        );
+      const cmpAdsets = plannedAdsets.filter(a => a.meta_campaign_row_id === cmpRow.id);
+      for (let ai = 0; ai < campaignPlan.adsets.length; ai++) {
+        const adsetPlan = campaignPlan.adsets[ai];
+        const adsetRow = cmpAdsets[ai];
         if (!adsetRow) continue;
 
         const targetingSpec = (adsetRow.targeting_summary || {}) as Record<string, unknown>;

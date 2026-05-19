@@ -226,7 +226,8 @@ const AdSetSchema = z.object({
 const CampaignPlanSchema = z.object({
   angle: z.string().min(3).max(80),
   rationale: z.string().min(5).max(400),
-  daily_budget_share: z.number().min(0.05).max(1),
+  // We renormaliseren later naar 1.0, dus geen strikte 0.05 ondergrens.
+  daily_budget_share: z.number().min(0).max(1),
   adsets: z.array(AdSetSchema).min(1).max(5),
 });
 
@@ -459,8 +460,12 @@ export async function planStrategy(input: StrategistInput): Promise<{
       response_format: {
         type: 'json_schema',
         json_schema: {
+          // strict:true vereist dat ELKE property in required staat én geen
+          // additionalProperties heeft. Onze targeting heeft veel optionele
+          // velden (interests/behaviors/locales/...). We kiezen voor
+          // strict:false + Zod-validatie achteraf voor flexibiliteit.
           name: 'campaign_strategy',
-          strict: true,
+          strict: false,
           schema: STRATEGY_JSON_SCHEMA,
         },
       },

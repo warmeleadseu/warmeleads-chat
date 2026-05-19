@@ -186,14 +186,16 @@ export async function POST(request: NextRequest) {
     const { data: ads } = await supabase
       .from('ai_campaign_meta_adsets')
       .select('id, meta_campaign_row_id, meta_adset_id, name, strategy_type, targeting_summary, daily_budget_cents, status')
-      .in('id', adsetRowIds);
+      .in('id', adsetRowIds)
+      .order('created_at', { ascending: true });
     plannedAdsets = (ads || []) as MetaAdsetRow[];
     const campaignRowIds = Array.from(new Set(plannedAdsets.map(a => a.meta_campaign_row_id)));
     if (campaignRowIds.length > 0) {
       const { data: cmps } = await supabase
         .from('ai_campaign_meta_campaigns')
         .select('id, experiment_id, meta_campaign_id, angle, rationale, daily_budget_cents, daily_budget_share, bid_strategy, status')
-        .in('id', campaignRowIds);
+        .in('id', campaignRowIds)
+        .order('created_at', { ascending: true });
       plannedCampaigns = (cmps || []) as MetaCampaignRow[];
     }
   }

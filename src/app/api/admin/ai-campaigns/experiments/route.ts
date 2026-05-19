@@ -21,14 +21,15 @@ export async function GET(request: NextRequest) {
 
   const ids = (experiments || []).map(e => e.id);
 
-  // Tree: campaigns -> adsets per experiment
+  // Tree: campaigns -> adsets per experiment (volgorde stabiel via created_at)
   let campaignsByExp: Record<string, Array<Record<string, unknown>>> = {};
   let adsetsByCampaign: Record<string, Array<Record<string, unknown>>> = {};
   if (ids.length > 0) {
     const { data: campaigns } = await supabase
       .from('ai_campaign_meta_campaigns')
       .select('id, experiment_id, meta_campaign_id, angle, rationale, daily_budget_cents, daily_budget_share, bid_strategy, status')
-      .in('experiment_id', ids);
+      .in('experiment_id', ids)
+      .order('created_at', { ascending: true });
     campaignsByExp = {};
     for (const c of campaigns || []) {
       (campaignsByExp[c.experiment_id as string] ||= []).push(c);
@@ -38,7 +39,8 @@ export async function GET(request: NextRequest) {
       const { data: adsets } = await supabase
         .from('ai_campaign_meta_adsets')
         .select('id, meta_campaign_row_id, meta_adset_id, name, strategy_type, targeting_summary, daily_budget_cents, predicted_cpl_cents, status')
-        .in('meta_campaign_row_id', campaignRowIds);
+        .in('meta_campaign_row_id', campaignRowIds)
+        .order('created_at', { ascending: true });
       adsetsByCampaign = {};
       for (const a of adsets || []) {
         (adsetsByCampaign[a.meta_campaign_row_id as string] ||= []).push(a);

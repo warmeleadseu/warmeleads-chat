@@ -5,7 +5,7 @@
 export interface AiCampaignBriefRow {
   id: string;
   branch: string;
-  status: 'draft' | 'generated' | 'launched' | 'killed' | 'failed';
+  status: 'draft' | 'generated' | 'launched' | 'killed' | 'failed' | 'deleted';
   target_audience: Record<string, unknown>;
   geographic_targeting: { countries: string[]; regions?: string[] };
   target_cpl_cents: number | null;
@@ -25,6 +25,13 @@ export interface AiCampaignBriefRow {
   variant_count: number;
   naming_prefix: string | null;
   created_by: string | null;
+  /** Strategist input (sliders + audience flags). */
+  strategy_params?: Record<string, unknown> | null;
+  /** Targeting-overrides (countries/regions/age/gender) van de Studio. */
+  targeting_spec?: Record<string, unknown> | null;
+  /** Volledig battle-plan (campaigns -> adsets -> creative_briefs) van de strategist. */
+  strategy_plan?: Record<string, unknown> | null;
+  deleted_at?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -52,6 +59,11 @@ export interface AiCampaignVariantRow {
   policy_precheck: Record<string, unknown>;
   generation: Record<string, unknown>;
   prompt_used: string | null;
+  /** Tree-koppeling naar `ai_campaign_meta_adsets.id` (Studio v2). */
+  meta_adset_row_id?: string | null;
+  creative_style?: string | null;
+  framework?: string | null;
+  predicted_cpl_cents?: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -61,12 +73,44 @@ export interface AiCampaignExperimentRow {
   brief_id: string;
   meta_campaign_id: string | null;
   meta_adset_id: string | null;
-  phase: 'pending' | 'running' | 'paused' | 'killed' | 'completed';
+  phase: 'pending' | 'running' | 'paused' | 'killed' | 'completed' | 'deleted';
   stop_reason: string | null;
   last_optimizer_tick_at: string | null;
   started_at: string | null;
   ended_at: string | null;
+  tree_summary?: Record<string, unknown> | null;
+  deleted_at?: string | null;
   created_at: string;
+}
+
+export interface AiCampaignMetaCampaignRow {
+  id: string;
+  experiment_id: string;
+  meta_campaign_id: string | null;
+  angle: string;
+  rationale: string | null;
+  daily_budget_cents: number;
+  daily_budget_share: number;
+  bid_strategy: 'LOWEST_COST_WITHOUT_CAP' | 'COST_CAP' | 'LOWEST_COST_WITH_BID_CAP';
+  status: 'pending' | 'active' | 'paused' | 'archived' | 'failed';
+  archived_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AiCampaignMetaAdsetRow {
+  id: string;
+  meta_campaign_row_id: string;
+  meta_adset_id: string | null;
+  name: string;
+  strategy_type: 'broad' | 'interest' | 'behavior' | 'lookalike' | 'retargeting_excl' | 'advantage';
+  targeting_summary: Record<string, unknown>;
+  daily_budget_cents: number | null;
+  predicted_cpl_cents: number | null;
+  status: 'pending' | 'active' | 'paused' | 'archived' | 'failed';
+  archived_at: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface AiBudgetGuardRow {

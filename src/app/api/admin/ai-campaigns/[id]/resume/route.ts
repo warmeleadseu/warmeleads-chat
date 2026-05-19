@@ -8,6 +8,10 @@ export const runtime = 'nodejs';
 
 interface Ctx { params: { id: string } }
 
+/**
+ * Hervat een gekild experiment: activeert ALLE niet-archived ad sets en
+ * campagnes in de tree opnieuw. Budget wordt opnieuw gereserveerd.
+ */
 export async function POST(request: NextRequest, ctx: Ctx) {
   const { admin, error: authErr } = await requireSuperAdmin(request);
   if (authErr || !admin) return authErr;
@@ -25,6 +29,7 @@ export async function POST(request: NextRequest, ctx: Ctx) {
     .eq('id', experimentId)
     .maybeSingle();
   if (!exp) return NextResponse.json({ error: 'Experiment niet gevonden' }, { status: 404 });
+  if (exp.deleted_at) return NextResponse.json({ error: 'Experiment is verwijderd' }, { status: 409 });
   if (exp.phase === 'running') {
     return NextResponse.json({ ok: true, idempotent: true, experiment: exp });
   }
@@ -42,25 +47,61 @@ export async function POST(request: NextRequest, ctx: Ctx) {
   }
 
   const errors: string[] = [];
-  if (exp.meta_adset_id) {
-    try {
-      await setEntityStatus(exp.meta_adset_id, 'ACTIVE');
-    } catch (e) {
-      errors.push(`adset activate: ${(e as Error).message}`);
+
+  // Tree-walk: campagnes + adsets terug op ACTIVE (volgorde: campagne eerst,
+  // anders weigert Meta de child-activate).
+  const { data: metaCampaigns } = await supabase
+    .from('ai_campaign_meta_campaigns')
+    .select('id, meta_campaign_id, status')
+    .eq('experiment_id', experimentId);
+  const campaignRowIds = (metaCampaigns || []).map(c => c.id);
+  for (const c of metaCampaigns || []) {
+    if (!c.meta_campaign_id || c.status === 'archived' || c.status === 'failed') continue;
+    try { await setEntityStatus(c.meta_campaign_id, 'ACTIVE'); }
+    catch (e) { errors.push(`campaign ${c.meta_campaign_id}: ${(e as Error).message}`); }
+  }
+  if (campaignRowIds.length > 0) {
+    const { data: adsets } = await supabase
+      .from('ai_campaign_meta_adsets')
+      .select('meta_adset_id, status')
+      .in('meta_campaign_row_id', campaignRowIds);
+    for (const a of adsets || []) {
+      if (!a.meta_adset_id || a.status === 'archived' || a.status === 'failed') continue;
+      try { await setEntityStatus(a.meta_adset_id, 'ACTIVE'); }
+      catch (e) { errors.push(`adset ${a.meta_adset_id}: ${(e as Error).message}`); }
     }
   }
-  if (exp.meta_campaign_id) {
-    try {
-      await setEntityStatus(exp.meta_campaign_id, 'ACTIVE');
-    } catch (e) {
-      errors.push(`campaign activate: ${(e as Error).message}`);
-    }
+
+  // Legacy fallback
+  if (campaignRowIds.length === 0 && exp.meta_campaign_id) {
+    try { await setEntityStatus(exp.meta_campaign_id, 'ACTIVE'); }
+    catch (e) { errors.push(`legacy campaign: ${(e as Error).message}`); }
+  }
+  if (campaignRowIds.length === 0 && exp.meta_adset_id) {
+    try { await setEntityStatus(exp.meta_adset_id, 'ACTIVE'); }
+    catch (e) { errors.push(`legacy adset: ${(e as Error).message}`); }
   }
 
   await supabase
     .from('ai_campaign_experiments')
     .update({ phase: 'running', ended_at: null, stop_reason: null })
     .eq('id', experimentId);
+
+  await supabase
+    .from('ai_campaign_meta_campaigns')
+    .update({ status: 'active' })
+    .eq('experiment_id', experimentId)
+    .neq('status', 'archived')
+    .neq('status', 'failed');
+
+  if (campaignRowIds.length > 0) {
+    await supabase
+      .from('ai_campaign_meta_adsets')
+      .update({ status: 'active' })
+      .in('meta_campaign_row_id', campaignRowIds)
+      .neq('status', 'archived')
+      .neq('status', 'failed');
+  }
 
   await supabase
     .from('ai_campaign_variants')
@@ -77,7 +118,7 @@ export async function POST(request: NextRequest, ctx: Ctx) {
     experiment_id: experimentId,
     action: 'manual_resume',
     reason: 'admin_resume_button',
-    metrics_snapshot: { errors },
+    metrics_snapshot: { errors, resumed_campaigns: campaignRowIds.length },
   });
 
   return NextResponse.json({ ok: true, errors });
