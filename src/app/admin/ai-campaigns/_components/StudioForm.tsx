@@ -66,6 +66,17 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [briefId, setBriefId] = useState<string | null>(null);
   const [variants, setVariants] = useState<GeneratedVariant[]>([]);
+  const [phase, setPhase] = useState<'idle' | 'copy' | 'images' | 'done'>('idle');
+  const [imgProgress, setImgProgress] = useState<{ done: number; total: number; errors: number }>({ done: 0, total: 0, errors: 0 });
+  const [phaseStartedAt, setPhaseStartedAt] = useState<number | null>(null);
+  const [elapsedMs, setElapsedMs] = useState<number>(0);
+
+  // Live elapsed-timer zodat de gebruiker ziet hoe lang AI bezig is.
+  useEffect(() => {
+    if (phase === 'idle' || phase === 'done' || phaseStartedAt == null) return;
+    const id = setInterval(() => setElapsedMs(Date.now() - phaseStartedAt), 250);
+    return () => clearInterval(id);
+  }, [phase, phaseStartedAt]);
 
   const load = useCallback(async () => {
     const [bRes, dRes] = await Promise.all([
@@ -119,19 +130,23 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
     setError(null);
     setVariants([]);
     setBriefId(null);
+    setImgProgress({ done: 0, total: 0, errors: 0 });
     if (!selectedForm?.page_id) {
       setError('Geen page-id gevonden voor geselecteerd Lead Form');
       return;
     }
     setGenerating(true);
+    setPhase('copy');
+    setPhaseStartedAt(Date.now());
+    setElapsedMs(0);
     try {
+      // Fase 1 — copy + DB insert. We forceren skip_images=true zodat deze call
+      // binnen ~20-30s terugkomt; beelden doen we daarna parallel per variant.
       const body = {
         branch,
         target_audience: {
           probleem: audienceProblem,
           motivatie: audienceMotivation,
-          // Klein contextcue dat de prompt slimmer maakt — zonder hardcoded
-          // persona te verzinnen; de gebruiker schrijft de echte details boven.
           form_questions_count: selectedForm.questions_count ?? null,
         },
         geographic_targeting: {
@@ -145,7 +160,7 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
         special_ad_category: specialAdCategory,
         is_test_mode: isTestMode,
         variant_count: variantCount,
-        skip_images: skipImages,
+        skip_images: true,
         skip_judge: false,
       };
       const res = await adminFetch('/api/admin/ai-campaigns/generate', {
@@ -155,13 +170,63 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
       const data = await res.json();
       if (!res.ok || !data.ok) {
         setError(data.error || 'Genereren mislukt');
+        setPhase('idle');
         return;
       }
       setBriefId(data.brief_id);
-      setVariants(data.variants || []);
+      const firstVariants = (data.variants || []) as GeneratedVariant[];
+      setVariants(firstVariants);
+
+      if (skipImages) {
+        setPhase('done');
+        return;
+      }
+
+      // Fase 2 — beelden parallel genereren. Per call ~30-90s; UI updatet
+      // elke kaart zodra zijn eigen image binnen is.
+      const eligible = firstVariants.filter(v => v.status !== 'failed' && !v.meta_image_hash);
+      if (eligible.length === 0) {
+        setPhase('done');
+        return;
+      }
+      setImgProgress({ done: 0, total: eligible.length, errors: 0 });
+      setPhase('images');
+      setPhaseStartedAt(Date.now());
+      setElapsedMs(0);
+
+      await Promise.all(
+        eligible.map(async v => {
+          try {
+            const r = await adminFetch(`/api/admin/ai-campaigns/variants/${v.id}/generate-image`, {
+              method: 'POST',
+              body: JSON.stringify({}),
+            });
+            const j = await r.json();
+            if (r.ok && j.ok) {
+              setVariants(prev =>
+                prev.map(x =>
+                  x.id === v.id ? { ...x, image_url: j.image_url, meta_image_hash: j.meta_image_hash } : x,
+                ),
+              );
+              setImgProgress(p => ({ ...p, done: p.done + 1 }));
+            } else {
+              setImgProgress(p => ({ ...p, errors: p.errors + 1 }));
+            }
+          } catch {
+            setImgProgress(p => ({ ...p, errors: p.errors + 1 }));
+          }
+        }),
+      );
+      setPhase('done');
     } finally {
       setGenerating(false);
     }
+  };
+
+  const formatElapsed = (ms: number): string => {
+    const s = Math.floor(ms / 1000);
+    const m = Math.floor(s / 60);
+    return m > 0 ? `${m}m ${s % 60}s` : `${s}s`;
   };
 
   const submitLaunch = async (goLive: boolean) => {
@@ -351,8 +416,60 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
           className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-button-gradient px-3.5 py-2.5 text-sm font-bold text-white shadow-sm disabled:opacity-50"
         >
           {generating ? <ArrowPathIcon className="h-4 w-4 animate-spin" /> : <SparklesIcon className="h-4 w-4" />}
-          {generating ? 'AI genereert…' : 'Genereer varianten'}
+          {generating
+            ? phase === 'copy'
+              ? `Copy genereren… ${formatElapsed(elapsedMs)}`
+              : phase === 'images'
+                ? `Beelden ${imgProgress.done}/${imgProgress.total} · ${formatElapsed(elapsedMs)}`
+                : 'AI genereert…'
+            : 'Genereer varianten'}
         </button>
+
+        {(phase === 'copy' || phase === 'images') && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs">
+            <div className="mb-1.5 flex items-center justify-between">
+              <span className="font-semibold text-amber-900">
+                {phase === 'copy' ? 'Stap 1/2 · Copy genereren' : 'Stap 2/2 · Beelden genereren'}
+              </span>
+              <span className="font-mono text-amber-700">{formatElapsed(elapsedMs)}</span>
+            </div>
+            {phase === 'copy' ? (
+              <p className="text-amber-800">
+                GPT-4o-mini schrijft {variantCount} unieke varianten en checkt ze tegen Meta&apos;s policy.
+                Verwacht ~20-30s totaal.
+              </p>
+            ) : (
+              <>
+                <p className="text-amber-800">
+                  Copy staat al klaar hieronder. Per variant draait nu GPT-Image-1 (~30-90s per beeld) parallel.
+                  {imgProgress.errors > 0 && (
+                    <span className="ml-1 text-rose-700">· {imgProgress.errors} mislukt</span>
+                  )}
+                </p>
+                <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-amber-200">
+                  <div
+                    className="h-full bg-amber-500 transition-all duration-300"
+                    style={{
+                      width: imgProgress.total
+                        ? `${((imgProgress.done + imgProgress.errors) / imgProgress.total) * 100}%`
+                        : '0%',
+                    }}
+                  />
+                </div>
+                <p className="mt-1 text-[10px] text-amber-700">
+                  {imgProgress.done}/{imgProgress.total} klaar · je kunt al beoordelen of de copy goed is.
+                </p>
+              </>
+            )}
+          </div>
+        )}
+
+        {phase === 'done' && variants.length > 0 && imgProgress.errors > 0 && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+            {imgProgress.done} van {imgProgress.total} beelden gegenereerd · {imgProgress.errors} mislukt.
+            Je kunt opnieuw genereren of zonder beeld pushen naar Meta.
+          </div>
+        )}
 
         {error && (
           <div className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
@@ -389,6 +506,11 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
                     {v.image_url ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={v.image_url} alt="creative" className="aspect-square w-full object-cover" />
+                    ) : phase === 'images' && !blocked ? (
+                      <div className="flex aspect-square w-full flex-col items-center justify-center gap-2 bg-gradient-to-br from-amber-50 to-white text-[11px] text-amber-700">
+                        <ArrowPathIcon className="h-5 w-5 animate-spin text-amber-500" />
+                        <span>beeld genereren…</span>
+                      </div>
                     ) : (
                       <div className="flex aspect-square w-full items-center justify-center bg-slate-100 text-xs text-slate-400">
                         geen image
