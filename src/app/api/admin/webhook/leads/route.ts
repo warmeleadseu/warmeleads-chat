@@ -22,6 +22,9 @@ const COMMON_KEYS = new Set([
   'status', 'bron', 'notities', 'land',
   'meta_campaign_id', 'meta_adset_id', 'meta_ad_id',
   'campaign_id', 'adset_id', 'ad_id',
+  // Meta Lead Ads submission id (verschillende Zapier mapping namen);
+  // gebruikt door CAPI for Lead Ads om events terug te matchen aan campagnes.
+  'meta_leadgen_id', 'leadgen_id', 'lead_id', 'fb_lead_id',
   'bedrijfsnaam', 'company_name',
 ]);
 
@@ -73,6 +76,8 @@ export async function POST(request: NextRequest) {
     const metaCampaignId = body.meta_campaign_id || body.campaign_id || null;
     const metaAdsetId = body.meta_adset_id || body.adset_id || null;
     const metaAdId = body.meta_ad_id || body.ad_id || null;
+    const metaLeadgenId =
+      body.meta_leadgen_id || body.leadgen_id || body.lead_id || body.fb_lead_id || null;
 
     const lead = await enrichLeadAddress({
       branch: branchSlug,
@@ -93,6 +98,7 @@ export async function POST(request: NextRequest) {
       ...(metaCampaignId && { meta_campaign_id: metaCampaignId }),
       ...(metaAdsetId && { meta_adset_id: metaAdsetId }),
       ...(metaAdId && { meta_ad_id: metaAdId }),
+      ...(metaLeadgenId && { meta_leadgen_id: String(metaLeadgenId) }),
     });
 
     if (!lead.naam_klant) {

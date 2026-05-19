@@ -1,14 +1,20 @@
 /**
- * Meta Conversions API (CAPI) helper.
+ * Meta Conversions API (CAPI) helper — specifiek voor Lead Ads / CRM events.
  *
- * Stuurt server-side events naar Meta Pixel zodat de Meta-ad-optimizer
- * weet welke leads "kwalificerend" of "verkocht" zijn. Cruciaal voor
- * de feedback-loop van de AI-campagnes.
+ * In Meta Events Manager heet de identifier "Dataset ID". Een Pixel is technisch
+ * ook een Dataset (web-type); voor Lead Ads kun je een aparte CRM-type dataset
+ * gebruiken óf een bestaande Pixel hergebruiken. Eén Dataset per Business Manager
+ * is normaal — Meta matcht events per `lead_id` (de Lead Ads submission id) terug
+ * naar de juiste campaign/adset/ad, dus aparte datasets per branche zijn níet nodig.
+ *
+ * Documentatie: https://developers.facebook.com/docs/marketing-api/conversions-api/guides/lead-ads-crm
  *
  * Vereist:
- * - META_PIXEL_ID                (env)
- * - META_CAPI_ACCESS_TOKEN       (env, óf hergebruik META_ACCESS_TOKEN)
- * - META_CAPI_TEST_EVENT_CODE    (env, optioneel; alleen in testmodus)
+ * - META_DATASET_ID              (env)   — voorheen META_PIXEL_ID, beide werken.
+ * - META_CAPI_ACCESS_TOKEN       (env)   — óf hergebruik META_ACCESS_TOKEN.
+ * - META_CAPI_TEST_EVENT_CODE    (env)   — optioneel; alleen voor Events Manager → Test Events.
+ *
+ * `action_source = 'system_generated'` is verplicht voor CRM-events (NIET 'website').
  */
 import { createHash } from 'crypto';
 import { META_GRAPH_URL } from '@/lib/meta';
@@ -82,17 +88,19 @@ export function hashCapiUserData(u: CapiUserData): Record<string, string | strin
 }
 
 export interface CapiCredentials {
-  pixelId: string;
+  /** Dataset ID (vroeger "Pixel ID"). */
+  datasetId: string;
   accessToken: string;
   testEventCode?: string;
 }
 
 export function getCapiCredentials(): CapiCredentials | null {
-  const pixelId = process.env.META_PIXEL_ID;
+  // Nieuwe naam heeft voorrang; fall back op de oude naam zodat bestaande envs blijven werken.
+  const datasetId = process.env.META_DATASET_ID || process.env.META_PIXEL_ID;
   const accessToken = process.env.META_CAPI_ACCESS_TOKEN || process.env.META_ACCESS_TOKEN;
-  if (!pixelId || !accessToken) return null;
+  if (!datasetId || !accessToken) return null;
   return {
-    pixelId,
+    datasetId,
     accessToken,
     testEventCode: process.env.META_CAPI_TEST_EVENT_CODE || undefined,
   };
@@ -130,7 +138,7 @@ export async function sendCapiEvent(input: CapiEventInput): Promise<CapiSendResu
   };
 
   try {
-    const res = await fetch(`${META_GRAPH_URL}/${creds.pixelId}/events?access_token=${encodeURIComponent(creds.accessToken)}`, {
+    const res = await fetch(`${META_GRAPH_URL}/${creds.datasetId}/events?access_token=${encodeURIComponent(creds.accessToken)}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),

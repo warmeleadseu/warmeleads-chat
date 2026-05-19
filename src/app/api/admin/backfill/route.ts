@@ -341,6 +341,8 @@ export async function POST(request: NextRequest) {
       const metaCampaignId = ml.campaign_id || null;
       const metaAdsetId = ml.adset_id || null;
       const metaAdId = ml.ad_id || null;
+      // ml.id is de Lead Ads submission-id (Graph API `lead_id`); cruciaal voor CAPI attribution.
+      const metaLeadgenId = (ml as { id?: string }).id || null;
 
       const leadData = {
         branch,
@@ -361,6 +363,7 @@ export async function POST(request: NextRequest) {
         ...(metaCampaignId && { meta_campaign_id: metaCampaignId }),
         ...(metaAdsetId && { meta_adset_id: metaAdsetId }),
         ...(metaAdId && { meta_ad_id: metaAdId }),
+        ...(metaLeadgenId && { meta_leadgen_id: String(metaLeadgenId) }),
       };
 
       let lead;

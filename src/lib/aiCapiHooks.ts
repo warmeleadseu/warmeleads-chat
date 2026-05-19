@@ -33,6 +33,8 @@ interface LeadRow {
   meta_campaign_id?: string | null;
   meta_ad_id?: string | null;
   meta_adset_id?: string | null;
+  /** Meta Lead Ads submission id — cruciaal voor CAPI for Lead Ads attribution. */
+  meta_leadgen_id?: string | null;
   branch?: string | null;
   lead_cost?: number | null;
   created_at?: string | null;
@@ -88,6 +90,10 @@ async function sendForLead(
     user,
     customData: {
       branch: lead.branch || undefined,
+      // Meta gebruikt `lead_id` (= Lead Ads submission-id) als primaire match-sleutel
+      // voor CAPI for Lead Ads. Daarmee koppelt Meta dit event terug aan de
+      // oorspronkelijke campagne/adset/ad zonder dat we het zelf hoeven mee te sturen.
+      ...(lead.meta_leadgen_id ? { lead_id: lead.meta_leadgen_id } : {}),
       meta_campaign_id: lead.meta_campaign_id || undefined,
       meta_ad_id: lead.meta_ad_id || undefined,
       meta_adset_id: lead.meta_adset_id || undefined,
@@ -106,13 +112,13 @@ export async function sendLeadEvent(leadId: string): Promise<{ ok: boolean; reas
   const supabase = createServerClient();
   const { data: lead } = await supabase
     .from('leads')
-    .select('id, email, telefoonnummer, naam_klant, postcode, plaatsnaam, land, meta_campaign_id, meta_ad_id, meta_adset_id, branch, lead_cost, created_at, bron')
+    .select('id, email, telefoonnummer, naam_klant, postcode, plaatsnaam, land, meta_campaign_id, meta_ad_id, meta_adset_id, meta_leadgen_id, branch, lead_cost, created_at, bron')
     .eq('id', leadId)
     .maybeSingle();
   if (!lead) return { ok: false, reason: 'lead_not_found' };
   // Alleen Meta-attributable leads: vermijd CAPI-pollutie voor Excel-imports of
   // andere bronnen die nooit door een Meta-ad zijn aangevraagd.
-  const isMetaAttributable = !!(lead.meta_campaign_id || lead.meta_ad_id || lead.meta_adset_id)
+  const isMetaAttributable = !!(lead.meta_leadgen_id || lead.meta_campaign_id || lead.meta_ad_id || lead.meta_adset_id)
     || ['zapier', 'meta', 'meta_lead_ads', 'facebook'].includes(String(lead.bron || '').toLowerCase());
   if (!isMetaAttributable) return { ok: false, reason: 'not_meta_attributable' };
   const eventTime = lead.created_at ? Math.floor(new Date(lead.created_at).getTime() / 1000) : undefined;
@@ -139,8 +145,8 @@ function priceFromBatch(batch: AssignmentJoinRow['batch']): number | null {
   return typeof single.price_per_lead === 'number' ? single.price_per_lead : null;
 }
 
-function isLeadMetaAttributable(lead: { meta_campaign_id?: string | null; meta_ad_id?: string | null; meta_adset_id?: string | null; bron?: string | null }): boolean {
-  if (lead.meta_campaign_id || lead.meta_ad_id || lead.meta_adset_id) return true;
+function isLeadMetaAttributable(lead: { meta_leadgen_id?: string | null; meta_campaign_id?: string | null; meta_ad_id?: string | null; meta_adset_id?: string | null; bron?: string | null }): boolean {
+  if (lead.meta_leadgen_id || lead.meta_campaign_id || lead.meta_ad_id || lead.meta_adset_id) return true;
   return ['zapier', 'meta', 'meta_lead_ads', 'facebook'].includes(String(lead.bron || '').toLowerCase());
 }
 
@@ -155,7 +161,7 @@ export async function sendQualifiedLeadEventForAssignment(assignmentId: string):
   if (!assignment) return { ok: false, reason: 'assignment_not_found' };
   const { data: lead } = await supabase
     .from('leads')
-    .select('id, email, telefoonnummer, naam_klant, postcode, plaatsnaam, land, meta_campaign_id, meta_ad_id, meta_adset_id, branch, lead_cost, bron')
+    .select('id, email, telefoonnummer, naam_klant, postcode, plaatsnaam, land, meta_campaign_id, meta_ad_id, meta_adset_id, meta_leadgen_id, branch, lead_cost, bron')
     .eq('id', assignment.lead_id)
     .maybeSingle();
   if (!lead) return { ok: false, reason: 'lead_not_found' };
@@ -180,7 +186,7 @@ export async function sendPurchaseEventForAssignment(assignmentId: string): Prom
   if (!assignment) return { ok: false, reason: 'assignment_not_found' };
   const { data: lead } = await supabase
     .from('leads')
-    .select('id, email, telefoonnummer, naam_klant, postcode, plaatsnaam, land, meta_campaign_id, meta_ad_id, meta_adset_id, branch, lead_cost, bron')
+    .select('id, email, telefoonnummer, naam_klant, postcode, plaatsnaam, land, meta_campaign_id, meta_ad_id, meta_adset_id, meta_leadgen_id, branch, lead_cost, bron')
     .eq('id', assignment.lead_id)
     .maybeSingle();
   if (!lead) return { ok: false, reason: 'lead_not_found' };
