@@ -78,7 +78,6 @@ interface BriefRow {
   id: string;
   branch: string;
   target_cpl_cents: number | null;
-  target_cpql_cents: number | null;
   daily_budget_cents: number;
   max_total_budget_cents: number;
   is_test_mode: boolean;
@@ -165,7 +164,7 @@ export async function runOptimizerTick(opts: OptimizerOptions = {}): Promise<Opt
 
       const { data: brief } = await supabase
         .from('ai_campaign_briefs')
-        .select('id, branch, target_cpl_cents, target_cpql_cents, daily_budget_cents, max_total_budget_cents, is_test_mode, status')
+        .select('id, branch, target_cpl_cents, daily_budget_cents, max_total_budget_cents, is_test_mode, status')
         .eq('id', exp.brief_id)
         .maybeSingle();
       if (!brief) { summary.actions.skipped++; continue; }

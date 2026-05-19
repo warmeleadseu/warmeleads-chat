@@ -9,6 +9,10 @@ interface LeadGenForm {
   id: string;
   name: string;
   status: string;
+  /** Page-id van de FB-pagina waar dit Lead Form aan hangt. */
+  page_id?: string;
+  /** Aantal vragen in het formulier (excl. NAW). Indicator voor "kwaliteit". */
+  questions_count?: number;
 }
 
 async function metaGet(path: string, token: string) {
@@ -123,15 +127,36 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // ── Get form details (parallel) ─────────────────────────────────
+    // ── Get form details + page binding (parallel) ──────────────────
+    // Bouw eerst een form-id → page-id mapping door per gevonden page de leadgen_forms op te halen.
+    const formToPage = new Map<string, string>();
+    for (const pageId of pageIds) {
+      let formsUrl: string | null = `${pageId}/leadgen_forms?fields=id&limit=200`;
+      while (formsUrl) {
+        const pgData: { data?: { id: string }[]; paging?: { next?: string }; error?: unknown } | null =
+          await metaGet(formsUrl, token).catch(() => null);
+        if (!pgData || pgData.error) break;
+        for (const form of pgData.data || []) {
+          if (formIds.has(form.id)) formToPage.set(form.id, pageId);
+        }
+        formsUrl = pgData.paging?.next ? pgData.paging.next.replace(`${META_GRAPH_URL}/`, '') : null;
+      }
+    }
+
     const formFetches = [...formIds].map(async (fid): Promise<LeadGenForm> => {
       try {
-        const d = await metaGet(`${fid}?fields=id,name,status`, token);
+        const d = await metaGet(`${fid}?fields=id,name,status,questions{id}`, token);
         if (!d.error) {
-          return { id: d.id, name: d.name || `Form ${fid}`, status: d.status || 'ACTIVE' };
+          return {
+            id: d.id,
+            name: d.name || `Form ${fid}`,
+            status: d.status || 'ACTIVE',
+            page_id: formToPage.get(fid),
+            questions_count: Array.isArray(d.questions?.data) ? d.questions.data.length : undefined,
+          };
         }
       } catch { /* ignore */ }
-      return { id: fid, name: `Form ${fid}`, status: 'unknown' };
+      return { id: fid, name: `Form ${fid}`, status: 'unknown', page_id: formToPage.get(fid) };
     });
 
     const forms = await Promise.all(formFetches);

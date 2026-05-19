@@ -1,20 +1,19 @@
 /**
- * High-level hooks rond de Meta Conversions API.
+ * Meta Conversions API hook — afgestemd op WarmeLeads' business-model.
  *
- * Doel: Meta's optimizer voorzien van échte funnel-feedback zodat de AI-campagnes
- * leren welke leads kwalificeren en verkocht worden.
+ * Wij verkopen leads aan installateurs/aannemers per branche en zijn niet
+ * verantwoordelijk voor wat de eindklant met die lead doet (offerte, sale).
+ * Kwalificatie van leads gebeurt in het Lead Form zelf (slimme vragen +
+ * NAW-validatie). Daarom sturen we alléén een `Lead`-event terug aan Meta:
  *
- * Event-naming:
- *  - "Lead"           bij elke nieuwe lead in onze database (één keer per lead_id).
- *  - "QualifiedLead"  bij eerste status-overgang naar gecontacteerd of offerte
- *                     (één per assignment_id; trigger zet terminal_status_at niet,
- *                     dus we sturen direct vanuit de PUT-route).
- *  - "Purchase"       bij status verkocht (één per assignment_id) met value =
- *                     price_per_lead × 1 (de waarde van een verkochte lead).
+ *   • bij elke nieuwe lead met phone_valid !== false
+ *   • één keer per lead_id, met deterministisch event_id voor deduplicatie
+ *   • alleen voor Meta-attributable bronnen (leadgen_id of meta_*_id of zapier-bron)
  *
- * Event-id is deterministisch zodat Meta dedupliceert binnen 48u (en wij idempotent
- * kunnen retryen). Alle CAPI-calls zijn fire-and-forget: nooit blokkeren wij een
- * webhook of admin/portal-actie op een Meta-fout.
+ * QualifiedLead- en Purchase-events sturen we expliciet NIET. Voor de
+ * AI-optimizer is "kwaliteit" geoperationaliseerd als phone_valid + lead in
+ * de juiste branche — die filter is aan ónze kant prima en geeft Meta's ML
+ * een schoner "this is what a good lead looks like"-signaal.
  */
 import { createServerClient } from '@/lib/supabase';
 import { sendCapiEvent, getCapiCredentials, type CapiEventName } from '@/lib/metaConversionApi';
@@ -36,6 +35,8 @@ interface LeadRow {
   /** Meta Lead Ads submission id — cruciaal voor CAPI for Lead Ads attribution. */
   meta_leadgen_id?: string | null;
   branch?: string | null;
+  /** Quality-gate: false → CAPI dispatch wordt overgeslagen. */
+  phone_valid?: boolean | null;
   lead_cost?: number | null;
   created_at?: string | null;
 }
@@ -69,7 +70,7 @@ export function buildCapiUserDataFromLead(lead: LeadRow): import('./metaConversi
 }
 
 interface SendOpts {
-  /** Override event-id (defaults: lead:/qlead:/purchase:<id>). */
+  /** Override event-id (default: `lead:<id>`). */
   eventId?: string;
   /** UNIX-seconds van origineel event; default = nu of created_at. */
   eventTimeUnix?: number;
@@ -105,6 +106,11 @@ async function sendForLead(
   return { ok: true };
 }
 
+function isLeadMetaAttributable(lead: { meta_leadgen_id?: string | null; meta_campaign_id?: string | null; meta_ad_id?: string | null; meta_adset_id?: string | null; bron?: string | null }): boolean {
+  if (lead.meta_leadgen_id || lead.meta_campaign_id || lead.meta_ad_id || lead.meta_adset_id) return true;
+  return ['zapier', 'meta', 'meta_lead_ads', 'facebook'].includes(String(lead.bron || '').toLowerCase());
+}
+
 /* ── Public API ─────────────────────────────────────────────── */
 
 export async function sendLeadEvent(leadId: string): Promise<{ ok: boolean; reason?: string }> {
@@ -112,124 +118,26 @@ export async function sendLeadEvent(leadId: string): Promise<{ ok: boolean; reas
   const supabase = createServerClient();
   const { data: lead } = await supabase
     .from('leads')
-    .select('id, email, telefoonnummer, naam_klant, postcode, plaatsnaam, land, meta_campaign_id, meta_ad_id, meta_adset_id, meta_leadgen_id, branch, lead_cost, created_at, bron')
+    .select('id, email, telefoonnummer, naam_klant, postcode, plaatsnaam, land, meta_campaign_id, meta_ad_id, meta_adset_id, meta_leadgen_id, branch, phone_valid, lead_cost, created_at, bron')
     .eq('id', leadId)
     .maybeSingle();
   if (!lead) return { ok: false, reason: 'lead_not_found' };
+  // Skip leads met expliciet ongeldig telefoonnummer. Dat zijn de leads die we
+  // ook niet uitdelen aan klanten — voor Meta's ML willen we daarvoor geen
+  // optimization-signaal sturen, anders gaat de optimizer rotzooi-leads opzoeken.
+  if (lead.phone_valid === false) return { ok: false, reason: 'phone_invalid' };
   // Alleen Meta-attributable leads: vermijd CAPI-pollutie voor Excel-imports of
   // andere bronnen die nooit door een Meta-ad zijn aangevraagd.
-  const isMetaAttributable = !!(lead.meta_leadgen_id || lead.meta_campaign_id || lead.meta_ad_id || lead.meta_adset_id)
-    || ['zapier', 'meta', 'meta_lead_ads', 'facebook'].includes(String(lead.bron || '').toLowerCase());
-  if (!isMetaAttributable) return { ok: false, reason: 'not_meta_attributable' };
+  if (!isLeadMetaAttributable(lead)) return { ok: false, reason: 'not_meta_attributable' };
   const eventTime = lead.created_at ? Math.floor(new Date(lead.created_at).getTime() / 1000) : undefined;
   return sendForLead('Lead', lead as LeadRow, {}, { eventId: `lead:${lead.id}`, eventTimeUnix: eventTime });
 }
 
-interface AssignmentJoinRow {
-  id: string;
-  lead_id: string;
-  customer_id: string;
-  status: string;
-  assigned_at: string | null;
-  terminal_status_at: string | null;
-  batch:
-    | { id: string; price_per_lead: number | null }
-    | { id: string; price_per_lead: number | null }[]
-    | null;
-}
-
-function priceFromBatch(batch: AssignmentJoinRow['batch']): number | null {
-  if (!batch) return null;
-  const single = Array.isArray(batch) ? batch[0] : batch;
-  if (!single) return null;
-  return typeof single.price_per_lead === 'number' ? single.price_per_lead : null;
-}
-
-function isLeadMetaAttributable(lead: { meta_leadgen_id?: string | null; meta_campaign_id?: string | null; meta_ad_id?: string | null; meta_adset_id?: string | null; bron?: string | null }): boolean {
-  if (lead.meta_leadgen_id || lead.meta_campaign_id || lead.meta_ad_id || lead.meta_adset_id) return true;
-  return ['zapier', 'meta', 'meta_lead_ads', 'facebook'].includes(String(lead.bron || '').toLowerCase());
-}
-
-export async function sendQualifiedLeadEventForAssignment(assignmentId: string): Promise<{ ok: boolean; reason?: string }> {
-  if (!getCapiCredentials()) return { ok: false, reason: 'capi_not_configured' };
-  const supabase = createServerClient();
-  const { data: assignment } = await supabase
-    .from('lead_assignments')
-    .select('id, lead_id, customer_id, status, assigned_at, terminal_status_at, batch:customer_batches!batch_id(id, price_per_lead)')
-    .eq('id', assignmentId)
-    .maybeSingle();
-  if (!assignment) return { ok: false, reason: 'assignment_not_found' };
-  const { data: lead } = await supabase
-    .from('leads')
-    .select('id, email, telefoonnummer, naam_klant, postcode, plaatsnaam, land, meta_campaign_id, meta_ad_id, meta_adset_id, meta_leadgen_id, branch, lead_cost, bron')
-    .eq('id', assignment.lead_id)
-    .maybeSingle();
-  if (!lead) return { ok: false, reason: 'lead_not_found' };
-  if (!isLeadMetaAttributable(lead)) return { ok: false, reason: 'not_meta_attributable' };
-  const value = priceFromBatch((assignment as AssignmentJoinRow).batch) || lead.lead_cost || undefined;
-  return sendForLead('QualifiedLead', lead as LeadRow, {
-    assignment_id: assignment.id,
-    customer_id: assignment.customer_id,
-    status: assignment.status,
-    ...(value != null ? { value, currency: 'EUR' } : {}),
-  }, { eventId: `qlead:${assignment.id}` });
-}
-
-export async function sendPurchaseEventForAssignment(assignmentId: string): Promise<{ ok: boolean; reason?: string }> {
-  if (!getCapiCredentials()) return { ok: false, reason: 'capi_not_configured' };
-  const supabase = createServerClient();
-  const { data: assignment } = await supabase
-    .from('lead_assignments')
-    .select('id, lead_id, customer_id, status, assigned_at, terminal_status_at, batch:customer_batches!batch_id(id, price_per_lead)')
-    .eq('id', assignmentId)
-    .maybeSingle();
-  if (!assignment) return { ok: false, reason: 'assignment_not_found' };
-  const { data: lead } = await supabase
-    .from('leads')
-    .select('id, email, telefoonnummer, naam_klant, postcode, plaatsnaam, land, meta_campaign_id, meta_ad_id, meta_adset_id, meta_leadgen_id, branch, lead_cost, bron')
-    .eq('id', assignment.lead_id)
-    .maybeSingle();
-  if (!lead) return { ok: false, reason: 'lead_not_found' };
-  if (!isLeadMetaAttributable(lead)) return { ok: false, reason: 'not_meta_attributable' };
-  const value = priceFromBatch((assignment as AssignmentJoinRow).batch) || lead.lead_cost || 0;
-  const eventTime = (assignment as AssignmentJoinRow).terminal_status_at
-    ? Math.floor(new Date((assignment as AssignmentJoinRow).terminal_status_at!).getTime() / 1000)
-    : undefined;
-  return sendForLead('Purchase', lead as LeadRow, {
-    assignment_id: assignment.id,
-    customer_id: assignment.customer_id,
-    value,
-    currency: 'EUR',
-  }, { eventId: `purchase:${assignment.id}`, eventTimeUnix: eventTime });
-}
-
-/**
- * Convenience-helper: bepaal op basis van statusovergang welk event te sturen
- * en vuur fire-and-forget af. Mag in elke route na een PUT op lead_assignments.
- */
-export function dispatchCapiForAssignmentStatus(
-  assignmentId: string,
-  previousStatus: string | null,
-  newStatus: string,
-): void {
-  if (!getCapiCredentials()) return;
-  if (previousStatus === newStatus) return;
-
-  if (newStatus === 'gecontacteerd' || newStatus === 'offerte') {
-    sendQualifiedLeadEventForAssignment(assignmentId)
-      .then(r => { if (!r.ok) console.warn('[capi] qlead failed', r.reason); })
-      .catch(e => console.warn('[capi] qlead threw', (e as Error).message));
-  } else if (newStatus === 'verkocht') {
-    sendPurchaseEventForAssignment(assignmentId)
-      .then(r => { if (!r.ok) console.warn('[capi] purchase failed', r.reason); })
-      .catch(e => console.warn('[capi] purchase threw', (e as Error).message));
-  }
-}
-
+/** Fire-and-forget Lead-event vanuit een non-blocking context (webhook/admin/portal). */
 export function fireLeadCapi(leadId: string): void {
   if (!getCapiCredentials()) return;
   sendLeadEvent(leadId)
-    .then(r => { if (!r.ok) console.warn('[capi] lead failed', r.reason); })
+    .then(r => { if (!r.ok && r.reason !== 'phone_invalid' && r.reason !== 'not_meta_attributable') console.warn('[capi] lead failed', r.reason); })
     .catch(e => console.warn('[capi] lead threw', (e as Error).message));
 }
 
@@ -237,5 +145,5 @@ export const __internal = {
   buildCapiUserDataFromLead,
   mapCountry,
   splitName,
-  priceFromBatch,
+  isLeadMetaAttributable,
 };

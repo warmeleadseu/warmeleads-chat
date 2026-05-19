@@ -62,20 +62,28 @@ describe('buildCapiUserDataFromLead', () => {
   });
 });
 
-describe('priceFromBatch', () => {
-  it('returns null when batch is null', () => {
-    expect(__internal.priceFromBatch(null)).toBe(null);
+describe('isLeadMetaAttributable', () => {
+  it('accepts leads with meta_leadgen_id', () => {
+    expect(__internal.isLeadMetaAttributable({ meta_leadgen_id: 'x' })).toBe(true);
   });
 
-  it('extracts price from single object', () => {
-    expect(__internal.priceFromBatch({ id: 'b', price_per_lead: 75 })).toBe(75);
+  it('accepts leads with meta_campaign_id', () => {
+    expect(__internal.isLeadMetaAttributable({ meta_campaign_id: '123' })).toBe(true);
   });
 
-  it('extracts price from array (PostgREST embed)', () => {
-    expect(__internal.priceFromBatch([{ id: 'b', price_per_lead: 99 }])).toBe(99);
+  it('accepts leads with zapier bron', () => {
+    expect(__internal.isLeadMetaAttributable({ bron: 'zapier' })).toBe(true);
   });
 
-  it('returns null if price not set', () => {
-    expect(__internal.priceFromBatch({ id: 'b', price_per_lead: null })).toBe(null);
+  it('accepts leads with meta_lead_ads bron case-insensitive', () => {
+    expect(__internal.isLeadMetaAttributable({ bron: 'Meta_Lead_Ads' })).toBe(true);
+  });
+
+  it('rejects excel_import without any meta-id', () => {
+    expect(__internal.isLeadMetaAttributable({ bron: 'excel_import' })).toBe(false);
+  });
+
+  it('rejects empty lead', () => {
+    expect(__internal.isLeadMetaAttributable({})).toBe(false);
   });
 });

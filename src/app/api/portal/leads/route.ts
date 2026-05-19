@@ -6,7 +6,6 @@ import { repairDemoAssignmentsIfNeeded } from '@/lib/demoPortalLeads';
 import { getHasPaidCustomerBatch, shouldUseDemoPortalExperience } from '@/lib/demoPortalEligibility';
 import { buildPhoneSearchIlikeClauses, sanitizePostgrestIlike } from '@/lib/phoneSearch';
 import { normalizeProvincie } from '@/lib/pdok';
-import { dispatchCapiForAssignmentStatus } from '@/lib/aiCapiHooks';
 
 const PAGE_SIZE = 1000;
 const IN_CHUNK = 500;
@@ -583,9 +582,8 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Kon lead niet bijwerken' }, { status: 500 });
     }
 
-    if (status !== undefined && status !== previousStatus) {
-      dispatchCapiForAssignmentStatus(assignment.id, previousStatus, status);
-    }
+    // NB: geen CAPI-event op statuswijzigingen. WarmeLeads optimaliseert op
+    // lead-volume + CPL per branche, niet op klant-side conversie.
 
     const { data: updatedAssignment } = await supabase
       .from('lead_assignments')

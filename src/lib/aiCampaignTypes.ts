@@ -9,7 +9,12 @@ export interface AiCampaignBriefRow {
   target_audience: Record<string, unknown>;
   geographic_targeting: { countries: string[]; regions?: string[] };
   target_cpl_cents: number | null;
-  target_cpql_cents: number | null;
+  /**
+   * @deprecated WarmeLeads optimaliseert op CPL per branche, niet op
+   * klant-side QualifiedLead. Kolom blijft voor back-compat van bestaande
+   * briefs maar wordt nergens meer gevuld of gelezen.
+   */
+  target_cpql_cents?: number | null;
   daily_budget_cents: number;
   max_total_budget_cents: number;
   lead_form_id: string;

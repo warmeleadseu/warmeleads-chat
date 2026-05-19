@@ -102,20 +102,47 @@ function buildSystemPrompt(brief: Brief): string {
   const targetSummary = Object.entries(brief.targetAudience)
     .map(([k, v]) => `- ${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`)
     .join('\n');
+  const formQuestionsCount =
+    typeof (brief.targetAudience as { form_questions_count?: number | null }).form_questions_count === 'number'
+      ? (brief.targetAudience as { form_questions_count?: number }).form_questions_count
+      : null;
 
   return [
-    `Je bent een senior copywriter voor Meta Lead Ads.`,
-    `Je maakt advertentievarianten voor de branche: ${branchLabel}.`,
+    `Je bent een senior copywriter voor Meta Lead Ads bij WarmeLeads — een leadgeneratie-bureau`,
+    `dat gekwalificeerde leads verkoopt aan installateurs/aannemers in Nederland en België.`,
+    '',
+    `Branche: ${branchLabel}.`,
     `Doelgebied: ${countries}.`,
     `Doelgroep:\n${targetSummary || '- (niet gespecificeerd)'}`,
     '',
-    `Regels:`,
-    `- Schrijf in helder Nederlands (geen anglicismen behalve veelgebruikte termen).`,
-    `- Maximaal ${brief.variantCount} unieke varianten met duidelijk verschillende angles (bv. besparing, comfort, urgentie, social-proof, expertise).`,
-    `- Headline maximaal 40 tekens; primary text 80–420 tekens; description max 120 tekens.`,
-    `- Voldoen aan Meta Advertising Standards: geen absolute beloften ("gegarandeerd"), geen "jij/je/jou"+gevoelig attribuut (gezondheid/financieel/religie/geaardheid), geen vóór/na lichaamsclaims, geen clickbait.`,
-    `- Voor lead-formulieren: zet realistische verwachtingen ("ontvang een vrijblijvende offerte" i.p.v. "krijg nu gratis…").`,
-    `- image_prompt beschrijft een fotorealistische scene zonder tekst, zonder herkenbare gezichten, zonder logo's; max 400 tekens.`,
+    `Belangrijke context over hoe deze ads gaan werken:`,
+    `- De advertentie heeft GEEN landingspagina — de gebruiker klikt op het Meta Lead Form`,
+    `  en vult dat formulier IN op Meta zelf.`,
+    `- Het formulier vraagt om NAW + ${formQuestionsCount ?? 'enkele'} kwalificerende vragen`,
+    `  (eigenaar woning, intentie, budget, tijdvenster). Mensen die het formulier afmaken zijn dus`,
+    `  al pre-gekwalificeerd. Je hoeft mensen NIET te overtuigen om te kopen — alleen om het`,
+    `  formulier in te vullen voor een vrijblijvende offerte/check.`,
+    `- WarmeLeads verkoopt deze leads vervolgens door, dus optimaliseer voor "veel ingevulde`,
+    `  formulieren tegen lage CPL", niet voor maximale claims.`,
+    '',
+    `Schrijfregels:`,
+    `- Helder Nederlands (geen anglicismen behalve veelgebruikte termen).`,
+    `- Maak ${brief.variantCount} unieke varianten met duidelijk verschillende angles`,
+    `  (bv. besparing, comfort, urgentie, social-proof, expertise, FOMO).`,
+    `- Headline ≤ 40 tekens; primary_text 80–420 tekens; description ≤ 120 tekens.`,
+    `- CTA: gebruik bij voorkeur GET_QUOTE of LEARN_MORE — past bij vrijblijvende lead-flow.`,
+    `- Belofte aanpassen op de werkelijkheid: "ontvang een vrijblijvende offerte" / "check je`,
+    `  besparing in 2 minuten" — NIET "krijg nu gratis…" of "100% besparing gegarandeerd".`,
+    `- Roep de kwalificerende criteria subtiel op zodat onder-gekwalificeerden zelf afhaken`,
+    `  (bv. impliceer "voor woningeigenaren", "minimum dakoppervlak X m²" als relevant) —`,
+    `  dat verhoogt de kwaliteit van de ingevulde formulieren.`,
+    '',
+    `Meta Advertising Standards:`,
+    `- Geen absolute beloftes ("gegarandeerd", "100%").`,
+    `- Geen "jij/je/jou"+gevoelig attribuut (gezondheid, financieel, religie, geaardheid).`,
+    `- Geen vóór/na lichaamsclaims, geen clickbait ("klik nu!").`,
+    `- image_prompt: fotorealistische scene zonder tekst, zonder herkenbare gezichten,`,
+    `  zonder logo's; max 400 tekens.`,
     brief.specialAdCategory !== 'NONE'
       ? `- LET OP: special_ad_category = ${brief.specialAdCategory}. Geen demografische targeting in copy; vermijd persoonlijke attributen.`
       : '',

@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
 
   const { data: experiments } = await supabase
     .from('ai_campaign_experiments')
-    .select('*, brief:ai_campaign_briefs(id, branch, status, target_cpl_cents, target_cpql_cents, daily_budget_cents, is_test_mode, created_at)')
+    .select('*, brief:ai_campaign_briefs(id, branch, status, target_cpl_cents, daily_budget_cents, is_test_mode, created_at)')
     .order('created_at', { ascending: false })
     .limit(50);
 

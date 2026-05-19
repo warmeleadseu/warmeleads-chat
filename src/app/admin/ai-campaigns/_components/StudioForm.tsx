@@ -16,6 +16,14 @@ interface Demand {
   openRatio: number;
 }
 
+interface LeadFormOption {
+  id: string;
+  name: string;
+  status: string;
+  page_id?: string;
+  questions_count?: number;
+}
+
 interface GeneratedVariant {
   id: string;
   headline: string;
@@ -36,15 +44,18 @@ interface Props {
 export default function StudioForm({ masterEnabled, onLaunched }: Props) {
   const [branches, setBranches] = useState<BranchOption[]>([]);
   const [demand, setDemand] = useState<Demand[]>([]);
+  const [forms, setForms] = useState<LeadFormOption[]>([]);
+  const [formsLoading, setFormsLoading] = useState<boolean>(false);
+  const [formsError, setFormsError] = useState<string | null>(null);
 
   const [branch, setBranch] = useState<string>('');
-  const [pageId, setPageId] = useState('');
   const [leadFormId, setLeadFormId] = useState('');
   const [audienceProblem, setAudienceProblem] = useState('');
   const [audienceMotivation, setAudienceMotivation] = useState('');
   const [countries, setCountries] = useState<string>('NL');
   const [dailyBudgetEur, setDailyBudgetEur] = useState<string>('25');
   const [maxTotalEur, setMaxTotalEur] = useState<string>('250');
+  const [targetCplEur, setTargetCplEur] = useState<string>('');
   const [variantCount, setVariantCount] = useState<number>(4);
   const [isTestMode, setIsTestMode] = useState<boolean>(true);
   const [specialAdCategory, setSpecialAdCategory] = useState<'NONE' | 'CREDIT' | 'EMPLOYMENT' | 'HOUSING' | 'ISSUES_ELECTIONS_POLITICS'>('NONE');
@@ -75,12 +86,43 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
 
   useEffect(() => { load(); }, [load]);
 
+  // Refresh Lead Form-lijst zodra de branche wijzigt — endpoint detecteert forms
+  // op basis van historische leads in die branche.
+  useEffect(() => {
+    if (!branch) return;
+    let cancelled = false;
+    setFormsLoading(true);
+    setFormsError(null);
+    adminFetch(`/api/admin/meta-forms?branch=${encodeURIComponent(branch)}`)
+      .then(async res => {
+        const data = await res.json().catch(() => ({}));
+        if (cancelled) return;
+        if (!res.ok) {
+          setForms([]);
+          setFormsError(data.error || 'Kon Lead Forms niet ophalen');
+        } else {
+          const list = (data.forms || []) as LeadFormOption[];
+          setForms(list);
+          if (list[0] && !list.find(f => f.id === leadFormId)) setLeadFormId(list[0].id);
+        }
+      })
+      .catch(() => { if (!cancelled) setFormsError('Netwerkfout bij ophalen Lead Forms'); })
+      .finally(() => { if (!cancelled) setFormsLoading(false); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [branch]);
+
   const branchDemand = demand.find(d => d.branch === branch) || null;
+  const selectedForm = forms.find(f => f.id === leadFormId) || null;
 
   const submitGenerate = async () => {
     setError(null);
     setVariants([]);
     setBriefId(null);
+    if (!selectedForm?.page_id) {
+      setError('Geen page-id gevonden voor geselecteerd Lead Form');
+      return;
+    }
     setGenerating(true);
     try {
       const body = {
@@ -88,14 +130,18 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
         target_audience: {
           probleem: audienceProblem,
           motivatie: audienceMotivation,
+          // Klein contextcue dat de prompt slimmer maakt — zonder hardcoded
+          // persona te verzinnen; de gebruiker schrijft de echte details boven.
+          form_questions_count: selectedForm.questions_count ?? null,
         },
         geographic_targeting: {
           countries: countries.split(',').map(c => c.trim().toUpperCase()).filter(Boolean),
         },
+        target_cpl_cents: targetCplEur ? Math.round(parseFloat(targetCplEur) * 100) : undefined,
         daily_budget_cents: Math.round(parseFloat(dailyBudgetEur) * 100),
         max_total_budget_cents: Math.round(parseFloat(maxTotalEur) * 100),
         lead_form_id: leadFormId,
-        page_id: pageId,
+        page_id: selectedForm.page_id,
         special_ad_category: specialAdCategory,
         is_test_mode: isTestMode,
         variant_count: variantCount,
@@ -165,25 +211,39 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
           )}
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-600">Page ID</label>
-            <input
-              value={pageId}
-              onChange={e => setPageId(e.target.value)}
-              placeholder="123456789012345"
-              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-600">Lead form ID</label>
-            <input
-              value={leadFormId}
-              onChange={e => setLeadFormId(e.target.value)}
-              placeholder="098765432109876"
-              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
-            />
-          </div>
+        <div>
+          <label className="mb-1 flex items-center justify-between text-xs font-medium text-slate-600">
+            <span>Lead Form</span>
+            {formsLoading && <span className="text-[10px] text-slate-400">laden…</span>}
+          </label>
+          <select
+            value={leadFormId}
+            onChange={e => setLeadFormId(e.target.value)}
+            disabled={formsLoading || forms.length === 0}
+            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm disabled:opacity-50"
+          >
+            {forms.length === 0 && <option value="">Geen formulieren gevonden</option>}
+            {forms.map(f => (
+              <option key={f.id} value={f.id}>
+                {f.name} {f.questions_count != null ? `· ${f.questions_count} vragen` : ''} {f.status === 'ARCHIVED' ? '(archief)' : ''}
+              </option>
+            ))}
+          </select>
+          {formsError && (
+            <p className="mt-1 text-[11px] text-rose-600">{formsError}</p>
+          )}
+          {selectedForm && (
+            <p className="mt-1 text-[11px] text-slate-500">
+              Form ID: <span className="font-mono">{selectedForm.id}</span>
+              {selectedForm.page_id && (
+                <> · Page: <span className="font-mono">{selectedForm.page_id}</span></>
+              )}
+            </p>
+          )}
+          <p className="mt-1 text-[11px] text-slate-500">
+            Tip: het aantal vragen in het formulier bepaalt de kwalificatie — meer vragen = striktere filter.
+            De AI past de copy daarop aan (geen valse beloftes, realistische verwachtingen).
+          </p>
         </div>
 
         <div>
@@ -208,7 +268,7 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
           />
         </div>
 
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-4 gap-3">
           <div>
             <label className="mb-1 block text-xs font-medium text-slate-600">Landen (CSV)</label>
             <input
@@ -232,6 +292,18 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
               type="number" min={1} step={1}
               value={maxTotalEur}
               onChange={e => setMaxTotalEur(e.target.value)}
+              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-600" title="Doel-CPL: optimizer pauzeert varianten boven 1.5× dit bedrag, schaalt onder 0.7×">
+              Doel CPL (€)
+            </label>
+            <input
+              type="number" min={1} step={1}
+              value={targetCplEur}
+              onChange={e => setTargetCplEur(e.target.value)}
+              placeholder="optioneel"
               className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
             />
           </div>
@@ -275,7 +347,7 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
 
         <button
           onClick={submitGenerate}
-          disabled={!masterEnabled || generating || !branch || !pageId || !leadFormId}
+          disabled={!masterEnabled || generating || !branch || !leadFormId || !selectedForm?.page_id}
           className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-button-gradient px-3.5 py-2.5 text-sm font-bold text-white shadow-sm disabled:opacity-50"
         >
           {generating ? <ArrowPathIcon className="h-4 w-4 animate-spin" /> : <SparklesIcon className="h-4 w-4" />}
