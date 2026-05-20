@@ -107,5 +107,87 @@ describe('aiCampaignStrategist', () => {
       };
       expect(() => __internal.StrategySchema.parse(invalid)).toThrow();
     });
+
+    it('accepteert ad set met embedded image_briefs (v3)', () => {
+      const valid = {
+        campaigns: [{
+          angle: 'ROI',
+          rationale: 'voor besparingsgevoelige doelgroep',
+          daily_budget_share: 1.0,
+          adsets: [{
+            strategy_type: 'broad',
+            name: 'Broad NL',
+            rationale: 'leer eerst breed',
+            predicted_cpl_cents: 1200,
+            targeting: { age_min: 30, age_max: 65 },
+            creative_brief: { style: 'bold_promo', framework: 'PAS', tone: 'warm', hook: 'Hoe verdien je je investering terug?' },
+            creatives: [{
+              label: 'overlay-promo',
+              headline_hook: 'BESPAAR ELK JAAR EUR 1200',
+              image_brief: {
+                concept: 'Modern Nederlands huis met thuisbatterij in meterkast',
+                visual_hook: 'glanzend batterij-paneel close-up',
+                subject: 'thuisbatterij module',
+                scene_setting: 'moderne meterkast',
+                composition: 'medium close-up, rule of thirds',
+                lighting: 'soft studio key + rim',
+                mood: 'premium-eerlijk',
+                color_focus: 'koel blauw + warm hout-accent',
+                style: 'price_badge',
+                overlay: { enabled: true, text: 'BESPAAR EUR 1200/JR', placement: 'badge_top_right', style_hint: 'bold sans-serif', rationale: 'cijfer in beeld stopt scroll' },
+                copy_alignment: 'beeld versterkt de ROI-belofte van de headline',
+              },
+            }],
+          }],
+        }],
+        overall_rationale: 'v3 met image-briefs',
+        predicted_avg_cpl_cents: 1200,
+      };
+      const parsed = __internal.StrategySchema.parse(valid);
+      expect(parsed.campaigns[0].adsets[0].creatives?.[0].image_brief.overlay.enabled).toBe(true);
+    });
+  });
+
+  describe('ImageBriefSchema (v3)', () => {
+    it('verwerpt brief met overlay enabled=true maar lege text/placement velden volledig leeg', () => {
+      const bad = {
+        concept: 'iets', visual_hook: 'iets', subject: 'iets', scene_setting: 'iets',
+        composition: 'iets', lighting: 'iets', mood: 'warm', color_focus: 'warm',
+        style: 'lifestyle',
+        // overlay-velden incompleet:
+        overlay: { enabled: true, text: 'a', placement: 'top' /* missing style_hint + rationale */ },
+        copy_alignment: 'iets',
+      };
+      expect(() => __internal.ImageBriefSchema.parse(bad)).toThrow();
+    });
+  });
+
+  describe('buildVisualDnaBlock', () => {
+    it('verwerkt een lege DNA naar generieke instructies', () => {
+      const block = __internal.buildVisualDnaBlock(undefined, 3);
+      expect(block).toContain('IMAGE BRIEFS PER AD SET');
+      expect(block).toContain('exact 3 items');
+    });
+
+    it('verwerkt admin-DNA met overlay-frequency=always tot 100%-instructie', () => {
+      const block = __internal.buildVisualDnaBlock({
+        audience_looks: ['gezin'],
+        settings: ['woonkamer'],
+        moods: ['warm-eerlijk'],
+        color_focuses: ['warme-aardetinten'],
+        styles_enabled: ['lifestyle', 'bold_promo'],
+        overlay_frequency: 'always',
+        must_include: ['zonnepaneel'],
+        must_avoid: ['kinderen alleen'],
+        brand_identity: 'merk',
+        example_overlays: ['BESPAAR EUR 1200/JAAR'],
+      }, 4);
+      expect(block).toContain('VISUEEL DNA');
+      expect(block).toContain('Mik op 100%');
+      expect(block).toContain('zonnepaneel');
+      expect(block).toContain('kinderen alleen');
+      expect(block).toContain('BESPAAR EUR 1200/JAAR');
+      expect(block).toContain('exact 4 items');
+    });
   });
 });

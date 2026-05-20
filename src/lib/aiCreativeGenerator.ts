@@ -18,6 +18,8 @@ import {
   withOpenAIRetry,
   type SupportedTextModel,
 } from '@/lib/openaiClient';
+import type { ImageBrief } from '@/lib/aiCampaignStrategist';
+import { type VisualStyle } from '@/lib/aiVisualDNA';
 
 export interface Brief {
   id: string;
@@ -39,13 +41,23 @@ export interface AdSetCreativeContext {
   rationale?: string;                              // waarom deze angle
   strategy_type: string;                            // broad / interest / lookalike / ...
   audience_summary: string;                         // korte beschrijving voor wie deze ad set draait
-  style: 'lifestyle' | 'product_closeup' | 'emotional' | 'social_proof' | 'infographic';
+  style: VisualStyle;
   framework: 'PAS' | 'AIDA' | 'BAB' | 'FAB' | '4U';
   tone: string;                                     // bv. "warm en feitelijk"
   hook: string;                                     // openingszin
   must_include?: string[];
   must_avoid?: string[];
   creatives_per_adset: number;                      // hoeveel varianten genereren binnen deze ad set
+  /**
+   * Per-creative image-briefs (uit de strategist). Optioneel; bij
+   * aanwezigheid gebruiken we deze als bron voor de image-prompt en
+   * laten we de copy-LLM alleen tekst genereren.
+   */
+  planned_creatives?: Array<{
+    label: string;
+    headline_hook: string;
+    image_brief: ImageBrief;
+  }>;
 }
 
 export interface GeneratedVariant {
@@ -60,7 +72,9 @@ export interface GeneratedVariant {
   judge_verdict?: 'safe' | 'risky' | 'block';
   judge_reason?: string;
   framework?: 'PAS' | 'AIDA' | 'BAB' | 'FAB' | '4U';
-  creative_style?: 'lifestyle' | 'product_closeup' | 'emotional' | 'social_proof' | 'infographic';
+  creative_style?: VisualStyle;
+  /** Volledig image-concept van de strategist (indien beschikbaar). */
+  image_brief?: ImageBrief;
 }
 
 export interface GenerationResult {
@@ -353,39 +367,157 @@ export async function judgeVariantPolicy(brief: Brief, variant: GeneratedVariant
 
 // ── Image-style cinematic prompts ────────────────────────────
 /**
- * Per stijl een vast "directing"-blok dat de beeldkwaliteit
- * substantieel omhoog brengt. We voegen dit aan elke image_prompt
- * toe zodat GPT-Image-1 consistent foto-grade output levert.
+ * Per stijl een vast "directing"-blok dat de beeldkwaliteit substantieel
+ * omhoog brengt. De eerste 5 stijlen zijn photorealistisch zonder
+ * on-image tekst. De laatste 5 (overlay-vriendelijk) zijn ontworpen om
+ * een korte CAPS-overlay te dragen — voor scroll-stop-effect op mobile feed.
  */
-export const IMAGE_STYLE_DIRECTION: Record<NonNullable<GeneratedVariant['creative_style']>, string> = {
+export const IMAGE_STYLE_DIRECTION: Record<VisualStyle, string> = {
   lifestyle:
-    'Cinematic lifestyle photography. Rule-of-thirds composition, warm golden-hour light, shallow depth of field, natural skin tones, ambient interior light. Subject framed at eye level with leading lines into the scene.',
+    'Cinematic lifestyle photography, shot on 35mm with a 50mm prime lens, f/2.0. Rule-of-thirds composition, warm golden-hour light, shallow depth of field, natural skin tones, ambient interior light. Subject framed at eye level with leading lines into the scene. Authentic candid feel, no posed studio look.',
   product_closeup:
-    'Premium product photography, hero close-up. Soft studio light from upper-left, subtle rim-light, clean uncluttered background in warm neutral tone, macro detail visible, slight bokeh.',
+    'Premium product photography, hero close-up, 100mm macro lens. Soft studio key light from upper-left, subtle rim-light, clean uncluttered background in warm neutral tone, macro detail visible, slight bokeh. Magazine-cover quality.',
   emotional:
-    'Emotive documentary photography. Soft window light, muted earth-tone palette, slight grain for warmth. Convey feeling of safety, calm, family — through environment and gesture, not faces.',
+    'Emotive documentary photography, shot on 50mm with soft natural window light. Muted earth-tone palette, subtle film grain for warmth. Convey safety, calm and family through environment, hands, gestures and props — never faces. National Geographic style restraint.',
   social_proof:
-    'Editorial real-estate photography style. Modern Dutch/Belgian residential street or suburban home from medium-wide angle, neighborhood context, slight overcast light for honest realism, no people in frame.',
+    'Editorial real-estate photography style, 24mm wide lens, slight overcast diffused light. Modern Dutch/Belgian residential street or suburban home from medium-wide angle with neighborhood context, no people. Honest realism, not heroic.',
   infographic:
-    'High-end editorial infographic illustration. Clean isometric or flat composition, restrained palette of three warm colors, subtle gradients, premium magazine-quality layout. No text/numbers — visual metaphor only.',
+    'High-end editorial infographic illustration. Clean isometric or flat composition, restrained palette of three brand-aligned colors, subtle gradients, premium magazine-quality layout. Visual metaphor only — no on-image words.',
+  bold_promo:
+    'High-contrast flat poster design, scroll-stopper for Meta feed. Bold solid background color (single brand-aligned hue), one strong visual element (object cutout, silhouette, icon), generous negative space reserved for ALL-CAPS overlay text. Inspired by Apple/Spotify out-of-home posters.',
+  price_badge:
+    'Split-screen composition: photo of subject on one side, large circular price/value badge on the other. Photo is clean and bright; badge is bold geometric shape in contrasting brand color, sized for instant readability. Modern fintech-poster vibe.',
+  urgency_banner:
+    'Documentary or lifestyle photo with a strong color-banner strip across the top OR bottom edge, reserved for urgency/deadline overlay text. Photo itself feels grounded and authentic; banner adds the scroll-stop. Banner color contrasts sharply with photo.',
+  testimonial_card:
+    'Social-feed style portrait or hand-holding-product shot with a clean white or off-white quote card overlay (subtle drop shadow, rounded corners). Card reserved for short customer quote. Authentic, not stocky.',
+  data_visual:
+    'Minimalist data-visualization composition with one or two big-number icons (euro sign, percentage, arrow), premium typography reserve area, restrained 3-color palette, soft gradient background. Magazine-quality layout like a Financial Times feature.',
 };
 
-const SAFETY_TRAILER =
-  'Photorealistic where applicable, natural composition. STRICT: absolutely no on-image text, numbers, words, watermarks or logos. No recognizable human faces. No copyrighted brands or characters. No medical/before-after content.';
+const NEGATIVES = [
+  'no AI-generated face artifacts',
+  'no recognizable real people or celebrities',
+  'no fake brand logos, no copyrighted characters',
+  'no warped, blurry, gibberish or duplicated overlay text',
+  'no medical or before-after framing',
+  'no aggressive sales-pitch composition that screams "ad"',
+  'no watermarks, no stock-photo timestamps',
+].join('; ');
 
+/**
+ * Bouwt een image-prompt volgens het OpenAI image-prompt framework
+ * (Goal / Subject / Scene / Composition / Lighting / Style / Output /
+ * Overlay / Negatives). Dit framework is in 2025-2026 expliciet door
+ * OpenAI aanbevolen voor GPT-Image-1.x als beste praktijk voor
+ * consistente, scroll-stoppende output.
+ *
+ * Twee paden:
+ *  - Met `image_brief` (van strategist): gebruik alle gedetailleerde
+ *    velden incl. overlay-object. Geeft de beste resultaten.
+ *  - Zonder brief (legacy): val terug op (baseIdea + style + branch)
+ *    en gebruik de oude SAFETY_TRAILER zonder overlay. Backwards-compat.
+ */
 export function buildImagePromptFromBrief(
   baseIdea: string,
-  style: NonNullable<GeneratedVariant['creative_style']>,
+  style: VisualStyle,
   branchName?: string,
+  image_brief?: ImageBrief,
+  options?: { headline?: string; primary_text?: string },
 ): string {
+  if (image_brief) {
+    return buildImagePromptFromFullBrief(image_brief, branchName, options);
+  }
+  // Legacy fallback (geen full brief beschikbaar)
   const direction = IMAGE_STYLE_DIRECTION[style];
   return [
-    `Subject: ${baseIdea}.`,
-    branchName ? `Context: Dutch/Belgian home market, branche=${branchName}.` : '',
-    direction,
-    SAFETY_TRAILER,
+    'GOAL: Facebook Lead Ad creative for the Dutch/Belgian home market, must stop the scroll on mobile feed.',
+    `SUBJECT: ${baseIdea}.`,
+    branchName ? `CONTEXT: branche = ${branchName}.` : '',
+    `STYLE: ${direction}`,
+    'OUTPUT: vertical 4:5 mobile-feed framing, photorealistic where applicable.',
+    'NO TEXT IN IMAGE.',
+    `NEGATIVES: ${NEGATIVES}.`,
+    'SAFETY: Compliant with Meta advertising policies.',
   ].filter(Boolean).join(' ');
 }
+
+/**
+ * Volledige image-prompt op basis van de strategist-brief. Dit is de
+ * voorkeurspad — zorgt dat het beeld 1-op-1 aansluit op de copy-hook,
+ * de DNA-keuzes en de overlay-beslissing.
+ */
+function buildImagePromptFromFullBrief(
+  brief: ImageBrief,
+  branchName?: string,
+  options?: { headline?: string; primary_text?: string },
+): string {
+  const direction = IMAGE_STYLE_DIRECTION[brief.style] || IMAGE_STYLE_DIRECTION.lifestyle;
+  const headlineHint = options?.headline
+    ? `COPY ALIGNMENT: this image must visually reinforce the headline "${options.headline.slice(0, 60)}"${brief.copy_alignment ? ` — ${brief.copy_alignment}` : ''}.`
+    : brief.copy_alignment
+      ? `COPY ALIGNMENT: ${brief.copy_alignment}`
+      : '';
+
+  const overlayBlock = brief.overlay.enabled && brief.overlay.text
+    ? buildOverlayInstruction(brief.overlay)
+    : 'NO TEXT IN IMAGE. Let the composition and visual hook carry the message.';
+
+  return [
+    'GOAL: Facebook Lead Ad creative for the Dutch/Belgian home market, must stop the scroll on mobile feed.',
+    branchName ? `CONTEXT: branche = ${branchName}.` : '',
+    `SUBJECT: ${brief.subject}.`,
+    `SCENE: ${brief.scene_setting}.`,
+    `COMPOSITION: ${brief.composition}; vertical 4:5 framing optimised for mobile feed.`,
+    `LIGHTING: ${brief.lighting}.`,
+    `MOOD: ${brief.mood}. COLOR FOCUS: ${brief.color_focus}.`,
+    `STYLE: ${direction}`,
+    `VISUAL HOOK: ${brief.visual_hook}.`,
+    headlineHint,
+    overlayBlock,
+    `NEGATIVES: ${NEGATIVES}.`,
+    'SAFETY: Compliant with Meta advertising policies. Photorealistic where applicable, authentic candid composition, never feel "AI-generated".',
+  ].filter(Boolean).join(' ');
+}
+
+/**
+ * Typography-instructies voor overlay-tekst. Volgt OpenAI's eigen
+ * best practice: zet de letterlijke tekst in quotes, ALL CAPS waar
+ * passend, expliciete font-weight + placement + contrast-instructie.
+ * Zo voorkomen we wazige/verminkte tekst die GPT-Image normaal
+ * snel produceert bij ad-stijl beelden.
+ */
+function buildOverlayInstruction(overlay: NonNullable<ImageBrief['overlay']>): string {
+  const text = (overlay.text || '').trim();
+  const upperised = text.length > 0 ? text.toUpperCase() : '';
+  const placement = overlay.placement || 'top';
+  const styleHint = overlay.style_hint || 'bold sans-serif, high contrast against background, perfectly legible on a mobile screen';
+  const placementDescriptor: Record<NonNullable<ImageBrief['overlay']['placement']>, string> = {
+    top: 'across the top third of the image',
+    bottom: 'across the bottom third of the image',
+    center: 'centered, dominant in the composition',
+    badge_top_right: 'as a circular badge in the top-right corner',
+    badge_top_left: 'as a circular badge in the top-left corner',
+  };
+  const placementText = placementDescriptor[placement] || 'across the top';
+
+  return [
+    `TEXT OVERLAY: render exactly the text "${upperised}" (do not change wording, do not add extra characters)`,
+    `placed ${placementText}.`,
+    `Typography: ${styleHint}.`,
+    'Crisp, perfectly readable, no kerning issues. Maximum 3-6 words. Reserve clear negative space around the text.',
+    'The overlay must look intentional and professionally designed, like a poster — not stamped on top.',
+  ].join(' ');
+}
+
+/**
+ * Backwards compatibel — sommige oude code paths gebruiken SAFETY_TRAILER
+ * direct. We exposen het, maar het is leeg geworden omdat alles via
+ * NEGATIVES/SAFETY in de nieuwe builder loopt.
+ */
+const SAFETY_TRAILER =
+  'Photorealistic where applicable, natural composition. Authentic feel, never AI-generated look. ' +
+  `NEGATIVES: ${NEGATIVES}.`;
 
 // ── Per-adset creative-generator (Studio v2) ─────────────────
 const PerAdsetVariantSchema = z.object({
@@ -546,9 +678,21 @@ export async function generateVariantsForAdSet(
     },
   });
 
-  const variants: GeneratedVariant[] = parsed.variants.map(v => {
-    // image_prompt verrijken met style-direction zodat alle ads cinematic zijn
-    const richPrompt = buildImagePromptFromBrief(v.image_prompt, ctx.style, brief.branchName);
+  const variants: GeneratedVariant[] = parsed.variants.map((v, idx) => {
+    // Wanneer de strategist per creative een complete image_brief heeft
+    // bedacht, gebruik die (1-op-1 koppeling op index). Anders val terug
+    // op de ouderwetse builder met enkel baseIdea + style.
+    const planned = ctx.planned_creatives?.[idx];
+    const richPrompt = planned
+      ? buildImagePromptFromBrief(
+          planned.image_brief.subject,
+          planned.image_brief.style,
+          brief.branchName,
+          planned.image_brief,
+          { headline: v.headline, primary_text: v.primary_text },
+        )
+      : buildImagePromptFromBrief(v.image_prompt, ctx.style, brief.branchName);
+
     const variant: GeneratedVariant = {
       angle: ctx.angle,
       tone: ctx.tone,
@@ -559,7 +703,8 @@ export async function generateVariantsForAdSet(
       image_prompt: richPrompt,
       policy_warnings: [],
       framework: ctx.framework,
-      creative_style: ctx.style,
+      creative_style: planned?.image_brief.style || ctx.style,
+      image_brief: planned?.image_brief,
     };
     variant.policy_warnings = policyCheckVariant(variant);
     return variant;
@@ -569,25 +714,37 @@ export async function generateVariantsForAdSet(
 }
 
 // ── Image generation ─────────────────────────────────────────
+/**
+ * Valide image-API-formaten voor gpt-image-1. 1024x1536 = 4:5 vertical
+ * (mobile-feed-optimized), 1024x1024 = vierkant, 1536x1024 = landscape.
+ */
+export const IMAGE_SIZES = ['1024x1024', '1024x1536', '1536x1024'] as const;
+export type ImageSize = (typeof IMAGE_SIZES)[number];
+
 export async function generateVariantImage(
   brief: Brief,
   variantId: string,
   imagePrompt: string,
+  options?: { size?: ImageSize },
 ): Promise<ImageGenerationResult | null> {
   const client = getOpenAIClient();
   if (!client) return null;
 
   // image_prompt komt al verrijkt uit `generateVariantsForAdSet`. We laten
   // de safety-trailer voor backwards-compat (oude legacy generator zonder style).
-  const safetyPrompt = imagePrompt.includes('STRICT: absolutely no on-image text')
-    ? imagePrompt
-    : [imagePrompt, SAFETY_TRAILER].join(' ');
+  const hasNegatives = imagePrompt.includes('NEGATIVES:') || imagePrompt.includes('STRICT: absolutely no on-image text');
+  const safetyPrompt = hasNegatives ? imagePrompt : [imagePrompt, SAFETY_TRAILER].join(' ');
+
+  // 4:5 (1024x1536) is sinds Meta's mobile-first roll-out de feed-default
+  // en presteert in CTR-benchmarks beduidend beter dan 1:1. Caller kan
+  // overschrijven via options.size voor specifieke plaatsingen.
+  const size: ImageSize = options?.size || '1024x1536';
 
   const res = await withOpenAIRetry(() =>
     client.images.generate({
       model: 'gpt-image-1',
       prompt: safetyPrompt,
-      size: '1024x1024',
+      size,
       n: 1,
     }),
   );

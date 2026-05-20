@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { __internal } from '../aiCreativeGenerator';
+import { __internal, buildImagePromptFromBrief, IMAGE_STYLE_DIRECTION } from '../aiCreativeGenerator';
+import { VISUAL_STYLES } from '../aiVisualDNA';
+import type { ImageBrief } from '../aiCampaignStrategist';
 
 const { regexPolicyCheck, policyCheckVariant, VariantsResponseSchema, buildSystemPrompt } = __internal;
 
@@ -102,5 +104,96 @@ describe('buildSystemPrompt', () => {
       variantCount: 2,
     });
     expect(prompt).toContain('special_ad_category = HOUSING');
+  });
+});
+
+describe('IMAGE_STYLE_DIRECTION', () => {
+  it('has a direction for every visual style', () => {
+    for (const style of VISUAL_STYLES) {
+      expect(IMAGE_STYLE_DIRECTION[style]).toBeDefined();
+      expect(IMAGE_STYLE_DIRECTION[style].length).toBeGreaterThan(20);
+    }
+  });
+});
+
+function makeBrief(partial: Partial<ImageBrief> = {}): ImageBrief {
+  return {
+    concept: 'Echtpaar 50+ kijkt tevreden naar tablet met energie-app',
+    visual_hook: 'rustige glimlach, warme avondzon door raam',
+    subject: 'echtpaar 50+',
+    scene_setting: 'moderne Nederlandse woonkamer in vroege avond',
+    composition: 'eye-level medium shot, rule-of-thirds',
+    lighting: 'golden hour, warm window light',
+    mood: 'warm-eerlijk',
+    color_focus: 'warme aardetinten',
+    style: 'lifestyle',
+    overlay: { enabled: false, text: null, placement: null, style_hint: null, rationale: 'pure lifestyle, geen tekst nodig' },
+    copy_alignment: 'beeld versterkt het ROI-verhaal van de copy',
+    ...partial,
+  };
+}
+
+describe('buildImagePromptFromBrief', () => {
+  it('includes all key blocks (Goal/Subject/Scene/Composition/Lighting/Style)', () => {
+    const brief = makeBrief();
+    const prompt = buildImagePromptFromBrief(brief.subject, brief.style, 'Thuisbatterij', brief);
+    expect(prompt).toContain('GOAL:');
+    expect(prompt).toContain('SUBJECT:');
+    expect(prompt).toContain('SCENE:');
+    expect(prompt).toContain('COMPOSITION:');
+    expect(prompt).toContain('LIGHTING:');
+    expect(prompt).toContain('STYLE:');
+    expect(prompt).toContain('NEGATIVES:');
+  });
+
+  it('emits NO TEXT IN IMAGE when overlay.enabled=false', () => {
+    const brief = makeBrief({ overlay: { enabled: false, text: null, placement: null, style_hint: null, rationale: 'geen tekst' } });
+    const prompt = buildImagePromptFromBrief(brief.subject, brief.style, 'Thuisbatterij', brief);
+    expect(prompt).toContain('NO TEXT IN IMAGE');
+    expect(prompt).not.toContain('TEXT OVERLAY:');
+  });
+
+  it('emits TEXT OVERLAY block when overlay.enabled=true', () => {
+    const brief = makeBrief({
+      style: 'bold_promo',
+      overlay: {
+        enabled: true,
+        text: 'BESPAAR EUR 1200/JAAR',
+        placement: 'badge_top_right',
+        style_hint: 'bold sans-serif, contrast',
+        rationale: 'cijfer in beeld stopt scroll',
+      },
+    });
+    const prompt = buildImagePromptFromBrief(brief.subject, brief.style, 'Thuisbatterij', brief);
+    expect(prompt).toContain('TEXT OVERLAY:');
+    expect(prompt).toContain('BESPAAR EUR 1200/JAAR');
+    expect(prompt).toContain('top-right');
+  });
+
+  it('forces overlay text to UPPER CASE in the prompt', () => {
+    const brief = makeBrief({
+      overlay: {
+        enabled: true,
+        text: 'gratis advies',
+        placement: 'top',
+        style_hint: null,
+        rationale: 'cta in beeld',
+      },
+    });
+    const prompt = buildImagePromptFromBrief(brief.subject, brief.style, 'Thuisbatterij', brief);
+    expect(prompt).toContain('GRATIS ADVIES');
+  });
+
+  it('falls back to legacy template when no image_brief provided', () => {
+    const prompt = buildImagePromptFromBrief('a sleek battery on a wall', 'lifestyle', 'Thuisbatterij');
+    expect(prompt).toContain('SUBJECT:');
+    expect(prompt).toContain('NO TEXT IN IMAGE');
+  });
+
+  it('aligns copy hint when headline is supplied', () => {
+    const brief = makeBrief();
+    const prompt = buildImagePromptFromBrief(brief.subject, brief.style, 'Thuisbatterij', brief, { headline: 'Bespaar nu' });
+    expect(prompt.toLowerCase()).toContain('copy alignment');
+    expect(prompt).toContain('Bespaar nu');
   });
 });

@@ -26,6 +26,7 @@ import {
 } from '@/lib/aiCreativeGenerator';
 import { uploadAdImage } from '@/lib/metaMarketingApi';
 import { isAiCampaignsEnabled, reserveOpenAIBudget } from '@/lib/aiCampaignBudget';
+import type { ImageBrief, PlannedCreative } from '@/lib/aiCampaignStrategist';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -59,7 +60,24 @@ interface BriefRow {
   special_ad_category: 'NONE' | 'CREDIT' | 'EMPLOYMENT' | 'HOUSING' | 'ISSUES_ELECTIONS_POLITICS';
   variant_count: number;
   is_test_mode: boolean;
-  strategy_plan: { campaigns: Array<{ angle: string; adsets: Array<{ strategy_type: string; creative_brief: { style: AdSetCreativeContext['style']; framework: AdSetCreativeContext['framework']; tone: string; hook: string; must_include?: string[]; must_avoid?: string[] }; targeting: Record<string, unknown> }> }> } | null;
+  strategy_plan: {
+    campaigns: Array<{
+      angle: string;
+      adsets: Array<{
+        strategy_type: string;
+        creative_brief: {
+          style: AdSetCreativeContext['style'];
+          framework: AdSetCreativeContext['framework'];
+          tone: string;
+          hook: string;
+          must_include?: string[];
+          must_avoid?: string[];
+        };
+        targeting: Record<string, unknown>;
+        creatives?: PlannedCreative[];
+      }>;
+    }>;
+  } | null;
   strategy_params: { creatives_per_adset?: number } | null;
 }
 
@@ -186,6 +204,12 @@ export async function POST(request: NextRequest) {
           must_include: adsetPlan.creative_brief.must_include,
           must_avoid: adsetPlan.creative_brief.must_avoid,
           creatives_per_adset: creativesPerAdset,
+          // Per-creative image_briefs (uit strategist) — als die er zijn
+          // gebruikt de generator ze als basis voor de image-prompt
+          // i.p.v. de inline image_prompt-string.
+          planned_creatives: adsetPlan.creatives && adsetPlan.creatives.length > 0
+            ? adsetPlan.creatives
+            : undefined,
         };
 
         let copyRes;
@@ -227,6 +251,8 @@ export async function POST(request: NextRequest) {
           }
 
           const status = judgeVerdict === 'block' ? 'failed' : 'draft';
+          const imageBrief: ImageBrief | undefined = v.image_brief;
+          const overlayUsed = !!(imageBrief?.overlay.enabled && imageBrief.overlay.text);
           const { data: row } = await supabase
             .from('ai_campaign_variants')
             .insert({
@@ -240,6 +266,10 @@ export async function POST(request: NextRequest) {
               description: v.description,
               cta: v.cta,
               image_prompt: v.image_prompt,
+              image_brief_json: imageBrief || null,
+              overlay_used: overlayUsed,
+              overlay_text: overlayUsed ? imageBrief!.overlay.text : null,
+              aspect_ratio: '1024x1536',
               creative_style: v.creative_style,
               framework: v.framework,
               meta_image_hash: imageHash,

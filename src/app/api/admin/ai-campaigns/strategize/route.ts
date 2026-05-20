@@ -29,6 +29,17 @@ import {
 import { BRANCH_HINTS } from '@/lib/aiCampaignStrategist';
 import { isAiCampaignsEnabled, reserveOpenAIBudget } from '@/lib/aiCampaignBudget';
 import { getBranchDemand } from '@/lib/aiCampaignDemand';
+import {
+  VISUAL_STYLES,
+  AUDIENCE_LOOKS,
+  SETTINGS,
+  MOODS,
+  COLOR_FOCUSES,
+  OVERLAY_FREQUENCIES,
+  buildDefaultVisualDNA,
+  validateVisualDNA,
+  type VisualDNA,
+} from '@/lib/aiVisualDNA';
 
 export const runtime = 'nodejs';
 export const maxDuration = 180;
@@ -73,6 +84,24 @@ const BodySchema = z.object({
     genders: z.array(z.number().int()).optional(),
     locales: z.array(z.number().int()).optional(),
   }).default({ countries: ['NL'] }),
+  /**
+   * Visueel DNA (admin-chips + vrije velden). Optioneel: zonder DNA
+   * vallen we terug op de branche-defaults uit `aiVisualDNA.ts`.
+   * Validatie is licht (lijsten mogen leeg zijn — dan kiest strategist
+   * vrij — maar overlay_frequency moet wel een geldige enum-waarde zijn).
+   */
+  visual_dna: z.object({
+    audience_looks: z.array(z.enum(AUDIENCE_LOOKS)).default([]),
+    settings: z.array(z.enum(SETTINGS)).default([]),
+    moods: z.array(z.enum(MOODS)).default([]),
+    color_focuses: z.array(z.enum(COLOR_FOCUSES)).default([]),
+    styles_enabled: z.array(z.enum(VISUAL_STYLES)).default([]),
+    overlay_frequency: z.enum(OVERLAY_FREQUENCIES).default('ai_decides'),
+    must_include: z.array(z.string().max(120)).max(20).default([]),
+    must_avoid: z.array(z.string().max(120)).max(20).default([]),
+    brand_identity: z.string().max(500).optional(),
+    example_overlays: z.array(z.string().max(60)).max(20).default([]),
+  }).optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -179,6 +208,27 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // ── Visueel DNA: gebruik body of val terug op branche-defaults ──
+  const effectiveVisualDNA: VisualDNA = body.visual_dna
+    ? {
+        audience_looks: body.visual_dna.audience_looks,
+        settings: body.visual_dna.settings,
+        moods: body.visual_dna.moods,
+        color_focuses: body.visual_dna.color_focuses,
+        styles_enabled: body.visual_dna.styles_enabled,
+        overlay_frequency: body.visual_dna.overlay_frequency,
+        must_include: body.visual_dna.must_include,
+        must_avoid: body.visual_dna.must_avoid,
+        brand_identity: body.visual_dna.brand_identity,
+        example_overlays: body.visual_dna.example_overlays,
+      }
+    : buildDefaultVisualDNA(body.branch);
+  const dnaIssues = validateVisualDNA(effectiveVisualDNA);
+  if (dnaIssues.length > 0) {
+    // Niet hard fatal — laat de admin zien dat we naar defaults vallen.
+    console.warn('[strategize] visual_dna validatie:', dnaIssues);
+  }
+
   // ── Brief opslaan (zonder variants) ──
   const { data: brief, error: briefErr } = await supabase
     .from('ai_campaign_briefs')
@@ -197,6 +247,7 @@ export async function POST(request: NextRequest) {
       variant_count: body.strategy_params.angles * body.strategy_params.adsets_per_angle * body.strategy_params.creatives_per_adset,
       targeting_spec: body.targeting_spec,
       strategy_params: body.strategy_params,
+      visual_dna_json: effectiveVisualDNA,
       created_by: admin.id,
     })
     .select('*')
@@ -237,6 +288,7 @@ export async function POST(request: NextRequest) {
         branch_lead_count: seedSize,
         known_interests: knownInterests,
       },
+      visual_dna: effectiveVisualDNA,
     });
     strategy = result.strategy;
     cost = result.costCents;

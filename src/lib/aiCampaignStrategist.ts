@@ -40,11 +40,51 @@ import {
   withOpenAIRetry,
   type SupportedTextModel,
 } from '@/lib/openaiClient';
+import {
+  VISUAL_STYLES,
+  overlayBiasFromFrequency,
+  type VisualDNA,
+  type VisualStyle,
+} from '@/lib/aiVisualDNA';
 
 // ── Public types ─────────────────────────────────────────────
 export type StrategyType = 'broad' | 'interest' | 'behavior' | 'lookalike' | 'retargeting_excl' | 'advantage';
-export type CreativeStyle = 'lifestyle' | 'product_closeup' | 'emotional' | 'social_proof' | 'infographic';
+/**
+ * Style-enum is uitgebreid van 5 naar 10 stijlen (de laatste 5 zijn
+ * overlay-vriendelijk). We delen hetzelfde enum met aiCreativeGenerator
+ * en aiVisualDNA om type-drift te vermijden.
+ */
+export type CreativeStyle = VisualStyle;
 export type Framework = 'PAS' | 'AIDA' | 'BAB' | 'FAB' | '4U';
+
+/**
+ * Compleet visueel concept per creative — door de strategist gepland,
+ * gebruikt door aiCreativeGenerator voor de uiteindelijke image-prompt
+ * en getoond in de battle-plan preview.
+ */
+export type OverlayPlacement = 'top' | 'bottom' | 'center' | 'badge_top_right' | 'badge_top_left';
+
+export interface ImageOverlay {
+  enabled: boolean;
+  text: string | null;          // 3-6 woorden, doorgaans CAPS
+  placement: OverlayPlacement | null;
+  style_hint: string | null;    // bv. 'bold sans-serif, urgentie-rood'
+  rationale: string;            // waarom wel/niet — voor audit + UI-tooltip
+}
+
+export interface ImageBrief {
+  concept: string;              // 1 NL zin: kernidee van de afbeelding
+  visual_hook: string;          // de aandachtstrekker
+  subject: string;              // onderwerp/personen/object
+  scene_setting: string;        // locatie/omgeving
+  composition: string;          // framing, lens, hoek
+  lighting: string;             // golden hour, softbox, etc.
+  mood: string;                 // warm, urgent, premium, ...
+  color_focus: string;          // palet-hint
+  style: CreativeStyle;
+  overlay: ImageOverlay;
+  copy_alignment: string;       // hoe deze image het copy-hook versterkt
+}
 
 export interface StrategistTargetingSpec {
   age_min: number;
@@ -68,6 +108,18 @@ export interface CreativeBrief {
   must_avoid?: string[];                     // taboe-woorden specifiek voor deze branche
 }
 
+/**
+ * Concept-plan voor één creative in een ad set. De strategist genereert
+ * er N per ad set (= creatives_per_adset), elk met andere style/scene
+ * zodat we echte variatie hebben.
+ */
+export interface PlannedCreative {
+  /** Korte naam (1-2 woorden) voor in de battle-plan UI. */
+  label: string;
+  headline_hook: string;                     // sterke openingsregel voor copy
+  image_brief: ImageBrief;
+}
+
 export interface PlannedAdSet {
   strategy_type: StrategyType;
   name: string;
@@ -75,6 +127,11 @@ export interface PlannedAdSet {
   predicted_cpl_cents: number;
   targeting: StrategistTargetingSpec;
   creative_brief: CreativeBrief;
+  /**
+   * Per-creative concept-plannen. Optioneel zodat oude flows blijven
+   * werken; nieuwe flow vereist exact creatives_per_adset items.
+   */
+  creatives?: PlannedCreative[];
 }
 
 export interface PlannedCampaign {
@@ -119,6 +176,13 @@ export interface StrategistInput {
     known_interests?: Array<{ id: string; name: string; topic?: string }>;
     known_behaviors?: Array<{ id: string; name: string }>;
   };
+  /**
+   * Visueel DNA voor deze campagne — wordt door StudioForm meegegeven
+   * en stuurt de strategist naar de juiste chips/sfeer/overlays.
+   * Optioneel: zonder DNA valt de strategist terug op branche-defaults
+   * intern (niet hier; de caller injecteert de defaults).
+   */
+  visual_dna?: VisualDNA;
 }
 
 // ── Branche-hints (persona + USP-cues) ───────────────────────
@@ -205,13 +269,54 @@ const TargetingSchema = z.object({
   zoek_keywords: z.array(z.string()).optional(),
 });
 
+/**
+ * VISUAL_STYLES bevat 10 stijlen — de eerste 5 klassiek, laatste 5
+ * overlay-vriendelijk. We delen het enum met aiVisualDNA om drift te
+ * voorkomen.
+ */
+const VisualStyleSchema = z.enum(VISUAL_STYLES);
+
 const CreativeBriefSchema = z.object({
-  style: z.enum(['lifestyle', 'product_closeup', 'emotional', 'social_proof', 'infographic']),
+  style: VisualStyleSchema,
   framework: z.enum(['PAS', 'AIDA', 'BAB', 'FAB', '4U']),
   tone: z.string().min(3).max(80),
   hook: z.string().min(5).max(200),
   must_include: z.array(z.string()).optional(),
   must_avoid: z.array(z.string()).optional(),
+});
+
+/**
+ * Image-brief voor één creative — kern van AI Ad Image Studio v3.
+ * Alle velden zijn verplicht (anders is de brief incompleet voor de
+ * image-prompt builder). De overlay-substructuur is altijd aanwezig
+ * met enabled=true|false zodat de UI eenduidig kan tonen.
+ */
+const ImageOverlaySchema = z.object({
+  enabled: z.boolean(),
+  text: z.string().max(80).nullable(),
+  placement: z.enum(['top', 'bottom', 'center', 'badge_top_right', 'badge_top_left']).nullable(),
+  style_hint: z.string().max(120).nullable(),
+  rationale: z.string().min(3).max(240),
+});
+
+const ImageBriefSchema = z.object({
+  concept: z.string().min(5).max(280),
+  visual_hook: z.string().min(3).max(180),
+  subject: z.string().min(3).max(200),
+  scene_setting: z.string().min(3).max(200),
+  composition: z.string().min(3).max(180),
+  lighting: z.string().min(3).max(160),
+  mood: z.string().min(3).max(80),
+  color_focus: z.string().min(3).max(120),
+  style: VisualStyleSchema,
+  overlay: ImageOverlaySchema,
+  copy_alignment: z.string().min(5).max(240),
+});
+
+const PlannedCreativeSchema = z.object({
+  label: z.string().min(1).max(40),
+  headline_hook: z.string().min(5).max(120),
+  image_brief: ImageBriefSchema,
 });
 
 const AdSetSchema = z.object({
@@ -221,6 +326,10 @@ const AdSetSchema = z.object({
   predicted_cpl_cents: z.number().int().min(50).max(20000),
   targeting: TargetingSchema,
   creative_brief: CreativeBriefSchema,
+  // Optioneel zodat oude flows niet breken; nieuwe responses bevatten
+  // altijd creatives[]. Lengte-validatie tegen creatives_per_adset
+  // doen we runtime in planStrategy.
+  creatives: z.array(PlannedCreativeSchema).max(8).optional(),
 });
 
 const CampaignPlanSchema = z.object({
@@ -305,12 +414,17 @@ function buildSystemPrompt(input: StrategistInput): string {
     '- advantage: vermeld "Advantage+ Audience" — gebruikt onze targeting als suggestie',
     '',
     'CREATIVE BRIEF PER AD SET:',
-    '- style:',
-    '  - lifestyle: mensen genieten van hun woning/auto/comfort, warm sfeervol licht',
-    '  - product_closeup: het product (batterij, paneel, unit) elegant in beeld',
-    '  - emotional: gezin, kinderen, geborgenheid (geen herkenbare gezichten!)',
-    '  - social_proof: huis met buren, straat, "veel mensen kiezen hiervoor"',
-    '  - infographic: visuele cijfers, ROI-grafiek, schematische besparing',
+    '- style (kies passend; OVERLAY-vriendelijke stijlen onderaan):',
+    '  - lifestyle: mensen genieten van hun woning/auto/comfort, warm sfeervol licht (geen tekst in beeld)',
+    '  - product_closeup: het product (batterij, paneel, unit) elegant in beeld (geen tekst in beeld)',
+    '  - emotional: gezin, geborgenheid, geen herkenbare gezichten (geen tekst in beeld)',
+    '  - social_proof: huis met buren, straat, "veel mensen kiezen hiervoor" (geen tekst in beeld)',
+    '  - infographic: visuele cijfers, ROI-grafiek, schematische besparing (subtiele cijfers oke)',
+    '  - bold_promo: groot CAPS-statement in beeld op effen achtergrond, scroll-stopper (overlay vrijwel altijd)',
+    '  - price_badge: split foto met circulaire prijs-badge "VANAF EUR X" (overlay altijd)',
+    '  - urgency_banner: alert-banner over foto met urgentie/deadline (overlay altijd)',
+    '  - testimonial_card: quote-card in social-feed-stijl (overlay = de quote)',
+    '  - data_visual: minimalistische cijfer-icoon-compositie, premium magazine-look (overlay = het kerngetal)',
     '- framework:',
     '  - PAS (Problem-Agitate-Solution): goed voor urgentie & risicomijding',
     '  - AIDA (Attention-Interest-Desire-Action): klassiek, breed inzetbaar',
@@ -331,7 +445,71 @@ function buildSystemPrompt(input: StrategistInput): string {
     interestList ? 'BESCHIKBARE INTERESTS (gebruik deze IDs waar passend):' : '',
     interestList,
     '',
+    buildVisualDnaBlock(input.visual_dna, input.params.creatives_per_adset),
     'OUTPUT: enkel JSON volgens response_format. Geen prose buiten JSON.',
+  ].filter(Boolean).join('\n');
+}
+
+/**
+ * Construeert het visueel-DNA-blok voor in de system prompt. Voedt de
+ * strategist met de chip-keuzes van de admin, de overlay-frequentie-bias
+ * en de instructie om per ad set creatives_per_adset complete
+ * image_briefs te produceren die ECHT variëren.
+ */
+function buildVisualDnaBlock(dna: VisualDNA | undefined, creativesPerAdset: number): string {
+  if (!dna) {
+    return [
+      '',
+      'IMAGE BRIEFS PER AD SET:',
+      `- Genereer voor elke ad set een lijst "creatives" met exact ${creativesPerAdset} items.`,
+      '- Elke creative krijgt een COMPLETE image_brief: concept, visual_hook, subject,',
+      '  scene_setting, composition, lighting, mood, color_focus, style en overlay-object.',
+      '- Beslis zelf per creative of een tekst-overlay de scroll stopt; varieer bewust.',
+      '- copy_alignment: schrijf 1 zin hoe het beeld de headline_hook versterkt.',
+      '',
+    ].join('\n');
+  }
+
+  const overlayBias = overlayBiasFromFrequency(dna.overlay_frequency);
+  const overlayHint = overlayBias == null
+    ? 'AI beslist zelf per creative (default).'
+    : `Mik op ${Math.round(overlayBias * 100)}% van de creatives MET overlay.`;
+
+  const enabled = dna.styles_enabled.length > 0 ? dna.styles_enabled.join(', ') : 'alle stijlen';
+  const settings = dna.settings.length > 0 ? dna.settings.join(', ') : 'vrij';
+  const moods = dna.moods.length > 0 ? dna.moods.join(', ') : 'vrij';
+  const colors = dna.color_focuses.length > 0 ? dna.color_focuses.join(', ') : 'vrij';
+  const audience = dna.audience_looks.length > 0 ? dna.audience_looks.join(', ') : 'vrij';
+
+  return [
+    '',
+    'VISUEEL DNA (admin-gekozen kaders — respecteer ze):',
+    `- Toegestane stijlen: ${enabled}`,
+    `- Settings: ${settings}`,
+    `- Moods: ${moods}`,
+    `- Kleurfocus: ${colors}`,
+    `- Doelgroep-look: ${audience}`,
+    dna.must_include.length > 0 ? `- VERPLICHT in beeld: ${dna.must_include.join('; ')}` : '',
+    dna.must_avoid.length > 0 ? `- NIET in beeld: ${dna.must_avoid.join('; ')}` : '',
+    dna.brand_identity ? `- Merkidentiteit: ${dna.brand_identity}` : '',
+    dna.example_overlays.length > 0
+      ? `- Inspiratie overlay-teksten (3-6 woorden, mag CAPS): ${dna.example_overlays.join(' | ')}`
+      : '',
+    `- Overlay-strategie: ${overlayHint}`,
+    '',
+    'IMAGE BRIEFS PER AD SET:',
+    `- Genereer voor elke ad set een lijst "creatives" met exact ${creativesPerAdset} items.`,
+    '- Elke creative krijgt een COMPLETE image_brief: concept, visual_hook, subject,',
+    '  scene_setting, composition, lighting, mood, color_focus, style en overlay-object.',
+    '- VARIËER: gebruik niet 3x dezelfde scene of 3x dezelfde style binnen één ad set.',
+    '- Overlay: kies enabled=true alleen wanneer de tekst echt scroll-stoppend werkt',
+    '  (concrete cijfers, deadline, gratis-aanbod, garantie). Bij twijfel: laat weg en',
+    '  laat het beeld zelf overtuigen. Overlay-tekst: 3-6 woorden, doorgaans CAPS.',
+    '- placement: top, bottom, center, badge_top_right of badge_top_left.',
+    '- style_hint: bv. "bold sans-serif, hoge contrast" of "handgeschreven urgentie-rood".',
+    '- rationale: 1 korte zin waarom je deze overlay-keuze maakt (bij wel én niet).',
+    '- copy_alignment: 1 zin hoe het beeld de headline_hook versterkt.',
+    '',
   ].filter(Boolean).join('\n');
 }
 
@@ -416,12 +594,65 @@ const STRATEGY_JSON_SCHEMA = {
                   additionalProperties: false,
                   required: ['style', 'framework', 'tone', 'hook'],
                   properties: {
-                    style: { type: 'string', enum: ['lifestyle', 'product_closeup', 'emotional', 'social_proof', 'infographic'] },
+                    style: { type: 'string', enum: VISUAL_STYLES as unknown as string[] },
                     framework: { type: 'string', enum: ['PAS', 'AIDA', 'BAB', 'FAB', '4U'] },
                     tone: { type: 'string' },
                     hook: { type: 'string' },
                     must_include: { type: 'array', items: { type: 'string' } },
                     must_avoid: { type: 'array', items: { type: 'string' } },
+                  },
+                },
+                creatives: {
+                  // Per-creative image_brief. Niet required omdat we
+                  // backwards-compat houden met oudere strategist-responses,
+                  // maar de nieuwe system-prompt vraagt altijd de volledige
+                  // lijst (creatives_per_adset items).
+                  type: 'array',
+                  maxItems: 8,
+                  items: {
+                    type: 'object',
+                    additionalProperties: false,
+                    required: ['label', 'headline_hook', 'image_brief'],
+                    properties: {
+                      label: { type: 'string' },
+                      headline_hook: { type: 'string' },
+                      image_brief: {
+                        type: 'object',
+                        additionalProperties: false,
+                        required: [
+                          'concept', 'visual_hook', 'subject', 'scene_setting',
+                          'composition', 'lighting', 'mood', 'color_focus',
+                          'style', 'overlay', 'copy_alignment',
+                        ],
+                        properties: {
+                          concept: { type: 'string' },
+                          visual_hook: { type: 'string' },
+                          subject: { type: 'string' },
+                          scene_setting: { type: 'string' },
+                          composition: { type: 'string' },
+                          lighting: { type: 'string' },
+                          mood: { type: 'string' },
+                          color_focus: { type: 'string' },
+                          style: { type: 'string', enum: VISUAL_STYLES as unknown as string[] },
+                          overlay: {
+                            type: 'object',
+                            additionalProperties: false,
+                            required: ['enabled', 'text', 'placement', 'style_hint', 'rationale'],
+                            properties: {
+                              enabled: { type: 'boolean' },
+                              text: { type: ['string', 'null'] },
+                              placement: {
+                                type: ['string', 'null'],
+                                enum: ['top', 'bottom', 'center', 'badge_top_right', 'badge_top_left', null],
+                              },
+                              style_hint: { type: ['string', 'null'] },
+                              rationale: { type: 'string' },
+                            },
+                          },
+                          copy_alignment: { type: 'string' },
+                        },
+                      },
+                    },
                   },
                 },
               },
@@ -519,6 +750,9 @@ export async function planStrategy(input: StrategistInput): Promise<{
 export const __internal = {
   buildSystemPrompt,
   buildUserPrompt,
+  buildVisualDnaBlock,
   StrategySchema,
+  ImageBriefSchema,
+  PlannedCreativeSchema,
   getBranchHint,
 };

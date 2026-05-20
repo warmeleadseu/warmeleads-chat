@@ -9,9 +9,25 @@ import {
   ExclamationTriangleIcon,
   CpuChipIcon,
   Cog6ToothIcon,
+  PhotoIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
 import { PROVINCES_NL, PROVINCES_BE } from '@/data/provinces';
+import {
+  VISUAL_STYLES,
+  AUDIENCE_LOOKS,
+  SETTINGS,
+  MOODS,
+  COLOR_FOCUSES,
+  buildDefaultVisualDNA,
+  type VisualDNA,
+  type VisualStyle,
+  type AudienceLook,
+  type Setting,
+  type Mood,
+  type ColorFocus,
+  type OverlayFrequency,
+} from '@/lib/aiVisualDNA';
 
 interface BranchOption { slug: string; name: string; is_active: boolean }
 
@@ -30,6 +46,32 @@ interface LeadFormOption {
   status: string;
   page_id?: string;
   questions_count?: number;
+}
+
+interface ImageBriefSummary {
+  concept: string;
+  visual_hook: string;
+  subject: string;
+  scene_setting: string;
+  composition: string;
+  lighting: string;
+  mood: string;
+  color_focus: string;
+  style: string;
+  overlay: {
+    enabled: boolean;
+    text: string | null;
+    placement: string | null;
+    style_hint: string | null;
+    rationale: string;
+  };
+  copy_alignment: string;
+}
+
+interface PlannedCreative {
+  label: string;
+  headline_hook: string;
+  image_brief: ImageBriefSummary;
 }
 
 interface PlannedAdSet {
@@ -55,6 +97,7 @@ interface PlannedAdSet {
     must_include?: string[];
     must_avoid?: string[];
   };
+  creatives?: PlannedCreative[];
 }
 
 interface PlannedCampaign {
@@ -84,6 +127,11 @@ interface GeneratedVariant {
   framework: string | null;
   meta_adset_row_id: string | null;
   policy_precheck: { regex_warnings?: string[]; judge_verdict?: string; judge_reason?: string };
+  image_brief_json?: ImageBriefSummary | null;
+  overlay_used?: boolean | null;
+  overlay_text?: string | null;
+  aspect_ratio?: string | null;
+  image_regeneration_count?: number | null;
 }
 
 interface Props {
@@ -152,6 +200,11 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
   const [specialAdCategory, setSpecialAdCategory] = useState<'NONE' | 'CREDIT' | 'EMPLOYMENT' | 'HOUSING' | 'ISSUES_ELECTIONS_POLITICS'>('NONE');
   const [isTestMode, setIsTestMode] = useState<boolean>(true);
 
+  // Visueel DNA — branche-defaults staan automatisch aan; admin kan tweaken.
+  // Wij houden alles als één object voor makkelijk versturen naar /strategize.
+  const [visualDNA, setVisualDNA] = useState<VisualDNA>(() => buildDefaultVisualDNA('thuisbatterij'));
+  const [showVisualDNA, setShowVisualDNA] = useState<boolean>(true);
+
   // State
   const [phase, setPhase] = useState<Phase>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -163,6 +216,8 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
   const [phaseStartedAt, setPhaseStartedAt] = useState<number | null>(null);
   const [elapsedMs, setElapsedMs] = useState<number>(0);
   const [launchErrors, setLaunchErrors] = useState<Array<{ level: string; ref: string; message: string }>>([]);
+  // Per-variant regenerate-state zodat de spinner specifiek is.
+  const [regenerating, setRegenerating] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (phase === 'idle' || phase === 'strategized' || phase === 'generated' || phase === 'launched' || phaseStartedAt == null) return;
@@ -210,6 +265,13 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [branch]);
 
+  // Bij branche-wissel: rebuild DNA naar branche-defaults zodat de
+  // chips/must-includes/overlay-voorbeelden meteen kloppen.
+  useEffect(() => {
+    if (!branch) return;
+    setVisualDNA(buildDefaultVisualDNA(branch));
+  }, [branch]);
+
   // Branch-lead count voor lookalike-eligibility + huidige pakketstatus
   useEffect(() => {
     if (!branch) return;
@@ -225,7 +287,6 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
       })
       .catch(() => { /* silent */ });
     return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [branch, countries]);
 
   /**
@@ -292,6 +353,88 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
     return m > 0 ? `${m}m ${s % 60}s` : `${s}s`;
   };
 
+  /**
+   * Generieke chip-toggle voor één van de DNA-arrays. Werkt over alle
+   * chip-groepen via een typed key. We typen het via een function-overload-
+   * vrij patroon: caller geeft de array-naam en de waarde, wij voegen toe
+   * of verwijderen.
+   */
+  function toggleDnaChip<K extends 'audience_looks' | 'settings' | 'moods' | 'color_focuses' | 'styles_enabled'>(
+    key: K,
+    value: VisualDNA[K] extends Array<infer V> ? V : never,
+  ) {
+    setVisualDNA(prev => {
+      const arr = prev[key] as Array<typeof value>;
+      const has = arr.includes(value);
+      const next = has ? arr.filter(v => v !== value) : [...arr, value];
+      return { ...prev, [key]: next };
+    });
+  }
+
+  /**
+   * Vrije-tekst-velden van het DNA. We splitsen op nieuwe regels (admin
+   * typt één per regel) en filteren lege strings eruit voordat we ze
+   * opslaan in de state.
+   */
+  function setDnaListFromText(key: 'must_include' | 'must_avoid' | 'example_overlays', text: string) {
+    const lines = text.split('\n').map(s => s.trim()).filter(Boolean);
+    setVisualDNA(prev => ({ ...prev, [key]: lines }));
+  }
+
+  /**
+   * Regenereer image voor één variant. Optioneel: scope = 'overlay' |
+   * 'setting' | 'style' | 'same'. Bij scope='same' versturen we geen
+   * override en gebruikt het backend-endpoint dezelfde brief opnieuw.
+   * Bij andere scopes prompten we de admin om de nieuwe waarde.
+   */
+  const regenerateImage = async (variantId: string, scope: 'same' | 'overlay' | 'setting' | 'style') => {
+    if (regenerating[variantId]) return;
+    let override: Record<string, unknown> | undefined;
+    if (scope === 'overlay') {
+      const text = window.prompt('Nieuwe overlay-tekst (laat leeg om overlay uit te zetten):', '');
+      if (text === null) return;
+      override = { overlay: text.trim().length > 0
+        ? { enabled: true, text: text.trim().toUpperCase() }
+        : { enabled: false, text: null } };
+    } else if (scope === 'setting') {
+      const text = window.prompt('Nieuwe setting/scene voor het beeld:', '');
+      if (text === null || !text.trim()) return;
+      override = { scene_setting: text.trim() };
+    } else if (scope === 'style') {
+      const text = window.prompt(`Nieuwe stijl (één van: ${VISUAL_STYLES.join(', ')}):`, '');
+      if (text === null) return;
+      const cleaned = text.trim() as VisualStyle;
+      if (!(VISUAL_STYLES as readonly string[]).includes(cleaned)) {
+        window.alert('Onbekende stijl. Annuleren.');
+        return;
+      }
+      override = { style: cleaned };
+    }
+    setRegenerating(prev => ({ ...prev, [variantId]: true }));
+    try {
+      const res = await adminFetch(`/api/admin/ai-campaigns/variants/${variantId}/generate-image`, {
+        method: 'POST',
+        body: JSON.stringify({ regenerate: true, override }),
+      });
+      const j = await res.json();
+      if (res.ok && j.ok) {
+        setVariants(prev => prev.map(x => x.id === variantId ? {
+          ...x,
+          image_url: j.image_url,
+          meta_image_hash: j.meta_image_hash,
+          overlay_used: j.overlay_used,
+          overlay_text: j.overlay_text,
+          aspect_ratio: j.aspect_ratio,
+          image_regeneration_count: j.regeneration_count,
+        } : x));
+      } else {
+        window.alert(`Regenereren mislukt: ${j.error || res.status}`);
+      }
+    } finally {
+      setRegenerating(prev => ({ ...prev, [variantId]: false }));
+    }
+  };
+
   const buildStrategizeBody = () => ({
     branch,
     lead_form_id: leadFormId,
@@ -323,6 +466,7 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
       age_max: ageMax,
       genders: genders === 'all' ? undefined : [genders === 'm' ? 1 : 2],
     },
+    visual_dna: visualDNA,
   });
 
   const submitStrategize = async () => {
@@ -390,7 +534,14 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
           });
           const j = await r.json();
           if (r.ok && j.ok) {
-            setVariants(prev => prev.map(x => x.id === v.id ? { ...x, image_url: j.image_url, meta_image_hash: j.meta_image_hash } : x));
+            setVariants(prev => prev.map(x => x.id === v.id ? {
+              ...x,
+              image_url: j.image_url,
+              meta_image_hash: j.meta_image_hash,
+              overlay_used: j.overlay_used,
+              overlay_text: j.overlay_text,
+              aspect_ratio: j.aspect_ratio,
+            } : x));
             setImgProgress(p => ({ ...p, done: p.done + 1 }));
           } else {
             setImgProgress(p => ({ ...p, errors: p.errors + 1 }));
@@ -754,6 +905,143 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
         </div>
       </div>
 
+      {/* ── Visueel DNA ─────────────────────────────────────────────── */}
+      <div className="rounded-xl border border-amber-200 bg-amber-50/40 p-5 shadow-sm">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+            <PhotoIcon className="h-4 w-4 text-amber-600" /> Visueel DNA
+            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+              {branch ? `${branch}-defaults aan` : 'defaults aan'}
+            </span>
+          </h2>
+          <button
+            type="button"
+            onClick={() => setShowVisualDNA(s => !s)}
+            className="text-[11px] font-medium text-amber-700 hover:underline"
+          >
+            {showVisualDNA ? 'inklappen' : 'uitklappen'}
+          </button>
+        </div>
+        <p className="mb-3 text-[11px] text-slate-600">
+          De slimste keuzes per branche staan aangevinkt — pas aan als je iets specifieks wilt. Onze AI kiest dan zelf
+          per advertentie de beste combinatie binnen deze kaders.
+        </p>
+
+        {showVisualDNA && (
+          <div className="space-y-4">
+            {/* Stijl-mix */}
+            <DnaChipGroup
+              label="Stijl-mix (advertentie-look)"
+              values={VISUAL_STYLES}
+              selected={visualDNA.styles_enabled}
+              onToggle={v => toggleDnaChip('styles_enabled', v as VisualStyle)}
+              hint="Onze AI kiest per advertentie de meest converterende stijl binnen deze selectie."
+            />
+
+            {/* Doelgroep-look */}
+            <DnaChipGroup
+              label="Doelgroep-look (wie zit er in beeld)"
+              values={AUDIENCE_LOOKS}
+              selected={visualDNA.audience_looks}
+              onToggle={v => toggleDnaChip('audience_looks', v as AudienceLook)}
+            />
+
+            {/* Setting */}
+            <DnaChipGroup
+              label="Setting (waar speelt de scene zich af)"
+              values={SETTINGS}
+              selected={visualDNA.settings}
+              onToggle={v => toggleDnaChip('settings', v as Setting)}
+            />
+
+            {/* Mood */}
+            <DnaChipGroup
+              label="Mood / sfeer"
+              values={MOODS}
+              selected={visualDNA.moods}
+              onToggle={v => toggleDnaChip('moods', v as Mood)}
+            />
+
+            {/* Kleurfocus */}
+            <DnaChipGroup
+              label="Kleurfocus"
+              values={COLOR_FOCUSES}
+              selected={visualDNA.color_focuses}
+              onToggle={v => toggleDnaChip('color_focuses', v as ColorFocus)}
+            />
+
+            {/* Overlay-frequentie */}
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-700">
+                Overlay-frequentie (tekst-in-beeld)
+              </label>
+              <select
+                value={visualDNA.overlay_frequency}
+                onChange={e => setVisualDNA(prev => ({ ...prev, overlay_frequency: e.target.value as OverlayFrequency }))}
+                className="rounded-lg border border-amber-200 bg-white px-3 py-1.5 text-xs"
+              >
+                <option value="ai_decides">AI beslist per advertentie (slim, default)</option>
+                <option value="never">Nooit overlay (puur beeld)</option>
+                <option value="low">~25% van de creatives</option>
+                <option value="mixed">~50% van de creatives</option>
+                <option value="high">~75% van de creatives</option>
+                <option value="always">Altijd overlay (bold-promo strategie)</option>
+              </select>
+              <p className="mt-1 text-[10px] text-slate-500">
+                Tekst-overlays (3-6 woorden CAPS) zijn bewezen scroll-stoppers — vooral voor prijs, deadline of gratis-aanbod.
+              </p>
+            </div>
+
+            {/* Vrije velden */}
+            <div className="grid gap-3 md:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-700">Verplicht in beeld (één per regel)</label>
+                <textarea
+                  rows={2}
+                  value={visualDNA.must_include.join('\n')}
+                  onChange={e => setDnaListFromText('must_include', e.target.value)}
+                  placeholder={'bv. zonnepaneel op dak\nNederlandse rijwoning'}
+                  className="w-full rounded-lg border border-amber-200 bg-white px-3 py-2 text-xs"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-700">Nooit in beeld (één per regel)</label>
+                <textarea
+                  rows={2}
+                  value={visualDNA.must_avoid.join('\n')}
+                  onChange={e => setDnaListFromText('must_avoid', e.target.value)}
+                  placeholder={'bv. kinderen alleen\nvoor-na splitscreens'}
+                  className="w-full rounded-lg border border-amber-200 bg-white px-3 py-2 text-xs"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-700">Voorbeeld overlay-teksten (één per regel)</label>
+                <textarea
+                  rows={2}
+                  value={visualDNA.example_overlays.join('\n')}
+                  onChange={e => setDnaListFromText('example_overlays', e.target.value)}
+                  placeholder={'BESPAAR EUR 1200/JAAR\nGRATIS ADVIES\nSALDERING STOPT'}
+                  className="w-full rounded-lg border border-amber-200 bg-white px-3 py-2 text-xs"
+                />
+                <p className="mt-1 text-[10px] text-slate-500">
+                  Inspiratie voor de AI — geen verplichting. Onze AI kiest of varieert hier zelf op.
+                </p>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-700">Merkidentiteit / sfeer</label>
+                <textarea
+                  rows={2}
+                  value={visualDNA.brand_identity || ''}
+                  onChange={e => setVisualDNA(prev => ({ ...prev, brand_identity: e.target.value }))}
+                  placeholder="bv. warme houttinten, Nederlands middenklasse-huishouden, eerlijk en betrouwbaar"
+                  className="w-full rounded-lg border border-amber-200 bg-white px-3 py-2 text-xs"
+                />
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* ── Battle-plan preview ──────────────────────────────────────── */}
       {strategy && (
         <div className="rounded-xl border border-purple-200 bg-purple-50/40 p-5 shadow-sm">
@@ -796,7 +1084,7 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
                   </span>
                 </div>
                 <p className="mt-1 text-[11px] text-slate-600">{c.rationale}</p>
-                <div className="mt-2 space-y-1.5">
+                <div className="mt-2 space-y-2">
                   {c.adsets.map((a, j) => (
                     <div key={j} className="rounded-md bg-slate-50 p-2 text-[10px]">
                       <div className="flex items-center justify-between">
@@ -811,6 +1099,62 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
                           <> · {a.targeting.interests.slice(0, 2).map(it => it.name).join(', ')}{a.targeting.interests.length > 2 ? '…' : ''}</>
                         )}
                       </div>
+
+                      {/* Per-creative sub-cards: laat zien wat de AI bedacht heeft */}
+                      {a.creatives && a.creatives.length > 0 && (
+                        <div className="mt-2 space-y-1.5">
+                          {a.creatives.map((cr, k) => (
+                            <div
+                              key={k}
+                              className="rounded border border-slate-200 bg-white p-1.5"
+                              title={[
+                                `Concept: ${cr.image_brief.concept}`,
+                                `Subject: ${cr.image_brief.subject}`,
+                                `Scene: ${cr.image_brief.scene_setting}`,
+                                `Compositie: ${cr.image_brief.composition}`,
+                                `Lichting: ${cr.image_brief.lighting}`,
+                                `Mood: ${cr.image_brief.mood}`,
+                                `Kleur: ${cr.image_brief.color_focus}`,
+                                `Style: ${cr.image_brief.style}`,
+                                cr.image_brief.copy_alignment ? `Copy-alignment: ${cr.image_brief.copy_alignment}` : '',
+                                cr.image_brief.overlay.enabled
+                                  ? `Overlay: "${cr.image_brief.overlay.text}" (${cr.image_brief.overlay.placement || '?'}) — ${cr.image_brief.overlay.rationale}`
+                                  : `Geen overlay — ${cr.image_brief.overlay.rationale}`,
+                              ].filter(Boolean).join('\n')}
+                            >
+                              <div className="flex items-start justify-between gap-1">
+                                <span className="font-semibold text-slate-800">
+                                  {k + 1}. {cr.label}
+                                </span>
+                                <span className="shrink-0 rounded-full bg-amber-50 px-1.5 py-0 text-[9px] text-amber-700 ring-1 ring-amber-200">
+                                  {cr.image_brief.style.replace(/_/g, ' ')}
+                                </span>
+                              </div>
+                              <div className="text-[10px] text-slate-700">
+                                <span className="font-medium">Concept:</span> {cr.image_brief.concept}
+                              </div>
+                              <div className="text-[10px] text-slate-600">
+                                <span className="font-medium">Hook:</span> {cr.image_brief.visual_hook}
+                              </div>
+                              <div className="text-[10px] text-slate-500">
+                                {cr.image_brief.scene_setting} · {cr.image_brief.mood} · {cr.image_brief.color_focus}
+                              </div>
+                              {cr.image_brief.overlay.enabled ? (
+                                <div className="mt-0.5 inline-flex items-center gap-1 rounded bg-rose-50 px-1.5 py-0 text-[9px] font-semibold text-rose-700 ring-1 ring-rose-200">
+                                  overlay: &ldquo;{cr.image_brief.overlay.text}&rdquo;
+                                  {cr.image_brief.overlay.placement && (
+                                    <span className="font-normal text-rose-500">· {cr.image_brief.overlay.placement.replace(/_/g, ' ')}</span>
+                                  )}
+                                </div>
+                              ) : (
+                                <div className="mt-0.5 inline-flex rounded bg-slate-100 px-1.5 py-0 text-[9px] font-medium text-slate-500">
+                                  geen overlay
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -866,6 +1210,12 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {variants.map(v => {
               const blocked = v.status === 'failed' || v.policy_precheck?.judge_verdict === 'block';
+              const aspectClass = (v.aspect_ratio === '1024x1024')
+                ? 'aspect-square'
+                : (v.aspect_ratio === '1536x1024')
+                  ? 'aspect-[3/2]'
+                  : 'aspect-[4/5]';
+              const isRegen = !!regenerating[v.id];
               return (
                 <motion.div
                   key={v.id}
@@ -873,17 +1223,28 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
                   animate={{ opacity: 1, y: 0 }}
                   className={`overflow-hidden rounded-lg border ${blocked ? 'border-rose-200 bg-rose-50/40' : 'border-slate-200 bg-white'}`}
                 >
-                  {v.image_url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={v.image_url} alt="creative" className="aspect-square w-full object-cover" />
-                  ) : phase === 'generating_images' && !blocked ? (
-                    <div className="flex aspect-square w-full flex-col items-center justify-center gap-2 bg-gradient-to-br from-amber-50 to-white text-[11px] text-amber-700">
-                      <ArrowPathIcon className="h-5 w-5 animate-spin text-amber-500" />
-                      <span>beeld genereren…</span>
-                    </div>
-                  ) : (
-                    <div className="flex aspect-square w-full items-center justify-center bg-slate-100 text-xs text-slate-400">geen image</div>
-                  )}
+                  <div className="relative">
+                    {v.image_url && !isRegen ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={v.image_url} alt="creative" className={`${aspectClass} w-full object-cover`} />
+                    ) : (phase === 'generating_images' || isRegen) && !blocked ? (
+                      <div className={`flex ${aspectClass} w-full flex-col items-center justify-center gap-2 bg-gradient-to-br from-amber-50 to-white text-[11px] text-amber-700`}>
+                        <ArrowPathIcon className="h-5 w-5 animate-spin text-amber-500" />
+                        <span>{isRegen ? 'regenereren…' : 'beeld genereren…'}</span>
+                      </div>
+                    ) : (
+                      <div className={`flex ${aspectClass} w-full items-center justify-center bg-slate-100 text-xs text-slate-400`}>geen image</div>
+                    )}
+                    {/* Overlay-badge linksboven op het beeld */}
+                    {v.image_url && v.overlay_used && v.overlay_text && (
+                      <span
+                        className="absolute left-1.5 top-1.5 max-w-[80%] truncate rounded bg-rose-600/90 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white shadow-sm"
+                        title={`Overlay in beeld: ${v.overlay_text}`}
+                      >
+                        {v.overlay_text}
+                      </span>
+                    )}
+                  </div>
                   <div className="space-y-1 p-3">
                     {v.angle && (
                       <span className="rounded-full bg-purple-50 px-1.5 py-0.5 text-[9px] font-medium text-purple-700">{v.angle}</span>
@@ -902,7 +1263,19 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
                     {(v.creative_style || v.framework) && (
                       <p className="pt-1 text-[9px] text-slate-400">
                         {v.creative_style} · {v.framework}
+                        {v.image_regeneration_count != null && v.image_regeneration_count > 0 && (
+                          <span className="ml-1 rounded bg-slate-100 px-1 text-slate-500">↻ {v.image_regeneration_count}x</span>
+                        )}
                       </p>
+                    )}
+                    {/* Regenereer-knoppen — geven scope-precieze controle */}
+                    {!blocked && v.image_url && (
+                      <div className="flex flex-wrap gap-1 pt-2">
+                        <RegenButton onClick={() => regenerateImage(v.id, 'same')} disabled={isRegen} label="↻ zelfde brief" />
+                        <RegenButton onClick={() => regenerateImage(v.id, 'overlay')} disabled={isRegen} label="overlay" />
+                        <RegenButton onClick={() => regenerateImage(v.id, 'setting')} disabled={isRegen} label="setting" />
+                        <RegenButton onClick={() => regenerateImage(v.id, 'style')} disabled={isRegen} label="stijl" />
+                      </div>
                     )}
                   </div>
                 </motion.div>
@@ -968,6 +1341,65 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Compacte regenerate-button voor variant-cards. Scope-bedoeling staat in
+ * de label; werkelijke override-payload wordt opgebouwd in
+ * `regenerateImage`. Uniforme styling zodat alle 4 knoppen op één rij
+ * passen onder een kleine variant-kaart.
+ */
+function RegenButton(props: { onClick: () => void; disabled?: boolean; label: string }) {
+  return (
+    <button
+      type="button"
+      onClick={props.onClick}
+      disabled={props.disabled}
+      className="rounded-md border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[9px] font-medium text-amber-800 hover:bg-amber-100 disabled:opacity-50"
+    >
+      {props.label}
+    </button>
+  );
+}
+
+/**
+ * Generieke chip-group voor het Visueel DNA. Klein, herbruikbaar.
+ * Houden we in dezelfde file (geen losse component-file) omdat het
+ * uitsluitend hier wordt gebruikt en de props heel specifiek zijn.
+ */
+function DnaChipGroup<T extends string>(props: {
+  label: string;
+  values: readonly T[];
+  selected: T[];
+  onToggle: (value: T) => void;
+  hint?: string;
+}) {
+  const { label, values, selected, onToggle, hint } = props;
+  return (
+    <div>
+      <label className="mb-1 block text-xs font-semibold text-slate-700">{label}</label>
+      <div className="flex flex-wrap gap-1">
+        {values.map(v => {
+          const active = selected.includes(v);
+          return (
+            <button
+              key={v}
+              type="button"
+              onClick={() => onToggle(v)}
+              className={`rounded-full px-2.5 py-1 text-[10px] font-medium transition ${
+                active
+                  ? 'bg-amber-500 text-white shadow-sm'
+                  : 'bg-white text-slate-600 ring-1 ring-amber-200 hover:bg-amber-50'
+              }`}
+            >
+              {v.replace(/_/g, ' ')}
+            </button>
+          );
+        })}
+      </div>
+      {hint && <p className="mt-1 text-[10px] text-slate-500">{hint}</p>}
     </div>
   );
 }
