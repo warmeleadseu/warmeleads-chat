@@ -275,7 +275,13 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
       });
       const data = await res.json();
       if (!res.ok || !data.ok) {
-        setError(data.error || 'Strategist faalde');
+        const baseMsg = data.error || 'Strategist faalde';
+        const details = typeof data.details === 'string'
+          ? data.details
+          : Array.isArray(data.details)
+            ? data.details.map((i: { path?: (string|number)[]; message?: string }) => `${(i.path || []).join('.')}: ${i.message || ''}`).join('; ')
+            : '';
+        setError(details ? `${baseMsg} — ${details}` : baseMsg);
         setPhase('idle');
         return;
       }
@@ -299,7 +305,8 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
       });
       const data = await res.json();
       if (!res.ok || !data.ok) {
-        setError(data.error || 'Generatie mislukt');
+        const details = typeof data.details === 'string' ? data.details : '';
+        setError(details ? `${data.error || 'Generatie mislukt'} — ${details}` : (data.error || 'Generatie mislukt'));
         setPhase('strategized');
         return;
       }
@@ -348,7 +355,8 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
       const data = await res.json();
       if (Array.isArray(data.errors)) setLaunchErrors(data.errors);
       if (!res.ok || !data.ok) {
-        setError(data.error || 'Launch mislukt');
+        const details = typeof data.details === 'string' ? data.details : '';
+        setError(details ? `${data.error || 'Launch mislukt'} — ${details}` : (data.error || 'Launch mislukt'));
         setPhase('generated');
         return;
       }
