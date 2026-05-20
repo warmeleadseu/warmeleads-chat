@@ -95,6 +95,21 @@ interface AudienceInfo {
   lookalike_id: string | null;
   exclusion_id: string | null;
   seed_lead_count: number;
+  freshly_built?: boolean;
+  reused_existing?: boolean;
+  status?: 'ready' | 'building' | 'failed' | 'unknown';
+  build_reason?: string | null;
+}
+
+interface LookalikeStatus {
+  lead_count: number;
+  audience: {
+    seedAudienceId: string | null;
+    lookalikeAudienceId: string | null;
+    exclusionAudienceId: string | null;
+    sourceLeadCount: number;
+    status: string | null;
+  } | null;
 }
 
 type Phase = 'idle' | 'strategizing' | 'strategized' | 'generating_copy' | 'generating_images' | 'generated' | 'launching' | 'launched';
@@ -125,8 +140,10 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
   const [creativesPerAdset, setCreativesPerAdset] = useState<number>(3);
   const [useLookalike, setUseLookalike] = useState<boolean>(false);
   const [useExclusion, setUseExclusion] = useState<boolean>(true);
-  const [buildLookalikeNow, setBuildLookalikeNow] = useState<boolean>(false);
   const [branchLeadCount, setBranchLeadCount] = useState<number | null>(null);
+  const [lookalikeStatus, setLookalikeStatus] = useState<LookalikeStatus | null>(null);
+  const [lookalikeBuilding, setLookalikeBuilding] = useState<boolean>(false);
+  const [lookalikeMsg, setLookalikeMsg] = useState<string | null>(null);
 
   // Budget
   const [dailyBudgetEur, setDailyBudgetEur] = useState<string>('25');
@@ -193,19 +210,62 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [branch]);
 
-  // Branch-lead count voor lookalike-eligibility
+  // Branch-lead count voor lookalike-eligibility + huidige pakketstatus
   useEffect(() => {
     if (!branch) return;
     let cancelled = false;
+    setLookalikeStatus(null);
     adminFetch(`/api/admin/ai-campaigns/lookalike?branch=${encodeURIComponent(branch)}&country=${countries[0] || 'NL'}`)
       .then(async res => {
         const d = await res.json().catch(() => ({}));
-        if (!cancelled && res.ok) setBranchLeadCount(d.lead_count ?? null);
+        if (!cancelled && res.ok) {
+          setBranchLeadCount(d.lead_count ?? null);
+          setLookalikeStatus({ lead_count: d.lead_count ?? 0, audience: d.audience ?? null });
+        }
       })
       .catch(() => { /* silent */ });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [branch, countries]);
+
+  /**
+   * Bouw of refresh het lookalike-pakket vanuit de UI.
+   * - force=false → ensure (gebruik bestaand als 'ready' én vers)
+   * - force=true  → forceer nieuwe seed-upload + nieuwe LAL
+   */
+  const triggerLookalikeBuild = async (force = false) => {
+    if (!branch) return;
+    setLookalikeMsg(null); setLookalikeBuilding(true);
+    try {
+      const country = countries[0] || 'NL';
+      const res = await adminFetch('/api/admin/ai-campaigns/lookalike', {
+        method: 'POST',
+        body: JSON.stringify({ branch, country, force }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok || !d.ok) {
+        setLookalikeMsg(d.error || `Bouwen mislukt (${res.status})`);
+        return;
+      }
+      setLookalikeStatus({
+        lead_count: d.seed_lead_count ?? 0,
+        audience: {
+          seedAudienceId: null,
+          lookalikeAudienceId: d.lookalike_id ?? null,
+          exclusionAudienceId: d.exclusion_id ?? null,
+          sourceLeadCount: d.seed_lead_count ?? 0,
+          status: d.status ?? 'ready',
+        },
+      });
+      setLookalikeMsg(
+        d.freshly_built
+          ? `Audience vers gebouwd · ${d.seed_lead_count} seeds`
+          : `Bestaand pakket hergebruikt · ${d.seed_lead_count} seeds`,
+      );
+    } finally {
+      setLookalikeBuilding(false);
+    }
+  };
 
   const branchDemand = demand.find(d => d.branch === branch) || null;
   const selectedForm = forms.find(f => f.id === leadFormId) || null;
@@ -252,7 +312,9 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
       creatives_per_adset: creativesPerAdset,
       use_lookalike: useLookalike,
       use_exclusion: useExclusion,
-      build_lookalike_now: buildLookalikeNow,
+      // De backend ensure't automatisch een audience-pakket; we hoeven
+      // hier alleen nog `force_rebuild_audience` te sturen als de
+      // gebruiker expliciet ververst via de refresh-knop.
     },
     targeting_spec: {
       countries,
@@ -486,13 +548,53 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
               )}
             </label>
             {useLookalike && branchLeadCount != null && branchLeadCount < 100 && (
-              <p className="text-[10px] text-amber-700">Minimaal 100 leads vereist voor lookalike — momenteel te weinig.</p>
+              <p className="ml-5 text-[10px] text-amber-700">Minimaal 100 leads vereist voor lookalike — momenteel te weinig.</p>
             )}
             {useLookalike && (
-              <label className="ml-5 flex items-center gap-2 text-[11px] text-slate-600">
-                <input type="checkbox" checked={buildLookalikeNow} onChange={e => setBuildLookalikeNow(e.target.checked)} />
-                Bouw audience nu (anders gebruik bestaande)
-              </label>
+              <div className="ml-5 rounded-md border border-slate-200 bg-slate-50/60 p-2 text-[11px] text-slate-700">
+                {lookalikeStatus?.audience?.status === 'ready' ? (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 font-medium text-emerald-700">
+                      Audience klaar
+                    </span>
+                    <span className="text-slate-600">
+                      {lookalikeStatus.audience.sourceLeadCount.toLocaleString('nl-NL')} seeds in Meta
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => triggerLookalikeBuild(true)}
+                      disabled={lookalikeBuilding || (branchLeadCount ?? 0) < 100}
+                      className="ml-auto rounded-md border border-slate-300 bg-white px-2 py-0.5 text-[10px] font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                    >
+                      {lookalikeBuilding ? 'Bezig…' : 'Refresh audience'}
+                    </button>
+                  </div>
+                ) : lookalikeStatus?.audience?.status === 'building' ? (
+                  <span className="text-slate-600">
+                    Audience wordt opgebouwd — Meta heeft 1–24u nodig om hem volledig te activeren.
+                  </span>
+                ) : (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-slate-600">
+                      Nog geen Custom + Lookalike pakket. Klik om nu vanuit het CRM op te bouwen.
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => triggerLookalikeBuild(false)}
+                      disabled={lookalikeBuilding || (branchLeadCount ?? 0) < 100}
+                      className="ml-auto rounded-md border border-purple-300 bg-purple-50 px-2 py-0.5 text-[10px] font-medium text-purple-700 hover:bg-purple-100 disabled:opacity-50"
+                    >
+                      {lookalikeBuilding ? 'Bouwen…' : 'Bouw audience nu'}
+                    </button>
+                  </div>
+                )}
+                {lookalikeMsg && (
+                  <p className="mt-1 text-[10px] text-slate-500">{lookalikeMsg}</p>
+                )}
+                <p className="mt-1 text-[10px] text-slate-400">
+                  Wordt automatisch aangemaakt bij <em>Plan strategie</em> als er nog geen pakket is. Refresh ververst hashes ≤ 14 dagen.
+                </p>
+              </div>
             )}
             <label className="flex items-center gap-2 text-xs text-slate-700">
               <input type="checkbox" checked={useExclusion} onChange={e => setUseExclusion(e.target.checked)} />
@@ -664,11 +766,14 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
             </h2>
             {audiences?.lookalike_id ? (
               <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
-                Lookalike actief ({audiences.seed_lead_count} seeds)
+                {audiences.freshly_built ? 'Lookalike vers aangemaakt' : 'Lookalike actief'} (
+                {audiences.seed_lead_count.toLocaleString('nl-NL')} seeds)
               </span>
             ) : useLookalike ? (
               <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">
-                Lookalike niet beschikbaar — strategist slaat het over
+                Lookalike niet beschikbaar
+                {audiences?.build_reason === 'insufficient_seed' ? ` — < 100 seeds` :
+                 audiences?.build_reason ? ` — ${audiences.build_reason}` : ' — strategist slaat het over'}
               </span>
             ) : null}
           </div>

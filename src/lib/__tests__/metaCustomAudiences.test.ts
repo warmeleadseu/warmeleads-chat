@@ -31,14 +31,32 @@ describe('metaCustomAudiences', () => {
   });
 
   describe('isEnabled', () => {
-    it('default uit', () => {
+    it('default aan als env afwezig is', () => {
       delete process.env.AI_LOOKALIKE_ENABLED;
-      expect(__internal.isEnabled()).toBe(false);
+      expect(__internal.isEnabled()).toBe(true);
     });
 
     it('aan met env=true', () => {
       process.env.AI_LOOKALIKE_ENABLED = 'true';
       expect(__internal.isEnabled()).toBe(true);
+      delete process.env.AI_LOOKALIKE_ENABLED;
+    });
+
+    it('uit met env=false (kill-switch)', () => {
+      process.env.AI_LOOKALIKE_ENABLED = 'false';
+      expect(__internal.isEnabled()).toBe(false);
+      delete process.env.AI_LOOKALIKE_ENABLED;
+    });
+
+    it('uit met env=0', () => {
+      process.env.AI_LOOKALIKE_ENABLED = '0';
+      expect(__internal.isEnabled()).toBe(false);
+      delete process.env.AI_LOOKALIKE_ENABLED;
+    });
+
+    it('uit met env=off', () => {
+      process.env.AI_LOOKALIKE_ENABLED = 'off';
+      expect(__internal.isEnabled()).toBe(false);
       delete process.env.AI_LOOKALIKE_ENABLED;
     });
   });
@@ -50,6 +68,11 @@ describe('metaCustomAudiences', () => {
 
     it('min seed minstens 100 (Meta-eis)', () => {
       expect(__internal.MIN_SEED_LEADS).toBeGreaterThanOrEqual(100);
+    });
+
+    it('stale-window staat tussen 1 en 30 dagen', () => {
+      expect(__internal.STALE_AFTER_DAYS).toBeGreaterThan(0);
+      expect(__internal.STALE_AFTER_DAYS).toBeLessThanOrEqual(30);
     });
   });
 });

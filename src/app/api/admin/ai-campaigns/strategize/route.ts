@@ -19,7 +19,13 @@ import { requireSuperAdmin } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
 import { planStrategy } from '@/lib/aiCampaignStrategist';
 import { searchInterestsForKeywords } from '@/lib/metaTargetingSearch';
-import { buildBranchAudiencePack, getBranchAudiencePack, countBranchLeads } from '@/lib/metaCustomAudiences';
+import {
+  ensureBranchAudiencePack,
+  buildBranchAudiencePack,
+  getBranchAudiencePack,
+  countBranchLeads,
+  type LookalikeBuildResult,
+} from '@/lib/metaCustomAudiences';
 import { BRANCH_HINTS } from '@/lib/aiCampaignStrategist';
 import { isAiCampaignsEnabled, reserveOpenAIBudget } from '@/lib/aiCampaignBudget';
 import { getBranchDemand } from '@/lib/aiCampaignDemand';
@@ -44,14 +50,19 @@ const BodySchema = z.object({
     creatives_per_adset: z.number().int().min(2).max(5).default(3),
     use_lookalike: z.boolean().default(false),
     use_exclusion: z.boolean().default(true),
-    build_lookalike_now: z.boolean().default(false),
+    // Backward-compat: oudere clients sturen dit nog. Wordt genegeerd —
+    // strategize bouwt nu altijd automatisch op als use_lookalike/exclusion
+    // aan staat en er nog geen pakket is.
+    build_lookalike_now: z.boolean().optional(),
+    /** force=true rebuild een bestaand pakket vers (hash-refresh + nieuwe LAL). */
+    force_rebuild_audience: z.boolean().default(false),
   }).default({
     angles: 3,
     adsets_per_angle: 2,
     creatives_per_adset: 3,
     use_lookalike: false,
     use_exclusion: true,
-    build_lookalike_now: false,
+    force_rebuild_audience: false,
   }),
   // Targeting-overrides (anders gebruikt strategist branche-defaults)
   targeting_spec: z.object({
@@ -103,24 +114,55 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'OpenAI-budget bereikt', guard }, { status: 402 });
   }
 
-  // ── Lookalike-audience (best-effort) ──
+  // ── Audience pipeline (auto-build) ──
+  //
+  // Semantiek:
+  //  - use_lookalike=true  → ensureBranchAudiencePack: gebruik bestaand
+  //    pakket als 'ready' én vers (<14d), anders bouw nu vers.
+  //  - use_exclusion=true  → idem (zelfde pakket bevat beide audiences).
+  //  - force_rebuild_audience=true → bouw alles opnieuw, ook bij vers
+  //    bestaand pakket.
+  //
+  // Faalt het bouwen (geen credentials, te weinig seeds, Meta-rate-limit),
+  // dan loggen we dat en sturen we de strategist op pad zonder lookalike.
+  // De UI laat het in de "audiences"-veld terugkomen zodat de admin
+  // direct ziet dat 'm wel gevraagd maar niet beschikbaar is.
   let lookalikeId: string | null = null;
   let exclusionId: string | null = null;
   let seedSize = 0;
+  let audiencePack: LookalikeBuildResult | null = null;
   const primaryCountry = body.targeting_spec.countries[0];
   if (body.strategy_params.use_lookalike || body.strategy_params.use_exclusion) {
     seedSize = await countBranchLeads(body.branch, primaryCountry);
-    if (body.strategy_params.build_lookalike_now && seedSize >= 100) {
-      const built = await buildBranchAudiencePack(body.branch, primaryCountry, 0.01);
-      if (built.ok) {
-        lookalikeId = built.lookalikeAudienceId ?? null;
-        exclusionId = built.exclusionAudienceId ?? null;
-      }
+    if (seedSize < 100 && !body.strategy_params.force_rebuild_audience) {
+      // Te weinig leads om überhaupt een LAL te kunnen seeden — sla
+      // bouwen over en log richting UI.
+      audiencePack = {
+        ok: false,
+        reason: 'insufficient_seed',
+        seedSize,
+        status: 'failed',
+      };
+    } else if (body.strategy_params.force_rebuild_audience) {
+      audiencePack = await buildBranchAudiencePack(body.branch, primaryCountry, 0.01, { force: true });
     } else {
-      const existing = await getBranchAudiencePack(body.branch, primaryCountry, 0.01);
-      if (existing) {
-        lookalikeId = existing.lookalikeAudienceId;
-        exclusionId = existing.exclusionAudienceId;
+      audiencePack = await ensureBranchAudiencePack(body.branch, primaryCountry, 0.01);
+    }
+    if (audiencePack?.ok) {
+      if (body.strategy_params.use_lookalike) lookalikeId = audiencePack.lookalikeAudienceId ?? null;
+      if (body.strategy_params.use_exclusion) exclusionId = audiencePack.exclusionAudienceId ?? null;
+      seedSize = audiencePack.seedSize ?? seedSize;
+    } else if (audiencePack?.reason === 'lookalike_disabled') {
+      // Master-kill staat aan — fall back op stille modus
+      console.warn('[strategize] lookalike pipeline staat uit via AI_LOOKALIKE_ENABLED=false');
+    } else if (audiencePack?.reason && audiencePack.reason !== 'insufficient_seed') {
+      console.warn('[strategize] audience build/ensure faalde', audiencePack);
+      // Probeer bestaand pakket alsnog te lezen — als build halverwege
+      // crashte hebben we mogelijk wel een seed/exclusion liggen.
+      const cached = await getBranchAudiencePack(body.branch, primaryCountry, 0.01);
+      if (cached?.status === 'ready') {
+        if (body.strategy_params.use_lookalike) lookalikeId = cached.lookalikeAudienceId ?? null;
+        if (body.strategy_params.use_exclusion) exclusionId = cached.exclusionAudienceId ?? null;
       }
     }
   }
@@ -318,6 +360,11 @@ export async function POST(request: NextRequest) {
       lookalike_id: lookalikeId,
       exclusion_id: exclusionId,
       seed_lead_count: seedSize,
+      // Detail-info voor UI: was het pakket vers gebouwd of hergebruikt?
+      freshly_built: audiencePack?.freshlyBuilt ?? false,
+      reused_existing: audiencePack?.reusedExisting ?? false,
+      status: audiencePack?.status ?? (lookalikeId || exclusionId ? 'ready' : 'unknown'),
+      build_reason: audiencePack?.ok ? null : audiencePack?.reason ?? null,
     },
   });
 }

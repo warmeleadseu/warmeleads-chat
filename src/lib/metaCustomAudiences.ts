@@ -13,8 +13,9 @@
  * Idempotent: per (branch, country, ratio) bewaren we IDs in
  * `ai_campaign_lookalikes`. Wekelijkse cron refresht.
  *
- * Achter `AI_LOOKALIKE_ENABLED=true` ENV-flag zodat we per default
- * geen Custom List upload doen zonder expliciete opt-in.
+ * Standaard ingeschakeld. Alleen expliciet `AI_LOOKALIKE_ENABLED=false`
+ * in de ENV schakelt de pipeline uit (kill-switch voor het uitlaten van
+ * PII naar Meta tijdens incidenten).
  */
 import { createHash } from 'crypto';
 import { createServerClient } from '@/lib/supabase';
@@ -24,6 +25,8 @@ import { normalizePhoneForCapi } from '@/lib/metaConversionApi';
 const MIN_SEED_LEADS = 100; // Meta accepteert pas >=100 voor lookalike
 const LEAD_WINDOW_DAYS = 365; // voor seed-audience
 const EXCLUSION_WINDOW_DAYS = 90; // voor exclusion-audience
+/** Een pakket wordt als "vers genoeg" beschouwd binnen dit venster. */
+const STALE_AFTER_DAYS = 14;
 
 export interface LookalikeBuildResult {
   ok: boolean;
@@ -34,10 +37,17 @@ export interface LookalikeBuildResult {
   lookalikeAudienceId?: string;
   exclusionAudienceId?: string;
   seedSize?: number;
+  /** True als (delen van) het pakket in deze call zijn aangemaakt. */
+  freshlyBuilt?: boolean;
+  /** True als het pakket bestond en gewoon hergebruikt is. */
+  reusedExisting?: boolean;
+  status?: 'ready' | 'building' | 'failed' | 'unknown';
 }
 
 function isEnabled(): boolean {
-  return (process.env.AI_LOOKALIKE_ENABLED || '').toLowerCase() === 'true';
+  const flag = (process.env.AI_LOOKALIKE_ENABLED || '').toLowerCase().trim();
+  // Default ON; alleen expliciete 'false' / '0' / 'off' schakelt uit.
+  return flag !== 'false' && flag !== '0' && flag !== 'off';
 }
 
 function sha256Lower(input: string): string {
@@ -177,23 +187,33 @@ async function createLookalikeAudience(seedId: string, country: string, ratio: n
 /**
  * Build (of refresh) een complete (seed + lookalike + exclusion) set
  * voor één branche + land.
+ *
+ * Idempotent:
+ *  - Bestaat (branch,country,ratio) al en zijn alle IDs aanwezig?
+ *    Dan gebeurt er geen Meta-call en wordt het bestaande pakket
+ *    teruggegeven (`reusedExisting=true`).
+ *  - Ontbreekt iets, of force=true → we bouwen alles dat ontbreekt
+ *    en uploaden vers gehashte leads naar de seed/exclusion.
+ *
+ * NB: een fresh lookalike heeft typisch 1-24u nodig voor Meta hem
+ * volledig populeert. De ID kun je al meteen in ad sets zetten;
+ * delivery start zodra Meta klaar is.
  */
-export async function buildBranchAudiencePack(branch: string, country: string, ratio = 0.01): Promise<LookalikeBuildResult> {
+export async function buildBranchAudiencePack(
+  branch: string,
+  country: string,
+  ratio: number = 0.01,
+  options: { force?: boolean } = {},
+): Promise<LookalikeBuildResult> {
   if (!isEnabled()) {
     return { ok: false, reason: 'lookalike_disabled' };
   }
   const creds = await getMetaCredentials();
   if (!creds) return { ok: false, reason: 'no_meta_credentials' };
 
-  const seedHashes = await fetchLeadsForSeed(branch, country, LEAD_WINDOW_DAYS);
-  if (seedHashes.length < MIN_SEED_LEADS) {
-    return { ok: false, reason: 'insufficient_seed', seedSize: seedHashes.length };
-  }
-  const exclusionHashes = await fetchLeadsForSeed(branch, country, EXCLUSION_WINDOW_DAYS);
-
   const supabase = createServerClient();
 
-  // Bestaande row?
+  // 1. Bestaand pakket inlezen
   const { data: existing } = await supabase
     .from('ai_campaign_lookalikes')
     .select('*')
@@ -202,9 +222,41 @@ export async function buildBranchAudiencePack(branch: string, country: string, r
     .eq('ratio', ratio)
     .maybeSingle();
 
-  let seedId = existing?.seed_audience_id as string | null;
-  let lookalikeId = existing?.lookalike_audience_id as string | null;
-  let exclusionId = existing?.exclusion_audience_id as string | null;
+  const havePack =
+    existing &&
+    existing.status === 'ready' &&
+    existing.seed_audience_id &&
+    existing.lookalike_audience_id &&
+    existing.exclusion_audience_id;
+  const fresh =
+    existing?.last_refreshed_at &&
+    Date.now() - new Date(existing.last_refreshed_at as string).getTime() < STALE_AFTER_DAYS * 24 * 60 * 60 * 1000;
+
+  if (havePack && fresh && !options.force) {
+    return {
+      ok: true,
+      branch,
+      country,
+      seedAudienceId: existing.seed_audience_id as string,
+      lookalikeAudienceId: existing.lookalike_audience_id as string,
+      exclusionAudienceId: existing.exclusion_audience_id as string,
+      seedSize: (existing.source_lead_count as number) ?? 0,
+      reusedExisting: true,
+      freshlyBuilt: false,
+      status: 'ready',
+    };
+  }
+
+  // 2. Seed-leads ophalen
+  const seedHashes = await fetchLeadsForSeed(branch, country, LEAD_WINDOW_DAYS);
+  if (seedHashes.length < MIN_SEED_LEADS) {
+    return { ok: false, reason: 'insufficient_seed', seedSize: seedHashes.length, status: 'failed' };
+  }
+  const exclusionHashes = await fetchLeadsForSeed(branch, country, EXCLUSION_WINDOW_DAYS);
+
+  let seedId = (existing?.seed_audience_id as string | null) || null;
+  let lookalikeId = (existing?.lookalike_audience_id as string | null) || null;
+  let exclusionId = (existing?.exclusion_audience_id as string | null) || null;
 
   await supabase.from('ai_campaign_lookalikes').upsert(
     {
@@ -217,12 +269,14 @@ export async function buildBranchAudiencePack(branch: string, country: string, r
     { onConflict: 'branch,country,ratio' },
   );
 
+  let createdAnything = false;
   try {
     if (!seedId) {
       seedId = await createCustomAudience(
         `WL-${branch}-leads-${country}`,
         `Auto-generated seed van WarmeLeads ${branch} leads (${country}, ${LEAD_WINDOW_DAYS}d, phone_valid=true)`,
       );
+      createdAnything = true;
     }
     await uploadAudienceData(seedId, seedHashes);
 
@@ -231,6 +285,7 @@ export async function buildBranchAudiencePack(branch: string, country: string, r
         `WL-${branch}-exclude-${country}-90d`,
         `Bestaande ${branch} leads laatste ${EXCLUSION_WINDOW_DAYS}d — niet opnieuw targeten`,
       );
+      createdAnything = true;
     }
     if (exclusionHashes.length > 0) {
       await uploadAudienceData(exclusionId, exclusionHashes);
@@ -241,6 +296,7 @@ export async function buildBranchAudiencePack(branch: string, country: string, r
       // create direct na upload meestal — Meta queue't intern. Bij faal
       // retryen we niet hier; cron pakt de volgende keer.
       lookalikeId = await createLookalikeAudience(seedId, country, ratio);
+      createdAnything = true;
     }
 
     await supabase
@@ -252,6 +308,7 @@ export async function buildBranchAudiencePack(branch: string, country: string, r
         source_lead_count: seedHashes.length,
         last_refreshed_at: new Date().toISOString(),
         status: 'ready',
+        notes: null,
       })
       .eq('branch', branch)
       .eq('country', country)
@@ -265,6 +322,9 @@ export async function buildBranchAudiencePack(branch: string, country: string, r
       lookalikeAudienceId: lookalikeId,
       exclusionAudienceId: exclusionId,
       seedSize: seedHashes.length,
+      freshlyBuilt: createdAnything,
+      reusedExisting: !createdAnything,
+      status: 'ready',
     };
   } catch (e) {
     const msg = (e as Error).message || 'unknown';
@@ -274,8 +334,21 @@ export async function buildBranchAudiencePack(branch: string, country: string, r
       .eq('branch', branch)
       .eq('country', country)
       .eq('ratio', ratio);
-    return { ok: false, reason: msg };
+    return { ok: false, reason: msg, status: 'failed' };
   }
+}
+
+/**
+ * Slimme ensure: gebruik bestaand pakket indien aanwezig, anders
+ * bouw automatisch. Roept `buildBranchAudiencePack` zonder force aan.
+ * Dit is de aanbevolen aanroep vanuit de Studio.
+ */
+export async function ensureBranchAudiencePack(
+  branch: string,
+  country: string,
+  ratio: number = 0.01,
+): Promise<LookalikeBuildResult> {
+  return buildBranchAudiencePack(branch, country, ratio, { force: false });
 }
 
 /** Lees bestaande audience-IDs voor (branch, country). Geen Meta-call. */
@@ -324,4 +397,5 @@ export const __internal = {
   MIN_SEED_LEADS,
   LEAD_WINDOW_DAYS,
   EXCLUSION_WINDOW_DAYS,
+  STALE_AFTER_DAYS,
 };
