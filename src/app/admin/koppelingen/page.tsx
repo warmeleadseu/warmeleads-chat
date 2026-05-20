@@ -580,9 +580,10 @@ function MetaAdsSection() {
               <ul className="mt-1 space-y-0.5 text-xs text-slate-400">
                 <li>1. De campagne-kosten worden 4x per dag opgehaald uit Meta (09:00, 12:00, 15:00, 16:00)</li>
                 <li>2. Bruto CPL = totale campagne-spend / aantal leads in ons CRM</li>
-                <li>3. Effectieve CPL = bruto CPL / gem. aantal toewijzingen per lead</li>
+                <li>3. Effectieve CPL = spend / netto-toewijzingen. <strong>Goedgekeurde reclamaties</strong> tellen niet als netto-levering (de Meta-spend blijft volledig staan en we leveren een gratis vervanglead), dus eff. CPL is altijd ≥ bruto CPL × gem. toewijzingen.</li>
                 <li>4. Stuur vanuit Zapier de velden <code className="rounded bg-white px-1 py-0.5 font-mono text-brand-purple">campaign_id</code>, <code className="rounded bg-white px-1 py-0.5 font-mono text-brand-purple">adset_id</code> en <code className="rounded bg-white px-1 py-0.5 font-mono text-brand-purple">ad_id</code> mee</li>
                 <li>5. Kosten tellen pas mee vanaf de activatiedatum van de eerste batch per branche</li>
+                <li>6. De AI optimizer pauzeert/scaleert ads op de <strong>netto</strong>-CPL — slechte kwaliteit (veel reclamaties) wordt automatisch afgestraft.</li>
               </ul>
             </div>
           </>

@@ -62,7 +62,7 @@ interface UnpaidBatchFeedItem {
   targetAreaLabels?: string[];
   accountManagerName?: string | null;
 }
-interface CostMetrics { monthAdSpend: number; brutoCpl: number; effectieveCpl: number; avgAssignments: number; distributionAssignmentTotal?: number; batchRevenue: number; bulkRevenue: number; bulkAssignmentCount: number; totalProfit: number; }
+interface CostMetrics { monthAdSpend: number; brutoCpl: number; effectieveCpl: number; avgAssignments: number; distributionAssignmentTotal?: number; netDistributionAssignmentTotal?: number; approvedReclamationsInWindow?: number; batchRevenue: number; bulkRevenue: number; bulkAssignmentCount: number; totalProfit: number; }
 interface PaidBatch { id: string; batchId: string; customer: string; branch: string; amount: number; paidAt: string; amId: string | null; amName: string | null; amAvatarUrl?: string | null; celebrationVideoUrl: string | null; videoStart?: number | null; videoEnd?: number | null; }
 interface AMLeaderboardEntry { id: string; name: string; revenue: number; bulkRevenue: number; batches: number; celebrationVideoUrl: string | null; avatarUrl?: string | null; }
 
@@ -1818,7 +1818,18 @@ export default function LiveDashboard() {
             { label: 'Leads vandaag', value: ps.day?.leads || 0, sub: `${ps.day?.assigned || 0} uitgedeeld`, color: 'from-brand-purple to-brand-pink' },
             { label: 'Leads deze week', value: ps.week?.leads || 0, sub: `${ps.week?.assigned || 0} uitgedeeld`, color: 'from-emerald-500 to-emerald-600', trend: ps.week },
             { label: 'Omzet', value: Math.round(data.totalRevenue), sub: `winst: €${(data.costMetrics?.totalProfit || 0).toLocaleString('nl-NL', { maximumFractionDigits: 0 })}${data.costMetrics?.bulkRevenue ? ` · bulk: €${data.costMetrics.bulkRevenue.toLocaleString('nl-NL', { maximumFractionDigits: 0 })}` : ''}`, color: 'from-amber-500 to-orange-500', prefix: '€' },
-            { label: 'Eff. CPL', value: data.costMetrics?.effectieveCpl || 0, sub: `${data.costMetrics?.avgAssignments || 0}x uitgedeeld · bruto €${(data.costMetrics?.brutoCpl || 0).toFixed(2)}`, color: 'from-teal-400 to-emerald-500', prefix: '€', decimals: 2 },
+            {
+              label: 'Eff. CPL',
+              value: data.costMetrics?.effectieveCpl || 0,
+              sub: `${data.costMetrics?.avgAssignments || 0}x uitgedeeld · bruto €${(data.costMetrics?.brutoCpl || 0).toFixed(2)}${
+                data.costMetrics?.approvedReclamationsInWindow && data.costMetrics.approvedReclamationsInWindow > 0
+                  ? ` · −${data.costMetrics.approvedReclamationsInWindow} reclam.`
+                  : ''
+              }`,
+              color: 'from-teal-400 to-emerald-500',
+              prefix: '€',
+              decimals: 2,
+            },
             { label: 'Totaal leads', value: data.totalLeads, sub: `${data.activeCustomers} klanten actief`, color: 'from-sky-500 to-blue-600' },
           ].map((kpi, i) => (
             <motion.div
@@ -2107,10 +2118,15 @@ export default function LiveDashboard() {
                 <p className="text-[9px] font-bold uppercase tracking-widest text-emerald-400/50">Bruto CPL</p>
                 <p className="mt-0.5 text-lg font-black tabular-nums text-white/80">&euro;{data.costMetrics.brutoCpl.toFixed(2)}</p>
               </div>
-              <div className="px-2">
+              <div className="px-2" title="Effectieve CPL: spend gedeeld door netto-toewijzingen (goedgekeurde reclamaties tellen niet als levering, kosten blijven volledig staan).">
                 <p className="text-[9px] font-bold uppercase tracking-widest text-emerald-400/50">Eff. CPL</p>
                 <p className="mt-0.5 text-lg font-black tabular-nums text-emerald-400">&euro;{data.costMetrics.effectieveCpl.toFixed(2)}</p>
-                <p className="text-[9px] text-white/25">{data.costMetrics.avgAssignments}x uitgedeeld</p>
+                <p className="text-[9px] text-white/25">
+                  {data.costMetrics.avgAssignments}x uitgedeeld
+                  {data.costMetrics.approvedReclamationsInWindow && data.costMetrics.approvedReclamationsInWindow > 0
+                    ? ` · −${data.costMetrics.approvedReclamationsInWindow} reclam.`
+                    : ''}
+                </p>
               </div>
               <div className="px-2">
                 <p className="text-[9px] font-bold uppercase tracking-widest text-emerald-400/50">Omzet</p>

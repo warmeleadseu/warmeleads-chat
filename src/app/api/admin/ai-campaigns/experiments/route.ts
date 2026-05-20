@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireSuperAdmin } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
 import { fetchAdLevelInsightsForAds } from '@/lib/metaMarketingApi';
+import { getApprovedReclamationStats } from '@/lib/reclamationStats';
 
 export const runtime = 'nodejs';
 
@@ -83,6 +84,18 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // ── Goedgekeurde reclamaties per ad/adset/campaign ──
+  //
+  // De Studio tree berekent CPL als spend/leads aan de hand van Meta-insights.
+  // Voor een eerlijke effective CPL trekken we per niveau (ad → adset →
+  // campaign) het aantal goedgekeurde reclamaties af van de leads-teller.
+  // De spend blijft natuurlijk volledig staan.
+  //
+  // We laden ÉÉN keer alle approved reclamaties (typisch een paar honderd
+  // door alle tijd heen) en bouwen lookup-maps. Dat is goedkoper dan per
+  // experiment apart te queryen.
+  const recs = await getApprovedReclamationStats({ excludeBulkAndDemo: true }, supabase);
+
   return NextResponse.json({
     experiments: (experiments || []).map(e => {
       const campaigns = (campaignsByExp[e.id] || []).map(c => ({
@@ -95,5 +108,16 @@ export async function GET(request: NextRequest) {
         campaigns,
       };
     }),
+    /**
+     * Reclamatie-counts gegroepeerd per Meta-ID. De UI gebruikt deze maps
+     * om bij rollup de leads-noemer te corrigeren naar netto. Alleen
+     * goedgekeurde reclamaties op leads die NIET demo/excel zijn.
+     */
+    approvedReclamations: {
+      total: recs.total,
+      byAdId: Object.fromEntries(recs.byAdId),
+      byAdsetId: Object.fromEntries(recs.byAdsetId),
+      byCampaignId: Object.fromEntries(recs.byCampaignId),
+    },
   });
 }

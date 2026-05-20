@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
 import { getPeriodStart, parseDashboardPeriod } from '@/lib/adminDashboardPeriod';
+import {
+  getApprovedReclamationStats,
+  countApprovedReclamationsForAssignments,
+} from '@/lib/reclamationStats';
 
 /** Na zware wijzigingen: Supabase → Query Performance + advisors (indexes i.c.m. costs-vensters). */
 
@@ -223,18 +227,40 @@ export async function GET(request: NextRequest) {
   const uniqueAssignedLeads = new Set(assignmentsForCpl.map(a => a.lead_id)).size;
   const totalAssignments = totalAssignmentCount;
 
-  /** Hoe vaak gemiddeld uitgedeeld per geworven Meta-lead in deze periode (≈ bruto / effectieve CPL). */
+  // ── Goedgekeurde reclamaties: aftrek voor netto-leveringen ──
+  //
+  // Bruto CPL telt alle binnenkomende leads (ongewijzigd: spend / leads).
+  // Eff. CPL trekt elke goedgekeurde reclamatie af van de assignment-pool:
+  // de Meta-spend voor die lead is wel gemaakt, maar de levering telt niet
+  // als omzet — we leveren een gratis vervanglead.
+  //
+  // We matchen op (lead_id, customer_id) zodat een lead die naar méérdere
+  // klanten is uitgedeeld maar door één klant gereclameerd is, slechts
+  // één keer wordt afgetrokken.
+  const approvedRecs = await getApprovedReclamationStats(
+    { excludeBulkAndDemo: true },
+    supabase,
+  );
+  const recAgg = countApprovedReclamationsForAssignments(
+    assignmentsForCpl,
+    approvedRecs.approvedPairs,
+    branchForAssignment,
+  );
+  const approvedReclamationsInPeriod = recAgg.total;
+  const netAssignmentCount = Math.max(0, totalAssignmentCount - approvedReclamationsInPeriod);
+
+  /** Hoe vaak gemiddeld uitgedeeld per geworven Meta-lead in deze periode (netto, excl. goedgekeurde reclamaties). */
   const avgAssignments =
-    totalOurLeads > 0 && totalAssignmentCount > 0
-      ? Math.round((totalAssignmentCount / totalOurLeads) * 100) / 100
+    totalOurLeads > 0 && netAssignmentCount > 0
+      ? Math.round((netAssignmentCount / totalOurLeads) * 100) / 100
       : 0;
 
-  /** Advertentiekosten per relevante toewijzing (bulk/demo vallen buiten de pool). */
-  const costPerAssignment = totalAssignmentCount > 0 ? totalAdSpend / totalAssignmentCount : 0;
+  /** Advertentiekosten per relevante toewijzing (bulk/demo vallen buiten de pool, goedgekeurde reclamaties tellen niet als levering). */
+  const costPerAssignment = netAssignmentCount > 0 ? totalAdSpend / netAssignmentCount : 0;
 
   const effectieveCpl =
-    totalAssignmentCount > 0
-      ? Math.round((totalAdSpend / totalAssignmentCount) * 100) / 100
+    netAssignmentCount > 0
+      ? Math.round((totalAdSpend / netAssignmentCount) * 100) / 100
       : null;
 
   // ── Branch-level costs ──
@@ -261,19 +287,31 @@ export async function GET(request: NextRequest) {
     branchAssignmentsCount.set(br, (branchAssignmentsCount.get(br) || 0) + 1);
   }
 
-  const branchCosts: Record<string, { spend: number; count: number; avgCpl: number; effectieveCpl: number; assignments: number }> = {};
+  const branchCosts: Record<string, {
+    spend: number;
+    count: number;
+    avgCpl: number;
+    effectieveCpl: number;
+    assignments: number;
+    netAssignments: number;
+    approvedReclamations: number;
+  }> = {};
   for (const [branch, count] of branchLeads) {
     const spend = branchSpend.get(branch) || 0;
     const avgCpl = count > 0 ? Math.round((spend / count) * 100) / 100 : 0;
     const branchTot = branchAssignmentsCount.get(branch) || 0;
+    const branchRec = recAgg.byBranch.get(branch) || 0;
+    const netBr = Math.max(0, branchTot - branchRec);
     const effectieveBr =
-      branchTot > 0 ? Math.round((spend / branchTot) * 100) / 100 : avgCpl;
+      netBr > 0 ? Math.round((spend / netBr) * 100) / 100 : avgCpl;
     branchCosts[branch] = {
       spend: Math.round(spend * 100) / 100,
       count,
       avgCpl,
       effectieveCpl: effectieveBr,
       assignments: branchTot,
+      netAssignments: netBr,
+      approvedReclamations: branchRec,
     };
   }
 
@@ -447,6 +485,8 @@ export async function GET(request: NextRequest) {
     monthBrutoCpl: brutoCpl,
     effectieveCpl,
     avgAssignments,
+    approvedReclamations: approvedReclamationsInPeriod,
+    netAssignments: netAssignmentCount,
     batchRevenue: Math.round(batchRevenue * 100) / 100,
     bulkRevenue: Math.round(bulkRevenue * 100) / 100,
     bulkByCustomer: Object.values(bulkByCustomer),
@@ -475,7 +515,7 @@ export async function GET(request: NextRequest) {
       maxAssignmentPages: COSTS_ASSIGN_MAX_PAGES,
       batchesCappedAt: 2500,
       note:
-        'CPL en ad-kosten: alleen distributie-toewijzingen (geen bulk_export, geen demo). Leads: geen excel_import of demo. Lookback begrensd; oude data kan ontbreken.',
+        'CPL en ad-kosten: alleen distributie-toewijzingen (geen bulk_export, geen demo). Leads: geen excel_import of demo. Effectieve CPL trekt goedgekeurde reclamaties af van de toewijzings-noemer (spend telt altijd mee, gereclameerde lead niet als netto-levering). Lookback begrensd; oude data kan ontbreken.',
     },
   });
 }

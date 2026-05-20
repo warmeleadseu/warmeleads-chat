@@ -147,6 +147,8 @@ interface CostData {
   monthBrutoCpl: number | null;
   effectieveCpl: number | null;
   avgAssignments: number;
+  approvedReclamations?: number;
+  netAssignments?: number;
   totalRevenue: number;
   totalCost: number;
   totalProfit: number;
@@ -154,7 +156,7 @@ interface CostData {
   leadsWithCost: number;
   uniqueAssignedLeads: number;
   totalAssignments: number;
-  branchCosts: Record<string, { spend: number; count: number; avgCpl: number; effectieveCpl: number; assignments: number }>;
+  branchCosts: Record<string, { spend: number; count: number; avgCpl: number; effectieveCpl: number; assignments: number; netAssignments?: number; approvedReclamations?: number }>;
   customerMargins: { name: string; revenue: number; cost: number; margin: number; leads: number; marginPct: number }[];
   batchFinancials: { id: string; customer: string; branch: string; batchSize: number; delivered: number; pricePerLead: number; status: string; revenue: number; cost: number; profit: number; marginPct: number; leadsWithCost: number }[];
   lastSyncAt: string | null;
@@ -439,10 +441,18 @@ export default function AdminDashboard() {
               <p className="mt-0.5 text-[11px] text-slate-500">Bruto CPL</p>
               <p className="text-[11px] text-slate-400">{costData.leadsWithCost} leads met kosten</p>
             </div>
-            <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-4 shadow-sm">
+            <div
+              className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-4 shadow-sm"
+              title="Effectieve CPL = spend / netto-toewijzingen. Goedgekeurde reclamaties tellen niet als netto-levering (de kosten blijven volledig staan)."
+            >
               <p className="text-xl font-bold text-emerald-700">&euro;{costData.effectieveCpl?.toFixed(2) ?? '-'}</p>
-              <p className="mt-0.5 text-[11px] text-emerald-600 font-medium">Effectieve CPL</p>
-              <p className="text-[11px] text-emerald-500">{costData.avgAssignments}x uitgedeeld</p>
+              <p className="mt-0.5 text-[11px] text-emerald-600 font-medium">Eff. CPL <span className="text-emerald-500">(excl. goedgekeurde reclamaties)</span></p>
+              <p className="text-[11px] text-emerald-500">
+                {costData.avgAssignments}x uitgedeeld
+                {costData.approvedReclamations && costData.approvedReclamations > 0
+                  ? ` · ${costData.approvedReclamations} reclam. afgetrokken`
+                  : ''}
+              </p>
             </div>
             <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
               <p className="text-xl font-bold text-slate-900">&euro;{costData.totalRevenue.toFixed(0)}</p>
@@ -485,8 +495,17 @@ export default function AdminDashboard() {
                             <span className="text-[11px] text-slate-400">bruto</span>
                             <span className="text-xs font-semibold text-slate-700">&euro;{data.avgCpl.toFixed(2)}</span>
                             <span className="text-slate-300">→</span>
-                            <span className="text-[11px] text-emerald-500">eff.</span>
+                            <span
+                              className="text-[11px] text-emerald-500"
+                              title="Effectieve CPL: kosten gedeeld door netto-toewijzingen (goedgekeurde reclamaties afgetrokken)."
+                            >eff.</span>
                             <span className="text-xs font-bold text-emerald-600">&euro;{data.effectieveCpl.toFixed(2)}</span>
+                            {data.approvedReclamations && data.approvedReclamations > 0 ? (
+                              <span
+                                className="text-[10px] text-rose-500"
+                                title={`${data.approvedReclamations} goedgekeurde reclamaties afgetrokken (van ${data.assignments} toewijzingen)`}
+                              >−{data.approvedReclamations}</span>
+                            ) : null}
                           </div>
                         </div>
                       </div>

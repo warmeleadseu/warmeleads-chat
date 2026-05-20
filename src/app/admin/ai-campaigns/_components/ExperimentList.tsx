@@ -77,13 +77,32 @@ interface Experiment {
 interface Rollup {
   spend: number;
   leads: number;
+  reclamations: number;
+  /** CPL excl. goedgekeurde reclamaties (= eerlijke metric). */
   cpl: number | null;
+  /** CPL incl. goedgekeurde reclamaties (= optimistische bruto-CPL). */
+  brutoCpl: number | null;
   impressions: number;
   clicks: number;
 }
 
-function rollup(variants: Variant[]): Rollup {
-  let spend = 0, leads = 0, impressions = 0, clicks = 0;
+/** Map van Meta-ad-IDs naar het aantal goedgekeurde reclamaties op die ad. */
+type ReclamationMaps = {
+  byAdId: Record<string, number>;
+  byAdsetId: Record<string, number>;
+  byCampaignId: Record<string, number>;
+  total: number;
+};
+
+const EMPTY_REC_MAPS: ReclamationMaps = {
+  byAdId: {},
+  byAdsetId: {},
+  byCampaignId: {},
+  total: 0,
+};
+
+function rollup(variants: Variant[], rec: ReclamationMaps = EMPTY_REC_MAPS): Rollup {
+  let spend = 0, leads = 0, impressions = 0, clicks = 0, reclamations = 0;
   for (const v of variants) {
     if (v.insights) {
       spend += v.insights.spend || 0;
@@ -91,14 +110,28 @@ function rollup(variants: Variant[]): Rollup {
       impressions += v.insights.impressions || 0;
       clicks += v.insights.clicks || 0;
     }
+    if (v.meta_ad_id && rec.byAdId[v.meta_ad_id]) {
+      reclamations += rec.byAdId[v.meta_ad_id];
+    }
   }
-  return { spend, leads, impressions, clicks, cpl: leads > 0 ? spend / leads : null };
+  // Effective CPL: spend gaat door, leads − reclamaties = netto-levering.
+  const net = Math.max(0, leads - reclamations);
+  return {
+    spend,
+    leads,
+    reclamations,
+    impressions,
+    clicks,
+    cpl: net > 0 ? spend / net : null,
+    brutoCpl: leads > 0 ? spend / leads : null,
+  };
 }
 
 interface Props { reloadKey: number }
 
 export default function ExperimentList({ reloadKey }: Props) {
   const [experiments, setExperiments] = useState<Experiment[]>([]);
+  const [recMaps, setRecMaps] = useState<ReclamationMaps>(EMPTY_REC_MAPS);
   const [loading, setLoading] = useState(true);
   const [refreshingInsights, setRefreshingInsights] = useState(false);
   const [running, setRunning] = useState<'dry' | 'live' | null>(null);
@@ -112,6 +145,14 @@ export default function ExperimentList({ reloadKey }: Props) {
     if (res.ok) {
       const d = await res.json();
       setExperiments(d.experiments || []);
+      if (d.approvedReclamations) {
+        setRecMaps({
+          total: d.approvedReclamations.total || 0,
+          byAdId: d.approvedReclamations.byAdId || {},
+          byAdsetId: d.approvedReclamations.byAdsetId || {},
+          byCampaignId: d.approvedReclamations.byCampaignId || {},
+        });
+      }
     }
     setLoading(false);
     setRefreshingInsights(false);
@@ -203,7 +244,7 @@ export default function ExperimentList({ reloadKey }: Props) {
       </div>
 
       {experiments.map(exp => {
-        const overall = rollup(exp.variants);
+        const overall = rollup(exp.variants, recMaps);
         const isOpen = expanded[exp.id] !== false; // default open
         return (
           <motion.div
@@ -238,8 +279,23 @@ export default function ExperimentList({ reloadKey }: Props) {
                   <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
                     <span className="rounded-full bg-slate-100 px-2 py-0.5 font-mono">spend €{overall.spend.toFixed(2)}</span>
                     <span className="rounded-full bg-slate-100 px-2 py-0.5 font-mono">{overall.leads} leads</span>
-                    <span className="rounded-full bg-slate-100 px-2 py-0.5 font-mono">
-                      CPL {overall.cpl != null ? `€${overall.cpl.toFixed(2)}` : '—'}
+                    {overall.reclamations > 0 && (
+                      <span
+                        className="rounded-full bg-rose-50 px-2 py-0.5 font-mono text-rose-700"
+                        title="Goedgekeurde reclamaties (kosten geld, tellen niet als netto-levering)"
+                      >
+                        −{overall.reclamations} gereclameerd
+                      </span>
+                    )}
+                    <span
+                      className="rounded-full bg-slate-100 px-2 py-0.5 font-mono"
+                      title={
+                        overall.reclamations > 0
+                          ? `Eff. CPL excl. ${overall.reclamations} goedgekeurde reclamatie(s) · bruto ${overall.brutoCpl != null ? `€${overall.brutoCpl.toFixed(2)}` : '—'}`
+                          : 'Eff. CPL'
+                      }
+                    >
+                      Eff. CPL {overall.cpl != null ? `€${overall.cpl.toFixed(2)}` : '—'}
                     </span>
                   </div>
                   {exp.stop_reason && (
@@ -282,7 +338,7 @@ export default function ExperimentList({ reloadKey }: Props) {
                   className="overflow-hidden border-t border-slate-100 bg-slate-50/40 px-5 py-4"
                 >
                   {exp.campaigns.length > 0 ? (
-                    <CampaignTree exp={exp} expandedCampaign={expandedCampaign} setExpandedCampaign={setExpandedCampaign} />
+                    <CampaignTree exp={exp} expandedCampaign={expandedCampaign} setExpandedCampaign={setExpandedCampaign} recMaps={recMaps} />
                   ) : (
                     <FlatVariants variants={exp.variants} />
                   )}
@@ -300,10 +356,12 @@ function CampaignTree({
   exp,
   expandedCampaign,
   setExpandedCampaign,
+  recMaps,
 }: {
   exp: Experiment;
   expandedCampaign: Record<string, boolean>;
   setExpandedCampaign: (fn: (e: Record<string, boolean>) => Record<string, boolean>) => void;
+  recMaps: ReclamationMaps;
 }) {
   const variantsByAdset = useMemo(() => {
     const map: Record<string, Variant[]> = {};
@@ -319,7 +377,7 @@ function CampaignTree({
       {exp.campaigns.map(c => {
         const adsetIds = c.adsets.map(a => a.id);
         const cmpVariants = adsetIds.flatMap(id => variantsByAdset[id] || []);
-        const ru = rollup(cmpVariants);
+        const ru = rollup(cmpVariants, recMaps);
         const isOpen = expandedCampaign[c.id] !== false;
         return (
           <div key={c.id} className="rounded-lg border border-purple-200 bg-white">
@@ -339,8 +397,17 @@ function CampaignTree({
                 <div className="mt-1 flex flex-wrap gap-2 text-[10px]">
                   <span className="rounded-full bg-slate-100 px-1.5 py-0.5 font-mono">spend €{ru.spend.toFixed(2)}</span>
                   <span className="rounded-full bg-slate-100 px-1.5 py-0.5 font-mono">{ru.leads} leads</span>
-                  <span className="rounded-full bg-slate-100 px-1.5 py-0.5 font-mono">
-                    CPL {ru.cpl != null ? `€${ru.cpl.toFixed(2)}` : '—'}
+                  {ru.reclamations > 0 && (
+                    <span
+                      className="rounded-full bg-rose-50 px-1.5 py-0.5 font-mono text-rose-700"
+                      title="Goedgekeurde reclamaties"
+                    >−{ru.reclamations}</span>
+                  )}
+                  <span
+                    className="rounded-full bg-slate-100 px-1.5 py-0.5 font-mono"
+                    title={ru.reclamations > 0 ? `Eff. CPL excl. reclamaties · bruto ${ru.brutoCpl != null ? `€${ru.brutoCpl.toFixed(2)}` : '—'}` : 'Eff. CPL'}
+                  >
+                    Eff. CPL {ru.cpl != null ? `€${ru.cpl.toFixed(2)}` : '—'}
                   </span>
                   <span className={`rounded-full px-1.5 py-0.5 font-medium ${
                     c.status === 'active' ? 'bg-emerald-100 text-emerald-700' :
@@ -361,7 +428,7 @@ function CampaignTree({
                 >
                   {c.adsets.map(a => {
                     const vs = variantsByAdset[a.id] || [];
-                    const asRu = rollup(vs);
+                    const asRu = rollup(vs, recMaps);
                     const t = a.targeting_summary as { age_min?: number; age_max?: number; interests?: Array<{ name: string }> };
                     return (
                       <div key={a.id} className="rounded-md border border-slate-200 bg-white p-2">
@@ -380,7 +447,13 @@ function CampaignTree({
                               <span className="rounded-full bg-purple-50 px-1.5 py-0.5 text-purple-700">~€{(a.predicted_cpl_cents / 100).toFixed(2)}</span>
                             )}
                             <span className="rounded-full bg-slate-100 px-1.5 py-0.5 font-mono">spend €{asRu.spend.toFixed(2)}</span>
-                            <span className="rounded-full bg-slate-100 px-1.5 py-0.5 font-mono">CPL {asRu.cpl != null ? `€${asRu.cpl.toFixed(2)}` : '—'}</span>
+                            {asRu.reclamations > 0 && (
+                              <span className="rounded-full bg-rose-50 px-1.5 py-0.5 font-mono text-rose-700" title="Goedgekeurde reclamaties">−{asRu.reclamations}</span>
+                            )}
+                            <span
+                              className="rounded-full bg-slate-100 px-1.5 py-0.5 font-mono"
+                              title={asRu.reclamations > 0 ? `Eff. CPL excl. reclamaties · bruto ${asRu.brutoCpl != null ? `€${asRu.brutoCpl.toFixed(2)}` : '—'}` : 'Eff. CPL'}
+                            >Eff. CPL {asRu.cpl != null ? `€${asRu.cpl.toFixed(2)}` : '—'}</span>
                             <span className={`rounded-full px-1.5 py-0.5 font-medium ${
                               a.status === 'active' ? 'bg-emerald-100 text-emerald-700' :
                               a.status === 'archived' ? 'bg-rose-100 text-rose-700' :

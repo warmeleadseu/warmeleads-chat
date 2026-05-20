@@ -28,6 +28,7 @@ import { fetchAdLevelInsightsForAds, setEntityStatus, updateAdSetDailyBudget } f
 import { getBranchDemand } from '@/lib/aiCampaignDemand';
 import { isAiCampaignsEnabled } from '@/lib/aiCampaignBudget';
 import { getMetaCredentials } from '@/lib/meta';
+import { getApprovedReclamationStats } from '@/lib/reclamationStats';
 
 /** Minstens dit aantal leads vóór we beslissen pauzeren/scalen. */
 const MIN_LEADS_PER_VARIANT = 10;
@@ -234,8 +235,37 @@ export async function runOptimizerTick(opts: OptimizerOptions = {}): Promise<Opt
       const adIds = variants.map(v => v.meta_ad_id).filter((x): x is string => !!x);
       const insights: InsightRow[] = adIds.length > 0 ? await fetchAdLevelInsightsForAds(adIds) : [];
       const insightByAd = new Map(insights.map(i => [i.ad_id, i]));
+
+      // ── Goedgekeurde reclamaties per ad/adset/campagne ──
+      //
+      // Reclamaties laten Meta-spend ongemoeid maar maken de bijbehorende
+      // lead waardeloos (gratis vervanglead voor klant). Voor optimizer-
+      // beslissingen moeten we daarom de NETTO-CPL gebruiken: een variant
+      // met 10 leads waarvan 4 gereclameerd telt als 6 echte leads. Dat
+      // straft slechte kwaliteit eerlijk af.
+      //
+      // We scope-en op de meta_campaign_ids van dit experiment om de query
+      // klein te houden.
+      const campaignMetaIds = campaigns.length > 0
+        ? campaigns.map(c => c.meta_campaign_id).filter((x): x is string => !!x)
+        : (exp.meta_campaign_id ? [exp.meta_campaign_id] : []);
+      const recs = campaignMetaIds.length > 0
+        ? await getApprovedReclamationStats(
+            { excludeBulkAndDemo: true },
+            supabase as unknown as Parameters<typeof getApprovedReclamationStats>[1],
+          )
+        : null;
+      const recByAd = (adId: string | null | undefined) =>
+        adId && recs ? recs.byAdId.get(adId) || 0 : 0;
+      const recByAdset = (adsetMetaId: string | null | undefined) =>
+        adsetMetaId && recs ? recs.byAdsetId.get(adsetMetaId) || 0 : 0;
+      const recByCampaign = (campMetaId: string | null | undefined) =>
+        campMetaId && recs ? recs.byCampaignId.get(campMetaId) || 0 : 0;
+
       const totalSpendEur = insights.reduce((s, i) => s + i.spend, 0);
-      const totalLeads = insights.reduce((s, i) => s + i.leads, 0);
+      const totalLeadsBruto = insights.reduce((s, i) => s + i.leads, 0);
+      const totalReclamations = campaignMetaIds.reduce((s, cid) => s + recByCampaign(cid), 0);
+      const totalLeads = Math.max(0, totalLeadsBruto - totalReclamations);
       const dailyBudgetEur = briefRow.daily_budget_cents / 100;
 
       // ── (b) cold-funnel ──
@@ -245,8 +275,8 @@ export async function runOptimizerTick(opts: OptimizerOptions = {}): Promise<Opt
           if (exp.meta_campaign_id) { try { await setEntityStatus(exp.meta_campaign_id, 'PAUSED'); } catch (e) { summary.errors.push((e as Error).message); } }
         }
         await logDecision(supabase, exp.id, null, 'kill_cold_funnel',
-          `Spend ${totalSpendEur.toFixed(2)}€ ≥ ${COLD_FUNNEL_SPEND_RATIO}×daily zonder leads`,
-          { totalSpendEur, totalLeads, dailyBudgetEur },
+          `Spend ${totalSpendEur.toFixed(2)}€ ≥ ${COLD_FUNNEL_SPEND_RATIO}×daily zonder netto leads (bruto=${totalLeadsBruto}, reclamaties=${totalReclamations})`,
+          { totalSpendEur, totalLeads, totalLeadsBruto, totalReclamations, dailyBudgetEur },
           !!opts.dryRun);
         await supabase
           .from('ai_campaign_experiments')
@@ -269,21 +299,29 @@ export async function runOptimizerTick(opts: OptimizerOptions = {}): Promise<Opt
         if (!v.meta_ad_id) continue;
         const ins = insightByAd.get(v.meta_ad_id);
         if (!ins) continue;
-        const enoughData = ins.leads >= MIN_LEADS_PER_VARIANT || ins.spend * 100 >= MIN_SPEND_PER_VARIANT_CENTS;
+        // Netto-leads: trek goedgekeurde reclamaties op exact deze ad af.
+        // We pauzeren/scalen op de eerlijke CPL — een variant met veel
+        // afkeurde leads moet sneller worden gestopt, ook al ziet Meta
+        // de bruto-CPL als acceptabel.
+        const adRecs = recByAd(v.meta_ad_id);
+        const netLeads = Math.max(0, ins.leads - adRecs);
+        const netCpl = netLeads > 0 ? ins.spend / netLeads : null;
+        const enoughData =
+          netLeads >= MIN_LEADS_PER_VARIANT || ins.spend * 100 >= MIN_SPEND_PER_VARIANT_CENTS;
         if (!enoughData) continue;
 
         if (target > 0) {
-          if (ins.cpl != null && ins.cpl > target * BAD_CPL_RATIO) {
+          if (netCpl != null && netCpl > target * BAD_CPL_RATIO) {
             if (!opts.dryRun) {
               try { await setEntityStatus(v.meta_ad_id, 'PAUSED'); } catch (e) { summary.errors.push((e as Error).message); }
               await supabase.from('ai_campaign_variants').update({ status: 'paused' }).eq('id', v.id);
             }
             await logDecision(supabase, exp.id, v.id, 'pause_loser',
-              `CPL €${ins.cpl} > target €${target} × ${BAD_CPL_RATIO}`,
-              { ins },
+              `Netto CPL €${netCpl.toFixed(2)} > target €${target} × ${BAD_CPL_RATIO} (bruto CPL €${ins.cpl?.toFixed(2) ?? '—'}, reclamaties=${adRecs})`,
+              { ins, netLeads, netCpl, adRecs },
               !!opts.dryRun);
             pausedCount++;
-          } else if (ins.cpl != null && ins.cpl < target * GOOD_CPL_RATIO) {
+          } else if (netCpl != null && netCpl < target * GOOD_CPL_RATIO) {
             winners.push(v);
             scaledCount++;
             if (!opts.dryRun) {
@@ -293,19 +331,19 @@ export async function runOptimizerTick(opts: OptimizerOptions = {}): Promise<Opt
                 .eq('id', v.id);
             }
             await logDecision(supabase, exp.id, v.id, 'scale_winner',
-              `CPL €${ins.cpl} < target €${target} × ${GOOD_CPL_RATIO}`,
-              { ins },
+              `Netto CPL €${netCpl.toFixed(2)} < target €${target} × ${GOOD_CPL_RATIO} (reclamaties=${adRecs})`,
+              { ins, netLeads, netCpl, adRecs },
               !!opts.dryRun);
           }
         } else {
-          if (ins.cpl == null && ins.spend * 100 >= MIN_SPEND_PER_VARIANT_CENTS) {
+          if (netCpl == null && ins.spend * 100 >= MIN_SPEND_PER_VARIANT_CENTS) {
             if (!opts.dryRun) {
               try { await setEntityStatus(v.meta_ad_id, 'PAUSED'); } catch (e) { summary.errors.push((e as Error).message); }
               await supabase.from('ai_campaign_variants').update({ status: 'paused' }).eq('id', v.id);
             }
             await logDecision(supabase, exp.id, v.id, 'pause_loser',
-              `Spend zonder leads ≥ €${MIN_SPEND_PER_VARIANT_CENTS / 100}`,
-              { ins },
+              `Spend zonder netto-leads ≥ €${MIN_SPEND_PER_VARIANT_CENTS / 100} (bruto=${ins.leads}, reclamaties=${adRecs})`,
+              { ins, adRecs },
               !!opts.dryRun);
             pausedCount++;
           }
@@ -342,8 +380,8 @@ export async function runOptimizerTick(opts: OptimizerOptions = {}): Promise<Opt
           variantsByAdset.set(v.meta_adset_row_id, arr);
         }
 
-        // Per-adset evaluatie: hele ad set pauzeren als avg-CPL > 2x target én >=10 leads
-        const adsetMetrics = new Map<string, { spend: number; leads: number; cpl: number | null }>();
+        // Per-adset evaluatie: hele ad set pauzeren als netto-CPL > 2x target én >=10 netto leads
+        const adsetMetrics = new Map<string, { spend: number; leads: number; cpl: number | null; netLeads: number; netCpl: number | null; reclamations: number }>();
         for (const adset of adsets) {
           if (adset.status === 'archived' || adset.status === 'failed') continue;
           const adsetVariants = variantsByAdset.get(adset.id) || [];
@@ -355,36 +393,47 @@ export async function runOptimizerTick(opts: OptimizerOptions = {}): Promise<Opt
             spend += ins.spend;
             leads += ins.leads;
           }
+          const adsetRecs = recByAdset(adset.meta_adset_id);
+          const netLeads = Math.max(0, leads - adsetRecs);
           const cpl = leads > 0 ? spend / leads : null;
-          adsetMetrics.set(adset.id, { spend, leads, cpl });
-          if (target > 0 && leads >= MIN_LEADS_PER_VARIANT * 2 && cpl != null && cpl > target * (BAD_CPL_RATIO * 1.4)) {
+          const netCpl = netLeads > 0 ? spend / netLeads : null;
+          adsetMetrics.set(adset.id, { spend, leads, cpl, netLeads, netCpl, reclamations: adsetRecs });
+          if (target > 0 && netLeads >= MIN_LEADS_PER_VARIANT * 2 && netCpl != null && netCpl > target * (BAD_CPL_RATIO * 1.4)) {
             if (!opts.dryRun && adset.meta_adset_id) {
               try { await setEntityStatus(adset.meta_adset_id, 'PAUSED'); } catch (e) { summary.errors.push((e as Error).message); }
               await supabase.from('ai_campaign_meta_adsets').update({ status: 'paused' }).eq('id', adset.id);
             }
             await logDecision(supabase, exp.id, null, 'pause_adset',
-              `Adset CPL €${cpl?.toFixed(2)} > 2× target — pauzeer hele set`,
-              { adset_id: adset.id, strategy_type: adset.strategy_type, spend, leads, cpl, target },
+              `Netto adset CPL €${netCpl.toFixed(2)} > 2× target — pauzeer hele set (reclamaties=${adsetRecs})`,
+              { adset_id: adset.id, strategy_type: adset.strategy_type, spend, leads, cpl, netLeads, netCpl, reclamations: adsetRecs, target },
               !!opts.dryRun);
             summary.actions.pause_adset++;
           }
         }
 
         // Per-campagne CBO-reallocation: winners krijgen meer budget, losers minder
+        // (op basis van netto-CPL — reclamaties hebben dezelfde impact als kosten)
         if (campaigns.length > 1) {
           const cmpMetrics = campaigns.map(c => {
             const cmpAdsets = adsets.filter(a => a.meta_campaign_row_id === c.id);
-            let spend = 0, leads = 0;
+            let spend = 0, leads = 0, netLeads = 0;
             for (const a of cmpAdsets) {
               const m = adsetMetrics.get(a.id);
-              if (m) { spend += m.spend; leads += m.leads; }
+              if (m) { spend += m.spend; leads += m.leads; netLeads += m.netLeads; }
             }
-            return { campaign: c, spend, leads, cpl: leads > 0 ? spend / leads : null };
+            return {
+              campaign: c,
+              spend,
+              leads,
+              netLeads,
+              cpl: leads > 0 ? spend / leads : null,
+              netCpl: netLeads > 0 ? spend / netLeads : null,
+            };
           });
-          const hasEnough = cmpMetrics.every(m => m.leads >= MIN_LEADS_PER_VARIANT);
+          const hasEnough = cmpMetrics.every(m => m.netLeads >= MIN_LEADS_PER_VARIANT);
           if (hasEnough && target > 0) {
-            // Sorteer op CPL (lager = beter), boost top-1, dim worst-1
-            const sorted = [...cmpMetrics].filter(m => m.cpl != null).sort((a, b) => (a.cpl! - b.cpl!));
+            // Sorteer op netto-CPL (lager = beter), boost top-1, dim worst-1.
+            const sorted = [...cmpMetrics].filter(m => m.netCpl != null).sort((a, b) => (a.netCpl! - b.netCpl!));
             if (sorted.length >= 2) {
               const winner = sorted[0];
               const loser = sorted[sorted.length - 1];
@@ -421,10 +470,10 @@ export async function runOptimizerTick(opts: OptimizerOptions = {}): Promise<Opt
                   }
                 }
                 await logDecision(supabase, exp.id, null, 'reallocate_budget',
-                  `Budget shift €${(transferAmt / 100).toFixed(2)} van "${loser.campaign.angle}" naar "${winner.campaign.angle}"`,
+                  `Budget shift €${(transferAmt / 100).toFixed(2)} van "${loser.campaign.angle}" naar "${winner.campaign.angle}" (op netto CPL)`,
                   {
-                    winner: { angle: winner.campaign.angle, cpl: winner.cpl, leads: winner.leads },
-                    loser: { angle: loser.campaign.angle, cpl: loser.cpl, leads: loser.leads },
+                    winner: { angle: winner.campaign.angle, cpl: winner.cpl, netCpl: winner.netCpl, leads: winner.leads, netLeads: winner.netLeads },
+                    loser: { angle: loser.campaign.angle, cpl: loser.cpl, netCpl: loser.netCpl, leads: loser.leads, netLeads: loser.netLeads },
                     transferCents: transferAmt,
                   },
                   !!opts.dryRun);

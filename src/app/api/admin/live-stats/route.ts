@@ -10,6 +10,7 @@ import {
 } from '@/lib/amLeaderboardServer';
 import { adminCustomerLiveUnpaidEmbed, adminCustomerTargetsOnly } from '@/lib/adminBatchQueries';
 import { activeTargetSummariesFromUnknown } from '@/lib/batchTargetAreas';
+import { getApprovedReclamationStats } from '@/lib/reclamationStats';
 
 const BREAKDOWN_LOOKBACK_DAYS = 90;
 /** Max rijen voor provincie/tak in JS-aggregatie (voorkomt full-table reads). */
@@ -356,13 +357,29 @@ export async function GET(request: NextRequest) {
 
   /** Zelfde logica als admin kosten: distributie-toewijzingen / Meta-leads in venster. */
   const distributionAssignTotal = Number(revenueStats.total_assignments) || 0;
+
+  // ── Goedgekeurde reclamaties: aftrek voor netto-leveringen ──
+  // We tellen reclamaties op leads die binnen het CPL-lookback-venster zijn
+  // binnengekomen (zelfde scope als monthAdSpend / totalOurLeads). Bron-
+  // filter sluit demo/excel-leads uit, zodat de noemer-scopes consistent zijn
+  // met de rest van het live dashboard.
+  const approvedRecs = await getApprovedReclamationStats(
+    {
+      leadCreatedSinceIso: metaSince.toISOString(),
+      excludeBulkAndDemo: true,
+    },
+    supabase,
+  );
+  const approvedReclamationsInWindow = approvedRecs.total;
+  const netDistributionAssignTotal = Math.max(0, distributionAssignTotal - approvedReclamationsInWindow);
+
   const avgAssignments =
-    totalOurLeads > 0 && distributionAssignTotal > 0
-      ? Math.round((distributionAssignTotal / totalOurLeads) * 100) / 100
+    totalOurLeads > 0 && netDistributionAssignTotal > 0
+      ? Math.round((netDistributionAssignTotal / totalOurLeads) * 100) / 100
       : 0;
   const effectieveCpl =
-    distributionAssignTotal > 0
-      ? Math.round((monthAdSpend / distributionAssignTotal) * 100) / 100
+    netDistributionAssignTotal > 0
+      ? Math.round((monthAdSpend / netDistributionAssignTotal) * 100) / 100
       : 0;
 
   const batchRevenue = Number(revenueStats.batch_revenue) || 0;
@@ -611,6 +628,8 @@ export async function GET(request: NextRequest) {
       effectieveCpl,
       avgAssignments,
       distributionAssignmentTotal: distributionAssignTotal,
+      netDistributionAssignmentTotal: netDistributionAssignTotal,
+      approvedReclamationsInWindow,
       batchRevenue: Math.round(batchRevenue * 100) / 100,
       bulkRevenue: Math.round(bulkRevenue * 100) / 100,
       bulkAssignmentCount: revenueStats.bulk_assignment_count,
