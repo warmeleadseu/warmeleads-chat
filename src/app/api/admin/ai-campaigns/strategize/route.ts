@@ -102,6 +102,12 @@ const BodySchema = z.object({
     brand_identity: z.string().max(500).optional(),
     example_overlays: z.array(z.string().max(60)).max(20).default([]),
   }).optional(),
+  /**
+   * Image engine voorkeur (StudioForm dropdown). 'auto' laat de
+   * selector kiezen op basis van Visueel DNA + overlay-beslissing.
+   * Andere waardes overrulen alles tenzij de credentials ontbreken.
+   */
+  preferred_image_provider: z.enum(['auto', 'flux', 'ideogram', 'recraft', 'imagen', 'pexels_overlay', 'gpt']).default('auto'),
 });
 
 export async function POST(request: NextRequest) {
@@ -248,6 +254,7 @@ export async function POST(request: NextRequest) {
       targeting_spec: body.targeting_spec,
       strategy_params: body.strategy_params,
       visual_dna_json: effectiveVisualDNA,
+      preferred_image_provider: body.preferred_image_provider,
       created_by: admin.id,
     })
     .select('*')

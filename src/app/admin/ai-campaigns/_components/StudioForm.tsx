@@ -132,7 +132,36 @@ interface GeneratedVariant {
   overlay_text?: string | null;
   aspect_ratio?: string | null;
   image_regeneration_count?: number | null;
+  image_provider?: string | null;
+  image_model?: string | null;
 }
+
+/**
+ * Provider-IDs voor de StudioForm-dropdown. Houden we lokaal i.p.v.
+ * importeren uit `@/lib/imageProviders` zodat de client-bundle geen
+ * sharp/server-only code meeneemt.
+ */
+type ImageProviderId = 'auto' | 'flux' | 'ideogram' | 'recraft' | 'imagen' | 'pexels_overlay' | 'gpt';
+
+const IMAGE_PROVIDER_OPTIONS: Array<{ id: ImageProviderId; label: string; sub: string }> = [
+  { id: 'auto',            label: 'Auto (AI kiest model)', sub: 'slim op basis van Visueel DNA + overlay' },
+  { id: 'flux',            label: 'Flux 1.1 Pro Ultra',     sub: 'fotorealistische lifestyle, minder AI-look' },
+  { id: 'ideogram',        label: 'Ideogram v3',            sub: 'perfecte typografie & overlay-text' },
+  { id: 'recraft',         label: 'Recraft V3',             sub: 'illustratie / infographic / vector' },
+  { id: 'imagen',          label: 'Imagen 4 Ultra',         sub: 'premium fotorealisme (Google)' },
+  { id: 'pexels_overlay',  label: 'Echte foto + overlay',   sub: 'Pexels stockfoto + lokale typografie' },
+  { id: 'gpt',             label: 'GPT-image (legacy)',     sub: 'OpenAI gpt-image-1 — voor referentie' },
+];
+
+const PROVIDER_LABEL: Record<string, string> = {
+  auto: 'auto',
+  flux: 'Flux 1.1',
+  ideogram: 'Ideogram v3',
+  recraft: 'Recraft V3',
+  imagen: 'Imagen 4',
+  pexels_overlay: 'Pexels',
+  gpt: 'GPT-image',
+};
 
 interface Props {
   masterEnabled: boolean;
@@ -212,6 +241,11 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
   const [dnaAdvisorMsg, setDnaAdvisorMsg] = useState<string | null>(null);
   const [dnaAdvisorError, setDnaAdvisorError] = useState<string | null>(null);
   const [dnaAiGenerated, setDnaAiGenerated] = useState<boolean>(false);
+
+  // Image engine voorkeur — keuze tussen Flux / Ideogram / Recraft /
+  // Imagen / Pexels-overlay / GPT (legacy) / Auto. Default 'auto' laat de
+  // selector beslissen op basis van Visueel DNA + overlay-keuze.
+  const [preferredImageProvider, setPreferredImageProvider] = useState<ImageProviderId>('auto');
 
   // State
   const [phase, setPhase] = useState<Phase>('idle');
@@ -395,13 +429,20 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
 
   /**
    * Regenereer image voor één variant. Optioneel: scope = 'overlay' |
-   * 'setting' | 'style' | 'same'. Bij scope='same' versturen we geen
-   * override en gebruikt het backend-endpoint dezelfde brief opnieuw.
-   * Bij andere scopes prompten we de admin om de nieuwe waarde.
+   * 'setting' | 'style' | 'provider' | 'same'. Bij scope='same' versturen
+   * we geen override en gebruikt het backend-endpoint dezelfde brief
+   * opnieuw. Bij andere scopes prompten we de admin om de nieuwe waarde.
+   * Bij scope='provider' tonen we een dropdown om een andere image-engine
+   * te kiezen voor déze variant — handig om snel verschillende modellen
+   * naast elkaar te vergelijken op dezelfde brief.
    */
-  const regenerateImage = async (variantId: string, scope: 'same' | 'overlay' | 'setting' | 'style') => {
+  const regenerateImage = async (
+    variantId: string,
+    scope: 'same' | 'overlay' | 'setting' | 'style' | 'provider',
+  ) => {
     if (regenerating[variantId]) return;
     let override: Record<string, unknown> | undefined;
+    let providerOverride: ImageProviderId | undefined;
     if (scope === 'overlay') {
       const text = window.prompt('Nieuwe overlay-tekst (laat leeg om overlay uit te zetten):', '');
       if (text === null) return;
@@ -421,12 +462,25 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
         return;
       }
       override = { style: cleaned };
+    } else if (scope === 'provider') {
+      const labels = IMAGE_PROVIDER_OPTIONS.map((o, i) => `${i + 1}. ${o.label}`).join('\n');
+      const raw = window.prompt(
+        `Kies een image-engine voor deze variant (typ het nummer):\n\n${labels}`,
+        '1',
+      );
+      if (raw === null) return;
+      const idx = parseInt(raw.trim(), 10) - 1;
+      if (Number.isNaN(idx) || idx < 0 || idx >= IMAGE_PROVIDER_OPTIONS.length) {
+        window.alert('Ongeldige keuze.');
+        return;
+      }
+      providerOverride = IMAGE_PROVIDER_OPTIONS[idx].id;
     }
     setRegenerating(prev => ({ ...prev, [variantId]: true }));
     try {
       const res = await adminFetch(`/api/admin/ai-campaigns/variants/${variantId}/generate-image`, {
         method: 'POST',
-        body: JSON.stringify({ regenerate: true, override }),
+        body: JSON.stringify({ regenerate: true, override, provider: providerOverride }),
       });
       const j = await res.json();
       if (res.ok && j.ok) {
@@ -438,6 +492,8 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
           overlay_text: j.overlay_text,
           aspect_ratio: j.aspect_ratio,
           image_regeneration_count: j.regeneration_count,
+          image_provider: j.image_provider,
+          image_model: j.image_model,
         } : x));
       } else {
         window.alert(`Regenereren mislukt: ${j.error || res.status}`);
@@ -540,6 +596,7 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
       genders: genders === 'all' ? undefined : [genders === 'm' ? 1 : 2],
     },
     visual_dna: visualDNA,
+    preferred_image_provider: preferredImageProvider,
   });
 
   const submitStrategize = async () => {
@@ -1137,6 +1194,39 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
               </p>
             </div>
 
+            {/* Image engine — kies welk model de creative-beelden genereert */}
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-700">
+                Image engine (welk model maakt de beelden)
+              </label>
+              <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+                {IMAGE_PROVIDER_OPTIONS.map(opt => {
+                  const active = preferredImageProvider === opt.id;
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => setPreferredImageProvider(opt.id)}
+                      aria-pressed={active}
+                      className={`rounded-lg border px-3 py-2 text-left transition ${
+                        active
+                          ? 'border-purple-500 bg-purple-50 ring-1 ring-purple-300'
+                          : 'border-amber-200 bg-white hover:border-amber-300 hover:bg-amber-50'
+                      }`}
+                    >
+                      <div className={`text-[11px] font-semibold ${active ? 'text-purple-800' : 'text-slate-800'}`}>
+                        {opt.label}
+                      </div>
+                      <div className={`text-[10px] ${active ? 'text-purple-600' : 'text-slate-500'}`}>{opt.sub}</div>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="mt-1 text-[10px] text-slate-500">
+                Auto = slimste keuze: Ideogram voor overlay-creatives, Flux voor fotorealisme, Recraft voor infographics, Pexels voor &lsquo;echte foto + tekst&rsquo;. Override hier als je één specifiek model wilt voor alle varianten.
+              </p>
+            </div>
+
             {/* Vrije velden */}
             <div className="grid gap-3 md:grid-cols-2">
               <div>
@@ -1405,9 +1495,17 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
                         <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-700">draft</span>
                       )}
                     </div>
-                    {(v.creative_style || v.framework) && (
+                    {(v.creative_style || v.framework || v.image_provider) && (
                       <p className="pt-1 text-[9px] text-slate-400">
                         {v.creative_style} · {v.framework}
+                        {v.image_provider && (
+                          <span
+                            className="ml-1 rounded bg-purple-50 px-1 text-purple-600 ring-1 ring-purple-200"
+                            title={v.image_model ? `model: ${v.image_model}` : undefined}
+                          >
+                            {PROVIDER_LABEL[v.image_provider] || v.image_provider}
+                          </span>
+                        )}
                         {v.image_regeneration_count != null && v.image_regeneration_count > 0 && (
                           <span className="ml-1 rounded bg-slate-100 px-1 text-slate-500">↻ {v.image_regeneration_count}x</span>
                         )}
@@ -1420,6 +1518,7 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
                         <RegenButton onClick={() => regenerateImage(v.id, 'overlay')} disabled={isRegen} label="overlay" />
                         <RegenButton onClick={() => regenerateImage(v.id, 'setting')} disabled={isRegen} label="setting" />
                         <RegenButton onClick={() => regenerateImage(v.id, 'style')} disabled={isRegen} label="stijl" />
+                        <RegenButton onClick={() => regenerateImage(v.id, 'provider')} disabled={isRegen} label="andere AI" />
                       </div>
                     )}
                   </div>

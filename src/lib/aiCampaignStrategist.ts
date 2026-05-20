@@ -84,6 +84,13 @@ export interface ImageBrief {
   style: CreativeStyle;
   overlay: ImageOverlay;
   copy_alignment: string;       // hoe deze image het copy-hook versterkt
+  /**
+   * Optionele hint van de strategist over welke image-provider deze
+   * creative het beste rendert. Wordt door de selector gerespecteerd
+   * mits geen user override + credentials beschikbaar. Waardes:
+   *   'auto' | 'flux' | 'ideogram' | 'recraft' | 'imagen' | 'pexels_overlay' | 'gpt'.
+   */
+  preferred_provider?: string | null;
 }
 
 export interface StrategistTargetingSpec {
@@ -311,6 +318,9 @@ const ImageBriefSchema = z.object({
   style: VisualStyleSchema,
   overlay: ImageOverlaySchema,
   copy_alignment: z.string().min(5).max(240),
+  preferred_provider: z.enum([
+    'auto', 'flux', 'ideogram', 'recraft', 'imagen', 'pexels_overlay', 'gpt',
+  ]).nullable().optional(),
 });
 
 const PlannedCreativeSchema = z.object({
@@ -496,6 +506,8 @@ function buildVisualDnaBlock(dna: VisualDNA | undefined, creativesPerAdset: numb
       '  scene_setting, composition, lighting, mood, color_focus, style en overlay-object.',
       '- Beslis zelf per creative of een tekst-overlay de scroll stopt; varieer bewust.',
       '- copy_alignment: schrijf 1 zin hoe het beeld de headline_hook versterkt.',
+      '- preferred_provider: kies optioneel "flux"/"ideogram"/"recraft"/"imagen"/"pexels_overlay"',
+      '  passend bij de style + overlay-keuze. "auto" of leeg = selector beslist zelf.',
       '',
     ].join('\n');
   }
@@ -539,6 +551,15 @@ function buildVisualDnaBlock(dna: VisualDNA | undefined, creativesPerAdset: numb
     '- style_hint: bv. "bold sans-serif, hoge contrast" of "handgeschreven urgentie-rood".',
     '- rationale: 1 korte zin waarom je deze overlay-keuze maakt (bij wel én niet).',
     '- copy_alignment: 1 zin hoe het beeld de headline_hook versterkt.',
+    '',
+    'IMAGE PROVIDER HINT (optioneel maar aanbevolen — vul preferred_provider in):',
+    '- "flux"           = fotorealistische lifestyle / emotional / product-shots.',
+    '- "ideogram"       = creatives MET tekst-overlay of poster-stijl (bold_promo, urgency_banner, price_badge).',
+    '- "recraft"        = vector/illustratie/infographic look (infographic, data_visual).',
+    '- "imagen"         = premium fotorealisme als alternatief voor flux (kies sporadisch voor variatie).',
+    '- "pexels_overlay" = échte stockfoto met lokale tekst-overlay (handig wanneer authenticiteit > AI-perfectie).',
+    '- "auto"           = laat selector beslissen (veilige default).',
+    '- Match de provider met de style + overlay-keuze van DEZE creative.',
     '',
   ].filter(Boolean).join('\n');
 }
@@ -680,6 +701,10 @@ const STRATEGY_JSON_SCHEMA = {
                             },
                           },
                           copy_alignment: { type: 'string' },
+                          preferred_provider: {
+                            type: ['string', 'null'],
+                            enum: ['auto', 'flux', 'ideogram', 'recraft', 'imagen', 'pexels_overlay', 'gpt', null],
+                          },
                         },
                       },
                     },

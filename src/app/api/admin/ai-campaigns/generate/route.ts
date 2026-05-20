@@ -274,6 +274,8 @@ export async function POST(request: NextRequest) {
               framework: v.framework,
               meta_image_hash: imageHash,
               image_url: imageUrl,
+              image_provider: imageHash ? 'gpt' : null,
+              image_model: imageHash ? 'gpt-image-1' : null,
               status,
               policy_precheck: {
                 regex_warnings: v.policy_warnings,
@@ -344,6 +346,8 @@ export async function POST(request: NextRequest) {
           image_prompt: v.image_prompt,
           meta_image_hash: imageHash,
           image_url: imageUrl,
+          image_provider: imageHash ? 'gpt' : null,
+          image_model: imageHash ? 'gpt-image-1' : null,
           status,
           policy_precheck: {
             regex_warnings: v.policy_warnings,
