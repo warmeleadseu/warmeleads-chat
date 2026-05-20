@@ -5,6 +5,7 @@ import { hasPermission, forbidden, PERMISSIONS } from '@/lib/portalPermissions';
 import { createBatchPayment } from '@/lib/mollie';
 import { calculatePricePerLead, mergeCustomTiers } from '@/lib/pricing';
 import { computeInvoiceVat, mollieBtwLabel } from '@/lib/invoiceVat';
+import { loadWelcomeOfferStatus, welcomeDiscountAmount } from '@/lib/welcomeOffer';
 
 export async function GET(request: NextRequest) {
   const session = await verifyCustomer(request);
@@ -50,7 +51,7 @@ export async function POST(request: NextRequest) {
 
     const { data: custData } = await supabase
       .from('customers')
-      .select('id, name, email, contact_person, welcome_offer_used, welcome_offer_expires_at, country, vat_id')
+      .select('id, name, email, contact_person, country, vat_id')
       .eq('id', customer.id)
       .single();
 
@@ -146,20 +147,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Batch grootte moet minimaal 10 zijn' }, { status: 400 });
     }
 
-    let welcomeEligible =
-      custData.welcome_offer_used === false &&
-      custData.welcome_offer_expires_at &&
-      new Date(custData.welcome_offer_expires_at) > new Date();
-
-    if (welcomeEligible) {
-      const { count } = await supabase
-        .from('batch_orders')
-        .select('id', { count: 'exact', head: true })
-        .eq('customer_id', customer.id)
-        .eq('welcome_discount_applied', true)
-        .in('status', ['pending', 'open']);
-      if ((count ?? 0) > 0) welcomeEligible = false;
-    }
+    const welcomeStatus = await loadWelcomeOfferStatus(supabase, customer.id);
+    const welcomeEligible = welcomeStatus.active;
 
     let branch = body.branch;
     let price_per_lead: number | null = null;
@@ -252,8 +241,8 @@ export async function POST(request: NextRequest) {
     }
 
     const subtotalBeforeDiscount = Number(price_per_lead) * batch_size;
-    const discountAmount = welcomeEligible ? Math.round(subtotalBeforeDiscount * 0.20 * 100) / 100 : 0;
-    const total_price = subtotalBeforeDiscount - discountAmount;
+    const discountAmount = welcomeEligible ? welcomeDiscountAmount(subtotalBeforeDiscount) : 0;
+    const total_price = Math.round((subtotalBeforeDiscount - discountAmount) * 100) / 100;
     const leadsVat = computeInvoiceVat({
       subtotalExclBtw: total_price,
       country: billingCountry,

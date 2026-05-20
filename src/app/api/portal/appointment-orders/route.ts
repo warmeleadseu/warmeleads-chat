@@ -5,6 +5,7 @@ import { hasPermission, forbidden, PERMISSIONS } from '@/lib/portalPermissions';
 import { createBatchPayment } from '@/lib/mollie';
 import { calculatePricePerLead, mergeCustomTiers } from '@/lib/pricing';
 import { computeInvoiceVat, mollieBtwLabel } from '@/lib/invoiceVat';
+import { loadWelcomeOfferStatus, welcomeDiscountAmount } from '@/lib/welcomeOffer';
 
 export async function GET(request: NextRequest) {
   const session = await verifyCustomer(request);
@@ -97,7 +98,13 @@ export async function POST(request: NextRequest) {
     }
 
     const price_per_appointment = result.price_per_lead;
-    const total_price = Number((price_per_appointment * batch_size).toFixed(2));
+    const subtotalBeforeDiscount = Number((price_per_appointment * batch_size).toFixed(2));
+
+    const welcomeStatus = await loadWelcomeOfferStatus(supabase, customer.id);
+    const welcomeEligible = welcomeStatus.active;
+    const discountAmount = welcomeEligible ? welcomeDiscountAmount(subtotalBeforeDiscount) : 0;
+    const total_price = Math.round((subtotalBeforeDiscount - discountAmount) * 100) / 100;
+
     const apptVat = computeInvoiceVat({
       subtotalExclBtw: total_price,
       country: billingCountry,
@@ -120,6 +127,7 @@ export async function POST(request: NextRequest) {
         notes: notes || null,
         source_batch_id: source_batch_id || null,
         status: 'pending',
+        welcome_discount_applied: welcomeEligible && discountAmount > 0,
       })
       .select()
       .single();
@@ -132,10 +140,11 @@ export async function POST(request: NextRequest) {
 
     let payment;
     try {
+      const discountLabel = discountAmount > 0 ? ` (incl. 20% welkomstkorting)` : '';
       payment = await createBatchPayment({
         orderId: order.id,
         amount: total_incl_btw,
-        description: `WarmeLeads afspraken: ${batch_size} ${branchData.name} afspraken (${mollieApptVatPhrase})`,
+        description: `WarmeLeads afspraken: ${batch_size} ${branchData.name} afspraken${discountLabel} (${mollieApptVatPhrase})`,
         redirectUrl: `${baseUrl}/portal/bestellen?product=appointments&order=${order.id}&status=redirect`,
         webhookUrl: `${baseUrl}/api/webhooks/mollie`,
         customerEmail: custData.email,

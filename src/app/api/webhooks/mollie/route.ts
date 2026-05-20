@@ -143,6 +143,13 @@ export async function POST(request: NextRequest) {
           .update({ batch_id: newBatch.id })
           .eq('id', apptOrderId);
 
+        if (claimedOrder.welcome_discount_applied) {
+          await supabase
+            .from('customers')
+            .update({ welcome_offer_used: true })
+            .eq('id', claimedOrder.customer_id);
+        }
+
         const { data: branchRow } = await supabase.from('branches').select('name').eq('slug', claimedOrder.branch).single();
         const branchName = branchRow?.name || claimedOrder.branch;
 

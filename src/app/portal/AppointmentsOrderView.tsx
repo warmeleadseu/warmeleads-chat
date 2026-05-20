@@ -105,18 +105,23 @@ export default function AppointmentsOrderView({
 
   const [pricingData, setPricingData] = useState<PricingData | null>(null);
   const [payingBatchId, setPayingBatchId] = useState<string | null>(null);
+  const [welcomeDiscount, setWelcomeDiscount] = useState<{ active: boolean; expiresAt: string | null }>({
+    active: false,
+    expiresAt: null,
+  });
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const guessBranch = customerBranches[0] || null;
-      const [batchesRes, ordersRes, branchesRes, pricingRes] = await Promise.all([
+      const [batchesRes, ordersRes, branchesRes, pricingRes, welcomeRes] = await Promise.all([
         portalFetch('/api/portal/appointment-batches'),
         portalFetch('/api/portal/appointment-orders'),
         portalFetch('/api/portal/branches'),
         guessBranch
           ? portalFetch(`/api/portal/appointment-pricing?branch=${encodeURIComponent(guessBranch)}`).catch(() => null)
           : Promise.resolve(null),
+        portalFetch('/api/portal/welcome-offer').catch(() => null),
       ]);
       if (batchesRes.ok) setBatches(await batchesRes.json());
       if (ordersRes.ok) setOrders(await ordersRes.json());
@@ -125,6 +130,12 @@ export default function AppointmentsOrderView({
         const map: Record<string, string> = {};
         (data.branches || data || []).forEach((b: { slug: string; name: string }) => { map[b.slug] = b.name; });
         setBranchNames(map);
+      }
+      if (welcomeRes && 'ok' in welcomeRes && welcomeRes.ok) {
+        try {
+          const data = await welcomeRes.json();
+          if (data) setWelcomeDiscount({ active: !!data.active, expiresAt: data.expires_at || null });
+        } catch { /* ignore */ }
       }
       if (pricingRes && 'ok' in pricingRes && pricingRes.ok && guessBranch) {
         try {
@@ -190,7 +201,9 @@ export default function AppointmentsOrderView({
     () => portalBtwRate({ country: customer.country, vat_id: customer.vat_id, reverse_charge: customer.reverse_charge }),
     [customer.country, customer.vat_id, customer.reverse_charge],
   );
-  const subtotal = roundMoney(dynamicPrice * effectiveSize);
+  const subtotalBeforeDiscount = roundMoney(dynamicPrice * effectiveSize);
+  const discountAmount = welcomeDiscount.active ? roundMoney(subtotalBeforeDiscount * 0.20) : 0;
+  const subtotal = roundMoney(subtotalBeforeDiscount - discountAmount);
   const btw = roundMoney(subtotal * btwRate);
   const total = subtotal + btw;
   const btwSummaryLabel = btwRate === 0 ? 'BTW (verlegd)' : 'BTW 21%';
@@ -531,13 +544,31 @@ export default function AppointmentsOrderView({
             />
           </PortalSection>
 
+          {welcomeDiscount.active && (
+            <div className="flex items-center gap-3 rounded-2xl border border-brand-purple/20 bg-gradient-to-r from-brand-purple/5 to-brand-pink/5 px-5 py-3.5">
+              <span className="text-xl">🎁</span>
+              <div>
+                <p className="text-sm font-bold text-brand-purple">20% welkomstkorting actief</p>
+                <p className="text-xs text-slate-500">
+                  Automatisch toegepast op deze bestelling
+                  {welcomeDiscount.expiresAt && (
+                    <> &middot; Geldig tot {formatDateNl(welcomeDiscount.expiresAt, { day: 'numeric', month: 'long' })}</>
+                  )}
+                </p>
+              </div>
+            </div>
+          )}
+
           <OrderSummaryCard
             lines={[
               {
                 label: <>{effectiveSize} afspraken &times; {formatCurrency(dynamicPrice)}</>,
-                value: <>{formatCurrency(subtotal)}</>,
-                tone: 'default',
+                value: <>{formatCurrency(subtotalBeforeDiscount)}</>,
+                tone: welcomeDiscount.active ? 'strike' : 'default',
               },
+              ...(welcomeDiscount.active
+                ? [{ label: 'Welkomstkorting -20%', value: <>-{formatCurrency(discountAmount)}</>, tone: 'positive' as const }]
+                : []),
               { label: btwSummaryLabel, value: <>{formatCurrency(btw)}</>, tone: 'muted' },
             ]}
             total={total}
