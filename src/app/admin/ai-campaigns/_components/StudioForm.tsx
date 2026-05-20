@@ -654,11 +654,11 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* ── Bovenste rij: Brief + Strategie + Targeting + Budget ───────── */}
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-4 sm:gap-6 lg:grid-cols-2">
         {/* Brief */}
-        <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
           <h2 className="text-sm font-semibold text-slate-900">Brief</h2>
 
           <div>
@@ -730,10 +730,10 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
         </div>
 
         {/* Strategie */}
-        <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex items-center justify-between">
+        <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+          <div className="flex items-center justify-between gap-2">
             <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-              <CpuChipIcon className="h-4 w-4 text-purple-500" /> Strategie
+              <CpuChipIcon className="h-4 w-4 text-purple-500" aria-hidden="true" /> Strategie
             </h2>
             <span className="rounded-full bg-purple-50 px-2 py-0.5 text-[10px] font-semibold text-purple-700">AI Strategist</span>
           </div>
@@ -843,9 +843,9 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
         </div>
 
         {/* Targeting */}
-        <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
           <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-            <Cog6ToothIcon className="h-4 w-4 text-emerald-500" /> Targeting
+            <Cog6ToothIcon className="h-4 w-4 text-emerald-500" aria-hidden="true" /> Targeting
           </h2>
 
           <div>
@@ -868,7 +868,7 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
           {(countries.includes('NL') || countries.includes('BE')) && (
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-600">Provincies (optioneel)</label>
-              <div className="max-h-32 overflow-y-auto rounded-lg border border-slate-200 p-2">
+              <div className="max-h-40 overflow-y-auto rounded-lg border border-slate-200 p-2 sm:max-h-32">
                 <div className="flex flex-wrap gap-1">
                   {countries.includes('NL') && PROVINCES_NL.map(p => (
                     <button
@@ -934,7 +934,7 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
         </div>
 
         {/* Budget */}
-        <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
           <h2 className="text-sm font-semibold text-slate-900">Budget &amp; doel</h2>
 
           <div className="grid grid-cols-3 gap-3">
@@ -958,20 +958,42 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
           </label>
 
           {/* CTA: strategize */}
-          <button
-            onClick={submitStrategize}
-            disabled={!masterEnabled || phase === 'strategizing' || !branch || !leadFormId || !selectedForm?.page_id}
-            className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-button-gradient px-3.5 py-2.5 text-sm font-bold text-white shadow-sm disabled:opacity-50"
-          >
-            {phase === 'strategizing' ? <ArrowPathIcon className="h-4 w-4 animate-spin" /> : <SparklesIcon className="h-4 w-4" />}
-            {phase === 'strategizing'
-              ? `Strategist denkt na… ${formatElapsed(elapsedMs)}`
-              : strategy ? 'Plan opnieuw' : 'Plan strategie'}
-          </button>
+          {(() => {
+            const blockingReason = !masterEnabled
+              ? 'Master-switch staat uit — schakel aan in koppelingen.'
+              : !branch
+                ? 'Kies eerst een branche.'
+                : !leadFormId
+                  ? 'Kies een Meta Lead Form.'
+                  : !selectedForm?.page_id
+                    ? 'Geen page-id gevonden voor dit formulier.'
+                    : null;
+            const disabled = phase === 'strategizing' || blockingReason != null;
+            return (
+              <button
+                onClick={submitStrategize}
+                disabled={disabled}
+                aria-disabled={disabled}
+                title={blockingReason || undefined}
+                className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-button-gradient px-3.5 py-2.5 text-sm font-bold text-white shadow-sm transition disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {phase === 'strategizing'
+                  ? <ArrowPathIcon className="h-4 w-4 animate-spin" aria-hidden="true" />
+                  : <SparklesIcon className="h-4 w-4" aria-hidden="true" />}
+                {phase === 'strategizing'
+                  ? `Strategist denkt na… ${formatElapsed(elapsedMs)}`
+                  : strategy ? 'Plan opnieuw' : 'Plan strategie'}
+              </button>
+            );
+          })()}
 
           {error && (
-            <div className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
-              <ExclamationTriangleIcon className="mt-0.5 h-4 w-4 shrink-0" />
+            <div
+              role="alert"
+              aria-live="polite"
+              className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700"
+            >
+              <ExclamationTriangleIcon className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
               <span>{error}</span>
             </div>
           )}
@@ -979,12 +1001,16 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
       </div>
 
       {/* ── Visueel DNA ─────────────────────────────────────────────── */}
-      <div className="rounded-xl border border-amber-200 bg-amber-50/40 p-5 shadow-sm">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-            <PhotoIcon className="h-4 w-4 text-amber-600" /> Visueel DNA
-            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
-              {dnaAiGenerated ? 'AI ingevuld' : branch ? `${branch}-defaults aan` : 'defaults aan'}
+      <div className="rounded-xl border border-amber-200 bg-amber-50/40 p-4 shadow-sm sm:p-5">
+        {/* Header: titel + badge boven, AI-knop + inklap onder op mobiel;
+            alles inline naast elkaar op tablet+. */}
+        <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+          <h2 className="flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-900">
+            <PhotoIcon className="h-4 w-4 text-amber-600" aria-hidden="true" /> Visueel DNA
+            <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+              dnaAiGenerated ? 'bg-purple-100 text-purple-700' : 'bg-amber-100 text-amber-700'
+            }`}>
+              {dnaAiGenerated ? '✨ AI ingevuld' : branch ? `${branch}-defaults` : 'defaults'}
             </span>
           </h2>
           <div className="flex items-center gap-2">
@@ -992,18 +1018,25 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
               type="button"
               onClick={requestDnaSuggestion}
               disabled={dnaAdvisorBusy || !branch}
-              className="inline-flex items-center gap-1.5 rounded-md bg-purple-600 px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm transition hover:bg-purple-700 disabled:opacity-50"
-              title="Laat onze AI de complete Visueel DNA invullen op basis van brief + targeting"
+              aria-disabled={dnaAdvisorBusy || !branch}
+              className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-md bg-gradient-to-r from-purple-600 to-purple-700 px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm transition hover:from-purple-700 hover:to-purple-800 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-initial sm:px-2.5 sm:py-1"
+              title={!branch ? 'Kies eerst een branche' : 'Laat onze AI de complete Visueel DNA invullen op basis van brief + targeting'}
             >
               {dnaAdvisorBusy
-                ? <ArrowPathIcon className="h-3 w-3 animate-spin" />
-                : <SparklesIcon className="h-3 w-3" />}
-              {dnaAdvisorBusy ? 'AI denkt na…' : dnaAiGenerated ? 'AI opnieuw invullen' : 'AI vul Visueel DNA in'}
+                ? <ArrowPathIcon className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                : <SparklesIcon className="h-3.5 w-3.5" aria-hidden="true" />}
+              <span className="sm:hidden">
+                {dnaAdvisorBusy ? 'AI denkt na…' : dnaAiGenerated ? 'AI opnieuw' : 'AI vult DNA in'}
+              </span>
+              <span className="hidden sm:inline">
+                {dnaAdvisorBusy ? 'AI denkt na…' : dnaAiGenerated ? 'AI opnieuw invullen' : 'AI vul Visueel DNA in'}
+              </span>
             </button>
             <button
               type="button"
               onClick={() => setShowVisualDNA(s => !s)}
-              className="text-[11px] font-medium text-amber-700 hover:underline"
+              aria-expanded={showVisualDNA}
+              className="rounded-md px-2 py-1 text-[11px] font-medium text-amber-700 hover:underline"
             >
               {showVisualDNA ? 'inklappen' : 'uitklappen'}
             </button>
@@ -1011,19 +1044,30 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
         </div>
         <p className="mb-3 text-[11px] text-slate-600">
           {dnaAiGenerated
-            ? 'Door AI gevuld op basis van branche + brief + targeting. Tweak wat je wil — onze AI gebruikt deze als kader voor elke advertentie.'
-            : 'De slimste keuzes per branche staan aangevinkt — klik op "AI vul Visueel DNA in" om de selectie volledig te laten matchen met je doelgroep, of pas zelf aan.'}
+            ? 'Door AI gevuld op basis van branche + brief + targeting. Pas aan als je iets specifieks wilt — onze AI gebruikt deze als kader voor elke advertentie.'
+            : 'De slimste keuzes per branche staan aangevinkt. Vul eerst probleem & motivatie in (in "Brief") en klik op "AI vult DNA in" voor een doelgroep-specifiek voorstel.'}
         </p>
 
         {dnaAdvisorMsg && (
-          <div className="mb-3 rounded-md border border-purple-200 bg-purple-50 px-3 py-2 text-[11px] text-purple-900">
-            <p className="mb-0.5 font-semibold">AI-rationale</p>
-            <p className="leading-relaxed">{dnaAdvisorMsg}</p>
+          <div
+            role="status"
+            aria-live="polite"
+            className="mb-3 rounded-md border border-purple-200 bg-gradient-to-br from-purple-50 to-white px-3 py-2 text-[11px] text-purple-900"
+          >
+            <div className="mb-0.5 flex items-center gap-1.5 font-semibold">
+              <SparklesIcon className="h-3.5 w-3.5 text-purple-600" aria-hidden="true" />
+              AI-rationale
+            </div>
+            <p className="leading-relaxed text-purple-900/90">{dnaAdvisorMsg}</p>
           </div>
         )}
         {dnaAdvisorError && (
-          <div className="mb-3 flex items-start gap-1.5 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] text-rose-700">
-            <ExclamationTriangleIcon className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <div
+            role="alert"
+            aria-live="polite"
+            className="mb-3 flex items-start gap-1.5 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] text-rose-700"
+          >
+            <ExclamationTriangleIcon className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
             <span>{dnaAdvisorError}</span>
           </div>
         )}
@@ -1145,11 +1189,11 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
 
       {/* ── Battle-plan preview ──────────────────────────────────────── */}
       {strategy && (
-        <div className="rounded-xl border border-purple-200 bg-purple-50/40 p-5 shadow-sm">
+        <div className="rounded-xl border border-purple-200 bg-purple-50/40 p-4 shadow-sm sm:p-5">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-              <CpuChipIcon className="h-4 w-4 text-purple-600" /> Battle-plan
-              <span className="ml-2 rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-semibold text-purple-700">
+            <h2 className="flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-900">
+              <CpuChipIcon className="h-4 w-4 text-purple-600" aria-hidden="true" /> Battle-plan
+              <span className="rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-semibold text-purple-700">
                 ~CPL EUR {(strategy.predicted_avg_cpl_cents / 100).toFixed(2)}
               </span>
             </h2>
@@ -1169,7 +1213,7 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
 
           <p className="mb-3 text-xs text-slate-700">{strategy.overall_rationale}</p>
 
-          <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {strategy.campaigns.map((c, i) => (
               <motion.div
                 key={i}
@@ -1264,13 +1308,13 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
           </div>
 
           {phase === 'strategized' && (
-            <div className="mt-4 flex flex-wrap gap-2">
+            <div className="mt-4">
               <button
                 onClick={submitGenerateCreatives}
                 disabled={phase !== 'strategized'}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-purple-600 px-3.5 py-2 text-sm font-bold text-white shadow-sm hover:bg-purple-700"
+                className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-gradient-to-r from-purple-600 to-purple-700 px-3.5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:from-purple-700 hover:to-purple-800 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
               >
-                <SparklesIcon className="h-4 w-4" />
+                <SparklesIcon className="h-4 w-4" aria-hidden="true" />
                 Genereer creatives ({totalAds} ads)
               </button>
             </div>
@@ -1303,8 +1347,8 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
 
       {/* ── Gegenereerde varianten + launch ──────────────────────────── */}
       {variants.length > 0 && (
-        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="mb-3 flex items-center justify-between">
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-sm font-semibold text-slate-900">Gegenereerde varianten ({variants.length})</h2>
           </div>
 
@@ -1391,21 +1435,21 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
                 Test-modus = altijd PAUSED + start over 1u. Zonder test-modus en met &ldquo;direct live&rdquo; activeren we
                 campagnes + ad sets meteen.
               </p>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                 <button
                   onClick={() => submitLaunch(false)}
                   disabled={phase !== 'generated'}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                  className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 sm:w-auto"
                 >
-                  <RocketLaunchIcon className="h-4 w-4" /> Push naar Meta (PAUSED)
+                  <RocketLaunchIcon className="h-4 w-4" aria-hidden="true" /> Push naar Meta (PAUSED)
                 </button>
                 <button
                   onClick={() => submitLaunch(true)}
                   disabled={phase !== 'generated' || isTestMode}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3.5 py-2 text-sm font-bold text-white hover:bg-emerald-600 disabled:opacity-50"
+                  className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-emerald-500 px-3.5 py-2 text-sm font-bold text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
                   title={isTestMode ? 'Schakel testmodus uit voor directe activatie' : 'Direct activeren'}
                 >
-                  <RocketLaunchIcon className="h-4 w-4" /> Direct live (ACTIVE)
+                  <RocketLaunchIcon className="h-4 w-4" aria-hidden="true" /> Direct live (ACTIVE)
                 </button>
               </div>
               {launchErrors.length > 0 && (
@@ -1469,6 +1513,9 @@ function RegenButton(props: { onClick: () => void; disabled?: boolean; label: st
  * Generieke chip-group voor het Visueel DNA. Klein, herbruikbaar.
  * Houden we in dezelfde file (geen losse component-file) omdat het
  * uitsluitend hier wordt gebruikt en de props heel specifiek zijn.
+ *
+ * Touch-target: `py-1.5` op mobile (≈32px hoog) voor comfortabel tappen,
+ * `py-1` op sm+ omdat daar muizen worden gebruikt en compactheid prettig is.
  */
 function DnaChipGroup<T extends string>(props: {
   label: string;
@@ -1478,24 +1525,30 @@ function DnaChipGroup<T extends string>(props: {
   hint?: string;
 }) {
   const { label, values, selected, onToggle, hint } = props;
+  const groupId = `dna-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40)}`;
   return (
     <div>
-      <label className="mb-1 block text-xs font-semibold text-slate-700">{label}</label>
-      <div className="flex flex-wrap gap-1">
+      <label id={`${groupId}-label`} className="mb-1 block text-xs font-semibold text-slate-700">
+        {label}
+      </label>
+      <div className="flex flex-wrap gap-1.5" role="group" aria-labelledby={`${groupId}-label`}>
         {values.map(v => {
           const active = selected.includes(v);
+          const display = v.replace(/_/g, ' ');
           return (
             <button
               key={v}
               type="button"
               onClick={() => onToggle(v)}
-              className={`rounded-full px-2.5 py-1 text-[10px] font-medium transition ${
+              aria-pressed={active}
+              aria-label={`${display}${active ? ' (geselecteerd)' : ''}`}
+              className={`rounded-full px-2.5 py-1.5 text-[11px] font-medium transition sm:py-1 sm:text-[10px] ${
                 active
                   ? 'bg-amber-500 text-white shadow-sm'
                   : 'bg-white text-slate-600 ring-1 ring-amber-200 hover:bg-amber-50'
               }`}
             >
-              {v.replace(/_/g, ' ')}
+              {display}
             </button>
           );
         })}

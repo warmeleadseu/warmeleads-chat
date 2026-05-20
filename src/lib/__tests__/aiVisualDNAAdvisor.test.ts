@@ -123,11 +123,21 @@ describe('suggestVisualDNA fallback', () => {
       branchName: 'Thuisbatterij',
       targeting: { countries: ['NL'], age_min: 30, age_max: 65 },
     });
-    // Branche-defaults voor thuisbatterij bevatten lifestyle + product_closeup.
     expect(out.dna.styles_enabled).toContain('lifestyle');
     expect(out.dna.styles_enabled.length).toBeGreaterThan(0);
     expect(out.dna.settings.length).toBeGreaterThan(0);
     expect(out.costCents).toBe(0);
-    expect(out.rationale).toMatch(/branche-defaults/i);
+    expect(out.source).toBe('fallback');
+    expect(out.fallbackReason).toBe('no_api_key');
+    expect(out.rationale).toMatch(/niet geconfigureerd/i);
+  });
+});
+
+describe('aiVisualDNAAdvisor extra prompt checks', () => {
+  it('system prompt benoemt Meta Ad policy guardrails', () => {
+    const sys = __internal.buildSystemPrompt();
+    expect(sys).toMatch(/voor\/na/i);
+    expect(sys).toMatch(/medische beelden/i);
+    expect(sys).toMatch(/in het nederlands/i);
   });
 });

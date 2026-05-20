@@ -63,6 +63,10 @@ export interface AdvisorOutput {
   rationale: string;
   costCents: number;
   model: SupportedTextModel;
+  /** "ai" als de tekst van OpenAI komt, "fallback" als we naar defaults vielen. */
+  source: 'ai' | 'fallback';
+  /** Reden van eventuele fallback — alleen gevuld bij source='fallback'. */
+  fallbackReason?: string;
 }
 
 // ── Zod schema voor wat OpenAI ons mag teruggeven ────────────
@@ -147,6 +151,7 @@ function buildSystemPrompt(): string {
     'Je bent een senior creative director voor Facebook Lead Ads in de Nederlandse/Belgische woningmarkt.',
     'Op basis van een branche-brief en doelgroep-targeting stel je het "Visueel DNA" samen waarmee onze AI vervolgens scroll-stoppende advertenties maakt.',
     'Je bent extreem concreet en pragmatisch — geen hype-taal, alleen keuzes die meetbaar converteren.',
+    'Alle vrije tekst (must_include, must_avoid, example_overlays, brand_identity, rationale) MOET in het Nederlands.',
     '',
     'Outputregels (KRITIEK):',
     '1. Alle chip-velden (audience_looks, settings, moods, color_focuses, styles_enabled) MOETEN strikt uit de bijgeleverde enum-waarden komen. Geen synoniemen, geen vertalingen.',
@@ -154,10 +159,16 @@ function buildSystemPrompt(): string {
     '3. Voor styles_enabled: kies 4-7 stijlen die binnen de branche/doelgroep echt converteren. Mix bewust 2-3 overlay-vriendelijke stijlen (bold_promo, price_badge, urgency_banner, testimonial_card, data_visual, infographic) met 2-3 natuurlijke stijlen (lifestyle, product_closeup, emotional, social_proof).',
     '4. overlay_frequency: kies "ai_decides" tenzij de motivatie een duidelijke deadline/prijsclaim heeft — dan "mixed" of "high".',
     '5. must_include: 2-5 visuele concrete elementen die in beeld TERUGKOMEN (bv. "Nederlandse rijwoning", "rood pannendak", "modern energielabel-paneel"). Hier MAG je nieuwe concepten toevoegen die niet bestaan als chip — die worden tekstueel in de image-prompts gebruikt.',
-    '6. must_avoid: 1-4 elementen die we structureel WEREN (bv. "stockfoto-glimlach", "voor-na splitscreens", "kinderen zonder ouder erbij").',
+    '6. must_avoid: 1-4 elementen die we structureel WEREN (bv. "stockfoto-glimlach", "voor-na splitscreens", "kinderen zonder ouder erbij", herkenbare gezichten bij medische context).',
     '7. example_overlays: 4-6 voorbeeld overlay-teksten in HOOFDLETTERS, 3-6 woorden, scroll-stoppers (deadline/prijs/gratis/besparing) gebaseerd op de motivatie.',
     '8. brand_identity: 1-2 zinnen die het visuele "merkgevoel" vastleggen voor deze branche+doelgroep (bv. "Eerlijk Nederlands middenklasse-huishouden, geen overdreven luxe").',
     '9. rationale: 1 alinea (max 4 zinnen NL) waarin je uitlegt waarom deze combinatie van keuzes converteert voor deze doelgroep.',
+    '',
+    'META AD POLICY (HARD):',
+    '- Geen voor/na-splitscreens, geen "100% gegarandeerd", geen onmogelijk-geclaim, geen medische beelden.',
+    '- Geen close-ups van persoonlijke lichaamskenmerken die targeting suggereren (gewicht, ras, etc).',
+    '- Geen agressieve scarcity die misleidt; subsidie-/saldering-deadlines mogen alleen als feit, niet als drukmiddel.',
+    'Verwerk deze policy in must_avoid en houd er rekening mee bij must_include en example_overlays.',
     '',
     'Belangrijk: vermijd dezelfde generieke selecties voor elke briefing — gebruik écht de doelgroep-leeftijd, het probleem en de motivatie om verschil te maken.',
   ].join('\n');
@@ -200,13 +211,19 @@ function buildUserPrompt(input: AdvisorInput): string {
 export async function suggestVisualDNA(input: AdvisorInput): Promise<AdvisorOutput> {
   const branchFallback = buildDefaultVisualDNA(input.branch);
   const client = getOpenAIClient();
-  const fallback: AdvisorOutput = {
+  const baseFallback: Omit<AdvisorOutput, 'fallbackReason' | 'rationale'> = {
     dna: branchFallback,
-    rationale: 'OpenAI niet beschikbaar — branche-defaults gebruikt.',
     costCents: 0,
     model: 'gpt-4o-mini',
+    source: 'fallback',
   };
-  if (!client) return fallback;
+  if (!client) {
+    return {
+      ...baseFallback,
+      rationale: 'OpenAI is niet geconfigureerd — branche-defaults gebruikt.',
+      fallbackReason: 'no_api_key',
+    };
+  }
 
   const model: SupportedTextModel = 'gpt-4o-mini';
   const systemPrompt = buildSystemPrompt();
@@ -215,6 +232,7 @@ export async function suggestVisualDNA(input: AdvisorInput): Promise<AdvisorOutp
   let parsed: AdvisorJson | null = null;
   let inputTokens = 0;
   let outputTokens = 0;
+  let failureReason: string | null = null;
   try {
     const completion = await withOpenAIRetry(() =>
       client.chat.completions.create({
@@ -238,15 +256,23 @@ export async function suggestVisualDNA(input: AdvisorInput): Promise<AdvisorOutp
     if (raw) {
       const json = JSON.parse(raw);
       parsed = AdvisorJsonSchema.parse(json);
+    } else {
+      failureReason = 'empty_response';
     }
     inputTokens = completion.usage?.prompt_tokens ?? 0;
     outputTokens = completion.usage?.completion_tokens ?? 0;
   } catch (e) {
-    console.warn('[visual-dna-advisor] OpenAI faalde, fallback op defaults:', (e as Error).message);
-    return fallback;
+    failureReason = (e as Error).message?.slice(0, 200) || 'unknown_error';
+    console.warn('[visual-dna-advisor] OpenAI faalde, fallback op defaults:', failureReason);
   }
 
-  if (!parsed) return fallback;
+  if (!parsed) {
+    return {
+      ...baseFallback,
+      rationale: 'AI-advies tijdelijk niet beschikbaar — branche-defaults gebruikt. Probeer het zo opnieuw.',
+      fallbackReason: failureReason || 'no_parsed_response',
+    };
+  }
 
   const dna: VisualDNA = {
     audience_looks: parsed.audience_looks,
@@ -283,6 +309,7 @@ export async function suggestVisualDNA(input: AdvisorInput): Promise<AdvisorOutp
     rationale: parsed.rationale,
     costCents,
     model,
+    source: 'ai',
   };
 }
 

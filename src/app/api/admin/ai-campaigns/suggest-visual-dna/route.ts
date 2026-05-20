@@ -89,6 +89,8 @@ export async function POST(request: NextRequest) {
       rationale: result.rationale,
       cost_cents: result.costCents,
       model: result.model,
+      source: result.source,
+      fallback_reason: result.fallbackReason ?? null,
     });
   } catch (e) {
     return NextResponse.json({
