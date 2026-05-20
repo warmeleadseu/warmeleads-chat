@@ -204,6 +204,14 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
   // Wij houden alles als één object voor makkelijk versturen naar /strategize.
   const [visualDNA, setVisualDNA] = useState<VisualDNA>(() => buildDefaultVisualDNA('thuisbatterij'));
   const [showVisualDNA, setShowVisualDNA] = useState<boolean>(true);
+  // Advisor-state: bijhouden of de huidige DNA door AI is voorgesteld, plus
+  // de rationale-string die we onder de knop tonen. Wanneer admin handmatig
+  // chips/velden tweaked, blijft het AI-merk staan — dat is bewust, want het
+  // markeert dat er een AI-basis onder ligt.
+  const [dnaAdvisorBusy, setDnaAdvisorBusy] = useState<boolean>(false);
+  const [dnaAdvisorMsg, setDnaAdvisorMsg] = useState<string | null>(null);
+  const [dnaAdvisorError, setDnaAdvisorError] = useState<string | null>(null);
+  const [dnaAiGenerated, setDnaAiGenerated] = useState<boolean>(false);
 
   // State
   const [phase, setPhase] = useState<Phase>('idle');
@@ -266,10 +274,14 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
   }, [branch]);
 
   // Bij branche-wissel: rebuild DNA naar branche-defaults zodat de
-  // chips/must-includes/overlay-voorbeelden meteen kloppen.
+  // chips/must-includes/overlay-voorbeelden meteen kloppen. Reset ook de
+  // AI-advisor staat — admin kan opnieuw "AI invullen" klikken.
   useEffect(() => {
     if (!branch) return;
     setVisualDNA(buildDefaultVisualDNA(branch));
+    setDnaAiGenerated(false);
+    setDnaAdvisorMsg(null);
+    setDnaAdvisorError(null);
   }, [branch]);
 
   // Branch-lead count voor lookalike-eligibility + huidige pakketstatus
@@ -432,6 +444,67 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
       }
     } finally {
       setRegenerating(prev => ({ ...prev, [variantId]: false }));
+    }
+  };
+
+  /**
+   * Laat de AI op basis van brief + targeting een complete Visueel DNA
+   * voorstellen. We tonen alléén een waarschuwing bij compleet lege brief
+   * (dan voegt de AI weinig toe boven branche-defaults), en sturen de huidige
+   * targeting altijd mee — ook als de admin nog niets heeft aangepast — zodat
+   * de AI relevant leeftijds-/gender-/landen-context heeft.
+   */
+  const requestDnaSuggestion = async () => {
+    if (dnaAdvisorBusy) return;
+    if (!branch) {
+      setDnaAdvisorError('Kies eerst een branche.');
+      return;
+    }
+    if (!audienceProblem.trim() && !audienceMotivation.trim()) {
+      const ok = window.confirm(
+        'Brief is leeg (probleem + motivatie). AI valt dan grotendeels terug op branche-defaults. Toch invullen?',
+      );
+      if (!ok) return;
+    }
+    setDnaAdvisorBusy(true);
+    setDnaAdvisorError(null);
+    setDnaAdvisorMsg(null);
+    try {
+      const res = await adminFetch('/api/admin/ai-campaigns/suggest-visual-dna', {
+        method: 'POST',
+        body: JSON.stringify({
+          branch,
+          audience_problem: audienceProblem.trim() || undefined,
+          audience_motivation: audienceMotivation.trim() || undefined,
+          form_questions_count: selectedForm?.questions_count ?? null,
+          targeting: {
+            countries,
+            regions: regions.map(r => ({ key: `${r.land}:${r.name}`, name: r.name })),
+            age_min: ageMin,
+            age_max: ageMax,
+            genders: genders === 'all' ? null : [genders === 'm' ? 1 : 2],
+          },
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        const details = typeof data.details === 'string'
+          ? data.details
+          : Array.isArray(data.details)
+            ? data.details.map((i: { path?: (string|number)[]; message?: string }) => `${(i.path || []).join('.')}: ${i.message || ''}`).join('; ')
+            : '';
+        setDnaAdvisorError(details ? `${data.error || 'AI-advies mislukt'} — ${details}` : (data.error || 'AI-advies mislukt'));
+        return;
+      }
+      setVisualDNA(data.dna);
+      setDnaAdvisorMsg(data.rationale || 'AI heeft het Visueel DNA ingevuld.');
+      setDnaAiGenerated(true);
+      // Klap de DNA-sectie open zodat de admin de gegenereerde keuzes ziet.
+      setShowVisualDNA(true);
+    } catch (e) {
+      setDnaAdvisorError((e as Error).message || 'Onbekende fout');
+    } finally {
+      setDnaAdvisorBusy(false);
     }
   };
 
@@ -907,25 +980,53 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
 
       {/* ── Visueel DNA ─────────────────────────────────────────────── */}
       <div className="rounded-xl border border-amber-200 bg-amber-50/40 p-5 shadow-sm">
-        <div className="mb-3 flex items-center justify-between">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
             <PhotoIcon className="h-4 w-4 text-amber-600" /> Visueel DNA
             <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
-              {branch ? `${branch}-defaults aan` : 'defaults aan'}
+              {dnaAiGenerated ? 'AI ingevuld' : branch ? `${branch}-defaults aan` : 'defaults aan'}
             </span>
           </h2>
-          <button
-            type="button"
-            onClick={() => setShowVisualDNA(s => !s)}
-            className="text-[11px] font-medium text-amber-700 hover:underline"
-          >
-            {showVisualDNA ? 'inklappen' : 'uitklappen'}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={requestDnaSuggestion}
+              disabled={dnaAdvisorBusy || !branch}
+              className="inline-flex items-center gap-1.5 rounded-md bg-purple-600 px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm transition hover:bg-purple-700 disabled:opacity-50"
+              title="Laat onze AI de complete Visueel DNA invullen op basis van brief + targeting"
+            >
+              {dnaAdvisorBusy
+                ? <ArrowPathIcon className="h-3 w-3 animate-spin" />
+                : <SparklesIcon className="h-3 w-3" />}
+              {dnaAdvisorBusy ? 'AI denkt na…' : dnaAiGenerated ? 'AI opnieuw invullen' : 'AI vul Visueel DNA in'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowVisualDNA(s => !s)}
+              className="text-[11px] font-medium text-amber-700 hover:underline"
+            >
+              {showVisualDNA ? 'inklappen' : 'uitklappen'}
+            </button>
+          </div>
         </div>
         <p className="mb-3 text-[11px] text-slate-600">
-          De slimste keuzes per branche staan aangevinkt — pas aan als je iets specifieks wilt. Onze AI kiest dan zelf
-          per advertentie de beste combinatie binnen deze kaders.
+          {dnaAiGenerated
+            ? 'Door AI gevuld op basis van branche + brief + targeting. Tweak wat je wil — onze AI gebruikt deze als kader voor elke advertentie.'
+            : 'De slimste keuzes per branche staan aangevinkt — klik op "AI vul Visueel DNA in" om de selectie volledig te laten matchen met je doelgroep, of pas zelf aan.'}
         </p>
+
+        {dnaAdvisorMsg && (
+          <div className="mb-3 rounded-md border border-purple-200 bg-purple-50 px-3 py-2 text-[11px] text-purple-900">
+            <p className="mb-0.5 font-semibold">AI-rationale</p>
+            <p className="leading-relaxed">{dnaAdvisorMsg}</p>
+          </div>
+        )}
+        {dnaAdvisorError && (
+          <div className="mb-3 flex items-start gap-1.5 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] text-rose-700">
+            <ExclamationTriangleIcon className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span>{dnaAdvisorError}</span>
+          </div>
+        )}
 
         {showVisualDNA && (
           <div className="space-y-4">

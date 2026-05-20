@@ -368,6 +368,28 @@ function buildSystemPrompt(input: StrategistInput): string {
     .map(i => `  - ${i.name} (id=${i.id})${i.topic ? ` [${i.topic}]` : ''}`)
     .join('\n');
 
+  // Targeting-context expliciet in de prompt zodat de strategist écht
+  // rekening houdt met leeftijd/gender/regio's bij het kiezen van angles
+  // en creative-frameworks. (Anders kan hij standaard 30-65 schrijven
+  // terwijl admin 50-70 wil.)
+  const regionList = (input.brief.regions || []).map(r => r.name).slice(0, 12).join(', ');
+  const genderText = !input.params.genders || input.params.genders.length === 0
+    ? 'alle genders'
+    : input.params.genders.includes(1) && input.params.genders.includes(2)
+      ? 'alle genders'
+      : input.params.genders.includes(1)
+        ? 'mannen'
+        : input.params.genders.includes(2)
+          ? 'vrouwen'
+          : 'alle genders';
+
+  // Brief-context van de admin (probleem/motivatie). Belangrijk: deze zijn
+  // door de admin expliciet ingevuld om de strategie te sturen — laten we
+  // ze NIET in een opaque JSON-blok verstoppen.
+  const ta = (input.brief.target_audience || {}) as { probleem?: string; motivatie?: string };
+  const briefProbleem = (ta.probleem || '').trim();
+  const briefMotivatie = (ta.motivatie || '').trim();
+
   return [
     'Je bent een senior Meta Ads strategist met 10+ jaar ervaring in lead-generatie',
     'voor energiebranches (zonnepanelen, thuisbatterij, warmtepomp, airco) in NL/BE.',
@@ -378,16 +400,24 @@ function buildSystemPrompt(input: StrategistInput): string {
     '',
     'CONTEXT:',
     `- Branche: ${branch}`,
-    `- Doelgebied: ${input.brief.countries.join(', ')}`,
-    `- Persona: ${hint.persona}`,
-    `- Motivaties: ${hint.motivations.join('; ')}`,
-    `- Bezwaren: ${hint.objections.join('; ')}`,
+    `- Doelgebied: ${input.brief.countries.join(', ')}${regionList ? ` (regio's: ${regionList})` : ''}`,
+    `- Leeftijdsbereik (admin-ingegeven): ${input.params.age_min || hint.default_age_min || 30}-${input.params.age_max || hint.default_age_max || 65}`,
+    `- Gender (admin-ingegeven): ${genderText}`,
+    briefProbleem ? `- Probleem doelgroep (admin-ingegeven): ${briefProbleem}` : '',
+    briefMotivatie ? `- Motivatie / trigger (admin-ingegeven): ${briefMotivatie}` : '',
+    `- Persona (branche-prior): ${hint.persona}`,
+    `- Motivaties (branche-prior): ${hint.motivations.join('; ')}`,
+    `- Bezwaren (branche-prior): ${hint.objections.join('; ')}`,
     `- Kwalificerende signalen: ${hint.qualifying_signals.join('; ')}`,
     `- Daily budget: EUR ${budget} (jij verdeelt dit over de campagnes)`,
     `- Doel-CPL: ${targetCpl}`,
     `- Aantal kwalificatievragen in formulier: ${input.brief.form_questions_count ?? 'onbekend'}`,
     `- ${lookalikeNote}`,
     `- ${exclusionNote}`,
+    '',
+    'BELANGRIJK: gebruik de admin-ingegeven leeftijd/gender als hard kader.',
+    'Je targeting.age_min/age_max in ELKE ad set MOET binnen die range vallen.',
+    'Als gender niet "alle" is: zet exact genders=[1] of [2] op elke ad set.',
     '',
     'STRUCTUUR DIE JE MOET ONTWERPEN:',
     `- Exact ${input.params.angles} campagnes, elk met een UNIEK angle (geen overlap)`,
