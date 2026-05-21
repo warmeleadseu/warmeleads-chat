@@ -52,7 +52,7 @@ export async function fetchAdInsights(
   const accountId = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
 
   const allInsights: AdInsight[] = [];
-  let url: string | null =
+  const url: string =
     `${META_GRAPH_URL}/${accountId}/insights?` +
     new URLSearchParams({
       fields: 'campaign_id,campaign_name,adset_id,adset_name,ad_id,ad_name,spend,impressions,clicks,actions',
@@ -290,4 +290,124 @@ export async function verifyMetaToken(accessToken: string): Promise<{ valid: boo
   } catch {
     return { valid: false, error: 'Kon Meta API niet bereiken' };
   }
+}
+
+/* ────────────────────────────────────────────────────────────
+ * Facebook Pages discovery (voor AI Lead Form Creator)
+ *
+ * Tot nu toe vonden we pages alleen impliciet (via promoted_object.page_id
+ * op bestaande campaigns). Voor branches die nog géén Meta-activiteit hebben,
+ * is dat niet bruikbaar. We voegen een directe `/me/accounts`-query toe die
+ * alle pages teruggeeft waar onze (system-)user-token toegang toe heeft.
+ *
+ * - Filtert op pages waar wij MANAGE/CREATE_CONTENT/ADVERTISE permissies
+ *   hebben (anders kan onze token sowieso geen leadgen_forms aanmaken).
+ * - Geeft per page ook het pagina-specifieke access_token mee. Lead form
+ *   creates moeten met die page-token, niet met de user-token.
+ * - 5-min in-memory cache zodat herhaalde modal-opens of multi-step wizards
+ *   niet steeds de `/me/accounts`-rate-limit raken.
+ * ──────────────────────────────────────────────────────────── */
+
+export interface MetaPageSummary {
+  id: string;
+  name: string;
+  category?: string;
+  picture_url?: string;
+  /**
+   * Permissies die ONZE token op deze pagina heeft. Filtering gebeurt al
+   * server-side; we exposen ze zodat de UI desnoods detail kan tonen.
+   */
+  tasks: string[];
+  /** Page-specifieke access token (long-lived als user-token long-lived is). */
+  access_token: string;
+}
+
+interface CachedPages {
+  expiresAt: number;
+  pages: MetaPageSummary[];
+}
+
+const PAGES_CACHE_TTL_MS = 5 * 60 * 1000;
+let pagesCache: CachedPages | null = null;
+/**
+ * Welke `tasks`-waardes betekenen dat onze token leadgen_forms mag aanmaken.
+ * Volgens Meta docs: ADVERTISE óf CREATE_CONTENT volstaan, MANAGE is breder.
+ * We accepteren alle drie zodat ook beperkter-gerechtigde tokens werken.
+ */
+const PAGE_TASKS_REQUIRED = new Set(['MANAGE', 'CREATE_CONTENT', 'ADVERTISE']);
+
+/**
+ * Lijst alle Facebook-pages waar onze configured Meta-token toegang toe heeft
+ * EN waar we permissie hebben om leadgen forms aan te maken. Cached 5 min.
+ */
+export async function listMetaPages(opts?: { force?: boolean }): Promise<MetaPageSummary[]> {
+  if (!opts?.force && pagesCache && pagesCache.expiresAt > Date.now()) {
+    return pagesCache.pages;
+  }
+
+  const creds = await getMetaCredentials();
+  if (!creds) {
+    throw new Error('Meta credentials niet geconfigureerd');
+  }
+
+  const collected: MetaPageSummary[] = [];
+  const fields = 'id,name,category,tasks,access_token,picture{url}';
+  let next: string | null =
+    `${META_GRAPH_URL}/me/accounts?fields=${encodeURIComponent(fields)}&limit=200&access_token=${encodeURIComponent(creds.accessToken)}`;
+
+  let safety = 0;
+  while (next && safety < 8) {
+    safety++;
+    const res: Response = await fetch(next);
+    const json: Record<string, unknown> = await res.json().catch(() => ({}));
+    if (!res.ok || json.error) {
+      const errObj = json.error as { message?: string } | undefined;
+      const msg = errObj?.message || `HTTP ${res.status}`;
+      throw new Error(`Meta /me/accounts faalde: ${msg}`);
+    }
+    const data = (json.data || []) as Array<{
+      id?: string;
+      name?: string;
+      category?: string;
+      tasks?: string[];
+      access_token?: string;
+      picture?: { data?: { url?: string } };
+    }>;
+    for (const p of data) {
+      if (!p.id || !p.access_token) continue;
+      const tasks = (p.tasks || []).filter(t => typeof t === 'string');
+      const hasPerm = tasks.some(t => PAGE_TASKS_REQUIRED.has(t));
+      if (!hasPerm) continue;
+      collected.push({
+        id: p.id,
+        name: p.name || `Page ${p.id}`,
+        category: p.category,
+        picture_url: p.picture?.data?.url,
+        tasks,
+        access_token: p.access_token,
+      });
+    }
+    const paging = json.paging as { next?: string } | undefined;
+    next = paging?.next || null;
+  }
+
+  collected.sort((a, b) => a.name.localeCompare(b.name));
+  pagesCache = { expiresAt: Date.now() + PAGES_CACHE_TTL_MS, pages: collected };
+  return collected;
+}
+
+/**
+ * Resolve het page-specifieke access_token voor een gegeven Facebook Page ID.
+ * Returnt null wanneer de page niet in onze toegestane lijst staat — dit is
+ * tevens onze ownership-guard voor de create-route.
+ */
+export async function getPageAccessToken(pageId: string): Promise<string | null> {
+  const pages = await listMetaPages();
+  const hit = pages.find(p => p.id === pageId);
+  return hit?.access_token || null;
+}
+
+/** Test-only: maakt de in-memory cache leeg zodat tests vers kunnen vragen. */
+export function __resetMetaPagesCacheForTests(): void {
+  pagesCache = null;
 }

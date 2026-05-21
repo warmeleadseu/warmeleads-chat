@@ -10,8 +10,10 @@ import {
   CpuChipIcon,
   Cog6ToothIcon,
   PhotoIcon,
+  PlusIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
+import AiLeadFormModal, { type CreatedFormInfo } from './AiLeadFormModal';
 import { PROVINCES_NL, PROVINCES_BE } from '@/data/provinces';
 import {
   VISUAL_STYLES,
@@ -197,6 +199,9 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
   const [forms, setForms] = useState<LeadFormOption[]>([]);
   const [formsLoading, setFormsLoading] = useState<boolean>(false);
   const [formsError, setFormsError] = useState<string | null>(null);
+  // AI Lead Form Creator modal — opent vanaf de Lead Form sectie wanneer
+  // forms ontbreken of de admin een extra vraagset wil aanmaken.
+  const [aiFormModalOpen, setAiFormModalOpen] = useState<boolean>(false);
 
   // Brief
   const [branch, setBranch] = useState<string>('');
@@ -286,26 +291,58 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
 
   useEffect(() => { load(); }, [load]);
 
-  useEffect(() => {
+  /**
+   * Forms voor de huidige branche laden. We extraheren dit als losse
+   * callback zodat het AI Lead Form modal het kan triggeren na een succesvolle
+   * create (om de zojuist aangemaakte form direct te selecteren).
+   */
+  const loadForms = useCallback(async (preferFormId?: string) => {
     if (!branch) return;
-    let cancelled = false;
     setFormsLoading(true); setFormsError(null);
-    adminFetch(`/api/admin/meta-forms?branch=${encodeURIComponent(branch)}`)
-      .then(async res => {
-        const data = await res.json().catch(() => ({}));
-        if (cancelled) return;
-        if (!res.ok) { setForms([]); setFormsError(data.error || 'Kon Lead Forms niet ophalen'); }
-        else {
-          const list = (data.forms || []) as LeadFormOption[];
-          setForms(list);
-          if (list[0] && !list.find(f => f.id === leadFormId)) setLeadFormId(list[0].id);
-        }
-      })
-      .catch(() => { if (!cancelled) setFormsError('Netwerkfout'); })
-      .finally(() => { if (!cancelled) setFormsLoading(false); });
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    try {
+      const res = await adminFetch(`/api/admin/meta-forms?branch=${encodeURIComponent(branch)}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { setForms([]); setFormsError(data.error || 'Kon Lead Forms niet ophalen'); return; }
+      const list = (data.forms || []) as LeadFormOption[];
+      setForms(list);
+      // Voorkeur: net aangemaakt form → anders huidige selectie behouden → anders eerste in lijst.
+      const wanted = preferFormId && list.find(f => f.id === preferFormId)?.id;
+      if (wanted) setLeadFormId(wanted);
+      else if (!list.find(f => f.id === leadFormId) && list[0]) setLeadFormId(list[0].id);
+    } catch {
+      setFormsError('Netwerkfout');
+    } finally {
+      setFormsLoading(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [branch]);
+
+  useEffect(() => { loadForms(); }, [loadForms]);
+
+  /**
+   * Callback bij succesvol AI-gegenereerd Meta Lead Form. We refreshen de
+   * forms-lijst en selecteren direct de zojuist aangemaakte form. De
+   * Meta-API geeft soms een paar seconden cache, dus polling kunnen we
+   * doen indien nodig — voor nu één refresh.
+   */
+  const handleFormCreated = useCallback(async (info: CreatedFormInfo) => {
+    // Optimistisch toevoegen voor instant UI-feedback, daarna refresh.
+    setForms(prev => {
+      if (prev.find(f => f.id === info.form_id)) return prev;
+      return [
+        {
+          id: info.form_id,
+          name: info.name,
+          status: 'ACTIVE',
+          page_id: info.page_id,
+          questions_count: info.questions_count,
+        },
+        ...prev,
+      ];
+    });
+    setLeadFormId(info.form_id);
+    await loadForms(info.form_id);
+  }, [loadForms]);
 
   // Bij branche-wissel: rebuild DNA naar branche-defaults zodat de
   // chips/must-includes/overlay-voorbeelden meteen kloppen. Reset ook de
@@ -741,19 +778,41 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
               <span>Lead Form</span>
               {formsLoading && <span className="text-[10px] text-slate-400">laden…</span>}
             </label>
-            <select
-              value={leadFormId}
-              onChange={e => setLeadFormId(e.target.value)}
-              disabled={formsLoading || forms.length === 0}
-              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm disabled:opacity-50"
-            >
-              {forms.length === 0 && <option value="">Geen formulieren gevonden</option>}
-              {forms.map(f => (
-                <option key={f.id} value={f.id}>
-                  {f.name} {f.questions_count != null ? `· ${f.questions_count}v` : ''} {f.status === 'ARCHIVED' ? '(archief)' : ''}
-                </option>
-              ))}
-            </select>
+            <div className="flex gap-2">
+              <select
+                value={leadFormId}
+                onChange={e => setLeadFormId(e.target.value)}
+                disabled={formsLoading || forms.length === 0}
+                className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm disabled:opacity-50"
+              >
+                {forms.length === 0 && <option value="">Geen formulieren gevonden</option>}
+                {forms.map(f => (
+                  <option key={f.id} value={f.id}>
+                    {f.name} {f.questions_count != null ? `· ${f.questions_count}v` : ''} {f.status === 'ARCHIVED' ? '(archief)' : ''}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => setAiFormModalOpen(true)}
+                disabled={!branch}
+                title="Maak een nieuw Meta Lead Form met AI"
+                className={`inline-flex shrink-0 items-center gap-1 rounded-lg px-3 py-2 text-xs font-medium shadow-sm transition-all disabled:opacity-50 ${
+                  forms.length === 0
+                    ? 'bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white hover:shadow-md'
+                    : 'border border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100'
+                }`}
+              >
+                <SparklesIcon className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">{forms.length === 0 ? 'Maak met AI' : 'Nieuw'}</span>
+                {forms.length > 0 && <PlusIcon className="h-3 w-3 sm:hidden" />}
+              </button>
+            </div>
+            {forms.length === 0 && !formsLoading && !formsError && (
+              <p className="mt-1.5 text-[11px] text-purple-700">
+                Geen formulieren voor deze branche gevonden. Klik <strong>&ldquo;Maak met AI&rdquo;</strong> om er direct één te laten ontwerpen door GPT-4o + aanmaken in Meta.
+              </p>
+            )}
             {formsError && <p className="mt-1 text-[11px] text-rose-600">{formsError}</p>}
             {selectedForm && (
               <p className="mt-1 text-[11px] text-slate-500">
@@ -1585,6 +1644,23 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
           )}
         </div>
       )}
+
+      {/* AI Lead Form Creator — modal voor het on-demand aanmaken van een
+          nieuw Meta Lead Form. Voert na succes handleFormCreated uit zodat
+          de forms-lijst direct refreshet + nieuwe form auto-geselecteerd wordt. */}
+      <AiLeadFormModal
+        open={aiFormModalOpen}
+        onClose={() => setAiFormModalOpen(false)}
+        branch={branch}
+        branchName={branches.find(b => b.slug === branch)?.name}
+        audienceProblem={audienceProblem}
+        audienceMotivation={audienceMotivation}
+        ageMin={ageMin}
+        ageMax={ageMax}
+        genders={genders === 'all' ? undefined : [genders === 'm' ? 1 : 2]}
+        countries={countries}
+        onCreated={handleFormCreated}
+      />
     </div>
   );
 }

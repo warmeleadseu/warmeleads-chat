@@ -400,6 +400,178 @@ export async function fetchAdLevelInsightsForAds(adIds: string[]): Promise<AdIns
   return out;
 }
 
+// ── Lead Forms (Lead Ads instant forms) ──────────────────────
+/**
+ * Eén vraag in een Meta Lead Form.
+ *
+ * Meta accepteert twee soorten "ingest"-velden:
+ *   - Prefilled (`PHONE`, `EMAIL`, `FULL_NAME`, `ZIP`, etc.): worden uit het
+ *     Facebook-profiel ingevuld. Bouw je als `{ type: 'PHONE' }` (geen key/label).
+ *   - Custom: free-text of multiple-choice (`type: 'CUSTOM'`). MOET een `key`,
+ *     `label` en (voor multi-choice) `options` met value+label hebben.
+ *
+ * We typen alleen de unie die wij effectief gebruiken vanuit de AI designer.
+ */
+export type LeadgenPrefilledType =
+  | 'EMAIL' | 'PHONE' | 'FULL_NAME' | 'FIRST_NAME' | 'LAST_NAME'
+  | 'STREET_ADDRESS' | 'CITY' | 'STATE' | 'ZIP' | 'COUNTRY'
+  | 'POST_CODE' | 'DATE_OF_BIRTH' | 'GENDER';
+
+export interface LeadgenCustomQuestion {
+  type: 'CUSTOM';
+  key: string;
+  label: string;
+  /** Bij multiple-choice: lijst opties met label+value. Leeg/undefined = vrije tekst. */
+  options?: Array<{ value: string; label: string }>;
+  /** Optioneel: korte zin onder het label voor extra context. */
+  inline_context?: string;
+}
+
+export interface LeadgenPrefilledQuestion {
+  type: LeadgenPrefilledType;
+}
+
+export type LeadgenQuestion = LeadgenCustomQuestion | LeadgenPrefilledQuestion;
+
+export interface LeadgenContextCard {
+  title: string;
+  /**
+   * Body-content. Meta accepteert array van strings (paragraphs). We
+   * accepteren beide; mappen naar array bij verzenden.
+   */
+  content: string | string[];
+  button_text?: string;
+  style?: 'PARAGRAPH_STYLE' | 'LIST_STYLE';
+}
+
+export interface LeadgenThankYouPage {
+  title: string;
+  body: string;
+  /**
+   * VIEW_WEBSITE = link naar URL, CALL_BUSINESS = "Bel ons", DOWNLOAD = file URL.
+   * NONE = geen knop (gewoon bedanktekst).
+   */
+  button_type?: 'VIEW_WEBSITE' | 'CALL_BUSINESS' | 'DOWNLOAD' | 'NONE';
+  button_text?: string;
+  website_url?: string;
+  /** Voor CALL_BUSINESS: telefoonnummer in E.164 (+31...). */
+  business_phone_number?: string;
+}
+
+export interface LeadgenPrivacyPolicy {
+  url: string;
+  link_text?: string;
+}
+
+export interface CreateLeadgenFormInput {
+  /** Naam van het formulier zoals zichtbaar in Meta Ads Manager. */
+  name: string;
+  /**
+   * `MORE_VOLUME` = geen review-screen (sneller, hogere submit-rate, mindere
+   * kwaliteit). `HIGHER_INTENT` = verplicht review-scherm voor submit. Voor
+   * WarmeLeads default = HIGHER_INTENT omdat we kwaliteit boven volume willen.
+   */
+  form_type?: 'MORE_VOLUME' | 'HIGHER_INTENT';
+  /** Meta locale-code, bv. `nl_NL`, `nl_BE`, `fr_BE`. Default nl_NL. */
+  locale?: string;
+  /** Custom + prefilled vragen in de getoonde volgorde. */
+  questions: LeadgenQuestion[];
+  /** Optionele intro-card voor de submit. */
+  context_card?: LeadgenContextCard;
+  /** Bedank-pagina ná submit. */
+  thank_you_page?: LeadgenThankYouPage;
+  /** Verplicht volgens Meta voor lead ads: privacy policy URL + link-tekst. */
+  privacy_policy: LeadgenPrivacyPolicy;
+  /** Optioneel: redirect-URL na klik op de thank-you knop (als type VIEW_WEBSITE). */
+  follow_up_action_url?: string;
+}
+
+/**
+ * Maak een nieuw Lead Form aan op een Facebook Page.
+ *
+ * BELANGRIJK: gebruikt het PAGE-specifieke access_token (verkrijgbaar via
+ * `getPageAccessToken(pageId)`). De system-user/ads-token werkt hier niet —
+ * Meta vereist een page-scoped token met `leads_retrieval` + `pages_manage_ads`.
+ */
+export async function createLeadgenForm(
+  pageId: string,
+  pageAccessToken: string,
+  input: CreateLeadgenFormInput,
+): Promise<{ id: string }> {
+  if (!pageId || !pageAccessToken) {
+    throw new Error('createLeadgenForm: pageId + pageAccessToken vereist');
+  }
+  if (!input.questions || input.questions.length === 0) {
+    throw new Error('createLeadgenForm: minimaal 1 vraag vereist');
+  }
+  if (!input.privacy_policy?.url) {
+    throw new Error('createLeadgenForm: privacy_policy.url is verplicht');
+  }
+
+  /**
+   * Meta verwacht `questions` als JSON-array. Custom-vragen krijgen options
+   * als `[{ value, label }]`. Prefilled vragen alleen `{ type }`.
+   */
+  const questionsPayload = input.questions.map(q => {
+    if (q.type === 'CUSTOM') {
+      const out: Record<string, unknown> = {
+        type: 'CUSTOM',
+        key: q.key,
+        label: q.label,
+      };
+      if (q.options && q.options.length > 0) {
+        out.options = q.options.map(o => ({ value: o.value, label: o.label }));
+      }
+      if (q.inline_context) out.inline_context = q.inline_context;
+      return out;
+    }
+    return { type: q.type };
+  });
+
+  const params: Record<string, unknown> = {
+    name: input.name,
+    follow_up_action_url:
+      input.follow_up_action_url || input.privacy_policy.url,
+    privacy_policy: {
+      url: input.privacy_policy.url,
+      link_text: input.privacy_policy.link_text || 'Privacybeleid WarmeLeads',
+    },
+    questions: questionsPayload,
+    locale: input.locale || 'nl_NL',
+    form_type: input.form_type || 'HIGHER_INTENT',
+  };
+
+  if (input.context_card) {
+    const contentArr = Array.isArray(input.context_card.content)
+      ? input.context_card.content
+      : [input.context_card.content];
+    params.context_card = {
+      title: input.context_card.title,
+      content: contentArr,
+      button_text: input.context_card.button_text || 'Verder',
+      style: input.context_card.style || 'PARAGRAPH_STYLE',
+    };
+  }
+
+  if (input.thank_you_page) {
+    const tp: Record<string, unknown> = {
+      title: input.thank_you_page.title,
+      body: input.thank_you_page.body,
+      button_type: input.thank_you_page.button_type || 'VIEW_WEBSITE',
+    };
+    if (input.thank_you_page.button_text) tp.button_text = input.thank_you_page.button_text;
+    if (input.thank_you_page.website_url) tp.website_url = input.thank_you_page.website_url;
+    if (input.thank_you_page.business_phone_number) tp.business_phone_number = input.thank_you_page.business_phone_number;
+    params.thank_you_page = tp;
+  }
+
+  const res = await metaWrite(`${pageId}/leadgen_forms`, params, pageAccessToken);
+  if (typeof res.id !== 'string') {
+    throw new Error('Meta createLeadgenForm: geen id terug');
+  }
+  return { id: res.id };
+}
+
 // ── Internal exports voor tests ──────────────────────────────
 export const __internal = {
   normActId,
