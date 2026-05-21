@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
       picture_url: p.picture_url ?? null,
       tasks: p.tasks,
     }));
-    return NextResponse.json({ pages: sanitized });
+    return NextResponse.json({ pages: sanitized, total: sanitized.length });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Onbekende fout';
     /**

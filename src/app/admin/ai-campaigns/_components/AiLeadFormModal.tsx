@@ -26,6 +26,7 @@ import {
   CheckBadgeIcon,
   ExclamationTriangleIcon,
   BuildingOffice2Icon,
+  MagnifyingGlassIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
 
@@ -143,6 +144,7 @@ export default function AiLeadFormModal({
   const [pages, setPages] = useState<MetaPage[]>([]);
   const [pagesLoading, setPagesLoading] = useState(false);
   const [pagesError, setPagesError] = useState<string | null>(null);
+  const [pageSearch, setPageSearch] = useState('');
   const [selectedPageId, setSelectedPageId] = useState<string>('');
 
   // Stap 2/3 — draft
@@ -159,6 +161,7 @@ export default function AiLeadFormModal({
   const resetAll = useCallback(() => {
     setStep(1);
     setPages([]); setPagesLoading(false); setPagesError(null);
+    setPageSearch('');
     setSelectedPageId('');
     setDraftLoading(false); setDraftError(null); setDraft(null);
     setExistingKeys(new Set()); setAiCostCents(0);
@@ -171,28 +174,43 @@ export default function AiLeadFormModal({
     onClose();
   }, [createBusy, draftLoading, onClose, resetAll]);
 
+  const loadPages = useCallback(async (opts?: { force?: boolean }) => {
+    setPagesLoading(true);
+    setPagesError(null);
+    const qs = opts?.force ? '?force=1' : '';
+    try {
+      const res = await adminFetch(`/api/admin/meta-pages${qs}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setPagesError(data.error || `Kon pages niet ophalen (${res.status})`);
+        setPages([]);
+        return;
+      }
+      const list = (data.pages || []) as MetaPage[];
+      setPages(list);
+      if (list.length === 1) setSelectedPageId(list[0].id);
+    } catch (err) {
+      setPagesError(err instanceof Error ? err.message : 'Netwerkfout');
+    } finally {
+      setPagesLoading(false);
+    }
+  }, []);
+
+  const filteredPages = useMemo(() => {
+    const q = pageSearch.trim().toLowerCase();
+    if (!q) return pages;
+    return pages.filter(p =>
+      p.name.toLowerCase().includes(q) ||
+      p.id.includes(q) ||
+      (p.category || '').toLowerCase().includes(q),
+    );
+  }, [pages, pageSearch]);
+
   // ── Pages laden zodra de modal open gaat ──
   useEffect(() => {
     if (!open) return;
-    let cancelled = false;
-    setPagesLoading(true); setPagesError(null);
-    adminFetch('/api/admin/meta-pages')
-      .then(async res => {
-        const data = await res.json().catch(() => ({}));
-        if (cancelled) return;
-        if (!res.ok) {
-          setPagesError(data.error || `Kon pages niet ophalen (${res.status})`);
-          setPages([]);
-        } else {
-          const list = (data.pages || []) as MetaPage[];
-          setPages(list);
-          if (list.length === 1) setSelectedPageId(list[0].id);
-        }
-      })
-      .catch(err => { if (!cancelled) setPagesError(err instanceof Error ? err.message : 'Netwerkfout'); })
-      .finally(() => { if (!cancelled) setPagesLoading(false); });
-    return () => { cancelled = true; };
-  }, [open]);
+    void loadPages();
+  }, [open, loadPages]);
 
   // ── AI Draft genereren ──
   const requestDraft = useCallback(async () => {
@@ -395,7 +413,7 @@ export default function AiLeadFormModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-2 py-4 sm:px-4 sm:py-8"
+      className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-black/50 p-2 sm:items-center sm:p-4 sm:py-8"
       onClick={handleClose}
     >
       <motion.div
@@ -404,7 +422,7 @@ export default function AiLeadFormModal({
         exit={{ opacity: 0, scale: 0.96, y: 12 }}
         transition={{ duration: 0.18 }}
         onClick={e => e.stopPropagation()}
-        className="flex max-h-full w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
+        className="flex max-h-[min(90dvh,calc(100vh-1rem))] w-full max-w-3xl shrink-0 flex-col overflow-hidden rounded-2xl bg-white shadow-2xl sm:max-h-[min(90dvh,calc(100vh-4rem))]"
       >
         {/* Header */}
         <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-gradient-to-r from-purple-50 to-fuchsia-50 px-4 py-3 sm:px-6 sm:py-4">
@@ -444,17 +462,28 @@ export default function AiLeadFormModal({
           ))}
         </div>
 
-        {/* Body — scrollbaar */}
-        <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
+        {/* Body — scrollbaar (min-h-0 is nodig zodat flex-child daadwerkelijk kan scrollen) */}
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6 sm:py-5">
           <AnimatePresence mode="wait">
             {/* ── STAP 1: Page picker ─────────────────────── */}
             {step === 1 && (
               <motion.div key="step1" initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -12 }} transition={{ duration: 0.15 }} className="space-y-4">
-                <div>
-                  <h3 className="text-sm font-semibold text-slate-900">Kies een Facebook-page</h3>
-                  <p className="mt-1 text-xs text-slate-600">
-                    Het Lead Form wordt aangemaakt op deze pagina. Alleen pages waar je MANAGE-rechten hebt zijn zichtbaar.
-                  </p>
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-sm font-semibold text-slate-900">Kies een Facebook-page</h3>
+                    <p className="mt-1 text-xs text-slate-600">
+                      Het Lead Form wordt aangemaakt op deze pagina. We tonen alle Facebook-pages die aan jullie Meta-koppeling zijn gekoppeld (met rechten om Lead Forms te beheren).
+                    </p>
+                  </div>
+                  {!pagesLoading && pages.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => loadPages({ force: true })}
+                      className="shrink-0 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-50"
+                    >
+                      Vernieuwen
+                    </button>
+                  )}
                 </div>
 
                 {pagesLoading && (
@@ -481,37 +510,76 @@ export default function AiLeadFormModal({
                 )}
 
                 {!pagesLoading && pages.length > 0 && (
-                  <div className="space-y-2">
-                    {pages.map(p => (
-                      <button
-                        type="button"
-                        key={p.id}
-                        onClick={() => setSelectedPageId(p.id)}
-                        className={`flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-all ${
-                          selectedPageId === p.id
-                            ? 'border-purple-500 bg-purple-50 ring-1 ring-purple-500'
-                            : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
-                        }`}
-                      >
-                        {p.picture_url ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={p.picture_url} alt="" className="h-9 w-9 rounded-full" />
-                        ) : (
-                          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-500">
-                            <BuildingOffice2Icon className="h-5 w-5" />
-                          </div>
-                        )}
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-sm font-medium text-slate-900">{p.name}</div>
-                          <div className="truncate text-[11px] text-slate-500">
-                            {p.category || 'Page'}
-                            {' · '}{p.tasks.join(', ')}
-                          </div>
+                  <>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-full bg-purple-100 px-2.5 py-0.5 text-[11px] font-semibold text-purple-800">
+                        {pages.length} {pages.length === 1 ? 'page' : 'pages'} gekoppeld
+                      </span>
+                      {pageSearch && (
+                        <span className="text-[11px] text-slate-500">
+                          {filteredPages.length} resultaat{filteredPages.length === 1 ? '' : 'en'}
+                        </span>
+                      )}
+                    </div>
+
+                    {pages.length >= 4 && (
+                      <div className="relative">
+                        <MagnifyingGlassIcon className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                        <input
+                          type="search"
+                          value={pageSearch}
+                          onChange={e => setPageSearch(e.target.value)}
+                          placeholder="Zoek page op naam of ID…"
+                          className="w-full rounded-lg border border-slate-200 bg-slate-50/60 py-2 pl-8 pr-3 text-sm text-slate-900 outline-none focus:border-brand-purple/50 focus:bg-white"
+                        />
+                      </div>
+                    )}
+
+                    <div
+                      className="max-h-[min(50dvh,22rem)] overflow-y-auto overscroll-contain rounded-xl border border-slate-200 bg-slate-50/30"
+                      style={{ WebkitOverflowScrolling: 'touch' }}
+                    >
+                      {filteredPages.length === 0 ? (
+                        <p className="px-4 py-6 text-center text-xs text-slate-500">Geen pages gevonden voor &ldquo;{pageSearch}&rdquo;</p>
+                      ) : (
+                        <div className="divide-y divide-slate-100 p-1">
+                          {filteredPages.map(p => (
+                            <button
+                              type="button"
+                              key={p.id}
+                              onClick={() => setSelectedPageId(p.id)}
+                              className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-all ${
+                                selectedPageId === p.id
+                                  ? 'border border-purple-500 bg-purple-50 ring-1 ring-purple-500'
+                                  : 'border border-transparent bg-white hover:border-slate-200 hover:bg-slate-50'
+                              }`}
+                            >
+                              {p.picture_url ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={p.picture_url} alt="" className="h-9 w-9 shrink-0 rounded-full" />
+                              ) : (
+                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500">
+                                  <BuildingOffice2Icon className="h-5 w-5" />
+                                </div>
+                              )}
+                              <div className="min-w-0 flex-1">
+                                <div className="truncate text-sm font-medium text-slate-900">{p.name}</div>
+                                <div className="truncate text-[11px] text-slate-500">
+                                  {p.category || 'Page'}
+                                  {' · '}{p.tasks.slice(0, 3).join(', ')}{p.tasks.length > 3 ? '…' : ''}
+                                </div>
+                              </div>
+                              <div className="hidden shrink-0 font-mono text-[10px] text-slate-400 sm:block">{p.id}</div>
+                            </button>
+                          ))}
                         </div>
-                        <div className="font-mono text-[10px] text-slate-400">{p.id}</div>
-                      </button>
-                    ))}
-                  </div>
+                      )}
+                    </div>
+
+                    <p className="text-[11px] text-slate-500">
+                      Mis je een page? Koppel die eerst in Meta Business Manager aan hetzelfde ad account / system user als in Koppelingen, en klik daarna op Vernieuwen.
+                    </p>
+                  </>
                 )}
               </motion.div>
             )}
@@ -923,7 +991,7 @@ export default function AiLeadFormModal({
         </div>
 
         {/* Footer met navigatie */}
-        <div className="flex items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:px-6">
+        <div className="shrink-0 flex items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:px-6">
           <button
             type="button"
             onClick={() => {
