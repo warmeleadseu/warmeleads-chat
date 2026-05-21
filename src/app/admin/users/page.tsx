@@ -430,7 +430,7 @@ function UserFormModal({ user, onClose, onSaved }: { user: AdminUser | null; onC
   useEffect(() => {
     if (!isAM) return;
     setLoadingCustomers(true);
-    adminFetch('/api/admin/customers')
+    adminFetch('/api/admin/customers/options')
       .then(r => r.ok ? r.json() : { customers: [] })
       .then((data: { customers?: CustomerOption[] }) => {
         const custs = data.customers || [];

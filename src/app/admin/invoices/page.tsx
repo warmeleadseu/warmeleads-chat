@@ -65,14 +65,14 @@ export default function AdminInvoicesPage() {
 
   const fetchCustomers = useCallback(async () => {
     try {
-      const res = await adminFetch('/api/admin/customers');
+      const res = await adminFetch('/api/admin/customers/options');
       if (res.ok) {
         const data = await res.json();
         const list = data.customers || (Array.isArray(data) ? data : []);
         setCustomers(list.map((c: Record<string, unknown>) => ({
           id: String(c.id),
           name: String(c.name),
-          email: String(c.email),
+          email: String(c.email ?? ''),
           country: (c.country as string) ?? 'NL',
           vat_id: (c.vat_id as string) || null,
         })));

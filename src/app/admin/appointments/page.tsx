@@ -140,7 +140,7 @@ export default function AdminAppointmentsPage() {
   useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
-    adminFetch('/api/admin/customers?is_active=true').then(r => r.ok ? r.json() : null).then(d => {
+    adminFetch('/api/admin/customers/options?active=1').then(r => r.ok ? r.json() : null).then(d => {
       if (Array.isArray(d)) setCustomers(d.map((c: Customer) => ({ id: c.id, name: c.name })));
       else if (d?.customers) setCustomers(d.customers.map((c: Customer) => ({ id: c.id, name: c.name })));
     }).catch(() => {});

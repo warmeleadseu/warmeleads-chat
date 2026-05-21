@@ -412,7 +412,7 @@ export default function LeadsCRMPage() {
 
   const fetchMeta = useCallback(async () => {
     const [custRes, branchRes] = await Promise.all([
-      adminFetch('/api/admin/customers'),
+      adminFetch('/api/admin/customers/options'),
       adminFetch('/api/admin/branches'),
     ]);
     if (custRes.ok) { const d = await custRes.json(); setCustomers(d.customers || []); }

@@ -192,7 +192,7 @@ export default function BatchesPage() {
     const [bRes, brRes, cRes] = await Promise.all([
       adminFetch('/api/admin/batches'),
       adminFetch('/api/admin/branches'),
-      adminFetch('/api/admin/customers'),
+      adminFetch('/api/admin/customers/options'),
     ]);
     if (bRes.ok) setBatches(await bRes.json());
     if (brRes.ok) { const d = await brRes.json(); setBranches(d.branches || []); }
