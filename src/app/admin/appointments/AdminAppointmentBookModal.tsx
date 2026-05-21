@@ -8,6 +8,7 @@ import {
   XMarkIcon, UserIcon, PhoneIcon, EnvelopeIcon, MapPinIcon,
   CalendarDaysIcon, ChevronLeftIcon, ChevronRightIcon, ClockIcon, CheckCircleIcon, BoltIcon,
 } from '@heroicons/react/24/outline';
+import SearchableSelect from '@/components/ui/SearchableSelect';
 
 interface Customer { id: string; name: string }
 interface BranchOption { slug: string; name: string }
@@ -158,10 +159,14 @@ export default function AdminAppointmentBookModal({
           <div className="space-y-5">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Field label="Klant *">
-                <select value={customerId} onChange={e => setCustomerId(e.target.value)} className={inputCls}>
-                  <option value="">-- Kies klant --</option>
-                  {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
+                <SearchableSelect
+                  value={customerId}
+                  onChange={v => setCustomerId(v)}
+                  options={customers.map(c => ({ value: c.id, label: c.name }))}
+                  placeholder="-- Kies klant --"
+                  searchPlaceholder="Zoek klant…"
+                  ariaLabel="Klant"
+                />
               </Field>
               <Field label="Branche *">
                 <select value={branch} onChange={e => setBranch(e.target.value)} className={inputCls}>

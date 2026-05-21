@@ -34,6 +34,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
 import { openCustomerPortalAsAdmin } from '@/lib/adminOpenPortal';
+import SearchableSelect from '@/components/ui/SearchableSelect';
 import { useAdmin } from '../adminContext';
 import { mergeCustomTiers } from '@/lib/pricing';
 import { isPipelineBatchKind } from '@/lib/batchKind';
@@ -2244,11 +2245,15 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
           <div>
             <label className="mb-1 block text-xs font-medium text-slate-500">Klant *</label>
-            <select value={form.customer_id} onChange={e => setForm(f => ({ ...f, customer_id: e.target.value }))}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-brand-purple/50">
-              <option value="">Selecteer klant...</option>
-              {activeCustomers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
+            <SearchableSelect
+              value={form.customer_id}
+              onChange={v => setForm(f => ({ ...f, customer_id: v }))}
+              options={activeCustomers.map(c => ({ value: c.id, label: c.name }))}
+              placeholder="Selecteer klant..."
+              searchPlaceholder="Zoek klant…"
+              ariaLabel="Klant"
+              className="py-2.5"
+            />
           </div>
 
           <div className="flex rounded-lg border border-slate-200 bg-slate-50 p-0.5">

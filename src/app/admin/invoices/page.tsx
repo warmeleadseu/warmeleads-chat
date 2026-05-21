@@ -17,6 +17,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { adminFetch, adminHeaders } from '@/lib/adminAuth';
 import { computeInvoiceVat } from '@/lib/invoiceVat';
+import SearchableSelect from '@/components/ui/SearchableSelect';
 
 interface Invoice {
   id: string;
@@ -412,11 +413,14 @@ function InvoicePanel({ customers, onClose, onSaved }: {
         <div className="flex-1 overflow-y-auto px-5 py-5 space-y-4">
           <div>
             <label className="mb-1 block text-xs font-medium text-slate-500">Klant *</label>
-            <select value={form.customer_id} onChange={e => setForm(f => ({ ...f, customer_id: e.target.value }))}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50">
-              <option value="">Selecteer klant...</option>
-              {customers.map(c => <option key={c.id} value={c.id}>{c.name} ({c.email})</option>)}
-            </select>
+            <SearchableSelect
+              value={form.customer_id}
+              onChange={v => setForm(f => ({ ...f, customer_id: v }))}
+              options={customers.map(c => ({ value: c.id, label: c.name, sub: c.email }))}
+              placeholder="Selecteer klant..."
+              searchPlaceholder="Zoek klant of e-mail…"
+              ariaLabel="Klant"
+            />
           </div>
 
           <div>

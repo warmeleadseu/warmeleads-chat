@@ -20,6 +20,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
 import { PROVINCES_ALL, PROVINCES_BE, PROVINCES_NL } from '@/data/provinces';
+import SearchableSelect from '@/components/ui/SearchableSelect';
 
 /* ── Multi-select dropdown ─────────────────────────────────── */
 
@@ -1149,10 +1150,9 @@ function ExportModal({
 
             <div>
               <label className="mb-1.5 block text-xs font-medium text-slate-500">Exporteren voor klant (optioneel)</label>
-              <select
+              <SearchableSelect
                 value={targetCustomerId}
-                onChange={e => {
-                  const v = e.target.value;
+                onChange={v => {
                   if (!v) {
                     setTargetCustomerId('');
                     setAddToPortal(false);
@@ -1162,11 +1162,13 @@ function ExportModal({
                   if (v !== targetCustomerId) setBulkBatchId('');
                   setTargetCustomerId(v);
                 }}
-                className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm text-slate-900"
-              >
-                <option value="">- Geen specifieke klant -</option>
-                {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
+                options={customers.map(c => ({ value: c.id, label: c.name }))}
+                emptyOptionLabel="Geen specifieke klant"
+                placeholder="Geen specifieke klant"
+                searchPlaceholder="Zoek klant…"
+                ariaLabel="Exporteren voor klant"
+                className="py-2.5"
+              />
             </div>
 
             {bulkBatchId && targetCustomerId && (
@@ -1414,11 +1416,15 @@ function LeadFormPanel({
             </div>
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-500">Klant (bedrijf)</label>
-              <select value={form.customer_id} onChange={e => set('customer_id', e.target.value)}
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900">
-                <option value="">- Selecteer -</option>
-                {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
+              <SearchableSelect
+                value={form.customer_id || ''}
+                onChange={v => set('customer_id', v)}
+                options={customers.map(c => ({ value: c.id, label: c.name }))}
+                emptyOptionLabel="Geen klant"
+                placeholder="- Selecteer -"
+                searchPlaceholder="Zoek klant…"
+                ariaLabel="Klant (bedrijf)"
+              />
             </div>
           </div>
           <div className="border-t border-slate-100 pt-4">

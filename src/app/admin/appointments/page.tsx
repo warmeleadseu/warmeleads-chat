@@ -20,6 +20,7 @@ import {
 } from '@heroicons/react/24/outline';
 import AdminAppointmentBookModal from './AdminAppointmentBookModal';
 import AdminAppointmentDetail from './AdminAppointmentDetail';
+import SearchableSelect from '@/components/ui/SearchableSelect';
 
 interface Customer { id: string; name: string }
 interface BranchOption { slug: string; name: string }
@@ -238,10 +239,20 @@ export default function AdminAppointmentsPage() {
               className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-8 pr-3 text-sm outline-none focus:border-brand-purple/50 sm:w-56"
             />
           </div>
-          <select value={customerFilter} onChange={e => setCustomerFilter(e.target.value)} className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-sm">
-            <option value="all">Alle klanten</option>
-            {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
+          <div className="w-48">
+            <SearchableSelect
+              value={customerFilter}
+              onChange={v => setCustomerFilter(v || 'all')}
+              options={[
+                { value: 'all', label: 'Alle klanten' },
+                ...customers.map(c => ({ value: c.id, label: c.name })),
+              ]}
+              placeholder="Alle klanten"
+              searchPlaceholder="Zoek klant…"
+              ariaLabel="Filter op klant"
+              className="h-9 py-0"
+            />
+          </div>
           <select value={branchFilter} onChange={e => setBranchFilter(e.target.value)} className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-sm">
             <option value="all">Alle branches</option>
             {branches.map(b => <option key={b.slug} value={b.slug}>{b.name}</option>)}
