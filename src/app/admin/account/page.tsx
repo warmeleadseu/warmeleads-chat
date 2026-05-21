@@ -227,7 +227,12 @@ export default function AccountPage() {
             <div>
               <h3 className="font-bold text-slate-900">Viering video</h3>
               <p className="text-xs text-slate-500">
-                Dit YouTube-filmpje wordt afgespeeld op het live dashboard als jouw batch betaald wordt
+                Dit YouTube-filmpje wordt afgespeeld op het live dashboard als jouw batch betaald wordt.
+                {!videoUrl && (
+                  <span className="ml-1 text-slate-600">
+                    Zolang je hier geen eigen URL hebt staan, gebruiken we de standaard celebration video van WarmeLeads — jouw sales worden dus altijd gevierd.
+                  </span>
+                )}
               </p>
             </div>
           </div>

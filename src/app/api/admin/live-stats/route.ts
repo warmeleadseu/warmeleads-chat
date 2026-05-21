@@ -429,6 +429,25 @@ export async function GET(request: NextRequest) {
         celebration_video_end: number | null;
       }
     >();
+    // Centrale fallback-video uit app_settings (zie migration 121) zodat
+    // ook AMs zonder eigen URL altijd een celebration video krijgen.
+    const { data: defaultVideoRows } = await supabase
+      .from('app_settings')
+      .select('key, value')
+      .in('key', [
+        'default_celebration_video_url',
+        'default_celebration_video_start',
+        'default_celebration_video_end',
+      ]);
+    const defaultMap = new Map<string, string>();
+    for (const row of defaultVideoRows || []) {
+      if (row?.key && typeof row.value === 'string') defaultMap.set(row.key, row.value);
+    }
+    const defaultUrl = defaultMap.get('default_celebration_video_url')?.trim() || null;
+    const defaultStartRaw = defaultMap.get('default_celebration_video_start');
+    const defaultEndRaw = defaultMap.get('default_celebration_video_end');
+    const defaultStart = defaultStartRaw && /^\d+$/.test(defaultStartRaw) ? Number(defaultStartRaw) : null;
+    const defaultEnd = defaultEndRaw && /^\d+$/.test(defaultEndRaw) ? Number(defaultEndRaw) : null;
     if (amIds.size > 0) {
       const { data: ams } = await supabase
         .from('admin_users')
@@ -448,6 +467,7 @@ export async function GET(request: NextRequest) {
       const cb = o.customer_batches as any;
       const amId = cb?.account_manager_id || cb?.customers?.account_manager_id || null;
       const am = amId ? amMap.get(amId) : null;
+      const hasOwnUrl = !!am?.celebration_video_url;
       recentPaidBatches.push({
         id: o.id,
         batchId: o.batch_id,
@@ -457,9 +477,9 @@ export async function GET(request: NextRequest) {
         paidAt: o.paid_at,
         amId,
         amName: am?.name || null,
-        celebrationVideoUrl: am?.celebration_video_url || null,
-        videoStart: am?.celebration_video_start ?? null,
-        videoEnd: am?.celebration_video_end ?? null,
+        celebrationVideoUrl: hasOwnUrl ? am!.celebration_video_url : defaultUrl,
+        videoStart: hasOwnUrl ? am!.celebration_video_start : defaultStart,
+        videoEnd: hasOwnUrl ? am!.celebration_video_end : defaultEnd,
       });
     }
   }
