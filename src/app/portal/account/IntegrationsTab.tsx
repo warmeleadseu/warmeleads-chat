@@ -2,7 +2,7 @@
 
 import { LockClosedIcon } from '@heroicons/react/24/outline';
 import { PortalSection } from '../_ui';
-import { TeamleaderIntegration } from '../integrations/TeamleaderIntegration';
+import { CrmIntegrationHub } from '../integrations/CrmIntegrationHub';
 
 export function IntegrationsTab({
   isOwner,
@@ -38,7 +38,7 @@ export function IntegrationsTab({
       <p className="text-sm text-slate-600">
         Koppel externe systemen om leads automatisch door te sturen naar je eigen workflow.
       </p>
-      <TeamleaderIntegration
+      <CrmIntegrationHub
         showToast={showToast}
         oauthHint={oauthHint}
         oauthReason={oauthReason}

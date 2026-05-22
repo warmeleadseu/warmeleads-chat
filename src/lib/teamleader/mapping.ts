@@ -22,7 +22,12 @@ export function formatDealTitle(
     .replace(/\{branch\}/g, vars.branch);
 }
 
-export function buildDealSummary(lead: Record<string, unknown>, assignmentId: string, leadId: string): string {
+export function buildDealSummary(
+  lead: Record<string, unknown>,
+  assignmentId: string,
+  leadId: string,
+  extraFields?: Record<string, string>,
+): string {
   const lines: string[] = [
     'Lead via Warme Leads portaal',
     '',
@@ -35,11 +40,20 @@ export function buildDealSummary(lead: Record<string, unknown>, assignmentId: st
   }
   if (lead.provincie) lines.push(`Provincie: ${lead.provincie}`);
   if (lead.notities) lines.push('', `Notities: ${lead.notities}`);
-  const cf = lead.custom_fields;
-  if (cf && typeof cf === 'object' && Object.keys(cf as object).length > 0) {
-    lines.push('', 'Extra velden:');
-    for (const [k, v] of Object.entries(cf as Record<string, unknown>)) {
-      if (v != null && String(v).trim()) lines.push(`- ${k}: ${v}`);
+
+  const extras = extraFields && Object.keys(extraFields).length > 0 ? extraFields : null;
+  if (extras) {
+    lines.push('', 'Overige gegevens:');
+    for (const [label, val] of Object.entries(extras)) {
+      if (val.trim()) lines.push(`- ${label}: ${val}`);
+    }
+  } else {
+    const cf = lead.custom_fields;
+    if (cf && typeof cf === 'object' && Object.keys(cf as object).length > 0) {
+      lines.push('', 'Extra velden:');
+      for (const [k, v] of Object.entries(cf as Record<string, unknown>)) {
+        if (v != null && String(v).trim()) lines.push(`- ${k}: ${v}`);
+      }
     }
   }
   return lines.join('\n').slice(0, 8000);

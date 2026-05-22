@@ -15,6 +15,7 @@ import {
   ArrowTopRightOnSquareIcon,
   ChevronRightIcon,
 } from '@heroicons/react/24/outline';
+import { TeamleaderFieldMapping } from './TeamleaderFieldMapping';
 
 type SyncRow = {
   id: string;
@@ -76,10 +77,15 @@ export function TeamleaderIntegration({
   showToast,
   oauthHint,
   oauthReason,
+  embedded = false,
+  onConnectionChange,
 }: {
   showToast: (msg: string, type?: 'success' | 'error') => void;
   oauthHint?: string | null;
   oauthReason?: string | null;
+  /** Geen eigen sectie-header; bedoeld voor CrmIntegrationHub */
+  embedded?: boolean;
+  onConnectionChange?: (connected: boolean) => void;
 }) {
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<StatusResponse | null>(null);
@@ -109,11 +115,12 @@ export function TeamleaderIntegration({
         setDealTemplate(d.settings?.deal_title_template || DEFAULT_DEAL_TEMPLATE);
         setSyncEnabled(d.settings?.enabled !== false);
         if (!d.has_customer_oauth_app && !d.connected) setSetupGuideOpen(true);
+        onConnectionChange?.(d.connected);
       }
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [onConnectionChange]);
 
   const loadPipelines = useCallback(
     async (opts: { force?: boolean; silent?: boolean } = {}) => {
@@ -191,6 +198,7 @@ export function TeamleaderIntegration({
     });
     if (res.ok) {
       showToast('Teamleader ontkoppeld');
+      onConnectionChange?.(false);
       await loadStatus();
     } else {
       showToast('Ontkoppelen mislukt', 'error');
@@ -312,26 +320,23 @@ export function TeamleaderIntegration({
     );
   };
 
-  if (loading) {
-    return (
-      <PortalSection title="Teamleader Focus" description="Leads automatisch synchroniseren als contact en deal.">
-        <div className="space-y-3">
-          <div className="h-10 animate-pulse rounded-xl bg-slate-100" />
-          <div className="h-32 animate-pulse rounded-xl bg-slate-50" />
-        </div>
-      </PortalSection>
-    );
-  }
+  const panel = loading ? (
+    <div className="space-y-3">
+      <div className="h-10 animate-pulse rounded-xl bg-slate-100" />
+      <div className="h-32 animate-pulse rounded-xl bg-slate-50" />
+    </div>
+  ) : (
+    <>
+      {!embedded && (
+        <div className="mb-4 flex justify-end">{statusBadge()}</div>
+      )}
 
-  return (
-    <PortalSection
-      eyebrow="CRM-koppeling"
-      title="Teamleader Focus"
-      description="Toegewezen leads worden automatisch als contact en deal in je Teamleader-account geplaatst."
-      action={statusBadge()}
-    >
       {!status?.connected && (
-        <SetupStepper current={wizardStep} needsByoa={needsByoaSetup && !canQuickConnect} />
+        <SetupStepper
+          current={wizardStep}
+          needsByoa={needsByoaSetup && !canQuickConnect}
+          compact={embedded}
+        />
       )}
 
       {/* ── Setup: BYOA ── */}
@@ -345,7 +350,9 @@ export function TeamleaderIntegration({
               className="flex w-full items-center justify-between gap-3 text-left"
             >
               <div>
-                <p className="text-sm font-semibold text-slate-900">Stap 1 — App registreren in Teamleader</p>
+                <p className="text-sm font-semibold text-slate-900">
+                  {embedded ? 'OAuth-app registreren in Teamleader' : 'Stap 1 — App registreren in Teamleader'}
+                </p>
                 <p className="mt-0.5 text-xs text-slate-500">
                   Eenmalig: maak een private integratie aan in je Teamleader-account.
                 </p>
@@ -569,6 +576,8 @@ export function TeamleaderIntegration({
             </Alert>
           )}
 
+          <TeamleaderFieldMapping showToast={showToast} connected />
+
           <SyncHistory
             successCount={status.success_count}
             rows={status.recent_syncs}
@@ -576,11 +585,32 @@ export function TeamleaderIntegration({
           />
         </div>
       )}
+    </>
+  );
+
+  if (embedded) return panel;
+
+  return (
+    <PortalSection
+      eyebrow="CRM-koppeling"
+      title="Teamleader Focus"
+      description="Toegewezen leads worden automatisch als contact en deal in je Teamleader-account geplaatst."
+      action={statusBadge()}
+    >
+      {panel}
     </PortalSection>
   );
 }
 
-function SetupStepper({ current, needsByoa }: { current: WizardStep; needsByoa: boolean }) {
+function SetupStepper({
+  current,
+  needsByoa,
+  compact,
+}: {
+  current: WizardStep;
+  needsByoa: boolean;
+  compact?: boolean;
+}) {
   const steps = needsByoa
     ? [
         { n: 1 as const, label: 'App registreren' },
@@ -591,6 +621,31 @@ function SetupStepper({ current, needsByoa }: { current: WizardStep; needsByoa: 
         { n: 2 as const, label: 'Autoriseren' },
         { n: 3 as const, label: 'Configureren' },
       ];
+
+  if (compact) {
+    return (
+      <div className="mb-4 flex flex-wrap gap-2">
+        {steps.map((step) => {
+          const done = current > step.n;
+          const active = current === step.n;
+          return (
+            <span
+              key={step.n}
+              className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${
+                done
+                  ? 'bg-emerald-50 text-emerald-700'
+                  : active
+                    ? 'bg-brand-purple/10 text-brand-purple'
+                    : 'bg-slate-100 text-slate-500'
+              }`}
+            >
+              {step.label}
+            </span>
+          );
+        })}
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-wrap items-center gap-2 sm:gap-0">

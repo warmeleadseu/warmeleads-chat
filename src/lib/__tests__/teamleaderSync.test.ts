@@ -18,6 +18,10 @@ vi.mock('@/lib/teamleader/deals', () => ({
   createDeal: vi.fn(),
 }));
 
+vi.mock('@/lib/teamleader/customFieldDefinitions', () => ({
+  listCustomFieldDefinitions: vi.fn().mockResolvedValue([]),
+}));
+
 import { createServerClient } from '@/lib/supabase';
 import {
   getTeamleaderIntegration,
@@ -131,10 +135,16 @@ describe('syncAssignmentToTeamleader', () => {
     const branchesChain = {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
-      maybeSingle: vi.fn().mockResolvedValue({ data: { name: 'Zonnepanelen' } }),
+      maybeSingle: vi.fn().mockResolvedValue({ data: { id: 'br-1', name: 'Zonnepanelen' } }),
+    };
+    const branchFieldsChain = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      order: vi.fn().mockResolvedValue({ data: [] }),
     };
     vi.mocked(sb.from).mockImplementation(((table: string) => {
       if (table === 'branches') return branchesChain;
+      if (table === 'branch_fields') return branchFieldsChain;
       return chain;
     }) as typeof sb.from);
 
@@ -147,6 +157,7 @@ describe('syncAssignmentToTeamleader', () => {
     expect(findOrCreateContact).toHaveBeenCalledWith(
       'access-tok',
       expect.objectContaining({ email: 'jan@test.nl' }),
+      [],
     );
     expect(createDeal).toHaveBeenCalledWith(
       'access-tok',

@@ -1,5 +1,6 @@
 import { teamleaderRequest } from './client';
 import { normalizePhone, splitContactName } from './mapping';
+import type { TlCustomFieldPayload } from './fieldMappingLogic';
 
 type TlContact = { id: string; emails?: Array<{ type: string; email: string }> };
 
@@ -34,6 +35,7 @@ export async function createContact(
     huisnummer?: string | null;
     plaatsnaam?: string | null;
   },
+  customFields?: TlCustomFieldPayload[],
 ): Promise<string> {
   const { firstName, lastName } = splitContactName(lead.naam_klant || '');
   const body: Record<string, unknown> = {
@@ -57,6 +59,9 @@ export async function createContact(
       },
     ];
   }
+  if (customFields?.length) {
+    body.custom_fields = customFields;
+  }
 
   const created = await teamleaderRequest<{ id: string }>(accessToken, 'contacts.add', body);
   if (!created?.id) throw new Error('contacts.add returned no id');
@@ -66,10 +71,11 @@ export async function createContact(
 export async function findOrCreateContact(
   accessToken: string,
   lead: Parameters<typeof createContact>[1],
+  customFields?: TlCustomFieldPayload[],
 ): Promise<string> {
   if (lead.email?.trim()) {
     const existing = await findContactByEmail(accessToken, lead.email);
     if (existing) return existing;
   }
-  return createContact(accessToken, lead);
+  return createContact(accessToken, lead, customFields);
 }

@@ -77,4 +77,15 @@ describe('buildDealSummary', () => {
     expect(summary).toContain('lead-1');
     expect(summary).toContain('daktype');
   });
+
+  it('uses labeled extra fields when provided', () => {
+    const summary = buildDealSummary(
+      { email: 'a@b.nl' },
+      'assign-1',
+      'lead-1',
+      { 'Type dak': 'Plat' },
+    );
+    expect(summary).toContain('Type dak');
+    expect(summary).toContain('Plat');
+  });
 });

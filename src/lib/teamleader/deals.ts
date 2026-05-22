@@ -1,4 +1,5 @@
 import { teamleaderRequest } from './client';
+import type { TlCustomFieldPayload } from './fieldMappingLogic';
 import type { TeamleaderPipeline } from './types';
 
 export async function listDealPipelines(accessToken: string): Promise<TeamleaderPipeline[]> {
@@ -41,9 +42,10 @@ export async function createDeal(
     title: string;
     summary: string;
     phaseId: string;
+    customFields?: TlCustomFieldPayload[];
   },
 ): Promise<string> {
-  const body = {
+  const body: Record<string, unknown> = {
     title: args.title,
     summary: args.summary,
     phase_id: args.phaseId,
@@ -54,6 +56,9 @@ export async function createDeal(
       },
     },
   };
+  if (args.customFields?.length) {
+    body.custom_fields = args.customFields;
+  }
 
   const created = await teamleaderRequest<{ id: string }>(accessToken, 'deals.create', body);
   if (!created?.id) throw new Error('deals.create returned no id');

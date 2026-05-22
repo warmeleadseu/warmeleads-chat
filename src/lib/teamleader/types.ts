@@ -1,5 +1,7 @@
 export const TEAMLEADER_PROVIDER = 'teamleader' as const;
 
+import type { TeamleaderFieldMappings } from './fieldMappingLogic';
+
 export type TeamleaderIntegrationSettings = {
   enabled?: boolean;
   pipeline_id?: string | null;
@@ -7,6 +9,8 @@ export type TeamleaderIntegrationSettings = {
   deal_title_template?: string | null;
   /** Cached first phase id for selected pipeline */
   phase_id?: string | null;
+  /** Per branche: portaalveld → Teamleader custom field id */
+  field_mappings?: TeamleaderFieldMappings;
 };
 
 export type TeamleaderTokenPair = {

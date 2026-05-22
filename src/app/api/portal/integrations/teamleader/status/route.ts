@@ -8,6 +8,7 @@ import {
   getCustomerOAuthConfig,
   getGlobalOAuthConfig,
 } from '@/lib/teamleader/credentials';
+import { hasSavedFieldMappings } from '@/lib/teamleader/fieldMappingLogic';
 import { TEAMLEADER_PROVIDER } from '@/lib/teamleader/types';
 
 export async function GET(request: NextRequest) {
@@ -64,6 +65,12 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  const customerBranches = session.customer.branches ?? [];
+  const fieldMappingConfigured = hasSavedFieldMappings(
+    integration?.settings?.field_mappings,
+    customerBranches,
+  );
+
   const oauthSource: 'customer' | 'global' | null = customerCfg
     ? 'customer'
     : globalCfg
@@ -77,6 +84,7 @@ export async function GET(request: NextRequest) {
     has_global_oauth_app: !!globalCfg,
     redirect_uri: getCallbackRedirectUri(),
     connected: !!integration?.connected_at,
+    field_mapping_configured: fieldMappingConfigured,
     settings: integration?.settings ?? null,
     connected_at: integration?.connected_at ?? null,
     success_count: successCount ?? 0,
