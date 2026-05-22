@@ -572,6 +572,51 @@ export async function createLeadgenForm(
   return { id: res.id };
 }
 
+/**
+ * Vertaal Meta-fouten bij POST /{page_id}/leadgen_forms naar actionable NL-tekst.
+ * Wordt gebruikt door /api/admin/meta-forms/create en de AI-wizard UI.
+ */
+export function formatMetaLeadFormCreateError(rawMessage: string, metaCode?: number): {
+  error: string;
+  hint?: string;
+} {
+  const msg = rawMessage || '';
+
+  // (#3) = de Facebook-app zelf mag deze API-call niet (niet alleen ontbrekende scope).
+  // Komt vaak voor bij third-party apps (bv. Zapier Automation) terwijl ads/leads-read wél werkt.
+  if (metaCode === 3 || /does not have the capability/i.test(msg)) {
+    return {
+      error:
+        'Jullie Meta-app mag geen Lead Forms programmatisch aanmaken (Meta fout #3).',
+      hint:
+        'De access token hoort waarschijnlijk bij een externe app (zoals Zapier), niet bij een eigen Facebook-app met Marketing API. ' +
+        'Oplossing A: maak een eigen app op developers.facebook.com → voeg product “Marketing API” toe → ' +
+        'vraag Advanced Access aan voor pages_manage_ads + leads_retrieval → genereer een nieuwe System User-token → plak in Koppelingen. ' +
+        'Oplossing B (nu meteen): maak het formulier handmatig in Meta Ads Manager op de gekozen page, ' +
+        'en kies het daarna in AI Campagnes bij “Lead Form”.',
+    };
+  }
+
+  if (/pages_manage_ads|leads_retrieval|#190|#200|access_token/i.test(msg)) {
+    return {
+      error: 'Meta token mist de juiste page-scopes voor Lead Form aanmaken.',
+      hint: 'Genereer een nieuwe System User-token met pages_manage_ads, leads_retrieval en pages_show_list, en update Koppelingen.',
+    };
+  }
+
+  if (/#100|Invalid parameter|questions|context_card|thank_you_page/i.test(msg)) {
+    return {
+      error: 'Meta weigerde de formulier-payload (ongeldige vraag of te lange tekst).',
+      hint: 'Controleer labels, opties en het privacy-URL in stap 3.',
+    };
+  }
+
+  return {
+    error: 'Meta API-fout bij aanmaken van het formulier.',
+    hint: msg.length > 0 ? msg : undefined,
+  };
+}
+
 // ── Internal exports voor tests ──────────────────────────────
 export const __internal = {
   normActId,

@@ -156,7 +156,7 @@ export default function AiLeadFormModal({
 
   // Stap 4 — create
   const [createBusy, setCreateBusy] = useState(false);
-  const [createError, setCreateError] = useState<string | null>(null);
+  const [createError, setCreateError] = useState<{ message: string; hint?: string } | null>(null);
 
   const resetAll = useCallback(() => {
     setStep(1);
@@ -388,22 +388,33 @@ export default function AiLeadFormModal({
           ai_cost_cents: aiCostCents,
         }),
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.ok) {
-        const detail = typeof data.details === 'string' ? data.details : '';
-        setCreateError(detail ? `${data.error || 'Aanmaken mislukt'} — ${detail}` : (data.error || 'Aanmaken mislukt'));
+      const data = await res.json().catch(() => ({})) as {
+        ok?: boolean;
+        error?: string;
+        hint?: string;
+        details?: string;
+        form_id?: string;
+        page_id?: string;
+        name?: string;
+        questions_count?: number;
+      };
+      if (!res.ok || !data.ok || !data.form_id || !data.page_id || !data.name) {
+        setCreateError({
+          message: data.error || 'Aanmaken mislukt',
+          hint: data.hint || (typeof data.details === 'string' ? data.details : undefined),
+        });
         return;
       }
       onCreated({
         form_id: data.form_id,
         page_id: data.page_id,
         name: data.name,
-        questions_count: data.questions_count,
+        questions_count: data.questions_count ?? 0,
       });
       resetAll();
       onClose();
     } catch (err) {
-      setCreateError(err instanceof Error ? err.message : 'Netwerkfout');
+      setCreateError({ message: err instanceof Error ? err.message : 'Netwerkfout' });
     } finally {
       setCreateBusy(false);
     }
@@ -982,7 +993,12 @@ export default function AiLeadFormModal({
                 {createError && (
                   <div className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-3 text-xs text-rose-900">
                     <ExclamationTriangleIcon className="h-4 w-4 shrink-0" />
-                    <div>{createError}</div>
+                    <div className="space-y-1.5">
+                      <p className="font-medium">{createError.message}</p>
+                      {createError.hint && (
+                        <p className="text-rose-800/90 leading-relaxed">{createError.hint}</p>
+                      )}
+                    </div>
                   </div>
                 )}
               </motion.div>

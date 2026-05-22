@@ -21,10 +21,12 @@ import { createServerClient } from '@/lib/supabase';
 import { getPageAccessToken } from '@/lib/meta';
 import {
   createLeadgenForm,
+  formatMetaLeadFormCreateError,
   type LeadgenQuestion,
   type LeadgenContextCard,
   type LeadgenThankYouPage,
   type LeadgenPrivacyPolicy,
+  type MetaApiError,
 } from '@/lib/metaMarketingApi';
 import { isAiCampaignsEnabled } from '@/lib/aiCampaignBudget';
 
@@ -173,20 +175,13 @@ export async function POST(request: NextRequest) {
     formId = res.id;
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Onbekende fout';
-    /**
-     * Mappen van bekende permissie-fouten naar actionable hints. Meta
-     * geeft (#200) "Requires pages_manage_ads" / (#190) "Invalid access
-     * token" / (#100) bij payload-validatie.
-     */
-    const isPerm = /pages_manage_ads|leads_retrieval|access_token|#190|#200/.test(msg);
-    const isPayload = /#100|Invalid parameter|questions|context_card|thank_you_page/i.test(msg);
+    const metaCode = (e as MetaApiError).code;
+    const mapped = formatMetaLeadFormCreateError(msg, metaCode);
     return NextResponse.json({
-      error: isPerm
-        ? 'Meta token mist de juiste page-scopes. Vraag een nieuwe token met pages_manage_ads + leads_retrieval in Koppelingen.'
-        : isPayload
-          ? 'Meta weigerde de formulier-payload. Check vragen/opties op ongeldige tekens of te lange labels.'
-          : 'Meta API-fout bij aanmaken van het formulier.',
+      error: mapped.error,
+      hint: mapped.hint,
       details: msg,
+      meta_code: metaCode,
     }, { status: 502 });
   }
 
