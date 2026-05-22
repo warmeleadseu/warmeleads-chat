@@ -52,15 +52,15 @@ export async function GET(request: NextRequest) {
     .order('created_at', { ascending: false })
     .limit(20);
 
-  const leadIds = [...new Set((recentLogs || []).map((r) => r.lead_id))];
-  const leadMap = new Map<string, { naam_klant: string; branch: string }>();
+  const leadIds = [...new Set((recentLogs || []).map((r) => r.lead_id).filter(Boolean))];
+  const leadMap = new Map<string, { naam_klant: string }>();
   if (leadIds.length > 0) {
     const { data: leads } = await supabase
       .from('leads')
-      .select('id, naam_klant, branch')
+      .select('id, naam_klant')
       .in('id', leadIds);
     for (const l of leads || []) {
-      leadMap.set(l.id, { naam_klant: l.naam_klant, branch: l.branch });
+      leadMap.set(l.id, { naam_klant: l.naam_klant });
     }
   }
 
@@ -86,15 +86,11 @@ export async function GET(request: NextRequest) {
       const lead = leadMap.get(row.lead_id);
       return {
         id: row.id,
-        lead_id: row.lead_id,
-        assignment_id: row.assignment_id,
         status: row.status,
-        teamleader_contact_id: row.teamleader_contact_id,
         teamleader_deal_id: row.teamleader_deal_id,
         error_message: row.error_message,
         created_at: row.created_at,
         lead_name: lead?.naam_klant ?? null,
-        branch: lead?.branch ?? null,
       };
     }),
   });

@@ -6,6 +6,7 @@ import {
   clearCustomerOAuthCredentials,
   saveCustomerOAuthCredentials,
 } from '@/lib/teamleader/credentials';
+import { invalidatePipelineCache } from '@/lib/teamleader/pipelineCache';
 
 export async function PUT(request: NextRequest) {
   const session = await verifyCustomer(request);
@@ -52,5 +53,6 @@ export async function DELETE(request: NextRequest) {
 
   const supabase = createServerClient();
   await clearCustomerOAuthCredentials(supabase, session.customer.id);
+  invalidatePipelineCache(session.customer.id);
   return NextResponse.json({ ok: true });
 }

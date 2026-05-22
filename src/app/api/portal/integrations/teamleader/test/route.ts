@@ -21,48 +21,58 @@ export async function POST(request: NextRequest) {
   const integration = await getTeamleaderIntegration(supabase, session.customer.id);
   if (!integration?.settings.pipeline_id) {
     return NextResponse.json(
-      { error: 'Kies eerst een pipeline' },
+      { error: 'Kies en bewaar eerst een pipeline.' },
       { status: 400 },
     );
   }
 
-  const accessToken = await ensureValidAccessToken(supabase, integration);
-  const phaseId = await resolvePhaseIdForPipeline(
-    supabase,
-    integration,
-    accessToken,
-    integration.settings.pipeline_id,
-  );
-  if (!phaseId) {
-    return NextResponse.json({ error: 'Geen deal-fase voor pipeline' }, { status: 400 });
+  try {
+    const accessToken = await ensureValidAccessToken(supabase, integration);
+    const phaseId = await resolvePhaseIdForPipeline(
+      supabase,
+      integration,
+      accessToken,
+      integration.settings.pipeline_id,
+    );
+    if (!phaseId) {
+      return NextResponse.json(
+        { error: 'Geen deal-fase gevonden voor deze pipeline.' },
+        { status: 400 },
+      );
+    }
+
+    const stamp = new Date().toISOString().slice(0, 16).replace('T', ' ');
+    const contactId = await findOrCreateContact(accessToken, {
+      naam_klant: 'Warme Leads Test',
+      email: `test+${session.customer.id.slice(0, 8)}@warmeleads.test`,
+      telefoonnummer: null,
+      postcode: null,
+      huisnummer: null,
+      plaatsnaam: null,
+    });
+
+    const template =
+      integration.settings.deal_title_template || DEFAULT_DEAL_TITLE_TEMPLATE;
+    const title = template
+      .replace(/\{branch_name\}/g, 'Test')
+      .replace(/\{naam_klant\}/g, 'Warme Leads Test')
+      .replace(/\{branch\}/g, 'test');
+
+    const dealId = await createDeal(accessToken, {
+      contactId,
+      title: `[TEST ${stamp}] ${title}`,
+      summary:
+        'Testdeal aangemaakt vanuit het Warme Leads portaal om de Teamleader-koppeling te verifiëren. Je kunt deze deal en bijbehorend contact veilig verwijderen.',
+      phaseId,
+    });
+
+    return NextResponse.json({
+      ok: true,
+      teamleader_contact_id: contactId,
+      teamleader_deal_id: dealId,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Test mislukt';
+    return NextResponse.json({ error: message }, { status: 502 });
   }
-
-  const contactId = await findOrCreateContact(accessToken, {
-    naam_klant: 'Warme Leads Test',
-    email: `test+${session.customer.id.slice(0, 8)}@warmeleads.test`,
-    telefoonnummer: null,
-    postcode: null,
-    huisnummer: null,
-    plaatsnaam: null,
-  });
-
-  const template =
-    integration.settings.deal_title_template || DEFAULT_DEAL_TITLE_TEMPLATE;
-  const title = template
-    .replace(/\{branch_name\}/g, 'Test')
-    .replace(/\{naam_klant\}/g, 'Warme Leads Test')
-    .replace(/\{branch\}/g, 'test');
-
-  const dealId = await createDeal(accessToken, {
-    contactId,
-    title: `[TEST] ${title}`,
-    summary: 'Testdeal vanuit Warme Leads portaal. Je kunt deze deal verwijderen.',
-    phaseId,
-  });
-
-  return NextResponse.json({
-    ok: true,
-    teamleader_contact_id: contactId,
-    teamleader_deal_id: dealId,
-  });
 }

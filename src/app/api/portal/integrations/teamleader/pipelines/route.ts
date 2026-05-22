@@ -7,9 +7,10 @@ import {
   getTeamleaderIntegration,
 } from '@/lib/teamleader/integrationRepo';
 import { listDealPipelines } from '@/lib/teamleader/deals';
-
-const CACHE_MS = 15 * 60 * 1000;
-const pipelineCache = new Map<string, { at: number; pipelines: Awaited<ReturnType<typeof listDealPipelines>> }>();
+import {
+  getCachedPipelines,
+  setCachedPipelines,
+} from '@/lib/teamleader/pipelineCache';
 
 export async function GET(request: NextRequest) {
   const session = await verifyCustomer(request);
@@ -20,17 +21,26 @@ export async function GET(request: NextRequest) {
   const supabase = createServerClient();
   const integration = await getTeamleaderIntegration(supabase, session.customer.id);
   if (!integration) {
-    return NextResponse.json({ error: 'Teamleader niet gekoppeld' }, { status: 400 });
+    return NextResponse.json(
+      { error: 'Teamleader nog niet gekoppeld', pipelines: [] },
+      { status: 400 },
+    );
   }
 
-  const cacheKey = session.customer.id;
-  const cached = pipelineCache.get(cacheKey);
-  if (cached && Date.now() - cached.at < CACHE_MS) {
-    return NextResponse.json({ pipelines: cached.pipelines });
+  const force = request.nextUrl.searchParams.get('refresh') === '1';
+  if (!force) {
+    const cached = getCachedPipelines(session.customer.id);
+    if (cached) return NextResponse.json({ pipelines: cached, cached: true });
   }
 
-  const accessToken = await ensureValidAccessToken(supabase, integration);
-  const pipelines = await listDealPipelines(accessToken);
-  pipelineCache.set(cacheKey, { at: Date.now(), pipelines });
-  return NextResponse.json({ pipelines });
+  try {
+    const accessToken = await ensureValidAccessToken(supabase, integration);
+    const pipelines = await listDealPipelines(accessToken);
+    setCachedPipelines(session.customer.id, pipelines);
+    return NextResponse.json({ pipelines, cached: false });
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : 'Kon pipelines niet ophalen';
+    return NextResponse.json({ error: message, pipelines: [] }, { status: 502 });
+  }
 }

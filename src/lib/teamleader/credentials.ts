@@ -119,26 +119,47 @@ export async function saveCustomerOAuthCredentials(
   supabase: SupabaseClient,
   customerId: string,
   args: { clientId: string; clientSecret: string },
-): Promise<void> {
+): Promise<{ changed: boolean }> {
   const clientId = stripEnvValue(args.clientId);
   const clientSecret = stripEnvValue(args.clientSecret);
   if (!clientId || !clientSecret) {
     throw new Error('Vul zowel Client ID als Client Secret in.');
   }
+
+  const existing = await getCustomerOAuthConfig(supabase, customerId);
+  const changed =
+    !existing ||
+    existing.clientId !== clientId ||
+    existing.clientSecret !== clientSecret;
+
   const now = new Date().toISOString();
-  const { error } = await supabase.from('customer_integrations').upsert(
-    {
-      customer_id: customerId,
-      provider: TEAMLEADER_PROVIDER,
-      client_id_enc: encryptSecret(clientId),
-      client_secret_enc: encryptSecret(clientSecret),
-      updated_at: now,
-    },
-    { onConflict: 'customer_id,provider' },
-  );
+  const payload: Record<string, unknown> = {
+    customer_id: customerId,
+    provider: TEAMLEADER_PROVIDER,
+    client_id_enc: encryptSecret(clientId),
+    client_secret_enc: encryptSecret(clientSecret),
+    updated_at: now,
+  };
+  if (changed) {
+    // Bestaande tokens zijn aan de oude app gekoppeld → ongeldig maken.
+    payload.access_token_enc = null;
+    payload.refresh_token_enc = null;
+    payload.expires_at = null;
+    payload.connected_at = null;
+  }
+
+  const { error } = await supabase
+    .from('customer_integrations')
+    .upsert(payload, { onConflict: 'customer_id,provider' });
   if (error) throw new Error(error.message);
+  return { changed };
 }
 
+/**
+ * Verwijder klant-eigen OAuth-app credentials. Bestaande access/refresh
+ * tokens zijn onbruikbaar zonder die credentials (en kunnen niet meer
+ * vernieuwd worden), dus die ruimen we tegelijk op.
+ */
 export async function clearCustomerOAuthCredentials(
   supabase: SupabaseClient,
   customerId: string,
@@ -148,6 +169,10 @@ export async function clearCustomerOAuthCredentials(
     .update({
       client_id_enc: null,
       client_secret_enc: null,
+      access_token_enc: null,
+      refresh_token_enc: null,
+      expires_at: null,
+      connected_at: null,
       updated_at: new Date().toISOString(),
     })
     .eq('customer_id', customerId)

@@ -78,14 +78,19 @@ export async function saveTeamleaderTokens(
 }
 
 /**
- * Ontkoppelen: gooi tokens + settings weg, maar bewaar de klant-eigen
- * OAuth-app credentials (client_id/secret) zodat klanten niet opnieuw
- * hun Teamleader-integratie hoeven te leveren bij opnieuw koppelen.
+ * Ontkoppelen: gooi alleen de OAuth-tokens weg. Pipeline-keuze,
+ * deal-titel-template en eigen OAuth-app credentials blijven bewaard
+ * zodat opnieuw koppelen één klik is.
  */
 export async function disconnectTeamleader(
   supabase: SupabaseClient,
   customerId: string,
 ): Promise<void> {
+  const existing = await getRawIntegrationRow(supabase, customerId);
+  const preservedSettings: TeamleaderIntegrationSettings = {
+    ...(existing?.settings ?? {}),
+    enabled: false,
+  };
   await supabase
     .from('customer_integrations')
     .update({
@@ -93,14 +98,14 @@ export async function disconnectTeamleader(
       refresh_token_enc: null,
       expires_at: null,
       connected_at: null,
-      settings: { enabled: false },
+      settings: preservedSettings,
       updated_at: new Date().toISOString(),
     })
     .eq('customer_id', customerId)
     .eq('provider', TEAMLEADER_PROVIDER);
 }
 
-/** Volledig opruimen — ook de eigen OAuth-app credentials. */
+/** Volledig opruimen — ook de eigen OAuth-app credentials en sync-log. */
 export async function fullyRemoveTeamleader(
   supabase: SupabaseClient,
   customerId: string,
@@ -110,6 +115,22 @@ export async function fullyRemoveTeamleader(
     .delete()
     .eq('customer_id', customerId)
     .eq('provider', TEAMLEADER_PROVIDER);
+}
+
+/** Lees de row zonder decrypt te forceren (helper voor disconnect). */
+async function getRawIntegrationRow(
+  supabase: SupabaseClient,
+  customerId: string,
+): Promise<IntegrationRow | null> {
+  const { data } = await supabase
+    .from('customer_integrations')
+    .select(
+      'id, customer_id, access_token_enc, refresh_token_enc, expires_at, settings, connected_at',
+    )
+    .eq('customer_id', customerId)
+    .eq('provider', TEAMLEADER_PROVIDER)
+    .maybeSingle();
+  return (data as IntegrationRow | null) ?? null;
 }
 
 export async function updateTeamleaderSettings(

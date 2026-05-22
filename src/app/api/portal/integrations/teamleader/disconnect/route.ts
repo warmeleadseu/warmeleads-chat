@@ -6,6 +6,7 @@ import {
   disconnectTeamleader,
   fullyRemoveTeamleader,
 } from '@/lib/teamleader/integrationRepo';
+import { invalidatePipelineCache } from '@/lib/teamleader/pipelineCache';
 
 /**
  * Default ontkoppelt alleen de OAuth-tokens (klant kan opnieuw verbinden
@@ -25,5 +26,6 @@ export async function POST(request: NextRequest) {
   } else {
     await disconnectTeamleader(supabase, session.customer.id);
   }
+  invalidatePipelineCache(session.customer.id);
   return NextResponse.json({ ok: true, purged: purge });
 }

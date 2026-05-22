@@ -8,6 +8,7 @@ import {
   resolvePhaseIdForPipeline,
   updateTeamleaderSettings,
 } from '@/lib/teamleader/integrationRepo';
+import { invalidatePipelineCache } from '@/lib/teamleader/pipelineCache';
 
 export async function PUT(request: NextRequest) {
   const session = await verifyCustomer(request);
@@ -42,21 +43,28 @@ export async function PUT(request: NextRequest) {
   let settings = await updateTeamleaderSettings(supabase, session.customer.id, patch);
 
   if (body.pipeline_id) {
-    const accessToken = await ensureValidAccessToken(supabase, integration);
-    const phaseId = await resolvePhaseIdForPipeline(
-      supabase,
-      { ...integration, settings },
-      accessToken,
-      body.pipeline_id,
-    );
-    if (!phaseId) {
-      return NextResponse.json(
-        { error: 'Geen fase gevonden voor deze pipeline' },
-        { status: 400 },
+    try {
+      const accessToken = await ensureValidAccessToken(supabase, integration);
+      const phaseId = await resolvePhaseIdForPipeline(
+        supabase,
+        { ...integration, settings },
+        accessToken,
+        body.pipeline_id,
       );
+      if (!phaseId) {
+        return NextResponse.json(
+          { error: 'Geen fase gevonden voor deze pipeline' },
+          { status: 400 },
+        );
+      }
+      settings = (await getTeamleaderIntegration(supabase, session.customer.id))!.settings;
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Kon pipeline-fase niet bepalen';
+      return NextResponse.json({ error: message }, { status: 502 });
     }
-    settings = (await getTeamleaderIntegration(supabase, session.customer.id))!.settings;
   }
 
+  invalidatePipelineCache(session.customer.id);
   return NextResponse.json({ settings });
 }

@@ -19,7 +19,6 @@ import {
 type SyncRow = {
   id: string;
   lead_name: string | null;
-  branch: string | null;
   status: string;
   teamleader_deal_id: string | null;
   error_message: string | null;
@@ -43,6 +42,8 @@ type StatusResponse = {
   } | null;
   success_count: number;
   last_error: string | null;
+  last_error_at: string | null;
+  connected_at: string | null;
   recent_syncs: SyncRow[];
 };
 
@@ -106,18 +107,24 @@ export function TeamleaderIntegrationSection({
     }
   }, []);
 
-  const loadPipelines = useCallback(async () => {
-    setPipelinesLoading(true);
-    try {
-      const res = await portalFetch('/api/portal/integrations/teamleader/pipelines');
-      if (res.ok) {
-        const d = await res.json();
-        setPipelines(d.pipelines || []);
+  const loadPipelines = useCallback(
+    async (opts: { force?: boolean; silent?: boolean } = {}) => {
+      setPipelinesLoading(true);
+      try {
+        const qs = opts.force ? '?refresh=1' : '';
+        const res = await portalFetch(`/api/portal/integrations/teamleader/pipelines${qs}`);
+        const d = await res.json().catch(() => ({}));
+        if (res.ok) {
+          setPipelines(d.pipelines || []);
+        } else if (!opts.silent) {
+          showToast(d.error || 'Kon pipelines niet ophalen', 'error');
+        }
+      } finally {
+        setPipelinesLoading(false);
       }
-    } finally {
-      setPipelinesLoading(false);
-    }
-  }, []);
+    },
+    [showToast],
+  );
 
   useEffect(() => {
     if (!isOwner) return;
@@ -125,18 +132,25 @@ export function TeamleaderIntegrationSection({
   }, [isOwner, loadStatus]);
 
   useEffect(() => {
+    if (!oauthHint) return;
     if (oauthHint === 'connected') {
       showToast('Teamleader succesvol gekoppeld', 'success');
       void loadStatus();
-    }
-    if (oauthHint === 'error') {
+    } else if (oauthHint === 'error') {
       const reasonLabel = describeOauthError(oauthReason);
       showToast(`Teamleader koppelen mislukt: ${reasonLabel}`, 'error');
+    }
+    // Clean URL zodat refresh geen tweede toast triggert.
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('teamleader');
+      url.searchParams.delete('reason');
+      window.history.replaceState({}, '', url.toString());
     }
   }, [oauthHint, oauthReason, showToast, loadStatus]);
 
   useEffect(() => {
-    if (status?.connected) void loadPipelines();
+    if (status?.connected) void loadPipelines({ silent: true });
   }, [status?.connected, loadPipelines]);
 
   if (!isOwner) return null;
@@ -145,13 +159,15 @@ export function TeamleaderIntegrationSection({
     window.location.href = '/api/portal/integrations/teamleader/connect';
   };
 
-  const disconnect = async () => {
-    if (!confirm('Teamleader ontkoppelen? Automatische sync stopt direct.')) return;
-    const res = await portalFetch('/api/portal/integrations/teamleader/disconnect', {
-      method: 'POST',
-    });
+  const disconnect = async (opts: { purge?: boolean } = {}) => {
+    const msg = opts.purge
+      ? 'Alle Teamleader-data (tokens + eigen app-credentials) verwijderen?'
+      : 'Teamleader ontkoppelen? Automatische sync stopt direct.';
+    if (!confirm(msg)) return;
+    const path = `/api/portal/integrations/teamleader/disconnect${opts.purge ? '?purge=1' : ''}`;
+    const res = await portalFetch(path, { method: 'POST' });
     if (res.ok) {
-      showToast('Teamleader ontkoppeld');
+      showToast(opts.purge ? 'Teamleader volledig verwijderd' : 'Teamleader ontkoppeld');
       await loadStatus();
     } else {
       showToast('Ontkoppelen mislukt', 'error');
@@ -225,6 +241,13 @@ export function TeamleaderIntegrationSection({
   };
 
   const runTest = async () => {
+    if (
+      !confirm(
+        'Een test maakt een echt contact + deal aan in jouw Teamleader (duidelijk gelabeld als [TEST]). Doorgaan?',
+      )
+    ) {
+      return;
+    }
     setTesting(true);
     try {
       const res = await portalFetch('/api/portal/integrations/teamleader/test', {
@@ -484,9 +507,12 @@ export function TeamleaderIntegrationSection({
           <button
             type="button"
             onClick={connect}
-            className="flex min-h-11 w-full items-center justify-center rounded-xl bg-brand-purple px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-purple/90 sm:w-auto sm:px-6"
+            className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-brand-purple px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-purple/90 sm:w-auto sm:px-6"
           >
-            Stap 3 — Koppel mijn Teamleader-account
+            <LinkIcon className="h-4 w-4" />
+            {status.has_customer_oauth_app
+              ? 'Koppel mijn Teamleader-account'
+              : 'Stap 3 — Koppel mijn Teamleader-account'}
           </button>
         )}
 
@@ -509,12 +535,22 @@ export function TeamleaderIntegrationSection({
 
             <div className="space-y-4">
               <div>
-                <label
-                  htmlFor="tl-pipeline"
-                  className="mb-1.5 block text-xs font-medium text-slate-700"
-                >
-                  Pipeline
-                </label>
+                <div className="mb-1.5 flex items-center justify-between gap-2">
+                  <label htmlFor="tl-pipeline" className="block text-xs font-medium text-slate-700">
+                    Pipeline
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => void loadPipelines({ force: true })}
+                    disabled={pipelinesLoading}
+                    className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700 disabled:opacity-50"
+                  >
+                    <ArrowPathIcon
+                      className={`h-3.5 w-3.5 ${pipelinesLoading ? 'animate-spin' : ''}`}
+                    />
+                    Vernieuwen
+                  </button>
+                </div>
                 <select
                   id="tl-pipeline"
                   value={pipelineId}
@@ -531,7 +567,7 @@ export function TeamleaderIntegrationSection({
                 </select>
                 {status.settings?.pipeline_name && !pipelineId && (
                   <p className="mt-1 text-xs text-slate-400">
-                    Opgeslagen: {status.settings.pipeline_name}
+                    Eerder opgeslagen: {status.settings.pipeline_name}
                   </p>
                 )}
               </div>
@@ -599,7 +635,8 @@ export function TeamleaderIntegrationSection({
               <button
                 type="button"
                 onClick={() => void disconnect()}
-                className="min-h-11 rounded-xl border border-red-200 px-4 py-2.5 text-sm font-medium text-red-600 sm:ml-auto"
+                title="Tokens wissen, eigen app blijft bewaard"
+                className="min-h-11 rounded-xl border border-red-200 px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50 sm:ml-auto"
               >
                 Ontkoppelen
               </button>
@@ -608,9 +645,16 @@ export function TeamleaderIntegrationSection({
             {status.last_error && (
               <div className="flex gap-2 rounded-xl border border-red-100 bg-red-50 p-3 text-sm text-red-800">
                 <ExclamationTriangleIcon className="h-5 w-5 shrink-0" />
-                <div>
-                  <p className="font-medium">Laatste fout</p>
-                  <p className="mt-0.5 text-xs leading-relaxed">{status.last_error}</p>
+                <div className="min-w-0">
+                  <p className="font-medium">
+                    Laatste sync-fout
+                    {status.last_error_at && (
+                      <span className="ml-1.5 font-normal text-red-600/80">
+                        — {formatSyncTime(status.last_error_at)}
+                      </span>
+                    )}
+                  </p>
+                  <p className="mt-0.5 break-words text-xs leading-relaxed">{status.last_error}</p>
                 </div>
               </div>
             )}
@@ -676,27 +720,34 @@ export function TeamleaderIntegrationSection({
                   {status.recent_syncs.map((row) => (
                     <div
                       key={row.id}
-                      className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50/50 px-3 py-3"
+                      className="rounded-xl border border-slate-100 bg-slate-50/50 px-3 py-3"
                     >
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium text-slate-900">
-                          {row.lead_name || 'Onbekende lead'}
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-slate-900">
+                            {row.lead_name || 'Onbekende lead'}
+                          </p>
+                          <p className="text-xs text-slate-500">{formatSyncTime(row.created_at)}</p>
+                        </div>
+                        <div className="flex shrink-0 flex-col items-end gap-1">
+                          <SyncStatusBadge status={row.status} error={row.error_message} />
+                          {row.teamleader_deal_id && (
+                            <a
+                              href={`https://focus.teamleader.eu/deals/${row.teamleader_deal_id}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs font-medium text-brand-purple"
+                            >
+                              Open deal
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                      {row.status === 'failed' && row.error_message && (
+                        <p className="mt-2 break-words text-xs text-red-600">
+                          {row.error_message}
                         </p>
-                        <p className="text-xs text-slate-500">{formatSyncTime(row.created_at)}</p>
-                      </div>
-                      <div className="flex shrink-0 flex-col items-end gap-1">
-                        <SyncStatusBadge status={row.status} error={row.error_message} />
-                        {row.teamleader_deal_id && (
-                          <a
-                            href={`https://focus.teamleader.eu/deals/${row.teamleader_deal_id}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-xs font-medium text-brand-purple"
-                          >
-                            Open deal
-                          </a>
-                        )}
-                      </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -718,10 +769,16 @@ export function TeamleaderIntegrationSection({
 
 function describeOauthError(reason?: string | null): string {
   if (!reason) return 'onbekende fout';
-  if (reason === 'no_oauth_config') return 'voer eerst je Client ID/Secret in';
+  if (reason === 'no_oauth_config') return 'voer eerst je Client ID en Secret in';
   if (reason === 'invalid_state') return 'sessie verlopen — probeer opnieuw';
   if (reason === 'missing_code') return 'Teamleader stuurde geen autorisatiecode terug';
   if (reason === 'access_denied') return 'toestemming in Teamleader geweigerd';
+  if (/invalid_client/i.test(reason))
+    return 'Client ID of Secret klopt niet — controleer de waarden in Teamleader';
+  if (/invalid_grant/i.test(reason))
+    return 'Autorisatiecode is niet (meer) geldig — probeer opnieuw te koppelen';
+  if (/redirect/i.test(reason))
+    return 'Redirect URI komt niet overeen met je Teamleader-integratie';
   return reason;
 }
 
