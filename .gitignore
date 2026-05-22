@@ -43,3 +43,8 @@ next-env.d.ts
 
 # supabase CLI cache
 supabase/.temp/
+
+# Meta App Review opname-output (genereer met scripts/record-meta-app-review*)
+assets/meta-app-review/*.mp4
+assets/meta-app-review/*.webm
+assets/meta-app-review/_tmp/
