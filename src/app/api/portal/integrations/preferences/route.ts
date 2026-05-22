@@ -13,6 +13,7 @@ import {
   getPreferredCrmProvider,
   setPreferredCrmProvider,
 } from '@/lib/integrations/crmPreferences';
+import { getGoogleSheetsIntegration } from '@/lib/googleSheets/integrationRepo';
 import { getTeamleaderIntegration } from '@/lib/teamleader/integrationRepo';
 
 export async function GET(request: NextRequest) {
@@ -24,17 +25,18 @@ export async function GET(request: NextRequest) {
   const supabase = createServerClient();
   const customerId = session.customer.id;
 
-  const [preferredStored, integration] = await Promise.all([
+  const [preferredStored, teamleaderIntegration, sheetsIntegration] = await Promise.all([
     getPreferredCrmProvider(supabase, customerId),
     getTeamleaderIntegration(supabase, customerId),
+    getGoogleSheetsIntegration(supabase, customerId),
   ]);
 
-  const teamleaderConnected = !!integration?.connected_at;
+  const teamleaderConnected = !!teamleaderIntegration?.connected_at;
+  const sheetsConnected = !!sheetsIntegration?.connected_at;
   let preferred = preferredStored;
 
-  if (teamleaderConnected) {
-    preferred = 'teamleader';
-  }
+  if (teamleaderConnected && !preferred) preferred = 'teamleader';
+  if (sheetsConnected && !preferred) preferred = 'google_sheets';
 
   return NextResponse.json({
     preferred_crm_provider: preferred,
@@ -48,7 +50,16 @@ export async function GET(request: NextRequest) {
     connections: {
       teamleader: {
         connected: teamleaderConnected,
-        configured: !!integration || teamleaderConnected,
+        configured: !!teamleaderIntegration || teamleaderConnected,
+      },
+      google_sheets: {
+        connected: sheetsConnected,
+        configured:
+          sheetsConnected &&
+          Boolean(
+            sheetsIntegration?.settings?.spreadsheet_id &&
+              sheetsIntegration?.settings?.sheet_name,
+          ),
       },
     },
   });

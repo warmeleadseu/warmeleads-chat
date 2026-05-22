@@ -9,11 +9,15 @@ export function IntegrationsTab({
   showToast,
   oauthHint,
   oauthReason,
+  sheetsOauthHint,
+  sheetsOauthReason,
 }: {
   isOwner: boolean;
   showToast: (msg: string, type?: 'success' | 'error') => void;
   oauthHint?: string | null;
   oauthReason?: string | null;
+  sheetsOauthHint?: string | null;
+  sheetsOauthReason?: string | null;
 }) {
   if (!isOwner) {
     return (
@@ -42,6 +46,8 @@ export function IntegrationsTab({
         showToast={showToast}
         oauthHint={oauthHint}
         oauthReason={oauthReason}
+        sheetsOauthHint={sheetsOauthHint}
+        sheetsOauthReason={sheetsOauthReason}
       />
     </div>
   );

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
+import { syncAssignmentToGoogleSheets } from '@/lib/googleSheets/syncAssignment';
+import { GOOGLE_SHEETS_PROVIDER } from '@/lib/googleSheets/types';
 import { syncAssignmentToTeamleader } from '@/lib/teamleader/syncAssignment';
 import { TEAMLEADER_PROVIDER } from '@/lib/teamleader/types';
 
@@ -14,12 +16,12 @@ export async function GET(request: NextRequest) {
   const supabase = createServerClient();
   const { data: failed } = await supabase
     .from('integration_sync_log')
-    .select('customer_id, lead_id, assignment_id, attempts, created_at')
-    .eq('provider', TEAMLEADER_PROVIDER)
+    .select('customer_id, lead_id, assignment_id, attempts, created_at, provider')
+    .in('provider', [TEAMLEADER_PROVIDER, GOOGLE_SHEETS_PROVIDER])
     .eq('status', 'failed')
     .lt('attempts', MAX_ATTEMPTS)
     .order('created_at', { ascending: true })
-    .limit(25);
+    .limit(40);
 
   if (!failed?.length) {
     return NextResponse.json({ retried: 0 });
@@ -34,11 +36,19 @@ export async function GET(request: NextRequest) {
     if (hoursSince < minWaitHours) continue;
 
     try {
-      await syncAssignmentToTeamleader({
-        customerId: row.customer_id,
-        leadId: row.lead_id,
-        assignmentId: row.assignment_id,
-      });
+      if (row.provider === GOOGLE_SHEETS_PROVIDER) {
+        await syncAssignmentToGoogleSheets({
+          customerId: row.customer_id,
+          leadId: row.lead_id,
+          assignmentId: row.assignment_id,
+        });
+      } else {
+        await syncAssignmentToTeamleader({
+          customerId: row.customer_id,
+          leadId: row.lead_id,
+          assignmentId: row.assignment_id,
+        });
+      }
       succeeded++;
     } catch {
       /* logged in sync log */

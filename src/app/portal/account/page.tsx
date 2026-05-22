@@ -1165,6 +1165,8 @@ export default function AccountPage() {
   const searchParams = useSearchParams();
   const teamleaderOauthHint = searchParams.get('teamleader');
   const teamleaderOauthReason = searchParams.get('reason');
+  const sheetsOauthHint = searchParams.get('sheets');
+  const sheetsOauthReason = searchParams.get('sheets_reason') || searchParams.get('reason');
   const [activeTab, setActiveTab] = useState<TabKey>('account');
 
   const [accountData, setAccountData] = useState<AccountData | null>(null);
@@ -1313,7 +1315,7 @@ export default function AccountPage() {
     const tab = searchParams.get('tab');
     if (tab === 'invoices') setActiveTab('invoices');
     else if (tab === 'integraties') setActiveTab('integraties');
-    if (searchParams.get('teamleader')) setActiveTab('integraties');
+    if (searchParams.get('teamleader') || searchParams.get('sheets')) setActiveTab('integraties');
 
     const paid = searchParams.get('paid');
     if (paid === 'invoice') {
@@ -1403,6 +1405,8 @@ export default function AccountPage() {
               showToast={showToast}
               oauthHint={teamleaderOauthHint}
               oauthReason={teamleaderOauthReason}
+              sheetsOauthHint={sheetsOauthHint}
+              sheetsOauthReason={sheetsOauthHint ? sheetsOauthReason : null}
             />
           )}
           {activeTab === 'insights' && (

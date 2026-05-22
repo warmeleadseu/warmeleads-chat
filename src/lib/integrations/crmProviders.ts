@@ -1,4 +1,9 @@
-export type CrmProviderId = 'teamleader' | 'hubspot' | 'pipedrive' | 'salesforce';
+export type CrmProviderId =
+  | 'teamleader'
+  | 'google_sheets'
+  | 'hubspot'
+  | 'pipedrive'
+  | 'salesforce';
 
 export type CrmProviderStatus = 'available' | 'coming_soon';
 
@@ -21,6 +26,15 @@ export const CRM_PROVIDERS: CrmProvider[] = [
       'Leads automatisch als contact en deal in je Teamleader-account. Je gebruikt je eigen OAuth-app (BYOA).',
     status: 'available',
     setupHint: 'Registreer een private app in de Teamleader Marketplace en autoriseer de koppeling.',
+  },
+  {
+    id: 'google_sheets',
+    name: 'Google Spreadsheets',
+    shortName: 'Sheets',
+    description:
+      'Nieuwe leads automatisch als rij in je eigen Google Spreadsheet. Koppel je Google-account en map kolommen per branche.',
+    status: 'available',
+    setupHint: 'Autoriseer Google, kies je spreadsheet en koppel portaalvelden aan kolommen.',
   },
   {
     id: 'hubspot',

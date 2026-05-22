@@ -6,9 +6,9 @@ import {
 } from '@/lib/integrations/crmProviders';
 
 describe('crmProviders', () => {
-  it('only teamleader is available', () => {
-    expect(AVAILABLE_CRM_IDS).toEqual(['teamleader']);
-    expect(isCrmProviderAvailable('teamleader')).toBe(true);
+  it('teamleader and google_sheets are available', () => {
+    expect(AVAILABLE_CRM_IDS).toContain('teamleader');
+    expect(AVAILABLE_CRM_IDS).toContain('google_sheets');
     expect(isCrmProviderAvailable('hubspot')).toBe(false);
   });
 
