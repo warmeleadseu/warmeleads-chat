@@ -34,6 +34,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { usePushNotifications } from '../usePushNotifications';
 import { PageHeader } from '../_ui';
+import { TeamleaderIntegrationSection } from './TeamleaderIntegrationSection';
 
 /* ─── Types ────────────────────────────────────────────────── */
 
@@ -182,11 +183,15 @@ function AccountTab({
   loading,
   showToast,
   accountManager,
+  isOwner,
+  teamleaderOauthHint,
 }: {
   data: AccountData | null;
   loading: boolean;
   showToast: (msg: string, type?: 'success' | 'error') => void;
   accountManager: AccountManagerData | null;
+  isOwner: boolean;
+  teamleaderOauthHint?: string | null;
 }) {
   const [currentPw, setCurrentPw] = useState('');
   const [newPw, setNewPw] = useState('');
@@ -457,6 +462,12 @@ function AccountTab({
 
       {/* Push notificaties */}
       <AccountPushToggle showToast={showToast} />
+
+      <TeamleaderIntegrationSection
+        isOwner={isOwner}
+        showToast={showToast}
+        oauthHint={teamleaderOauthHint}
+      />
 
       {/* Member since */}
       <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -1158,8 +1169,9 @@ function OrdersTab({ data, loading, onDelete }: { data: OrderData[]; loading: bo
 }
 
 export default function AccountPage() {
-  const { customer } = usePortal();
+  const { customer, isOwner } = usePortal();
   const searchParams = useSearchParams();
+  const teamleaderOauthHint = searchParams.get('teamleader');
   const [activeTab, setActiveTab] = useState<TabKey>('account');
 
   const [accountData, setAccountData] = useState<AccountData | null>(null);
@@ -1387,6 +1399,8 @@ export default function AccountPage() {
               loading={accountLoading}
               showToast={showToast}
               accountManager={accountManager}
+              isOwner={isOwner}
+              teamleaderOauthHint={teamleaderOauthHint}
             />
           )}
           {activeTab === 'insights' && (

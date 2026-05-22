@@ -33,8 +33,17 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: 'key en value zijn verplicht' }, { status: 400 });
   }
 
+  let normalized = String(value);
+  if (
+    key.includes('token') ||
+    key.includes('secret') ||
+    key.startsWith('teamleader_')
+  ) {
+    normalized = normalized.replace(/[\r\n\u2028\u2029]+/g, '').trim();
+  }
+
   const { error } = await supabase.from('app_settings').upsert(
-    { key, value: String(value), updated_at: new Date().toISOString() },
+    { key, value: normalized, updated_at: new Date().toISOString() },
     { onConflict: 'key' }
   );
 

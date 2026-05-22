@@ -517,16 +517,25 @@ export async function distributeLead(
     const externalOffset = (batchForCheck as any)?.leads_delivered_external || 0;
     if (batchForCheck && (currentCount || 0) + externalOffset >= batchForCheck.batch_size) continue;
 
-    const { error } = await supabase
+    const { data: insertedAssignment, error } = await supabase
       .from('lead_assignments')
       .insert({
         lead_id: lead.id,
         customer_id: m.customer_id,
         batch_id: m.batch_id,
         distance_km: m.distance_km,
-      });
+      })
+      .select('id')
+      .single();
 
-    if (error) continue;
+    if (error || !insertedAssignment) continue;
+
+    const { onLeadAssignedToCustomer } = await import('@/lib/integrations/onLeadAssigned');
+    onLeadAssignedToCustomer({
+      customerId: m.customer_id,
+      leadId: lead.id,
+      assignmentId: insertedAssignment.id,
+    });
 
     await syncBatchDelivered(supabase, m.batch_id);
 
@@ -802,11 +811,19 @@ export async function backfillBatch(batchId: string, lookbackDays: number): Prom
     }
     if (!inRange) continue;
 
-    const { error } = await supabase
+    const { data: insertedAssignment, error } = await supabase
       .from('lead_assignments')
-      .insert({ lead_id: lead.id, customer_id: batch.customer_id, batch_id: batch.id, distance_km: Math.round(bestDist * 10) / 10 });
+      .insert({ lead_id: lead.id, customer_id: batch.customer_id, batch_id: batch.id, distance_km: Math.round(bestDist * 10) / 10 })
+      .select('id')
+      .single();
 
-    if (!error) {
+    if (!error && insertedAssignment) {
+      const { onLeadAssignedToCustomer } = await import('@/lib/integrations/onLeadAssigned');
+      onLeadAssignedToCustomer({
+        customerId: batch.customer_id,
+        leadId: lead.id,
+        assignmentId: insertedAssignment.id,
+      });
       assigned++;
       runningAssignCount++;
       alreadyAssigned.add(lead.id);

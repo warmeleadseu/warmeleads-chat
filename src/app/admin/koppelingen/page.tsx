@@ -341,6 +341,8 @@ export default function KoppelingenPage() {
       {/* Meta Ads koppeling */}
       <MetaAdsSection />
 
+      <TeamleaderOAuthSection />
+
       {/* Admin account */}
       <div className="mt-10 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="mb-3 text-sm font-semibold text-slate-900">Admin account</h2>
@@ -361,6 +363,202 @@ export default function KoppelingenPage() {
           />
         )}
       </AnimatePresence>
+    </div>
+  );
+}
+
+/* ───────── Teamleader OAuth (Warme Leads-app, klanten koppelen zelf) ───────── */
+
+function TeamleaderOAuthSection() {
+  const [clientId, setClientId] = useState('');
+  const [clientSecret, setClientSecret] = useState('');
+  const [redirectUri, setRedirectUri] = useState('');
+  const [status, setStatus] = useState<{
+    configured: boolean;
+    redirect_uri: string | null;
+  } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [showSecret, setShowSecret] = useState(false);
+
+  const fetchStatus = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await adminFetch('/api/admin/integrations/teamleader/status');
+      if (res.ok) setStatus(await res.json());
+    } catch { /* ignore */ }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { void fetchStatus(); }, [fetchStatus]);
+
+  const save = async () => {
+    if (!clientId && !clientSecret && !redirectUri) return;
+    setSaving(true);
+    setSaved(false);
+    try {
+      const tasks: Promise<Response>[] = [];
+      if (clientId.trim()) {
+        tasks.push(
+          adminFetch('/api/admin/settings', {
+            method: 'PUT',
+            body: JSON.stringify({ key: 'teamleader_client_id', value: clientId.trim() }),
+          }),
+        );
+      }
+      if (clientSecret.trim()) {
+        tasks.push(
+          adminFetch('/api/admin/settings', {
+            method: 'PUT',
+            body: JSON.stringify({ key: 'teamleader_client_secret', value: clientSecret.trim() }),
+          }),
+        );
+      }
+      if (redirectUri.trim()) {
+        tasks.push(
+          adminFetch('/api/admin/settings', {
+            method: 'PUT',
+            body: JSON.stringify({ key: 'teamleader_redirect_uri', value: redirectUri.trim() }),
+          }),
+        );
+      }
+      await Promise.all(tasks);
+      setClientId('');
+      setClientSecret('');
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+      fetchStatus();
+    } catch { /* ignore */ }
+    setSaving(false);
+  };
+
+  const prodCallback =
+    typeof window !== 'undefined'
+      ? `${window.location.origin}/api/portal/integrations/teamleader/callback`
+      : 'https://warmeleads.eu/api/portal/integrations/teamleader/callback';
+
+  return (
+    <div className="mt-10 rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="border-b border-slate-100 px-5 py-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-50">
+            <LinkIcon className="h-5 w-5 text-violet-600" />
+          </div>
+          <div>
+            <h2 className="text-sm font-bold text-slate-900">Teamleader Focus (klantportaal)</h2>
+            <p className="text-xs text-slate-500">
+              Eén OAuth-app voor Warme Leads — klanten koppelen hun eigen Teamleader-account in het portaal
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-4 p-5">
+        <div className="rounded-lg border border-blue-100 bg-blue-50/60 p-4 text-sm text-blue-900">
+          <p className="font-medium">Hoe het werkt</p>
+          <ol className="mt-2 list-decimal space-y-1 pl-4 text-xs text-blue-800">
+            <li>
+              Maak <strong>één</strong> integratie op{' '}
+              <a
+                href="https://marketplace.focus.teamleader.eu/build"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium underline"
+              >
+                Teamleader Marketplace
+              </a>{' '}
+              (naam: Warme Leads).
+            </li>
+            <li>
+              Whitelist deze redirect URI (exact, geen spaties/newlines):{' '}
+              <code className="mt-1 block break-all rounded bg-white px-2 py-1 font-mono text-[11px] text-violet-700">
+                {prodCallback}
+              </code>
+            </li>
+            <li>Plak hieronder de Client ID en Client Secret van die app (één keer).</li>
+            <li>
+              Klanten (bijv. Sergio) gaan in het portaal → Account → <strong>Koppel Teamleader</strong> — hun
+              tokens worden per klant opgeslagen; jij hoeft geen IDs per klant te beheren.
+            </li>
+          </ol>
+        </div>
+
+        {loading ? (
+          <div className="h-20 animate-pulse rounded-lg bg-slate-50" />
+        ) : status?.configured ? (
+          <div className="flex items-start gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+            <CheckCircleIcon className="mt-0.5 h-5 w-5 shrink-0 text-emerald-500" />
+            <div className="text-sm">
+              <p className="font-medium text-emerald-800">OAuth-app geconfigureerd</p>
+              <p className="mt-0.5 break-all text-xs text-emerald-700">
+                Redirect: {status.redirect_uri || prodCallback}
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+            <InformationCircleIcon className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
+            <p className="text-sm text-amber-800">
+              Nog geen credentials. Zonder Client ID/Secret kunnen klanten Teamleader nog niet koppelen in het portaal.
+            </p>
+          </div>
+        )}
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="sm:col-span-2">
+            <label className="mb-1 block text-xs font-medium text-slate-500">Client ID</label>
+            <input
+              value={clientId}
+              onChange={(e) => setClientId(e.target.value)}
+              placeholder={status?.configured ? 'Laat leeg om niet te wijzigen' : 'Van Marketplace-buildpagina'}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/20"
+              autoComplete="off"
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="mb-1 block text-xs font-medium text-slate-500">Client Secret</label>
+            <div className="relative">
+              <input
+                type={showSecret ? 'text' : 'password'}
+                value={clientSecret}
+                onChange={(e) => setClientSecret(e.target.value)}
+                placeholder={status?.configured ? '••••••••' : 'Geheim van Marketplace'}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2.5 pr-10 text-sm outline-none focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/20"
+                autoComplete="new-password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowSecret(!showSecret)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-slate-400 hover:text-slate-600"
+              >
+                {showSecret ? <EyeSlashIcon className="h-4 w-4" /> : <EyeIcon className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+          <div className="sm:col-span-2">
+            <label className="mb-1 block text-xs font-medium text-slate-500">
+              Redirect URI (optioneel; default = productie-URL hierboven)
+            </label>
+            <input
+              value={redirectUri}
+              onChange={(e) => setRedirectUri(e.target.value)}
+              placeholder={status?.redirect_uri || prodCallback}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2.5 font-mono text-xs outline-none focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/20"
+            />
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => void save()}
+          disabled={saving || (!clientId.trim() && !clientSecret.trim() && !redirectUri.trim())}
+          className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-button-gradient px-4 py-2 text-sm font-bold text-white shadow-sm disabled:opacity-50"
+        >
+          {saving ? <ArrowPathIcon className="h-4 w-4 animate-spin" /> : null}
+          {saved ? 'Opgeslagen!' : 'Credentials opslaan'}
+        </button>
+      </div>
     </div>
   );
 }

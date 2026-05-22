@@ -5,6 +5,7 @@ import { logAudit } from '@/lib/audit';
 import { isBulkLeadsBatchKind, normalizeBatchKind } from '@/lib/batchKind';
 import { buildPhoneSearchIlikeClauses, sanitizePostgrestIlike } from '@/lib/phoneSearch';
 import * as XLSX from 'xlsx';
+import { onLeadAssignedToCustomer } from '@/lib/integrations/onLeadAssigned';
 
 const COLUMN_HEADERS = [
   'Branche', 'Naam', 'E-mail', 'Telefoon', 'Postcode', 'Huisnr.',
@@ -273,7 +274,21 @@ export async function POST(request: NextRequest) {
     const CHUNK = 500;
     for (let i = 0; i < assignments.length; i += CHUNK) {
       const chunk = assignments.slice(i, i + CHUNK);
-      await supabase.from('lead_assignments').insert(chunk);
+      const { data: inserted } = await supabase
+        .from('lead_assignments')
+        .insert(chunk)
+        .select('id, lead_id, customer_id');
+      const rows = inserted || [];
+      const SYNC_BATCH = 5;
+      for (let j = 0; j < rows.length; j += SYNC_BATCH) {
+        for (const row of rows.slice(j, j + SYNC_BATCH)) {
+          onLeadAssignedToCustomer({
+            customerId: row.customer_id,
+            leadId: row.lead_id,
+            assignmentId: row.id,
+          });
+        }
+      }
     }
   }
 
