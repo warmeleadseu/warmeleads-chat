@@ -7,6 +7,12 @@ import { buildPhoneSearchIlikeClauses, sanitizePostgrestIlike } from '@/lib/phon
 import { sanitizeCustomerWritePayload, customersHaveCountryColumn } from '@/lib/customerCountrySupport';
 import { recalcOpenInvoicesForCustomer } from '@/lib/recalcOpenInvoices';
 import { enrichCustomersWithCounts } from '@/lib/adminCustomerEnrichment';
+import {
+  applyCustomerBranchesChange,
+  branchesChanged,
+  normalizeCustomerBranchSlugs,
+  validateCustomerBranchSlugs,
+} from '@/lib/customerBranches';
 
 const DEFAULT_LIMIT = 25;
 const MAX_LIMIT = 100;
@@ -159,6 +165,20 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = createServerClient();
+
+    if ('branches' in rest) {
+      const validated = await validateCustomerBranchSlugs(
+        supabase,
+        normalizeCustomerBranchSlugs(rest.branches),
+      );
+      if (!validated.ok) {
+        return NextResponse.json({ error: validated.error }, { status: 400 });
+      }
+      rest.branches = validated.slugs;
+    } else {
+      return NextResponse.json({ error: 'Selecteer minimaal één branche' }, { status: 400 });
+    }
+
     const insertPayload = await sanitizeCustomerWritePayload(supabase, rest);
     const { data, error } = await supabase.from('customers').insert(insertPayload).select().single();
 
@@ -197,18 +217,59 @@ export async function PUT(request: NextRequest) {
     const supabase = createServerClient();
 
     const hasCountryColumn = await customersHaveCountryColumn(supabase);
-    const beforeSelect = hasCountryColumn ? 'country, vat_id' : 'vat_id';
+    const beforeSelect = hasCountryColumn ? 'country, vat_id, branches' : 'vat_id, branches';
     const { data: before } = await supabase
       .from('customers')
       .select(beforeSelect)
       .eq('id', id)
-      .maybeSingle<{ country?: string | null; vat_id?: string | null }>();
+      .maybeSingle<{ country?: string | null; vat_id?: string | null; branches?: string[] | null }>();
+
+    if ('branches' in updates) {
+      const validated = await validateCustomerBranchSlugs(
+        supabase,
+        normalizeCustomerBranchSlugs(updates.branches),
+      );
+      if (!validated.ok) {
+        return NextResponse.json({ error: validated.error }, { status: 400 });
+      }
+      updates.branches = validated.slugs;
+    }
 
     const updatePayload = await sanitizeCustomerWritePayload(supabase, updates);
     const { data, error } = await supabase.from('customers').update(updatePayload).eq('id', id).select().single();
 
     if (error) {
       return NextResponse.json({ error: 'Bijwerken mislukt' }, { status: 500 });
+    }
+
+    let branchChangeMeta: Awaited<ReturnType<typeof applyCustomerBranchesChange>> | null = null;
+    if ('branches' in updates) {
+      const prevBranches = normalizeCustomerBranchSlugs(before?.branches);
+      const nextBranches = normalizeCustomerBranchSlugs(data.branches);
+      if (branchesChanged(prevBranches, nextBranches)) {
+        try {
+          branchChangeMeta = await applyCustomerBranchesChange(
+            supabase,
+            id,
+            prevBranches,
+            nextBranches,
+          );
+          logAudit({
+            adminId: admin.id,
+            adminName: admin.name,
+            action: 'customer.branches_updated',
+            entityType: 'customer',
+            entityId: id,
+            details: {
+              from: prevBranches,
+              to: nextBranches,
+              warnings: branchChangeMeta.warnings,
+            },
+          });
+        } catch (e) {
+          console.error('[admin/customers PUT] branch sync failed:', e);
+        }
+      }
     }
 
     let recalcedInvoices: Awaited<ReturnType<typeof recalcOpenInvoicesForCustomer>> = [];
@@ -252,6 +313,7 @@ export async function PUT(request: NextRequest) {
       success: true,
       customer: { ...data, password_hash: undefined },
       recalced_invoices: recalcedInvoices,
+      branch_change: branchChangeMeta,
     });
   } catch {
     return NextResponse.json({ error: 'Ongeldige data' }, { status: 400 });

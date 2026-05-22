@@ -8,6 +8,12 @@ import {
   isValidStatus,
   loadAccessibleProspect,
 } from '@/lib/prospects';
+import {
+  applyCustomerBranchesChange,
+  branchesChanged,
+  normalizeCustomerBranchSlugs,
+  validateCustomerBranchSlugs,
+} from '@/lib/customerBranches';
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   const admin = await verifyAdmin(request);
@@ -167,6 +173,50 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     return NextResponse.json({ success: true, prospect: access.prospect });
   }
 
+  let branchChangeMeta: Awaited<ReturnType<typeof applyCustomerBranchesChange>> | null = null;
+
+  if ('branches' in updates && access.prospect?.converted_to_customer_id) {
+    const validated = await validateCustomerBranchSlugs(
+      supabase,
+      normalizeCustomerBranchSlugs(updates.branches),
+    );
+    if (!validated.ok) {
+      return NextResponse.json({ error: validated.error }, { status: 400 });
+    }
+    updates.branches = validated.slugs;
+
+    const customerId = access.prospect.converted_to_customer_id;
+    const { data: custBefore } = await supabase
+      .from('customers')
+      .select('branches')
+      .eq('id', customerId)
+      .maybeSingle();
+
+    const prevBranches = normalizeCustomerBranchSlugs(custBefore?.branches);
+    if (branchesChanged(prevBranches, validated.slugs)) {
+      const { error: custErr } = await supabase
+        .from('customers')
+        .update({ branches: validated.slugs })
+        .eq('id', customerId);
+      if (custErr) {
+        console.error('[prospects] customer branches sync error:', custErr.message);
+        return NextResponse.json({ error: 'Klant-branches bijwerken mislukt' }, { status: 500 });
+      }
+      try {
+        branchChangeMeta = await applyCustomerBranchesChange(
+          supabase,
+          customerId,
+          prevBranches,
+          validated.slugs,
+        );
+      } catch (e) {
+        console.error('[prospects] branch side-effects failed:', e);
+      }
+    }
+  } else if ('branches' in updates) {
+    updates.branches = normalizeCustomerBranchSlugs(updates.branches);
+  }
+
   const { data, error } = await supabase
     .from('prospects')
     .update(updates)
@@ -199,7 +249,12 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     details: { fields: Object.keys(updates) },
   });
 
-  return NextResponse.json({ success: true, prospect: data });
+  return NextResponse.json({
+    success: true,
+    prospect: data,
+    branch_change: branchChangeMeta,
+    customer_branches_synced: !!access.prospect?.converted_to_customer_id && 'branches' in updates,
+  });
 }
 
 export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {

@@ -25,8 +25,10 @@ export function stripEnvValue(value: string | undefined | null): string {
  * whitelisten in hun eigen Teamleader-integratie.
  */
 export function getCallbackRedirectUri(): string {
-  const site = stripEnvValue(process.env.NEXT_PUBLIC_SITE_URL);
-  const base = site || 'https://warmeleads.eu';
+  const base =
+    stripEnvValue(process.env.NEXT_PUBLIC_APP_URL) ||
+    stripEnvValue(process.env.NEXT_PUBLIC_SITE_URL) ||
+    'https://warmeleads.eu';
   return `${base.replace(/\/$/, '')}/api/portal/integrations/teamleader/callback`;
 }
 

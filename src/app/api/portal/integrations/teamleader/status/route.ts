@@ -4,10 +4,11 @@ import { createServerClient } from '@/lib/supabase';
 import { requireIntegrationOwner } from '@/lib/integrations/portalIntegrationAuth';
 import { getTeamleaderIntegration } from '@/lib/teamleader/integrationRepo';
 import {
-  getCallbackRedirectUri,
   getCustomerOAuthConfig,
+  getEffectiveOAuthConfig,
   getGlobalOAuthConfig,
 } from '@/lib/teamleader/credentials';
+import { isTeamleaderSyncReady } from '@/lib/integrations/syncRouting';
 import { hasSavedFieldMappings } from '@/lib/teamleader/fieldMappingLogic';
 import { TEAMLEADER_PROVIDER } from '@/lib/teamleader/types';
 
@@ -20,10 +21,11 @@ export async function GET(request: NextRequest) {
   const supabase = createServerClient();
   const customerId = session.customer.id;
 
-  const [integration, customerCfg, globalCfg] = await Promise.all([
+  const [integration, customerCfg, globalCfg, effectiveCfg] = await Promise.all([
     getTeamleaderIntegration(supabase, customerId),
     getCustomerOAuthConfig(supabase, customerId),
     getGlobalOAuthConfig(),
+    getEffectiveOAuthConfig(supabase, customerId),
   ]);
 
   const { count: successCount } = await supabase
@@ -77,13 +79,16 @@ export async function GET(request: NextRequest) {
       ? 'global'
       : null;
 
+  const syncReady = isTeamleaderSyncReady(integration);
+
   return NextResponse.json({
     configured: !!(customerCfg || globalCfg),
     oauth_source: oauthSource,
     has_customer_oauth_app: !!customerCfg,
     has_global_oauth_app: !!globalCfg,
-    redirect_uri: getCallbackRedirectUri(),
+    redirect_uri: effectiveCfg?.redirectUri ?? null,
     connected: !!integration?.connected_at,
+    sync_ready: syncReady,
     field_mapping_configured: fieldMappingConfigured,
     settings: integration?.settings ?? null,
     connected_at: integration?.connected_at ?? null,

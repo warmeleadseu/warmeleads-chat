@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyCustomer, portalUnauthorized } from '@/lib/portalAuth';
 import { requireIntegrationOwner } from '@/lib/integrations/portalIntegrationAuth';
 import { buildGoogleAuthorizationUrl, buildGoogleOAuthState } from '@/lib/googleSheets/oauth';
-import { getGoogleOAuthConfig } from '@/lib/googleSheets/config';
+import {
+  getGoogleOAuthConfig,
+  isGoogleSheetsApiKeyConfigured,
+} from '@/lib/googleSheets/config';
 
 function portalAccountUrl(request: NextRequest, query: string): string {
   const base = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, '') || request.nextUrl.origin;
@@ -15,6 +18,12 @@ export async function GET(request: NextRequest) {
   if (!session) return portalUnauthorized();
   const denied = requireIntegrationOwner(session);
   if (denied) return denied;
+
+  if (!isGoogleSheetsApiKeyConfigured()) {
+    return NextResponse.redirect(
+      portalAccountUrl(request, 'sheets=error&sheets_reason=no_api_key'),
+    );
+  }
 
   const config = getGoogleOAuthConfig();
   if (!config) {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
+import { shouldRetryIntegrationSync } from '@/lib/integrations/syncRouting';
 import { syncAssignmentToGoogleSheets } from '@/lib/googleSheets/syncAssignment';
 import { GOOGLE_SHEETS_PROVIDER } from '@/lib/googleSheets/types';
 import { syncAssignmentToTeamleader } from '@/lib/teamleader/syncAssignment';
@@ -35,6 +36,21 @@ export async function GET(request: NextRequest) {
     const minWaitHours = Math.min(24, Math.pow(2, Math.max(0, row.attempts - 1)));
     if (hoursSince < minWaitHours) continue;
 
+    const { data: customer } = await supabase
+      .from('customers')
+      .select('branches')
+      .eq('id', row.customer_id)
+      .maybeSingle();
+    const branches = (customer?.branches as string[] | null) ?? [];
+
+    const mayRetry = await shouldRetryIntegrationSync(
+      supabase,
+      row.customer_id,
+      row.provider,
+      branches,
+    );
+    if (!mayRetry) continue;
+
     try {
       if (row.provider === GOOGLE_SHEETS_PROVIDER) {
         await syncAssignmentToGoogleSheets({
@@ -42,7 +58,7 @@ export async function GET(request: NextRequest) {
           leadId: row.lead_id,
           assignmentId: row.assignment_id,
         });
-      } else {
+      } else if (row.provider === TEAMLEADER_PROVIDER) {
         await syncAssignmentToTeamleader({
           customerId: row.customer_id,
           leadId: row.lead_id,

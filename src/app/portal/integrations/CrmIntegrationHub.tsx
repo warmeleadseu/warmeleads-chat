@@ -20,8 +20,8 @@ import { GoogleSheetsIntegration } from './GoogleSheetsIntegration';
 type PreferencesResponse = {
   preferred_crm_provider: string | null;
   connections: {
-    teamleader: { connected: boolean; configured: boolean };
-    google_sheets: { connected: boolean; configured: boolean };
+    teamleader: { connected: boolean; configured: boolean; sync_ready: boolean };
+    google_sheets: { connected: boolean; configured: boolean; sync_ready: boolean };
   };
 };
 
@@ -43,6 +43,7 @@ export function CrmIntegrationHub({
   const [selectedId, setSelectedId] = useState<CrmProviderId | ''>('');
   const [confirmedId, setConfirmedId] = useState<CrmProviderId | ''>('');
   const [teamleaderConnected, setTeamleaderConnected] = useState(false);
+  const [teamleaderSyncReady, setTeamleaderSyncReady] = useState(false);
   const [sheetsConnected, setSheetsConnected] = useState(false);
   const [sheetsSyncReady, setSheetsSyncReady] = useState(false);
 
@@ -53,8 +54,9 @@ export function CrmIntegrationHub({
       if (res.ok) {
         const d = (await res.json()) as PreferencesResponse;
         setTeamleaderConnected(d.connections.teamleader.connected);
+        setTeamleaderSyncReady(d.connections.teamleader.sync_ready);
         setSheetsConnected(d.connections.google_sheets.connected);
-        setSheetsSyncReady(d.connections.google_sheets.configured);
+        setSheetsSyncReady(d.connections.google_sheets.sync_ready);
         const preferred = (d.preferred_crm_provider as CrmProviderId) || '';
         if (preferred) {
           setSelectedId(preferred);
@@ -91,8 +93,8 @@ export function CrmIntegrationHub({
   const showProviderSetup = Boolean(confirmedId && confirmedProvider?.status === 'available');
 
   const isFullyConnected =
-    (confirmedId === 'teamleader' && teamleaderConnected) ||
-    (confirmedId === 'google_sheets' && sheetsConnected && sheetsSyncReady);
+    (confirmedId === 'teamleader' && teamleaderSyncReady) ||
+    (confirmedId === 'google_sheets' && sheetsSyncReady);
 
   const statusBadge = useMemo(() => {
     if (isFullyConnected) {
@@ -291,10 +293,7 @@ export function CrmIntegrationHub({
             showToast={showToast}
             oauthHint={oauthHint}
             oauthReason={oauthReason}
-            onConnectionChange={(connected) => {
-              setTeamleaderConnected(connected);
-              if (connected) void loadPrefs();
-            }}
+            onConnectionChange={() => void loadPrefs()}
           />
         </div>
       )}
@@ -312,10 +311,7 @@ export function CrmIntegrationHub({
             showToast={showToast}
             oauthHint={sheetsOauthHint}
             oauthReason={sheetsOauthReason}
-            onConnectionChange={(connected) => {
-              setSheetsConnected(connected);
-              if (connected) void loadPrefs();
-            }}
+            onConnectionChange={() => void loadPrefs()}
           />
         </div>
       )}

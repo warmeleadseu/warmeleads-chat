@@ -27,7 +27,9 @@ export async function GET(request: NextRequest) {
 
   const customerId = parseGoogleOAuthState(state);
   if (!customerId) {
-    return NextResponse.redirect(portalAccountUrl(request, 'sheets=error&reason=invalid_state'));
+    return NextResponse.redirect(
+      portalAccountUrl(request, 'sheets=error&sheets_reason=invalid_state'),
+    );
   }
 
   try {
@@ -47,7 +49,9 @@ export async function GET(request: NextRequest) {
     await saveGoogleSheetsTokens(supabase, customerId, tokens);
     return NextResponse.redirect(portalAccountUrl(request, 'sheets=connected'));
   } catch (err) {
-    const reason = err instanceof Error ? err.message : 'unknown';
+    const raw = err instanceof Error ? err.message : 'unknown';
+    const reason =
+      raw.length > 80 || /[<>"']/.test(raw) ? 'token_exchange_failed' : raw;
     return NextResponse.redirect(
       portalAccountUrl(request, `sheets=error&sheets_reason=${encodeURIComponent(reason)}`),
     );

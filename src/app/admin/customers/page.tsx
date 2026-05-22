@@ -870,6 +870,10 @@ function CustomerDetailPanel({
   const [impersonating, setImpersonating] = useState(false);
   const [allBatches, setAllBatches] = useState<Batch[]>([]);
   const [composeOpen, setComposeOpen] = useState(false);
+  const [branchEdit, setBranchEdit] = useState<string[]>([]);
+  const [editingBranches, setEditingBranches] = useState(false);
+  const [savingBranches, setSavingBranches] = useState(false);
+  const [branchSaveError, setBranchSaveError] = useState('');
 
   const c = customer;
 
@@ -879,7 +883,10 @@ function CustomerDetailPanel({
     setShowPw(false);
     setResettingPw(false);
     setNewPw('');
-  }, [c.id]);
+    setBranchEdit(c.branches || []);
+    setEditingBranches(false);
+    setBranchSaveError('');
+  }, [c.id, c.branches]);
   const portalReady = c.portal_active && c.has_password && c.email;
   const activity = getActivityStatus(c);
   const neverLogged = c.portal_active && c.has_password && (!c.last_login_at || !c.login_count);
@@ -919,6 +926,54 @@ function CustomerDetailPanel({
       if (!r.ok) alert(r.error);
     } catch { /* ignore */ }
     setImpersonating(false);
+  };
+
+  const detailBranchChoices = (() => {
+    const bySlug = new Map(branchOptions.map(bo => [bo.slug, bo]));
+    for (const slug of branchEdit) {
+      if (!bySlug.has(slug)) {
+        bySlug.set(slug, { slug, name: slug, color: 'slate', is_active: false });
+      }
+    }
+    return [...bySlug.values()].filter(bo => bo.is_active || branchEdit.includes(bo.slug));
+  })();
+
+  const toggleDetailBranch = (slug: string) => {
+    setBranchEdit(prev =>
+      prev.includes(slug) ? prev.filter(x => x !== slug) : [...prev, slug],
+    );
+  };
+
+  const saveBranches = async () => {
+    if (branchEdit.length === 0) {
+      setBranchSaveError('Selecteer minimaal één branche');
+      return;
+    }
+    setSavingBranches(true);
+    setBranchSaveError('');
+    try {
+      const res = await adminFetch('/api/admin/customers', {
+        method: 'PUT',
+        body: JSON.stringify({ id: c.id, branches: branchEdit }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || 'Opslaan mislukt');
+      const warnings = d.branch_change?.warnings as { branch: string; batch_count: number }[] | undefined;
+      if (warnings?.length) {
+        const lines = warnings.map(
+          w => `• ${branchOptions.find(b => b.slug === w.branch)?.name || w.branch}: ${w.batch_count} actieve batch(es)`,
+        );
+        alert(
+          `Branches opgeslagen.\n\nLet op: verwijderde branches met nog actieve batches:\n${lines.join('\n')}`,
+        );
+      }
+      setEditingBranches(false);
+      onRefresh();
+    } catch (err) {
+      setBranchSaveError(err instanceof Error ? err.message : 'Opslaan mislukt');
+    } finally {
+      setSavingBranches(false);
+    }
   };
 
   const tabs: { key: DetailTab; label: string; icon: typeof MapPinIcon }[] = [
@@ -1042,20 +1097,74 @@ function CustomerDetailPanel({
             <div className="p-5 space-y-5">
               {/* Branches */}
               <div>
-                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Branches</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {c.branches?.map(bSlug => {
-                    const bo = branchOptions.find(x => x.slug === bSlug);
-                    return (
-                      <span key={bSlug} className={`rounded-full px-2.5 py-1 text-xs font-medium ${BRANCH_COLOR_MAP[bo?.color || 'slate'] || BRANCH_COLOR_MAP.slate}`}>
-                        {bo?.name || bSlug}
-                      </span>
-                    );
-                  })}
-                  {c.signup_source === 'website' && (
-                    <span className="rounded-full bg-brand-purple/10 px-2.5 py-1 text-xs font-medium text-brand-purple">Website</span>
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Branches</p>
+                  {!editingBranches ? (
+                    <button
+                      type="button"
+                      onClick={() => { setBranchEdit(c.branches || []); setEditingBranches(true); }}
+                      className="text-[11px] font-semibold text-brand-purple hover:text-brand-purple/80"
+                    >
+                      Wijzigen
+                    </button>
+                  ) : (
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => { setEditingBranches(false); setBranchEdit(c.branches || []); setBranchSaveError(''); }}
+                        className="text-[11px] font-medium text-slate-500 hover:text-slate-700"
+                      >
+                        Annuleren
+                      </button>
+                      <button
+                        type="button"
+                        onClick={saveBranches}
+                        disabled={savingBranches}
+                        className="text-[11px] font-semibold text-brand-purple hover:text-brand-purple/80 disabled:opacity-50"
+                      >
+                        {savingBranches ? 'Opslaan…' : 'Opslaan'}
+                      </button>
+                    </div>
                   )}
                 </div>
+                {branchSaveError && (
+                  <p className="mb-2 text-xs text-red-600">{branchSaveError}</p>
+                )}
+                {editingBranches ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {detailBranchChoices.map(bo => (
+                      <button
+                        key={bo.slug}
+                        type="button"
+                        onClick={() => toggleDetailBranch(bo.slug)}
+                        className={`rounded-full px-2.5 py-1 text-xs font-medium transition ${
+                          branchEdit.includes(bo.slug)
+                            ? BRANCH_COLOR_MAP[bo.color] || BRANCH_COLOR_MAP.slate
+                            : 'bg-slate-100 text-slate-400 ring-1 ring-slate-200'
+                        }`}
+                      >
+                        {bo.name}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5">
+                    {(c.branches?.length ? c.branches : []).map(bSlug => {
+                      const bo = branchOptions.find(x => x.slug === bSlug);
+                      return (
+                        <span key={bSlug} className={`rounded-full px-2.5 py-1 text-xs font-medium ${BRANCH_COLOR_MAP[bo?.color || 'slate'] || BRANCH_COLOR_MAP.slate}`}>
+                          {bo?.name || bSlug}
+                        </span>
+                      );
+                    })}
+                    {(!c.branches || c.branches.length === 0) && (
+                      <span className="text-xs text-amber-700">Geen branche gekoppeld — klik Wijzigen</span>
+                    )}
+                    {c.signup_source === 'website' && (
+                      <span className="rounded-full bg-brand-purple/10 px-2.5 py-1 text-xs font-medium text-brand-purple">Website</span>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Stats */}
@@ -1589,9 +1698,20 @@ function CustomerForm({ customer, branchOptions, allCustomers, accountManagers, 
     }));
   };
 
+  const branchChoices = (() => {
+    const bySlug = new Map(branchOptions.map(bo => [bo.slug, bo]));
+    for (const slug of form.branches) {
+      if (!bySlug.has(slug)) {
+        bySlug.set(slug, { slug, name: slug, color: 'slate', is_active: false });
+      }
+    }
+    return [...bySlug.values()].filter(bo => bo.is_active || form.branches.includes(bo.slug));
+  })();
+
   const save = async () => {
     if (!form.name) { setError('Bedrijfsnaam is verplicht'); return; }
     if (!isEdit && !form.password) { setError('Stel een portaalwachtwoord in voor de klant'); return; }
+    if (form.branches.length === 0) { setError('Selecteer minimaal één branche'); return; }
     setSaving(true);
     setError('');
     try {
@@ -1616,7 +1736,17 @@ function CustomerForm({ customer, branchOptions, allCustomers, accountManagers, 
         method: isEdit ? 'PUT' : 'POST',
         body: JSON.stringify(body),
       });
-      if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error);
+      const warnings = d.branch_change?.warnings as { branch: string; batch_count: number }[] | undefined;
+      if (warnings?.length) {
+        const lines = warnings.map(
+          w => `• ${branchOptions.find(b => b.slug === w.branch)?.name || w.branch}: ${w.batch_count} actieve batch(es)`,
+        );
+        alert(
+          `Branches opgeslagen.\n\nLet op: deze branches zijn verwijderd maar hebben nog actieve batches:\n${lines.join('\n')}\n\nBestaande batches blijven op die branche draaien.`,
+        );
+      }
       onSaved();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Er ging iets mis');
@@ -1861,17 +1991,24 @@ function CustomerForm({ customer, branchOptions, allCustomers, accountManagers, 
           )}
           <div>
             <label className="mb-1.5 block text-xs font-medium text-slate-500">Branches</label>
+            <p className="mb-2 text-[11px] text-slate-400">
+              Wijzigingen gelden direct in het klantportaal (bestellen, demo-leads, integraties). Bestaande batches op een verwijderde branche blijven actief.
+            </p>
             <div className="flex flex-wrap gap-2">
-              {branchOptions.filter(bo => bo.is_active).map(bo => (
+              {branchChoices.map(bo => (
                 <button key={bo.slug} onClick={() => toggleBranch(bo.slug)} type="button"
                   className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition ${
                     form.branches.includes(bo.slug) ? 'border-brand-purple bg-brand-purple/10 text-brand-purple' : 'border-slate-200 text-slate-500 hover:border-slate-300'
-                  }`}
+                  } ${!bo.is_active ? 'opacity-70' : ''}`}
                 >
                   {bo.name}
+                  {!bo.is_active && <span className="ml-1 text-[10px] text-slate-400">(inactief)</span>}
                 </button>
               ))}
             </div>
+            {form.branches.length === 0 && (
+              <p className="mt-1.5 text-xs text-amber-700">Selecteer minimaal één branche.</p>
+            )}
           </div>
           {currentUser.role !== 'accountmanager' && accountManagers.length > 0 && (
             <div>
@@ -3955,7 +4092,8 @@ function CustomerPricingPanel({ customer, branchOptions, onClose, embedded }: {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const customerBranches = branches.filter(b => customer.branches.includes(b.slug));
+  const customerBranchSlugs = customer.branches || [];
+  const customerBranches = branches.filter(b => customerBranchSlugs.includes(b.slug));
 
   const branchDefaults = (b: BranchPricingRef) => product === 'appointments'
     ? { tiers: b.appointment_pricing_tiers, discount: b.appointment_nationwide_discount }

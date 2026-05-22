@@ -5,6 +5,7 @@ import { requireIntegrationOwner } from '@/lib/integrations/portalIntegrationAut
 import {
   clearCustomerOAuthCredentials,
   saveCustomerOAuthCredentials,
+  stripEnvValue,
 } from '@/lib/teamleader/credentials';
 import { invalidatePipelineCache } from '@/lib/teamleader/pipelineCache';
 
@@ -21,8 +22,8 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: 'Ongeldige aanvraag' }, { status: 400 });
   }
 
-  const clientId = (body.client_id ?? '').trim();
-  const clientSecret = (body.client_secret ?? '').trim();
+  const clientId = stripEnvValue(body.client_id);
+  const clientSecret = stripEnvValue(body.client_secret);
   if (!clientId || !clientSecret) {
     return NextResponse.json(
       { error: 'Vul zowel Client ID als Client Secret in.' },

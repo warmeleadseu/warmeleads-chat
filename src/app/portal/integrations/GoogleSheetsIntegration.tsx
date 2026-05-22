@@ -23,6 +23,8 @@ type SyncRow = {
 
 type StatusResponse = {
   oauth_configured: boolean;
+  api_key_configured?: boolean;
+  server_ready?: boolean;
   connected: boolean;
   spreadsheet_configured: boolean;
   field_mapping_configured: boolean;
@@ -31,6 +33,7 @@ type StatusResponse = {
     enabled?: boolean;
     spreadsheet_url?: string | null;
     sheet_name?: string | null;
+    sheet_gid?: number | null;
   } | null;
   success_count: number;
   last_error: string | null;
@@ -62,7 +65,7 @@ export function GoogleSheetsIntegration({
   oauthHint?: string | null;
   oauthReason?: string | null;
   embedded?: boolean;
-  onConnectionChange?: (connected: boolean) => void;
+  onConnectionChange?: () => void;
 }) {
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<StatusResponse | null>(null);
@@ -83,7 +86,10 @@ export function GoogleSheetsIntegration({
         setStatus(d);
         setSpreadsheetUrl(d.settings?.spreadsheet_url || '');
         setSyncEnabled(d.settings?.enabled !== false);
-        onConnectionChange?.(d.connected);
+        if (d.settings?.sheet_gid != null) {
+          setSelectedSheetId(d.settings.sheet_gid);
+        }
+        onConnectionChange?.();
       }
     } finally {
       setLoading(false);
@@ -123,8 +129,8 @@ export function GoogleSheetsIntegration({
     });
     if (res.ok) {
       showToast('Google Sheets ontkoppeld');
-      onConnectionChange?.(false);
       await loadStatus();
+      onConnectionChange?.();
     } else {
       showToast('Ontkoppelen mislukt', 'error');
     }
@@ -213,9 +219,17 @@ export function GoogleSheetsIntegration({
     </div>
   ) : (
     <div className="space-y-5">
+      {status?.api_key_configured === false && (
+        <Alert variant="warning">
+          De Google Sheets API-key ontbreekt op de server. Neem contact op met Warme Leads.
+        </Alert>
+      )}
+
       {!status?.oauth_configured && (
         <Alert variant="warning">
-          Google OAuth is nog niet geconfigureerd op de server. Neem contact op met Warme Leads.
+          Google OAuth (Client ID + secret) is nog niet geconfigureerd. Maak in Google Cloud een OAuth-client
+          (Web application) met redirect{' '}
+          <span className="font-mono text-[11px]">…/api/portal/integrations/google-sheets/callback</span>.
         </Alert>
       )}
 
@@ -228,7 +242,7 @@ export function GoogleSheetsIntegration({
           <button
             type="button"
             onClick={connectGoogle}
-            disabled={!status?.oauth_configured}
+            disabled={status?.server_ready === false}
             className={`${T.btnPrimary} mt-4`}
           >
             <LinkIcon className="h-4 w-4" />
@@ -314,7 +328,14 @@ export function GoogleSheetsIntegration({
           </div>
 
           {spreadsheetReady && (
-            <GoogleSheetsFieldMapping showToast={showToast} ready={spreadsheetReady} />
+            <GoogleSheetsFieldMapping
+              showToast={showToast}
+              ready={spreadsheetReady}
+              onSaved={() => {
+                void loadStatus();
+                onConnectionChange?.();
+              }}
+            />
           )}
 
           {spreadsheetReady && mappingReady && (
@@ -496,8 +517,10 @@ function SyncHistory({
 
 function describeOauthError(reason?: string | null): string {
   if (!reason) return 'onbekende fout';
+  if (reason === 'no_api_key') return 'Google Sheets API-key ontbreekt op de server';
   if (reason === 'no_oauth_config') return 'Google OAuth is niet geconfigureerd';
   if (reason === 'invalid_state') return 'sessie verlopen, probeer opnieuw';
+  if (reason === 'token_exchange_failed') return 'token uitwisselen mislukt — probeer opnieuw';
   if (reason === 'missing_code') return 'autorisatie niet voltooid';
   if (reason === 'access_denied') return 'toegang geweigerd in Google';
   if (reason === 'missing_refresh_token') return 'geen refresh token — probeer opnieuw en accepteer alle rechten';

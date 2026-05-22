@@ -18,9 +18,11 @@ type BranchMappingData = {
 export function GoogleSheetsFieldMapping({
   showToast,
   ready,
+  onSaved,
 }: {
   showToast: (msg: string, type?: 'success' | 'error') => void;
   ready: boolean;
+  onSaved?: () => void;
 }) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -87,6 +89,7 @@ export function GoogleSheetsFieldMapping({
         setDirty(false);
         setHasSavedMappings(true);
         await load();
+        onSaved?.();
       } else {
         const d = await res.json();
         showToast(d.error || 'Opslaan mislukt', 'error');

@@ -10,8 +10,16 @@ import {
 import {
   fetchSpreadsheetTabs,
   parseSpreadsheetUrl,
-  quoteSheetName,
 } from '@/lib/googleSheets/spreadsheet';
+
+async function resolveSheetNameFromGid(
+  accessToken: string,
+  spreadsheetId: string,
+  sheetGid: number,
+): Promise<string | null> {
+  const tabs = await fetchSpreadsheetTabs(accessToken, spreadsheetId);
+  return tabs.find((t) => t.sheetId === sheetGid)?.title ?? null;
+}
 
 export async function PUT(request: NextRequest) {
   const session = await verifyCustomer(request);
@@ -19,12 +27,17 @@ export async function PUT(request: NextRequest) {
   const denied = requireIntegrationOwner(session);
   if (denied) return denied;
 
-  const body = (await request.json()) as {
+  let body: {
     spreadsheet_url?: string;
     sheet_gid?: number | null;
     sheet_name?: string | null;
     enabled?: boolean;
   };
+  try {
+    body = (await request.json()) as typeof body;
+  } catch {
+    return NextResponse.json({ error: 'Ongeldige aanvraag' }, { status: 400 });
+  }
 
   const supabase = createServerClient();
   const integration = await getGoogleSheetsIntegration(supabase, session.customer.id);
@@ -43,22 +56,32 @@ export async function PUT(request: NextRequest) {
     }
     patch.spreadsheet_id = parsed.spreadsheetId;
     patch.spreadsheet_url = body.spreadsheet_url.trim();
-    if (parsed.gid != null) patch.sheet_gid = parsed.gid;
+    // URL-gid alleen als fallback; expliciete sheet_gid uit UI heeft voorrang.
+    if (parsed.gid != null && body.sheet_gid == null) {
+      patch.sheet_gid = parsed.gid;
+    }
   }
 
-  if (body.sheet_name !== undefined) {
+  if (body.sheet_gid != null) {
+    patch.sheet_gid = body.sheet_gid;
+  }
+
+  if (body.sheet_name !== undefined && body.sheet_name !== null) {
     patch.sheet_name = body.sheet_name;
   }
 
-  if (body.sheet_gid != null && body.spreadsheet_url?.trim()) {
+  const spreadsheetId =
+    patch.spreadsheet_id ?? integration.settings.spreadsheet_id ?? null;
+
+  if (patch.sheet_gid != null && spreadsheetId && !patch.sheet_name) {
     try {
       const accessToken = await ensureValidGoogleAccessToken(supabase, integration);
-      const spreadsheetId = patch.spreadsheet_id ?? integration.settings.spreadsheet_id;
-      if (spreadsheetId) {
-        const tabs = await fetchSpreadsheetTabs(accessToken, spreadsheetId);
-        const tab = tabs.find((t) => t.sheetId === body.sheet_gid);
-        if (tab) patch.sheet_name = tab.title;
-      }
+      const title = await resolveSheetNameFromGid(
+        accessToken,
+        spreadsheetId,
+        patch.sheet_gid,
+      );
+      if (title) patch.sheet_name = title;
     } catch {
       /* sheet_name kan handmatig worden gezet */
     }
@@ -76,13 +99,21 @@ export async function PUT(request: NextRequest) {
         patch.sheet_gid != null
           ? tabs.find((t) => t.sheetId === patch.sheet_gid)
           : tabs[0];
-      if (preferred) patch.sheet_name = preferred.title;
+      if (preferred) {
+        patch.sheet_name = preferred.title;
+        if (patch.sheet_gid == null) patch.sheet_gid = preferred.sheetId;
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Spreadsheet niet bereikbaar';
       return NextResponse.json({ error: message }, { status: 502 });
     }
   }
 
-  const settings = await updateGoogleSheetsSettings(supabase, session.customer.id, patch);
-  return NextResponse.json({ settings });
+  try {
+    const settings = await updateGoogleSheetsSettings(supabase, session.customer.id, patch);
+    return NextResponse.json({ settings });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Opslaan mislukt';
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }

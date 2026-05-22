@@ -13,8 +13,13 @@ import {
   getPreferredCrmProvider,
   setPreferredCrmProvider,
 } from '@/lib/integrations/crmPreferences';
+import {
+  isGoogleSheetsSyncReady,
+  isTeamleaderSyncReady,
+} from '@/lib/integrations/syncRouting';
 import { getGoogleSheetsIntegration } from '@/lib/googleSheets/integrationRepo';
 import { getTeamleaderIntegration } from '@/lib/teamleader/integrationRepo';
+import { getCustomerOAuthConfig, getGlobalOAuthConfig } from '@/lib/teamleader/credentials';
 
 export async function GET(request: NextRequest) {
   const session = await verifyCustomer(request);
@@ -24,17 +29,28 @@ export async function GET(request: NextRequest) {
 
   const supabase = createServerClient();
   const customerId = session.customer.id;
+  const branches = session.customer.branches ?? [];
 
-  const [preferredStored, teamleaderIntegration, sheetsIntegration] = await Promise.all([
+  const [
+    preferredStored,
+    teamleaderIntegration,
+    sheetsIntegration,
+    customerCfg,
+    globalCfg,
+  ] = await Promise.all([
     getPreferredCrmProvider(supabase, customerId),
     getTeamleaderIntegration(supabase, customerId),
     getGoogleSheetsIntegration(supabase, customerId),
+    getCustomerOAuthConfig(supabase, customerId),
+    getGlobalOAuthConfig(),
   ]);
 
   const teamleaderConnected = !!teamleaderIntegration?.connected_at;
   const sheetsConnected = !!sheetsIntegration?.connected_at;
-  let preferred = preferredStored;
+  const teamleaderSyncReady = isTeamleaderSyncReady(teamleaderIntegration);
+  const sheetsSyncReady = isGoogleSheetsSyncReady(sheetsIntegration, branches);
 
+  let preferred = preferredStored;
   if (teamleaderConnected && !preferred) preferred = 'teamleader';
   if (sheetsConnected && !preferred) preferred = 'google_sheets';
 
@@ -50,16 +66,13 @@ export async function GET(request: NextRequest) {
     connections: {
       teamleader: {
         connected: teamleaderConnected,
-        configured: !!teamleaderIntegration || teamleaderConnected,
+        configured: !!(customerCfg || globalCfg),
+        sync_ready: teamleaderSyncReady,
       },
       google_sheets: {
         connected: sheetsConnected,
-        configured:
-          sheetsConnected &&
-          Boolean(
-            sheetsIntegration?.settings?.spreadsheet_id &&
-              sheetsIntegration?.settings?.sheet_name,
-          ),
+        configured: sheetsSyncReady,
+        sync_ready: sheetsSyncReady,
       },
     },
   });

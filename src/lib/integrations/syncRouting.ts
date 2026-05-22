@@ -1,0 +1,78 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { getPreferredCrmProvider } from '@/lib/integrations/crmPreferences';
+import { getGoogleSheetsIntegration } from '@/lib/googleSheets/integrationRepo';
+import { hasSavedSheetMappings } from '@/lib/googleSheets/fieldMappingLogic';
+import { GOOGLE_SHEETS_PROVIDER } from '@/lib/googleSheets/types';
+import { getTeamleaderIntegration } from '@/lib/teamleader/integrationRepo';
+import { TEAMLEADER_PROVIDER } from '@/lib/teamleader/types';
+
+export type IntegrationSyncTargets = {
+  teamleader: boolean;
+  google_sheets: boolean;
+};
+
+export function isTeamleaderSyncReady(
+  integration: Awaited<ReturnType<typeof getTeamleaderIntegration>>,
+): boolean {
+  if (!integration?.connected_at) return false;
+  if (integration.settings.enabled === false) return false;
+  return Boolean(integration.settings.pipeline_id);
+}
+
+export function isGoogleSheetsSyncReady(
+  integration: Awaited<ReturnType<typeof getGoogleSheetsIntegration>>,
+  customerBranches: string[],
+): boolean {
+  if (!integration?.connected_at) return false;
+  if (integration.settings.enabled === false) return false;
+  const spreadsheetOk = Boolean(
+    integration.settings.spreadsheet_id && integration.settings.sheet_name,
+  );
+  if (!spreadsheetOk) return false;
+  return hasSavedSheetMappings(integration.settings.field_mappings, customerBranches);
+}
+
+/**
+ * Bepaalt welke CRM-sync(s) na leadtoewijzing mogen draaien.
+ * Respecteert `preferred_crm_provider`; voorkomt dubbele export naar Teamleader én Sheets.
+ */
+export async function resolveIntegrationSyncTargets(
+  supabase: SupabaseClient,
+  customerId: string,
+  customerBranches: string[] = [],
+): Promise<IntegrationSyncTargets> {
+  const [preferred, teamleaderIntegration, sheetsIntegration] = await Promise.all([
+    getPreferredCrmProvider(supabase, customerId),
+    getTeamleaderIntegration(supabase, customerId),
+    getGoogleSheetsIntegration(supabase, customerId),
+  ]);
+
+  const tlReady = isTeamleaderSyncReady(teamleaderIntegration);
+  const gsReady = isGoogleSheetsSyncReady(sheetsIntegration, customerBranches);
+
+  if (preferred === TEAMLEADER_PROVIDER) {
+    return { teamleader: tlReady, google_sheets: false };
+  }
+  if (preferred === GOOGLE_SHEETS_PROVIDER) {
+    return { teamleader: false, google_sheets: gsReady };
+  }
+
+  // Geen expliciete keuze: alleen syncen als precies één integratie klaar is.
+  if (tlReady && !gsReady) return { teamleader: true, google_sheets: false };
+  if (gsReady && !tlReady) return { teamleader: false, google_sheets: true };
+
+  return { teamleader: false, google_sheets: false };
+}
+
+/** Of een mislukte sync-log voor deze provider opnieuw geprobeerd mag worden. */
+export async function shouldRetryIntegrationSync(
+  supabase: SupabaseClient,
+  customerId: string,
+  provider: string,
+  customerBranches: string[] = [],
+): Promise<boolean> {
+  const targets = await resolveIntegrationSyncTargets(supabase, customerId, customerBranches);
+  if (provider === TEAMLEADER_PROVIDER) return targets.teamleader;
+  if (provider === GOOGLE_SHEETS_PROVIDER) return targets.google_sheets;
+  return false;
+}

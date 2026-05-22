@@ -3,6 +3,7 @@ import { createServerClient } from '@/lib/supabase';
 import { verifyAdmin, unauthorized, forbidden } from '@/lib/adminAuth';
 import { logAudit } from '@/lib/audit';
 import { loadAccessibleProspect } from '@/lib/prospects';
+import { normalizeCustomerBranchSlugs, validateCustomerBranchSlugs } from '@/lib/customerBranches';
 
 interface ConvertBody {
   // Optional override van customer-velden, default uit prospect
@@ -41,12 +42,18 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     );
   }
 
+  const branchCandidates = normalizeCustomerBranchSlugs(body.branches ?? p.branches ?? []);
+  const branchValidated = await validateCustomerBranchSlugs(supabase, branchCandidates);
+  if (!branchValidated.ok) {
+    return NextResponse.json({ error: branchValidated.error }, { status: 400 });
+  }
+
   const customerInsert: Record<string, unknown> = {
     name: body.name || p.company_name,
     contact_person: body.contact_person ?? p.contact_person ?? null,
     email: body.email ?? p.email ?? null,
     phone: body.phone ?? p.phone ?? null,
-    branches: body.branches ?? p.branches ?? [],
+    branches: branchValidated.slugs,
     notes: body.notes ?? p.notes ?? null,
     is_active: true,
     account_manager_id: body.account_manager_id ?? p.account_manager_id ?? null,

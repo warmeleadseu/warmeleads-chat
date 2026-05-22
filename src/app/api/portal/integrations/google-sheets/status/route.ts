@@ -2,9 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyCustomer, portalUnauthorized } from '@/lib/portalAuth';
 import { createServerClient } from '@/lib/supabase';
 import { requireIntegrationOwner } from '@/lib/integrations/portalIntegrationAuth';
-import { getGoogleOAuthConfig } from '@/lib/googleSheets/config';
+import {
+  getGoogleOAuthConfig,
+  isGoogleSheetsApiKeyConfigured,
+  isGoogleSheetsIntegrationServerReady,
+} from '@/lib/googleSheets/config';
 import { getGoogleSheetsIntegration } from '@/lib/googleSheets/integrationRepo';
 import { hasSavedSheetMappings } from '@/lib/googleSheets/fieldMappingLogic';
+import { isGoogleSheetsSyncReady } from '@/lib/integrations/syncRouting';
 import { GOOGLE_SHEETS_PROVIDER } from '@/lib/googleSheets/types';
 
 export async function GET(request: NextRequest) {
@@ -23,6 +28,8 @@ export async function GET(request: NextRequest) {
 
   const branches = (customer?.branches as string[] | null) ?? [];
   const oauthConfigured = !!getGoogleOAuthConfig();
+  const apiKeyConfigured = isGoogleSheetsApiKeyConfigured();
+  const serverReady = isGoogleSheetsIntegrationServerReady();
 
   const { count: successCount } = await supabase
     .from('integration_sync_log')
@@ -60,17 +67,17 @@ export async function GET(request: NextRequest) {
   const spreadsheetConfigured = Boolean(
     settings?.spreadsheet_id && settings?.sheet_name,
   );
+  const fieldMappingConfigured = hasSavedSheetMappings(settings?.field_mappings, branches);
+  const syncReady = isGoogleSheetsSyncReady(integration, branches);
 
   return NextResponse.json({
     oauth_configured: oauthConfigured,
+    api_key_configured: apiKeyConfigured,
+    server_ready: serverReady,
     connected: !!integration?.connected_at,
     spreadsheet_configured: spreadsheetConfigured,
-    field_mapping_configured: hasSavedSheetMappings(settings?.field_mappings, branches),
-    sync_ready: Boolean(
-      integration?.connected_at &&
-        spreadsheetConfigured &&
-        settings?.enabled !== false,
-    ),
+    field_mapping_configured: fieldMappingConfigured,
+    sync_ready: syncReady,
     settings,
     connected_at: integration?.connected_at ?? null,
     success_count: successCount ?? 0,

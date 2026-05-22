@@ -1,4 +1,4 @@
-import { GOOGLE_SHEETS_API_BASE } from './config';
+import { appendGoogleSheetsApiKey, GOOGLE_SHEETS_API_BASE } from './config';
 
 export type SheetTab = {
   sheetId: number;
@@ -38,7 +38,8 @@ async function sheetsFetch<T>(
   path: string,
   init?: RequestInit,
 ): Promise<T> {
-  const res = await fetch(`${GOOGLE_SHEETS_API_BASE}${path}`, {
+  const apiPath = appendGoogleSheetsApiKey(path);
+  const res = await fetch(`${GOOGLE_SHEETS_API_BASE}${apiPath}`, {
     ...init,
     headers: {
       Authorization: `Bearer ${accessToken}`,

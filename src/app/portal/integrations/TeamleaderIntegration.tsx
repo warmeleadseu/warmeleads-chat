@@ -85,7 +85,7 @@ export function TeamleaderIntegration({
   oauthReason?: string | null;
   /** Geen eigen sectie-header; bedoeld voor CrmIntegrationHub */
   embedded?: boolean;
-  onConnectionChange?: (connected: boolean) => void;
+  onConnectionChange?: () => void;
 }) {
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<StatusResponse | null>(null);
@@ -115,7 +115,7 @@ export function TeamleaderIntegration({
         setDealTemplate(d.settings?.deal_title_template || DEFAULT_DEAL_TEMPLATE);
         setSyncEnabled(d.settings?.enabled !== false);
         if (!d.has_customer_oauth_app && !d.connected) setSetupGuideOpen(true);
-        onConnectionChange?.(d.connected);
+        onConnectionChange?.();
       }
     } finally {
       setLoading(false);
@@ -198,8 +198,8 @@ export function TeamleaderIntegration({
     });
     if (res.ok) {
       showToast('Teamleader ontkoppeld');
-      onConnectionChange?.(false);
       await loadStatus();
+      onConnectionChange?.();
     } else {
       showToast('Ontkoppelen mislukt', 'error');
     }
@@ -227,6 +227,7 @@ export function TeamleaderIntegration({
         setClientSecret('');
         setSetupGuideOpen(false);
         await loadStatus();
+        onConnectionChange?.();
       } else {
         showToast(d.error || 'Opslaan mislukt', 'error');
       }
@@ -252,6 +253,7 @@ export function TeamleaderIntegration({
       if (res.ok) {
         showToast('Instellingen opgeslagen');
         await loadStatus();
+        onConnectionChange?.();
       } else {
         const d = await res.json();
         showToast(d.error || 'Opslaan mislukt', 'error');

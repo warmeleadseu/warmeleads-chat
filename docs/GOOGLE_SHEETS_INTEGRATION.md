@@ -13,18 +13,22 @@ Klanten koppelen hun eigen Google-account en spreadsheet via **Account → Integ
 ## Server-configuratie
 
 ```env
-GOOGLE_INTEGRATION_CLIENT_ID=
+GOOGLE_SHEETS_API_KEY=              # verplicht — API key uit Google Cloud (geen trailing newline)
+GOOGLE_INTEGRATION_CLIENT_ID=       # verplicht voor OAuth-koppeling
 GOOGLE_INTEGRATION_CLIENT_SECRET=
 INTEGRATION_TOKEN_ENCRYPTION_KEY=   # aanbevolen
 NEXT_PUBLIC_APP_URL=https://warmeleads.eu
 ```
 
-Google Cloud Console:
+Google Cloud Console (project **Google Sheets Webapp**):
 
-- OAuth consent screen (productie: verified indien extern)
-- OAuth client type: **Web application**
+- **Google Sheets API** ingeschakeld
+- **API key** (`API key 1`) → `GOOGLE_SHEETS_API_KEY`
+- **OAuth client** `CRM WarmeLeads OAuth` (Web application) → `GOOGLE_INTEGRATION_CLIENT_ID` + `GOOGLE_INTEGRATION_CLIENT_SECRET`
 - Redirect URI: `{NEXT_PUBLIC_APP_URL}/api/portal/integrations/google-sheets/callback`
-- API: Google Sheets API ingeschakeld
+- Service account `warmeleads-sheets@light-footing-452919-u7.iam.gserviceaccount.com` (optioneel via `GOOGLE_SERVICE_ACCOUNT_EMAIL`)
+
+De API key alleen is niet genoeg om te schrijven: klanten autoriseren nog steeds hun eigen Google-account via OAuth. De key koppelt API-aanroepen aan jullie Cloud-project (quota/facturering).
 
 ## Technisch
 

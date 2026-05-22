@@ -282,6 +282,18 @@ export function ProspectDrawer({
       if (res.ok && data.prospect) {
         setProspect(data.prospect);
         onUpdated(data.prospect);
+        if (data.customer_branches_synced) {
+          const warnings = data.branch_change?.warnings as { branch: string; batch_count: number }[] | undefined;
+          if (warnings?.length) {
+            const lines = warnings.map(
+              (w: { branch: string; batch_count: number }) =>
+                `• ${branches.find(b => b.slug === w.branch)?.name || w.branch}: ${w.batch_count} actieve batch(es)`,
+            );
+            alert(
+              `Klant-branches bijgewerkt.\n\nLet op: verwijderde branches met nog actieve batches:\n${lines.join('\n')}`,
+            );
+          }
+        }
         setTab('overzicht');
       } else {
         setDrawerError(data?.error || 'Opslaan mislukt');
@@ -434,6 +446,11 @@ export function ProspectDrawer({
                 />
               ) : (
                 <div className="space-y-4">
+                  {prospect.converted_to_customer_id && (
+                    <div className="rounded-lg border border-brand-purple/20 bg-brand-purple/5 px-3 py-2 text-xs text-brand-purple">
+                      Deze prospect is een klant. Branches die je hier wijzigt, worden ook op de gekoppelde klant toegepast (portaal, prijzen, demo-leads).
+                    </div>
+                  )}
                   <ProspectFormFields value={editForm} onChange={setEditForm} branches={branches} />
                   <div className="flex justify-end gap-2 border-t border-slate-200 pt-4">
                     {canManage && (
