@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { portalFetch } from '@/lib/portalAuth';
 import { PortalSection, T } from '../_ui';
 import {
@@ -47,46 +47,74 @@ export function CrmIntegrationHub({
   const [sheetsConnected, setSheetsConnected] = useState(false);
   const [sheetsSyncReady, setSheetsSyncReady] = useState(false);
 
+  const applyPrefs = useCallback((d: PreferencesResponse) => {
+    setTeamleaderConnected(d.connections.teamleader.connected);
+    setTeamleaderSyncReady(d.connections.teamleader.sync_ready);
+    setSheetsConnected(d.connections.google_sheets.connected);
+    setSheetsSyncReady(d.connections.google_sheets.sync_ready);
+    const preferred = (d.preferred_crm_provider as CrmProviderId) || '';
+    if (preferred) {
+      setSelectedId(preferred);
+      setConfirmedId(preferred);
+    }
+  }, []);
+
   const loadPrefs = useCallback(async () => {
     setLoading(true);
     try {
       const res = await portalFetch('/api/portal/integrations/preferences');
       if (res.ok) {
-        const d = (await res.json()) as PreferencesResponse;
-        setTeamleaderConnected(d.connections.teamleader.connected);
-        setTeamleaderSyncReady(d.connections.teamleader.sync_ready);
-        setSheetsConnected(d.connections.google_sheets.connected);
-        setSheetsSyncReady(d.connections.google_sheets.sync_ready);
-        const preferred = (d.preferred_crm_provider as CrmProviderId) || '';
-        if (preferred) {
-          setSelectedId(preferred);
-          setConfirmedId(preferred);
-        }
+        applyPrefs((await res.json()) as PreferencesResponse);
       }
     } finally {
       setLoading(false);
     }
+  }, [applyPrefs]);
+
+  /** Ververs hub-status zonder skeleton (kind mag gemount blijven). */
+  const refreshPrefs = useCallback(async () => {
+    try {
+      const res = await portalFetch('/api/portal/integrations/preferences');
+      if (res.ok) {
+        applyPrefs((await res.json()) as PreferencesResponse);
+      }
+    } catch {
+      /* stille refresh */
+    }
+  }, [applyPrefs]);
+
+  const refreshPrefsRef = useRef(refreshPrefs);
+  refreshPrefsRef.current = refreshPrefs;
+
+  const notifyChildUpdate = useCallback(() => {
+    void refreshPrefsRef.current();
   }, []);
 
   useEffect(() => {
     void loadPrefs();
   }, [loadPrefs]);
 
+  const oauthHandled = useRef({ teamleader: false, sheets: false });
+
   useEffect(() => {
-    if (oauthHint === 'connected') {
+    if (oauthHint === 'connected' && !oauthHandled.current.teamleader) {
+      oauthHandled.current.teamleader = true;
       setTeamleaderConnected(true);
       setSelectedId('teamleader');
       setConfirmedId('teamleader');
+      void refreshPrefs();
     }
-  }, [oauthHint]);
+  }, [oauthHint, refreshPrefs]);
 
   useEffect(() => {
-    if (sheetsOauthHint === 'connected') {
+    if (sheetsOauthHint === 'connected' && !oauthHandled.current.sheets) {
+      oauthHandled.current.sheets = true;
       setSheetsConnected(true);
       setSelectedId('google_sheets');
       setConfirmedId('google_sheets');
+      void refreshPrefs();
     }
-  }, [sheetsOauthHint]);
+  }, [sheetsOauthHint, refreshPrefs]);
 
   const selectedProvider = getCrmProvider(selectedId);
   const confirmedProvider = getCrmProvider(confirmedId);
@@ -293,7 +321,7 @@ export function CrmIntegrationHub({
             showToast={showToast}
             oauthHint={oauthHint}
             oauthReason={oauthReason}
-            onConnectionChange={() => void loadPrefs()}
+            onHubRefresh={notifyChildUpdate}
           />
         </div>
       )}
@@ -311,7 +339,7 @@ export function CrmIntegrationHub({
             showToast={showToast}
             oauthHint={sheetsOauthHint}
             oauthReason={sheetsOauthReason}
-            onConnectionChange={() => void loadPrefs()}
+            onHubRefresh={notifyChildUpdate}
           />
         </div>
       )}

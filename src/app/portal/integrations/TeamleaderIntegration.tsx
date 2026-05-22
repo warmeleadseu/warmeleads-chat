@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { portalFetch } from '@/lib/portalAuth';
 import { PortalSection, T } from '../_ui';
 import {
@@ -78,14 +78,15 @@ export function TeamleaderIntegration({
   oauthHint,
   oauthReason,
   embedded = false,
-  onConnectionChange,
+  onHubRefresh,
 }: {
   showToast: (msg: string, type?: 'success' | 'error') => void;
   oauthHint?: string | null;
   oauthReason?: string | null;
   /** Geen eigen sectie-header; bedoeld voor CrmIntegrationHub */
   embedded?: boolean;
-  onConnectionChange?: () => void;
+  /** Stille hub-refresh (geen volledige loading-skeleton). */
+  onHubRefresh?: () => void;
 }) {
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<StatusResponse | null>(null);
@@ -104,8 +105,11 @@ export function TeamleaderIntegration({
   const [savingCreds, setSavingCreds] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
 
-  const loadStatus = useCallback(async () => {
-    setLoading(true);
+  const hubRefreshRef = useRef(onHubRefresh);
+  hubRefreshRef.current = onHubRefresh;
+
+  const loadStatus = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoading(true);
     try {
       const res = await portalFetch('/api/portal/integrations/teamleader/status');
       if (res.ok) {
@@ -115,12 +119,15 @@ export function TeamleaderIntegration({
         setDealTemplate(d.settings?.deal_title_template || DEFAULT_DEAL_TEMPLATE);
         setSyncEnabled(d.settings?.enabled !== false);
         if (!d.has_customer_oauth_app && !d.connected) setSetupGuideOpen(true);
-        onConnectionChange?.();
       }
     } finally {
-      setLoading(false);
+      if (!opts?.silent) setLoading(false);
     }
-  }, [onConnectionChange]);
+  }, []);
+
+  const notifyHub = useCallback(() => {
+    hubRefreshRef.current?.();
+  }, []);
 
   const loadPipelines = useCallback(
     async (opts: { force?: boolean; silent?: boolean } = {}) => {
@@ -149,7 +156,8 @@ export function TeamleaderIntegration({
     if (!oauthHint) return;
     if (oauthHint === 'connected') {
       showToast('Teamleader is gekoppeld', 'success');
-      void loadStatus();
+      void loadStatus({ silent: true });
+      notifyHub();
     } else if (oauthHint === 'error') {
       showToast(`Koppelen mislukt: ${describeOauthError(oauthReason)}`, 'error');
     }
@@ -160,7 +168,7 @@ export function TeamleaderIntegration({
       if (!url.searchParams.has('tab')) url.searchParams.set('tab', 'integraties');
       window.history.replaceState({}, '', url.toString());
     }
-  }, [oauthHint, oauthReason, showToast, loadStatus]);
+  }, [oauthHint, oauthReason, showToast, loadStatus, notifyHub]);
 
   useEffect(() => {
     if (status?.connected) void loadPipelines({ silent: true });
@@ -199,7 +207,7 @@ export function TeamleaderIntegration({
     if (res.ok) {
       showToast('Teamleader ontkoppeld');
       await loadStatus();
-      onConnectionChange?.();
+      notifyHub();
     } else {
       showToast('Ontkoppelen mislukt', 'error');
     }
@@ -227,7 +235,7 @@ export function TeamleaderIntegration({
         setClientSecret('');
         setSetupGuideOpen(false);
         await loadStatus();
-        onConnectionChange?.();
+        notifyHub();
       } else {
         showToast(d.error || 'Opslaan mislukt', 'error');
       }
@@ -253,7 +261,7 @@ export function TeamleaderIntegration({
       if (res.ok) {
         showToast('Instellingen opgeslagen');
         await loadStatus();
-        onConnectionChange?.();
+        notifyHub();
       } else {
         const d = await res.json();
         showToast(d.error || 'Opslaan mislukt', 'error');
@@ -578,7 +586,11 @@ export function TeamleaderIntegration({
             </Alert>
           )}
 
-          <TeamleaderFieldMapping showToast={showToast} connected />
+          <TeamleaderFieldMapping
+            showToast={showToast}
+            connected
+            onSaved={notifyHub}
+          />
 
           <SyncHistory
             successCount={status.success_count}

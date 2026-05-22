@@ -24,9 +24,11 @@ const NATIVE_KEYS = new Set<string>(
 export function TeamleaderFieldMapping({
   showToast,
   connected,
+  onSaved,
 }: {
   showToast: (msg: string, type?: 'success' | 'error') => void;
   connected: boolean;
+  onSaved?: () => void;
 }) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -114,6 +116,7 @@ export function TeamleaderFieldMapping({
         setDirty(false);
         setHasSavedMappings(true);
         await load();
+        onSaved?.();
       } else {
         const d = await res.json();
         showToast(d.error || 'Opslaan mislukt', 'error');

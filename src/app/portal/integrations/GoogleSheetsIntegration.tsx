@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { portalFetch } from '@/lib/portalAuth';
 import { T } from '../_ui';
 import {
@@ -59,13 +59,14 @@ export function GoogleSheetsIntegration({
   oauthHint,
   oauthReason,
   embedded = false,
-  onConnectionChange,
+  onHubRefresh,
 }: {
   showToast: (msg: string, type?: 'success' | 'error') => void;
   oauthHint?: string | null;
   oauthReason?: string | null;
   embedded?: boolean;
-  onConnectionChange?: () => void;
+  /** Stille hub-refresh (geen volledige loading-skeleton). */
+  onHubRefresh?: () => void;
 }) {
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<StatusResponse | null>(null);
@@ -77,8 +78,11 @@ export function GoogleSheetsIntegration({
   const [testing, setTesting] = useState(false);
   const [syncEnabled, setSyncEnabled] = useState(true);
 
-  const loadStatus = useCallback(async () => {
-    setLoading(true);
+  const hubRefreshRef = useRef(onHubRefresh);
+  hubRefreshRef.current = onHubRefresh;
+
+  const loadStatus = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoading(true);
     try {
       const res = await portalFetch('/api/portal/integrations/google-sheets/status');
       if (res.ok) {
@@ -89,12 +93,15 @@ export function GoogleSheetsIntegration({
         if (d.settings?.sheet_gid != null) {
           setSelectedSheetId(d.settings.sheet_gid);
         }
-        onConnectionChange?.();
       }
     } finally {
-      setLoading(false);
+      if (!opts?.silent) setLoading(false);
     }
-  }, [onConnectionChange]);
+  }, []);
+
+  const notifyHub = useCallback(() => {
+    hubRefreshRef.current?.();
+  }, []);
 
   useEffect(() => {
     void loadStatus();
@@ -104,7 +111,8 @@ export function GoogleSheetsIntegration({
     if (!oauthHint) return;
     if (oauthHint === 'connected') {
       showToast('Google-account gekoppeld', 'success');
-      void loadStatus();
+      void loadStatus({ silent: true });
+      notifyHub();
     } else if (oauthHint === 'error') {
       showToast(`Koppelen mislukt: ${describeOauthError(oauthReason)}`, 'error');
     }
@@ -116,7 +124,7 @@ export function GoogleSheetsIntegration({
       if (!url.searchParams.has('tab')) url.searchParams.set('tab', 'integraties');
       window.history.replaceState({}, '', url.toString());
     }
-  }, [oauthHint, oauthReason, showToast, loadStatus]);
+  }, [oauthHint, oauthReason, showToast, loadStatus, notifyHub]);
 
   const connectGoogle = () => {
     window.location.href = '/api/portal/integrations/google-sheets/connect';
@@ -130,7 +138,7 @@ export function GoogleSheetsIntegration({
     if (res.ok) {
       showToast('Google Sheets ontkoppeld');
       await loadStatus();
-      onConnectionChange?.();
+      notifyHub();
     } else {
       showToast('Ontkoppelen mislukt', 'error');
     }
@@ -180,6 +188,7 @@ export function GoogleSheetsIntegration({
       if (res.ok) {
         showToast('Spreadsheet opgeslagen');
         await loadStatus();
+        notifyHub();
       } else {
         showToast(d.error || 'Opslaan mislukt', 'error');
       }
@@ -332,8 +341,8 @@ export function GoogleSheetsIntegration({
               showToast={showToast}
               ready={spreadsheetReady}
               onSaved={() => {
-                void loadStatus();
-                onConnectionChange?.();
+                void loadStatus({ silent: true });
+                notifyHub();
               }}
             />
           )}
