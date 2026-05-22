@@ -7,7 +7,12 @@ import {
   CRM_PROVIDERS,
   getCrmProvider,
   isCrmProviderAvailable,
+  type CrmProviderId,
 } from '@/lib/integrations/crmProviders';
+import {
+  getPreferredCrmProvider,
+  setPreferredCrmProvider,
+} from '@/lib/integrations/crmPreferences';
 import { getTeamleaderIntegration } from '@/lib/teamleader/integrationRepo';
 
 export async function GET(request: NextRequest) {
@@ -19,15 +24,15 @@ export async function GET(request: NextRequest) {
   const supabase = createServerClient();
   const customerId = session.customer.id;
 
-  const [{ data: customer }, integration] = await Promise.all([
-    supabase.from('customers').select('preferred_crm_provider').eq('id', customerId).single(),
+  const [preferredStored, integration] = await Promise.all([
+    getPreferredCrmProvider(supabase, customerId),
     getTeamleaderIntegration(supabase, customerId),
   ]);
 
   const teamleaderConnected = !!integration?.connected_at;
-  let preferred = (customer?.preferred_crm_provider as string | null) ?? null;
+  let preferred = preferredStored;
 
-  if (teamleaderConnected && preferred !== 'teamleader') {
+  if (teamleaderConnected) {
     preferred = 'teamleader';
   }
 
@@ -69,20 +74,17 @@ export async function PUT(request: NextRequest) {
     );
   }
 
-  if (!AVAILABLE_CRM_IDS.includes(providerId as (typeof AVAILABLE_CRM_IDS)[number])) {
+  if (!AVAILABLE_CRM_IDS.includes(providerId as CrmProviderId)) {
     return NextResponse.json({ error: 'CRM niet ondersteund' }, { status: 400 });
   }
 
   const supabase = createServerClient();
-  const { error } = await supabase
-    .from('customers')
-    .update({
-      preferred_crm_provider: providerId,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', session.customer.id);
 
-  if (error) {
+  try {
+    await setPreferredCrmProvider(supabase, session.customer.id, providerId);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Opslaan mislukt';
+    console.error('[integrations/preferences] save failed:', message);
     return NextResponse.json({ error: 'Opslaan mislukt' }, { status: 500 });
   }
 
