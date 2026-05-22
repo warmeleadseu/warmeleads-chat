@@ -367,7 +367,7 @@ export default function KoppelingenPage() {
   );
 }
 
-/* ───────── Teamleader OAuth (Warme Leads-app, klanten koppelen zelf) ───────── */
+/* ───────── Teamleader OAuth (optioneel — klanten brengen meestal hun eigen app mee) ───────── */
 
 function TeamleaderOAuthSection() {
   const [clientId, setClientId] = useState('');
@@ -446,20 +446,29 @@ function TeamleaderOAuthSection() {
             <LinkIcon className="h-5 w-5 text-violet-600" />
           </div>
           <div>
-            <h2 className="text-sm font-bold text-slate-900">Teamleader Focus (klantportaal)</h2>
+            <h2 className="text-sm font-bold text-slate-900">Teamleader Focus (optioneel)</h2>
             <p className="text-xs text-slate-500">
-              Eén OAuth-app voor Warme Leads — klanten koppelen hun eigen Teamleader-account in het portaal
+              Centrale Warme Leads-OAuth-app — alleen invullen als jíj wilt dat klanten zónder eigen Teamleader-integratie kunnen koppelen
             </p>
           </div>
         </div>
       </div>
 
       <div className="space-y-4 p-5">
+        <div className="rounded-lg border border-emerald-100 bg-emerald-50/60 p-4 text-sm text-emerald-900">
+          <p className="font-medium">Niet nodig in de meeste gevallen</p>
+          <p className="mt-1 text-xs leading-relaxed text-emerald-800">
+            Klanten maken in het portaal zelf een gratis Teamleader-integratie aan in hún eigen Teamleader-account
+            (Bring-Your-Own OAuth-app). Warme Leads heeft dus géén eigen Teamleader-account nodig. Sla dit dus
+            gerust over — vul deze sectie alleen in als je optioneel een centrale fallback wilt aanbieden.
+          </p>
+        </div>
+
         <div className="rounded-lg border border-blue-100 bg-blue-50/60 p-4 text-sm text-blue-900">
-          <p className="font-medium">Hoe het werkt</p>
+          <p className="font-medium">Als je tóch een centrale app wilt</p>
           <ol className="mt-2 list-decimal space-y-1 pl-4 text-xs text-blue-800">
             <li>
-              Maak <strong>één</strong> integratie op{' '}
+              Maak één integratie op{' '}
               <a
                 href="https://marketplace.focus.teamleader.eu/build"
                 target="_blank"
@@ -468,7 +477,7 @@ function TeamleaderOAuthSection() {
               >
                 Teamleader Marketplace
               </a>{' '}
-              (naam: Warme Leads).
+              (vereist een Teamleader-account — gratis dev-account volstaat).
             </li>
             <li>
               Whitelist deze redirect URI (exact, geen spaties/newlines):{' '}
@@ -476,11 +485,7 @@ function TeamleaderOAuthSection() {
                 {prodCallback}
               </code>
             </li>
-            <li>Plak hieronder de Client ID en Client Secret van die app (één keer).</li>
-            <li>
-              Klanten (bijv. Sergio) gaan in het portaal → Account → <strong>Koppel Teamleader</strong> — hun
-              tokens worden per klant opgeslagen; jij hoeft geen IDs per klant te beheren.
-            </li>
+            <li>Plak hieronder Client ID en Secret.</li>
           </ol>
         </div>
 

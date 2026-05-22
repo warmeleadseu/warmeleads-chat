@@ -4,8 +4,15 @@ export const TEAMLEADER_AUTH_BASE = 'https://focus.teamleader.eu';
 export const DEFAULT_DEAL_TITLE_TEMPLATE = 'Warme Leads — {branch_name} — {naam_klant}';
 
 export {
-  getTeamleaderOAuthConfig,
+  getGlobalOAuthConfig,
+  getCustomerOAuthConfig,
+  getEffectiveOAuthConfig,
+  saveCustomerOAuthCredentials,
+  clearCustomerOAuthCredentials,
+  isTeamleaderConfiguredForCustomer,
   isTeamleaderConfigured,
+  getTeamleaderOAuthConfig,
+  getCallbackRedirectUri,
   stripEnvValue,
 } from './credentials';
 export type { TeamleaderOAuthConfig } from './credentials';

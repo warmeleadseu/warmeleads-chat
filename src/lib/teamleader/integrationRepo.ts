@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { decryptSecret, encryptSecret } from '@/lib/integrations/tokenEncrypt';
 import { refreshAccessToken } from './oauth';
+import { getEffectiveOAuthConfig } from './credentials';
 import {
   TEAMLEADER_PROVIDER,
   type TeamleaderIntegrationSettings,
@@ -76,7 +77,31 @@ export async function saveTeamleaderTokens(
   if (error) throw new Error(error.message);
 }
 
+/**
+ * Ontkoppelen: gooi tokens + settings weg, maar bewaar de klant-eigen
+ * OAuth-app credentials (client_id/secret) zodat klanten niet opnieuw
+ * hun Teamleader-integratie hoeven te leveren bij opnieuw koppelen.
+ */
 export async function disconnectTeamleader(
+  supabase: SupabaseClient,
+  customerId: string,
+): Promise<void> {
+  await supabase
+    .from('customer_integrations')
+    .update({
+      access_token_enc: null,
+      refresh_token_enc: null,
+      expires_at: null,
+      connected_at: null,
+      settings: { enabled: false },
+      updated_at: new Date().toISOString(),
+    })
+    .eq('customer_id', customerId)
+    .eq('provider', TEAMLEADER_PROVIDER);
+}
+
+/** Volledig opruimen — ook de eigen OAuth-app credentials. */
+export async function fullyRemoveTeamleader(
   supabase: SupabaseClient,
   customerId: string,
 ): Promise<void> {
@@ -107,6 +132,10 @@ export async function updateTeamleaderSettings(
   return settings;
 }
 
+/**
+ * Geef een geldig access token terug. Refresht zo nodig — gebruikt de
+ * OAuth-config van **deze** klant (BYOA) of valt terug op de globale app.
+ */
 export async function ensureValidAccessToken(
   supabase: SupabaseClient,
   integration: StoredIntegration,
@@ -115,7 +144,13 @@ export async function ensureValidAccessToken(
   if (integration.expires_at.getTime() > Date.now() + bufferMs) {
     return integration.access_token;
   }
-  const refreshed = await refreshAccessToken(integration.refresh_token);
+  const oauthConfig = await getEffectiveOAuthConfig(supabase, integration.customer_id);
+  if (!oauthConfig) {
+    throw new Error(
+      'Teamleader-koppeling kan niet vernieuwen: OAuth-app credentials ontbreken.',
+    );
+  }
+  const refreshed = await refreshAccessToken(oauthConfig, integration.refresh_token);
   await saveTeamleaderTokens(supabase, integration.customer_id, refreshed);
   return refreshed.accessToken;
 }

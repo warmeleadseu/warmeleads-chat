@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from 'crypto';
 import { getRawSessionSecret } from '@/lib/sessionSecrets';
 import { TEAMLEADER_AUTH_BASE } from './config';
-import { getTeamleaderOAuthConfig } from './credentials';
+import type { TeamleaderOAuthConfig } from './credentials';
 import type { TeamleaderTokenPair } from './types';
 
 const STATE_TTL_MS = 10 * 60 * 1000;
@@ -36,9 +36,10 @@ export function parseOAuthState(state: string): string | null {
   }
 }
 
-export async function getAuthorizationUrl(state: string): Promise<string> {
-  const config = await getTeamleaderOAuthConfig();
-  if (!config) throw new Error('Teamleader OAuth niet geconfigureerd');
+export function buildAuthorizationUrl(
+  config: TeamleaderOAuthConfig,
+  state: string,
+): string {
   const params = new URLSearchParams({
     client_id: config.clientId,
     response_type: 'code',
@@ -49,9 +50,6 @@ export async function getAuthorizationUrl(state: string): Promise<string> {
 }
 
 async function tokenRequest(body: Record<string, string>): Promise<TeamleaderTokenPair> {
-  const config = await getTeamleaderOAuthConfig();
-  if (!config) throw new Error('Teamleader OAuth niet geconfigureerd');
-
   const res = await fetch(`${TEAMLEADER_AUTH_BASE}/oauth2/access_token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -65,7 +63,9 @@ async function tokenRequest(body: Record<string, string>): Promise<TeamleaderTok
     error_description?: string;
   };
   if (!res.ok || !json.access_token || !json.refresh_token) {
-    throw new Error(json.error_description || json.error || `Token exchange failed (${res.status})`);
+    throw new Error(
+      json.error_description || json.error || `Token exchange faalde (${res.status})`,
+    );
   }
   const expiresIn = json.expires_in ?? 3600;
   return {
@@ -75,9 +75,10 @@ async function tokenRequest(body: Record<string, string>): Promise<TeamleaderTok
   };
 }
 
-export async function exchangeCodeForTokens(code: string): Promise<TeamleaderTokenPair> {
-  const config = await getTeamleaderOAuthConfig();
-  if (!config) throw new Error('Teamleader OAuth niet geconfigureerd');
+export function exchangeCodeForTokens(
+  config: TeamleaderOAuthConfig,
+  code: string,
+): Promise<TeamleaderTokenPair> {
   return tokenRequest({
     grant_type: 'authorization_code',
     client_id: config.clientId,
@@ -87,9 +88,10 @@ export async function exchangeCodeForTokens(code: string): Promise<TeamleaderTok
   });
 }
 
-export async function refreshAccessToken(refreshToken: string): Promise<TeamleaderTokenPair> {
-  const config = await getTeamleaderOAuthConfig();
-  if (!config) throw new Error('Teamleader OAuth niet geconfigureerd');
+export function refreshAccessToken(
+  config: TeamleaderOAuthConfig,
+  refreshToken: string,
+): Promise<TeamleaderTokenPair> {
   return tokenRequest({
     grant_type: 'refresh_token',
     client_id: config.clientId,

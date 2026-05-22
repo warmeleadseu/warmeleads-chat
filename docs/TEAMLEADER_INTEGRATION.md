@@ -1,65 +1,74 @@
 # Teamleader Focus-integratie (klantportaal)
 
-## Belangrijk: één app, veel klanten
+## Belangrijk: Warme Leads heeft géén Teamleader-account nodig
 
-**Jij hoeft geen Client ID per klant te zetten.** Warme Leads registreert **één** OAuth-app op de Teamleader Marketplace. De credentials daarvan bewaar je **één keer** (Admin → Koppelingen, of optioneel in Vercel env).
-
-Elke klant (bijv. Sergio / Next Gen) klikt in het portaal op **Koppel Teamleader**, logt in bij **zijn eigen** Teamleader-account, en geeft toestemming. De access/refresh tokens van **die** klant worden per `customer_id` in `customer_integrations` opgeslagen (encrypted). Daarna syncen alleen **hun** toegewezen leads.
+Onze klanten brengen hun **eigen** OAuth-app mee. Iedere klant maakt zelf een gratis private integratie aan in zijn eigen Teamleader Focus, plakt Client ID + Secret in het portaal en doet daarna OAuth. Wij hoeven niets aan onze kant te registreren.
 
 ```
-Warme Leads (1× Marketplace-app)
-    └── Client ID + Secret → Admin Koppelingen of Vercel
-    └── Klant A OAuth → tokens van klant A
-    └── Klant B OAuth → tokens van klant B
+Klant A
+  └── Teamleader (eigen Focus-account)
+       └── Marketplace → Create integration (gratis, privaat)
+       └── Client ID + Secret → in Warme Leads-portaal plakken
+       └── OAuth → tokens van klant A worden bij ons opgeslagen
+Klant B
+  └── Idem, volledig los van klant A
 ```
 
-## Stap 1 — Marketplace-app (Warme Leads, éénmalig)
+> Optioneel: als jij toch één centrale Warme Leads-OAuth-app wilt aanbieden (zodat klanten geen eigen integratie hoeven aan te maken), kun je dat in **Admin → Koppelingen** invullen. Klant-eigen credentials hebben altijd voorrang.
 
-1. [Teamleader Marketplace](https://marketplace.focus.teamleader.eu/build) → integratie **Warme Leads**.
-2. Redirect URI whitelist (exact, **geen** newline/spatie aan het eind):
-   - `https://warmeleads.eu/api/portal/integrations/teamleader/callback`
-   - Lokaal: `http://localhost:3000/api/portal/integrations/teamleader/callback`
-3. Kopieer **Client ID** en **Client Secret** (één regel, geen regeleinde in de waarde).
+## Klantflow (de standaard route)
 
-## Stap 2 — Credentials opslaan (kies één)
+### Stap 1 — Klant maakt integratie in zijn Teamleader
 
-### Optie A — Admin (aanbevolen)
+1. Klant gaat naar [Teamleader Marketplace → Build](https://marketplace.focus.teamleader.eu/build) en logt in met zijn eigen Teamleader-account.
+2. Klikt op **Create integration** → naam: bijv. `Warme Leads`.
+3. Vult bij **Redirect URI** exact onze callback-URL in. Het portaal toont en kopieert deze URL automatisch — bijvoorbeeld: `https://warmeleads.eu/api/portal/integrations/teamleader/callback`.
+4. Bewaart de integratie. Kopieert **Client ID** en **Client Secret**.
 
-**Admin → Koppelingen → Teamleader Focus** → plak Client ID + Secret → Opslaan.
+### Stap 2 — Klant plakt credentials in Warme Leads-portaal
 
-Geen Vercel nodig zolang dit staat in `app_settings`.
+Portaal → **Account** → sectie **Teamleader Focus** → plak Client ID en Secret → Opslaan.
 
-### Optie B — Vercel (alternatief)
+### Stap 3 — Klant doet OAuth
 
-Zelfde waarden als env vars (zonder newline aan het eind):
+Klik op **Koppel mijn Teamleader-account**. De klant logt in (zit al ingelogd in eigen Teamleader), klikt **Authorize**, en wordt teruggestuurd naar het portaal.
 
-```env
-TEAMLEADER_CLIENT_ID=
-TEAMLEADER_CLIENT_SECRET=
-TEAMLEADER_REDIRECT_URI=https://warmeleads.eu/api/portal/integrations/teamleader/callback
-```
+### Stap 4 — Klant kiest pipeline en zet sync aan
 
-Env heeft voorrang boven Admin als beide gezet zijn.
+Pipeline kiezen, eventueel deal-titel template aanpassen, **sync aan**, opslaan. Vanaf nu gaan alleen leads die aan deze klant zijn toegewezen automatisch als contact + deal naar Teamleader.
 
-## Stap 3 — Klantflow
+## Wat we per klant opslaan (encrypted)
 
-1. Portaal → **Account** → **Teamleader Focus**.
-2. **Koppel Teamleader** → OAuth → terug naar portaal.
-3. Pipeline kiezen, deal-titel eventueel aanpassen, **Sync aan** → Opslaan.
-4. Optioneel **Testdeal** om te verifiëren.
+In `customer_integrations`:
 
-Alleen `lead_assignments` met `customer_id` = die klant worden gesynchroniseerd.
+| Veld | Doel |
+|------|------|
+| `client_id_enc`, `client_secret_enc` | Klant-eigen OAuth-app credentials |
+| `access_token_enc`, `refresh_token_enc`, `expires_at` | OAuth-tokens van die klant |
+| `settings.pipeline_id`, `settings.deal_title_template`, `settings.enabled` | Sync-voorkeuren |
+
+Tokens worden versleuteld met AES-256-GCM (`INTEGRATION_TOKEN_ENCRYPTION_KEY` of fallback op `APP_SESSION_SECRET`/`CRON_SECRET`).
 
 ## Database
 
-Migratie: `supabase/migrations/122_teamleader_integration.sql`  
-Tabellen: `customer_integrations`, `integration_sync_log`.
+- `supabase/migrations/122_teamleader_integration.sql` — `customer_integrations` + `integration_sync_log`
+- `supabase/migrations/123_teamleader_per_customer_oauth_app.sql` — `client_id_enc` + `client_secret_enc`
+
+## Optioneel: centrale Warme Leads-app
+
+Als je tóch een fallback wilt aanbieden (klanten kunnen direct koppelen zonder eigen integratie aan te maken):
+
+- **Admin → Koppelingen → Teamleader Focus** → Client ID + Secret plakken.
+- Of Vercel env vars `TEAMLEADER_CLIENT_ID` / `TEAMLEADER_CLIENT_SECRET` / `TEAMLEADER_REDIRECT_URI`.
+
+In dat geval moet je zelf een (gratis) Marketplace-app op je naam registreren. **Niet vereist** voor klanten — die kunnen altijd hun eigen app meebrengen.
 
 ## Troubleshooting
 
 | Probleem | Oplossing |
 |----------|-----------|
-| Portaal: “binnenkort beschikbaar” | Client ID/Secret nog niet in Admin of Vercel |
-| OAuth redirect mismatch | Redirect URI in Marketplace = exact de callback-URL |
-| Token/secret werkt niet | Geen newline in geplakte waarde; opnieuw opslaan via Admin |
+| Portaal: “voer eerst Client ID/Secret in” | Klant heeft nog geen eigen credentials geplakt (sectie Teamleader → Stap 2) |
+| OAuth redirect mismatch | Redirect URI in de Teamleader-integratie van de klant = exact onze callback-URL (geen newline/spatie) |
+| `invalid_state` | OAuth-flow duurde langer dan 10 min — opnieuw beginnen |
+| Token werkt niet | Geen newline/spatie in Client Secret; opnieuw plakken |
 | Geen sync | Pipeline gekozen + sync aan + lead niet `bron=demo` |

@@ -185,6 +185,7 @@ function AccountTab({
   accountManager,
   isOwner,
   teamleaderOauthHint,
+  teamleaderOauthReason,
 }: {
   data: AccountData | null;
   loading: boolean;
@@ -192,6 +193,7 @@ function AccountTab({
   accountManager: AccountManagerData | null;
   isOwner: boolean;
   teamleaderOauthHint?: string | null;
+  teamleaderOauthReason?: string | null;
 }) {
   const [currentPw, setCurrentPw] = useState('');
   const [newPw, setNewPw] = useState('');
@@ -467,6 +469,7 @@ function AccountTab({
         isOwner={isOwner}
         showToast={showToast}
         oauthHint={teamleaderOauthHint}
+        oauthReason={teamleaderOauthReason}
       />
 
       {/* Member since */}
@@ -1172,6 +1175,7 @@ export default function AccountPage() {
   const { customer, isOwner } = usePortal();
   const searchParams = useSearchParams();
   const teamleaderOauthHint = searchParams.get('teamleader');
+  const teamleaderOauthReason = searchParams.get('reason');
   const [activeTab, setActiveTab] = useState<TabKey>('account');
 
   const [accountData, setAccountData] = useState<AccountData | null>(null);
@@ -1401,6 +1405,7 @@ export default function AccountPage() {
               accountManager={accountManager}
               isOwner={isOwner}
               teamleaderOauthHint={teamleaderOauthHint}
+              teamleaderOauthReason={teamleaderOauthReason}
             />
           )}
           {activeTab === 'insights' && (

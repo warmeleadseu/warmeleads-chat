@@ -8,6 +8,12 @@ import {
   CheckCircleIcon,
   ExclamationTriangleIcon,
   PuzzlePieceIcon,
+  ClipboardDocumentIcon,
+  CheckIcon,
+  EyeIcon,
+  EyeSlashIcon,
+  ArrowTopRightOnSquareIcon,
+  InformationCircleIcon,
 } from '@heroicons/react/24/outline';
 
 type SyncRow = {
@@ -24,6 +30,10 @@ type Pipeline = { id: string; name: string };
 
 type StatusResponse = {
   configured: boolean;
+  oauth_source: 'customer' | 'global' | null;
+  has_customer_oauth_app: boolean;
+  has_global_oauth_app: boolean;
+  redirect_uri: string;
   connected: boolean;
   settings: {
     enabled?: boolean;
@@ -53,10 +63,12 @@ export function TeamleaderIntegrationSection({
   isOwner,
   showToast,
   oauthHint,
+  oauthReason,
 }: {
   isOwner: boolean;
   showToast: (msg: string, type?: 'success' | 'error') => void;
   oauthHint?: string | null;
+  oauthReason?: string | null;
 }) {
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<StatusResponse | null>(null);
@@ -67,6 +79,13 @@ export function TeamleaderIntegrationSection({
   const [pipelineId, setPipelineId] = useState('');
   const [dealTemplate, setDealTemplate] = useState('');
   const [syncEnabled, setSyncEnabled] = useState(true);
+
+  const [credsOpen, setCredsOpen] = useState(false);
+  const [clientId, setClientId] = useState('');
+  const [clientSecret, setClientSecret] = useState('');
+  const [showSecret, setShowSecret] = useState(false);
+  const [savingCreds, setSavingCreds] = useState(false);
+  const [copied, setCopied] = useState<string | null>(null);
 
   const loadStatus = useCallback(async () => {
     setLoading(true);
@@ -80,6 +99,7 @@ export function TeamleaderIntegrationSection({
           d.settings?.deal_title_template || 'Warme Leads — {branch_name} — {naam_klant}',
         );
         setSyncEnabled(d.settings?.enabled !== false);
+        if (!d.configured) setCredsOpen(true);
       }
     } finally {
       setLoading(false);
@@ -109,8 +129,11 @@ export function TeamleaderIntegrationSection({
       showToast('Teamleader succesvol gekoppeld', 'success');
       void loadStatus();
     }
-    if (oauthHint === 'error') showToast('Teamleader koppelen mislukt. Probeer het opnieuw.', 'error');
-  }, [oauthHint, showToast, loadStatus]);
+    if (oauthHint === 'error') {
+      const reasonLabel = describeOauthError(oauthReason);
+      showToast(`Teamleader koppelen mislukt: ${reasonLabel}`, 'error');
+    }
+  }, [oauthHint, oauthReason, showToast, loadStatus]);
 
   useEffect(() => {
     if (status?.connected) void loadPipelines();
@@ -132,6 +155,46 @@ export function TeamleaderIntegrationSection({
       await loadStatus();
     } else {
       showToast('Ontkoppelen mislukt', 'error');
+    }
+  };
+
+  const saveCreds = async () => {
+    if (!clientId.trim() || !clientSecret.trim()) {
+      showToast('Vul zowel Client ID als Client Secret in', 'error');
+      return;
+    }
+    setSavingCreds(true);
+    try {
+      const res = await portalFetch('/api/portal/integrations/teamleader/credentials', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          client_id: clientId.trim(),
+          client_secret: clientSecret.trim(),
+        }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (res.ok) {
+        showToast('Teamleader-app credentials opgeslagen');
+        setClientId('');
+        setClientSecret('');
+        await loadStatus();
+      } else {
+        showToast(d.error || 'Opslaan mislukt', 'error');
+      }
+    } finally {
+      setSavingCreds(false);
+    }
+  };
+
+  const removeCreds = async () => {
+    if (!confirm('Eigen Teamleader-app credentials verwijderen?')) return;
+    const res = await portalFetch('/api/portal/integrations/teamleader/credentials', {
+      method: 'DELETE',
+    });
+    if (res.ok) {
+      showToast('Eigen credentials verwijderd');
+      await loadStatus();
     }
   };
 
@@ -175,8 +238,13 @@ export function TeamleaderIntegrationSection({
     }
   };
 
-  const needsPipeline = status?.connected && !status.settings?.pipeline_id && !pipelineId;
-  const syncReady = status?.connected && !!pipelineId && syncEnabled;
+  const copy = (value: string, key: string) => {
+    if (typeof navigator === 'undefined') return;
+    navigator.clipboard.writeText(value).then(() => {
+      setCopied(key);
+      window.setTimeout(() => setCopied(null), 2000);
+    });
+  };
 
   if (loading) {
     return (
@@ -193,27 +261,13 @@ export function TeamleaderIntegrationSection({
     );
   }
 
-  if (!status?.configured) {
-    return (
-      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100">
-            <PuzzlePieceIcon className="h-5 w-5 text-slate-500" />
-          </div>
-          <div>
-            <h3 className="text-sm font-semibold text-slate-900">Teamleader</h3>
-            <p className="mt-1 text-sm text-slate-600">
-              De koppeling met Teamleader wordt door Warme Leads geactiveerd. Zodra dat klaar is, kun je hier
-              je eigen Teamleader-account koppelen en leads automatisch laten doorsturen.
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const redirectUri = status?.redirect_uri || '';
+  const needsPipeline = status?.connected && !status.settings?.pipeline_id && !pipelineId;
+  const syncReady = status?.connected && !!pipelineId && syncEnabled;
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+      {/* Header */}
       <div className="border-b border-slate-100 p-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-start gap-3">
@@ -223,50 +277,221 @@ export function TeamleaderIntegrationSection({
             <div>
               <h3 className="text-sm font-semibold text-slate-900">Teamleader Focus</h3>
               <p className="mt-0.5 max-w-prose text-xs leading-relaxed text-slate-500">
-                Koppel <strong>jouw</strong> Teamleader-account. Alleen leads die aan jouw portaal zijn toegewezen
-                worden als contact + deal doorgestuurd — nooit leads van andere klanten.
+                Verbind <strong>jouw eigen</strong> Teamleader-account. Alleen leads die aan jouw portaal
+                zijn toegewezen worden als contact + deal doorgestuurd. Warme Leads heeft géén Teamleader
+                nodig — jij maakt zelf een gratis private integratie aan in je eigen Teamleader.
               </p>
             </div>
           </div>
-          {status.connected ? (
+          {status?.connected ? (
             <span className="inline-flex w-fit items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
               <CheckCircleIcon className="h-3.5 w-3.5" />
               Verbonden
             </span>
+          ) : status?.has_customer_oauth_app ? (
+            <span className="inline-flex w-fit items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-800">
+              Klaar om te koppelen
+            </span>
           ) : (
             <span className="inline-flex w-fit rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
-              Nog niet gekoppeld
+              Nog niet ingesteld
             </span>
           )}
         </div>
       </div>
 
       <div className="space-y-5 p-5">
-        {!status.connected ? (
-          <div className="space-y-4">
-            <ol className="space-y-2 text-sm text-slate-600">
+        {/* Stap 1 — eigen Teamleader-app */}
+        {!status?.has_customer_oauth_app && (
+          <div className="space-y-3 rounded-xl border border-violet-100 bg-violet-50/40 p-4">
+            <div className="flex items-start gap-2">
+              <InformationCircleIcon className="mt-0.5 h-5 w-5 shrink-0 text-violet-600" />
+              <div>
+                <p className="text-sm font-semibold text-slate-900">Stap 1 — Maak een Teamleader-integratie aan</p>
+                <p className="mt-1 text-xs text-slate-600">
+                  Dit is gratis en gebeurt in je eigen Teamleader Focus. Het kost ongeveer een minuut.
+                </p>
+              </div>
+            </div>
+
+            <ol className="space-y-2 text-sm text-slate-700">
               <li className="flex gap-2">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-purple/10 text-xs font-bold text-brand-purple">
+                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-violet-600 text-[10px] font-bold text-white">
                   1
                 </span>
-                <span>Log in bij Teamleader en geef Warme Leads toestemming.</span>
+                <span>
+                  Open{' '}
+                  <a
+                    href="https://marketplace.focus.teamleader.eu/build"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-0.5 font-medium text-violet-700 hover:underline"
+                  >
+                    Teamleader Marketplace → Build
+                    <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5" />
+                  </a>{' '}
+                  en log in met je eigen Teamleader-account.
+                </span>
               </li>
               <li className="flex gap-2">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-purple/10 text-xs font-bold text-brand-purple">
+                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-violet-600 text-[10px] font-bold text-white">
                   2
                 </span>
-                <span>Kies daarna je pipeline en zet sync aan.</span>
+                <span>
+                  Klik op <strong>Create integration</strong>, naam: <em>Warme Leads</em>.
+                </span>
+              </li>
+              <li className="flex gap-2">
+                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-violet-600 text-[10px] font-bold text-white">
+                  3
+                </span>
+                <span className="min-w-0">
+                  Bij <strong>Redirect URI</strong> exact deze waarde plakken:
+                  <div className="mt-2 flex items-start gap-2 rounded-lg border border-violet-200 bg-white p-2">
+                    <code className="min-w-0 flex-1 break-all font-mono text-[11px] text-violet-700">
+                      {redirectUri}
+                    </code>
+                    <button
+                      type="button"
+                      onClick={() => copy(redirectUri, 'redirect')}
+                      className="shrink-0 rounded p-1 text-slate-400 hover:bg-slate-50 hover:text-slate-700"
+                      aria-label="Kopieer redirect URI"
+                    >
+                      {copied === 'redirect' ? (
+                        <CheckIcon className="h-4 w-4 text-emerald-500" />
+                      ) : (
+                        <ClipboardDocumentIcon className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
+                </span>
+              </li>
+              <li className="flex gap-2">
+                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-violet-600 text-[10px] font-bold text-white">
+                  4
+                </span>
+                <span>
+                  Bewaar de integratie en kopieer de <strong>Client ID</strong> en <strong>Client Secret</strong>.
+                  Hieronder plak je ze in dit portaal.
+                </span>
               </li>
             </ol>
+          </div>
+        )}
+
+        {/* Credentials form */}
+        {(!status?.has_customer_oauth_app || credsOpen) && (
+          <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-semibold text-slate-900">
+                {status?.has_customer_oauth_app
+                  ? 'Eigen Teamleader-app credentials bijwerken'
+                  : 'Stap 2 — Plak je Client ID en Secret'}
+              </p>
+              {status?.has_customer_oauth_app && (
+                <button
+                  type="button"
+                  onClick={() => setCredsOpen(false)}
+                  className="text-xs text-slate-500 hover:text-slate-700"
+                >
+                  Verbergen
+                </button>
+              )}
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-600">Client ID</label>
+              <input
+                type="text"
+                inputMode="text"
+                autoComplete="off"
+                value={clientId}
+                onChange={(e) => setClientId(e.target.value)}
+                placeholder="bijv. 1a2b3c4d-5e6f-7g8h-9i0j-..."
+                className="min-h-11 w-full rounded-xl border border-slate-200 px-3 py-2.5 font-mono text-xs outline-none focus:border-brand-purple/40 focus:ring-2 focus:ring-brand-purple/15"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-600">Client Secret</label>
+              <div className="relative">
+                <input
+                  type={showSecret ? 'text' : 'password'}
+                  autoComplete="new-password"
+                  value={clientSecret}
+                  onChange={(e) => setClientSecret(e.target.value)}
+                  placeholder="••••••••••••••••"
+                  className="min-h-11 w-full rounded-xl border border-slate-200 px-3 py-2.5 pr-11 font-mono text-xs outline-none focus:border-brand-purple/40 focus:ring-2 focus:ring-brand-purple/15"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowSecret(!showSecret)}
+                  className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-2 text-slate-400 hover:text-slate-700"
+                  aria-label={showSecret ? 'Secret verbergen' : 'Secret tonen'}
+                >
+                  {showSecret ? (
+                    <EyeSlashIcon className="h-4 w-4" />
+                  ) : (
+                    <EyeIcon className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
+              <p className="mt-1 text-[11px] text-slate-400">
+                Wordt versleuteld opgeslagen. Newlines worden automatisch gestript.
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <button
+                type="button"
+                onClick={() => void saveCreds()}
+                disabled={savingCreds || !clientId.trim() || !clientSecret.trim()}
+                className="min-h-11 flex-1 rounded-xl bg-brand-purple px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-purple/90 disabled:opacity-50"
+              >
+                {savingCreds ? 'Opslaan…' : 'Credentials opslaan'}
+              </button>
+              {status?.has_customer_oauth_app && (
+                <button
+                  type="button"
+                  onClick={() => void removeCreds()}
+                  className="min-h-11 rounded-xl border border-red-200 px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50"
+                >
+                  Verwijderen
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {status?.has_customer_oauth_app && !credsOpen && (
+          <div className="flex items-center justify-between gap-2 rounded-xl border border-emerald-100 bg-emerald-50/60 p-3 text-sm text-emerald-800">
+            <span className="flex items-center gap-2">
+              <CheckCircleIcon className="h-4 w-4 text-emerald-600" />
+              Eigen Teamleader-app credentials zijn opgeslagen.
+            </span>
             <button
               type="button"
-              onClick={connect}
-              className="flex min-h-11 w-full items-center justify-center rounded-xl bg-brand-purple px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-purple/90 sm:w-auto sm:px-6"
+              onClick={() => setCredsOpen(true)}
+              className="text-xs font-medium text-emerald-700 hover:underline"
             >
-              Koppel Teamleader
+              Wijzigen
             </button>
           </div>
-        ) : (
+        )}
+
+        {/* Connect button */}
+        {status?.configured && !status.connected && (
+          <button
+            type="button"
+            onClick={connect}
+            className="flex min-h-11 w-full items-center justify-center rounded-xl bg-brand-purple px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-purple/90 sm:w-auto sm:px-6"
+          >
+            Stap 3 — Koppel mijn Teamleader-account
+          </button>
+        )}
+
+        {/* Connected state */}
+        {status?.connected && (
           <>
             {needsPipeline && (
               <div className="flex gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
@@ -284,7 +509,10 @@ export function TeamleaderIntegrationSection({
 
             <div className="space-y-4">
               <div>
-                <label htmlFor="tl-pipeline" className="mb-1.5 block text-xs font-medium text-slate-700">
+                <label
+                  htmlFor="tl-pipeline"
+                  className="mb-1.5 block text-xs font-medium text-slate-700"
+                >
                   Pipeline
                 </label>
                 <select
@@ -294,9 +522,7 @@ export function TeamleaderIntegrationSection({
                   disabled={pipelinesLoading}
                   className="min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-brand-purple/40 focus:ring-2 focus:ring-brand-purple/15 disabled:opacity-60"
                 >
-                  <option value="">
-                    {pipelinesLoading ? 'Pipelines laden…' : 'Kies een pipeline…'}
-                  </option>
+                  <option value="">{pipelinesLoading ? 'Pipelines laden…' : 'Kies een pipeline…'}</option>
                   {pipelines.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.name}
@@ -311,7 +537,10 @@ export function TeamleaderIntegrationSection({
               </div>
 
               <div>
-                <label htmlFor="tl-template" className="mb-1.5 block text-xs font-medium text-slate-700">
+                <label
+                  htmlFor="tl-template"
+                  className="mb-1.5 block text-xs font-medium text-slate-700"
+                >
                   Deal-titel
                 </label>
                 <input
@@ -475,9 +704,25 @@ export function TeamleaderIntegrationSection({
             )}
           </>
         )}
+
+        {status?.oauth_source === 'global' && !status.has_customer_oauth_app && !status.connected && (
+          <p className="rounded-lg border border-slate-100 bg-slate-50 p-3 text-xs text-slate-500">
+            Warme Leads heeft een centrale Teamleader-koppeling beschikbaar. Je kunt direct koppelen, of
+            kies hierboven voor een eigen Teamleader-integratie.
+          </p>
+        )}
       </div>
     </div>
   );
+}
+
+function describeOauthError(reason?: string | null): string {
+  if (!reason) return 'onbekende fout';
+  if (reason === 'no_oauth_config') return 'voer eerst je Client ID/Secret in';
+  if (reason === 'invalid_state') return 'sessie verlopen — probeer opnieuw';
+  if (reason === 'missing_code') return 'Teamleader stuurde geen autorisatiecode terug';
+  if (reason === 'access_denied') return 'toestemming in Teamleader geweigerd';
+  return reason;
 }
 
 function SyncStatusBadge({ status, error }: { status: string; error: string | null }) {
