@@ -6,7 +6,8 @@ import { getEffectiveOAuthConfig } from '@/lib/teamleader/credentials';
 
 function portalAccountUrl(request: NextRequest, query: string): string {
   const base = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, '') || request.nextUrl.origin;
-  return `${base}/portal/account?${query}`;
+  const q = query.includes('tab=') ? query : `tab=integraties&${query}`;
+  return `${base}/portal/account?${q}`;
 }
 
 export async function GET(request: NextRequest) {

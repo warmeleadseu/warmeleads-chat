@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
   const config = await getEffectiveOAuthConfig(supabase, session.customer.id);
   if (!config) {
     return NextResponse.redirect(
-      portalAccountUrl(request, 'teamleader=error&reason=no_oauth_config'),
+      portalAccountUrl(request, 'tab=integraties&teamleader=error&reason=no_oauth_config'),
     );
   }
 

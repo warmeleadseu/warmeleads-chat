@@ -31,10 +31,11 @@ import {
   DocumentTextIcon,
   ArrowDownTrayIcon,
   CreditCardIcon,
+  PuzzlePieceIcon,
 } from '@heroicons/react/24/outline';
 import { usePushNotifications } from '../usePushNotifications';
 import { PageHeader } from '../_ui';
-import { TeamleaderIntegrationSection } from './TeamleaderIntegrationSection';
+import { IntegrationsTab } from './IntegrationsTab';
 
 /* ─── Types ────────────────────────────────────────────────── */
 
@@ -93,6 +94,7 @@ interface OrderData {
 
 const TABS = [
   { key: 'account', label: 'Mijn Account', icon: UserCircleIcon },
+  { key: 'integraties', label: 'Integraties', icon: PuzzlePieceIcon },
   { key: 'insights', label: 'Prestaties', icon: ChartBarIcon },
   { key: 'areas', label: 'Gebieden', icon: GlobeAltIcon },
   { key: 'orders', label: 'Bestellingen', icon: ShoppingCartIcon },
@@ -183,17 +185,11 @@ function AccountTab({
   loading,
   showToast,
   accountManager,
-  isOwner,
-  teamleaderOauthHint,
-  teamleaderOauthReason,
 }: {
   data: AccountData | null;
   loading: boolean;
   showToast: (msg: string, type?: 'success' | 'error') => void;
   accountManager: AccountManagerData | null;
-  isOwner: boolean;
-  teamleaderOauthHint?: string | null;
-  teamleaderOauthReason?: string | null;
 }) {
   const [currentPw, setCurrentPw] = useState('');
   const [newPw, setNewPw] = useState('');
@@ -464,13 +460,6 @@ function AccountTab({
 
       {/* Push notificaties */}
       <AccountPushToggle showToast={showToast} />
-
-      <TeamleaderIntegrationSection
-        isOwner={isOwner}
-        showToast={showToast}
-        oauthHint={teamleaderOauthHint}
-        oauthReason={teamleaderOauthReason}
-      />
 
       {/* Member since */}
       <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -1323,6 +1312,9 @@ export default function AccountPage() {
   useEffect(() => {
     const tab = searchParams.get('tab');
     if (tab === 'invoices') setActiveTab('invoices');
+    else if (tab === 'integraties') setActiveTab('integraties');
+    if (searchParams.get('teamleader')) setActiveTab('integraties');
+
     const paid = searchParams.get('paid');
     if (paid === 'invoice') {
       showToast('Betaling verwerkt. Je factuur wordt zo bijgewerkt.', 'success');
@@ -1365,7 +1357,7 @@ export default function AccountPage() {
 
       <PageHeader
         title="Account & Insights"
-        subtitle="Beheer je account, bekijk prestaties en targetgebieden"
+        subtitle="Accountgegevens, integraties, prestaties en facturatie"
       />
 
       <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0" style={{ scrollbarWidth: 'none' }}>
@@ -1403,9 +1395,14 @@ export default function AccountPage() {
               loading={accountLoading}
               showToast={showToast}
               accountManager={accountManager}
+            />
+          )}
+          {activeTab === 'integraties' && (
+            <IntegrationsTab
               isOwner={isOwner}
-              teamleaderOauthHint={teamleaderOauthHint}
-              teamleaderOauthReason={teamleaderOauthReason}
+              showToast={showToast}
+              oauthHint={teamleaderOauthHint}
+              oauthReason={teamleaderOauthReason}
             />
           )}
           {activeTab === 'insights' && (
