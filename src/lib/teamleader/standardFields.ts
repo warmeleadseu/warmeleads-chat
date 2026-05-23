@@ -15,5 +15,7 @@ export const PORTAL_STANDARD_FIELDS = [
 export type PortalStandardFieldKey = (typeof PORTAL_STANDARD_FIELDS)[number]['key'];
 
 export const FIELD_MAP_SKIP = '_skip';
+/** Standaard contactveld (naam/e-mail/telefoon/adres) — geen TL custom field. */
+export const FIELD_MAP_NATIVE = '_native';
 /** Ongekoppelde waarden in deal-samenvatting (fallback). */
 export const FIELD_MAP_SUMMARY = '_summary';

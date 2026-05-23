@@ -19,7 +19,7 @@ vi.mock('@/lib/teamleader/deals', () => ({
 }));
 
 vi.mock('@/lib/teamleader/customFieldDefinitions', () => ({
-  listCustomFieldDefinitions: vi.fn().mockResolvedValue([]),
+  listGroupedCustomFieldDefinitions: vi.fn().mockResolvedValue({ contact: [], deal: [] }),
 }));
 
 import { createServerClient } from '@/lib/supabase';

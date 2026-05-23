@@ -3,6 +3,7 @@ import {
   formatValueForTeamleader,
   getLeadFieldValue,
   hasSavedFieldMappings,
+  suggestDefaultFieldMapping,
   suggestFieldMapping,
   getPortalFieldsForBranch,
 } from '@/lib/teamleader/fieldMappingLogic';
@@ -28,6 +29,17 @@ describe('suggestFieldMapping', () => {
     ];
     const mapping = suggestFieldMapping(portal, tlContact, []);
     expect(mapping.contact.email).toBe('tl-1');
+  });
+});
+
+describe('suggestDefaultFieldMapping', () => {
+  it('maps native standard fields to contact and branch fields to deal summary', () => {
+    const portal = getPortalFieldsForBranch([{ key: 'daktype', label: 'Type dak' }]);
+    const mapping = suggestDefaultFieldMapping(portal);
+    expect(mapping.contact.email).toBe('_native');
+    expect(mapping.contact.naam_klant).toBe('_native');
+    expect(mapping.deal.daktype).toBe('_summary');
+    expect(mapping.deal.provincie).toBe('_summary');
   });
 });
 

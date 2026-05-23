@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyCustomer, portalUnauthorized } from '@/lib/portalAuth';
 import { createServerClient } from '@/lib/supabase';
 import { requireIntegrationOwner } from '@/lib/integrations/portalIntegrationAuth';
-import { listCustomFieldDefinitions } from '@/lib/teamleader/customFieldDefinitions';
+import { listGroupedCustomFieldDefinitions } from '@/lib/teamleader/customFieldDefinitions';
 import {
   branchMappingIsEmpty,
   getPortalFieldsForBranch,
   hasSavedFieldMappings,
   mergeMappings,
+  suggestDefaultFieldMapping,
   suggestFieldMapping,
   type BranchFieldMapping,
   type TeamleaderFieldMappings,
@@ -17,6 +18,7 @@ import {
   getTeamleaderIntegration,
   updateTeamleaderSettings,
 } from '@/lib/teamleader/integrationRepo';
+import { FIELD_MAP_NATIVE } from '@/lib/teamleader/standardFields';
 
 async function loadCustomerBranches(
   supabase: ReturnType<typeof createServerClient>,
@@ -51,14 +53,13 @@ export async function GET(request: NextRequest) {
 
   const customerBranches = await loadCustomerBranches(supabase, session.customer.id);
 
-  let tlContact: Awaited<ReturnType<typeof listCustomFieldDefinitions>> = [];
-  let tlDeal: Awaited<ReturnType<typeof listCustomFieldDefinitions>> = [];
+  let tlContact: Awaited<
+    ReturnType<typeof listGroupedCustomFieldDefinitions>
+  >['contact'] = [];
+  let tlDeal: Awaited<ReturnType<typeof listGroupedCustomFieldDefinitions>>['deal'] = [];
   let teamleaderFieldsWarning: string | null = null;
   try {
-    [tlContact, tlDeal] = await Promise.all([
-      listCustomFieldDefinitions(accessToken, 'contact'),
-      listCustomFieldDefinitions(accessToken, 'deal'),
-    ]);
+    ({ contact: tlContact, deal: tlDeal } = await listGroupedCustomFieldDefinitions(accessToken));
   } catch (err) {
     teamleaderFieldsWarning =
       err instanceof Error ? err.message : 'Kon Teamleader-velden niet ophalen';
@@ -84,10 +85,11 @@ export async function GET(request: NextRequest) {
       .map((f: { key: string; label: string }) => ({ key: f.key, label: f.label }));
     const portalFields = getPortalFieldsForBranch(fields);
     const saved = mergeMappings(savedMappings, b.slug);
-    const useSuggest =
-      suggest || (branchMappingIsEmpty(saved) && tlHasCustomFields);
+    const useSuggest = suggest || branchMappingIsEmpty(saved);
     const mapping = useSuggest
-      ? suggestFieldMapping(portalFields, tlContact, tlDeal)
+      ? tlHasCustomFields
+        ? suggestFieldMapping(portalFields, tlContact, tlDeal)
+        : suggestDefaultFieldMapping(portalFields)
       : saved;
     return {
       slug: b.slug,
@@ -145,7 +147,7 @@ export async function PUT(request: NextRequest) {
     const clean = (m: Record<string, string>) => {
       const out: Record<string, string> = {};
       for (const [k, v] of Object.entries(m)) {
-        if (v && v !== '_native') out[k] = v;
+        if (v && v !== FIELD_MAP_NATIVE) out[k] = v;
       }
       return out;
     };

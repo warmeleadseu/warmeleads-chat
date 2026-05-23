@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { portalFetch } from '@/lib/portalAuth';
 import { T } from '../_ui';
 import { ArrowPathIcon, SparklesIcon } from '@heroicons/react/24/outline';
-import { FIELD_MAP_SKIP, FIELD_MAP_SUMMARY } from '@/lib/teamleader/standardFields';
+import { FIELD_MAP_SKIP, FIELD_MAP_SUMMARY, FIELD_MAP_NATIVE } from '@/lib/teamleader/standardFields';
 import { PORTAL_STANDARD_FIELDS } from '@/lib/teamleader/standardFields';
 
 type TlField = { id: string; label: string; type: string };
@@ -84,6 +84,7 @@ export function TeamleaderFieldMapping({
   const active = branches.find((b) => b.slug === activeBranch);
   const portalFields = active?.portal_fields ?? [];
   const showSuggestBanner =
+    !tlFieldsWarning &&
     portalFields.length > 0 &&
     (!hasSavedMappings || active?.mapping_source === 'suggested' || dirty);
 
@@ -179,10 +180,17 @@ export function TeamleaderFieldMapping({
 
       {showSuggestBanner && !loading && (
         <div className="mb-4 rounded-xl border border-amber-200/80 bg-amber-50/90 px-4 py-3 text-xs text-amber-900">
-          <p className="font-medium">Velden uit Teamleader geladen</p>
+          <p className="font-medium">
+            {tlContact.length > 0 || tlDeal.length > 0
+              ? 'Velden uit Teamleader geladen'
+              : 'Standaardkoppeling voorgesteld'}
+          </p>
           <p className="mt-0.5 text-amber-800/90">
-            We hebben je Teamleader-velden vergeleken met de portaalvelden
-            {branches.length > 1 ? ' per branche' : ''}. Controleer de koppelingen hieronder en klik op{' '}
+            {tlContact.length > 0 || tlDeal.length > 0
+              ? `We hebben je Teamleader-velden vergeleken met de portaalvelden${
+                  branches.length > 1 ? ' per branche' : ''
+                }. Controleer de koppelingen hieronder en klik op `
+              : 'Zonder extra Teamleader-velden sturen we standaardgegevens naar het contact en branchevelden naar de dealomschrijving. Controleer en klik op '}
             <span className="font-medium">Veldkoppeling opslaan</span> om ze definitief te maken.
           </p>
         </div>
@@ -348,7 +356,7 @@ function FieldSelect({
         className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-800 outline-none focus:border-brand-purple/40 focus:ring-1 focus:ring-brand-purple/15"
       >
         <option value="">— Niet koppelen —</option>
-        {isNative && <option value="_native">Standaard contactveld</option>}
+        {isNative && <option value={FIELD_MAP_NATIVE}>Standaard contactveld</option>}
         <option value={FIELD_MAP_SUMMARY}>In dealomschrijving</option>
         <option value={FIELD_MAP_SKIP}>Overslaan</option>
         <optgroup label="Teamleader-velden">

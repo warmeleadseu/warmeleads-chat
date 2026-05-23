@@ -1,10 +1,11 @@
 import { createServerClient } from '@/lib/supabase';
-import { listCustomFieldDefinitions } from './customFieldDefinitions';
+import { listGroupedCustomFieldDefinitions } from './customFieldDefinitions';
 import {
   buildMappedCustomFields,
   collectSummaryExtras,
   getPortalFieldsForBranch,
   mergeMappings,
+  suggestDefaultFieldMapping,
   suggestFieldMapping,
 } from './fieldMappingLogic';
 import { buildDealSummary, formatDealTitle } from './mapping';
@@ -118,13 +119,14 @@ export async function syncAssignmentToTeamleader(args: SyncAssignmentArgs): Prom
       Object.keys(branchMapping.contact).length > 0 ||
       Object.keys(branchMapping.deal).length > 0;
 
-    const [tlContactDefs, tlDealDefs] = await Promise.all([
-      listCustomFieldDefinitions(accessToken, 'contact'),
-      listCustomFieldDefinitions(accessToken, 'deal'),
-    ]);
+    const { contact: tlContactDefs, deal: tlDealDefs } =
+      await listGroupedCustomFieldDefinitions(accessToken);
 
-    if (!hasAnyMapping && (tlContactDefs.length > 0 || tlDealDefs.length > 0)) {
-      branchMapping = suggestFieldMapping(portalFields, tlContactDefs, tlDealDefs);
+    if (!hasAnyMapping) {
+      branchMapping =
+        tlContactDefs.length > 0 || tlDealDefs.length > 0
+          ? suggestFieldMapping(portalFields, tlContactDefs, tlDealDefs)
+          : suggestDefaultFieldMapping(portalFields);
     }
 
     const contactCustom = buildMappedCustomFields(

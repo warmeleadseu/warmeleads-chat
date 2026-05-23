@@ -1,4 +1,4 @@
-import { PORTAL_STANDARD_FIELDS, FIELD_MAP_SKIP, FIELD_MAP_SUMMARY } from './standardFields';
+import { PORTAL_STANDARD_FIELDS, FIELD_MAP_SKIP, FIELD_MAP_SUMMARY, FIELD_MAP_NATIVE } from './standardFields';
 import type { TeamleaderCustomFieldDefinition } from './customFieldDefinitions';
 
 export type PortalFieldOption = {
@@ -64,6 +64,27 @@ export function suggestFieldMapping(
       deal[pf.key] = dealMatch;
       usedDeal.add(dealMatch);
     } else if (pf.group === 'branch') {
+      deal[pf.key] = FIELD_MAP_SUMMARY;
+    }
+  }
+
+  return { contact, deal };
+}
+
+/** Standaardkoppeling zonder Teamleader custom fields (native contact + dealomschrijving). */
+export function suggestDefaultFieldMapping(
+  portalFields: PortalFieldOption[],
+): BranchFieldMapping {
+  const contact: Record<string, string> = {};
+  const deal: Record<string, string> = {};
+  const nativeKeys = new Set<string>(
+    PORTAL_STANDARD_FIELDS.filter((f) => f.native !== 'none').map((f) => f.key),
+  );
+
+  for (const pf of portalFields) {
+    if (nativeKeys.has(pf.key)) {
+      contact[pf.key] = FIELD_MAP_NATIVE;
+    } else {
       deal[pf.key] = FIELD_MAP_SUMMARY;
     }
   }
@@ -197,7 +218,14 @@ export function buildMappedCustomFields(
   const seen = new Set<string>();
 
   for (const [portalKey, tlFieldId] of Object.entries(mapping)) {
-    if (!tlFieldId || tlFieldId === FIELD_MAP_SKIP || tlFieldId === FIELD_MAP_SUMMARY) continue;
+    if (
+      !tlFieldId ||
+      tlFieldId === FIELD_MAP_SKIP ||
+      tlFieldId === FIELD_MAP_SUMMARY ||
+      tlFieldId === FIELD_MAP_NATIVE
+    ) {
+      continue;
+    }
     const value = getLeadFieldValue(lead, portalKey);
     if (!value) continue;
     const def = defById.get(tlFieldId);

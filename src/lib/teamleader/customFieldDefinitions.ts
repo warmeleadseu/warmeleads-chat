@@ -26,6 +26,9 @@ const MAPPABLE_TYPES = new Set([
   'url',
 ]);
 
+/** Contexts accepted by customFieldDefinitions.list filter (deal is excluded in current API). */
+const FILTERABLE_CONTEXTS = new Set(['contact', 'company', 'product', 'project', 'milestone']);
+
 export function normalizeTeamleaderFieldType(type: unknown): string {
   return String(type ?? '')
     .trim()
@@ -46,10 +49,26 @@ export function unwrapTeamleaderList<T>(data: unknown): T[] {
   return [];
 }
 
-/** Haal alle custom field definities op voor een context (gepagineerd). */
-export async function listCustomFieldDefinitions(
+type RawRow = TeamleaderCustomFieldDefinition & {
+  configuration?: { options?: Array<{ id: string; value: string }> };
+};
+
+function parseMappableRow(row: RawRow): TeamleaderCustomFieldDefinition | null {
+  const normalizedType = normalizeTeamleaderFieldType(row.type);
+  if (!isMappableTeamleaderFieldType(normalizedType)) return null;
+  return {
+    id: row.id,
+    label: row.label,
+    type: normalizedType,
+    context: row.context,
+    required: row.required,
+    options: row.configuration?.options,
+  };
+}
+
+async function fetchPaginatedDefinitions(
   accessToken: string,
-  context: 'contact' | 'deal',
+  body: Record<string, unknown>,
 ): Promise<TeamleaderCustomFieldDefinition[]> {
   const all: TeamleaderCustomFieldDefinition[] = [];
   let page = 1;
@@ -57,24 +76,13 @@ export async function listCustomFieldDefinitions(
 
   for (;;) {
     const batch = await teamleaderRequest<ListResponse>(accessToken, 'customFieldDefinitions.list', {
-      filter: { context },
+      ...body,
       page: { size: pageSize, number: page },
     });
-    type RawRow = TeamleaderCustomFieldDefinition & {
-      configuration?: { options?: Array<{ id: string; value: string }> };
-    };
     const list = unwrapTeamleaderList<RawRow>(batch);
     for (const row of list) {
-      const normalizedType = normalizeTeamleaderFieldType(row.type);
-      if (!isMappableTeamleaderFieldType(normalizedType)) continue;
-      all.push({
-        id: row.id,
-        label: row.label,
-        type: normalizedType,
-        context: row.context,
-        required: row.required,
-        options: row.configuration?.options,
-      });
+      const parsed = parseMappableRow(row);
+      if (parsed) all.push(parsed);
     }
     if (list.length < pageSize) break;
     page += 1;
@@ -82,4 +90,37 @@ export async function listCustomFieldDefinitions(
   }
 
   return all.sort((a, b) => a.label.localeCompare(b.label, 'nl'));
+}
+
+/** Haal contact- en deal-custom fields op (één gedeelde unfiltered fetch voor deal). */
+export async function listGroupedCustomFieldDefinitions(
+  accessToken: string,
+): Promise<{ contact: TeamleaderCustomFieldDefinition[]; deal: TeamleaderCustomFieldDefinition[] }> {
+  const [contactFiltered, unfiltered] = await Promise.all([
+    FILTERABLE_CONTEXTS.has('contact')
+      ? fetchPaginatedDefinitions(accessToken, { filter: { context: 'contact' } }).catch(
+          () => [] as TeamleaderCustomFieldDefinition[],
+        )
+      : Promise.resolve([] as TeamleaderCustomFieldDefinition[]),
+    fetchPaginatedDefinitions(accessToken, {}),
+  ]);
+
+  const contactFromAll = unfiltered.filter((f) => f.context === 'contact');
+  const deal = unfiltered.filter((f) => f.context === 'deal');
+
+  const contact = contactFiltered.length > 0 ? contactFiltered : contactFromAll;
+
+  return {
+    contact: [...contact].sort((a, b) => a.label.localeCompare(b.label, 'nl')),
+    deal: [...deal].sort((a, b) => a.label.localeCompare(b.label, 'nl')),
+  };
+}
+
+/** Haal custom field definities op voor één context. */
+export async function listCustomFieldDefinitions(
+  accessToken: string,
+  context: 'contact' | 'deal',
+): Promise<TeamleaderCustomFieldDefinition[]> {
+  const grouped = await listGroupedCustomFieldDefinitions(accessToken);
+  return grouped[context];
 }
