@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
+import { ensurePreferredCrmProvider } from '@/lib/integrations/crmPreferences';
 import { exchangeGoogleCodeForTokens, parseGoogleOAuthState } from '@/lib/googleSheets/oauth';
 import { saveGoogleSheetsTokens } from '@/lib/googleSheets/integrationRepo';
 import { getGoogleOAuthConfig } from '@/lib/googleSheets/config';
+import { GOOGLE_SHEETS_PROVIDER } from '@/lib/googleSheets/types';
 
 function portalAccountUrl(request: NextRequest, query: string): string {
   const base = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, '') || request.nextUrl.origin;
@@ -47,6 +49,7 @@ export async function GET(request: NextRequest) {
       );
     }
     await saveGoogleSheetsTokens(supabase, customerId, tokens);
+    await ensurePreferredCrmProvider(supabase, customerId, GOOGLE_SHEETS_PROVIDER);
     return NextResponse.redirect(portalAccountUrl(request, 'sheets=connected'));
   } catch (err) {
     const raw = err instanceof Error ? err.message : 'unknown';

@@ -75,6 +75,10 @@ export async function saveGoogleSheetsTokens(
 ): Promise<void> {
   const existing = await getGoogleSheetsIntegrationRow(supabase, customerId);
   const now = new Date().toISOString();
+  const settings: GoogleSheetsIntegrationSettings = {
+    ...(existing?.settings ?? {}),
+    enabled: true,
+  };
   const payload = {
     customer_id: customerId,
     provider: GOOGLE_SHEETS_PROVIDER,
@@ -82,12 +86,32 @@ export async function saveGoogleSheetsTokens(
     refresh_token_enc: encryptSecret(tokens.refreshToken),
     expires_at: tokens.expiresAt.toISOString(),
     connected_at: now,
-    settings: existing?.settings ?? { enabled: true },
+    settings,
     updated_at: now,
   };
   const { error } = await supabase.from('customer_integrations').upsert(payload, {
     onConflict: 'customer_id,provider',
   });
+  if (error) throw new Error(error.message);
+}
+
+/** Vernieuw tokens na expiry — laat connected_at en settings ongemoeid. */
+export async function updateGoogleSheetsTokens(
+  supabase: SupabaseClient,
+  customerId: string,
+  tokens: GoogleSheetsTokenPair,
+): Promise<void> {
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from('customer_integrations')
+    .update({
+      access_token_enc: encryptSecret(tokens.accessToken),
+      refresh_token_enc: encryptSecret(tokens.refreshToken),
+      expires_at: tokens.expiresAt.toISOString(),
+      updated_at: now,
+    })
+    .eq('customer_id', customerId)
+    .eq('provider', GOOGLE_SHEETS_PROVIDER);
   if (error) throw new Error(error.message);
 }
 
@@ -144,6 +168,6 @@ export async function ensureValidGoogleAccessToken(
     throw new Error('Google OAuth is niet geconfigureerd op de server.');
   }
   const refreshed = await refreshGoogleAccessToken(config, integration.refresh_token);
-  await saveGoogleSheetsTokens(supabase, integration.customer_id, refreshed);
+  await updateGoogleSheetsTokens(supabase, integration.customer_id, refreshed);
   return refreshed.accessToken;
 }

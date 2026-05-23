@@ -61,7 +61,12 @@ export async function saveTeamleaderTokens(
   customerId: string,
   tokens: TeamleaderTokenPair,
 ): Promise<void> {
+  const existing = await getRawIntegrationRow(supabase, customerId);
   const now = new Date().toISOString();
+  const settings: TeamleaderIntegrationSettings = {
+    ...(existing?.settings ?? {}),
+    enabled: true,
+  };
   const payload = {
     customer_id: customerId,
     provider: TEAMLEADER_PROVIDER,
@@ -69,11 +74,32 @@ export async function saveTeamleaderTokens(
     refresh_token_enc: encryptSecret(tokens.refreshToken),
     expires_at: tokens.expiresAt.toISOString(),
     connected_at: now,
+    settings,
     updated_at: now,
   };
   const { error } = await supabase.from('customer_integrations').upsert(payload, {
     onConflict: 'customer_id,provider',
   });
+  if (error) throw new Error(error.message);
+}
+
+/** Vernieuw tokens na expiry — laat connected_at en settings ongemoeid. */
+export async function updateTeamleaderTokens(
+  supabase: SupabaseClient,
+  customerId: string,
+  tokens: TeamleaderTokenPair,
+): Promise<void> {
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from('customer_integrations')
+    .update({
+      access_token_enc: encryptSecret(tokens.accessToken),
+      refresh_token_enc: encryptSecret(tokens.refreshToken),
+      expires_at: tokens.expiresAt.toISOString(),
+      updated_at: now,
+    })
+    .eq('customer_id', customerId)
+    .eq('provider', TEAMLEADER_PROVIDER);
   if (error) throw new Error(error.message);
 }
 
@@ -172,7 +198,7 @@ export async function ensureValidAccessToken(
     );
   }
   const refreshed = await refreshAccessToken(oauthConfig, integration.refresh_token);
-  await saveTeamleaderTokens(supabase, integration.customer_id, refreshed);
+  await updateTeamleaderTokens(supabase, integration.customer_id, refreshed);
   return refreshed.accessToken;
 }
 

@@ -93,11 +93,14 @@ export function GoogleSheetsIntegration({
         if (d.settings?.sheet_gid != null) {
           setSelectedSheetId(d.settings.sheet_gid);
         }
+      } else if (!opts?.silent) {
+        const d = await res.json().catch(() => ({}));
+        showToast((d as { error?: string }).error || 'Status laden mislukt', 'error');
       }
     } finally {
       if (!opts?.silent) setLoading(false);
     }
-  }, []);
+  }, [showToast]);
 
   const notifyHub = useCallback(() => {
     hubRefreshRef.current?.();
@@ -131,12 +134,12 @@ export function GoogleSheetsIntegration({
   };
 
   const disconnect = async () => {
-    if (!confirm('Google Sheets ontkoppelen? Automatische synchronisatie stopt.')) return;
+    if (!confirm('Google Spreadsheets ontkoppelen? Automatische synchronisatie stopt.')) return;
     const res = await portalFetch('/api/portal/integrations/google-sheets/disconnect', {
       method: 'POST',
     });
     if (res.ok) {
-      showToast('Google Sheets ontkoppeld');
+      showToast('Google Spreadsheets ontkoppeld');
       await loadStatus();
       notifyHub();
     } else {
@@ -236,9 +239,8 @@ export function GoogleSheetsIntegration({
 
       {!status?.oauth_configured && (
         <Alert variant="warning">
-          Google OAuth (Client ID + secret) is nog niet geconfigureerd. Maak in Google Cloud een OAuth-client
-          (Web application) met redirect{' '}
-          <span className="font-mono text-[11px]">…/api/portal/integrations/google-sheets/callback</span>.
+          Google-koppeling is nog niet beschikbaar. Neem contact op met Warme Leads als je deze
+          integratie wilt gebruiken.
         </Alert>
       )}
 
@@ -335,6 +337,12 @@ export function GoogleSheetsIntegration({
               </p>
             )}
           </div>
+
+          {spreadsheetReady && !mappingReady && (
+            <Alert variant="warning">
+              Stel hieronder de veldkoppeling in en sla op om synchronisatie te activeren.
+            </Alert>
+          )}
 
           {spreadsheetReady && (
             <GoogleSheetsFieldMapping
@@ -484,6 +492,7 @@ function SyncHistory({
         </p>
         <button type="button" onClick={onRefresh} className={T.btnGhost}>
           <ArrowPathIcon className="h-3.5 w-3.5" />
+          Vernieuwen
         </button>
       </div>
       <p className="mb-3 text-xs text-slate-500">{successCount} geslaagde synchronisatie(s)</p>
@@ -514,7 +523,7 @@ function SyncHistory({
                       : 'bg-slate-100 text-slate-500'
                 }`}
               >
-                {row.status === 'success' ? 'OK' : row.status === 'failed' ? 'Fout' : '…'}
+                {row.status === 'success' ? 'Geslaagd' : row.status === 'failed' ? 'Mislukt' : '…'}
               </span>
             </li>
           ))}

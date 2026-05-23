@@ -1,5 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { getPreferredCrmProvider } from '@/lib/integrations/crmPreferences';
+import {
+  getPreferredCrmProvider,
+  resolveEffectiveCrmProvider,
+} from '@/lib/integrations/crmPreferences';
 import { getGoogleSheetsIntegration } from '@/lib/googleSheets/integrationRepo';
 import { hasSavedSheetMappings } from '@/lib/googleSheets/fieldMappingLogic';
 import { GOOGLE_SHEETS_PROVIDER } from '@/lib/googleSheets/types';
@@ -32,6 +35,33 @@ export function isGoogleSheetsSyncReady(
   return hasSavedSheetMappings(integration.settings.field_mappings, customerBranches);
 }
 
+/** Pure helper — gebruikt door resolveIntegrationSyncTargets en tests. */
+export function resolveIntegrationSyncTargetsFromState(args: {
+  preferredStored: string | null;
+  teamleaderConnected: boolean;
+  sheetsConnected: boolean;
+  tlReady: boolean;
+  gsReady: boolean;
+}): IntegrationSyncTargets {
+  const effective = resolveEffectiveCrmProvider(
+    args.preferredStored,
+    args.teamleaderConnected,
+    args.sheetsConnected,
+  );
+
+  if (effective === TEAMLEADER_PROVIDER) {
+    return { teamleader: args.tlReady, google_sheets: false };
+  }
+  if (effective === GOOGLE_SHEETS_PROVIDER) {
+    return { teamleader: false, google_sheets: args.gsReady };
+  }
+
+  if (args.tlReady && !args.gsReady) return { teamleader: true, google_sheets: false };
+  if (args.gsReady && !args.tlReady) return { teamleader: false, google_sheets: true };
+
+  return { teamleader: false, google_sheets: false };
+}
+
 /**
  * Bepaalt welke CRM-sync(s) na leadtoewijzing mogen draaien.
  * Respecteert `preferred_crm_provider`; voorkomt dubbele export naar Teamleader én Sheets.
@@ -50,18 +80,13 @@ export async function resolveIntegrationSyncTargets(
   const tlReady = isTeamleaderSyncReady(teamleaderIntegration);
   const gsReady = isGoogleSheetsSyncReady(sheetsIntegration, customerBranches);
 
-  if (preferred === TEAMLEADER_PROVIDER) {
-    return { teamleader: tlReady, google_sheets: false };
-  }
-  if (preferred === GOOGLE_SHEETS_PROVIDER) {
-    return { teamleader: false, google_sheets: gsReady };
-  }
-
-  // Geen expliciete keuze: alleen syncen als precies één integratie klaar is.
-  if (tlReady && !gsReady) return { teamleader: true, google_sheets: false };
-  if (gsReady && !tlReady) return { teamleader: false, google_sheets: true };
-
-  return { teamleader: false, google_sheets: false };
+  return resolveIntegrationSyncTargetsFromState({
+    preferredStored: preferred,
+    teamleaderConnected: Boolean(teamleaderIntegration?.connected_at),
+    sheetsConnected: Boolean(sheetsIntegration?.connected_at),
+    tlReady,
+    gsReady,
+  });
 }
 
 /** Of een mislukte sync-log voor deze provider opnieuw geprobeerd mag worden. */

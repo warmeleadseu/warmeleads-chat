@@ -119,11 +119,14 @@ export function TeamleaderIntegration({
         setDealTemplate(d.settings?.deal_title_template || DEFAULT_DEAL_TEMPLATE);
         setSyncEnabled(d.settings?.enabled !== false);
         if (!d.has_customer_oauth_app && !d.connected) setSetupGuideOpen(true);
+      } else if (!opts?.silent) {
+        const d = await res.json().catch(() => ({}));
+        showToast((d as { error?: string }).error || 'Teamleader-status laden mislukt', 'error');
       }
     } finally {
       if (!opts?.silent) setLoading(false);
     }
-  }, []);
+  }, [showToast]);
 
   const notifyHub = useCallback(() => {
     hubRefreshRef.current?.();

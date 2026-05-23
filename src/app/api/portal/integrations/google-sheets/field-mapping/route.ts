@@ -21,15 +21,7 @@ import {
   quoteSheetName,
 } from '@/lib/googleSheets/spreadsheet';
 
-async function loadCustomerBranches(
-  supabase: ReturnType<typeof createServerClient>,
-  customerId: string,
-): Promise<string[]> {
-  const { data } = await supabase.from('customers').select('branches').eq('id', customerId).single();
-  return (data?.branches as string[] | null) ?? [];
-}
-
-export async function GET(request: NextRequest) {
+import { loadCustomerBranchSlugs, isCustomerBranch } from '@/lib/integrations/customerBranches';
   const session = await verifyCustomer(request);
   if (!session) return portalUnauthorized();
   const denied = requireIntegrationOwner(session);
@@ -67,7 +59,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: message }, { status: 502 });
   }
 
-  const customerBranches = await loadCustomerBranches(supabase, session.customer.id);
+  const customerBranches = await loadCustomerBranchSlugs(supabase, session.customer.id);
   const slugs = branchFilter ? [branchFilter] : customerBranches;
 
   const { data: branchRows } = await supabase
@@ -142,6 +134,9 @@ export async function PUT(request: NextRequest) {
   if (body.field_mappings) {
     nextMappings = body.field_mappings;
   } else if (body.branch && body.mapping) {
+    if (!(await isCustomerBranch(supabase, session.customer.id, body.branch))) {
+      return NextResponse.json({ error: 'Ongeldige branche' }, { status: 400 });
+    }
     const clean: SheetBranchFieldMapping = {};
     for (const [k, v] of Object.entries(body.mapping)) {
       if (v !== '' && v != null) clean[k] = v;

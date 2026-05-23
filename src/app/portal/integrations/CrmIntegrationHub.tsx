@@ -65,11 +65,16 @@ export function CrmIntegrationHub({
       const res = await portalFetch('/api/portal/integrations/preferences');
       if (res.ok) {
         applyPrefs((await res.json()) as PreferencesResponse);
+      } else {
+        const d = await res.json().catch(() => ({}));
+        showToast((d as { error?: string }).error || 'Integraties laden mislukt', 'error');
       }
+    } catch {
+      showToast('Integraties laden mislukt', 'error');
     } finally {
       setLoading(false);
     }
-  }, [applyPrefs]);
+  }, [applyPrefs, showToast]);
 
   /** Ververs hub-status zonder skeleton (kind mag gemount blijven). */
   const refreshPrefs = useCallback(async () => {

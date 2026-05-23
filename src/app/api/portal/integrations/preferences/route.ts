@@ -11,6 +11,7 @@ import {
 } from '@/lib/integrations/crmProviders';
 import {
   getPreferredCrmProvider,
+  resolveEffectiveCrmProvider,
   setPreferredCrmProvider,
 } from '@/lib/integrations/crmPreferences';
 import {
@@ -50,9 +51,11 @@ export async function GET(request: NextRequest) {
   const teamleaderSyncReady = isTeamleaderSyncReady(teamleaderIntegration);
   const sheetsSyncReady = isGoogleSheetsSyncReady(sheetsIntegration, branches);
 
-  let preferred = preferredStored;
-  if (teamleaderConnected && !preferred) preferred = 'teamleader';
-  if (sheetsConnected && !preferred) preferred = 'google_sheets';
+  const preferred = resolveEffectiveCrmProvider(
+    preferredStored,
+    teamleaderConnected,
+    sheetsConnected,
+  );
 
   return NextResponse.json({
     preferred_crm_provider: preferred,
@@ -71,7 +74,7 @@ export async function GET(request: NextRequest) {
       },
       google_sheets: {
         connected: sheetsConnected,
-        configured: sheetsSyncReady,
+        configured: sheetsConnected,
         sync_ready: sheetsSyncReady,
       },
     },
