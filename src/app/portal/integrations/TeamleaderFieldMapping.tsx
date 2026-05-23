@@ -42,6 +42,7 @@ export function TeamleaderFieldMapping({
   }>({ contact: {}, deal: {} });
   const [hasSavedMappings, setHasSavedMappings] = useState(true);
   const [dirty, setDirty] = useState(false);
+  const [tlFieldsWarning, setTlFieldsWarning] = useState<string | null>(null);
 
   const load = useCallback(async (opts?: { suggest?: boolean }) => {
     if (!connected) return;
@@ -58,6 +59,9 @@ export function TeamleaderFieldMapping({
       setBranches(loaded);
       setTlContact(d.teamleader_fields?.contact || []);
       setTlDeal(d.teamleader_fields?.deal || []);
+      setTlFieldsWarning(
+        typeof d.teamleader_fields_warning === 'string' ? d.teamleader_fields_warning : null,
+      );
       setHasSavedMappings(d.has_saved_mappings !== false);
       const slug = activeBranch || loaded[0]?.slug || '';
       if (slug && !activeBranch) setActiveBranch(slug);
@@ -80,8 +84,8 @@ export function TeamleaderFieldMapping({
   const active = branches.find((b) => b.slug === activeBranch);
   const portalFields = active?.portal_fields ?? [];
   const showSuggestBanner =
-    (!hasSavedMappings || active?.mapping_source === 'suggested' || dirty) &&
-    (tlContact.length > 0 || tlDeal.length > 0);
+    portalFields.length > 0 &&
+    (!hasSavedMappings || active?.mapping_source === 'suggested' || dirty);
 
   const setContactMap = (key: string, value: string) => {
     setDirty(true);
@@ -184,14 +188,33 @@ export function TeamleaderFieldMapping({
         </div>
       )}
 
-      {loading && portalFields.length === 0 ? (
+      {loading && portalFields.length === 0 && branches.length === 0 ? (
         <div className="h-40 animate-pulse rounded-xl bg-slate-50" />
-      ) : tlContact.length === 0 && tlDeal.length === 0 ? (
+      ) : portalFields.length === 0 ? (
         <p className="rounded-xl border border-dashed border-slate-200 py-8 text-center text-sm text-slate-500">
-          Geen extra velden gevonden in Teamleader. Standaardgegevens worden wel gesynchroniseerd.
+          Geen portaalvelden gevonden voor deze klant. Controleer of de branche(s) aan het account
+          gekoppeld zijn.
         </p>
       ) : (
         <>
+          {tlFieldsWarning && !loading && (
+            <div className="mb-4 rounded-xl border border-amber-200/80 bg-amber-50/90 px-4 py-3 text-xs text-amber-900">
+              <p className="font-medium">Teamleader-velden konden niet worden opgehaald</p>
+              <p className="mt-0.5 text-amber-800/90">{tlFieldsWarning}</p>
+            </div>
+          )}
+
+          {!loading && !tlFieldsWarning && tlContact.length === 0 && tlDeal.length === 0 && (
+            <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
+              <p className="font-medium text-slate-800">Geen extra custom fields in Teamleader</p>
+              <p className="mt-0.5">
+                Veel accounts hebben alleen standaard contact- en dealvelden. Koppel portaalvelden
+                hieronder aan <span className="font-medium">Standaard contactveld</span> of{' '}
+                <span className="font-medium">In dealomschrijving</span>.
+              </p>
+            </div>
+          )}
+
           <div className="hidden overflow-hidden rounded-xl border border-slate-100 md:block">
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50 text-slate-500">

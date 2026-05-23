@@ -49,11 +49,20 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: message }, { status: 502 });
   }
 
-  const [tlContact, tlDeal, customerBranches] = await Promise.all([
-    listCustomFieldDefinitions(accessToken, 'contact'),
-    listCustomFieldDefinitions(accessToken, 'deal'),
-    loadCustomerBranches(supabase, session.customer.id),
-  ]);
+  const customerBranches = await loadCustomerBranches(supabase, session.customer.id);
+
+  let tlContact: Awaited<ReturnType<typeof listCustomFieldDefinitions>> = [];
+  let tlDeal: Awaited<ReturnType<typeof listCustomFieldDefinitions>> = [];
+  let teamleaderFieldsWarning: string | null = null;
+  try {
+    [tlContact, tlDeal] = await Promise.all([
+      listCustomFieldDefinitions(accessToken, 'contact'),
+      listCustomFieldDefinitions(accessToken, 'deal'),
+    ]);
+  } catch (err) {
+    teamleaderFieldsWarning =
+      err instanceof Error ? err.message : 'Kon Teamleader-velden niet ophalen';
+  }
 
   const slugs = branchFilter ? [branchFilter] : customerBranches;
   const { data: branchRows } = await supabase
@@ -91,6 +100,7 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({
     has_saved_mappings: hasSavedFieldMappings(savedMappings, branchSlugs),
+    teamleader_fields_warning: teamleaderFieldsWarning,
     teamleader_fields: {
       contact: tlContact.map((f) => ({
         id: f.id,
