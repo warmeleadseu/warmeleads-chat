@@ -15,7 +15,12 @@ export async function findContactByEmail(
     accessToken,
     'contacts.list',
     {
-      filter: { email: normalized },
+      filter: {
+        email: {
+          type: 'primary',
+          email: normalized,
+        },
+      },
       page: { size: 1, number: 1 },
     },
   );

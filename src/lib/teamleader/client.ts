@@ -13,8 +13,21 @@ export class TeamleaderApiError extends Error {
 
 type JsonRpcResponse<T> = {
   data?: T;
-  errors?: Array<{ title?: string; detail?: string; status?: string }>;
+  errors?: Array<{
+    title?: string;
+    detail?: string;
+    status?: string;
+    meta?: { field?: string };
+  }>;
 };
+
+function formatTeamleaderError(
+  err: NonNullable<JsonRpcResponse<unknown>['errors']>[number],
+): string {
+  const base = err.detail || err.title || 'Teamleader API error';
+  const field = err.meta?.field;
+  return field ? `${base} (${field})` : base;
+}
 
 export async function teamleaderRequest<T>(
   accessToken: string,
@@ -39,13 +52,13 @@ export async function teamleaderRequest<T>(
   if (!res.ok) {
     const err = json.errors?.[0];
     throw new TeamleaderApiError(
-      err?.detail || err?.title || `Teamleader API ${res.status}`,
+      err ? formatTeamleaderError(err) : `Teamleader API ${res.status}`,
       res.status,
     );
   }
   if (json.errors?.length) {
     const err = json.errors[0];
-    throw new TeamleaderApiError(err.detail || err.title || 'Teamleader API error', res.status);
+    throw new TeamleaderApiError(formatTeamleaderError(err), res.status);
   }
   return json.data as T;
 }

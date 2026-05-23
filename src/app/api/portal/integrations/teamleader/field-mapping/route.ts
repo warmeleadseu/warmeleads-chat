@@ -18,7 +18,11 @@ import {
   getTeamleaderIntegration,
   updateTeamleaderSettings,
 } from '@/lib/teamleader/integrationRepo';
-import { FIELD_MAP_NATIVE } from '@/lib/teamleader/standardFields';
+import {
+  FIELD_MAP_NATIVE,
+  FIELD_MAP_SKIP,
+  FIELD_MAP_SUMMARY,
+} from '@/lib/teamleader/standardFields';
 
 async function loadCustomerBranches(
   supabase: ReturnType<typeof createServerClient>,
@@ -147,7 +151,14 @@ export async function PUT(request: NextRequest) {
     const clean = (m: Record<string, string>) => {
       const out: Record<string, string> = {};
       for (const [k, v] of Object.entries(m)) {
-        if (v && v !== FIELD_MAP_NATIVE) out[k] = v;
+        if (
+          v &&
+          v !== FIELD_MAP_NATIVE &&
+          v !== FIELD_MAP_SUMMARY &&
+          v !== FIELD_MAP_SKIP
+        ) {
+          out[k] = v;
+        }
       }
       return out;
     };
