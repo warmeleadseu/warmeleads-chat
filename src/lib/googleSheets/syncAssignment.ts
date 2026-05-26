@@ -19,6 +19,7 @@ export type SyncAssignmentArgs = {
   customerId: string;
   leadId: string;
   assignmentId: string;
+  options?: { forceResend?: boolean };
 };
 
 async function getBranchFields(
@@ -65,7 +66,18 @@ export async function syncAssignmentToGoogleSheets(args: SyncAssignmentArgs): Pr
     .eq('assignment_id', assignmentId)
     .eq('provider', GOOGLE_SHEETS_PROVIDER)
     .maybeSingle();
-  if (existingLog?.status === 'success') return;
+  if (existingLog?.status === 'success' && !args.options?.forceResend) return;
+
+  if (existingLog?.status === 'success' && args.options?.forceResend) {
+    await supabase
+      .from('integration_sync_log')
+      .update({
+        status: 'pending',
+        error_message: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', existingLog.id);
+  }
 
   const { data: lead } = await supabase.from('leads').select('*').eq('id', leadId).single();
   if (!lead || lead.bron === 'demo') return;

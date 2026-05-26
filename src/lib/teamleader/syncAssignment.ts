@@ -11,6 +11,7 @@ export type SyncAssignmentArgs = {
   customerId: string;
   leadId: string;
   assignmentId: string;
+  options?: { forceResend?: boolean };
 };
 
 export async function syncAssignmentToTeamleader(args: SyncAssignmentArgs): Promise<void> {
@@ -38,7 +39,18 @@ export async function syncAssignmentToTeamleader(args: SyncAssignmentArgs): Prom
     .eq('assignment_id', assignmentId)
     .eq('provider', TEAMLEADER_PROVIDER)
     .maybeSingle();
-  if (existingLog?.status === 'success') return;
+  if (existingLog?.status === 'success' && !args.options?.forceResend) return;
+
+  if (existingLog?.status === 'success' && args.options?.forceResend) {
+    await supabase
+      .from('integration_sync_log')
+      .update({
+        status: 'pending',
+        error_message: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', existingLog.id);
+  }
 
   const { data: lead } = await supabase.from('leads').select('*').eq('id', leadId).single();
   if (!lead || lead.bron === 'demo') return;

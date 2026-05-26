@@ -45,6 +45,11 @@ import {
 } from '@heroicons/react/24/outline';
 import { usePushNotifications, type PushState } from './usePushNotifications';
 import ExportWizard, { type ExportFilters } from './ExportWizard';
+import {
+  LeadSelectionBar,
+  useCrmBackfillReady,
+  useLeadCrmBackfill,
+} from './LeadCrmBackfill';
 import { PageHeader, useToast } from './_ui';
 import { STATUS_COLORS, STATUS_OPTIONS } from './_constants/leadStatus';
 import { getBatchProgressView, isCappedDeliveryModel } from '@/lib/batchDeliveryModel';
@@ -254,9 +259,10 @@ function ReclamationListBadge({ status, reason }: { status: string; reason?: str
 }
 
 export default function PortalPage() {
-  const { customer } = usePortal();
+  const { customer, isOwner } = usePortal();
   const showDemoPortal = isDemoPortalExperience(customer);
   const searchParams = useSearchParams();
+  const { crmLabel, crmReady } = useCrmBackfillReady(isOwner);
 
   const [stats, setStats] = useState<Stats>({ totalLeads: 0, newThisWeek: 0, contacted: 0, sold: 0 });
   const [statsLoading, setStatsLoading] = useState(true);
@@ -298,6 +304,15 @@ export default function PortalPage() {
     toast.show(msg, type);
   }, [toast]);
 
+  const {
+    selectedIds,
+    syncing: crmBackfillSyncing,
+    toggleLead,
+    togglePage,
+    clearSelection,
+    runBackfill,
+  } = useLeadCrmBackfill(showToast);
+
   const [showWelcome, setShowWelcome] = useState(false);
   const [welcomeOffer, setWelcomeOffer] = useState<{ active: boolean; expiresAt: string | null }>({ active: false, expiresAt: null });
   const [welcomeDismissed, setWelcomeDismissed] = useState(false);
@@ -324,6 +339,25 @@ export default function PortalPage() {
       .catch(() => {});
   }, []);
 
+  const pageLeadIds = useMemo(() => leads.map((l) => l.id), [leads]);
+  const allPageSelected =
+    pageLeadIds.length > 0 && pageLeadIds.every((id) => selectedIds.has(id));
+  const somePageSelected = pageLeadIds.some((id) => selectedIds.has(id));
+
+  const handleCrmBackfill = () => {
+    if (!crmLabel) return;
+    const count = selectedIds.size;
+    if (
+      !confirm(
+        `${count} lead${count === 1 ? '' : 's'} alsnog naar ${crmLabel} sturen? Leads die al succesvol zijn verstuurd worden overgeslagen.`,
+      )
+    ) {
+      return;
+    }
+    void runBackfill(crmLabel, false);
+  };
+
+  const showLeadSelection = isOwner && crmReady && !showDemoPortal;
   const showBranchFilter = customer.branches.length > 1;
   const conversionRate = stats.totalLeads > 0
     ? Math.round((stats.sold / stats.totalLeads) * 100)
@@ -1064,6 +1098,20 @@ export default function PortalPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 bg-slate-50/50">
+                    {showLeadSelection && (
+                      <th className="w-10 px-3 py-3">
+                        <input
+                          type="checkbox"
+                          checked={allPageSelected}
+                          ref={(el) => {
+                            if (el) el.indeterminate = somePageSelected && !allPageSelected;
+                          }}
+                          onChange={(e) => togglePage(pageLeadIds, e.target.checked)}
+                          className="h-4 w-4 rounded border-slate-300 text-brand-purple focus:ring-brand-purple/30"
+                          aria-label="Selecteer alle leads op deze pagina"
+                        />
+                      </th>
+                    )}
                     {[
                       { key: 'naam_klant', label: 'Naam' },
                       { key: 'plaatsnaam', label: 'Plaats' },
@@ -1091,8 +1139,19 @@ export default function PortalPage() {
                     <tr
                       key={lead.id}
                       onClick={() => setSelectedLead(lead)}
-                      className="cursor-pointer transition hover:bg-slate-50"
+                      className={`cursor-pointer transition hover:bg-slate-50 ${selectedIds.has(lead.id) ? 'bg-brand-purple/5' : ''}`}
                     >
+                      {showLeadSelection && (
+                        <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.has(lead.id)}
+                            onChange={(e) => toggleLead(lead.id, e.target.checked)}
+                            className="h-4 w-4 rounded border-slate-300 text-brand-purple focus:ring-brand-purple/30"
+                            aria-label={`Selecteer ${lead.naam_klant || 'lead'}`}
+                          />
+                        </td>
+                      )}
                       <td className="px-4 py-3">
                         <div className="min-w-0 space-y-1">
                           <div className="flex flex-wrap items-center gap-1.5">
@@ -1175,12 +1234,39 @@ export default function PortalPage() {
 
           {/* Mobile cards */}
           <div className="space-y-3 md:hidden">
+            {showLeadSelection && (
+              <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
+                <input
+                  type="checkbox"
+                  checked={allPageSelected}
+                  ref={(el) => {
+                    if (el) el.indeterminate = somePageSelected && !allPageSelected;
+                  }}
+                  onChange={(e) => togglePage(pageLeadIds, e.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300 text-brand-purple"
+                />
+                Selecteer pagina
+              </label>
+            )}
             {leads.map(lead => (
               <div
                 key={lead.id}
                 onClick={() => setSelectedLead(lead)}
-                className="cursor-pointer rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition active:scale-[0.99]"
+                className={`cursor-pointer rounded-xl border bg-white p-4 shadow-sm transition active:scale-[0.99] ${
+                  selectedIds.has(lead.id) ? 'border-brand-purple/40 ring-1 ring-brand-purple/20' : 'border-slate-200'
+                }`}
               >
+                {showLeadSelection && (
+                  <div className="mb-2 flex justify-end" onClick={(e) => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(lead.id)}
+                      onChange={(e) => toggleLead(lead.id, e.target.checked)}
+                      className="h-4 w-4 rounded border-slate-300 text-brand-purple"
+                      aria-label={`Selecteer ${lead.naam_klant || 'lead'}`}
+                    />
+                  </div>
+                )}
                 <div className="mb-2 flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-1.5">
@@ -1277,6 +1363,16 @@ export default function PortalPage() {
                 </button>
               </div>
             </div>
+          )}
+
+          {showLeadSelection && crmLabel && (
+            <LeadSelectionBar
+              selectedCount={selectedIds.size}
+              crmLabel={crmLabel}
+              onClear={clearSelection}
+              onSync={() => handleCrmBackfill()}
+              syncing={crmBackfillSyncing}
+            />
           )}
         </>
       )}
