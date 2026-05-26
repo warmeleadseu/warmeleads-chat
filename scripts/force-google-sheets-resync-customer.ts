@@ -13,7 +13,8 @@ import { syncAssignmentToGoogleSheets } from '../src/lib/googleSheets/syncAssign
 import { GOOGLE_SHEETS_PROVIDER } from '../src/lib/googleSheets/types';
 
 config({ path: resolve(process.cwd(), '.env.local') });
-config({ path: resolve(process.cwd(), '.env.vercel.prod.full') });
+config({ path: resolve(process.cwd(), '.env.vercel.integration'), override: true });
+config({ path: resolve(process.cwd(), '.env.vercel.prod.full'), override: true });
 
 const DRY_RUN = process.argv.includes('--dry-run');
 const customerArg = process.argv.find((a) => a.startsWith('--customer-name='));

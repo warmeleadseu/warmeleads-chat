@@ -14,6 +14,7 @@ import {
 } from './fieldMappingLogic';
 import { ensureLatestSheetInSettings } from './activeSheet';
 import { resolveGoogleSheetsAccessToken } from './access';
+import { assertGoogleSheetsServerReady } from './config';
 import { getGoogleSheetsIntegrationPublic } from './integrationRepo';
 import { GOOGLE_SHEETS_PROVIDER } from './types';
 
@@ -49,9 +50,10 @@ export async function syncAssignmentToGoogleSheets(args: SyncAssignmentArgs): Pr
   const integration = await getGoogleSheetsIntegrationPublic(supabase, customerId);
   if (!integration?.connected_at) return;
   if (integration.settings.enabled === false) return;
-
   const spreadsheetId = integration.settings.spreadsheet_id;
   if (!spreadsheetId) return;
+
+  await assertGoogleSheetsServerReady();
 
   const { data: assignment } = await supabase
     .from('lead_assignments')

@@ -68,6 +68,15 @@ export function isGoogleSheetsIntegrationServerReady(): boolean {
   );
 }
 
+/** Duidelijke fout vóór sync als service account ontbreekt (bv. lokaal script zonder prod-env). */
+export function assertGoogleSheetsServerReady(): void {
+  if (!isGoogleSheetsIntegrationServerReady()) {
+    throw new Error(
+      'Google Spreadsheets is niet beschikbaar op de server. Neem contact op met Warme Leads.',
+    );
+  }
+}
+
 /** Legacy: klant autoriseert eigen Google-account. */
 export function isGoogleSheetsOAuthServerReady(): boolean {
   return !!getGoogleOAuthConfig() && isGoogleSheetsApiKeyConfigured();

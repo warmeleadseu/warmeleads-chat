@@ -1,4 +1,5 @@
 import { appendGoogleSheetsApiKey, GOOGLE_SHEETS_API_BASE } from './config';
+import { fetchGoogleSheetsWithRetry } from './httpRetry';
 import {
   extractHeaderColumnsFromCells,
   HEADER_SCAN_COLS,
@@ -93,7 +94,7 @@ async function sheetsFetch<T>(
   init?: RequestInit,
 ): Promise<T> {
   const apiPath = appendGoogleSheetsApiKey(path);
-  const res = await fetch(`${GOOGLE_SHEETS_API_BASE}${apiPath}`, {
+  const res = await fetchGoogleSheetsWithRetry(`${GOOGLE_SHEETS_API_BASE}${apiPath}`, {
     ...init,
     headers: {
       Authorization: `Bearer ${accessToken}`,

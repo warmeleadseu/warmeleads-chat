@@ -31,29 +31,42 @@ type IntegrationRow = {
 
 function rowToStored(row: IntegrationRow): StoredIntegration | null {
   if (!row.access_token_enc || !row.refresh_token_enc || !row.expires_at) return null;
-  return {
-    id: row.id,
-    customer_id: row.customer_id,
-    access_token: decryptSecret(row.access_token_enc),
-    refresh_token: decryptSecret(row.refresh_token_enc),
-    expires_at: new Date(row.expires_at),
-    settings: row.settings ?? { enabled: true },
-    connected_at: row.connected_at,
-  };
+  try {
+    return {
+      id: row.id,
+      customer_id: row.customer_id,
+      access_token: decryptSecret(row.access_token_enc),
+      refresh_token: decryptSecret(row.refresh_token_enc),
+      expires_at: new Date(row.expires_at),
+      settings: row.settings ?? { enabled: true },
+      connected_at: row.connected_at,
+    };
+  } catch (err) {
+    console.error('[teamleader] token decrypt failed', {
+      customerId: row.customer_id,
+      message: err instanceof Error ? err.message : String(err),
+    });
+    return null;
+  }
 }
 
 export async function getTeamleaderIntegration(
   supabase: SupabaseClient,
   customerId: string,
 ): Promise<StoredIntegration | null> {
-  const { data } = await supabase
-    .from('customer_integrations')
-    .select('id, customer_id, access_token_enc, refresh_token_enc, expires_at, settings, connected_at')
-    .eq('customer_id', customerId)
-    .eq('provider', TEAMLEADER_PROVIDER)
-    .maybeSingle();
-  if (!data) return null;
-  return rowToStored(data as IntegrationRow);
+  const row = await getRawIntegrationRow(supabase, customerId);
+  if (!row) return null;
+  return rowToStored(row);
+}
+
+/** True wanneer er tokens in de DB staan maar decrypt faalt (opnieuw koppelen vereist). */
+export async function isTeamleaderTokenDecryptBroken(
+  supabase: SupabaseClient,
+  customerId: string,
+): Promise<boolean> {
+  const row = await getRawIntegrationRow(supabase, customerId);
+  if (!row?.connected_at || !row.access_token_enc || !row.refresh_token_enc) return false;
+  return rowToStored(row) === null;
 }
 
 export async function saveTeamleaderTokens(
@@ -144,7 +157,7 @@ export async function fullyRemoveTeamleader(
 }
 
 /** Lees de row zonder decrypt te forceren (helper voor disconnect). */
-async function getRawIntegrationRow(
+export async function getRawIntegrationRow(
   supabase: SupabaseClient,
   customerId: string,
 ): Promise<IntegrationRow | null> {
