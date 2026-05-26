@@ -20,8 +20,9 @@ import {
   fetchSheetHeaderColumns,
   quoteSheetName,
 } from '@/lib/googleSheets/spreadsheet';
-
 import { loadCustomerBranchSlugs, isCustomerBranch } from '@/lib/integrations/customerBranches';
+
+export async function GET(request: NextRequest) {
   const session = await verifyCustomer(request);
   if (!session) return portalUnauthorized();
   const denied = requireIntegrationOwner(session);

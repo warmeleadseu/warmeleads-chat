@@ -18,8 +18,9 @@ import {
   getTeamleaderIntegration,
   updateTeamleaderSettings,
 } from '@/lib/teamleader/integrationRepo';
-
 import { loadCustomerBranchSlugs, isCustomerBranch } from '@/lib/integrations/customerBranches';
+
+export async function GET(request: NextRequest) {
   const session = await verifyCustomer(request);
   if (!session) return portalUnauthorized();
   const denied = requireIntegrationOwner(session);

@@ -216,7 +216,7 @@ function matchesAllFilters(lead: LeadForDistribution, filters: LeadFilter[]): bo
 
 interface DistributionResult {
   lead_id: string;
-  assignments: { customer_id: string; batch_id: string; distance_km: number }[];
+  assignments: { customer_id: string; batch_id: string; distance_km: number | null }[];
 }
 
 /** Row shape from customer_batches select in distribution (PostgREST nested customers). */
