@@ -213,6 +213,10 @@ export async function GET(request: NextRequest) {
   const dateFormat = url.searchParams.get('date_format') || 'nl';
   const includeHeaders = url.searchParams.get('include_headers') !== 'false';
   const feedbackFilter = url.searchParams.get('feedback_filter');
+  const leadIdsParam = url.searchParams.get('lead_ids');
+  const requestedLeadIds = leadIdsParam
+    ? leadIdsParam.split(',').map((id) => id.trim()).filter(Boolean)
+    : null;
 
   const columnsParam = url.searchParams.get('columns');
   const selectedColumns = columnsParam
@@ -231,9 +235,24 @@ export async function GET(request: NextRequest) {
     hasPaidCustomerBatch,
   });
 
-  const { ids: leadIds, metaMap, partial: exportPartial, maxExportRows } = await getCustomerLeadData(supabase, customer.id, leadSource, demoMode);
+  const { ids: poolLeadIds, metaMap, partial: exportPartial, maxExportRows } = await getCustomerLeadData(supabase, customer.id, leadSource, demoMode);
 
-  if (exportPartial) {
+  const leadIds = requestedLeadIds
+    ? requestedLeadIds.filter((id) => poolLeadIds.includes(id))
+    : poolLeadIds;
+
+  if (requestedLeadIds && requestedLeadIds.length > 0 && leadIds.length === 0) {
+    return NextResponse.json({ error: 'Geen geldige leads geselecteerd voor export' }, { status: 400 });
+  }
+
+  if (requestedLeadIds && requestedLeadIds.length > EXPORT_PAGINATE_MAX_ROWS) {
+    return NextResponse.json(
+      { error: `Maximaal ${EXPORT_PAGINATE_MAX_ROWS} leads per export` },
+      { status: 400 },
+    );
+  }
+
+  if (!requestedLeadIds && exportPartial) {
     console.info('[portal/export]', { computeMs: Date.now() - t0, rejected: true, reason: 'paginate_cap' });
     return NextResponse.json(
       {
@@ -268,9 +287,11 @@ export async function GET(request: NextRequest) {
   for (let i = 0; i < leadIds.length; i += IN_CHUNK) {
     const chunk = leadIds.slice(i, i + IN_CHUNK);
     let q = supabase.from('leads').select('*').in('id', chunk);
-    if (branch && branch !== 'all') q = q.eq('branch', branch);
-    if (from) q = q.gte('wervingsdatum', from);
-    if (to) q = q.lte('wervingsdatum', to);
+    if (!requestedLeadIds) {
+      if (branch && branch !== 'all') q = q.eq('branch', branch);
+      if (from) q = q.gte('wervingsdatum', from);
+      if (to) q = q.lte('wervingsdatum', to);
+    }
     const batchRes = await paginateQuery<Record<string, unknown>>(q);
     rawLeads.push(...batchRes.rows);
   }
@@ -287,11 +308,13 @@ export async function GET(request: NextRequest) {
     };
   });
 
-  let filtered = status && status !== 'all'
-    ? leads.filter(l => l.status === status)
-    : leads;
+  let filtered = requestedLeadIds
+    ? leads
+    : status && status !== 'all'
+      ? leads.filter(l => l.status === status)
+      : leads;
 
-  if (searchParam) {
+  if (!requestedLeadIds && searchParam) {
     filtered = filtered.filter(l => {
       const hay = [l.naam_klant, l.email, l.telefoonnummer, l.postcode, l.plaatsnaam]
         .filter(Boolean).join(' ').toLowerCase();

@@ -22,6 +22,38 @@ export function columnIndexToLetter(index: number): string {
   return s;
 }
 
+/** 0-based kolomindex uit A1-kolomletter (A → 0, Z → 25, AA → 26). */
+export function columnLetterToIndex(letter: string): number {
+  const upper = letter.trim().toUpperCase();
+  if (!/^[A-Z]+$/.test(upper)) return -1;
+  let index = 0;
+  for (let i = 0; i < upper.length; i++) {
+    index = index * 26 + (upper.charCodeAt(i) - 64);
+  }
+  return index - 1;
+}
+
+/**
+ * Bepaalt de startkolom (0-based) uit een Values API range, bv. "'Blad 1'!G1:W1" → 6.
+ * Zonder range valt terug op kolom A (0).
+ */
+export function parseValuesRangeStartColumn(range: string | undefined): number {
+  if (!range) return 0;
+  const bang = range.lastIndexOf('!');
+  const a1Part = bang >= 0 ? range.slice(bang + 1) : range;
+  const startCell = a1Part.split(':')[0] ?? 'A1';
+  const colMatch = startCell.match(/^([A-Za-z]+)/);
+  if (!colMatch) return 0;
+  const idx = columnLetterToIndex(colMatch[1]);
+  return idx >= 0 ? idx : 0;
+}
+
+/** Berekent het aantal kolommen op basis van de hoogste kolomindex. */
+export function sheetColumnCount(columns: SheetColumn[]): number {
+  if (columns.length === 0) return 0;
+  return Math.max(...columns.map((c) => c.index)) + 1;
+}
+
 /**
  * Standaard het laatste tabblad (zoals gevraagd in portaal-setup), tenzij gid expliciet is gezet.
  */
@@ -91,17 +123,21 @@ export async function fetchSheetHeaderColumns(
   spreadsheetId: string,
   sheetName: string,
 ): Promise<SheetColumn[]> {
-  const range = encodeURIComponent(`${sheetName}!1:1`);
-  const data = await sheetsFetch<{ values?: string[][] }>(
+  const range = encodeURIComponent(`${sheetName}!A1:ZZ1`);
+  const data = await sheetsFetch<{ values?: string[][]; range?: string }>(
     accessToken,
     `/spreadsheets/${spreadsheetId}/values/${range}`,
   );
   const row = data.values?.[0] ?? [];
-  return row.map((label, index) => ({
-    index,
-    letter: columnIndexToLetter(index),
-    label: (label || '').trim() || `Kolom ${columnIndexToLetter(index)}`,
-  }));
+  const startCol = parseValuesRangeStartColumn(data.range);
+  return row.map((label, offset) => {
+    const index = startCol + offset;
+    return {
+      index,
+      letter: columnIndexToLetter(index),
+      label: (label || '').trim() || `Kolom ${columnIndexToLetter(index)}`,
+    };
+  });
 }
 
 export async function appendRowToSheet(

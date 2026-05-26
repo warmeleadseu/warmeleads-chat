@@ -277,6 +277,7 @@ export async function GET(request: NextRequest) {
   const limit = parseInt(url.searchParams.get('limit') || '25');
   const branch = url.searchParams.get('branch');
   const leadSource = (url.searchParams.get('lead_source') || 'all') as 'all' | 'fresh' | 'bulk';
+  const idsOnly = url.searchParams.get('ids_only') === '1';
 
   const { demoMode, branches: customerBranches } = await getCustomerDemoInfo(supabase, customer.id);
 
@@ -343,6 +344,9 @@ export async function GET(request: NextRequest) {
 
   if (filteredLeadIds.length === 0) {
     console.info('[portal/leads]', { computeMs: Date.now() - t0, partial: leadDataPartial, poolSize: 0, page });
+    if (idsOnly) {
+      return NextResponse.json({ ids: [], total: 0, partial: leadDataPartial, maxPaginateRows });
+    }
     return NextResponse.json({
       leads: [],
       total: 0,
@@ -399,7 +403,11 @@ export async function GET(request: NextRequest) {
     const startIdx = (page - 1) * limit;
     let q = supabase.from('leads').select('*').in('id', filteredLeadIds);
     q = applyFilters(q);
-    q = q.order(col, { ascending: asc }).range(startIdx, startIdx + limit - 1);
+    if (idsOnly) {
+      q = q.order(col, { ascending: asc });
+    } else {
+      q = q.order(col, { ascending: asc }).range(startIdx, startIdx + limit - 1);
+    }
     const { data, error: fetchError } = await q;
     if (fetchError) {
       return NextResponse.json({ error: 'Kon leads niet ophalen' }, { status: 500 });
@@ -420,6 +428,17 @@ export async function GET(request: NextRequest) {
 
     await attachReclamationFieldsToLeads(supabase, customer.id, enrichedLeads as Record<string, unknown>[]);
     enrichPortalLeadDistances(enrichedLeads as Record<string, unknown>[], activeTargets);
+
+    if (idsOnly) {
+      const allIds = enrichedLeads.map((l) => (l as Record<string, unknown>).id as string);
+      console.info('[portal/leads]', { computeMs: Date.now() - t0, partial: leadDataPartial, poolSize: filteredLeadIds.length, path: 'ids_only_db_sort' });
+      return NextResponse.json({
+        ids: allIds,
+        total: allIds.length,
+        partial: leadDataPartial,
+        maxPaginateRows,
+      });
+    }
 
     console.info('[portal/leads]', { computeMs: Date.now() - t0, partial: leadDataPartial, poolSize: filteredLeadIds.length, page, path: 'db_sort' });
     return NextResponse.json({
@@ -486,6 +505,17 @@ export async function GET(request: NextRequest) {
   const enrichedLeads = enrichedAll.slice(startIdx, startIdx + limit);
 
   await attachReclamationFieldsToLeads(supabase, customer.id, enrichedLeads as Record<string, unknown>[]);
+
+  if (idsOnly) {
+    const allIds = enrichedAll.map((l) => (l as Record<string, unknown>).id as string);
+    console.info('[portal/leads]', { computeMs: Date.now() - t0, partial: leadDataPartial, poolSize: filteredLeadIds.length, path: 'ids_only_mem_sort' });
+    return NextResponse.json({
+      ids: allIds,
+      total: totalCount,
+      partial: leadDataPartial,
+      maxPaginateRows,
+    });
+  }
 
   console.info('[portal/leads]', { computeMs: Date.now() - t0, partial: leadDataPartial, poolSize: filteredLeadIds.length, page, path: 'mem_sort' });
   return NextResponse.json({

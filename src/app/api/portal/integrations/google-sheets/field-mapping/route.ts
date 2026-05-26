@@ -6,6 +6,7 @@ import {
   getPortalFieldsForBranch,
   hasSavedSheetMappings,
   mergeSheetMappings,
+  remapLegacyColumnIndices,
   sheetMappingIsEmpty,
   suggestSheetColumnMapping,
 } from '@/lib/googleSheets/fieldMappingLogic';
@@ -99,14 +100,15 @@ export async function GET(request: NextRequest) {
       .map((f: { key: string; label: string }) => ({ key: f.key, label: f.label }));
     const portalFields = getPortalFieldsForBranch(fields);
     const saved = mergeSheetMappings(savedMappings, b.slug);
-    const useSuggest = suggest || (sheetMappingIsEmpty(saved) && hasColumns);
-    const mapping = useSuggest ? suggestSheetColumnMapping(portalFields, sheetColumns) : saved;
+    const savedRemapped = remapLegacyColumnIndices(saved, sheetColumns);
+    const useSuggest = suggest || (sheetMappingIsEmpty(savedRemapped) && hasColumns);
+    const mapping = useSuggest ? suggestSheetColumnMapping(portalFields, sheetColumns) : savedRemapped;
     return {
       slug: b.slug,
       name: b.name,
       portal_fields: portalFields,
       mapping,
-      mapping_source: useSuggest && sheetMappingIsEmpty(saved) ? 'suggested' : 'saved',
+      mapping_source: useSuggest && sheetMappingIsEmpty(savedRemapped) ? 'suggested' : 'saved',
     };
   });
 

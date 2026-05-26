@@ -44,12 +44,14 @@ import {
   ClockIcon,
 } from '@heroicons/react/24/outline';
 import { usePushNotifications, type PushState } from './usePushNotifications';
-import ExportWizard, { type ExportFilters } from './ExportWizard';
+import ExportWizard, { type ExportFilters, type ExportSelection } from './ExportWizard';
 import {
   LeadSelectionBar,
+  SelectAllLeadsBanner,
   useCrmBackfillReady,
   useLeadCrmBackfill,
 } from './LeadCrmBackfill';
+import { PERMISSIONS } from '@/lib/portalPermissions';
 import { PageHeader, useToast } from './_ui';
 import { STATUS_COLORS, STATUS_OPTIONS } from './_constants/leadStatus';
 import { getBatchProgressView, isCappedDeliveryModel } from '@/lib/batchDeliveryModel';
@@ -259,8 +261,9 @@ function ReclamationListBadge({ status, reason }: { status: string; reason?: str
 }
 
 export default function PortalPage() {
-  const { customer, isOwner } = usePortal();
+  const { customer, isOwner, hasPermission } = usePortal();
   const showDemoPortal = isDemoPortalExperience(customer);
+  const canExport = isOwner || hasPermission(PERMISSIONS.LEADS_EXPORT);
   const searchParams = useSearchParams();
   const { crmLabel, crmReady } = useCrmBackfillReady(isOwner);
 
@@ -295,6 +298,8 @@ export default function PortalPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showExportWizard, setShowExportWizard] = useState(false);
+  const [exportSelection, setExportSelection] = useState<ExportSelection | null>(null);
+  const [exportCount, setExportCount] = useState(0);
   const [emailNotifications, setEmailNotifications] = useState(false);
   const [notificationFrequency, setNotificationFrequency] = useState('instant');
 
@@ -306,9 +311,12 @@ export default function PortalPage() {
 
   const {
     selectedIds,
+    selectAllFiltered,
     syncing: crmBackfillSyncing,
+    isLeadSelected,
     toggleLead,
     togglePage,
+    selectAllMatching,
     clearSelection,
     runBackfill,
   } = useLeadCrmBackfill(showToast);
@@ -341,23 +349,31 @@ export default function PortalPage() {
 
   const pageLeadIds = useMemo(() => leads.map((l) => l.id), [leads]);
   const allPageSelected =
-    pageLeadIds.length > 0 && pageLeadIds.every((id) => selectedIds.has(id));
-  const somePageSelected = pageLeadIds.some((id) => selectedIds.has(id));
+    pageLeadIds.length > 0 && pageLeadIds.every((id) => isLeadSelected(id));
+  const somePageSelected = pageLeadIds.some((id) => isLeadSelected(id));
+  const selectedCount = selectAllFiltered ? total : selectedIds.size;
+  const showSelectAllBanner =
+    allPageSelected && total > pageLeadIds.length && pageLeadIds.length > 0;
 
-  const handleCrmBackfill = () => {
-    if (!crmLabel) return;
-    const count = selectedIds.size;
-    if (
-      !confirm(
-        `${count} lead${count === 1 ? '' : 's'} alsnog naar ${crmLabel} sturen? Leads die al succesvol zijn verstuurd worden overgeslagen.`,
-      )
-    ) {
+  useEffect(() => {
+    clearSelection();
+  }, [statusFilter, branchFilter, dateFrom, dateTo, leadSource, search, clearSelection]);
+
+  const openExportWizard = useCallback((selection: ExportSelection | null, count: number) => {
+    setExportSelection(selection);
+    setExportCount(count);
+    setShowExportWizard(true);
+  }, []);
+
+  const handleExportFromSelection = () => {
+    if (selectAllFiltered) {
+      openExportWizard(null, total);
       return;
     }
-    void runBackfill(crmLabel, false);
+    openExportWizard({ mode: 'lead_ids', leadIds: [...selectedIds] }, selectedIds.size);
   };
 
-  const showLeadSelection = isOwner && crmReady && !showDemoPortal;
+  const showLeadSelection = !showDemoPortal && ((isOwner && crmReady) || canExport);
   const showBranchFilter = customer.branches.length > 1;
   const conversionRate = stats.totalLeads > 0
     ? Math.round((stats.sold / stats.totalLeads) * 100)
@@ -620,6 +636,25 @@ export default function PortalPage() {
     leadSource,
     search,
   }), [statusFilter, branchFilter, dateFrom, dateTo, leadSource, search]);
+
+  const handleCrmBackfill = () => {
+    if (!crmLabel) return;
+    const count = selectedCount;
+    if (
+      !confirm(
+        `${count} lead${count === 1 ? '' : 's'} alsnog naar ${crmLabel} sturen? Leads die al succesvol zijn verstuurd worden overgeslagen.`,
+      )
+    ) {
+      return;
+    }
+    void runBackfill(crmLabel, {
+      forceResend: false,
+      selectAllFiltered,
+      selectedIds,
+      filters: exportFilters,
+      total,
+    });
+  };
 
   const branchFieldsForExport = useMemo(() => {
     const customerBranchSlugs = new Set(customer.branches);
@@ -887,8 +922,8 @@ export default function PortalPage() {
             Conversie {conversionRate}%
           </button>
           <button
-            onClick={() => setShowExportWizard(true)}
-            disabled={total === 0}
+            onClick={() => openExportWizard(null, total)}
+            disabled={total === 0 || !canExport}
             className="inline-flex min-h-11 snap-start items-center gap-1.5 rounded-xl border border-brand-purple/30 bg-brand-purple/5 px-3.5 py-2 text-xs font-semibold text-brand-purple transition hover:bg-brand-purple/10 disabled:opacity-40"
           >
             <ArrowDownTrayIcon className="h-4 w-4" />
@@ -953,8 +988,8 @@ export default function PortalPage() {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setShowExportWizard(true)}
-            disabled={total === 0}
+            onClick={() => openExportWizard(null, total)}
+            disabled={total === 0 || !canExport}
             className="inline-flex items-center gap-1.5 rounded-lg border border-brand-purple/30 bg-brand-purple/5 px-3 py-2 text-sm font-medium text-brand-purple transition hover:bg-brand-purple/10 disabled:opacity-40"
           >
             <ArrowDownTrayIcon className="h-4 w-4" />
@@ -1092,6 +1127,16 @@ export default function PortalPage() {
         </div>
       ) : (
         <>
+          {showLeadSelection && (showSelectAllBanner || selectAllFiltered) && (
+            <SelectAllLeadsBanner
+              pageCount={pageLeadIds.length}
+              totalCount={total}
+              selectAllFiltered={selectAllFiltered}
+              onSelectAll={selectAllMatching}
+              onClearAll={clearSelection}
+            />
+          )}
+
           {/* Desktop table */}
           <div className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm md:block">
             <div className="overflow-x-auto">
@@ -1139,14 +1184,14 @@ export default function PortalPage() {
                     <tr
                       key={lead.id}
                       onClick={() => setSelectedLead(lead)}
-                      className={`cursor-pointer transition hover:bg-slate-50 ${selectedIds.has(lead.id) ? 'bg-brand-purple/5' : ''}`}
+                      className={`cursor-pointer transition hover:bg-slate-50 ${isLeadSelected(lead.id) ? 'bg-brand-purple/5' : ''}`}
                     >
                       {showLeadSelection && (
                         <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
                           <input
                             type="checkbox"
-                            checked={selectedIds.has(lead.id)}
-                            onChange={(e) => toggleLead(lead.id, e.target.checked)}
+                            checked={isLeadSelected(lead.id)}
+                            onChange={(e) => toggleLead(lead.id, e.target.checked, pageLeadIds)}
                             className="h-4 w-4 rounded border-slate-300 text-brand-purple focus:ring-brand-purple/30"
                             aria-label={`Selecteer ${lead.naam_klant || 'lead'}`}
                           />
@@ -1253,15 +1298,15 @@ export default function PortalPage() {
                 key={lead.id}
                 onClick={() => setSelectedLead(lead)}
                 className={`cursor-pointer rounded-xl border bg-white p-4 shadow-sm transition active:scale-[0.99] ${
-                  selectedIds.has(lead.id) ? 'border-brand-purple/40 ring-1 ring-brand-purple/20' : 'border-slate-200'
+                  isLeadSelected(lead.id) ? 'border-brand-purple/40 ring-1 ring-brand-purple/20' : 'border-slate-200'
                 }`}
               >
                 {showLeadSelection && (
                   <div className="mb-2 flex justify-end" onClick={(e) => e.stopPropagation()}>
                     <input
                       type="checkbox"
-                      checked={selectedIds.has(lead.id)}
-                      onChange={(e) => toggleLead(lead.id, e.target.checked)}
+                      checked={isLeadSelected(lead.id)}
+                      onChange={(e) => toggleLead(lead.id, e.target.checked, pageLeadIds)}
                       className="h-4 w-4 rounded border-slate-300 text-brand-purple"
                       aria-label={`Selecteer ${lead.naam_klant || 'lead'}`}
                     />
@@ -1365,12 +1410,14 @@ export default function PortalPage() {
             </div>
           )}
 
-          {showLeadSelection && crmLabel && (
+          {(selectedCount > 0 && (canExport || (isOwner && crmReady && crmLabel))) && (
             <LeadSelectionBar
-              selectedCount={selectedIds.size}
-              crmLabel={crmLabel}
+              selectedCount={selectedCount}
+              crmLabel={isOwner && crmReady ? crmLabel : null}
+              canExport={canExport}
               onClear={clearSelection}
-              onSync={() => handleCrmBackfill()}
+              onSync={isOwner && crmReady && crmLabel ? () => handleCrmBackfill() : undefined}
+              onExport={handleExportFromSelection}
               syncing={crmBackfillSyncing}
             />
           )}
@@ -1398,11 +1445,15 @@ export default function PortalPage() {
       {/* Export wizard */}
       <ExportWizard
         open={showExportWizard}
-        onClose={() => setShowExportWizard(false)}
+        onClose={() => {
+          setShowExportWizard(false);
+          setExportSelection(null);
+        }}
         filters={exportFilters}
-        totalLeads={total}
+        totalLeads={exportCount || total}
         customerName={customer.name}
         branchFields={branchFieldsForExport}
+        exportSelection={exportSelection}
         showToast={showToast}
       />
 

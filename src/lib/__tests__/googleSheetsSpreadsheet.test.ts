@@ -1,13 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import {
   columnIndexToLetter,
+  columnLetterToIndex,
   parseSpreadsheetUrl,
+  parseValuesRangeStartColumn,
   pickDefaultSheetTab,
   quoteSheetName,
+  sheetColumnCount,
+  type SheetColumn,
   type SheetTab,
 } from '@/lib/googleSheets/spreadsheet';
 import {
   buildSheetRowValues,
+  remapLegacyColumnIndices,
+  resolveSheetColumnIndex,
   suggestSheetColumnMapping,
 } from '@/lib/googleSheets/fieldMappingLogic';
 import { getPortalFieldsForBranch } from '@/lib/teamleader/fieldMappingLogic';
@@ -27,6 +33,31 @@ describe('columnIndexToLetter', () => {
     expect(columnIndexToLetter(0)).toBe('A');
     expect(columnIndexToLetter(25)).toBe('Z');
     expect(columnIndexToLetter(26)).toBe('AA');
+  });
+});
+
+describe('columnLetterToIndex', () => {
+  it('maps letters to indices', () => {
+    expect(columnLetterToIndex('A')).toBe(0);
+    expect(columnLetterToIndex('G')).toBe(6);
+    expect(columnLetterToIndex('AA')).toBe(26);
+  });
+});
+
+describe('parseValuesRangeStartColumn', () => {
+  it('parses start column from API range', () => {
+    expect(parseValuesRangeStartColumn("'Blad 1'!G1:W1")).toBe(6);
+    expect(parseValuesRangeStartColumn('Sheet1!A1:Z1')).toBe(0);
+  });
+});
+
+describe('sheetColumnCount', () => {
+  it('uses highest column index', () => {
+    const cols: SheetColumn[] = [
+      { index: 6, letter: 'G', label: 'Naam' },
+      { index: 15, letter: 'P', label: 'Manager' },
+    ];
+    expect(sheetColumnCount(cols)).toBe(16);
   });
 });
 
@@ -58,12 +89,31 @@ describe('quoteSheetName', () => {
 });
 
 describe('suggestSheetColumnMapping', () => {
-  it('matches email column', () => {
+  it('matches email column with absolute index', () => {
     const portal = getPortalFieldsForBranch([]);
     const mapping = suggestSheetColumnMapping(portal, [
-      { index: 0, letter: 'A', label: 'E-mail' },
+      { index: 6, letter: 'G', label: 'E-mail' },
     ]);
-    expect(mapping.email).toBe('0');
+    expect(mapping.email).toBe('6');
+  });
+});
+
+describe('resolveSheetColumnIndex', () => {
+  it('accepts numeric and letter refs', () => {
+    expect(resolveSheetColumnIndex('6')).toBe(6);
+    expect(resolveSheetColumnIndex('G')).toBe(6);
+  });
+});
+
+describe('remapLegacyColumnIndices', () => {
+  it('shifts relative indices when headers start at G', () => {
+    const columns: SheetColumn[] = [
+      { index: 6, letter: 'G', label: 'Naam klant' },
+      { index: 7, letter: 'H', label: 'E-mail' },
+    ];
+    const remapped = remapLegacyColumnIndices({ naam_klant: '0', email: '1' }, columns);
+    expect(remapped.naam_klant).toBe('6');
+    expect(remapped.email).toBe('7');
   });
 });
 
@@ -76,5 +126,17 @@ describe('buildSheetRowValues', () => {
     );
     expect(row[0]).toBe('Jan');
     expect(row[1]).toBe('a@b.nl');
+  });
+
+  it('preserves leading empty columns for offset headers', () => {
+    const row = buildSheetRowValues(
+      { naam_klant: 'Jan', email: 'a@b.nl' },
+      { naam_klant: '6', email: '7' },
+      16,
+    );
+    expect(row[0]).toBe('');
+    expect(row[6]).toBe('Jan');
+    expect(row[7]).toBe('a@b.nl');
+    expect(row.length).toBe(16);
   });
 });

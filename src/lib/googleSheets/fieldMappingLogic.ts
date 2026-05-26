@@ -6,8 +6,9 @@ import {
 } from '@/lib/teamleader/fieldMappingLogic';
 import type { GoogleSheetsFieldMappings, SheetBranchFieldMapping } from './types';
 import type { SheetColumn } from './spreadsheet';
+import { columnLetterToIndex, sheetColumnCount } from './spreadsheet';
 
-export { getPortalFieldsForBranch, getLeadFieldValue };
+export { getPortalFieldsForBranch, getLeadFieldValue, sheetColumnCount };
 
 export function mergeSheetMappings(
   saved: GoogleSheetsFieldMappings | undefined,
@@ -76,23 +77,82 @@ export function suggestSheetColumnMapping(
   return mapping;
 }
 
-/** Bouw een rij-array voor append op basis van kolom-mapping. */
+/** Zet opgeslagen kolomverwijzing om naar 0-based sheet-kolomindex. */
+export function resolveSheetColumnIndex(colRef: string): number | null {
+  const trimmed = colRef.trim();
+  if (!trimmed) return null;
+  if (/^\d+$/.test(trimmed)) {
+    const n = Number(trimmed);
+    return Number.isFinite(n) && n >= 0 ? n : null;
+  }
+  if (/^[A-Za-z]+$/.test(trimmed)) {
+    const idx = columnLetterToIndex(trimmed);
+    return idx >= 0 ? idx : null;
+  }
+  return null;
+}
+
+/**
+ * Migreert veldkoppelingen die met oude (relatieve) kolomindices zijn opgeslagen
+ * naar absolute sheet-kolomindices zodra koppen niet in kolom A beginnen.
+ */
+export function remapLegacyColumnIndices(
+  mapping: SheetBranchFieldMapping,
+  columns: SheetColumn[],
+): SheetBranchFieldMapping {
+  if (columns.length === 0) return mapping;
+
+  const startCol = columns[0]?.index ?? 0;
+  if (startCol === 0) return mapping;
+
+  const mappedIndices = Object.values(mapping)
+    .map((ref) => resolveSheetColumnIndex(ref))
+    .filter((idx): idx is number => idx != null);
+
+  if (mappedIndices.length === 0) return mapping;
+
+  const minMapped = Math.min(...mappedIndices);
+  const maxMapped = Math.max(...mappedIndices);
+
+  // Oude opslag: indices 0..n-1 terwijl fysieke kolommen bij startCol beginnen.
+  if (minMapped >= 0 && maxMapped < columns.length) {
+    const remapped: SheetBranchFieldMapping = {};
+    for (const [key, ref] of Object.entries(mapping)) {
+      const idx = resolveSheetColumnIndex(ref);
+      if (idx != null && idx >= 0 && idx < columns.length) {
+        remapped[key] = String(columns[idx].index);
+      } else if (ref) {
+        remapped[key] = ref;
+      }
+    }
+    return remapped;
+  }
+
+  return mapping;
+}
+
+/** Bouw een rij-array voor append op basis van kolom-mapping (absolute kolomindices). */
 export function buildSheetRowValues(
   lead: Record<string, unknown>,
   mapping: SheetBranchFieldMapping,
   columnCount: number,
 ): string[] {
-  const row = Array.from({ length: Math.max(columnCount, 1) }, () => '');
-  let maxIndex = columnCount - 1;
+  let maxMappedIndex = -1;
+  for (const colRef of Object.values(mapping)) {
+    const idx = resolveSheetColumnIndex(colRef);
+    if (idx != null && idx > maxMappedIndex) maxMappedIndex = idx;
+  }
 
-  for (const [portalKey, colIndexStr] of Object.entries(mapping)) {
-    const colIndex = Number(colIndexStr);
-    if (!Number.isFinite(colIndex) || colIndex < 0) continue;
+  const width = Math.max(columnCount, maxMappedIndex + 1, 1);
+  const row = Array.from({ length: width }, () => '');
+
+  for (const [portalKey, colRef] of Object.entries(mapping)) {
+    const colIndex = resolveSheetColumnIndex(colRef);
+    if (colIndex == null || colIndex < 0 || colIndex >= width) continue;
     const value = getLeadFieldValue(lead, portalKey);
     if (!value) continue;
     row[colIndex] = value;
-    if (colIndex > maxIndex) maxIndex = colIndex;
   }
 
-  return row.slice(0, maxIndex + 1);
+  return row;
 }

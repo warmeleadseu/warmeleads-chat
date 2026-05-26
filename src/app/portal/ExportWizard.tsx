@@ -128,6 +128,11 @@ async function readPortalExportErrorMessage(res: Response): Promise<string> {
 
 /* ─── component ─── */
 
+export interface ExportSelection {
+  mode: 'filters' | 'lead_ids';
+  leadIds?: string[];
+}
+
 interface ExportWizardProps {
   open: boolean;
   onClose: () => void;
@@ -135,6 +140,7 @@ interface ExportWizardProps {
   totalLeads: number;
   customerName: string;
   branchFields: BranchField[];
+  exportSelection?: ExportSelection | null;
   showToast?: (msg: string, type?: 'success' | 'error' | 'info') => void;
 }
 
@@ -145,6 +151,7 @@ export default function ExportWizard({
   totalLeads,
   customerName,
   branchFields,
+  exportSelection,
   showToast,
 }: ExportWizardProps) {
   const [step, setStep] = useState(1);
@@ -295,14 +302,18 @@ export default function ExportWizard({
     params.set('date_format', dateFormat);
     params.set('include_headers', includeHeaders ? 'true' : 'false');
     if (feedbackFilter) params.set('feedback_filter', feedbackFilter);
-    if (filters.statusFilter !== 'all') params.set('status', filters.statusFilter);
-    if (filters.branchFilter !== 'all') params.set('branch', filters.branchFilter);
-    if (filters.dateFrom) params.set('from', filters.dateFrom);
-    if (filters.dateTo) params.set('to', filters.dateTo);
-    if (filters.leadSource !== 'all') params.set('lead_source', filters.leadSource);
-    if (filters.search) params.set('search', filters.search);
+    if (exportSelection?.mode === 'lead_ids' && exportSelection.leadIds?.length) {
+      params.set('lead_ids', exportSelection.leadIds.join(','));
+    } else {
+      if (filters.statusFilter !== 'all') params.set('status', filters.statusFilter);
+      if (filters.branchFilter !== 'all') params.set('branch', filters.branchFilter);
+      if (filters.dateFrom) params.set('from', filters.dateFrom);
+      if (filters.dateTo) params.set('to', filters.dateTo);
+      if (filters.leadSource !== 'all') params.set('lead_source', filters.leadSource);
+      if (filters.search) params.set('search', filters.search);
+    }
     return params;
-  }, [format, selectedCols, separator, dateFormat, includeHeaders, feedbackFilter, filters]);
+  }, [format, selectedCols, separator, dateFormat, includeHeaders, feedbackFilter, filters, exportSelection]);
 
   const loadPreview = useCallback(async () => {
     setPreviewLoading(true);
@@ -434,7 +445,11 @@ export default function ExportWizard({
                 <div className="flex items-center justify-between px-4 py-3 sm:px-5 sm:py-4">
                   <div className="min-w-0">
                     <h2 className="text-base font-bold text-slate-900 sm:text-lg">Leads exporteren</h2>
-                    <p className="mt-0.5 text-xs text-slate-400">{totalLeads} leads beschikbaar</p>
+                    <p className="mt-0.5 text-xs text-slate-400">
+                      {exportSelection?.mode === 'lead_ids'
+                        ? `${totalLeads} geselecteerde lead${totalLeads === 1 ? '' : 's'}`
+                        : `${totalLeads} leads beschikbaar`}
+                    </p>
                   </div>
                   <button
                     onClick={closeSafe}

@@ -8,6 +8,8 @@ import {
   buildSheetRowValues,
   getPortalFieldsForBranch,
   mergeSheetMappings,
+  remapLegacyColumnIndices,
+  sheetColumnCount,
   suggestSheetColumnMapping,
 } from './fieldMappingLogic';
 import { ensureLatestSheetInSettings } from './activeSheet';
@@ -53,7 +55,7 @@ export async function syncAssignmentToGoogleSheets(args: SyncAssignmentArgs): Pr
 
   const { data: assignment } = await supabase
     .from('lead_assignments')
-    .select('id, customer_id, lead_id')
+    .select('id, customer_id, lead_id, status, notities')
     .eq('id', assignmentId)
     .maybeSingle();
   if (!assignment || assignment.customer_id !== customerId || assignment.lead_id !== leadId) {
@@ -79,8 +81,14 @@ export async function syncAssignmentToGoogleSheets(args: SyncAssignmentArgs): Pr
       .eq('id', existingLog.id);
   }
 
-  const { data: lead } = await supabase.from('leads').select('*').eq('id', leadId).single();
-  if (!lead || lead.bron === 'demo') return;
+  const { data: leadRow } = await supabase.from('leads').select('*').eq('id', leadId).single();
+  if (!leadRow || leadRow.bron === 'demo') return;
+
+  const lead = {
+    ...leadRow,
+    status: assignment?.status ?? leadRow.status ?? 'nieuw',
+    notities: assignment?.notities ?? leadRow.notities ?? '',
+  };
 
   const logPayload = {
     customer_id: customerId,
@@ -117,13 +125,16 @@ export async function syncAssignmentToGoogleSheets(args: SyncAssignmentArgs): Pr
     const portalFields = getPortalFieldsForBranch(branchFields);
 
     const columns = await fetchSheetHeaderColumns(accessToken, spreadsheetId, quotedSheet);
-    let columnMapping = mergeSheetMappings(integration.settings.field_mappings, branchSlug);
+    let columnMapping = remapLegacyColumnIndices(
+      mergeSheetMappings(integration.settings.field_mappings, branchSlug),
+      columns,
+    );
 
     if (Object.keys(columnMapping).length === 0 && columns.length > 0) {
       columnMapping = suggestSheetColumnMapping(portalFields, columns);
     }
 
-    const columnCount = columns.length > 0 ? columns.length : 20;
+    const columnCount = sheetColumnCount(columns) || 20;
     const rowValues = buildSheetRowValues(
       lead as Record<string, unknown>,
       columnMapping,

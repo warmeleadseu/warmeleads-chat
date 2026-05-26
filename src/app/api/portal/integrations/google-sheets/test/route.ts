@@ -10,6 +10,7 @@ import {
   appendRowToSheet,
   fetchSheetHeaderColumns,
   quoteSheetName,
+  sheetColumnCount,
 } from '@/lib/googleSheets/spreadsheet';
 
 export async function POST(request: NextRequest) {
@@ -40,10 +41,12 @@ export async function POST(request: NextRequest) {
     const quoted = quoteSheetName(sheetName);
     const columns = await fetchSheetHeaderColumns(accessToken, spreadsheetId, quoted);
     const stamp = new Date().toLocaleString('nl-NL');
-    const row = columns.map((_, i) =>
-      i === 0 ? `[TEST Warme Leads ${stamp}]` : i === 1 ? 'test@warmeleads.eu' : '',
-    );
-    if (row.length === 0) row.push(`[TEST Warme Leads ${stamp}]`);
+    const width = sheetColumnCount(columns) || 1;
+    const row = Array.from({ length: width }, () => '');
+    const firstCol = columns[0]?.index ?? 0;
+    row[firstCol] = `[TEST Warme Leads ${stamp}]`;
+    const secondCol = columns[1]?.index;
+    if (secondCol != null) row[secondCol] = 'test@warmeleads.eu';
 
     const updatedRange = await appendRowToSheet(accessToken, spreadsheetId, quoted, row);
     return NextResponse.json({ ok: true, updated_range: updatedRange, sheet_name: sheetName });
