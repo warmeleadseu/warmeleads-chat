@@ -47,6 +47,7 @@ import { usePushNotifications, type PushState } from './usePushNotifications';
 import ExportWizard, { type ExportFilters } from './ExportWizard';
 import { PageHeader, useToast } from './_ui';
 import { STATUS_COLORS, STATUS_OPTIONS } from './_constants/leadStatus';
+import { getBatchProgressView, isCappedDeliveryModel } from '@/lib/batchDeliveryModel';
 
 function WhatsAppIcon({ className }: { className?: string }) {
   return (
@@ -127,6 +128,8 @@ interface Batch {
   total_price?: number | null;
   /** Aanwezig wanneer batch uit appointment_batches komt (parallel aan leads). */
   batch_product?: 'leads' | 'appointments';
+  batch_kind?: string | null;
+  delivery_model?: string | null;
 }
 
 function StatsSkeleton() {
@@ -351,16 +354,24 @@ export default function PortalPage() {
     });
     return sorted[0];
   }, [liveAndPendingBatches, batches.active]);
-  const primaryBatchProgressPct = useMemo(() => {
-    if (!primaryBatch) return 0;
-    const size = Number(primaryBatch.batch_size);
-    const delivered = Number(primaryBatch.leads_delivered);
-    return size > 0 ? Math.min(100, Math.round((delivered / size) * 100)) : 0;
+  const primaryBatchProgressView = useMemo(() => {
+    if (!primaryBatch) return null;
+    return getBatchProgressView({
+      delivery_model: primaryBatch.delivery_model,
+      batch_kind: primaryBatch.batch_kind,
+      batch_size: Number(primaryBatch.batch_size),
+      leads_delivered: Number(primaryBatch.leads_delivered),
+    });
   }, [primaryBatch]);
+  const primaryBatchProgressPct = primaryBatchProgressView?.progressPercent ?? 0;
   const primaryBatchIsUnpaid = primaryBatch
     ? primaryBatch.is_paid === false || primaryBatch.status === 'pending_payment'
     : false;
-  const primaryBatchShouldUpsell = !!primaryBatch && !primaryBatchIsUnpaid && primaryBatchProgressPct >= 80;
+  const primaryBatchShouldUpsell =
+    !!primaryBatch &&
+    !primaryBatchIsUnpaid &&
+    isCappedDeliveryModel(primaryBatch.delivery_model, primaryBatch.batch_kind) &&
+    primaryBatchProgressPct >= 80;
   const latestHistoricalBatchId = useMemo(() => {
     if (batches.completed.length > 0 && typeof batches.completed[0].id === 'string') {
       return batches.completed[0].id;

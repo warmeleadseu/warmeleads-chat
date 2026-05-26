@@ -16,6 +16,8 @@
  *   need_more_volume = open_ratio > 1.0 (we leveren minder dan klanten willen)
  */
 import { createServerClient } from '@/lib/supabase';
+import { isPipelineBatchKind } from '@/lib/batchKind';
+import { isCappedDeliveryModel } from '@/lib/batchDeliveryModel';
 
 export interface BranchDemand {
   branch: string;
@@ -31,7 +33,7 @@ export async function getBranchDemand(branch: string): Promise<BranchDemand> {
 
   const { data: batches } = await supabase
     .from('customer_batches')
-    .select('id, batch_size, leads_delivered, status, is_paid, starts_at, batch_kind, branch')
+    .select('id, batch_size, leads_delivered, status, is_paid, starts_at, batch_kind, delivery_model, branch')
     .eq('branch', branch)
     .eq('status', 'active')
     .eq('is_paid', true);
@@ -40,7 +42,9 @@ export async function getBranchDemand(branch: string): Promise<BranchDemand> {
   let activeBatches = 0;
   const now = Date.now();
   for (const b of batches || []) {
-    if (!isPipelineBatchKindStr((b as { batch_kind?: string }).batch_kind)) continue;
+    const row = b as { batch_kind?: string; delivery_model?: string };
+    if (!isPipelineBatchKind(row.batch_kind)) continue;
+    if (!isCappedDeliveryModel(row.delivery_model, row.batch_kind)) continue;
     const startsAt = (b as { starts_at?: string | null }).starts_at;
     if (startsAt && new Date(startsAt).getTime() > now) continue;
     const size = Number(b.batch_size) || 0;
@@ -64,13 +68,6 @@ export async function getBranchDemand(branch: string): Promise<BranchDemand> {
   const needMoreVolume = openRatio > 1.0;
 
   return { branch, capacityOpen, activeBatches, leadsLast7d, needMoreVolume, openRatio };
-}
-
-function isPipelineBatchKindStr(kind: string | null | undefined): boolean {
-  const k = (kind || '').toLowerCase();
-  if (!k) return true;
-  if (k === 'bulk_export' || k === 'niche') return false;
-  return true;
 }
 
 export async function getAllBranchDemand(): Promise<BranchDemand[]> {

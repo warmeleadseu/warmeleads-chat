@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyCustomer, portalUnauthorized } from '@/lib/portalAuth';
 import { createServerClient } from '@/lib/supabase';
 import { hasPermission, forbidden, PERMISSIONS } from '@/lib/portalPermissions';
+import { isCappedDeliveryModel } from '@/lib/batchDeliveryModel';
 
 export async function GET(request: NextRequest) {
   const session = await verifyCustomer(request);
@@ -125,7 +126,13 @@ export async function GET(request: NextRequest) {
     );
 
     let estimated_completion: string | null = null;
-    if (avg_leads_per_day > 0) {
+    if (
+      avg_leads_per_day > 0 &&
+      isCappedDeliveryModel(
+        (batch as { delivery_model?: string }).delivery_model,
+        (batch as { batch_kind?: string }).batch_kind,
+      )
+    ) {
       const remaining = (batch.batch_size || 0) - (batch.leads_delivered || 0);
       const daysLeft = remaining / avg_leads_per_day;
       const completionDate = new Date(now);

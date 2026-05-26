@@ -17,6 +17,7 @@ import {
   ensureCustomerHasBranch,
   validateLeadBranchSlug,
 } from '@/lib/nicheResearch';
+import { deliveryModelForNewBatch, isCappedDeliveryModel } from '@/lib/batchDeliveryModel';
 
 function sanitizeMetaCampaignIdsInput(raw: unknown): string[] | undefined {
   if (raw === undefined) return undefined;
@@ -146,6 +147,7 @@ export async function POST(request: NextRequest) {
         starts_at: startsAtValue,
         account_manager_id: custRow.account_manager_id || null,
         batch_kind: 'niche_research',
+        delivery_model: deliveryModelForNewBatch('niche_research'),
         niche_title: nicheTitle,
         lead_branch_slug: leadBranchSlug,
       })
@@ -236,6 +238,7 @@ export async function POST(request: NextRequest) {
     starts_at: startsAtValue,
     account_manager_id: custRow?.account_manager_id || null,
     batch_kind,
+    delivery_model: deliveryModelForNewBatch(batch_kind),
   };
 
   if (isPipelineBatchKind(batch_kind)) {
@@ -445,7 +448,12 @@ export async function PUT(request: NextRequest) {
     const paidForLifecycle =
       updates.is_paid !== undefined ? updates.is_paid === true : existing.is_paid === true;
 
-    if (!updates.status && !isNicheExisting) {
+    const isCappedExisting = isCappedDeliveryModel(
+      (existing as { delivery_model?: string }).delivery_model,
+      (existing as { batch_kind?: string }).batch_kind,
+    );
+
+    if (!updates.status && isCappedExisting) {
       if (
         updates.leads_delivered >= batchSize &&
         (existing.status === 'active' || existing.status === 'paused')

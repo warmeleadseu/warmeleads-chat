@@ -11,6 +11,7 @@ import { isBulkLeadsBatchKind, isPipelineBatchKind } from '@/lib/batchKind';
 import { reconcileBatchMetaCampaigns } from '@/lib/metaBatchCampaignSync';
 import { metaInheritanceNoteSuffix, resolveMetaCampaignFieldsForNewLeadBatch } from '@/lib/metaCampaignInheritance';
 import { ensureCustomerHasBranch } from '@/lib/nicheResearch';
+import { deliveryModelForNewBatch, normalizeDeliveryModel } from '@/lib/batchDeliveryModel';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.warmeleads.eu';
 
@@ -393,6 +394,10 @@ export async function POST(request: NextRequest) {
         is_paid: true,
         account_manager_id: orderCust?.account_manager_id || null,
         batch_kind: orderBatchKind,
+        delivery_model: normalizeDeliveryModel(
+          (order as { delivery_model?: string }).delivery_model,
+          orderBatchKind,
+        ),
         niche_title: orderNicheTitle || null,
         ...(orderBatchKind === 'niche_research' && orderLeadBranchSlug
           ? { lead_branch_slug: orderLeadBranchSlug }

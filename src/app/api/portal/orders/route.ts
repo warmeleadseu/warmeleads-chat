@@ -7,6 +7,7 @@ import { calculatePricePerLead, mergeCustomTiers } from '@/lib/pricing';
 import { computeInvoiceVat, mollieBtwLabel } from '@/lib/invoiceVat';
 import { loadWelcomeOfferStatus, welcomeDiscountAmount } from '@/lib/welcomeOffer';
 import { validateLeadBranchSlug } from '@/lib/nicheResearch';
+import { deliveryModelForNewBatch } from '@/lib/batchDeliveryModel';
 
 export async function GET(request: NextRequest) {
   const session = await verifyCustomer(request);
@@ -112,6 +113,7 @@ export async function POST(request: NextRequest) {
           status: 'pending',
           welcome_discount_applied: false,
           batch_kind: 'niche_research',
+          delivery_model: deliveryModelForNewBatch('niche_research'),
           niche_title: nicheTitle,
           lead_branch_slug: leadBranchSlug,
         })
@@ -276,6 +278,7 @@ export async function POST(request: NextRequest) {
         status: 'pending',
         welcome_discount_applied: welcomeEligible && discountAmount > 0,
         batch_kind: 'leads',
+        delivery_model: deliveryModelForNewBatch('leads'),
         niche_title: null,
       })
       .select()

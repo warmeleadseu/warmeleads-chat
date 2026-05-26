@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { checkBatchMilestones } from './batchNotifications';
-import { isNicheResearchBatchKind, isPipelineBatchKind } from './batchKind';
+import { isPipelineBatchKind } from './batchKind';
+import { isCappedDeliveryModel } from './batchDeliveryModel';
 import { reconcileBatchMetaCampaigns } from './metaBatchCampaignSync';
 
 /**
@@ -21,7 +22,7 @@ export async function syncBatchDelivered(
 
   const { data: batch } = await supabase
     .from('customer_batches')
-    .select('batch_size, status, leads_delivered_external, batch_kind, is_paid')
+    .select('batch_size, status, leads_delivered_external, batch_kind, delivery_model, is_paid')
     .eq('id', batchId)
     .single();
 
@@ -31,10 +32,13 @@ export async function syncBatchDelivered(
   const delivered = assignmentCount + external;
 
   const updates: Record<string, unknown> = { leads_delivered: delivered };
-  const isNicheResearch = isNicheResearchBatchKind((batch as { batch_kind?: string }).batch_kind);
+  const capped = isCappedDeliveryModel(
+    (batch as { delivery_model?: string }).delivery_model,
+    (batch as { batch_kind?: string }).batch_kind,
+  );
 
   if (
-    !isNicheResearch &&
+    capped &&
     delivered >= batch.batch_size &&
     (batch.status === 'active' || batch.status === 'paused')
   ) {
@@ -61,7 +65,7 @@ export async function syncBatchDelivered(
         });
       }
     } catch { /* non-critical */ }
-  } else if (!isNicheResearch && delivered < batch.batch_size && batch.status === 'completed') {
+  } else if (capped && delivered < batch.batch_size && batch.status === 'completed') {
     updates.status = batch.is_paid ? 'active' : 'pending_payment';
     updates.completed_at = null;
   }

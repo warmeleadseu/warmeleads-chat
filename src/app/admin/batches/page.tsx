@@ -59,7 +59,9 @@ function picksFromBatchMeta(batch: {
   return ids.map(id => ({ id, name: id, paused: paused.has(id) }));
 }
 import { BatchTargetAreaBadges } from '@/components/admin/BatchTargetAreaBadges';
+import { BatchProgressDisplay } from '@/components/admin/BatchProgressDisplay';
 import type { CustomerTargetRow } from '@/lib/batchTargetAreas';
+import { getBatchProgressView, isCappedDeliveryModel } from '@/lib/batchDeliveryModel';
 
 interface LeadFilter { field: string; operator: string; value: string; values?: string[] }
 interface Compensation { amount: number; reason: string; date: string }
@@ -74,6 +76,7 @@ interface Batch {
   account_manager_id: string | null;
   created_at: string; completed_at: string | null;
   batch_kind?: string | null;
+  delivery_model?: string | null;
   niche_title?: string | null;
   lead_branch_slug?: string | null;
   meta_campaign_ids?: string[] | null;
@@ -101,6 +104,15 @@ function isBulkLeadsBatch(b: Pick<Batch, 'batch_kind'>): boolean {
 
 function isNicheResearchBatch(b: Pick<Batch, 'batch_kind'>): boolean {
   return (b.batch_kind || '') === 'niche_research';
+}
+
+function batchProgressProps(b: Pick<Batch, 'delivery_model' | 'batch_kind' | 'batch_size' | 'leads_delivered'>) {
+  return {
+    delivery_model: b.delivery_model,
+    batch_kind: b.batch_kind,
+    batch_size: b.batch_size,
+    leads_delivered: b.leads_delivered,
+  };
 }
 interface BranchOption { slug: string; name: string; color: string; is_active: boolean }
 interface Customer { id: string; name: string; is_active: boolean }
@@ -247,8 +259,8 @@ export default function BatchesPage() {
     }
     list.sort((a, b) => {
       if (sortBy === 'progress') {
-        const pA = a.batch_size > 0 ? a.leads_delivered / a.batch_size : 0;
-        const pB = b.batch_size > 0 ? b.leads_delivered / b.batch_size : 0;
+        const pA = getBatchProgressView(batchProgressProps(a)).sortProgress;
+        const pB = getBatchProgressView(batchProgressProps(b)).sortProgress;
         return pB - pA;
       }
       if (sortBy === 'customer') return (a.customers?.name || '').localeCompare(b.customers?.name || '');
@@ -260,10 +272,18 @@ export default function BatchesPage() {
 
   const activeCount = batches.filter(b => b.status === 'active').length;
   const pendingPayCount = batches.filter(b => b.status === 'pending_payment').length;
-  const totalRemaining = batches.filter(b => b.status === 'active').reduce((s, b) => s + Math.max(0, b.batch_size - b.leads_delivered), 0);
+  const totalRemaining = batches
+    .filter(b => b.status === 'active' && isCappedDeliveryModel(b.delivery_model, b.batch_kind))
+    .reduce((s, b) => s + Math.max(0, b.batch_size - b.leads_delivered), 0);
   const totalDelivered = batches.reduce((s, b) => s + b.leads_delivered, 0);
-  const avgProgress = batches.length > 0
-    ? Math.round(batches.reduce((s, b) => s + (b.batch_size > 0 ? Math.min(100, (b.leads_delivered / b.batch_size) * 100) : 0), 0) / batches.length)
+  const cappedForAvg = batches.filter(b => isCappedDeliveryModel(b.delivery_model, b.batch_kind));
+  const avgProgress = cappedForAvg.length > 0
+    ? Math.round(
+        cappedForAvg.reduce(
+          (s, b) => s + (b.batch_size > 0 ? Math.min(100, (b.leads_delivered / b.batch_size) * 100) : 0),
+          0,
+        ) / cappedForAvg.length,
+      )
     : 0;
 
   const activeFilterCount = [statusFilter !== 'all', branchFilter !== 'all', customerFilter !== 'all'].filter(Boolean).length;
@@ -433,7 +453,6 @@ export default function BatchesPage() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filtered.map(b => {
-                  const pct = b.batch_size > 0 ? Math.min(100, Math.round((b.leads_delivered / b.batch_size) * 100)) : 0;
                   const br = getBranch(b.branch);
                   const c = COLOR_MAP[br.color] || COLOR_MAP.slate;
                   const compTotal = (Array.isArray(b.compensations) ? b.compensations : []).reduce((s: number, x: Compensation) => s + x.amount, 0);
@@ -451,22 +470,11 @@ export default function BatchesPage() {
                         <BatchTargetAreaBadges customers={b.customers} variant="compact" />
                       </td>
                       <td className="px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          <div className="w-24">
-                            <div className="h-2 overflow-hidden rounded-full bg-slate-100">
-                              <div className={`h-full rounded-full transition-all ${pct >= 100 ? 'bg-blue-500' : pct >= 75 ? 'bg-emerald-500' : pct >= 50 ? 'bg-amber-500' : 'bg-brand-purple'}`}
-                                style={{ width: `${pct}%` }} />
-                            </div>
-                          </div>
-                          <div>
-                            <span className="whitespace-nowrap text-xs text-slate-600">
-                              {b.leads_delivered}/{b.batch_size} <span className="text-slate-400">({pct}%)</span>
-                              {b.leads_delivered > b.batch_size && <span className="ml-1 text-[10px] font-medium text-amber-600">overlevering</span>}
-                            </span>
-                            {compTotal > 0 && (
-                              <p className="whitespace-nowrap text-[10px] font-medium text-emerald-600">+{compTotal} compensatie</p>
-                            )}
-                          </div>
+                        <div>
+                          <BatchProgressDisplay {...batchProgressProps(b)} size="sm" />
+                          {compTotal > 0 && (
+                            <p className="mt-0.5 whitespace-nowrap text-[10px] font-medium text-emerald-600">+{compTotal} compensatie</p>
+                          )}
                         </div>
                       </td>
                       <td className="px-4 py-3">
@@ -540,7 +548,6 @@ export default function BatchesPage() {
           {/* Mobile cards */}
           <div className="space-y-3 md:hidden">
             {filtered.map(b => {
-              const pct = b.batch_size > 0 ? Math.min(100, Math.round((b.leads_delivered / b.batch_size) * 100)) : 0;
               const br = getBranch(b.branch);
               const c = COLOR_MAP[br.color] || COLOR_MAP.slate;
               const mobileCompTotal = (Array.isArray(b.compensations) ? b.compensations : []).reduce((s: number, x: Compensation) => s + x.amount, 0);
@@ -591,21 +598,11 @@ export default function BatchesPage() {
                   <div className="mb-2">
                     <BatchTargetAreaBadges customers={b.customers} variant="compact" />
                   </div>
-                  {/* Progress */}
                   <div className="mb-2">
-                    <div className="mb-1 flex items-baseline justify-between">
-                      <div>
-                        <span className="text-sm font-bold text-slate-800">{b.leads_delivered} / {b.batch_size}</span>
-                        {mobileCompTotal > 0 && (
-                          <span className="ml-1.5 text-[10px] font-medium text-emerald-600">+{mobileCompTotal} comp.</span>
-                        )}
-                      </div>
-                      <span className="text-xs font-medium text-slate-500">{pct}%</span>
-                    </div>
-                    <div className="h-2.5 overflow-hidden rounded-full bg-slate-100">
-                      <div className={`h-full rounded-full transition-all ${pct >= 100 ? 'bg-blue-500' : pct >= 75 ? 'bg-emerald-500' : pct >= 50 ? 'bg-amber-500' : 'bg-brand-purple'}`}
-                        style={{ width: `${pct}%` }} />
-                    </div>
+                    <BatchProgressDisplay {...batchProgressProps(b)} size="md" />
+                    {mobileCompTotal > 0 && (
+                      <p className="mt-1 text-[10px] font-medium text-emerald-600">+{mobileCompTotal} compensatie</p>
+                    )}
                   </div>
                   {/* Details */}
                   <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
@@ -1046,7 +1043,6 @@ function BatchDetailPanel({ batchId, branches, onClose, onEdit, onListRefresh }:
               <p className="text-sm font-medium text-slate-500">Batch niet gevonden</p>
             </div>
           ) : (() => {
-            const pct = batch.batch_size > 0 ? Math.min(100, Math.round((batch.leads_delivered / batch.batch_size) * 100)) : 0;
             const br = getBranch(batch.branch);
             const c = COLOR_MAP[br.color] || COLOR_MAP.slate;
             const compensations: Compensation[] = Array.isArray(batch.compensations) ? batch.compensations : [];
@@ -1233,32 +1229,11 @@ function BatchDetailPanel({ batchId, branches, onClose, onEdit, onListRefresh }:
 
                 {/* Progress */}
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                  <div className="mb-2 flex items-baseline justify-between">
-                    <div>
-                      <span className="text-lg font-bold text-slate-900">{batch.leads_delivered}</span>
-                      {isNicheResearchBatch(batch) ? (
-                        <span className="text-sm text-slate-500"> onderzoeksleads ingeladen</span>
-                      ) : (
-                        <span className="text-sm text-slate-400"> / {batch.batch_size} geleverd</span>
-                      )}
-                      {totalComp > 0 && (
-                        <span className="ml-2 text-xs font-medium text-emerald-600">+{totalComp} compensatie</span>
-                      )}
-                    </div>
-                    {!isNicheResearchBatch(batch) && (
-                      <span className="text-sm font-bold text-slate-600">{pct}%</span>
-                    )}
-                  </div>
-                  {!isNicheResearchBatch(batch) && (
-                  <div className="h-3 overflow-hidden rounded-full bg-slate-200">
-                    <div className={`h-full rounded-full transition-all ${pct >= 100 ? 'bg-blue-500' : pct >= 75 ? 'bg-emerald-500' : pct >= 50 ? 'bg-amber-500' : 'bg-brand-purple'}`}
-                      style={{ width: `${pct}%` }} />
-                  </div>
+                  <BatchProgressDisplay {...batchProgressProps(batch)} size="md" />
+                  {totalComp > 0 && (
+                    <p className="mt-2 text-xs font-medium text-emerald-600">+{totalComp} compensatie in batchgrootte</p>
                   )}
                   <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5">
-                    {!isNicheResearchBatch(batch) && batch.leads_delivered > batch.batch_size && (
-                      <p className="text-[11px] font-medium text-amber-600">Overlevering: {batch.leads_delivered - batch.batch_size} extra</p>
-                    )}
                     {batch.leads_delivered_external > 0 && (
                       <p className="text-[11px] text-slate-400">
                         <span className="font-medium text-slate-500">{batch.leads_delivered - batch.leads_delivered_external}</span> via systeem

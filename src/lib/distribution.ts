@@ -3,6 +3,7 @@ import { sendLeadNotification } from './email';
 import { sendNewLeadPush } from './pushNotification';
 import { syncBatchDelivered } from './batchSync';
 import { isPipelineBatchKind } from './batchKind';
+import { batchIsAtCapacity, isCappedDeliveryModel } from './batchDeliveryModel';
 import { getLeadLimitPeriodAnchors } from './batchAssignmentCaps';
 import { leadMatchesAnyProvinceTarget } from './provinceTargetMatch';
 
@@ -84,11 +85,11 @@ export function isPipelineBatchOpenForInbound<T extends {
   leads_delivered: number | null;
   batch_size: number;
   starts_at?: string | null;
+  delivery_model?: string | null;
+  batch_kind?: string | null;
 }>(b: T, now: Date): boolean {
-  const delivered = Number(b.leads_delivered ?? 0);
-  const size = Number(b.batch_size ?? 0);
-  if (size <= 0 || delivered >= size) return false;
   if (b.starts_at && new Date(b.starts_at) > now) return false;
+  if (batchIsAtCapacity(b)) return false;
   return true;
 }
 
@@ -242,7 +243,7 @@ async function fetchActiveBatchesForBranch(
 ): Promise<ActiveCustomerBatch[]> {
   const { data } = await supabase
     .from('customer_batches')
-    .select('id, customer_id, branch, batch_size, leads_delivered, leads_delivered_external, leads_per_week, leads_per_day, lead_filters, created_at, is_paid, starts_at, customers!inner(id, is_active, portal_active)')
+    .select('id, customer_id, branch, batch_size, leads_delivered, leads_delivered_external, leads_per_week, leads_per_day, lead_filters, created_at, is_paid, starts_at, delivery_model, batch_kind, customers!inner(id, is_active, portal_active)')
     .eq('branch', branch)
     .eq('status', 'active')
     .eq('batch_kind', 'leads')
@@ -417,7 +418,9 @@ export async function distributeLead(
   const matches: Match[] = [];
 
   for (const batch of fifoActiveBatches) {
-    if (Number(batch.leads_delivered ?? 0) >= batch.batch_size) continue;
+    if (batchIsAtCapacity(batch as { delivery_model?: string; batch_kind?: string; batch_size: number; leads_delivered: number | null })) {
+      continue;
+    }
     if (recentAssignedIds.has(batch.customer_id)) continue;
     if (batch.starts_at && new Date(batch.starts_at) > now) continue;
 
@@ -534,7 +537,16 @@ export async function distributeLead(
       .eq('batch_id', m.batch_id);
     const batchForCheck = fifoActiveBatches.find(b => b.id === m.batch_id);
     const externalOffset = (batchForCheck as any)?.leads_delivered_external || 0;
-    if (batchForCheck && (currentCount || 0) + externalOffset >= batchForCheck.batch_size) continue;
+    if (
+      batchForCheck &&
+      isCappedDeliveryModel(
+        (batchForCheck as { delivery_model?: string }).delivery_model,
+        (batchForCheck as { batch_kind?: string }).batch_kind,
+      ) &&
+      (currentCount || 0) + externalOffset >= batchForCheck.batch_size
+    ) {
+      continue;
+    }
 
     const { data: insertedAssignment, error } = await supabase
       .from('lead_assignments')
@@ -659,7 +671,7 @@ export async function backfillBatch(batchId: string, lookbackDays: number): Prom
 
   const { data: batch } = await supabase
     .from('customer_batches')
-    .select('id, customer_id, branch, batch_size, leads_delivered, leads_delivered_external, leads_per_week, leads_per_day, lead_filters, is_paid, starts_at, batch_kind, customers!inner(id, is_active)')
+    .select('id, customer_id, branch, batch_size, leads_delivered, leads_delivered_external, leads_per_week, leads_per_day, lead_filters, is_paid, starts_at, batch_kind, delivery_model, customers!inner(id, is_active)')
     .eq('id', batchId)
     .eq('status', 'active')
     .single();
@@ -667,7 +679,7 @@ export async function backfillBatch(batchId: string, lookbackDays: number): Prom
   if (!batch || !isPipelineBatchKind((batch as { batch_kind?: string }).batch_kind)) {
     return { assigned: 0 };
   }
-  if (batch.leads_delivered >= batch.batch_size) return { assigned: 0 };
+  if (batchIsAtCapacity(batch)) return { assigned: 0 };
   if (batch.is_paid === false) return { assigned: 0 };
   if (batch.starts_at && new Date(batch.starts_at) > new Date()) return { assigned: 0 };
 
@@ -795,7 +807,7 @@ export async function backfillBatch(batchId: string, lookbackDays: number): Prom
   let skippedByWeeklyLimit = 0;
 
   for (const lead of leads) {
-    if (runningAssignCount + backfillExternal >= batch.batch_size) break;
+    if (batchIsAtCapacity({ ...batch, leads_delivered: runningAssignCount + backfillExternal })) break;
 
     if (alreadyAssigned.has(lead.id)) continue;
     if (excludedLeadIds.has(lead.id)) continue;
