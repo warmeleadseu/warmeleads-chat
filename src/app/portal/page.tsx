@@ -637,18 +637,17 @@ export default function PortalPage() {
     search,
   }), [statusFilter, branchFilter, dateFrom, dateTo, leadSource, search]);
 
-  const handleCrmBackfill = () => {
+  const handleCrmBackfill = (forceResend: boolean) => {
     if (!crmLabel) return;
     const count = selectedCount;
-    if (
-      !confirm(
-        `${count} lead${count === 1 ? '' : 's'} alsnog naar ${crmLabel} sturen? Leads die al succesvol zijn verstuurd worden overgeslagen.`,
-      )
-    ) {
+    const message = forceResend
+      ? `${count} lead${count === 1 ? '' : 's'} opnieuw naar ${crmLabel} sturen, inclusief leads die al eerder succesvol zijn gesynchroniseerd? Er worden nieuwe rijen toegevoegd.`
+      : `${count} lead${count === 1 ? '' : 's'} naar ${crmLabel} sturen? Leads die al succesvol zijn verstuurd worden overgeslagen.`;
+    if (!confirm(message)) {
       return;
     }
     void runBackfill(crmLabel, {
-      forceResend: false,
+      forceResend,
       selectAllFiltered,
       selectedIds,
       filters: exportFilters,
@@ -1416,7 +1415,7 @@ export default function PortalPage() {
               crmLabel={isOwner && crmReady ? crmLabel : null}
               canExport={canExport}
               onClear={clearSelection}
-              onSync={isOwner && crmReady && crmLabel ? () => handleCrmBackfill() : undefined}
+              onSync={isOwner && crmReady && crmLabel ? handleCrmBackfill : undefined}
               onExport={handleExportFromSelection}
               syncing={crmBackfillSyncing}
             />

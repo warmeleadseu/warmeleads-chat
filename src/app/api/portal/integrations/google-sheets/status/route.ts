@@ -55,6 +55,12 @@ export async function GET(request: NextRequest) {
     .eq('provider', GOOGLE_SHEETS_PROVIDER)
     .eq('status', 'success');
 
+  const { count: assignedLeadCount } = await supabase
+    .from('lead_assignments')
+    .select('id', { count: 'exact', head: true })
+    .eq('customer_id', customerId)
+    .neq('source', 'demo');
+
   const { data: lastFailed } = await supabase
     .from('integration_sync_log')
     .select('error_message, created_at')
@@ -101,6 +107,7 @@ export async function GET(request: NextRequest) {
     settings,
     connected_at: integration?.connected_at ?? null,
     success_count: successCount ?? 0,
+    assigned_lead_count: assignedLeadCount ?? 0,
     last_error: lastFailed?.error_message ?? null,
     last_error_at: lastFailed?.created_at ?? null,
     recent_syncs: (recentLogs || []).map((row) => ({

@@ -8,6 +8,92 @@ import { TEAMLEADER_PROVIDER } from '@/lib/teamleader/types';
 
 export const MAX_BACKFILL_LEADS = 50;
 
+export async function fetchAssignedLeadIdsForCustomer(
+  supabase: SupabaseClient,
+  customerId: string,
+): Promise<string[]> {
+  const ids: string[] = [];
+  let offset = 0;
+  const pageSize = 500;
+  while (true) {
+    const { data } = await supabase
+      .from('lead_assignments')
+      .select('lead_id')
+      .eq('customer_id', customerId)
+      .neq('source', 'demo')
+      .order('assigned_at', { ascending: true })
+      .range(offset, offset + pageSize - 1);
+    if (!data?.length) break;
+    for (const row of data) {
+      if (row.lead_id) ids.push(row.lead_id);
+    }
+    if (data.length < pageSize) break;
+    offset += pageSize;
+  }
+  return [...new Set(ids)];
+}
+
+function mergeBackfillSummaries(
+  parts: BackfillLeadsSummary[],
+): BackfillLeadsSummary {
+  if (parts.length === 0) {
+    return {
+      provider: null,
+      provider_name: null,
+      requested: 0,
+      synced: 0,
+      skipped: 0,
+      failed: 0,
+      results: [],
+    };
+  }
+  const first = parts[0];
+  return {
+    provider: first.provider,
+    provider_name: first.provider_name,
+    requested: parts.reduce((s, p) => s + p.requested, 0),
+    synced: parts.reduce((s, p) => s + p.synced, 0),
+    skipped: parts.reduce((s, p) => s + p.skipped, 0),
+    failed: parts.reduce((s, p) => s + p.failed, 0),
+    results: parts.flatMap((p) => p.results),
+  };
+}
+
+export async function backfillAllAssignedLeadsToIntegration(args: {
+  supabase: SupabaseClient;
+  customerId: string;
+  customerBranches?: string[];
+  forceResend?: boolean;
+}): Promise<BackfillLeadsSummary> {
+  const leadIds = await fetchAssignedLeadIdsForCustomer(args.supabase, args.customerId);
+  if (leadIds.length === 0) {
+    return {
+      provider: null,
+      provider_name: null,
+      requested: 0,
+      synced: 0,
+      skipped: 0,
+      failed: 0,
+      results: [],
+    };
+  }
+
+  const parts: BackfillLeadsSummary[] = [];
+  for (let i = 0; i < leadIds.length; i += MAX_BACKFILL_LEADS) {
+    const chunk = leadIds.slice(i, i + MAX_BACKFILL_LEADS);
+    parts.push(
+      await backfillLeadsToIntegration({
+        supabase: args.supabase,
+        customerId: args.customerId,
+        leadIds: chunk,
+        customerBranches: args.customerBranches,
+        forceResend: args.forceResend,
+      }),
+    );
+  }
+  return mergeBackfillSummaries(parts);
+}
+
 export type BackfillLeadStatus = 'synced' | 'skipped' | 'failed';
 
 export type BackfillLeadResult = {

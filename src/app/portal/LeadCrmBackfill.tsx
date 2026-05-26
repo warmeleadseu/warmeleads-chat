@@ -120,49 +120,68 @@ export function LeadSelectionBar({
   onExport: () => void;
   syncing: boolean;
 }) {
+  const [forceResend, setForceResend] = useState(false);
+
   if (selectedCount === 0) return null;
 
   return (
-    <div className="sticky bottom-4 z-30 mx-auto flex max-w-3xl flex-col gap-2 rounded-xl border border-brand-purple/20 bg-white p-3 shadow-lg sm:flex-row sm:items-center sm:justify-between">
-      <p className="text-sm font-medium text-slate-800">
-        {selectedCount} lead{selectedCount === 1 ? '' : 's'} geselecteerd
-      </p>
-      <div className="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          onClick={onClear}
-          disabled={syncing}
-          className="rounded-lg px-3 py-1.5 text-xs font-medium text-slate-500 hover:bg-slate-50"
-        >
-          Deselecteer
-        </button>
-        {canExport && (
+    <div className="sticky bottom-4 z-30 mx-auto flex max-w-3xl flex-col gap-2 rounded-xl border border-brand-purple/20 bg-white p-3 shadow-lg">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm font-medium text-slate-800">
+          {selectedCount} lead{selectedCount === 1 ? '' : 's'} geselecteerd
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            onClick={onExport}
+            onClick={onClear}
             disabled={syncing}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-brand-purple/30 bg-brand-purple/5 px-3 py-2 text-xs font-semibold text-brand-purple transition hover:bg-brand-purple/10 disabled:opacity-50"
+            className="rounded-lg px-3 py-1.5 text-xs font-medium text-slate-500 hover:bg-slate-50"
           >
-            <ArrowDownTrayIcon className="h-4 w-4" />
-            Exporteer selectie
+            Deselecteer
           </button>
-        )}
-        {crmLabel && onSync && (
-          <button
-            type="button"
-            onClick={() => onSync(false)}
-            disabled={syncing}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-brand-purple px-3 py-2 text-xs font-semibold text-white transition hover:bg-brand-purple/90 disabled:opacity-50"
-          >
-            {syncing ? (
-              <ArrowPathIcon className="h-4 w-4 animate-spin" />
-            ) : (
-              <CloudArrowUpIcon className="h-4 w-4" />
-            )}
-            {syncing ? 'Bezig…' : `Stuur naar ${crmLabel}`}
-          </button>
-        )}
+          {canExport && (
+            <button
+              type="button"
+              onClick={onExport}
+              disabled={syncing}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-brand-purple/30 bg-brand-purple/5 px-3 py-2 text-xs font-semibold text-brand-purple transition hover:bg-brand-purple/10 disabled:opacity-50"
+            >
+              <ArrowDownTrayIcon className="h-4 w-4" />
+              Exporteer selectie
+            </button>
+          )}
+          {crmLabel && onSync && (
+            <button
+              type="button"
+              onClick={() => onSync(forceResend)}
+              disabled={syncing}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-brand-purple px-3 py-2 text-xs font-semibold text-white transition hover:bg-brand-purple/90 disabled:opacity-50"
+            >
+              {syncing ? (
+                <ArrowPathIcon className="h-4 w-4 animate-spin" />
+              ) : (
+                <CloudArrowUpIcon className="h-4 w-4" />
+              )}
+              {syncing ? 'Bezig…' : `Stuur naar ${crmLabel}`}
+            </button>
+          )}
+        </div>
       </div>
+      {crmLabel && onSync && (
+        <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2 text-xs text-slate-600">
+          <input
+            type="checkbox"
+            checked={forceResend}
+            onChange={(e) => setForceResend(e.target.checked)}
+            disabled={syncing}
+            className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-purple focus:ring-brand-purple/30"
+          />
+          <span>
+            Ook opnieuw versturen als deze leads al succesvol zijn gesynchroniseerd naar{' '}
+            {crmLabel}. Er worden nieuwe rijen/regels toegevoegd.
+          </span>
+        </label>
+      )}
     </div>
   );
 }

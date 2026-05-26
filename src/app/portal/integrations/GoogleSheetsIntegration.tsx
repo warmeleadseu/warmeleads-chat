@@ -37,6 +37,7 @@ type StatusResponse = {
     sheet_gid?: number | null;
   } | null;
   success_count: number;
+  assigned_lead_count?: number;
   last_error: string | null;
   last_error_at: string | null;
   recent_syncs: SyncRow[];
@@ -76,6 +77,8 @@ export function GoogleSheetsIntegration({
   const [testing, setTesting] = useState(false);
   const [syncEnabled, setSyncEnabled] = useState(true);
   const [copiedEmail, setCopiedEmail] = useState(false);
+  const [resyncingAll, setResyncingAll] = useState(false);
+  const [resyncForceResend, setResyncForceResend] = useState(true);
 
   const hubRefreshRef = useRef(onHubRefresh);
   hubRefreshRef.current = onHubRefresh;
@@ -213,6 +216,46 @@ export function GoogleSheetsIntegration({
       else showToast(d.error || 'Test mislukt', 'error');
     } finally {
       setTesting(false);
+    }
+  };
+
+  const runResyncAll = async () => {
+    const count = status?.assigned_lead_count ?? 0;
+    if (count === 0) {
+      showToast('Geen toegewezen leads om te versturen', 'error');
+      return;
+    }
+    const message = resyncForceResend
+      ? `Alle ${count} toegewezen leads opnieuw naar je spreadsheet sturen? Leads die al eerder succesvol zijn gesynchroniseerd krijgen opnieuw een rij (handig na het aanpassen van veldkoppelingen).`
+      : `Alle ${count} toegewezen leads naar je spreadsheet sturen? Leads die al succesvol zijn gesynchroniseerd worden overgeslagen.`;
+    if (!confirm(message)) return;
+
+    setResyncingAll(true);
+    try {
+      const res = await portalFetch('/api/portal/integrations/sync-leads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          all_assigned: true,
+          force_resend: resyncForceResend,
+        }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        showToast((d as { error?: string }).error || 'Versturen mislukt', 'error');
+        return;
+      }
+      const parts: string[] = [];
+      if (d.synced) parts.push(`${d.synced} verstuurd`);
+      if (d.skipped) parts.push(`${d.skipped} overgeslagen`);
+      if (d.failed) parts.push(`${d.failed} mislukt`);
+      showToast(
+        parts.length > 0 ? parts.join(', ') : 'Geen leads verstuurd',
+        d.failed ? 'error' : 'success',
+      );
+      await loadStatus({ silent: true });
+    } finally {
+      setResyncingAll(false);
     }
   };
 
@@ -407,6 +450,44 @@ export function GoogleSheetsIntegration({
               )}
               <p className="mt-1 break-words text-xs">{status.last_error}</p>
             </Alert>
+          )}
+
+          {status.sync_ready && (status.assigned_lead_count ?? 0) > 0 && (
+            <div className="rounded-xl border border-brand-purple/15 bg-brand-purple/5 p-4">
+              <p className="text-sm font-semibold text-slate-900">Leads opnieuw versturen</p>
+              <p className="mt-1 text-xs text-slate-600">
+                Stuur alle {status.assigned_lead_count} toegewezen leads in één keer naar je
+                spreadsheet. Handig na het corrigeren van veldkoppelingen.
+              </p>
+              <label className="mt-3 flex cursor-pointer items-start gap-2 text-xs text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={resyncForceResend}
+                  onChange={(e) => setResyncForceResend(e.target.checked)}
+                  disabled={resyncingAll}
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-purple focus:ring-brand-purple/30"
+                />
+                <span>
+                  Ook leads opnieuw versturen die al succesvol zijn gesynchroniseerd (nieuwe rijen
+                  worden toegevoegd).
+                </span>
+              </label>
+              <button
+                type="button"
+                onClick={() => void runResyncAll()}
+                disabled={resyncingAll || !syncEnabled}
+                className={`${T.btnPrimary} mt-3`}
+              >
+                {resyncingAll ? (
+                  <>
+                    <ArrowPathIcon className="inline h-4 w-4 animate-spin" />
+                    {' Bezig…'}
+                  </>
+                ) : (
+                  `Alle ${status.assigned_lead_count} leads versturen`
+                )}
+              </button>
+            </div>
           )}
 
           <SyncHistory
