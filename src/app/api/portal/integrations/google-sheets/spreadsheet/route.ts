@@ -12,11 +12,10 @@ import {
   updateGoogleSheetsSettings,
 } from '@/lib/googleSheets/integrationRepo';
 import {
-  columnIndexToLetter,
-  fetchSheetHeaderColumns,
   fetchSpreadsheetTabs,
   parseSpreadsheetUrl,
   quoteSheetName,
+  scanSheetHeaders,
 } from '@/lib/googleSheets/spreadsheet';
 
 export async function POST(request: NextRequest) {
@@ -59,11 +58,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Geen werkblad gevonden in deze spreadsheet' }, { status: 400 });
     }
 
-    const columns = await fetchSheetHeaderColumns(
+    const scan = await scanSheetHeaders(
       accessToken,
       parsed.spreadsheetId,
       quoteSheetName(tab.title),
     );
+    const columns = scan.columns;
 
     const prev = await getGoogleSheetsIntegrationPublic(supabase, customerId);
     const tabChanged =
@@ -74,6 +74,7 @@ export async function POST(request: NextRequest) {
       spreadsheet_url: url,
       sheet_gid: tab.sheetId,
       sheet_name: tab.title,
+      header_row: scan.headerRow,
     });
     await markGoogleSheetsConnected(supabase, customerId);
 
@@ -90,8 +91,9 @@ export async function POST(request: NextRequest) {
         letter: c.letter,
         label: c.label,
         id: String(c.index),
-        display: `${columnIndexToLetter(c.index)} — ${c.label}`,
+        display: `${c.letter} — ${c.label}`,
       })),
+      header_row: scan.headerRow,
     });
   } catch (err) {
     const { message, status } = mapGoogleSheetsHttpError(err);

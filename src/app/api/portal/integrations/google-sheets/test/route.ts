@@ -8,8 +8,8 @@ import { mapGoogleSheetsHttpError } from '@/lib/googleSheets/errors';
 import { getGoogleSheetsIntegrationPublic } from '@/lib/googleSheets/integrationRepo';
 import {
   appendRowToSheet,
-  fetchSheetHeaderColumns,
   quoteSheetName,
+  scanSheetHeaders,
   sheetColumnCount,
 } from '@/lib/googleSheets/spreadsheet';
 
@@ -39,7 +39,13 @@ export async function POST(request: NextRequest) {
       accessToken,
     );
     const quoted = quoteSheetName(sheetName);
-    const columns = await fetchSheetHeaderColumns(accessToken, spreadsheetId, quoted);
+    const scan = await scanSheetHeaders(
+      accessToken,
+      spreadsheetId,
+      quoted,
+      { headerRow: integration.settings.header_row ?? null },
+    );
+    const columns = scan.columns;
     const stamp = new Date().toLocaleString('nl-NL');
     const width = sheetColumnCount(columns) || 1;
     const row = Array.from({ length: width }, () => '');

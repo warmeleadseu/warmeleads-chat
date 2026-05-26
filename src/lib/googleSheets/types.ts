@@ -20,6 +20,8 @@ export type GoogleSheetsIntegrationSettings = {
   spreadsheet_url?: string | null;
   sheet_gid?: number | null;
   sheet_name?: string | null;
+  /** 1-based rij met kolomkoppen; null = automatisch detecteren */
+  header_row?: number | null;
   field_mappings?: GoogleSheetsFieldMappings;
 };
 

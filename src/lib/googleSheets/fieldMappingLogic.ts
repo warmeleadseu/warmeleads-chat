@@ -105,17 +105,20 @@ export function remapLegacyColumnIndices(
   const startCol = columns[0]?.index ?? 0;
   if (startCol === 0) return mapping;
 
-  const mappedIndices = Object.values(mapping)
+  const indices = Object.values(mapping)
     .map((ref) => resolveSheetColumnIndex(ref))
     .filter((idx): idx is number => idx != null);
 
-  if (mappedIndices.length === 0) return mapping;
+  if (indices.length === 0) return mapping;
 
-  const minMapped = Math.min(...mappedIndices);
-  const maxMapped = Math.max(...mappedIndices);
+  const minMapped = Math.min(...indices);
+  const maxMapped = Math.max(...indices);
+
+  // Al opgeslagen als absolute indices (na fix + opnieuw mappen)
+  if (minMapped >= startCol) return mapping;
 
   // Oude opslag: indices 0..n-1 terwijl fysieke kolommen bij startCol beginnen.
-  if (minMapped >= 0 && maxMapped < columns.length) {
+  if (maxMapped < columns.length) {
     const remapped: SheetBranchFieldMapping = {};
     for (const [key, ref] of Object.entries(mapping)) {
       const idx = resolveSheetColumnIndex(ref);

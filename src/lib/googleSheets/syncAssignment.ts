@@ -1,8 +1,8 @@
 import { createServerClient } from '@/lib/supabase';
 import {
   appendRowToSheet,
-  fetchSheetHeaderColumns,
   quoteSheetName,
+  scanSheetHeaders,
 } from './spreadsheet';
 import {
   buildSheetRowValues,
@@ -119,12 +119,18 @@ export async function syncAssignmentToGoogleSheets(args: SyncAssignmentArgs): Pr
       accessToken,
     );
     const quotedSheet = quoteSheetName(sheetName);
+    const headerRowPref = integration.settings.header_row ?? null;
 
     const branchSlug = lead.branch || '';
     const branchFields = await getBranchFields(supabase, branchSlug);
     const portalFields = getPortalFieldsForBranch(branchFields);
 
-    const columns = await fetchSheetHeaderColumns(accessToken, spreadsheetId, quotedSheet);
+    const { columns, headerRow } = await scanSheetHeaders(
+      accessToken,
+      spreadsheetId,
+      quotedSheet,
+      { headerRow: headerRowPref },
+    );
     let columnMapping = remapLegacyColumnIndices(
       mergeSheetMappings(integration.settings.field_mappings, branchSlug),
       columns,

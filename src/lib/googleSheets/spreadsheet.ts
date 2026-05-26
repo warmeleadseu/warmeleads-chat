@@ -1,4 +1,11 @@
 import { appendGoogleSheetsApiKey, GOOGLE_SHEETS_API_BASE } from './config';
+import {
+  extractHeaderColumnsFromCells,
+  HEADER_SCAN_COLS,
+  HEADER_SCAN_ROWS,
+  pickBestHeaderRow,
+  type SheetHeaderScan,
+} from './headerRow';
 
 export type SheetTab = {
   sheetId: number;
@@ -122,22 +129,57 @@ export async function fetchSheetHeaderColumns(
   accessToken: string,
   spreadsheetId: string,
   sheetName: string,
+  options?: { headerRow?: number | null },
 ): Promise<SheetColumn[]> {
-  const range = encodeURIComponent(`${sheetName}!A1:ZZ1`);
-  const data = await sheetsFetch<{ values?: string[][]; range?: string }>(
+  const scan = await scanSheetHeaders(accessToken, spreadsheetId, sheetName, options);
+  return scan.columns;
+}
+
+/**
+ * Leest koppen via Grid Data (behoudt lege kolommen) en detecteert automatisch de koppenrij.
+ * Mediabink e.d. hebben koppen vaak op rij 2 i.p.v. rij 1.
+ */
+export async function scanSheetHeaders(
+  accessToken: string,
+  spreadsheetId: string,
+  sheetName: string,
+  options?: { headerRow?: number | null },
+): Promise<SheetHeaderScan> {
+  const range = encodeURIComponent(`${sheetName}!A1:${columnIndexToLetter(HEADER_SCAN_COLS - 1)}${HEADER_SCAN_ROWS}`);
+  const data = await sheetsFetch<{
+    sheets?: Array<{
+      data?: Array<{
+        startColumn?: number;
+        startRow?: number;
+        rowData?: Array<{
+          values?: Array<{ formattedValue?: string } | null>;
+        }>;
+      }>;
+    }>;
+  }>(
     accessToken,
-    `/spreadsheets/${spreadsheetId}/values/${range}`,
+    `/spreadsheets/${spreadsheetId}?includeGridData=true&ranges=${range}&fields=sheets.data(startColumn,startRow,rowData.values(formattedValue))`,
   );
-  const row = data.values?.[0] ?? [];
-  const startCol = parseValuesRangeStartColumn(data.range);
-  return row.map((label, offset) => {
-    const index = startCol + offset;
-    return {
-      index,
-      letter: columnIndexToLetter(index),
-      label: (label || '').trim() || `Kolom ${columnIndexToLetter(index)}`,
-    };
-  });
+
+  const grid = data.sheets?.[0]?.data?.[0];
+  const startColumn = grid?.startColumn ?? 0;
+  const startRow = grid?.startRow ?? 0;
+  const rowData = grid?.rowData ?? [];
+
+  const rowTexts: string[][] = rowData.map((row) =>
+    (row.values ?? []).map((cell) => (cell?.formattedValue ?? '').trim()),
+  );
+
+  while (rowTexts.length < HEADER_SCAN_ROWS) {
+    rowTexts.push([]);
+  }
+
+  const headerRow = pickBestHeaderRow(rowTexts, options?.headerRow);
+  const headerIdx = headerRow - 1 - startRow;
+  const headerCells = headerIdx >= 0 && headerIdx < rowTexts.length ? rowTexts[headerIdx] : [];
+
+  const columns = extractHeaderColumnsFromCells(headerCells, startColumn);
+  return { headerRow, columns };
 }
 
 export async function appendRowToSheet(
@@ -146,7 +188,9 @@ export async function appendRowToSheet(
   sheetName: string,
   values: string[],
 ): Promise<string> {
-  const range = encodeURIComponent(`${sheetName}!A:ZZ`);
+  const lastIndex = values.length - 1;
+  const endCol = columnIndexToLetter(Math.max(lastIndex, 0));
+  const range = encodeURIComponent(`${sheetName}!A:${endCol}`);
   const data = await sheetsFetch<{
     updates?: { updatedRange?: string };
   }>(accessToken, `/spreadsheets/${spreadsheetId}/values/${range}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`, {

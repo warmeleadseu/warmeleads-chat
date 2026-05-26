@@ -20,8 +20,8 @@ import {
 } from '@/lib/googleSheets/integrationRepo';
 import {
   columnIndexToLetter,
-  fetchSheetHeaderColumns,
   quoteSheetName,
+  scanSheetHeaders,
 } from '@/lib/googleSheets/spreadsheet';
 import { loadCustomerBranchSlugs, isCustomerBranch } from '@/lib/integrations/customerBranches';
 
@@ -51,7 +51,8 @@ export async function GET(request: NextRequest) {
   let accessToken: string;
   let sheetName: string;
   let sheetTabChanged = false;
-  let sheetColumns: Awaited<ReturnType<typeof fetchSheetHeaderColumns>>;
+  let sheetColumns: Awaited<ReturnType<typeof scanSheetHeaders>>['columns'];
+  let detectedHeaderRow = 1;
   try {
     accessToken = await resolveGoogleSheetsAccessToken(supabase, session.customer.id);
     const resolved = await ensureLatestSheetInSettings(
@@ -62,11 +63,14 @@ export async function GET(request: NextRequest) {
     );
     sheetName = resolved.sheetName;
     sheetTabChanged = resolved.tabChanged;
-    sheetColumns = await fetchSheetHeaderColumns(
+    const scan = await scanSheetHeaders(
       accessToken,
       spreadsheetId,
       quoteSheetName(sheetName),
+      { headerRow: integration.settings.header_row ?? null },
     );
+    sheetColumns = scan.columns;
+    detectedHeaderRow = scan.headerRow;
   } catch (err) {
     const { message, status } = mapGoogleSheetsHttpError(err);
     return NextResponse.json({ error: message }, { status });
@@ -115,6 +119,7 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({
     has_saved_mappings: hasSavedSheetMappings(savedMappings, branchSlugs),
     sheet_tab_changed: sheetTabChanged,
+    header_row: detectedHeaderRow,
     sheet_columns: sheetFields,
     spreadsheet: {
       url: integration.settings.spreadsheet_url,
@@ -161,8 +166,26 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: 'Ongeldige aanvraag' }, { status: 400 });
   }
 
+  let headerRowToSave = integration.settings.header_row ?? null;
+  try {
+    const spreadsheetId = integration.settings.spreadsheet_id;
+    if (spreadsheetId && integration.settings.sheet_name) {
+      const accessToken = await resolveGoogleSheetsAccessToken(supabase, session.customer.id);
+      const scan = await scanSheetHeaders(
+        accessToken,
+        spreadsheetId,
+        quoteSheetName(integration.settings.sheet_name),
+        { headerRow: integration.settings.header_row ?? null },
+      );
+      headerRowToSave = scan.headerRow;
+    }
+  } catch {
+    /* non-blocking */
+  }
+
   const settings = await updateGoogleSheetsSettings(supabase, session.customer.id, {
     field_mappings: nextMappings,
+    header_row: headerRowToSave,
   });
 
   return NextResponse.json({ settings: { field_mappings: settings.field_mappings } });

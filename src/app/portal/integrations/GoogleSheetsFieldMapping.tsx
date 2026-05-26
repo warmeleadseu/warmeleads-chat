@@ -116,7 +116,7 @@ export function GoogleSheetsFieldMapping({
         <div>
           <h4 className="text-sm font-semibold text-slate-900">Veldkoppeling</h4>
           <p className="mt-0.5 max-w-prose text-xs text-slate-500">
-            Koppel elk portaalveld aan een kolom in je spreadsheet (rij 1 = koppen).
+            Koppel elk portaalveld aan een kolom in je spreadsheet. Koppen worden automatisch gedetecteerd (vaak rij 2 bij Google Sheets-tabellen).
           </p>
         </div>
         <div className="flex shrink-0 gap-2">
