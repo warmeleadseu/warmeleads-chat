@@ -1,16 +1,5 @@
 import { createServerClient } from '@/lib/supabase';
-import { listGroupedCustomFieldDefinitions } from './customFieldDefinitions';
-import {
-  buildMappedCustomFields,
-  collectSummaryExtras,
-  getPortalFieldsForBranch,
-  mergeMappings,
-  suggestDefaultFieldMapping,
-  suggestFieldMapping,
-} from './fieldMappingLogic';
-import { buildDealSummary, formatDealTitle } from './mapping';
-import { findOrCreateContact } from './contacts';
-import { createDeal } from './deals';
+import { syncLeadRecordToTeamleader } from './syncLeadRecord';
 import {
   ensureValidAccessToken,
   getTeamleaderIntegration,
@@ -23,33 +12,6 @@ export type SyncAssignmentArgs = {
   leadId: string;
   assignmentId: string;
 };
-
-async function getBranchName(
-  supabase: ReturnType<typeof createServerClient>,
-  branchSlug: string | null | undefined,
-): Promise<string> {
-  if (!branchSlug) return 'Lead';
-  const { data } = await supabase.from('branches').select('name').eq('slug', branchSlug).maybeSingle();
-  return data?.name || branchSlug;
-}
-
-async function getBranchFields(
-  supabase: ReturnType<typeof createServerClient>,
-  branchSlug: string,
-): Promise<Array<{ key: string; label: string }>> {
-  const { data: branch } = await supabase
-    .from('branches')
-    .select('id')
-    .eq('slug', branchSlug)
-    .maybeSingle();
-  if (!branch?.id) return [];
-  const { data: fields } = await supabase
-    .from('branch_fields')
-    .select('key, label')
-    .eq('branch_id', branch.id)
-    .order('sort_order', { ascending: true });
-  return (fields || []).map((f) => ({ key: f.key, label: f.label }));
-}
 
 export async function syncAssignmentToTeamleader(args: SyncAssignmentArgs): Promise<void> {
   const supabase = createServerClient();
@@ -110,75 +72,15 @@ export async function syncAssignmentToTeamleader(args: SyncAssignmentArgs): Prom
       throw new Error('Geen deal-fase gevonden voor de gekozen pipeline');
     }
 
-    const branchSlug = lead.branch || '';
-    const branchFields = await getBranchFields(supabase, branchSlug);
-    const portalFields = getPortalFieldsForBranch(branchFields);
-    let branchMapping = mergeMappings(integration.settings.field_mappings, branchSlug);
-
-    const hasAnyMapping =
-      Object.keys(branchMapping.contact).length > 0 ||
-      Object.keys(branchMapping.deal).length > 0;
-
-    const { contact: tlContactDefs, deal: tlDealDefs } =
-      await listGroupedCustomFieldDefinitions(accessToken);
-
-    if (!hasAnyMapping) {
-      branchMapping =
-        tlContactDefs.length > 0 || tlDealDefs.length > 0
-          ? suggestFieldMapping(portalFields, tlContactDefs, tlDealDefs)
-          : suggestDefaultFieldMapping(portalFields);
-    }
-
-    const contactCustom = buildMappedCustomFields(
-      lead as Record<string, unknown>,
-      branchMapping.contact,
-      tlContactDefs,
-      'contact',
-    );
-    const dealCustom = buildMappedCustomFields(
-      lead as Record<string, unknown>,
-      branchMapping.deal,
-      tlDealDefs,
-      'deal',
-    );
-    const summaryExtras = collectSummaryExtras(
-      lead as Record<string, unknown>,
-      portalFields,
-      branchMapping,
-    );
-
-    const branchName = await getBranchName(supabase, lead.branch);
-    const contactId = await findOrCreateContact(
+    const { contactId, dealId } = await syncLeadRecordToTeamleader({
+      supabase,
       accessToken,
-      {
-        naam_klant: lead.naam_klant,
-        email: lead.email,
-        telefoonnummer: lead.telefoonnummer,
-        postcode: lead.postcode,
-        huisnummer: lead.huisnummer,
-        plaatsnaam: lead.plaatsnaam,
-      },
-      contactCustom,
-    );
-
-    const title = formatDealTitle(integration.settings.deal_title_template, {
-      branch_name: branchName,
-      naam_klant: lead.naam_klant || 'Onbekend',
-      branch: lead.branch || '',
-    });
-    const summary = buildDealSummary(
-      lead as Record<string, unknown>,
+      pipelineId,
+      phaseId,
+      settings: integration.settings,
+      lead,
       assignmentId,
       leadId,
-      Object.keys(summaryExtras).length > 0 ? summaryExtras : undefined,
-    );
-
-    const dealId = await createDeal(accessToken, {
-      contactId,
-      title,
-      summary,
-      phaseId,
-      customFields: dealCustom,
     });
 
     await supabase

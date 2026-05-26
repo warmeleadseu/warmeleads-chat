@@ -7,9 +7,26 @@ import {
   getTeamleaderIntegration,
   resolvePhaseIdForPipeline,
 } from '@/lib/teamleader/integrationRepo';
-import { findOrCreateContact } from '@/lib/teamleader/contacts';
-import { createDeal } from '@/lib/teamleader/deals';
-import { DEFAULT_DEAL_TITLE_TEMPLATE } from '@/lib/teamleader/config';
+import { syncLeadRecordToTeamleader } from '@/lib/teamleader/syncLeadRecord';
+import { buildTeamleaderTestLead, pickTestBranchSlug } from '@/lib/teamleader/testLead';
+
+async function getBranchFieldKeys(
+  supabase: ReturnType<typeof createServerClient>,
+  branchSlug: string,
+): Promise<string[]> {
+  const { data: branch } = await supabase
+    .from('branches')
+    .select('id')
+    .eq('slug', branchSlug)
+    .maybeSingle();
+  if (!branch?.id) return [];
+  const { data: fields } = await supabase
+    .from('branch_fields')
+    .select('key')
+    .eq('branch_id', branch.id)
+    .order('sort_order', { ascending: true });
+  return (fields || []).map((f) => f.key as string);
+}
 
 export async function POST(request: NextRequest) {
   const session = await verifyCustomer(request);
@@ -41,33 +58,32 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const branchSlug = pickTestBranchSlug(session.customer.branches);
+    const branchFieldKeys = await getBranchFieldKeys(supabase, branchSlug);
+    const testLead = buildTeamleaderTestLead(branchSlug, session.customer.id, branchFieldKeys);
+
     const stamp = new Date().toISOString().slice(0, 16).replace('T', ' ');
-    const contactId = await findOrCreateContact(accessToken, {
-      naam_klant: 'Warme Leads Test',
-      email: `test+${session.customer.id.slice(0, 8)}@warmeleads.test`,
-      telefoonnummer: null,
-      postcode: null,
-      huisnummer: null,
-      plaatsnaam: null,
-    });
+    const assignmentId = `test-${session.customer.id}`;
+    const leadId = testLead.id || assignmentId;
 
-    const template =
-      integration.settings.deal_title_template || DEFAULT_DEAL_TITLE_TEMPLATE;
-    const title = template
-      .replace(/\{branch_name\}/g, 'Test')
-      .replace(/\{naam_klant\}/g, 'Warme Leads Test')
-      .replace(/\{branch\}/g, 'test');
-
-    const dealId = await createDeal(accessToken, {
-      contactId,
-      title: `[TEST ${stamp}] ${title}`,
-      summary:
-        'Testdeal aangemaakt vanuit het Warme Leads portaal om de Teamleader-koppeling te verifiëren. Je kunt deze deal en bijbehorend contact veilig verwijderen.',
+    const { contactId, dealId, branchName } = await syncLeadRecordToTeamleader({
+      supabase,
+      accessToken,
+      pipelineId: integration.settings.pipeline_id,
       phaseId,
+      settings: integration.settings,
+      lead: testLead,
+      assignmentId,
+      leadId,
+      dealTitlePrefix: `[TEST ${stamp}] `,
+      summaryPreamble:
+        'Testdeal aangemaakt vanuit het Warme Leads portaal om de Teamleader-koppeling te verifiëren. Je kunt deze deal en bijbehorend contact veilig verwijderen.\n\n',
     });
 
     return NextResponse.json({
       ok: true,
+      branch: branchSlug,
+      branch_name: branchName,
       teamleader_contact_id: contactId,
       teamleader_deal_id: dealId,
     });

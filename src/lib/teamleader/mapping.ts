@@ -63,3 +63,37 @@ export function normalizePhone(phone: string | null | undefined): string | undef
   const p = (phone || '').trim();
   return p.length >= 6 ? p : undefined;
 }
+
+/** Achtergrondinformatie op het Teamleader-contact (remarks). */
+export function buildContactRemarks(
+  lead: Record<string, unknown>,
+  summaryExtras?: Record<string, string>,
+): string | undefined {
+  const lines: string[] = [];
+  if (lead.notities) lines.push(String(lead.notities));
+
+  const extras =
+    summaryExtras && Object.keys(summaryExtras).length > 0 ? summaryExtras : null;
+  if (extras) {
+    if (lines.length) lines.push('');
+    lines.push('Leadgegevens:');
+    for (const [label, val] of Object.entries(extras)) {
+      if (val.trim()) lines.push(`• ${label}: ${val}`);
+    }
+  } else {
+    const cf = lead.custom_fields;
+    if (cf && typeof cf === 'object') {
+      const entries = Object.entries(cf as Record<string, unknown>).filter(
+        ([, v]) => v != null && String(v).trim(),
+      );
+      if (entries.length > 0) {
+        if (lines.length) lines.push('');
+        lines.push('Leadgegevens:');
+        for (const [k, v] of entries) lines.push(`• ${k}: ${v}`);
+      }
+    }
+  }
+
+  const text = lines.join('\n').trim();
+  return text.length > 0 ? text.slice(0, 8000) : undefined;
+}

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildContactRemarks,
   buildDealSummary,
   formatDealTitle,
   normalizePhone,
@@ -87,5 +88,25 @@ describe('buildDealSummary', () => {
     );
     expect(summary).toContain('Type dak');
     expect(summary).toContain('Plat');
+  });
+});
+
+describe('buildContactRemarks', () => {
+  it('formats summary extras for contact background', () => {
+    const remarks = buildContactRemarks(
+      { notities: 'Bel terug na 17:00' },
+      { Zonnepanelen: 'Ja', 'Dynamisch contract': 'Ja' },
+    );
+    expect(remarks).toContain('Bel terug na 17:00');
+    expect(remarks).toContain('Zonnepanelen');
+    expect(remarks).toContain('Dynamisch contract');
+  });
+
+  it('falls back to custom_fields when no extras', () => {
+    const remarks = buildContactRemarks({
+      custom_fields: { budget: '€10.000' },
+    });
+    expect(remarks).toContain('budget');
+    expect(remarks).toContain('€10.000');
   });
 });
