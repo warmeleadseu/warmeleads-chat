@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyCustomer, portalUnauthorized } from '@/lib/portalAuth';
 import { createServerClient } from '@/lib/supabase';
 import { requireIntegrationOwner } from '@/lib/integrations/portalIntegrationAuth';
+import { ensureLatestSheetInSettings } from '@/lib/googleSheets/activeSheet';
 import { resolveGoogleSheetsAccessToken } from '@/lib/googleSheets/access';
 import { getGoogleSheetsIntegrationPublic } from '@/lib/googleSheets/integrationRepo';
 import {
@@ -23,13 +24,18 @@ export async function POST(request: NextRequest) {
   }
 
   const spreadsheetId = integration.settings.spreadsheet_id;
-  const sheetName = integration.settings.sheet_name;
-  if (!spreadsheetId || !sheetName) {
+  if (!spreadsheetId) {
     return NextResponse.json({ error: 'Stel eerst een spreadsheet in' }, { status: 400 });
   }
 
   try {
     const accessToken = await resolveGoogleSheetsAccessToken(supabase, session.customer.id);
+    const sheetName = await ensureLatestSheetInSettings(
+      supabase,
+      session.customer.id,
+      integration,
+      accessToken,
+    );
     const quoted = quoteSheetName(sheetName);
     const columns = await fetchSheetHeaderColumns(accessToken, spreadsheetId, quoted);
     const stamp = new Date().toLocaleString('nl-NL');

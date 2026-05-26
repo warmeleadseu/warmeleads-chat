@@ -239,8 +239,8 @@ export function GoogleSheetsIntegration({
         </div>
         <p className="text-xs text-slate-500">
           Deel je spreadsheet in Google met onderstaand adres als <strong>bewerker</strong>, plak
-          daarna de URL. We lezen automatisch de kolomkoppen uit rij 1 van het{' '}
-          <strong>laatste tabblad</strong> (tenzij de URL een specifiek tabblad aangeeft).
+          daarna de URL. Leads worden altijd naar het <strong>laatste tabblad</strong> geschreven;
+          voegt de klant een nieuw blad toe, dan schakelt de koppeling daar automatisch naartoe.
         </p>
 
         {serviceAccountEmail && (
@@ -311,7 +311,8 @@ export function GoogleSheetsIntegration({
               ))}
             </select>
             <p className="mt-1 text-xs text-slate-500">
-              Wijzig het werkblad en klik opnieuw op koppelen om kolommen opnieuw te laden.
+              Alleen om kolommen handmatig uit een ander blad te laden. Synchronisatie gebruikt
+              altijd het laatste tabblad.
             </p>
           </div>
         )}

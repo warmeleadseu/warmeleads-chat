@@ -8,7 +8,7 @@ Klanten koppelen een Google Spreadsheet via **Account → Integraties** zonder i
 2. Deel de spreadsheet in Google met het Warme Leads service account als **bewerker**.
 3. Plak de spreadsheet-URL → kolommen uit rij 1 van het **laatste tabblad** (of het tabblad uit `#gid=` in de URL).
 4. Map portaalvelden per branche aan spreadsheet-kolommen.
-5. Nieuwe leadtoewijzingen → rij onderaan het gekozen werkblad.
+5. Nieuwe leadtoewijzingen → rij onderaan het **laatste tabblad** (bij elke sync wordt opnieuw gecontroleerd of er een nieuwer tabblad is).
 
 ## Server-configuratie
 

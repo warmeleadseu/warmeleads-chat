@@ -10,6 +10,7 @@ import {
   mergeSheetMappings,
   suggestSheetColumnMapping,
 } from './fieldMappingLogic';
+import { ensureLatestSheetInSettings } from './activeSheet';
 import { resolveGoogleSheetsAccessToken } from './access';
 import { getGoogleSheetsIntegrationPublic } from './integrationRepo';
 import { GOOGLE_SHEETS_PROVIDER } from './types';
@@ -47,8 +48,7 @@ export async function syncAssignmentToGoogleSheets(args: SyncAssignmentArgs): Pr
   if (integration.settings.enabled === false) return;
 
   const spreadsheetId = integration.settings.spreadsheet_id;
-  const sheetName = integration.settings.sheet_name;
-  if (!spreadsheetId || !sheetName) return;
+  if (!spreadsheetId) return;
 
   const { data: assignment } = await supabase
     .from('lead_assignments')
@@ -92,6 +92,12 @@ export async function syncAssignmentToGoogleSheets(args: SyncAssignmentArgs): Pr
 
   try {
     const accessToken = await resolveGoogleSheetsAccessToken(supabase, customerId);
+    const sheetName = await ensureLatestSheetInSettings(
+      supabase,
+      customerId,
+      integration,
+      accessToken,
+    );
     const quotedSheet = quoteSheetName(sheetName);
 
     const branchSlug = lead.branch || '';

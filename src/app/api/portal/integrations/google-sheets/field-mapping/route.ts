@@ -10,6 +10,7 @@ import {
   suggestSheetColumnMapping,
 } from '@/lib/googleSheets/fieldMappingLogic';
 import type { GoogleSheetsFieldMappings, SheetBranchFieldMapping } from '@/lib/googleSheets/types';
+import { ensureLatestSheetInSettings } from '@/lib/googleSheets/activeSheet';
 import { resolveGoogleSheetsAccessToken } from '@/lib/googleSheets/access';
 import {
   getGoogleSheetsIntegrationPublic,
@@ -35,8 +36,7 @@ export async function GET(request: NextRequest) {
   }
 
   const spreadsheetId = integration.settings.spreadsheet_id;
-  const sheetName = integration.settings.sheet_name;
-  if (!spreadsheetId || !sheetName) {
+  if (!spreadsheetId) {
     return NextResponse.json(
       { error: 'Kies eerst een spreadsheet en werkblad' },
       { status: 400 },
@@ -47,9 +47,16 @@ export async function GET(request: NextRequest) {
   const branchFilter = request.nextUrl.searchParams.get('branch');
 
   let accessToken: string;
+  let sheetName: string;
   let sheetColumns: Awaited<ReturnType<typeof fetchSheetHeaderColumns>>;
   try {
     accessToken = await resolveGoogleSheetsAccessToken(supabase, session.customer.id);
+    sheetName = await ensureLatestSheetInSettings(
+      supabase,
+      session.customer.id,
+      integration,
+      accessToken,
+    );
     sheetColumns = await fetchSheetHeaderColumns(
       accessToken,
       spreadsheetId,
