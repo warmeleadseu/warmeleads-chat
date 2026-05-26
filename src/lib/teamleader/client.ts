@@ -29,6 +29,20 @@ function formatTeamleaderError(
   return field ? `${base} (${field})` : base;
 }
 
+/** Teamleader retourneert 204 / lege body voor o.a. contacts.update en contacts.tag. */
+export function parseTeamleaderResponseText<T>(
+  text: string,
+  httpStatus: number,
+): JsonRpcResponse<T> | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  try {
+    return JSON.parse(trimmed) as JsonRpcResponse<T>;
+  } catch {
+    throw new TeamleaderApiError('Ongeldig antwoord van Teamleader', httpStatus);
+  }
+}
+
 export async function teamleaderRequest<T>(
   accessToken: string,
   endpoint: string,
@@ -48,17 +62,25 @@ export async function teamleaderRequest<T>(
     throw new TeamleaderApiError('Teamleader rate limit', 429, retryAfter);
   }
 
-  const json = (await res.json()) as JsonRpcResponse<T>;
+  const text = await res.text();
+  const json = parseTeamleaderResponseText<T>(text, res.status);
+
   if (!res.ok) {
-    const err = json.errors?.[0];
+    const err = json?.errors?.[0];
     throw new TeamleaderApiError(
       err ? formatTeamleaderError(err) : `Teamleader API ${res.status}`,
       res.status,
     );
   }
-  if (json.errors?.length) {
+
+  if (json?.errors?.length) {
     const err = json.errors[0];
     throw new TeamleaderApiError(formatTeamleaderError(err), res.status);
   }
+
+  if (!json) {
+    return undefined as T;
+  }
+
   return json.data as T;
 }

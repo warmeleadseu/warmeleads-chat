@@ -287,7 +287,16 @@ export function TeamleaderIntegration({
       const res = await portalFetch('/api/portal/integrations/teamleader/test', {
         method: 'POST',
       });
-      const d = await res.json();
+      const raw = await res.text();
+      let d: { error?: string } = {};
+      if (raw.trim()) {
+        try {
+          d = JSON.parse(raw) as { error?: string };
+        } catch {
+          showToast('Onverwacht antwoord van de server', 'error');
+          return;
+        }
+      }
       if (res.ok) showToast('Testdeal aangemaakt in Teamleader');
       else showToast(d.error || 'Test mislukt', 'error');
     } finally {

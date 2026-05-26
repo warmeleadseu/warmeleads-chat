@@ -115,7 +115,6 @@ export async function findOrCreateContact(
       return existing;
     }
   }
-  const id = await createContact(accessToken, lead, customFields);
-  await tagContact(accessToken, id);
-  return id;
+  // tags worden al meegegeven bij contacts.add
+  return createContact(accessToken, lead, customFields);
 }
