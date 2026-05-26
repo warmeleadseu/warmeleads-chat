@@ -1,6 +1,10 @@
 import { teamleaderRequest } from './client';
 import { WARME_LEADS_CONTACT_TAG } from './config';
-import { normalizePhone, splitContactName } from './mapping';
+import {
+  buildTeamleaderContactAddresses,
+  buildTeamleaderTelephones,
+  splitContactName,
+} from './mapping';
 import type { TlCustomFieldPayload } from './fieldMappingLogic';
 
 type TlContact = { id: string; emails?: Array<{ type: string; email: string }> };
@@ -14,20 +18,6 @@ export type TeamleaderContactLeadInput = {
   plaatsnaam?: string | null;
   remarks?: string | null;
 };
-
-function buildAddressPayload(lead: TeamleaderContactLeadInput): Record<string, unknown>[] | undefined {
-  if (!lead.postcode && !lead.plaatsnaam) return undefined;
-  return [
-    {
-      type: 'primary',
-      address: {
-        line_1: [lead.postcode, lead.huisnummer].filter(Boolean).join(' ').trim() || undefined,
-        city: lead.plaatsnaam || undefined,
-        country: 'NL',
-      },
-    },
-  ];
-}
 
 export async function findContactByEmail(
   accessToken: string,
@@ -72,9 +62,9 @@ export async function updateContact(
   customFields?: TlCustomFieldPayload[],
 ): Promise<void> {
   const body: Record<string, unknown> = { id: contactId };
-  const phone = normalizePhone(lead.telefoonnummer);
-  if (phone) body.telephones = [{ type: 'phone', number: phone }];
-  const addresses = buildAddressPayload(lead);
+  const telephones = buildTeamleaderTelephones(lead.telefoonnummer);
+  if (telephones) body.telephones = telephones;
+  const addresses = buildTeamleaderContactAddresses(lead);
   if (addresses) body.addresses = addresses;
   if (lead.remarks?.trim()) body.remarks = lead.remarks.trim();
   if (customFields?.length) {
@@ -98,9 +88,9 @@ export async function createContact(
   if (lead.email?.trim()) {
     body.emails = [{ type: 'primary', email: lead.email.trim() }];
   }
-  const phone = normalizePhone(lead.telefoonnummer);
-  if (phone) body.telephones = [{ type: 'phone', number: phone }];
-  const addresses = buildAddressPayload(lead);
+  const telephones = buildTeamleaderTelephones(lead.telefoonnummer);
+  if (telephones) body.telephones = telephones;
+  const addresses = buildTeamleaderContactAddresses(lead);
   if (addresses) body.addresses = addresses;
   if (lead.remarks?.trim()) body.remarks = lead.remarks.trim();
   if (customFields?.length) {

@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   buildContactRemarks,
   buildDealSummary,
+  buildTeamleaderContactAddresses,
+  buildTeamleaderTelephones,
   formatDealTitle,
+  normalizeNlPostcode,
   normalizePhone,
   splitContactName,
 } from '@/lib/teamleader/mapping';
@@ -88,6 +91,47 @@ describe('buildDealSummary', () => {
     );
     expect(summary).toContain('Type dak');
     expect(summary).toContain('Plat');
+  });
+});
+
+describe('normalizeNlPostcode', () => {
+  it('formats Dutch postcode with space', () => {
+    expect(normalizeNlPostcode('5611ab')).toBe('5611 AB');
+  });
+});
+
+describe('buildTeamleaderContactAddresses', () => {
+  it('includes postal_code, city and line_1 for Teamleader API', () => {
+    const addresses = buildTeamleaderContactAddresses({
+      postcode: '5611AB',
+      huisnummer: '12',
+      plaatsnaam: 'Eindhoven',
+    });
+    expect(addresses).toHaveLength(1);
+    expect(addresses![0].address).toEqual({
+      line_1: '12',
+      postal_code: '5611 AB',
+      city: 'Eindhoven',
+      country: 'NL',
+    });
+  });
+
+  it('returns undefined when no address parts', () => {
+    expect(buildTeamleaderContactAddresses({})).toBeUndefined();
+  });
+
+  it('includes postal_code key when only city is known', () => {
+    const addresses = buildTeamleaderContactAddresses({ plaatsnaam: 'Utrecht' });
+    expect(addresses![0].address.postal_code).toBeNull();
+    expect(addresses![0].address.city).toBe('Utrecht');
+  });
+});
+
+describe('buildTeamleaderTelephones', () => {
+  it('uses mobile type for Dutch mobile numbers', () => {
+    expect(buildTeamleaderTelephones('+31612345678')).toEqual([
+      { type: 'mobile', number: '+31612345678' },
+    ]);
   });
 });
 

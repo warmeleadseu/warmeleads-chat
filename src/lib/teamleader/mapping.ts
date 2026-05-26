@@ -64,6 +64,60 @@ export function normalizePhone(phone: string | null | undefined): string | undef
   return p.length >= 6 ? p : undefined;
 }
 
+export type TeamleaderAddressInput = {
+  postcode?: string | null;
+  huisnummer?: string | null;
+  plaatsnaam?: string | null;
+};
+
+/** NL-postcode: 1234 AB (Teamleader accepteert ook zonder spatie). */
+export function normalizeNlPostcode(postcode: string | null | undefined): string | null {
+  const compact = (postcode || '').trim().replace(/\s+/g, '').toUpperCase();
+  if (!compact) return null;
+  const dutch = compact.match(/^(\d{4})([A-Z]{2})$/);
+  if (dutch) return `${dutch[1]} ${dutch[2]}`;
+  return compact;
+}
+
+/**
+ * Teamleader AddressRequest vereist de keys line_1, postal_code, city en country
+ * (waarden mogen null zijn, maar postal_code moet aanwezig zijn).
+ */
+export function buildTeamleaderContactAddresses(
+  lead: TeamleaderAddressInput,
+): Array<{ type: 'primary'; address: Record<string, string | null> }> | undefined {
+  const postal_code = normalizeNlPostcode(lead.postcode);
+  const city = (lead.plaatsnaam || '').trim() || null;
+  const line_1 = (lead.huisnummer || '').trim() || null;
+
+  if (!postal_code && !city && !line_1) return undefined;
+
+  return [
+    {
+      type: 'primary',
+      address: {
+        line_1,
+        postal_code,
+        city,
+        country: 'NL',
+      },
+    },
+  ];
+}
+
+export function buildTeamleaderTelephones(
+  phone: string | null | undefined,
+): Array<{ type: 'phone' | 'mobile'; number: string }> | undefined {
+  const normalized = normalizePhone(phone);
+  if (!normalized) return undefined;
+  const digits = normalized.replace(/\D/g, '');
+  const isMobile =
+    digits.startsWith('316') ||
+    digits.startsWith('06') ||
+    (digits.length === 10 && digits.startsWith('6'));
+  return [{ type: isMobile ? 'mobile' : 'phone', number: normalized }];
+}
+
 /** Achtergrondinformatie op het Teamleader-contact (remarks). */
 export function buildContactRemarks(
   lead: Record<string, unknown>,
