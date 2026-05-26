@@ -39,24 +39,18 @@ try {
 }
 
 const keyName = 'GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY';
-const line = `${keyName}="${vercelValue}"`;
-if (envText.match(new RegExp(`^${keyName}=`, 'm'))) {
-  envText = envText.replace(new RegExp(`^${keyName}=.*$`, 'm'), line);
-} else {
-  envText = envText.trimEnd() + (envText.endsWith('\n') ? '' : '\n') + line + '\n';
-}
-writeFileSync(envLocalPath, envText);
+const managedKeys = new Set([keyName, 'GOOGLE_SERVICE_ACCOUNT_EMAIL']);
+const lines = envText
+  .split('\n')
+  .filter((line) => {
+    const k = line.match(/^([A-Z0-9_]+)=/)?.[1];
+    return !k || !managedKeys.has(k);
+  });
+while (lines.length && lines[lines.length - 1] === '') lines.pop();
+if (email) lines.push(`GOOGLE_SERVICE_ACCOUNT_EMAIL=${email}`);
+lines.push(`${keyName}="${vercelValue}"`);
+writeFileSync(envLocalPath, `${lines.join('\n')}\n`);
 console.log('✓ .env.local bijgewerkt');
-
-if (email) {
-  const emailLine = `GOOGLE_SERVICE_ACCOUNT_EMAIL="${email}"`;
-  if (envText.match(/^GOOGLE_SERVICE_ACCOUNT_EMAIL=/m)) {
-    envText = envText.replace(/^GOOGLE_SERVICE_ACCOUNT_EMAIL=.*$/m, emailLine);
-  } else {
-    envText += emailLine + '\n';
-  }
-  writeFileSync(envLocalPath, envText);
-}
 
 for (const env of ['production', 'preview', 'development']) {
   try {
