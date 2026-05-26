@@ -129,10 +129,19 @@ export async function saveCustomerOAuthCredentials(
   }
 
   const existing = await getCustomerOAuthConfig(supabase, customerId);
-  const changed =
-    !existing ||
-    existing.clientId !== clientId ||
-    existing.clientSecret !== clientSecret;
+  const { data: rawRow } = await supabase
+    .from('customer_integrations')
+    .select('client_id_enc, client_secret_enc')
+    .eq('customer_id', customerId)
+    .eq('provider', TEAMLEADER_PROVIDER)
+    .maybeSingle();
+
+  // Alleen tokens wissen als we zeker weten dat de OAuth-app gewijzigd is.
+  // Als oude credentials niet meer te decrypten zijn (key-rotatie), mogen we
+  // bestaande tokens niet per ongeluk weggooien bij opnieuw opslaan.
+  const oauthAppChanged = existing
+    ? existing.clientId !== clientId || existing.clientSecret !== clientSecret
+    : !rawRow?.client_id_enc;
 
   const now = new Date().toISOString();
   const payload: Record<string, unknown> = {
@@ -142,8 +151,8 @@ export async function saveCustomerOAuthCredentials(
     client_secret_enc: encryptSecret(clientSecret),
     updated_at: now,
   };
-  if (changed) {
-    // Bestaande tokens zijn aan de oude app gekoppeld → ongeldig maken.
+  if (oauthAppChanged) {
+    // Tokens horen bij de vorige OAuth-app → ongeldig maken.
     payload.access_token_enc = null;
     payload.refresh_token_enc = null;
     payload.expires_at = null;
@@ -154,7 +163,7 @@ export async function saveCustomerOAuthCredentials(
     .from('customer_integrations')
     .upsert(payload, { onConflict: 'customer_id,provider' });
   if (error) throw new Error(error.message);
-  return { changed };
+  return { changed: oauthAppChanged };
 }
 
 /**

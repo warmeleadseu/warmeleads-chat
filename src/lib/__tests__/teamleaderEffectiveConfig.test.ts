@@ -159,4 +159,22 @@ describe('saveCustomerOAuthCredentials', () => {
     expect(payload.client_id_enc).not.toBe('plaintext-id');
     expect(payload.client_secret_enc).not.toBe('plaintext-secret');
   });
+
+  it('does not wipe tokens when stored credentials cannot be decrypted', async () => {
+    const upsert = vi.fn().mockResolvedValue({ error: null });
+    const sb = buildSupabaseMock({
+      customerCreds: {
+        client_id_enc: 'legacy-ciphertext',
+        client_secret_enc: 'legacy-ciphertext',
+      },
+      upsertSpy: upsert,
+    });
+    await saveCustomerOAuthCredentials(sb, 'cust-1', {
+      clientId: 'same-id',
+      clientSecret: 'same-secret',
+    });
+    const payload = upsert.mock.calls[0][0];
+    expect(payload.access_token_enc).toBeUndefined();
+    expect(payload.connected_at).toBeUndefined();
+  });
 });

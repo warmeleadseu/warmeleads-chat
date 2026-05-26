@@ -35,6 +35,7 @@ type StatusResponse = {
   has_global_oauth_app: boolean;
   redirect_uri: string;
   connected: boolean;
+  tokens_readable?: boolean;
   settings: {
     enabled?: boolean;
     pipeline_id?: string | null;
@@ -495,6 +496,16 @@ export function TeamleaderIntegration({
       {/* ── Connected: settings ── */}
       {status?.connected && (
         <div className="mt-5 space-y-5">
+          {status.tokens_readable === false && (
+            <Alert variant="error">
+              <span className="font-medium">Koppeling kon niet worden geladen</span>
+              <p className="mt-1 text-xs">
+                Teamleader lijkt gekoppeld, maar de opgeslagen tokens kunnen op dit moment niet worden
+                gelezen. Klik op <strong>Ontkoppelen</strong> en verbind opnieuw. Blijft dit probleem
+                bestaan? Neem contact op met Warme Leads.
+              </p>
+            </Alert>
+          )}
           {needsPipeline && (
             <Alert variant="warning">
               Selecteer een pipeline en sla de instellingen op om synchronisatie te starten.

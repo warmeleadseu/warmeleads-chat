@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyCustomer, portalUnauthorized } from '@/lib/portalAuth';
 import { createServerClient } from '@/lib/supabase';
 import { requireIntegrationOwner } from '@/lib/integrations/portalIntegrationAuth';
-import { getTeamleaderIntegration } from '@/lib/teamleader/integrationRepo';
+import { getTeamleaderConnectionState } from '@/lib/teamleader/integrationRepo';
 import {
   getCustomerOAuthConfig,
   getEffectiveOAuthConfig,
@@ -21,12 +21,13 @@ export async function GET(request: NextRequest) {
   const supabase = createServerClient();
   const customerId = session.customer.id;
 
-  const [integration, customerCfg, globalCfg, effectiveCfg] = await Promise.all([
-    getTeamleaderIntegration(supabase, customerId),
+  const [connection, customerCfg, globalCfg, effectiveCfg] = await Promise.all([
+    getTeamleaderConnectionState(supabase, customerId),
     getCustomerOAuthConfig(supabase, customerId),
     getGlobalOAuthConfig(),
     getEffectiveOAuthConfig(supabase, customerId),
   ]);
+  const integration = connection.integration;
 
   const { count: successCount } = await supabase
     .from('integration_sync_log')
@@ -69,7 +70,7 @@ export async function GET(request: NextRequest) {
 
   const customerBranches = session.customer.branches ?? [];
   const fieldMappingConfigured = hasSavedFieldMappings(
-    integration?.settings?.field_mappings,
+    integration?.settings?.field_mappings ?? connection.row?.settings?.field_mappings,
     customerBranches,
   );
 
@@ -79,22 +80,36 @@ export async function GET(request: NextRequest) {
       ? 'global'
       : null;
 
-  const syncReady = isTeamleaderSyncReady(integration);
+  const syncReady =
+    connection.tokensReadable && isTeamleaderSyncReady(integration);
+
+  const lastError =
+    lastFailed?.error_message &&
+    connection.connected &&
+    (!connection.tokensReadable ||
+      !connection.row?.connected_at ||
+      new Date(lastFailed.created_at).getTime() >=
+        new Date(connection.row.connected_at).getTime())
+      ? lastFailed.error_message
+      : null;
+  const lastErrorAt =
+    lastError && lastFailed?.created_at ? lastFailed.created_at : null;
 
   return NextResponse.json({
     configured: !!(customerCfg || globalCfg),
     oauth_source: oauthSource,
-    has_customer_oauth_app: !!customerCfg,
+    has_customer_oauth_app: !!customerCfg || Boolean(connection.row?.client_id_enc),
     has_global_oauth_app: !!globalCfg,
     redirect_uri: effectiveCfg?.redirectUri ?? null,
-    connected: !!integration?.connected_at,
+    connected: connection.connected,
+    tokens_readable: connection.tokensReadable,
     sync_ready: syncReady,
     field_mapping_configured: fieldMappingConfigured,
-    settings: integration?.settings ?? null,
-    connected_at: integration?.connected_at ?? null,
+    settings: integration?.settings ?? connection.row?.settings ?? null,
+    connected_at: connection.row?.connected_at ?? null,
     success_count: successCount ?? 0,
-    last_error: lastFailed?.error_message ?? null,
-    last_error_at: lastFailed?.created_at ?? null,
+    last_error: lastError,
+    last_error_at: lastErrorAt,
     recent_syncs: (recentLogs || []).map((row) => {
       const lead = leadMap.get(row.lead_id);
       return {

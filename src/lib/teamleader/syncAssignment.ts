@@ -3,7 +3,6 @@ import { syncLeadRecordToTeamleader } from './syncLeadRecord';
 import {
   ensureValidAccessToken,
   getTeamleaderIntegration,
-  isTeamleaderTokenDecryptBroken,
   resolvePhaseIdForPipeline,
 } from './integrationRepo';
 import { TEAMLEADER_PROVIDER } from './types';
@@ -20,17 +19,10 @@ export async function syncAssignmentToTeamleader(args: SyncAssignmentArgs): Prom
   const { customerId, leadId, assignmentId } = args;
 
   const integration = await getTeamleaderIntegration(supabase, customerId);
-  const tokenBroken = await isTeamleaderTokenDecryptBroken(supabase, customerId);
-  if (!integration?.connected_at) {
-    if (!tokenBroken) return;
-  } else if (integration.settings.enabled === false) {
-    return;
-  }
-
-  const pipelineId = integration?.settings.pipeline_id;
-  if (tokenBroken || !pipelineId) {
-    if (!tokenBroken) return;
-  }
+  if (!integration?.connected_at) return;
+  if (integration.settings.enabled === false) return;
+  const pipelineId = integration.settings.pipeline_id;
+  if (!pipelineId) return;
 
   const { data: assignment } = await supabase
     .from('lead_assignments')
@@ -84,11 +76,6 @@ export async function syncAssignmentToTeamleader(args: SyncAssignmentArgs): Prom
   }
 
   try {
-    if (tokenBroken || !integration) {
-      throw new Error(
-        'Teamleader-tokens zijn onleesbaar. Laat de klant Teamleader opnieuw koppelen in het portaal.',
-      );
-    }
     const accessToken = await ensureValidAccessToken(supabase, integration);
     const phaseId =
       integration.settings.phase_id ||

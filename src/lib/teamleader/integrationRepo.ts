@@ -27,6 +27,7 @@ type IntegrationRow = {
   expires_at: string | null;
   settings: TeamleaderIntegrationSettings | null;
   connected_at: string | null;
+  client_id_enc?: string | null;
 };
 
 function rowToStored(row: IntegrationRow): StoredIntegration | null {
@@ -69,6 +70,32 @@ export async function isTeamleaderTokenDecryptBroken(
   return rowToStored(row) === null;
 }
 
+export type TeamleaderConnectionState = {
+  row: IntegrationRow | null;
+  integration: StoredIntegration | null;
+  /** DB heeft connected_at + tokens */
+  connected: boolean;
+  /** Tokens kunnen met de huidige server-sleutel worden gelezen */
+  tokensReadable: boolean;
+};
+
+export async function getTeamleaderConnectionState(
+  supabase: SupabaseClient,
+  customerId: string,
+): Promise<TeamleaderConnectionState> {
+  const row = await getRawIntegrationRow(supabase, customerId);
+  const integration = row ? rowToStored(row) : null;
+  const connected = Boolean(
+    row?.connected_at && row.access_token_enc && row.refresh_token_enc && row.expires_at,
+  );
+  return {
+    row,
+    integration,
+    connected,
+    tokensReadable: Boolean(integration),
+  };
+}
+
 export async function saveTeamleaderTokens(
   supabase: SupabaseClient,
   customerId: string,
@@ -80,11 +107,17 @@ export async function saveTeamleaderTokens(
     ...(existing?.settings ?? {}),
     enabled: true,
   };
+  const accessTokenEnc = encryptSecret(tokens.accessToken);
+  const refreshTokenEnc = encryptSecret(tokens.refreshToken);
+  // Faal hard als encrypt/decrypt op deze server inconsistent is.
+  decryptSecret(accessTokenEnc);
+  decryptSecret(refreshTokenEnc);
+
   const payload = {
     customer_id: customerId,
     provider: TEAMLEADER_PROVIDER,
-    access_token_enc: encryptSecret(tokens.accessToken),
-    refresh_token_enc: encryptSecret(tokens.refreshToken),
+    access_token_enc: accessTokenEnc,
+    refresh_token_enc: refreshTokenEnc,
     expires_at: tokens.expiresAt.toISOString(),
     connected_at: now,
     settings,
@@ -94,6 +127,18 @@ export async function saveTeamleaderTokens(
     onConflict: 'customer_id,provider',
   });
   if (error) throw new Error(error.message);
+
+  // Oude mislukte syncs zijn niet meer relevant na een succesvolle koppeling.
+  await supabase
+    .from('integration_sync_log')
+    .update({
+      status: 'pending',
+      error_message: null,
+      updated_at: now,
+    })
+    .eq('customer_id', customerId)
+    .eq('provider', TEAMLEADER_PROVIDER)
+    .eq('status', 'failed');
 }
 
 /** Vernieuw tokens na expiry — laat connected_at en settings ongemoeid. */
@@ -164,7 +209,7 @@ export async function getRawIntegrationRow(
   const { data } = await supabase
     .from('customer_integrations')
     .select(
-      'id, customer_id, access_token_enc, refresh_token_enc, expires_at, settings, connected_at',
+      'id, customer_id, access_token_enc, refresh_token_enc, expires_at, settings, connected_at, client_id_enc',
     )
     .eq('customer_id', customerId)
     .eq('provider', TEAMLEADER_PROVIDER)

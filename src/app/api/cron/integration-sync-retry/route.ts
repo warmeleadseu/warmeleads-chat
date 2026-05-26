@@ -8,7 +8,7 @@ import { syncAssignmentToGoogleSheets } from '@/lib/googleSheets/syncAssignment'
 import { GOOGLE_SHEETS_PROVIDER } from '@/lib/googleSheets/types';
 import { syncAssignmentToTeamleader } from '@/lib/teamleader/syncAssignment';
 import { TEAMLEADER_PROVIDER } from '@/lib/teamleader/types';
-import { isTeamleaderTokenDecryptBroken } from '@/lib/teamleader/integrationRepo';
+import { getTeamleaderConnectionState } from '@/lib/teamleader/integrationRepo';
 
 const MAX_ATTEMPTS = 8;
 const MISSING_LOOKBACK_HOURS = 72;
@@ -52,11 +52,9 @@ async function runSyncJob(
   );
   if (!mayRetry) return false;
 
-  if (
-    row.provider === TEAMLEADER_PROVIDER &&
-    (await isTeamleaderTokenDecryptBroken(supabase, row.customer_id))
-  ) {
-    return false;
+  if (row.provider === TEAMLEADER_PROVIDER) {
+    const conn = await getTeamleaderConnectionState(supabase, row.customer_id);
+    if (conn.connected && !conn.tokensReadable) return false;
   }
 
   if (row.provider === GOOGLE_SHEETS_PROVIDER) {
