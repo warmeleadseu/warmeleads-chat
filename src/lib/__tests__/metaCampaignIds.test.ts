@@ -33,4 +33,13 @@ describe('mergeMetaCampaignLookupNames', () => {
       { id: '1', name: 'A' },
     ]);
   });
+
+  it('preserves paused flag after name lookup', () => {
+    const out = mergeMetaCampaignLookupNames(
+      ['1'],
+      [{ id: '1', name: 'Kopie' }],
+      [{ id: '1', name: '1', paused: true }],
+    );
+    expect(out).toEqual([{ id: '1', name: 'Kopie', paused: true }]);
+  });
 });

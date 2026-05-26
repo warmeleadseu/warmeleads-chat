@@ -54,11 +54,19 @@ export type MetaCampaignPick = { id: string; name: string; /** Handmatig uit in 
 export function mergeMetaCampaignLookupNames(
   orderedIds: string[],
   campaigns: { id: string; name: string }[],
+  previous?: MetaCampaignPick[],
 ): MetaCampaignPick[] {
+  const pausedById = new Map(
+    (previous ?? []).filter(p => p.paused === true).map(p => [p.id, true] as const),
+  );
   const nameById = new Map<string, string>();
   for (const c of campaigns) {
     const id = String(c.id).trim();
     if (/^\d+$/.test(id)) nameById.set(id, c.name || id);
   }
-  return orderedIds.map(id => ({ id, name: nameById.get(id) || id }));
+  return orderedIds.map(id => ({
+    id,
+    name: nameById.get(id) || id,
+    ...(pausedById.has(id) ? { paused: true as const } : {}),
+  }));
 }

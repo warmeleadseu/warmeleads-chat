@@ -52,7 +52,7 @@ export function MetaCampaignLinkerFields({
       .then(r => (r.ok ? r.json() : Promise.reject(new Error('lookup failed'))))
       .then((d: { campaigns?: { id: string; name: string }[] }) => {
         if (cancelled) return;
-        setPicks(mergeMetaCampaignLookupNames(ids, d.campaigns || []));
+        setPicks(prev => mergeMetaCampaignLookupNames(ids, d.campaigns || [], prev));
       })
       .catch(() => {});
     return () => {

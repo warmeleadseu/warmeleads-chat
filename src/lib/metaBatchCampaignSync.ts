@@ -85,6 +85,62 @@ export function getDesiredMetaCampaignStatusForCampaign(
   return getDesiredMetaCampaignStatus(row, capCounts);
 }
 
+/**
+ * Meta-campagne kan aan meerdere batches hangen (bv. oude voltooide + nieuwe actieve batch).
+ * ACTIVE zodra één batch met sync aan ACTIVE wil; anders PAUSED.
+ * Voorkomt dat een voltooide batch een gedeelde campagne uit blijft zetten.
+ */
+export function resolveAggregatedMetaCampaignDesiredStatus(
+  campaignId: string,
+  allBatches: BatchMetaSyncRow[],
+  capCountsByBatchId: Record<string, BatchMetaAssignmentCapCounts> = {},
+): 'ACTIVE' | 'PAUSED' {
+  const linked = allBatches.filter(b => {
+    if (b.meta_campaign_sync_enabled === false) return false;
+    if (!isPipelineBatchKind(b.batch_kind)) return false;
+    return normalizeCampaignIds(b.meta_campaign_ids).includes(campaignId);
+  });
+  if (linked.length === 0) return 'PAUSED';
+
+  for (const batch of linked) {
+    const caps = capCountsByBatchId[batch.id];
+    if (getDesiredMetaCampaignStatusForCampaign(batch, campaignId, caps) === 'ACTIVE') {
+      return 'ACTIVE';
+    }
+  }
+  return 'PAUSED';
+}
+
+async function fetchAllMetaLinkedBatches(supabase: SupabaseClient): Promise<BatchMetaSyncRow[]> {
+  const { data, error } = await supabase
+    .from('customer_batches')
+    .select(
+      'id, batch_kind, is_paid, status, batch_size, leads_delivered, starts_at, leads_per_day, leads_per_week, meta_campaign_ids, meta_campaign_paused_ids, meta_campaign_sync_enabled',
+    )
+    .not('meta_campaign_ids', 'eq', '{}')
+    .limit(400);
+
+  if (error || !data) return [];
+  return (data as BatchMetaSyncRow[]).filter(
+    b => isPipelineBatchKind(b.batch_kind) && normalizeCampaignIds(b.meta_campaign_ids).length > 0,
+  );
+}
+
+async function buildCapCountsMap(
+  supabase: SupabaseClient,
+  batches: BatchMetaSyncRow[],
+): Promise<Record<string, BatchMetaAssignmentCapCounts>> {
+  const out: Record<string, BatchMetaAssignmentCapCounts> = {};
+  for (const batch of batches) {
+    const lpw = batch.leads_per_week != null && Number(batch.leads_per_week) > 0 ? Number(batch.leads_per_week) : 0;
+    const lpd = batch.leads_per_day != null && Number(batch.leads_per_day) > 0 ? Number(batch.leads_per_day) : 0;
+    if (lpw > 0 || lpd > 0) {
+      out[batch.id] = await fetchBatchAssignmentCapCounts(supabase, batch.id);
+    }
+  }
+  return out;
+}
+
 /** Alleen IDs die ook in `linkedIds` staan (paused ⊆ gekoppeld). */
 export function sanitizePausedMetaCampaignIds(linkedIds: string[], raw: unknown): string[] {
   const linked = new Set(normalizeCampaignIds(linkedIds));
@@ -199,12 +255,11 @@ export async function reconcileBatchMetaCampaigns(
     return;
   }
 
-  const lpw = batch.leads_per_week != null && Number(batch.leads_per_week) > 0 ? Number(batch.leads_per_week) : 0;
-  const lpd = batch.leads_per_day != null && Number(batch.leads_per_day) > 0 ? Number(batch.leads_per_day) : 0;
-  let capCounts: BatchMetaAssignmentCapCounts | undefined;
-  if (lpw > 0 || lpd > 0) {
-    capCounts = await fetchBatchAssignmentCapCounts(supabase, batchId);
-  }
+  const allLinkedBatches = await fetchAllMetaLinkedBatches(supabase);
+  const batchesForCaps = allLinkedBatches.some(b => b.id === batchId)
+    ? allLinkedBatches
+    : [...allLinkedBatches, batch];
+  const capCountsByBatchId = await buildCapCountsMap(supabase, batchesForCaps);
 
   const credentials = await getMetaCredentials();
 
@@ -226,7 +281,7 @@ export async function reconcileBatchMetaCampaigns(
   for (const campaignId of ids) {
     const desired = orphanPause.includes(campaignId)
       ? 'PAUSED'
-      : getDesiredMetaCampaignStatusForCampaign(batch, campaignId, capCounts);
+      : resolveAggregatedMetaCampaignDesiredStatus(campaignId, batchesForCaps, capCountsByBatchId);
 
     const info = await graphGetCampaign(campaignId, credentials.accessToken);
     if (!info.ok) {
@@ -276,7 +331,10 @@ export async function reconcileMetaCampaignsForCron(supabase: SupabaseClient, li
   const errors: string[] = [];
   const { data: rows, error } = await supabase
     .from('customer_batches')
-    .select('id, meta_campaign_ids, batch_kind')
+    .select('id, meta_campaign_ids, batch_kind, status, is_paid, meta_campaign_sync_enabled')
+    .eq('status', 'active')
+    .eq('is_paid', true)
+    .not('meta_campaign_ids', 'eq', '{}')
     .order('created_at', { ascending: false })
     .limit(300);
 
@@ -290,6 +348,7 @@ export async function reconcileMetaCampaignsForCron(supabase: SupabaseClient, li
       const mids = r.meta_campaign_ids as string[] | null;
       return (
         isPipelineBatchKind((r as { batch_kind?: string }).batch_kind) &&
+        (r as { meta_campaign_sync_enabled?: boolean }).meta_campaign_sync_enabled !== false &&
         Array.isArray(mids) &&
         mids.length > 0
       );
