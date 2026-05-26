@@ -4,6 +4,7 @@ import { createServerClient } from '@/lib/supabase';
 import { requireIntegrationOwner } from '@/lib/integrations/portalIntegrationAuth';
 import { ensureLatestSheetInSettings } from '@/lib/googleSheets/activeSheet';
 import { resolveGoogleSheetsAccessToken } from '@/lib/googleSheets/access';
+import { mapGoogleSheetsHttpError } from '@/lib/googleSheets/errors';
 import { getGoogleSheetsIntegrationPublic } from '@/lib/googleSheets/integrationRepo';
 import {
   appendRowToSheet,
@@ -30,7 +31,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const accessToken = await resolveGoogleSheetsAccessToken(supabase, session.customer.id);
-    const sheetName = await ensureLatestSheetInSettings(
+    const { sheetName } = await ensureLatestSheetInSettings(
       supabase,
       session.customer.id,
       integration,
@@ -39,15 +40,15 @@ export async function POST(request: NextRequest) {
     const quoted = quoteSheetName(sheetName);
     const columns = await fetchSheetHeaderColumns(accessToken, spreadsheetId, quoted);
     const stamp = new Date().toLocaleString('nl-NL');
-    const row = columns.map((c, i) =>
+    const row = columns.map((_, i) =>
       i === 0 ? `[TEST Warme Leads ${stamp}]` : i === 1 ? 'test@warmeleads.eu' : '',
     );
     if (row.length === 0) row.push(`[TEST Warme Leads ${stamp}]`);
 
     const updatedRange = await appendRowToSheet(accessToken, spreadsheetId, quoted, row);
-    return NextResponse.json({ ok: true, updated_range: updatedRange });
+    return NextResponse.json({ ok: true, updated_range: updatedRange, sheet_name: sheetName });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Test mislukt';
-    return NextResponse.json({ error: message }, { status: 502 });
+    const { message, status } = mapGoogleSheetsHttpError(err);
+    return NextResponse.json({ error: message }, { status });
   }
 }

@@ -160,8 +160,9 @@ export function GoogleSheetsIntegration({
       }
       setSheetTabs(d.tabs || []);
       if (d.sheet_gid != null) setSelectedSheetId(d.sheet_gid);
+      const tabNote = d.sheet_tab_changed ? ' (nieuwer tabblad gedetecteerd)' : '';
       showToast(
-        `Spreadsheet gekoppeld — ${d.columns?.length ?? 0} kolommen op werkblad "${d.sheet_name ?? ''}"`,
+        `Spreadsheet gekoppeld — ${d.columns?.length ?? 0} kolommen op "${d.sheet_name ?? ''}"${tabNote}`,
       );
       await loadStatus({ silent: true });
       notifyHub();
@@ -178,7 +179,6 @@ export function GoogleSheetsIntegration({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           spreadsheet_url: spreadsheetUrl.trim() || undefined,
-          sheet_gid: selectedSheetId === '' ? null : selectedSheetId,
           enabled: syncEnabled,
         }),
       });

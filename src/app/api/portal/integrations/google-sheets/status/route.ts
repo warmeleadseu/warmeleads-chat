@@ -8,6 +8,8 @@ import {
   isGoogleSheetsApiKeyConfigured,
   isGoogleSheetsIntegrationServerReady,
 } from '@/lib/googleSheets/config';
+import { ensureLatestSheetInSettings } from '@/lib/googleSheets/activeSheet';
+import { resolveGoogleSheetsAccessToken } from '@/lib/googleSheets/access';
 import { isGoogleServiceAccountConfigured } from '@/lib/googleSheets/serviceAccount';
 import { getGoogleSheetsIntegrationPublic } from '@/lib/googleSheets/integrationRepo';
 import { hasSavedSheetMappings } from '@/lib/googleSheets/fieldMappingLogic';
@@ -23,10 +25,23 @@ export async function GET(request: NextRequest) {
   const supabase = createServerClient();
   const customerId = session.customer.id;
 
-  const [integration, { data: customer }] = await Promise.all([
-    getGoogleSheetsIntegrationPublic(supabase, customerId),
-    supabase.from('customers').select('branches').eq('id', customerId).single(),
-  ]);
+  let integration = await getGoogleSheetsIntegrationPublic(supabase, customerId);
+
+  if (integration?.connected_at && integration.settings.spreadsheet_id) {
+    try {
+      const accessToken = await resolveGoogleSheetsAccessToken(supabase, customerId);
+      await ensureLatestSheetInSettings(supabase, customerId, integration, accessToken);
+      integration = (await getGoogleSheetsIntegrationPublic(supabase, customerId)) ?? integration;
+    } catch {
+      /* status tonen ook als refresh van tabblad faalt */
+    }
+  }
+
+  const { data: customer } = await supabase
+    .from('customers')
+    .select('branches')
+    .eq('id', customerId)
+    .single();
 
   const branches = (customer?.branches as string[] | null) ?? [];
   const oauthConfigured = !!getGoogleOAuthConfig();

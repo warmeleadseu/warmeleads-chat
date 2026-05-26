@@ -12,6 +12,7 @@ import {
 import type { GoogleSheetsFieldMappings, SheetBranchFieldMapping } from '@/lib/googleSheets/types';
 import { ensureLatestSheetInSettings } from '@/lib/googleSheets/activeSheet';
 import { resolveGoogleSheetsAccessToken } from '@/lib/googleSheets/access';
+import { mapGoogleSheetsHttpError } from '@/lib/googleSheets/errors';
 import {
   getGoogleSheetsIntegrationPublic,
   updateGoogleSheetsSettings,
@@ -48,23 +49,26 @@ export async function GET(request: NextRequest) {
 
   let accessToken: string;
   let sheetName: string;
+  let sheetTabChanged = false;
   let sheetColumns: Awaited<ReturnType<typeof fetchSheetHeaderColumns>>;
   try {
     accessToken = await resolveGoogleSheetsAccessToken(supabase, session.customer.id);
-    sheetName = await ensureLatestSheetInSettings(
+    const resolved = await ensureLatestSheetInSettings(
       supabase,
       session.customer.id,
       integration,
       accessToken,
     );
+    sheetName = resolved.sheetName;
+    sheetTabChanged = resolved.tabChanged;
     sheetColumns = await fetchSheetHeaderColumns(
       accessToken,
       spreadsheetId,
       quoteSheetName(sheetName),
     );
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Kon spreadsheet niet bereiken';
-    return NextResponse.json({ error: message }, { status: 502 });
+    const { message, status } = mapGoogleSheetsHttpError(err);
+    return NextResponse.json({ error: message }, { status });
   }
 
   const customerBranches = await loadCustomerBranchSlugs(supabase, session.customer.id);
@@ -108,6 +112,7 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({
     has_saved_mappings: hasSavedSheetMappings(savedMappings, branchSlugs),
+    sheet_tab_changed: sheetTabChanged,
     sheet_columns: sheetFields,
     spreadsheet: {
       url: integration.settings.spreadsheet_url,

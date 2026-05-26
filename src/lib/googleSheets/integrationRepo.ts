@@ -207,6 +207,10 @@ export async function disconnectGoogleSheets(
   const preservedSettings: GoogleSheetsIntegrationSettings = {
     ...(existing?.settings ?? {}),
     enabled: false,
+    spreadsheet_id: null,
+    spreadsheet_url: null,
+    sheet_name: null,
+    sheet_gid: null,
   };
   await supabase
     .from('customer_integrations')

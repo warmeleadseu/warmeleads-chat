@@ -1,9 +1,9 @@
 import { SignJWT, importPKCS8 } from 'jose';
-import { stripEnvValue } from '@/lib/teamleader/credentials';
 import { GOOGLE_OAUTH_TOKEN_URL, GOOGLE_SHEETS_SCOPE, getGoogleServiceAccountEmail } from './config';
 
 function getPrivateKeyPem(): string {
-  const raw = stripEnvValue(process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY);
+  let raw = process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY ?? '';
+  raw = raw.trim().replace(/^["']|["']$/g, '');
   if (!raw) return '';
   return raw.replace(/\\n/g, '\n');
 }

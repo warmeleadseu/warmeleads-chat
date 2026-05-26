@@ -92,7 +92,7 @@ export async function syncAssignmentToGoogleSheets(args: SyncAssignmentArgs): Pr
 
   try {
     const accessToken = await resolveGoogleSheetsAccessToken(supabase, customerId);
-    const sheetName = await ensureLatestSheetInSettings(
+    const { sheetName } = await ensureLatestSheetInSettings(
       supabase,
       customerId,
       integration,

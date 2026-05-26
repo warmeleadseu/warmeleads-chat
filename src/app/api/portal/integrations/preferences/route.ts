@@ -48,6 +48,9 @@ export async function GET(request: NextRequest) {
 
   const teamleaderConnected = !!teamleaderIntegration?.connected_at;
   const sheetsConnected = !!sheetsIntegration?.connected_at;
+  const sheetsSpreadsheetConfigured = Boolean(
+    sheetsIntegration?.settings?.spreadsheet_id && sheetsIntegration?.settings?.sheet_name,
+  );
   const teamleaderSyncReady = isTeamleaderSyncReady(teamleaderIntegration);
   const sheetsSyncReady = isGoogleSheetsSyncReady(sheetsIntegration, branches);
 
@@ -74,7 +77,7 @@ export async function GET(request: NextRequest) {
       },
       google_sheets: {
         connected: sheetsConnected,
-        configured: sheetsConnected,
+        configured: sheetsSpreadsheetConfigured,
         sync_ready: sheetsSyncReady,
       },
     },

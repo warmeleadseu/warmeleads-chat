@@ -54,6 +54,15 @@ export function GoogleSheetsFieldMapping({
         const current = loaded.find((x) => x.slug === (activeBranch || slug));
         if (current) setLocalMapping(current.mapping);
         if (!opts?.suggest) setDirty(false);
+        if (d.sheet_tab_changed && !opts?.suggest) {
+          const name = d.spreadsheet?.sheet_name;
+          showToast(
+            name
+              ? `Nieuw tabblad actief: "${name}" — controleer je veldkoppeling`
+              : 'Er is een nieuwer tabblad actief — controleer je veldkoppeling',
+          );
+          setDirty(true);
+        }
         if (opts?.suggest) {
           setDirty(true);
           showToast('Kolommen automatisch gekoppeld — controleer en sla op');

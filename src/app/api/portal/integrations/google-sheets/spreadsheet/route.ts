@@ -2,9 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyCustomer, portalUnauthorized } from '@/lib/portalAuth';
 import { createServerClient } from '@/lib/supabase';
 import { requireIntegrationOwner } from '@/lib/integrations/portalIntegrationAuth';
-import { googleSheetsAccessDeniedMessage, resolveGoogleSheetsAccessToken } from '@/lib/googleSheets/access';
+import { resolveSheetTabForSetup } from '@/lib/googleSheets/activeSheet';
+import { resolveGoogleSheetsAccessToken } from '@/lib/googleSheets/access';
+import { mapGoogleSheetsHttpError } from '@/lib/googleSheets/errors';
 import {
   ensureGoogleSheetsIntegrationRow,
+  getGoogleSheetsIntegrationPublic,
   markGoogleSheetsConnected,
   updateGoogleSheetsSettings,
 } from '@/lib/googleSheets/integrationRepo';
@@ -13,7 +16,6 @@ import {
   fetchSheetHeaderColumns,
   fetchSpreadsheetTabs,
   parseSpreadsheetUrl,
-  pickDefaultSheetTab,
   quoteSheetName,
 } from '@/lib/googleSheets/spreadsheet';
 
@@ -26,7 +28,6 @@ export async function POST(request: NextRequest) {
   const body = (await request.json()) as {
     spreadsheet_url?: string;
     sheet_gid?: number | null;
-    sheet_name?: string | null;
   };
 
   const url = body.spreadsheet_url?.trim();
@@ -47,34 +48,42 @@ export async function POST(request: NextRequest) {
     const accessToken = await resolveGoogleSheetsAccessToken(supabase, customerId);
     const tabs = await fetchSpreadsheetTabs(accessToken, parsed.spreadsheetId);
 
-    const preferredGid = body.sheet_gid ?? parsed.gid ?? null;
-    const tab = pickDefaultSheetTab(tabs, preferredGid);
-    const sheetName = body.sheet_name ?? tab?.title ?? null;
-    const sheetGid = tab?.sheetId ?? preferredGid ?? null;
+    const manualGid = body.sheet_gid != null ? body.sheet_gid : null;
+    const tab = await resolveSheetTabForSetup(
+      accessToken,
+      parsed.spreadsheetId,
+      manualGid,
+    );
 
-    if (!sheetName) {
+    if (!tab) {
       return NextResponse.json({ error: 'Geen werkblad gevonden in deze spreadsheet' }, { status: 400 });
     }
 
     const columns = await fetchSheetHeaderColumns(
       accessToken,
       parsed.spreadsheetId,
-      quoteSheetName(sheetName),
+      quoteSheetName(tab.title),
     );
+
+    const prev = await getGoogleSheetsIntegrationPublic(supabase, customerId);
+    const tabChanged =
+      prev?.settings.sheet_name !== tab.title || prev?.settings.sheet_gid !== tab.sheetId;
 
     await updateGoogleSheetsSettings(supabase, customerId, {
       spreadsheet_id: parsed.spreadsheetId,
       spreadsheet_url: url,
-      sheet_gid: sheetGid,
-      sheet_name: sheetName,
+      sheet_gid: tab.sheetId,
+      sheet_name: tab.title,
     });
     await markGoogleSheetsConnected(supabase, customerId);
 
     return NextResponse.json({
       spreadsheet_id: parsed.spreadsheetId,
       spreadsheet_url: url,
-      sheet_gid: sheetGid,
-      sheet_name: sheetName,
+      sheet_gid: tab.sheetId,
+      sheet_name: tab.title,
+      sheet_tab_changed: tabChanged,
+      uses_latest_tab: manualGid == null,
       tabs: tabs.map((t) => ({ sheet_id: t.sheetId, title: t.title })),
       columns: columns.map((c) => ({
         index: c.index,
@@ -85,10 +94,7 @@ export async function POST(request: NextRequest) {
       })),
     });
   } catch (err) {
-    const raw = err instanceof Error ? err.message : 'Spreadsheet laden mislukt';
-    const status = raw.includes('permission') || raw.includes('403') ? 403 : 502;
-    const message =
-      status === 403 ? googleSheetsAccessDeniedMessage() : raw;
+    const { message, status } = mapGoogleSheetsHttpError(err);
     return NextResponse.json({ error: message }, { status });
   }
 }
