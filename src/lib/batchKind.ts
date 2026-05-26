@@ -14,3 +14,7 @@ export function isPipelineBatchKind(kind: string | null | undefined): boolean {
 export function isBulkLeadsBatchKind(kind: string | null | undefined): boolean {
   return normalizeBatchKind(kind) === 'bulk_leads';
 }
+
+export function isNicheResearchBatchKind(kind: string | null | undefined): boolean {
+  return normalizeBatchKind(kind) === 'niche_research';
+}

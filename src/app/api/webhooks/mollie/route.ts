@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { getPayment } from '@/lib/mollie';
-import { backfillBatch } from '@/lib/distribution';
+import { backfillBatch, distributeUnassignedLeads } from '@/lib/distribution';
 import { sendOrderConfirmationEmail, sendEmail } from '@/lib/email';
 import { sendPushToCustomer } from '@/lib/pushNotification';
 import { createInvoice, notifyCustomerInvoicePaid, sendNewBatchAdminEmail } from '@/lib/invoice';
@@ -10,6 +10,7 @@ import { finalizePaidLeadBatch, finalizePaidBulkLeadBatch } from '@/lib/finalize
 import { isBulkLeadsBatchKind, isPipelineBatchKind } from '@/lib/batchKind';
 import { reconcileBatchMetaCampaigns } from '@/lib/metaBatchCampaignSync';
 import { metaInheritanceNoteSuffix, resolveMetaCampaignFieldsForNewLeadBatch } from '@/lib/metaCampaignInheritance';
+import { ensureCustomerHasBranch } from '@/lib/nicheResearch';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.warmeleads.eu';
 
@@ -342,13 +343,17 @@ export async function POST(request: NextRequest) {
           ? String((order as { niche_title?: string }).niche_title).trim()
           : '';
 
-      const nowIso = new Date().toISOString();
+      const orderLeadBranchSlug =
+        typeof (order as { lead_branch_slug?: string }).lead_branch_slug === 'string'
+          ? String((order as { lead_branch_slug: string }).lead_branch_slug).trim()
+          : '';
+
       const researchCompleted =
         orderBatchKind === 'niche_research'
           ? {
-              status: 'completed' as const,
-              leads_delivered: 1,
-              completed_at: nowIso,
+              status: 'active' as const,
+              leads_delivered: 0,
+              completed_at: null as string | null,
             }
           : { status: 'active' as const, leads_delivered: 0, completed_at: null as string | null };
 
@@ -389,6 +394,9 @@ export async function POST(request: NextRequest) {
         account_manager_id: orderCust?.account_manager_id || null,
         batch_kind: orderBatchKind,
         niche_title: orderNicheTitle || null,
+        ...(orderBatchKind === 'niche_research' && orderLeadBranchSlug
+          ? { lead_branch_slug: orderLeadBranchSlug }
+          : {}),
       };
 
       if (isPipelineBatchKind(orderBatchKind) && leadMetaResolved) {
@@ -429,6 +437,15 @@ export async function POST(request: NextRequest) {
         .from('batch_orders')
         .update({ batch_id: newBatch.id })
         .eq('id', orderId);
+
+      if (orderBatchKind === 'niche_research' && orderLeadBranchSlug) {
+        await ensureCustomerHasBranch(supabase, order.customer_id, orderLeadBranchSlug);
+        try {
+          distributeUnassignedLeads();
+        } catch {
+          /* non-blocking */
+        }
+      }
 
       if (order.welcome_discount_applied) {
         await supabase

@@ -6,6 +6,7 @@ import { createBatchPayment } from '@/lib/mollie';
 import { calculatePricePerLead, mergeCustomTiers } from '@/lib/pricing';
 import { computeInvoiceVat, mollieBtwLabel } from '@/lib/invoiceVat';
 import { loadWelcomeOfferStatus, welcomeDiscountAmount } from '@/lib/welcomeOffer';
+import { validateLeadBranchSlug } from '@/lib/nicheResearch';
 
 export async function GET(request: NextRequest) {
   const session = await verifyCustomer(request);
@@ -42,6 +43,7 @@ export async function POST(request: NextRequest) {
       leads_per_day: customerLeadsPerDay,
       batch_kind: rawBatchKind,
       niche_title: rawNicheTitle,
+      lead_branch_slug: rawLeadBranchSlug,
     } = body;
 
     const batchKind =
@@ -66,6 +68,12 @@ export async function POST(request: NextRequest) {
           { error: 'Geef een duidelijke naam voor de niche (minimaal 3 tekens).' },
           { status: 400 },
         );
+      }
+
+      const leadBranchSlug = typeof rawLeadBranchSlug === 'string' ? rawLeadBranchSlug.trim() : '';
+      const branchCheck = await validateLeadBranchSlug(supabase, leadBranchSlug);
+      if (!branchCheck.ok) {
+        return NextResponse.json({ error: branchCheck.error }, { status: 400 });
       }
 
       const RESEARCH_EXCL = 1000;
@@ -105,6 +113,7 @@ export async function POST(request: NextRequest) {
           welcome_discount_applied: false,
           batch_kind: 'niche_research',
           niche_title: nicheTitle,
+          lead_branch_slug: leadBranchSlug,
         })
         .select()
         .single();

@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { checkBatchMilestones } from './batchNotifications';
-import { isPipelineBatchKind } from './batchKind';
+import { isNicheResearchBatchKind, isPipelineBatchKind } from './batchKind';
 import { reconcileBatchMetaCampaigns } from './metaBatchCampaignSync';
 
 /**
@@ -31,8 +31,10 @@ export async function syncBatchDelivered(
   const delivered = assignmentCount + external;
 
   const updates: Record<string, unknown> = { leads_delivered: delivered };
+  const isNicheResearch = isNicheResearchBatchKind((batch as { batch_kind?: string }).batch_kind);
 
   if (
+    !isNicheResearch &&
     delivered >= batch.batch_size &&
     (batch.status === 'active' || batch.status === 'paused')
   ) {
@@ -59,7 +61,7 @@ export async function syncBatchDelivered(
         });
       }
     } catch { /* non-critical */ }
-  } else if (delivered < batch.batch_size && batch.status === 'completed') {
+  } else if (!isNicheResearch && delivered < batch.batch_size && batch.status === 'completed') {
     updates.status = batch.is_paid ? 'active' : 'pending_payment';
     updates.completed_at = null;
   }

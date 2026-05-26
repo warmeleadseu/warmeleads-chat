@@ -276,9 +276,6 @@ export async function distributeLead(
   ctx?: DistributeLeadContext,
 ): Promise<DistributionResult> {
   const result: DistributionResult = { lead_id: lead.id, assignments: [] };
-  const hasCoords = !!(lead.lat && lead.lng);
-  const hasProv = !!(lead as any).provincie;
-  if (!hasCoords && !hasProv) return result;
 
   // Never distribute demo leads to real customers (early check before DB fetch)
   if (lead.bron === 'demo') return result;
@@ -294,6 +291,23 @@ export async function distributeLead(
   // Double-check after DB fetch in case bron wasn't passed by caller
   if (fullLead.bron === 'demo') return result;
 
+  // Niche-onderzoek: geen geo vereist; telt niet mee voor pipeline 12u-cooldown
+  if (fullLead.phone_valid !== false) {
+    const { tryAssignLeadToNicheResearchBatch } = await import('./nicheResearchDistribution');
+    const nicheHit = await tryAssignLeadToNicheResearchBatch(supabase, fullLead);
+    if (nicheHit) {
+      result.assignments.push({
+        customer_id: nicheHit.customer_id,
+        batch_id: nicheHit.batch_id,
+        distance_km: null,
+      });
+    }
+  }
+
+  const hasCoords = !!(fullLead.lat && fullLead.lng);
+  const hasProv = !!(fullLead as { provincie?: string }).provincie;
+  if (!hasCoords && !hasProv) return result;
+
   if (fullLead.phone_valid === false) {
     const allow = ctx?.allowInvalidPhoneForCustomerIds;
     if (!allow?.length) return result;
@@ -301,18 +315,23 @@ export async function distributeLead(
 
   const { data: existingAssignments } = await supabase
     .from('lead_assignments')
-    .select('customer_id, assigned_at')
+    .select('customer_id, assigned_at, batch_id, customer_batches(batch_kind)')
     .eq('lead_id', lead.id);
+
+  const pipelineCooldownAssignments = (existingAssignments || []).filter((a) => {
+    const kind = (a as { customer_batches?: { batch_kind?: string } | null }).customer_batches?.batch_kind;
+    return kind !== 'niche_research';
+  });
 
   const reassignmentCutoff = new Date(Date.now() - REASSIGNMENT_COOLDOWN_DAYS * 24 * 60 * 60 * 1000);
   const recentAssignments = (existingAssignments || []).filter(a => new Date(a.assigned_at) >= reassignmentCutoff);
   const recentAssignedIds = new Set(recentAssignments.map(a => a.customer_id));
   if (recentAssignedIds.size >= effectiveMaxAssignments(fullLead as LeadForDistribution)) return result;
 
-  // 12-hour cooldown: skip if assigned to anyone in the last COOLDOWN_HOURS
-  if (existingAssignments && existingAssignments.length > 0) {
+  // 12-hour cooldown: alleen pipeline-toewijzingen (niche-onderzoek blokkeert andere klanten niet structureel)
+  if (pipelineCooldownAssignments.length > 0) {
     const cooldownCutoff = new Date(Date.now() - COOLDOWN_HOURS * 60 * 60 * 1000);
-    const cooldownHit = existingAssignments.find(a =>
+    const cooldownHit = pipelineCooldownAssignments.find(a =>
       new Date(a.assigned_at) > cooldownCutoff
     );
     if (cooldownHit) return result;

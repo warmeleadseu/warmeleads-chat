@@ -75,6 +75,7 @@ interface Batch {
   created_at: string; completed_at: string | null;
   batch_kind?: string | null;
   niche_title?: string | null;
+  lead_branch_slug?: string | null;
   meta_campaign_ids?: string[] | null;
   meta_campaign_paused_ids?: string[] | null;
   meta_campaign_sync_enabled?: boolean | null;
@@ -96,6 +97,10 @@ interface Batch {
 
 function isBulkLeadsBatch(b: Pick<Batch, 'batch_kind'>): boolean {
   return (b.batch_kind || 'leads') === 'bulk_leads';
+}
+
+function isNicheResearchBatch(b: Pick<Batch, 'batch_kind'>): boolean {
+  return (b.batch_kind || '') === 'niche_research';
 }
 interface BranchOption { slug: string; name: string; color: string; is_active: boolean }
 interface Customer { id: string; name: string; is_active: boolean }
@@ -1201,14 +1206,27 @@ function BatchDetailPanel({ batchId, branches, onClose, onEdit, onListRefresh }:
                   </div>
                 )}
 
-                {(batch.batch_kind || '') === 'niche_research' && (
+                {isNicheResearchBatch(batch) && (
                   <div className="rounded-lg border border-fuchsia-200 bg-fuchsia-50/60 px-3 py-2.5 text-xs text-fuchsia-950">
                     <p className="font-medium">Onderzoeksbatch (€1.000 excl. btw)</p>
                     {batch.niche_title ? (
                       <p className="mt-1 font-semibold text-fuchsia-900">&ldquo;{batch.niche_title}&rdquo;</p>
                     ) : null}
+                    {batch.lead_branch_slug ? (
+                      <p className="mt-1 text-fuchsia-900/90">
+                        Inbound branche:{' '}
+                        <span className="font-semibold">
+                          {getBranch(batch.lead_branch_slug).name}
+                        </span>{' '}
+                        <span className="font-mono text-[10px]">({batch.lead_branch_slug})</span>
+                      </p>
+                    ) : (
+                      <p className="mt-1 font-medium text-amber-800">
+                        Geen inbound-branche gekoppeld — leads worden nog niet automatisch ingeladen.
+                      </p>
+                    )}
                     <p className="mt-1 text-fuchsia-900/90">
-                      Geen automatische lead-pijplijn. Zelfde product als portaal; bedrag wordt volgens afspraak gecrediteerd in latere leadlevering.
+                      Actieve, betaalde batches ontvangen automatisch inbound leads (geldig telefoonnummer) op de gekoppelde branche in het klantportaal. Geen geo-pijplijn.
                     </p>
                   </div>
                 )}
@@ -1218,19 +1236,27 @@ function BatchDetailPanel({ batchId, branches, onClose, onEdit, onListRefresh }:
                   <div className="mb-2 flex items-baseline justify-between">
                     <div>
                       <span className="text-lg font-bold text-slate-900">{batch.leads_delivered}</span>
-                      <span className="text-sm text-slate-400"> / {batch.batch_size} geleverd</span>
+                      {isNicheResearchBatch(batch) ? (
+                        <span className="text-sm text-slate-500"> onderzoeksleads ingeladen</span>
+                      ) : (
+                        <span className="text-sm text-slate-400"> / {batch.batch_size} geleverd</span>
+                      )}
                       {totalComp > 0 && (
                         <span className="ml-2 text-xs font-medium text-emerald-600">+{totalComp} compensatie</span>
                       )}
                     </div>
-                    <span className="text-sm font-bold text-slate-600">{pct}%</span>
+                    {!isNicheResearchBatch(batch) && (
+                      <span className="text-sm font-bold text-slate-600">{pct}%</span>
+                    )}
                   </div>
+                  {!isNicheResearchBatch(batch) && (
                   <div className="h-3 overflow-hidden rounded-full bg-slate-200">
                     <div className={`h-full rounded-full transition-all ${pct >= 100 ? 'bg-blue-500' : pct >= 75 ? 'bg-emerald-500' : pct >= 50 ? 'bg-amber-500' : 'bg-brand-purple'}`}
                       style={{ width: `${pct}%` }} />
                   </div>
+                  )}
                   <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5">
-                    {batch.leads_delivered > batch.batch_size && (
+                    {!isNicheResearchBatch(batch) && batch.leads_delivered > batch.batch_size && (
                       <p className="text-[11px] font-medium text-amber-600">Overlevering: {batch.leads_delivered - batch.batch_size} extra</p>
                     )}
                     {batch.leads_delivered_external > 0 && (
@@ -1537,7 +1563,9 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
   batch: Batch; branches: BranchOption[]; customers: Customer[];
   onClose: () => void; onSaved: () => void;
 }) {
+  const isNicheResearch = isNicheResearchBatch(batch);
   const initStartsAt = batch.starts_at ? new Date(batch.starts_at) : null;
+  const [leadBranchSlug, setLeadBranchSlug] = useState(batch.lead_branch_slug || '');
   const [form, setForm] = useState({
     batch_size: batch.batch_size,
     leads_delivered: batch.leads_delivered,
@@ -1611,6 +1639,9 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
       if (extraLeads > 0) {
         payload.compensation = { amount: extraLeads, reason: extraReason };
       }
+      if (isNicheResearch) {
+        payload.lead_branch_slug = leadBranchSlug;
+      }
       const res = await adminFetch('/api/admin/batches', {
         method: 'PUT',
         body: JSON.stringify(payload),
@@ -1629,13 +1660,18 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
   const deliveredChanged = form.leads_delivered !== batch.leads_delivered;
   const sizeChanged = effectiveBatchSize !== batch.batch_size;
   const reopenStatus =
-    form.leads_delivered < effectiveBatchSize && batch.status === 'completed'
+    !isNicheResearch &&
+    form.leads_delivered < effectiveBatchSize &&
+    batch.status === 'completed'
       ? batch.is_paid
         ? 'active'
         : 'pending_payment'
       : null;
-  const autoStatus =
-    form.leads_delivered >= effectiveBatchSize ? 'completed' : reopenStatus ?? batch.status;
+  const autoStatus = isNicheResearch
+    ? batch.status
+    : form.leads_delivered >= effectiveBatchSize
+      ? 'completed'
+      : reopenStatus ?? batch.status;
 
   return (
     <>
@@ -1656,16 +1692,46 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
         </div>
 
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
+          {isNicheResearch && (
+            <div className="space-y-3 rounded-lg border border-fuchsia-200 bg-fuchsia-50/50 p-3">
+              <p className="text-xs font-semibold text-fuchsia-950">Onderzoeksbatch</p>
+              {batch.niche_title && (
+                <p className="text-sm font-medium text-fuchsia-900">&ldquo;{batch.niche_title}&rdquo;</p>
+              )}
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-600">Inbound lead-branche (Zapier) *</label>
+                <select
+                  value={leadBranchSlug}
+                  onChange={e => setLeadBranchSlug(e.target.value)}
+                  className="w-full rounded-lg border border-fuchsia-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-fuchsia-500/50"
+                >
+                  <option value="">Kies branche…</option>
+                  {branches.filter(b => b.is_active && b.slug !== 'niche_research').map(b => (
+                    <option key={b.slug} value={b.slug}>{b.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
+
           {/* Live progress */}
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
             <div className="mb-1 flex items-baseline justify-between">
-              <span className="text-sm font-bold text-slate-800">{form.leads_delivered} / {effectiveBatchSize} geleverd</span>
-              <span className="text-xs font-medium text-slate-500">{livePct}%</span>
+              <span className="text-sm font-bold text-slate-800">
+                {isNicheResearch
+                  ? `${form.leads_delivered} onderzoeksleads ingeladen`
+                  : `${form.leads_delivered} / ${effectiveBatchSize} geleverd`}
+              </span>
+              {!isNicheResearch && (
+                <span className="text-xs font-medium text-slate-500">{livePct}%</span>
+              )}
             </div>
+            {!isNicheResearch && (
             <div className="h-2.5 overflow-hidden rounded-full bg-slate-200">
               <div className={`h-full rounded-full transition-all duration-300 ${livePct >= 100 ? 'bg-blue-500' : livePct >= 75 ? 'bg-emerald-500' : livePct >= 50 ? 'bg-amber-500' : 'bg-brand-purple'}`}
                 style={{ width: `${livePct}%` }} />
             </div>
+            )}
             <div className="mt-1.5 flex items-center justify-between">
               <p className="text-[11px] text-slate-400">Status: {STATUS_LABELS[autoStatus] || autoStatus}</p>
               {(deliveredChanged || sizeChanged) && autoStatus !== batch.status && (
@@ -1677,9 +1743,11 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
           </div>
 
           {/* Fields */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className={`grid gap-3 ${isNicheResearch ? 'grid-cols-1' : 'grid-cols-2'}`}>
             <div>
-              <label className="mb-1 block text-xs font-medium text-slate-500">Geleverde leads</label>
+              <label className="mb-1 block text-xs font-medium text-slate-500">
+                {isNicheResearch ? 'Ingeladen onderzoeksleads' : 'Geleverde leads'}
+              </label>
               <input type="number" value={form.leads_delivered} onChange={e => setForm(f => ({ ...f, leads_delivered: Math.max(0, Number(e.target.value)) }))} min={0}
                 className={`w-full rounded-lg border px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50 ${
                   deliveredChanged ? 'border-amber-300 bg-amber-50/50 ring-1 ring-amber-200' : 'border-slate-200'
@@ -1694,14 +1762,17 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
                 <p className="mt-1 text-[10px] text-slate-400">Pas aan voor extern geleverde leads (mail/Excel)</p>
               )}
             </div>
+            {!isNicheResearch && (
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-500">Batch grootte</label>
               <input type="number" value={form.batch_size} onChange={e => setForm(f => ({ ...f, batch_size: Math.max(1, Number(e.target.value)) }))} min={1}
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
             </div>
+            )}
           </div>
 
           {/* Extra leads toevoegen (compensatie) */}
+          {!isNicheResearch && (
           <div className="rounded-lg border border-dashed border-brand-purple/30 bg-brand-purple/5 p-3">
             <div className="mb-2 flex items-center gap-2">
               <PlusIcon className="h-4 w-4 text-brand-purple" />
@@ -1758,7 +1829,9 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
               </div>
             )}
           </div>
+          )}
 
+          {!isNicheResearch && (
           <div className="grid grid-cols-3 gap-3">
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-500">Per dag</label>
@@ -1779,6 +1852,7 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
             </div>
           </div>
+          )}
 
           <div>
             <label className="mb-1 block text-xs font-medium text-slate-500">Notities</label>
@@ -1972,6 +2046,7 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
     leads_per_day: '', leads_per_week: '', lookback_days: '3', notes: '', lead_filters: [] as LeadFilter[],
     batch_delivery: 'pipeline' as 'pipeline' | 'bulk' | 'niche_research',
     niche_title: '',
+    lead_branch_slug: '',
     // Standaard verstuurt het systeem direct een betaallink-mail naar de klant bij
     // een open factuur. Admin/AM kan dit hier uitvinken om alleen de factuur +
     // Mollie-checkout aan te maken zonder mail.
@@ -2154,8 +2229,8 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
     }
 
     if (form.batch_delivery === 'niche_research') {
-      if (!form.customer_id || form.niche_title.trim().length < 3) {
-        alert('Kies een klant en vul een duidelijke nichenaam in (minimaal 3 tekens).');
+      if (!form.customer_id || form.niche_title.trim().length < 3 || !form.lead_branch_slug) {
+        alert('Kies een klant, inbound branche en vul een duidelijke nichenaam in (minimaal 3 tekens).');
         return;
       }
     } else if (!form.customer_id || !form.branch || !form.batch_size) {
@@ -2176,6 +2251,7 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
             customer_id: form.customer_id,
             batch_kind: 'niche_research',
             niche_title: form.niche_title.trim(),
+            lead_branch_slug: form.lead_branch_slug,
             is_paid: form.is_paid,
             notes: form.notes || null,
             ...(startsAtISO ? { starts_at: startsAtISO } : {}),
@@ -2359,7 +2435,23 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
               </div>
               <div className="rounded-lg border border-fuchsia-200 bg-fuchsia-50/50 px-3 py-2 text-[11px] text-fuchsia-950">
                 <p className="font-semibold">Vast pakket</p>
-                <p className="mt-0.5 text-fuchsia-900/90">1 × €1.000 excl. btw · geen lead-staffel · branche <span className="font-mono text-[10px]">niche_research</span> wordt automatisch gezet.</p>
+                <p className="mt-0.5 text-fuchsia-900/90">1 × €1.000 excl. btw · facturatie op systeem-branche <span className="font-mono text-[10px]">niche_research</span>.</p>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-500">Inbound lead-branche (Zapier) *</label>
+                <select
+                  value={form.lead_branch_slug}
+                  onChange={e => setForm(f => ({ ...f, lead_branch_slug: e.target.value }))}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-fuchsia-500/50"
+                >
+                  <option value="">Kies branche…</option>
+                  {activeBranches.filter(b => b.slug !== 'niche_research').map(b => (
+                    <option key={b.slug} value={b.slug}>{b.name}</option>
+                  ))}
+                </select>
+                <p className="mt-1 text-[10px] text-slate-500">
+                  Leads op deze branche worden automatisch aan de onderzoeksbatch gekoppeld zodra de batch actief en betaald is.
+                </p>
               </div>
             </div>
           )}

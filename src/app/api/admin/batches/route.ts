@@ -13,6 +13,10 @@ import {
 } from '@/lib/metaBatchCampaignSync';
 import { adminBatchListSelect } from '@/lib/adminBatchQueries';
 import { resolveMetaCampaignFieldsForNewLeadBatch, upsertCustomerBranchMetaDefaults } from '@/lib/metaCampaignInheritance';
+import {
+  ensureCustomerHasBranch,
+  validateLeadBranchSlug,
+} from '@/lib/nicheResearch';
 
 function sanitizeMetaCampaignIdsInput(raw: unknown): string[] | undefined {
   if (raw === undefined) return undefined;
@@ -73,6 +77,7 @@ export async function POST(request: NextRequest) {
     customer_id, branch, batch_size, price_per_lead, leads_per_week, leads_per_day, notes, lead_filters, lookback_days, starts_at,
     batch_kind: rawBatchKind,
     niche_title: rawNicheTitle,
+    lead_branch_slug: rawLeadBranchSlug,
   } = body;
   const batch_kind = normalizeBatchKind(typeof rawBatchKind === 'string' ? rawBatchKind : undefined);
   // Optionele betaallink-mail bij open factuur. Default true (backwards compat); admin/AM
@@ -96,6 +101,12 @@ export async function POST(request: NextRequest) {
         { error: 'Geef een duidelijke naam voor de niche (minimaal 3 tekens).' },
         { status: 400 },
       );
+    }
+
+    const leadBranchSlug = typeof rawLeadBranchSlug === 'string' ? rawLeadBranchSlug.trim() : '';
+    const branchCheck = await validateLeadBranchSlug(supabase, leadBranchSlug);
+    if (!branchCheck.ok) {
+      return NextResponse.json({ error: branchCheck.error }, { status: 400 });
     }
 
     const RESEARCH_EXCL = 1000;
@@ -136,11 +147,14 @@ export async function POST(request: NextRequest) {
         account_manager_id: custRow.account_manager_id || null,
         batch_kind: 'niche_research',
         niche_title: nicheTitle,
+        lead_branch_slug: leadBranchSlug,
       })
       .select()
       .single();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    await ensureCustomerHasBranch(supabase, customer_id, leadBranchSlug);
 
     const batchIsPaid = nichePaid;
     const { data: brRow } = await supabase.from('branches').select('name').eq('slug', branchSlug).maybeSingle();
@@ -176,6 +190,14 @@ export async function POST(request: NextRequest) {
       });
     } catch (e) {
       console.error('[admin/batches] invoice creation failed:', e);
+    }
+
+    if (nichePaid && data.status === 'active') {
+      try {
+        distributeUnassignedLeads();
+      } catch {
+        /* non-blocking */
+      }
     }
 
     return NextResponse.json(data, { status: 201 });
@@ -382,6 +404,16 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: 'Onderzoeksbatch heeft altijd omvang 1.' }, { status: 400 });
   }
 
+  if (isNicheExisting && body.lead_branch_slug !== undefined) {
+    const slug = typeof body.lead_branch_slug === 'string' ? body.lead_branch_slug.trim() : '';
+    const branchCheck = await validateLeadBranchSlug(supabase, slug);
+    if (!branchCheck.ok) {
+      return NextResponse.json({ error: branchCheck.error }, { status: 400 });
+    }
+    updates.lead_branch_slug = slug;
+    await ensureCustomerHasBranch(supabase, existing.customer_id, slug);
+  }
+
   // Recalculate total_price - exclude compensation leads (those are free)
   if (!isNicheExisting && (updates.batch_size || updates.price_per_lead)) {
     const ppl = updates.price_per_lead ?? existing.price_per_lead;
@@ -413,7 +445,7 @@ export async function PUT(request: NextRequest) {
     const paidForLifecycle =
       updates.is_paid !== undefined ? updates.is_paid === true : existing.is_paid === true;
 
-    if (!updates.status) {
+    if (!updates.status && !isNicheExisting) {
       if (
         updates.leads_delivered >= batchSize &&
         (existing.status === 'active' || existing.status === 'paused')
@@ -434,6 +466,7 @@ export async function PUT(request: NextRequest) {
     'notes', 'lead_filters', 'status', 'completed_at', 'lookback_days',
     'compensations', 'starts_at', 'account_manager_id', 'batch_kind', 'niche_title',
     'meta_campaign_ids', 'meta_campaign_paused_ids', 'meta_campaign_sync_enabled',
+    'lead_branch_slug',
   ];
   const safeUpdates: Record<string, unknown> = {};
   for (const key of allowedFields) {
