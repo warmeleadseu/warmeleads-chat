@@ -2,15 +2,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyCustomer, portalUnauthorized } from '@/lib/portalAuth';
 import { createServerClient } from '@/lib/supabase';
 import { requireIntegrationOwner } from '@/lib/integrations/portalIntegrationAuth';
+import { googleSheetsAccessDeniedMessage, resolveGoogleSheetsAccessToken } from '@/lib/googleSheets/access';
 import {
-  ensureValidGoogleAccessToken,
-  getGoogleSheetsIntegration,
+  ensureGoogleSheetsIntegrationRow,
+  markGoogleSheetsConnected,
+  updateGoogleSheetsSettings,
 } from '@/lib/googleSheets/integrationRepo';
 import {
   columnIndexToLetter,
   fetchSheetHeaderColumns,
   fetchSpreadsheetTabs,
   parseSpreadsheetUrl,
+  pickDefaultSheetTab,
   quoteSheetName,
 } from '@/lib/googleSheets/spreadsheet';
 
@@ -37,26 +40,17 @@ export async function POST(request: NextRequest) {
   }
 
   const supabase = createServerClient();
-  const integration = await getGoogleSheetsIntegration(supabase, session.customer.id);
-  if (!integration?.connected_at) {
-    return NextResponse.json({ error: 'Koppel eerst je Google-account' }, { status: 400 });
-  }
+  const customerId = session.customer.id;
 
   try {
-    const accessToken = await ensureValidGoogleAccessToken(supabase, integration);
+    await ensureGoogleSheetsIntegrationRow(supabase, customerId);
+    const accessToken = await resolveGoogleSheetsAccessToken(supabase, customerId);
     const tabs = await fetchSpreadsheetTabs(accessToken, parsed.spreadsheetId);
 
-    let sheetName = body.sheet_name ?? null;
-    let sheetGid = body.sheet_gid ?? parsed.gid ?? null;
-
-    if (sheetGid != null) {
-      const tab = tabs.find((t) => t.sheetId === sheetGid);
-      if (tab) sheetName = tab.title;
-    }
-    if (!sheetName && tabs[0]) {
-      sheetName = tabs[0].title;
-      sheetGid = tabs[0].sheetId;
-    }
+    const preferredGid = body.sheet_gid ?? parsed.gid ?? null;
+    const tab = pickDefaultSheetTab(tabs, preferredGid);
+    const sheetName = body.sheet_name ?? tab?.title ?? null;
+    const sheetGid = tab?.sheetId ?? preferredGid ?? null;
 
     if (!sheetName) {
       return NextResponse.json({ error: 'Geen werkblad gevonden in deze spreadsheet' }, { status: 400 });
@@ -67,6 +61,14 @@ export async function POST(request: NextRequest) {
       parsed.spreadsheetId,
       quoteSheetName(sheetName),
     );
+
+    await updateGoogleSheetsSettings(supabase, customerId, {
+      spreadsheet_id: parsed.spreadsheetId,
+      spreadsheet_url: url,
+      sheet_gid: sheetGid,
+      sheet_name: sheetName,
+    });
+    await markGoogleSheetsConnected(supabase, customerId);
 
     return NextResponse.json({
       spreadsheet_id: parsed.spreadsheetId,
@@ -83,7 +85,10 @@ export async function POST(request: NextRequest) {
       })),
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Spreadsheet laden mislukt';
-    return NextResponse.json({ error: message }, { status: 502 });
+    const raw = err instanceof Error ? err.message : 'Spreadsheet laden mislukt';
+    const status = raw.includes('permission') || raw.includes('403') ? 403 : 502;
+    const message =
+      status === 403 ? googleSheetsAccessDeniedMessage() : raw;
+    return NextResponse.json({ error: message }, { status });
   }
 }

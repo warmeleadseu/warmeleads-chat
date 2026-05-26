@@ -22,6 +22,21 @@ export function columnIndexToLetter(index: number): string {
   return s;
 }
 
+/**
+ * Standaard het laatste tabblad (zoals gevraagd in portaal-setup), tenzij gid expliciet is gezet.
+ */
+export function pickDefaultSheetTab(
+  tabs: SheetTab[],
+  preferredGid?: number | null,
+): SheetTab | null {
+  if (tabs.length === 0) return null;
+  if (preferredGid != null) {
+    const match = tabs.find((t) => t.sheetId === preferredGid);
+    if (match) return match;
+  }
+  return tabs[tabs.length - 1];
+}
+
 export function parseSpreadsheetUrl(url: string): { spreadsheetId: string; gid?: number } | null {
   const trimmed = url.trim();
   const idMatch = trimmed.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);

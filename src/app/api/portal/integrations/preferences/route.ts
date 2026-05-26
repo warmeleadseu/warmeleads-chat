@@ -18,7 +18,7 @@ import {
   isGoogleSheetsSyncReady,
   isTeamleaderSyncReady,
 } from '@/lib/integrations/syncRouting';
-import { getGoogleSheetsIntegration } from '@/lib/googleSheets/integrationRepo';
+import { getGoogleSheetsIntegrationPublic } from '@/lib/googleSheets/integrationRepo';
 import { getTeamleaderIntegration } from '@/lib/teamleader/integrationRepo';
 import { getCustomerOAuthConfig, getGlobalOAuthConfig } from '@/lib/teamleader/credentials';
 
@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
   ] = await Promise.all([
     getPreferredCrmProvider(supabase, customerId),
     getTeamleaderIntegration(supabase, customerId),
-    getGoogleSheetsIntegration(supabase, customerId),
+    getGoogleSheetsIntegrationPublic(supabase, customerId),
     getCustomerOAuthConfig(supabase, customerId),
     getGlobalOAuthConfig(),
   ]);

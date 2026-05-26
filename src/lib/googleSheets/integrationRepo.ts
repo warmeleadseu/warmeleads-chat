@@ -4,6 +4,8 @@ import { getGoogleOAuthConfig } from './config';
 import { refreshGoogleAccessToken } from './oauth';
 import {
   GOOGLE_SHEETS_PROVIDER,
+  type GoogleSheetsConnectionMode,
+  type GoogleSheetsIntegrationPublic,
   type GoogleSheetsIntegrationSettings,
   type GoogleSheetsTokenPair,
 } from './types';
@@ -68,6 +70,87 @@ export async function getGoogleSheetsIntegrationRow(
   return (data as IntegrationRow | null) ?? null;
 }
 
+function inferConnectionMode(row: IntegrationRow): GoogleSheetsConnectionMode | null {
+  if (row.settings?.connection_mode) return row.settings.connection_mode;
+  if (row.access_token_enc && row.refresh_token_enc) return 'oauth';
+  if (row.connected_at) return 'service_account';
+  return null;
+}
+
+export function rowToGoogleSheetsIntegrationPublic(
+  row: IntegrationRow,
+): GoogleSheetsIntegrationPublic {
+  return {
+    id: row.id,
+    customer_id: row.customer_id,
+    settings: row.settings ?? { enabled: true },
+    connected_at: row.connected_at,
+    connection_mode: inferConnectionMode(row),
+  };
+}
+
+export async function getGoogleSheetsIntegrationPublic(
+  supabase: SupabaseClient,
+  customerId: string,
+): Promise<GoogleSheetsIntegrationPublic | null> {
+  const row = await getGoogleSheetsIntegrationRow(supabase, customerId);
+  if (!row) return null;
+  return rowToGoogleSheetsIntegrationPublic(row);
+}
+
+/** Zorgt voor een customer_integrations-rij zonder OAuth. */
+export async function ensureGoogleSheetsIntegrationRow(
+  supabase: SupabaseClient,
+  customerId: string,
+): Promise<IntegrationRow> {
+  const existing = await getGoogleSheetsIntegrationRow(supabase, customerId);
+  if (existing) return existing;
+
+  const now = new Date().toISOString();
+  const settings: GoogleSheetsIntegrationSettings = {
+    enabled: true,
+    connection_mode: 'service_account',
+  };
+  const { error } = await supabase.from('customer_integrations').insert({
+    customer_id: customerId,
+    provider: GOOGLE_SHEETS_PROVIDER,
+    settings,
+    connected_at: null,
+    updated_at: now,
+  });
+  if (error) throw new Error(error.message);
+
+  const row = await getGoogleSheetsIntegrationRow(supabase, customerId);
+  if (!row) throw new Error('Google Sheets-koppeling aanmaken mislukt');
+  return row;
+}
+
+/** Markeert koppeling actief na succesvolle spreadsheet-setup (zonder Google-login). */
+export async function markGoogleSheetsConnected(
+  supabase: SupabaseClient,
+  customerId: string,
+): Promise<void> {
+  const row = await ensureGoogleSheetsIntegrationRow(supabase, customerId);
+  if (row.connected_at && row.settings?.connection_mode === 'oauth') return;
+
+  const now = new Date().toISOString();
+  const settings: GoogleSheetsIntegrationSettings = {
+    ...(row.settings ?? {}),
+    enabled: true,
+    connection_mode: row.access_token_enc ? 'oauth' : 'service_account',
+  };
+  const { error } = await supabase
+    .from('customer_integrations')
+    .update({
+      connected_at: row.connected_at ?? now,
+      settings,
+      updated_at: now,
+    })
+    .eq('customer_id', customerId)
+    .eq('provider', GOOGLE_SHEETS_PROVIDER);
+  if (error) throw new Error(error.message);
+}
+
 export async function saveGoogleSheetsTokens(
   supabase: SupabaseClient,
   customerId: string,
@@ -78,6 +161,7 @@ export async function saveGoogleSheetsTokens(
   const settings: GoogleSheetsIntegrationSettings = {
     ...(existing?.settings ?? {}),
     enabled: true,
+    connection_mode: 'oauth',
   };
   const payload = {
     customer_id: customerId,
@@ -143,8 +227,7 @@ export async function updateGoogleSheetsSettings(
   customerId: string,
   patch: Partial<GoogleSheetsIntegrationSettings>,
 ): Promise<GoogleSheetsIntegrationSettings> {
-  const row = await getGoogleSheetsIntegrationRow(supabase, customerId);
-  if (!row) throw new Error('Geen Google Sheets-koppeling');
+  const row = await ensureGoogleSheetsIntegrationRow(supabase, customerId);
   const settings: GoogleSheetsIntegrationSettings = { ...(row.settings ?? {}), ...patch };
   const { error } = await supabase
     .from('customer_integrations')

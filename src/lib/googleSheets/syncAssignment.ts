@@ -10,10 +10,8 @@ import {
   mergeSheetMappings,
   suggestSheetColumnMapping,
 } from './fieldMappingLogic';
-import {
-  ensureValidGoogleAccessToken,
-  getGoogleSheetsIntegration,
-} from './integrationRepo';
+import { resolveGoogleSheetsAccessToken } from './access';
+import { getGoogleSheetsIntegrationPublic } from './integrationRepo';
 import { GOOGLE_SHEETS_PROVIDER } from './types';
 
 export type SyncAssignmentArgs = {
@@ -44,7 +42,7 @@ export async function syncAssignmentToGoogleSheets(args: SyncAssignmentArgs): Pr
   const supabase = createServerClient();
   const { customerId, leadId, assignmentId } = args;
 
-  const integration = await getGoogleSheetsIntegration(supabase, customerId);
+  const integration = await getGoogleSheetsIntegrationPublic(supabase, customerId);
   if (!integration?.connected_at) return;
   if (integration.settings.enabled === false) return;
 
@@ -93,7 +91,7 @@ export async function syncAssignmentToGoogleSheets(args: SyncAssignmentArgs): Pr
   }
 
   try {
-    const accessToken = await ensureValidGoogleAccessToken(supabase, integration);
+    const accessToken = await resolveGoogleSheetsAccessToken(supabase, customerId);
     const quotedSheet = quoteSheetName(sheetName);
 
     const branchSlug = lead.branch || '';

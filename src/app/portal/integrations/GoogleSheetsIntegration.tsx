@@ -4,9 +4,9 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { portalFetch } from '@/lib/portalAuth';
 import { T } from '../_ui';
 import {
-  LinkIcon,
   ArrowPathIcon,
   CheckCircleIcon,
+  ClipboardDocumentIcon,
   ExclamationTriangleIcon,
   TableCellsIcon,
 } from '@heroicons/react/24/outline';
@@ -22,8 +22,9 @@ type SyncRow = {
 };
 
 type StatusResponse = {
-  oauth_configured: boolean;
   api_key_configured?: boolean;
+  service_account_configured?: boolean;
+  service_account_email?: string;
   server_ready?: boolean;
   connected: boolean;
   spreadsheet_configured: boolean;
@@ -56,8 +57,6 @@ function formatSyncTime(iso: string): string {
 
 export function GoogleSheetsIntegration({
   showToast,
-  oauthHint,
-  oauthReason,
   embedded = false,
   onHubRefresh,
 }: {
@@ -65,7 +64,6 @@ export function GoogleSheetsIntegration({
   oauthHint?: string | null;
   oauthReason?: string | null;
   embedded?: boolean;
-  /** Stille hub-refresh (geen volledige loading-skeleton). */
   onHubRefresh?: () => void;
 }) {
   const [loading, setLoading] = useState(true);
@@ -77,6 +75,7 @@ export function GoogleSheetsIntegration({
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [syncEnabled, setSyncEnabled] = useState(true);
+  const [copiedEmail, setCopiedEmail] = useState(false);
 
   const hubRefreshRef = useRef(onHubRefresh);
   hubRefreshRef.current = onHubRefresh;
@@ -110,27 +109,18 @@ export function GoogleSheetsIntegration({
     void loadStatus();
   }, [loadStatus]);
 
-  useEffect(() => {
-    if (!oauthHint) return;
-    if (oauthHint === 'connected') {
-      showToast('Google-account gekoppeld', 'success');
-      void loadStatus({ silent: true });
-      notifyHub();
-    } else if (oauthHint === 'error') {
-      showToast(`Koppelen mislukt: ${describeOauthError(oauthReason)}`, 'error');
-    }
-    if (typeof window !== 'undefined') {
-      const url = new URL(window.location.href);
-      url.searchParams.delete('sheets');
-      url.searchParams.delete('sheets_reason');
-      url.searchParams.delete('reason');
-      if (!url.searchParams.has('tab')) url.searchParams.set('tab', 'integraties');
-      window.history.replaceState({}, '', url.toString());
-    }
-  }, [oauthHint, oauthReason, showToast, loadStatus, notifyHub]);
+  const serviceAccountEmail = status?.service_account_email ?? '';
 
-  const connectGoogle = () => {
-    window.location.href = '/api/portal/integrations/google-sheets/connect';
+  const copyServiceAccountEmail = async () => {
+    if (!serviceAccountEmail) return;
+    try {
+      await navigator.clipboard.writeText(serviceAccountEmail);
+      setCopiedEmail(true);
+      showToast('E-mailadres gekopieerd');
+      setTimeout(() => setCopiedEmail(false), 2000);
+    } catch {
+      showToast('Kopiëren mislukt — kopieer het adres handmatig', 'error');
+    }
   };
 
   const disconnect = async () => {
@@ -140,6 +130,7 @@ export function GoogleSheetsIntegration({
     });
     if (res.ok) {
       showToast('Google Spreadsheets ontkoppeld');
+      setSheetTabs([]);
       await loadStatus();
       notifyHub();
     } else {
@@ -169,7 +160,11 @@ export function GoogleSheetsIntegration({
       }
       setSheetTabs(d.tabs || []);
       if (d.sheet_gid != null) setSelectedSheetId(d.sheet_gid);
-      showToast(`Spreadsheet geladen — ${d.columns?.length ?? 0} kolommen gevonden`);
+      showToast(
+        `Spreadsheet gekoppeld — ${d.columns?.length ?? 0} kolommen op werkblad "${d.sheet_name ?? ''}"`,
+      );
+      await loadStatus({ silent: true });
+      notifyHub();
     } finally {
       setLoadingSheet(false);
     }
@@ -182,15 +177,15 @@ export function GoogleSheetsIntegration({
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          spreadsheet_url: spreadsheetUrl.trim(),
+          spreadsheet_url: spreadsheetUrl.trim() || undefined,
           sheet_gid: selectedSheetId === '' ? null : selectedSheetId,
           enabled: syncEnabled,
         }),
       });
       const d = await res.json().catch(() => ({}));
       if (res.ok) {
-        showToast('Spreadsheet opgeslagen');
-        await loadStatus();
+        showToast('Instellingen opgeslagen');
+        await loadStatus({ silent: true });
         notifyHub();
       } else {
         showToast(d.error || 'Opslaan mislukt', 'error');
@@ -231,198 +226,194 @@ export function GoogleSheetsIntegration({
     </div>
   ) : (
     <div className="space-y-5">
-      {status?.api_key_configured === false && (
+      {status?.server_ready === false && (
         <Alert variant="warning">
-          De Google Sheets API-key ontbreekt op de server. Neem contact op met Warme Leads.
+          Google Spreadsheets is nog niet beschikbaar op de server. Neem contact op met Warme Leads.
         </Alert>
       )}
 
-      {!status?.oauth_configured && (
-        <Alert variant="warning">
-          Google-koppeling is nog niet beschikbaar. Neem contact op met Warme Leads als je deze
-          integratie wilt gebruiken.
-        </Alert>
-      )}
+      <div className="space-y-4 rounded-xl border border-slate-100 p-4">
+        <div className="flex items-center gap-2">
+          <TableCellsIcon className="h-5 w-5 text-slate-400" />
+          <p className="text-sm font-semibold text-slate-900">Stap 2 — Spreadsheet koppelen</p>
+        </div>
+        <p className="text-xs text-slate-500">
+          Deel je spreadsheet in Google met onderstaand adres als <strong>bewerker</strong>, plak
+          daarna de URL. We lezen automatisch de kolomkoppen uit rij 1 van het{' '}
+          <strong>laatste tabblad</strong> (tenzij de URL een specifiek tabblad aangeeft).
+        </p>
 
-      {!status?.connected && (
-        <div className="rounded-xl border border-slate-100 bg-slate-50/80 p-4">
-          <p className="text-sm font-semibold text-slate-900">Stap 2 — Google-account autoriseren</p>
-          <p className="mt-1 text-xs text-slate-500">
-            Geef toegang om rijen toe te voegen in spreadsheets waar jij toegang toe hebt.
-          </p>
+        {serviceAccountEmail && (
+          <div className="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+              Deel met dit adres
+            </p>
+            <div className="mt-1 flex items-center gap-2">
+              <code className="min-w-0 flex-1 truncate text-xs text-slate-800">
+                {serviceAccountEmail}
+              </code>
+              <button
+                type="button"
+                onClick={() => void copyServiceAccountEmail()}
+                className={T.btnGhost}
+                title="Kopieer e-mailadres"
+              >
+                <ClipboardDocumentIcon className="h-4 w-4" />
+                {copiedEmail ? 'Gekopieerd' : 'Kopiëren'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div>
+          <label htmlFor="gs-url" className="mb-1 block text-xs font-medium text-slate-600">
+            Spreadsheet-URL
+          </label>
+          <input
+            id="gs-url"
+            type="url"
+            value={spreadsheetUrl}
+            onChange={(e) => setSpreadsheetUrl(e.target.value)}
+            placeholder="https://docs.google.com/spreadsheets/d/..."
+            className={T.input}
+            disabled={status?.server_ready === false}
+          />
+        </div>
+
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
           <button
             type="button"
-            onClick={connectGoogle}
-            disabled={status?.server_ready === false}
-            className={`${T.btnPrimary} mt-4`}
+            onClick={() => void loadSpreadsheet()}
+            disabled={loadingSheet || !spreadsheetUrl.trim() || status?.server_ready === false}
+            className={T.btnPrimary}
           >
-            <LinkIcon className="h-4 w-4" />
-            Verbinden met Google
+            {loadingSheet ? 'Bezig…' : 'Kolommen uitlezen en koppelen'}
           </button>
         </div>
+
+        {sheetTabs.length > 1 && (
+          <div>
+            <label htmlFor="gs-tab" className="mb-1 block text-xs font-medium text-slate-600">
+              Werkblad
+            </label>
+            <select
+              id="gs-tab"
+              value={selectedSheetId}
+              onChange={(e) =>
+                setSelectedSheetId(e.target.value === '' ? '' : Number(e.target.value))
+              }
+              className={T.input}
+            >
+              {sheetTabs.map((t) => (
+                <option key={t.sheet_id} value={t.sheet_id}>
+                  {t.title}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-slate-500">
+              Wijzig het werkblad en klik opnieuw op koppelen om kolommen opnieuw te laden.
+            </p>
+          </div>
+        )}
+
+        {status?.settings?.sheet_name && (
+          <p className="text-xs text-slate-500">
+            Actief werkblad:{' '}
+            <span className="font-medium text-slate-700">{status.settings.sheet_name}</span>
+          </p>
+        )}
+
+        {spreadsheetReady && (
+          <div className="flex items-center gap-2 text-xs text-emerald-700">
+            <CheckCircleIcon className="h-4 w-4 shrink-0" />
+            Spreadsheet is gekoppeld
+          </div>
+        )}
+      </div>
+
+      {spreadsheetReady && !mappingReady && (
+        <Alert variant="warning">
+          Stel hieronder de veldkoppeling in en sla op om synchronisatie te activeren.
+        </Alert>
       )}
 
-      {status?.connected && (
-        <>
-          <div className="flex items-center gap-2 rounded-xl border border-emerald-100 bg-emerald-50/50 px-4 py-3 text-sm text-emerald-800">
-            <CheckCircleIcon className="h-4 w-4 shrink-0 text-emerald-600" />
-            Google-account is gekoppeld
-          </div>
+      {spreadsheetReady && (
+        <GoogleSheetsFieldMapping
+          showToast={showToast}
+          ready={spreadsheetReady}
+          onSaved={() => {
+            void loadStatus({ silent: true });
+            notifyHub();
+          }}
+        />
+      )}
 
-          <div className="space-y-4 rounded-xl border border-slate-100 p-4">
-            <div className="flex items-center gap-2">
-              <TableCellsIcon className="h-5 w-5 text-slate-400" />
-              <p className="text-sm font-semibold text-slate-900">Stap 3 — Spreadsheet kiezen</p>
-            </div>
-            <p className="text-xs text-slate-500">
-              Plak de URL van je Google Spreadsheet. Rij 1 moet kolomkoppen bevatten.
-            </p>
-            <div>
-              <label htmlFor="gs-url" className="mb-1 block text-xs font-medium text-slate-600">
-                Spreadsheet-URL
-              </label>
-              <input
-                id="gs-url"
-                type="url"
-                value={spreadsheetUrl}
-                onChange={(e) => setSpreadsheetUrl(e.target.value)}
-                placeholder="https://docs.google.com/spreadsheets/d/..."
-                className={T.input}
-              />
-            </div>
-            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-              <button
-                type="button"
-                onClick={() => void loadSpreadsheet()}
-                disabled={loadingSheet || !spreadsheetUrl.trim()}
-                className={T.btnSecondary}
-              >
-                {loadingSheet ? 'Laden…' : 'Kolommen uitlezen'}
-              </button>
-              <button
-                type="button"
-                onClick={() => void saveSettings()}
-                disabled={saving || !spreadsheetUrl.trim()}
-                className={T.btnPrimary}
-              >
-                {saving ? 'Opslaan…' : 'Spreadsheet opslaan'}
-              </button>
-            </div>
-
-            {sheetTabs.length > 1 && (
-              <div>
-                <label htmlFor="gs-tab" className="mb-1 block text-xs font-medium text-slate-600">
-                  Werkblad
-                </label>
-                <select
-                  id="gs-tab"
-                  value={selectedSheetId}
-                  onChange={(e) =>
-                    setSelectedSheetId(e.target.value === '' ? '' : Number(e.target.value))
-                  }
-                  className={T.input}
-                >
-                  {sheetTabs.map((t) => (
-                    <option key={t.sheet_id} value={t.sheet_id}>
-                      {t.title}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {status.settings?.sheet_name && (
-              <p className="text-xs text-slate-500">
-                Actief werkblad: <span className="font-medium">{status.settings.sheet_name}</span>
-              </p>
-            )}
-          </div>
-
-          {spreadsheetReady && !mappingReady && (
+      {spreadsheetReady && mappingReady && status && (
+        <div className="space-y-4 border-t border-slate-100 pt-5">
+          {status.sync_ready && (
+            <Alert variant="success">
+              Synchronisatie is actief. Nieuwe leadtoewijzingen worden als rij toegevoegd.
+            </Alert>
+          )}
+          {!syncEnabled && (
             <Alert variant="warning">
-              Stel hieronder de veldkoppeling in en sla op om synchronisatie te activeren.
+              Synchronisatie staat gepauzeerd. Schakel deze weer in om door te sturen.
             </Alert>
           )}
 
-          {spreadsheetReady && (
-            <GoogleSheetsFieldMapping
-              showToast={showToast}
-              ready={spreadsheetReady}
-              onSaved={() => {
-                void loadStatus({ silent: true });
-                notifyHub();
-              }}
-            />
-          )}
-
-          {spreadsheetReady && mappingReady && (
-            <div className="space-y-4 border-t border-slate-100 pt-5">
-              {status.sync_ready && (
-                <Alert variant="success">
-                  Synchronisatie is actief. Nieuwe leadtoewijzingen worden als rij toegevoegd.
-                </Alert>
-              )}
-              {!syncEnabled && (
-                <Alert variant="warning">
-                  Synchronisatie staat gepauzeerd. Schakel deze weer in om door te sturen.
-                </Alert>
-              )}
-
-              <div className="flex items-center justify-between gap-4 rounded-xl border border-slate-100 bg-slate-50/80 px-4 py-3">
-                <div>
-                  <p className="text-sm font-medium text-slate-800">Automatische synchronisatie</p>
-                  <p className={T.helper}>Tijdelijk pauzeren zonder te ontkoppelen</p>
-                </div>
-                <Toggle checked={syncEnabled} onChange={setSyncEnabled} />
-              </div>
-
-              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-                <button
-                  type="button"
-                  onClick={() => void saveSettings()}
-                  disabled={saving}
-                  className={T.btnPrimary}
-                >
-                  {saving ? 'Opslaan…' : 'Instellingen opslaan'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void runTest()}
-                  disabled={testing}
-                  className={T.btnSecondary}
-                >
-                  {testing ? 'Bezig…' : 'Testrij toevoegen'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void disconnect()}
-                  className={`${T.btnDanger} sm:ml-auto`}
-                >
-                  Ontkoppelen
-                </button>
-              </div>
-
-              {status.last_error && (
-                <Alert variant="error">
-                  <span className="font-medium">Laatste fout</span>
-                  {status.last_error_at && (
-                    <span className="font-normal text-red-600/80">
-                      {' '}
-                      · {formatSyncTime(status.last_error_at)}
-                    </span>
-                  )}
-                  <p className="mt-1 break-words text-xs">{status.last_error}</p>
-                </Alert>
-              )}
-
-              <SyncHistory
-                successCount={status.success_count}
-                rows={status.recent_syncs}
-                onRefresh={() => void loadStatus()}
-              />
+          <div className="flex items-center justify-between gap-4 rounded-xl border border-slate-100 bg-slate-50/80 px-4 py-3">
+            <div>
+              <p className="text-sm font-medium text-slate-800">Automatische synchronisatie</p>
+              <p className={T.helper}>Tijdelijk pauzeren zonder te ontkoppelen</p>
             </div>
+            <Toggle checked={syncEnabled} onChange={setSyncEnabled} />
+          </div>
+
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+            <button
+              type="button"
+              onClick={() => void saveSettings()}
+              disabled={saving}
+              className={T.btnPrimary}
+            >
+              {saving ? 'Opslaan…' : 'Instellingen opslaan'}
+            </button>
+            <button
+              type="button"
+              onClick={() => void runTest()}
+              disabled={testing}
+              className={T.btnSecondary}
+            >
+              {testing ? 'Bezig…' : 'Testrij toevoegen'}
+            </button>
+            <button
+              type="button"
+              onClick={() => void disconnect()}
+              className={`${T.btnDanger} sm:ml-auto`}
+            >
+              Ontkoppelen
+            </button>
+          </div>
+
+          {status.last_error && (
+            <Alert variant="error">
+              <span className="font-medium">Laatste fout</span>
+              {status.last_error_at && (
+                <span className="font-normal text-red-600/80">
+                  {' '}
+                  · {formatSyncTime(status.last_error_at)}
+                </span>
+              )}
+              <p className="mt-1 break-words text-xs">{status.last_error}</p>
+            </Alert>
           )}
-        </>
+
+          <SyncHistory
+            successCount={status.success_count}
+            rows={status.recent_syncs}
+            onRefresh={() => void loadStatus()}
+          />
+        </div>
       )}
     </div>
   );
@@ -531,16 +522,4 @@ function SyncHistory({
       )}
     </div>
   );
-}
-
-function describeOauthError(reason?: string | null): string {
-  if (!reason) return 'onbekende fout';
-  if (reason === 'no_api_key') return 'Google Sheets API-key ontbreekt op de server';
-  if (reason === 'no_oauth_config') return 'Google OAuth is niet geconfigureerd';
-  if (reason === 'invalid_state') return 'sessie verlopen, probeer opnieuw';
-  if (reason === 'token_exchange_failed') return 'token uitwisselen mislukt — probeer opnieuw';
-  if (reason === 'missing_code') return 'autorisatie niet voltooid';
-  if (reason === 'access_denied') return 'toegang geweigerd in Google';
-  if (reason === 'missing_refresh_token') return 'geen refresh token — probeer opnieuw en accepteer alle rechten';
-  return reason.length > 120 ? `${reason.slice(0, 120)}…` : reason;
 }

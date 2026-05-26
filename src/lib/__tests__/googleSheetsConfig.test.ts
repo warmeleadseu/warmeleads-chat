@@ -2,14 +2,18 @@ import { describe, expect, it, afterEach } from 'vitest';
 import {
   appendGoogleSheetsApiKey,
   getGoogleSheetsApiKey,
+  isGoogleSheetsIntegrationServerReady,
 } from '@/lib/googleSheets/config';
 
 describe('googleSheets config', () => {
-  const prev = process.env.GOOGLE_SHEETS_API_KEY;
+  const prevKey = process.env.GOOGLE_SHEETS_API_KEY;
+  const prevSa = process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY;
 
   afterEach(() => {
-    if (prev === undefined) delete process.env.GOOGLE_SHEETS_API_KEY;
-    else process.env.GOOGLE_SHEETS_API_KEY = prev;
+    if (prevKey === undefined) delete process.env.GOOGLE_SHEETS_API_KEY;
+    else process.env.GOOGLE_SHEETS_API_KEY = prevKey;
+    if (prevSa === undefined) delete process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY;
+    else process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY = prevSa;
   });
 
   it('strips newlines from API key', () => {
@@ -30,5 +34,15 @@ describe('googleSheets config', () => {
   it('leaves path unchanged without key', () => {
     delete process.env.GOOGLE_SHEETS_API_KEY;
     expect(appendGoogleSheetsApiKey('/spreadsheets/x')).toBe('/spreadsheets/x');
+  });
+
+  it('server ready requires API key and service account private key', () => {
+    delete process.env.GOOGLE_SHEETS_API_KEY;
+    delete process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY;
+    expect(isGoogleSheetsIntegrationServerReady()).toBe(false);
+
+    process.env.GOOGLE_SHEETS_API_KEY = 'k';
+    process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY = 'pem';
+    expect(isGoogleSheetsIntegrationServerReady()).toBe(true);
   });
 });

@@ -32,9 +32,9 @@ export const CRM_PROVIDERS: CrmProvider[] = [
     name: 'Google Spreadsheets',
     shortName: 'Sheets',
     description:
-      'Nieuwe leads automatisch als rij in je eigen Google Spreadsheet. Koppel je Google-account en map kolommen per branche.',
+      'Nieuwe leads automatisch als rij in je Google Spreadsheet. Deel het bestand met Warme Leads, plak de URL en map kolommen per branche.',
     status: 'available',
-    setupHint: 'Autoriseer Google, kies je spreadsheet en koppel portaalvelden aan kolommen.',
+    setupHint: 'Deel je spreadsheet, plak de URL en koppel portaalvelden aan kolommen.',
   },
   {
     id: 'hubspot',

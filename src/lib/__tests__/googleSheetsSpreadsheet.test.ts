@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   columnIndexToLetter,
   parseSpreadsheetUrl,
+  pickDefaultSheetTab,
   quoteSheetName,
+  type SheetTab,
 } from '@/lib/googleSheets/spreadsheet';
 import {
   buildSheetRowValues,
@@ -25,6 +27,26 @@ describe('columnIndexToLetter', () => {
     expect(columnIndexToLetter(0)).toBe('A');
     expect(columnIndexToLetter(25)).toBe('Z');
     expect(columnIndexToLetter(26)).toBe('AA');
+  });
+});
+
+describe('pickDefaultSheetTab', () => {
+  const tabs: SheetTab[] = [
+    { sheetId: 0, title: 'Eerste' },
+    { sheetId: 111, title: 'Midden' },
+    { sheetId: 222, title: 'Laatste' },
+  ];
+
+  it('picks last tab when no gid', () => {
+    expect(pickDefaultSheetTab(tabs)?.title).toBe('Laatste');
+  });
+
+  it('respects gid when present', () => {
+    expect(pickDefaultSheetTab(tabs, 111)?.title).toBe('Midden');
+  });
+
+  it('falls back to last tab when gid unknown', () => {
+    expect(pickDefaultSheetTab(tabs, 999)?.title).toBe('Laatste');
   });
 });
 

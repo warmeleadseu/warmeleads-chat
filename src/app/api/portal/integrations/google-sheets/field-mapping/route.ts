@@ -10,9 +10,9 @@ import {
   suggestSheetColumnMapping,
 } from '@/lib/googleSheets/fieldMappingLogic';
 import type { GoogleSheetsFieldMappings, SheetBranchFieldMapping } from '@/lib/googleSheets/types';
+import { resolveGoogleSheetsAccessToken } from '@/lib/googleSheets/access';
 import {
-  ensureValidGoogleAccessToken,
-  getGoogleSheetsIntegration,
+  getGoogleSheetsIntegrationPublic,
   updateGoogleSheetsSettings,
 } from '@/lib/googleSheets/integrationRepo';
 import {
@@ -29,9 +29,9 @@ export async function GET(request: NextRequest) {
   if (denied) return denied;
 
   const supabase = createServerClient();
-  const integration = await getGoogleSheetsIntegration(supabase, session.customer.id);
+  const integration = await getGoogleSheetsIntegrationPublic(supabase, session.customer.id);
   if (!integration?.connected_at) {
-    return NextResponse.json({ error: 'Google Sheets niet gekoppeld' }, { status: 400 });
+    return NextResponse.json({ error: 'Stel eerst je spreadsheet in' }, { status: 400 });
   }
 
   const spreadsheetId = integration.settings.spreadsheet_id;
@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
   let accessToken: string;
   let sheetColumns: Awaited<ReturnType<typeof fetchSheetHeaderColumns>>;
   try {
-    accessToken = await ensureValidGoogleAccessToken(supabase, integration);
+    accessToken = await resolveGoogleSheetsAccessToken(supabase, session.customer.id);
     sheetColumns = await fetchSheetHeaderColumns(
       accessToken,
       spreadsheetId,
@@ -123,9 +123,9 @@ export async function PUT(request: NextRequest) {
   };
 
   const supabase = createServerClient();
-  const integration = await getGoogleSheetsIntegration(supabase, session.customer.id);
+  const integration = await getGoogleSheetsIntegrationPublic(supabase, session.customer.id);
   if (!integration) {
-    return NextResponse.json({ error: 'Google Sheets niet gekoppeld' }, { status: 400 });
+    return NextResponse.json({ error: 'Stel eerst je spreadsheet in' }, { status: 400 });
   }
 
   let nextMappings: GoogleSheetsFieldMappings = {

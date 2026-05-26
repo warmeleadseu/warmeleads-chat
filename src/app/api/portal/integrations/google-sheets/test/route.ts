@@ -2,10 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyCustomer, portalUnauthorized } from '@/lib/portalAuth';
 import { createServerClient } from '@/lib/supabase';
 import { requireIntegrationOwner } from '@/lib/integrations/portalIntegrationAuth';
-import {
-  ensureValidGoogleAccessToken,
-  getGoogleSheetsIntegration,
-} from '@/lib/googleSheets/integrationRepo';
+import { resolveGoogleSheetsAccessToken } from '@/lib/googleSheets/access';
+import { getGoogleSheetsIntegrationPublic } from '@/lib/googleSheets/integrationRepo';
 import {
   appendRowToSheet,
   fetchSheetHeaderColumns,
@@ -19,9 +17,9 @@ export async function POST(request: NextRequest) {
   if (denied) return denied;
 
   const supabase = createServerClient();
-  const integration = await getGoogleSheetsIntegration(supabase, session.customer.id);
+  const integration = await getGoogleSheetsIntegrationPublic(supabase, session.customer.id);
   if (!integration?.connected_at) {
-    return NextResponse.json({ error: 'Koppel eerst je Google-account' }, { status: 400 });
+    return NextResponse.json({ error: 'Stel eerst je spreadsheet in' }, { status: 400 });
   }
 
   const spreadsheetId = integration.settings.spreadsheet_id;
@@ -31,7 +29,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const accessToken = await ensureValidGoogleAccessToken(supabase, integration);
+    const accessToken = await resolveGoogleSheetsAccessToken(supabase, session.customer.id);
     const quoted = quoteSheetName(sheetName);
     const columns = await fetchSheetHeaderColumns(accessToken, spreadsheetId, quoted);
     const stamp = new Date().toLocaleString('nl-NL');

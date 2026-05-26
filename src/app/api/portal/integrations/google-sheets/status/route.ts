@@ -4,10 +4,12 @@ import { createServerClient } from '@/lib/supabase';
 import { requireIntegrationOwner } from '@/lib/integrations/portalIntegrationAuth';
 import {
   getGoogleOAuthConfig,
+  getGoogleServiceAccountEmail,
   isGoogleSheetsApiKeyConfigured,
   isGoogleSheetsIntegrationServerReady,
 } from '@/lib/googleSheets/config';
-import { getGoogleSheetsIntegration } from '@/lib/googleSheets/integrationRepo';
+import { isGoogleServiceAccountConfigured } from '@/lib/googleSheets/serviceAccount';
+import { getGoogleSheetsIntegrationPublic } from '@/lib/googleSheets/integrationRepo';
 import { hasSavedSheetMappings } from '@/lib/googleSheets/fieldMappingLogic';
 import { isGoogleSheetsSyncReady } from '@/lib/integrations/syncRouting';
 import { GOOGLE_SHEETS_PROVIDER } from '@/lib/googleSheets/types';
@@ -22,7 +24,7 @@ export async function GET(request: NextRequest) {
   const customerId = session.customer.id;
 
   const [integration, { data: customer }] = await Promise.all([
-    getGoogleSheetsIntegration(supabase, customerId),
+    getGoogleSheetsIntegrationPublic(supabase, customerId),
     supabase.from('customers').select('branches').eq('id', customerId).single(),
   ]);
 
@@ -73,7 +75,10 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({
     oauth_configured: oauthConfigured,
     api_key_configured: apiKeyConfigured,
+    service_account_configured: isGoogleServiceAccountConfigured(),
+    service_account_email: getGoogleServiceAccountEmail(),
     server_ready: serverReady,
+    connection_mode: integration?.connection_mode ?? null,
     connected: !!integration?.connected_at,
     spreadsheet_configured: spreadsheetConfigured,
     field_mapping_configured: fieldMappingConfigured,

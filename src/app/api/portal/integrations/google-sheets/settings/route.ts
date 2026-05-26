@@ -2,14 +2,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyCustomer, portalUnauthorized } from '@/lib/portalAuth';
 import { createServerClient } from '@/lib/supabase';
 import { requireIntegrationOwner } from '@/lib/integrations/portalIntegrationAuth';
+import { resolveGoogleSheetsAccessToken } from '@/lib/googleSheets/access';
 import {
-  ensureValidGoogleAccessToken,
-  getGoogleSheetsIntegration,
+  ensureGoogleSheetsIntegrationRow,
+  getGoogleSheetsIntegrationRow,
+  markGoogleSheetsConnected,
   updateGoogleSheetsSettings,
 } from '@/lib/googleSheets/integrationRepo';
 import {
   fetchSpreadsheetTabs,
   parseSpreadsheetUrl,
+  pickDefaultSheetTab,
 } from '@/lib/googleSheets/spreadsheet';
 
 async function resolveSheetNameFromGid(
@@ -40,10 +43,9 @@ export async function PUT(request: NextRequest) {
   }
 
   const supabase = createServerClient();
-  const integration = await getGoogleSheetsIntegration(supabase, session.customer.id);
-  if (!integration?.connected_at) {
-    return NextResponse.json({ error: 'Koppel eerst je Google-account' }, { status: 400 });
-  }
+  const customerId = session.customer.id;
+  await ensureGoogleSheetsIntegrationRow(supabase, customerId);
+  const integration = await getGoogleSheetsIntegrationRow(supabase, customerId);
 
   const patch: Parameters<typeof updateGoogleSheetsSettings>[2] = {};
 
@@ -56,7 +58,6 @@ export async function PUT(request: NextRequest) {
     }
     patch.spreadsheet_id = parsed.spreadsheetId;
     patch.spreadsheet_url = body.spreadsheet_url.trim();
-    // URL-gid alleen als fallback; expliciete sheet_gid uit UI heeft voorrang.
     if (parsed.gid != null && body.sheet_gid == null) {
       patch.sheet_gid = parsed.gid;
     }
@@ -71,11 +72,11 @@ export async function PUT(request: NextRequest) {
   }
 
   const spreadsheetId =
-    patch.spreadsheet_id ?? integration.settings.spreadsheet_id ?? null;
+    patch.spreadsheet_id ?? integration?.settings?.spreadsheet_id ?? null;
 
   if (patch.sheet_gid != null && spreadsheetId && !patch.sheet_name) {
     try {
-      const accessToken = await ensureValidGoogleAccessToken(supabase, integration);
+      const accessToken = await resolveGoogleSheetsAccessToken(supabase, customerId);
       const title = await resolveSheetNameFromGid(
         accessToken,
         spreadsheetId,
@@ -87,18 +88,15 @@ export async function PUT(request: NextRequest) {
     }
   }
 
-  if (patch.spreadsheet_id && !patch.sheet_name && integration.settings.sheet_name) {
+  if (patch.spreadsheet_id && !patch.sheet_name && integration?.settings?.sheet_name) {
     patch.sheet_name = integration.settings.sheet_name;
   }
 
   if (patch.spreadsheet_id && !patch.sheet_name) {
     try {
-      const accessToken = await ensureValidGoogleAccessToken(supabase, integration);
+      const accessToken = await resolveGoogleSheetsAccessToken(supabase, customerId);
       const tabs = await fetchSpreadsheetTabs(accessToken, patch.spreadsheet_id);
-      const preferred =
-        patch.sheet_gid != null
-          ? tabs.find((t) => t.sheetId === patch.sheet_gid)
-          : tabs[0];
+      const preferred = pickDefaultSheetTab(tabs, patch.sheet_gid ?? null);
       if (preferred) {
         patch.sheet_name = preferred.title;
         if (patch.sheet_gid == null) patch.sheet_gid = preferred.sheetId;
@@ -110,7 +108,10 @@ export async function PUT(request: NextRequest) {
   }
 
   try {
-    const settings = await updateGoogleSheetsSettings(supabase, session.customer.id, patch);
+    const settings = await updateGoogleSheetsSettings(supabase, customerId, patch);
+    if (settings.spreadsheet_id && settings.sheet_name) {
+      await markGoogleSheetsConnected(supabase, customerId);
+    }
     return NextResponse.json({ settings });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Opslaan mislukt';

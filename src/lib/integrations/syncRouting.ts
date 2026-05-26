@@ -3,7 +3,7 @@ import {
   getPreferredCrmProvider,
   resolveEffectiveCrmProvider,
 } from '@/lib/integrations/crmPreferences';
-import { getGoogleSheetsIntegration } from '@/lib/googleSheets/integrationRepo';
+import { getGoogleSheetsIntegrationPublic } from '@/lib/googleSheets/integrationRepo';
 import { hasSavedSheetMappings } from '@/lib/googleSheets/fieldMappingLogic';
 import { GOOGLE_SHEETS_PROVIDER } from '@/lib/googleSheets/types';
 import { getTeamleaderIntegration } from '@/lib/teamleader/integrationRepo';
@@ -23,7 +23,7 @@ export function isTeamleaderSyncReady(
 }
 
 export function isGoogleSheetsSyncReady(
-  integration: Awaited<ReturnType<typeof getGoogleSheetsIntegration>>,
+  integration: Awaited<ReturnType<typeof getGoogleSheetsIntegrationPublic>>,
   customerBranches: string[],
 ): boolean {
   if (!integration?.connected_at) return false;
@@ -74,7 +74,7 @@ export async function resolveIntegrationSyncTargets(
   const [preferred, teamleaderIntegration, sheetsIntegration] = await Promise.all([
     getPreferredCrmProvider(supabase, customerId),
     getTeamleaderIntegration(supabase, customerId),
-    getGoogleSheetsIntegration(supabase, customerId),
+    getGoogleSheetsIntegrationPublic(supabase, customerId),
   ]);
 
   const tlReady = isTeamleaderSyncReady(teamleaderIntegration);

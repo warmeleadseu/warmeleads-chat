@@ -57,7 +57,18 @@ export function getGoogleOAuthConfig(): GoogleOAuthConfig | null {
   };
 }
 
-/** Portaal-koppeling kan pas starten met OAuth; API key is aanvullend verplicht op de server. */
+export function getGoogleServiceAccountPrivateKeyConfigured(): boolean {
+  return Boolean(stripEnvValue(process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY));
+}
+
+/** URL-koppeling: API key + service account (geen klant-OAuth). */
 export function isGoogleSheetsIntegrationServerReady(): boolean {
+  return (
+    isGoogleSheetsApiKeyConfigured() && getGoogleServiceAccountPrivateKeyConfigured()
+  );
+}
+
+/** Legacy: klant autoriseert eigen Google-account. */
+export function isGoogleSheetsOAuthServerReady(): boolean {
   return !!getGoogleOAuthConfig() && isGoogleSheetsApiKeyConfigured();
 }
