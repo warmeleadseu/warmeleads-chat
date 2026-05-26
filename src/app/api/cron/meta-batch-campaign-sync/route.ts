@@ -3,8 +3,8 @@ import { createServerClient } from '@/lib/supabase';
 import { reconcileMetaCampaignsForCron } from '@/lib/metaBatchCampaignSync';
 
 /**
- * Elke 15 min: zet Meta-campagnes op ACTIVE/PAUSED volgens batch-state
- * (betaald, actief, vol, pauze, sync-vlag) én `starts_at` (geen ads vóór startmoment).
+ * Elke 15 min: zet Meta-campagnes op ACTIVE/PAUSED volgens **actieve** batches
+ * (voltooide batches met oude koppelingen worden genegeerd).
  */
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get('authorization');

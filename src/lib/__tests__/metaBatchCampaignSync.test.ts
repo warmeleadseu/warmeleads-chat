@@ -3,6 +3,7 @@ import {
   getDesiredMetaCampaignStatus,
   getDesiredMetaCampaignStatusForCampaign,
   hasBatchAdvertisingWindowStarted,
+  isBatchEligibleForMetaSync,
   resolveAggregatedMetaCampaignDesiredStatus,
 } from '../metaBatchCampaignSync';
 
@@ -107,6 +108,27 @@ describe('getDesiredMetaCampaignStatusForCampaign', () => {
   });
 });
 
+describe('isBatchEligibleForMetaSync', () => {
+  const base = {
+    id: '1',
+    batch_kind: 'leads' as const,
+    is_paid: true,
+    status: 'active' as const,
+    batch_size: 10,
+    leads_delivered: 0,
+    meta_campaign_sync_enabled: true,
+    meta_campaign_ids: ['1'],
+  };
+
+  it('accepts active paid pipeline batch', () => {
+    expect(isBatchEligibleForMetaSync(base)).toBe(true);
+  });
+
+  it('rejects completed batch', () => {
+    expect(isBatchEligibleForMetaSync({ ...base, status: 'completed' })).toBe(false);
+  });
+});
+
 describe('resolveAggregatedMetaCampaignDesiredStatus', () => {
   const sharedId = '120242306172830248';
 
@@ -136,21 +158,19 @@ describe('resolveAggregatedMetaCampaignDesiredStatus', () => {
     starts_at: null,
   };
 
-  it('stays ACTIVE when one active batch still needs the shared campaign', () => {
-    expect(
-      resolveAggregatedMetaCampaignDesiredStatus(sharedId, [activeBatch, completedBatch]),
-    ).toBe('ACTIVE');
+  it('is ACTIVE when an active batch needs the campaign', () => {
+    expect(resolveAggregatedMetaCampaignDesiredStatus(sharedId, [activeBatch])).toBe('ACTIVE');
   });
 
-  it('is PAUSED when only completed batches link the campaign', () => {
+  it('is PAUSED when no active batch links the campaign (completed ignored)', () => {
     expect(resolveAggregatedMetaCampaignDesiredStatus(sharedId, [completedBatch])).toBe('PAUSED');
+    expect(resolveAggregatedMetaCampaignDesiredStatus(sharedId, [])).toBe('PAUSED');
   });
 
-  it('is PAUSED when manually paused on any linked batch', () => {
+  it('is PAUSED when manually paused on active batch', () => {
     expect(
       resolveAggregatedMetaCampaignDesiredStatus(sharedId, [
         { ...activeBatch, meta_campaign_paused_ids: [sharedId] },
-        completedBatch,
       ]),
     ).toBe('PAUSED');
   });

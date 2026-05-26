@@ -258,7 +258,7 @@ export function MetaCampaignLinkerFields({
           onChange={e => setSyncEnabled(e.target.checked)}
           className="rounded border-indigo-300 text-indigo-600 focus:ring-indigo-500"
         />
-        Meta sync aan (uit = alle gekoppelde campagnes naar gepauzeerd). Per campagne: pauze/aan-knop; verwijderen = ontkoppelen + pauzeren in Meta.
+        Meta sync aan (uit = alle gekoppelde campagnes naar gepauzeerd). Alleen <strong>actieve</strong> batches sturen aan/uit in Meta — voltooide batches blijven gekoppeld voor historiek. Per campagne: pauze/aan-knop; verwijderen = ontkoppelen + pauzeren in Meta.
       </label>
 
       {syncStatusSlot}

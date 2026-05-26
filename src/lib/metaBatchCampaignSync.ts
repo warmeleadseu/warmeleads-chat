@@ -74,6 +74,16 @@ export function getDesiredMetaCampaignStatus(
   return 'ACTIVE';
 }
 
+/** Alleen actieve, betaalde pipeline-batches sturen Meta sync (voltooide batches worden genegeerd). */
+export function isBatchEligibleForMetaSync(row: BatchMetaSyncRow): boolean {
+  return (
+    row.meta_campaign_sync_enabled !== false &&
+    isPipelineBatchKind(row.batch_kind) &&
+    row.is_paid === true &&
+    row.status === 'active'
+  );
+}
+
 /** Gewenste status voor één gekoppelde campagne (incl. handmatig uit in CRM). */
 export function getDesiredMetaCampaignStatusForCampaign(
   row: BatchMetaSyncRow,
@@ -86,20 +96,19 @@ export function getDesiredMetaCampaignStatusForCampaign(
 }
 
 /**
- * Meta-campagne kan aan meerdere batches hangen (bv. oude voltooide + nieuwe actieve batch).
- * ACTIVE zodra één batch met sync aan ACTIVE wil; anders PAUSED.
- * Voorkomt dat een voltooide batch een gedeelde campagne uit blijft zetten.
+ * Bepaalt ACTIVE/PAUSED op basis van **alleen actieve** gekoppelde batches.
+ * Voltooide/gepauzeerde batches met oude meta_campaign_ids tellen niet mee (historiek blijft staan).
  */
 export function resolveAggregatedMetaCampaignDesiredStatus(
   campaignId: string,
-  allBatches: BatchMetaSyncRow[],
+  activeBatches: BatchMetaSyncRow[],
   capCountsByBatchId: Record<string, BatchMetaAssignmentCapCounts> = {},
 ): 'ACTIVE' | 'PAUSED' {
-  const linked = allBatches.filter(b => {
-    if (b.meta_campaign_sync_enabled === false) return false;
-    if (!isPipelineBatchKind(b.batch_kind)) return false;
-    return normalizeCampaignIds(b.meta_campaign_ids).includes(campaignId);
-  });
+  const linked = activeBatches.filter(
+    b =>
+      isBatchEligibleForMetaSync(b) &&
+      normalizeCampaignIds(b.meta_campaign_ids).includes(campaignId),
+  );
   if (linked.length === 0) return 'PAUSED';
 
   for (const batch of linked) {
@@ -111,18 +120,21 @@ export function resolveAggregatedMetaCampaignDesiredStatus(
   return 'PAUSED';
 }
 
-async function fetchAllMetaLinkedBatches(supabase: SupabaseClient): Promise<BatchMetaSyncRow[]> {
+async function fetchActiveMetaLinkedBatches(supabase: SupabaseClient): Promise<BatchMetaSyncRow[]> {
   const { data, error } = await supabase
     .from('customer_batches')
     .select(
       'id, batch_kind, is_paid, status, batch_size, leads_delivered, starts_at, leads_per_day, leads_per_week, meta_campaign_ids, meta_campaign_paused_ids, meta_campaign_sync_enabled',
     )
+    .eq('status', 'active')
+    .eq('is_paid', true)
     .not('meta_campaign_ids', 'eq', '{}')
     .limit(400);
 
   if (error || !data) return [];
   return (data as BatchMetaSyncRow[]).filter(
-    b => isPipelineBatchKind(b.batch_kind) && normalizeCampaignIds(b.meta_campaign_ids).length > 0,
+    b =>
+      isBatchEligibleForMetaSync(b) && normalizeCampaignIds(b.meta_campaign_ids).length > 0,
   );
 }
 
@@ -255,10 +267,26 @@ export async function reconcileBatchMetaCampaigns(
     return;
   }
 
-  const allLinkedBatches = await fetchAllMetaLinkedBatches(supabase);
-  const batchesForCaps = allLinkedBatches.some(b => b.id === batchId)
-    ? allLinkedBatches
-    : [...allLinkedBatches, batch];
+  const batchDrivesSync = isBatchEligibleForMetaSync(batch);
+  /** Voltooide batch: geen status-sync voor gekoppelde campagnes (alleen ontkoppelde → PAUSED). */
+  const campaignIdsToSync = batchDrivesSync ? ids : [...orphanPause];
+
+  if (campaignIdsToSync.length === 0) {
+    await supabase
+      .from('customer_batches')
+      .update({
+        meta_sync_last_attempt_at: nowIso,
+        meta_sync_last_error: null,
+      })
+      .eq('id', batchId);
+    return;
+  }
+
+  const activeBatches = await fetchActiveMetaLinkedBatches(supabase);
+  const batchesForCaps =
+    batchDrivesSync && !activeBatches.some(b => b.id === batchId)
+      ? [...activeBatches, batch]
+      : activeBatches;
   const capCountsByBatchId = await buildCapCountsMap(supabase, batchesForCaps);
 
   const credentials = await getMetaCredentials();
@@ -278,10 +306,30 @@ export async function reconcileBatchMetaCampaigns(
   const errors: string[] = [];
   let okCount = 0;
 
-  for (const campaignId of ids) {
-    const desired = orphanPause.includes(campaignId)
-      ? 'PAUSED'
-      : resolveAggregatedMetaCampaignDesiredStatus(campaignId, batchesForCaps, capCountsByBatchId);
+  const activeIds = new Set(
+    activeBatches.flatMap(b => normalizeCampaignIds(b.meta_campaign_ids)),
+  );
+
+  for (const campaignId of campaignIdsToSync) {
+    let desired: 'ACTIVE' | 'PAUSED';
+    if (orphanPause.includes(campaignId)) {
+      desired = 'PAUSED';
+    } else if (!batchDrivesSync) {
+      /** Batch net voltooid of voltooide batch bewerkt: pauzeer alleen exclusieve campagnes. */
+      desired = activeIds.has(campaignId)
+        ? resolveAggregatedMetaCampaignDesiredStatus(
+            campaignId,
+            batchesForCaps,
+            capCountsByBatchId,
+          )
+        : 'PAUSED';
+    } else {
+      desired = resolveAggregatedMetaCampaignDesiredStatus(
+        campaignId,
+        batchesForCaps,
+        capCountsByBatchId,
+      );
+    }
 
     const info = await graphGetCampaign(campaignId, credentials.accessToken);
     if (!info.ok) {
@@ -310,7 +358,7 @@ export async function reconcileBatchMetaCampaigns(
   const payload: Record<string, unknown> = {
     meta_sync_last_attempt_at: nowIso,
   };
-  if (okCount === ids.length) {
+  if (okCount === campaignIdsToSync.length) {
     payload.meta_sync_last_success_at = nowIso;
     payload.meta_sync_last_error = null;
   } else if (okCount > 0) {
@@ -323,7 +371,7 @@ export async function reconcileBatchMetaCampaigns(
   await supabase.from('customer_batches').update(payload).eq('id', batchId);
 }
 
-/** Cron: batches met Meta-koppeling (pipeline) — idempotente reconcile. */
+/** Cron: alleen actieve betaalde batches met Meta-koppeling — idempotente reconcile. */
 export async function reconcileMetaCampaignsForCron(supabase: SupabaseClient, limit = 60): Promise<{
   processed: number;
   errors: string[];
