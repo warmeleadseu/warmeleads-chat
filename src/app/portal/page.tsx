@@ -42,6 +42,7 @@ import {
   ChevronDownIcon,
   BoltIcon,
   ClockIcon,
+  InformationCircleIcon,
 } from '@heroicons/react/24/outline';
 import { usePushNotifications, type PushState } from './usePushNotifications';
 import ExportWizard, { type ExportFilters, type ExportSelection } from './ExportWizard';
@@ -2378,6 +2379,8 @@ function LeadFeedback({ leadId, showToast }: { leadId: string; showToast: (m: st
 
 function LeadReclamation({ leadId, showToast }: { leadId: string; showToast: (m: string) => void }) {
   const [existing, setExisting] = useState<{ id: string; reason: string; description?: string; status: string; created_at: string } | null>(null);
+  const [allowed, setAllowed] = useState(true);
+  const [blockReason, setBlockReason] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState('');
@@ -2390,8 +2393,22 @@ function LeadReclamation({ leadId, showToast }: { leadId: string; showToast: (m:
     setReason('');
     setDescription('');
     portalFetch(`/api/portal/reclamations?lead_id=${leadId}`)
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d?.reclamation) setExisting(d.reclamation); else setExisting(null); })
+      .then(async r => {
+        if (r.status === 404) return { allowed: false, block_reason: 'Lead niet gevonden' };
+        return r.ok ? r.json() : null;
+      })
+      .then(d => {
+        if (!d) {
+          setExisting(null);
+          setAllowed(false);
+          setBlockReason('Kon reclamatiestatus niet laden');
+          return;
+        }
+        setAllowed(d.allowed !== false);
+        setBlockReason(d.block_reason ?? null);
+        if (d.reclamation) setExisting(d.reclamation);
+        else setExisting(null);
+      })
       .finally(() => setLoading(false));
   }, [leadId]);
 
@@ -2419,6 +2436,20 @@ function LeadReclamation({ leadId, showToast }: { leadId: string; showToast: (m:
   };
 
   if (loading) return null;
+
+  if (!allowed && !existing) {
+    return (
+      <div className="rounded-xl border border-fuchsia-100 bg-fuchsia-50/60 p-4">
+        <h3 className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-fuchsia-800">
+          <InformationCircleIcon className="h-3.5 w-3.5" aria-hidden />
+          Geen reclamatie mogelijk
+        </h3>
+        <p className="text-xs leading-relaxed text-fuchsia-900/90">
+          {blockReason || 'Voor deze lead kan geen reclamatie worden ingediend.'}
+        </p>
+      </div>
+    );
+  }
 
   if (existing) {
     const st = RECLAMATION_STATUS_MAP[existing.status] || RECLAMATION_STATUS_MAP.pending;

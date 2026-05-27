@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyCustomer, portalUnauthorized } from '@/lib/portalAuth';
 import { createServerClient } from '@/lib/supabase';
 import { hasPermission, forbidden, PERMISSIONS } from '@/lib/portalPermissions';
+import { getLeadReclamationEligibility } from '@/lib/reclamationEligibility';
 
 const VALID_REASONS = [
   'foutief_telefoonnummer',
@@ -22,6 +23,11 @@ export async function GET(request: NextRequest) {
 
   const supabase = createServerClient();
 
+  const eligibility = await getLeadReclamationEligibility(supabase, customer.id, leadId);
+  if (!eligibility.allowed && eligibility.message === 'Lead niet gevonden') {
+    return NextResponse.json({ error: eligibility.message }, { status: 404 });
+  }
+
   const { data } = await supabase
     .from('lead_reclamations')
     .select('*')
@@ -29,7 +35,11 @@ export async function GET(request: NextRequest) {
     .eq('customer_id', customer.id)
     .maybeSingle();
 
-  return NextResponse.json({ reclamation: data });
+  return NextResponse.json({
+    reclamation: data,
+    allowed: eligibility.allowed,
+    block_reason: eligibility.allowed ? null : eligibility.message ?? null,
+  });
 }
 
 export async function POST(request: NextRequest) {
@@ -52,23 +62,10 @@ export async function POST(request: NextRequest) {
 
     const supabase = createServerClient();
 
-    const { data: assignment } = await supabase
-      .from('lead_assignments')
-      .select('lead_id')
-      .eq('lead_id', lead_id)
-      .eq('customer_id', customer.id)
-      .maybeSingle();
-
-    if (!assignment) {
-      const { data: directLead } = await supabase
-        .from('leads')
-        .select('id')
-        .eq('id', lead_id)
-        .eq('customer_id', customer.id)
-        .maybeSingle();
-      if (!directLead) {
-        return NextResponse.json({ error: 'Lead niet gevonden' }, { status: 404 });
-      }
+    const eligibility = await getLeadReclamationEligibility(supabase, customer.id, lead_id);
+    if (!eligibility.allowed) {
+      const status = eligibility.message === 'Lead niet gevonden' ? 404 : 403;
+      return NextResponse.json({ error: eligibility.message }, { status });
     }
 
     const { data: existing } = await supabase
