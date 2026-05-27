@@ -655,7 +655,7 @@ export async function backfillBatch(batchId: string, lookbackDays: number): Prom
 
   const { data: batch } = await supabase
     .from('customer_batches')
-    .select('id, customer_id, branch, batch_size, leads_delivered, leads_delivered_external, leads_per_week, leads_per_day, lead_filters, is_paid, starts_at, batch_kind, delivery_model, customers!inner(id, is_active)')
+    .select('id, customer_id, branch, batch_size, leads_delivered, leads_delivered_external, leads_per_week, leads_per_day, lead_filters, is_paid, starts_at, created_at, distribution_priority, batch_kind, delivery_model, customers!inner(id, is_active)')
     .eq('id', batchId)
     .eq('status', 'active')
     .single();

@@ -527,22 +527,21 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const effectiveBatchKind =
-    updates.batch_kind !== undefined
-      ? String(updates.batch_kind)
-      : (existing as { batch_kind?: string }).batch_kind;
+  const batchKindAfterUpdate = String(
+    (data as { batch_kind?: string }).batch_kind ?? effectiveBatchKind,
+  );
 
   // Trigger milestone notifications when leads_delivered changes
   if (updates.leads_delivered !== undefined && updates.leads_delivered !== existing.leads_delivered) {
     const batchSize = updates.batch_size ?? existing.batch_size;
-    if (isPipelineBatchKind(effectiveBatchKind)) {
+    if (isPipelineBatchKind(batchKindAfterUpdate)) {
       checkBatchMilestones(supabase, id, updates.leads_delivered, batchSize).catch(() => {});
     }
   }
 
   // When batch_size grew and backfill requested, fill the extra slots
   const batchGrew = trigger_backfill && updates.batch_size && updates.batch_size > existing.batch_size;
-  if (batchGrew && isPipelineBatchKind(effectiveBatchKind) && data.is_paid === true) {
+  if (batchGrew && isPipelineBatchKind(batchKindAfterUpdate) && data.is_paid === true) {
     const lookback = existing.lookback_days ?? 3;
     try { backfillBatch(id, Math.max(lookback, 3)); } catch { /* non-blocking */ }
   }
@@ -562,7 +561,7 @@ export async function PUT(request: NextRequest) {
     forcePauseCampaignIds: removedMetaCampaignIds,
   }).catch(e => console.error('[admin/batches PUT] meta reconcile:', e));
 
-  if (save_branch_meta_default === true && isPipelineBatchKind(effectiveBatchKind)) {
+  if (save_branch_meta_default === true && isPipelineBatchKind(batchKindAfterUpdate)) {
     try {
       const idsForDefault =
         safeUpdates.meta_campaign_ids !== undefined
