@@ -18,3 +18,9 @@ export function isBulkLeadsBatchKind(kind: string | null | undefined): boolean {
 export function isNicheResearchBatchKind(kind: string | null | undefined): boolean {
   return normalizeBatchKind(kind) === 'niche_research';
 }
+
+/** Pipeline + onderzoek: Meta-campagne koppelen en ACTIVE/PAUSED sync (niet bulk). */
+export function isMetaCampaignSyncBatchKind(kind: string | null | undefined): boolean {
+  const k = normalizeBatchKind(kind);
+  return k === 'leads' || k === 'niche_research';
+}

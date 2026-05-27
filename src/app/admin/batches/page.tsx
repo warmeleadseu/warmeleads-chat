@@ -38,7 +38,7 @@ import { openCustomerPortalAsAdmin } from '@/lib/adminOpenPortal';
 import SearchableSelect from '@/components/ui/SearchableSelect';
 import { useAdmin } from '../adminContext';
 import { mergeCustomTiers } from '@/lib/pricing';
-import { isPipelineBatchKind } from '@/lib/batchKind';
+import { isMetaCampaignSyncBatchKind, isPipelineBatchKind } from '@/lib/batchKind';
 import { coerceCustomerBatchMetaCampaignIds, type MetaCampaignPick } from '@/lib/metaCampaignIds';
 import { MetaCampaignLinkerFields } from './MetaCampaignLinkerFields';
 
@@ -106,6 +106,10 @@ function isBulkLeadsBatch(b: Pick<Batch, 'batch_kind'>): boolean {
 
 function isNicheResearchBatch(b: Pick<Batch, 'batch_kind'>): boolean {
   return (b.batch_kind || '') === 'niche_research';
+}
+
+function supportsBatchMetaCampaigns(batchKind: string | null | undefined): boolean {
+  return isMetaCampaignSyncBatchKind(batchKind);
 }
 
 function hasDistributionPriority(b: Pick<Batch, 'distribution_priority'>): boolean {
@@ -543,7 +547,7 @@ export default function BatchesPage() {
                               Start {formatStartsAt(b.starts_at)}
                             </span>
                           )}
-                          {isPipelineBatchKind(b.batch_kind) && metaLinkCount > 0 && (
+                          {supportsBatchMetaCampaigns(b.batch_kind) && metaLinkCount > 0 && (
                             <span className="inline-flex w-fit items-center gap-0.5 rounded-md bg-indigo-50 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-800">
                               <GlobeAltIcon className="h-3 w-3 shrink-0" aria-hidden />
                               Meta · {metaLinkCount}
@@ -627,7 +631,7 @@ export default function BatchesPage() {
                             Start {formatStartsAt(b.starts_at)}
                           </span>
                         )}
-                        {isPipelineBatchKind(b.batch_kind) && metaLinkCount > 0 && (
+                        {supportsBatchMetaCampaigns(b.batch_kind) && metaLinkCount > 0 && (
                           <span className="inline-flex items-center gap-0.5 rounded-md bg-indigo-50 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-800">
                             <GlobeAltIcon className="h-3 w-3 shrink-0" aria-hidden />
                             Meta · {metaLinkCount}
@@ -748,7 +752,7 @@ function BatchDetailMetaBlock({
   const [saveBranchMetaDefault, setSaveBranchMetaDefault] = useState(false);
 
   useEffect(() => {
-    if (!isPipelineBatchKind(batch.batch_kind)) return;
+    if (!supportsBatchMetaCampaigns(batch.batch_kind)) return;
     setMetaCampaignPicks(picksFromBatchMeta(batch));
   }, [batch.batch_kind, batch.id, serverIdsKey, batch.meta_campaign_paused_ids]);
 
@@ -781,18 +785,28 @@ function BatchDetailMetaBlock({
     }
   };
 
-  if (!isPipelineBatchKind(batch.batch_kind)) return null;
+  if (!supportsBatchMetaCampaigns(batch.batch_kind)) return null;
+
+  const nicheMeta = isNicheResearchBatch(batch);
 
   return (
     <div className="rounded-xl border border-indigo-200 bg-indigo-50/50 p-3.5">
       <MetaCampaignLinkerFields
         title="Meta campagnes"
         helpText={
-          <>
-            Zoek op naam (zoals in Ads Manager). Je kunt <strong>meerdere</strong> campagnes koppelen (zelfde batch, zelfde
-            pauze/active-logica). Bij <strong>pauzeren</strong> van de batch worden alle gekoppelde campagnes in Meta
-            mee gepauzeerd.
-          </>
+          nicheMeta ? (
+            <>
+              Koppel campagnes voor dit onderzoek. Bij een <strong>actieve, betaalde</strong> batch en sync aan gaan ze op{' '}
+              <strong>ACTIVE</strong> in Meta (onderzoek heeft geen batch-cap). Bij <strong>pauzeren</strong> van de batch
+              of uitzetten van sync worden ze gepauzeerd.
+            </>
+          ) : (
+            <>
+              Zoek op naam (zoals in Ads Manager). Je kunt <strong>meerdere</strong> campagnes koppelen (zelfde batch, zelfde
+              pauze/active-logica). Bij <strong>pauzeren</strong> van de batch worden alle gekoppelde campagnes in Meta
+              mee gepauzeerd.
+            </>
+          )
         }
         picks={metaCampaignPicks}
         setPicks={setMetaCampaignPicks}
@@ -818,8 +832,16 @@ function BatchDetailMetaBlock({
           className="mt-0.5 shrink-0"
         />
         <span>
-          <strong>Standaard voor nieuwe batches</strong> — na opslaan wordt deze koppeling bewaard voor deze klant + branche
-          (herbestel via portaal pakt dit automatisch op).
+          <strong>Standaard voor nieuwe batches</strong> — na opslaan wordt deze koppeling bewaard voor deze klant
+          {nicheMeta && batch.lead_branch_slug ? (
+            <>
+              {' '}
+              + inbound branche <strong className="font-mono text-[10px]">{batch.lead_branch_slug}</strong>
+            </>
+          ) : (
+            <> + branche</>
+          )}{' '}
+          (nieuwe leads-batches zonder handmatige Meta-IDs pakken dit op).
         </span>
       </label>
 
@@ -1642,7 +1664,7 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
   }, [batch.id, batch.distribution_priority]);
 
   useEffect(() => {
-    if (!isPipelineBatchKind(batch.batch_kind)) return;
+    if (!supportsBatchMetaCampaigns(batch.batch_kind)) return;
     setMetaCampaignPicks(picksFromBatchMeta(batch));
   }, [batch.batch_kind, batch.id, editServerMetaKey, batch.meta_campaign_paused_ids]);
 
@@ -1678,12 +1700,12 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
         trigger_backfill: batchSizeGrew,
         starts_at: startsAtISO,
       };
-      if (isPipelineBatchKind(batch.batch_kind)) {
+      if (supportsBatchMetaCampaigns(batch.batch_kind)) {
         Object.assign(payload, metaFieldsFromPicks(metaCampaignPicks));
         payload.meta_campaign_sync_enabled = metaSyncEnabled;
-        if (priorityEditable) payload.distribution_priority = distributionPriority;
         if (saveBranchMetaDefault) payload.save_branch_meta_default = true;
       }
+      if (priorityEditable) payload.distribution_priority = distributionPriority;
       if (extraLeads > 0) {
         payload.compensation = { amount: extraLeads, reason: extraReason };
       }
@@ -1916,16 +1938,23 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
               className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
           </div>
 
-          {isPipelineBatchKind(batch.batch_kind) && (
+          {supportsBatchMetaCampaigns(batch.batch_kind) && (
             <>
             <MetaCampaignLinkerFields
               title="Meta campagnes (batch)"
               helpText={
-                <>
-                  Zoek op <strong>campagnenaam</strong> zoals in Meta Ads Manager. Je kunt <strong>meerdere</strong> campagnes
-                  koppelen; die worden samen op <strong>ACTIVE</strong> of <strong>PAUSED</strong> gezet op basis van deze batch
-                  (betaald, actief, niet vol, <strong>startmoment</strong>, sync aan, dag/week-limieten).
-                </>
+                isNicheResearch ? (
+                  <>
+                    Koppel campagnes voor dit onderzoek. Bij actieve, betaalde batch + sync aan → <strong>ACTIVE</strong> in Meta
+                    (geen cap op aantal onderzoeksleads). Batch pauzeren of sync uit → campagnes naar <strong>PAUSED</strong>.
+                  </>
+                ) : (
+                  <>
+                    Zoek op <strong>campagnenaam</strong> zoals in Meta Ads Manager. Je kunt <strong>meerdere</strong> campagnes
+                    koppelen; die worden samen op <strong>ACTIVE</strong> of <strong>PAUSED</strong> gezet op basis van deze batch
+                    (betaald, actief, niet vol, <strong>startmoment</strong>, sync aan, dag/week-limieten).
+                  </>
+                )
               }
               searchPlaceholder="Bijv. Thuisbatterij leads Q2"
               picks={metaCampaignPicks}
@@ -1955,8 +1984,16 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
               />
               <span>
                 <strong>Standaard voor nieuwe batches</strong> — sla deze Meta-koppeling op voor{' '}
-                <strong>{cust?.name || 'deze klant'}</strong> + <strong>{br?.name || batch.branch}</strong>. Bij een nieuwe
-                leads-batch (portaal of admin zonder handmatige Meta-IDs) worden deze campagnes automatisch overgenomen.
+                <strong>{cust?.name || 'deze klant'}</strong>
+                {isNicheResearch && leadBranchSlug ? (
+                  <>
+                    {' '}
+                    + inbound <strong>{branches.find(b => b.slug === leadBranchSlug)?.name || leadBranchSlug}</strong>
+                  </>
+                ) : (
+                  <> + <strong>{br?.name || batch.branch}</strong></>
+                )}
+                . Nieuwe leads-batches zonder handmatige Meta-IDs pakken dit op.
               </span>
             </label>
             </>
@@ -2317,6 +2354,8 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
             notes: form.notes || null,
             ...(startsAtISO ? { starts_at: startsAtISO } : {}),
             ...(form.is_paid ? {} : { send_payment_email: form.send_payment_email }),
+            ...metaFieldsFromPicks(metaCampaignPicks),
+            meta_campaign_sync_enabled: metaSyncEnabled,
           }),
         });
         if (res.ok) onCreated();
@@ -2694,15 +2733,22 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
             </div>
           )}
 
-          {!isAppointments && form.batch_delivery === 'pipeline' && (
+          {!isAppointments && (form.batch_delivery === 'pipeline' || form.batch_delivery === 'niche_research') && (
             <MetaCampaignLinkerFields
               title="Meta campagnes (optioneel)"
               helpText={
-                <>
-                  Koppel één of <strong>meerdere</strong> Meta-campagnes. Ze worden samen op <strong>ACTIVE</strong> of{' '}
-                  <strong>PAUSED</strong> gezet volgens deze batch (zoals bij bewerken). Leeg laten kan; je kunt later altijd
-                  alsnog koppelen.
-                </>
+                form.batch_delivery === 'niche_research' ? (
+                  <>
+                    Koppel campagnes voor het onderzoek. Actief + betaald + sync aan → <strong>ACTIVE</strong> in Meta. Later
+                    altijd aanpasbaar in batchdetail.
+                  </>
+                ) : (
+                  <>
+                    Koppel één of <strong>meerdere</strong> Meta-campagnes. Ze worden samen op <strong>ACTIVE</strong> of{' '}
+                    <strong>PAUSED</strong> gezet volgens deze batch (zoals bij bewerken). Leeg laten kan; je kunt later altijd
+                    alsnog koppelen.
+                  </>
+                )
               }
               picks={metaCampaignPicks}
               setPicks={setMetaCampaignPicks}

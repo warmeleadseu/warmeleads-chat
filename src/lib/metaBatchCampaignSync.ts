@@ -2,7 +2,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { fetchBatchAssignmentCapCounts } from '@/lib/batchAssignmentCaps';
 import { coerceCustomerBatchMetaCampaignIds } from '@/lib/metaCampaignIds';
 import { getMetaCredentials, META_GRAPH_URL } from '@/lib/meta';
-import { isPipelineBatchKind } from '@/lib/batchKind';
+import { isMetaCampaignSyncBatchKind, isNicheResearchBatchKind } from '@/lib/batchKind';
+import { batchIsAtCapacity } from '@/lib/batchDeliveryModel';
 
 export type MetaBatchCampaignSyncTrigger = 'finalize' | 'batch_sync' | 'admin' | 'cron';
 
@@ -11,6 +12,7 @@ export type BatchMetaAssignmentCapCounts = { todayCount: number; weekCount: numb
 export type BatchMetaSyncRow = {
   id: string;
   batch_kind?: string | null;
+  delivery_model?: string | null;
   is_paid: boolean | null;
   status: string | null;
   batch_size: number | null;
@@ -21,7 +23,21 @@ export type BatchMetaSyncRow = {
   meta_campaign_ids: string[] | null;
   meta_campaign_paused_ids?: string[] | null;
   meta_campaign_sync_enabled: boolean | null;
+  lead_branch_slug?: string | null;
 };
+
+/** Branche-sleutel voor `customer_branch_meta_defaults` (onderzoek → inbound lead-branche). */
+export function metaDefaultsBranchForBatch(batch: {
+  branch: string;
+  batch_kind?: string | null;
+  lead_branch_slug?: string | null;
+}): string {
+  if (isNicheResearchBatchKind(batch.batch_kind)) {
+    const slug = String(batch.lead_branch_slug ?? '').trim();
+    if (slug) return slug;
+  }
+  return batch.branch;
+}
 
 export type ReconcileBatchMetaOptions = {
   /** Campagnes die niet meer gekoppeld zijn: expliciet naar PAUSED in Meta. */
@@ -41,7 +57,7 @@ export function hasBatchAdvertisingWindowStarted(startsAt: string | null | undef
 
 /**
  * Gewenste Meta campaign status voor alle gekoppelde campagnes van deze batch.
- * PAUSED = veilig default (onbetaald, niet actief, vol, pauze, sync uit, bulk/niche, vóór starts_at,
+ * PAUSED = veilig default (onbetaald, niet actief, vol [alleen capped], pauze, sync uit, bulk, vóór starts_at,
  * of dag-/weeklimiet bereikt zoals in `distributeLead` op `assigned_at`).
  *
  * Bij ingestelde `leads_per_day` / `leads_per_week` moet `capCounts` gezet zijn (anders PAUSED).
@@ -53,13 +69,20 @@ export function getDesiredMetaCampaignStatus(
   const ids = normalizeCampaignIds(row.meta_campaign_ids);
   if (ids.length === 0) return 'PAUSED';
   if (row.meta_campaign_sync_enabled === false) return 'PAUSED';
-  if (!isPipelineBatchKind(row.batch_kind)) return 'PAUSED';
+  if (!isMetaCampaignSyncBatchKind(row.batch_kind)) return 'PAUSED';
   if (row.is_paid !== true) return 'PAUSED';
   if (row.status !== 'active') return 'PAUSED';
 
-  const size = Number(row.batch_size) || 0;
-  const delivered = Number(row.leads_delivered) || 0;
-  if (size > 0 && delivered >= size) return 'PAUSED';
+  if (
+    batchIsAtCapacity({
+      delivery_model: row.delivery_model,
+      batch_kind: row.batch_kind,
+      batch_size: row.batch_size ?? 0,
+      leads_delivered: row.leads_delivered,
+    })
+  ) {
+    return 'PAUSED';
+  }
 
   if (!hasBatchAdvertisingWindowStarted(row.starts_at)) return 'PAUSED';
 
@@ -74,11 +97,11 @@ export function getDesiredMetaCampaignStatus(
   return 'ACTIVE';
 }
 
-/** Alleen actieve, betaalde pipeline-batches sturen Meta sync (voltooide batches worden genegeerd). */
+/** Alleen actieve, betaalde pipeline/onderzoek-batches sturen Meta sync (voltooide batches worden genegeerd). */
 export function isBatchEligibleForMetaSync(row: BatchMetaSyncRow): boolean {
   return (
     row.meta_campaign_sync_enabled !== false &&
-    isPipelineBatchKind(row.batch_kind) &&
+    isMetaCampaignSyncBatchKind(row.batch_kind) &&
     row.is_paid === true &&
     row.status === 'active'
   );
@@ -124,7 +147,7 @@ async function fetchActiveMetaLinkedBatches(supabase: SupabaseClient): Promise<B
   const { data, error } = await supabase
     .from('customer_batches')
     .select(
-      'id, batch_kind, is_paid, status, batch_size, leads_delivered, starts_at, leads_per_day, leads_per_week, meta_campaign_ids, meta_campaign_paused_ids, meta_campaign_sync_enabled',
+      'id, batch_kind, delivery_model, is_paid, status, batch_size, leads_delivered, starts_at, leads_per_day, leads_per_week, meta_campaign_ids, meta_campaign_paused_ids, meta_campaign_sync_enabled',
     )
     .eq('status', 'active')
     .eq('is_paid', true)
@@ -243,7 +266,7 @@ export async function reconcileBatchMetaCampaigns(
   const { data: row, error: fetchErr } = await supabase
     .from('customer_batches')
     .select(
-      'id, batch_kind, is_paid, status, batch_size, leads_delivered, starts_at, leads_per_day, leads_per_week, meta_campaign_ids, meta_campaign_paused_ids, meta_campaign_sync_enabled',
+      'id, batch_kind, delivery_model, is_paid, status, batch_size, leads_delivered, starts_at, leads_per_day, leads_per_week, meta_campaign_ids, meta_campaign_paused_ids, meta_campaign_sync_enabled',
     )
     .eq('id', batchId)
     .single();
@@ -395,7 +418,7 @@ export async function reconcileMetaCampaignsForCron(supabase: SupabaseClient, li
     .filter(r => {
       const mids = r.meta_campaign_ids as string[] | null;
       return (
-        isPipelineBatchKind((r as { batch_kind?: string }).batch_kind) &&
+        isMetaCampaignSyncBatchKind((r as { batch_kind?: string }).batch_kind) &&
         (r as { meta_campaign_sync_enabled?: boolean }).meta_campaign_sync_enabled !== false &&
         Array.isArray(mids) &&
         mids.length > 0

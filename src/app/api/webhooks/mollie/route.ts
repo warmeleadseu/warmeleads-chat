@@ -7,7 +7,7 @@ import { sendPushToCustomer } from '@/lib/pushNotification';
 import { createInvoice, notifyCustomerInvoicePaid, sendNewBatchAdminEmail } from '@/lib/invoice';
 import { insertCelebrationEvent } from '@/lib/celebrationInsert';
 import { finalizePaidLeadBatch, finalizePaidBulkLeadBatch } from '@/lib/finalizePaidLeadBatch';
-import { isBulkLeadsBatchKind, isPipelineBatchKind } from '@/lib/batchKind';
+import { isBulkLeadsBatchKind, isMetaCampaignSyncBatchKind, isPipelineBatchKind } from '@/lib/batchKind';
 import { reconcileBatchMetaCampaigns } from '@/lib/metaBatchCampaignSync';
 import { metaInheritanceNoteSuffix, resolveMetaCampaignFieldsForNewLeadBatch } from '@/lib/metaCampaignInheritance';
 import { ensureCustomerHasBranch } from '@/lib/nicheResearch';
@@ -364,10 +364,14 @@ export async function POST(request: NextRequest) {
           : null;
 
       let leadMetaResolved: Awaited<ReturnType<typeof resolveMetaCampaignFieldsForNewLeadBatch>> | null = null;
-      if (isPipelineBatchKind(orderBatchKind)) {
+      if (isMetaCampaignSyncBatchKind(orderBatchKind)) {
+        const metaBranch =
+          orderBatchKind === 'niche_research' && orderLeadBranchSlug
+            ? orderLeadBranchSlug
+            : order.branch;
         leadMetaResolved = await resolveMetaCampaignFieldsForNewLeadBatch(supabase, {
           customerId: order.customer_id,
-          branch: order.branch,
+          branch: metaBranch,
           sourceBatchId: orderSourceBatchId,
         });
       }
@@ -404,7 +408,7 @@ export async function POST(request: NextRequest) {
           : {}),
       };
 
-      if (isPipelineBatchKind(orderBatchKind) && leadMetaResolved) {
+      if (isMetaCampaignSyncBatchKind(orderBatchKind) && leadMetaResolved) {
         batchInsertPayload.meta_campaign_ids = leadMetaResolved.meta_campaign_ids;
         batchInsertPayload.meta_campaign_paused_ids = leadMetaResolved.meta_campaign_paused_ids;
         batchInsertPayload.meta_campaign_sync_enabled = leadMetaResolved.meta_campaign_sync_enabled;
@@ -553,7 +557,7 @@ export async function POST(request: NextRequest) {
         backfillBatch(newBatch.id, 3).catch(() => {});
       }
 
-      if (isPipelineBatchKind(orderBatchKind)) {
+      if (isMetaCampaignSyncBatchKind(orderBatchKind)) {
         reconcileBatchMetaCampaigns(supabase, newBatch.id, 'finalize').catch(err =>
           console.error('[mollie-webhook] meta reconcile portal batch:', err),
         );

@@ -127,6 +127,44 @@ describe('isBatchEligibleForMetaSync', () => {
   it('rejects completed batch', () => {
     expect(isBatchEligibleForMetaSync({ ...base, status: 'completed' })).toBe(false);
   });
+
+  it('accepts active paid niche_research batch', () => {
+    expect(
+      isBatchEligibleForMetaSync({
+        ...base,
+        batch_kind: 'niche_research',
+        batch_size: 1,
+        leads_delivered: 42,
+      }),
+    ).toBe(true);
+  });
+
+  it('rejects bulk_leads', () => {
+    expect(isBatchEligibleForMetaSync({ ...base, batch_kind: 'bulk_leads' })).toBe(false);
+  });
+});
+
+describe('getDesiredMetaCampaignStatus — niche_research', () => {
+  const nicheBase = {
+    id: 'n1',
+    batch_kind: 'niche_research' as const,
+    delivery_model: 'unlimited' as const,
+    is_paid: true,
+    status: 'active' as const,
+    batch_size: 1,
+    leads_delivered: 25,
+    meta_campaign_sync_enabled: true,
+    meta_campaign_ids: ['999'],
+    starts_at: null,
+  };
+
+  it('stays ACTIVE when delivered exceeds batch_size (unlimited delivery)', () => {
+    expect(getDesiredMetaCampaignStatus(nicheBase)).toBe('ACTIVE');
+  });
+
+  it('is PAUSED when batch status is paused', () => {
+    expect(getDesiredMetaCampaignStatus({ ...nicheBase, status: 'paused' })).toBe('PAUSED');
+  });
 });
 
 describe('resolveAggregatedMetaCampaignDesiredStatus', () => {

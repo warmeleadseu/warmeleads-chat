@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { isPipelineBatchKind } from '@/lib/batchKind';
+import { isNicheResearchBatchKind, isPipelineBatchKind } from '@/lib/batchKind';
 import { normalizeCampaignIds, sanitizePausedMetaCampaignIds } from '@/lib/metaBatchCampaignSync';
 
 export type MetaInheritanceSource = 'source_batch' | 'branch_default' | 'latest_batch' | 'none';
@@ -75,7 +75,7 @@ export function applyMetaInheritanceWaterfall(input: {
   }
 
   for (const row of historical) {
-    if (!isPipelineBatchKind(row.batch_kind)) continue;
+    if (!isPipelineBatchKind(row.batch_kind) && !isNicheResearchBatchKind(row.batch_kind)) continue;
     const ids = normalizeCampaignIds(row.meta_campaign_ids);
     if (ids.length > 0) {
       return resolvedFromRow(row, 'latest_batch');
@@ -141,12 +141,26 @@ export async function resolveMetaCampaignFieldsForNewLeadBatch(
     .order('created_at', { ascending: false })
     .limit(40);
 
+  const { data: nicheHistRows } = await supabase
+    .from('customer_batches')
+    .select('batch_kind, meta_campaign_ids, meta_campaign_paused_ids, meta_campaign_sync_enabled')
+    .eq('customer_id', customerId)
+    .eq('batch_kind', 'niche_research')
+    .eq('lead_branch_slug', branch)
+    .order('created_at', { ascending: false })
+    .limit(10);
+
+  const historical = [
+    ...((histRows || []) as MetaInheritRow[]),
+    ...((nicheHistRows || []) as MetaInheritRow[]),
+  ];
+
   return applyMetaInheritanceWaterfall({
     orderBranch: branch,
     customerId,
     sourceBatch,
     branchDefault,
-    historical: (histRows || []) as MetaInheritRow[],
+    historical,
   });
 }
 
