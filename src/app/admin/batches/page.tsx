@@ -31,6 +31,7 @@ import {
   GlobeAltIcon,
   PhoneIcon,
   UserIcon,
+  BoltIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
 import { openCustomerPortalAsAdmin } from '@/lib/adminOpenPortal';
@@ -85,6 +86,7 @@ interface Batch {
   meta_sync_last_attempt_at?: string | null;
   meta_sync_last_success_at?: string | null;
   meta_sync_last_error?: string | null;
+  distribution_priority?: boolean | null;
   customers?: {
     id?: string;
     name: string;
@@ -104,6 +106,52 @@ function isBulkLeadsBatch(b: Pick<Batch, 'batch_kind'>): boolean {
 
 function isNicheResearchBatch(b: Pick<Batch, 'batch_kind'>): boolean {
   return (b.batch_kind || '') === 'niche_research';
+}
+
+function hasDistributionPriority(b: Pick<Batch, 'distribution_priority'>): boolean {
+  return b.distribution_priority === true;
+}
+
+function showDistributionPriorityBadge(
+  b: Pick<Batch, 'distribution_priority' | 'batch_kind' | 'status'>,
+): boolean {
+  return isPipelineBatchKind(b.batch_kind) && hasDistributionPriority(b) && b.status !== 'completed';
+}
+
+function DistributionPriorityField({
+  checked,
+  onChange,
+  disabled,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <label
+      className={`flex items-start gap-3 rounded-xl border border-amber-200/80 bg-amber-50/60 p-3.5 ${
+        disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
+      }`}
+    >
+      <input
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={e => onChange(e.target.checked)}
+        className="mt-0.5 h-4 w-4 rounded border-amber-300 text-amber-600 focus:ring-amber-500 disabled:cursor-not-allowed"
+      />
+      <div>
+        <span className="flex items-center gap-1.5 text-sm font-semibold text-amber-900">
+          <BoltIcon className="h-4 w-4 shrink-0" aria-hidden />
+          Voorrang bij leadverdeling
+        </span>
+        <p className="mt-0.5 text-xs leading-relaxed text-amber-900/80">
+          Nieuwe leads gaan eerst naar deze batch, ook als er een oudere open batch van dezelfde klant en branche is.
+          Handig bij spoed. Tussen klanten telt voorrang mee in de matchvolgorde.
+        </p>
+      </div>
+    </label>
+  );
 }
 
 function batchProgressProps(b: Pick<Batch, 'delivery_model' | 'batch_kind' | 'batch_size' | 'leads_delivered'>) {
@@ -501,6 +549,12 @@ export default function BatchesPage() {
                               Meta · {metaLinkCount}
                             </span>
                           )}
+                          {showDistributionPriorityBadge(b) && (
+                            <span className="inline-flex w-fit items-center gap-0.5 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-900">
+                              <BoltIcon className="h-3 w-3 shrink-0" aria-hidden />
+                              Voorrang
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td className="px-4 py-3 text-right text-slate-700">
@@ -577,6 +631,12 @@ export default function BatchesPage() {
                           <span className="inline-flex items-center gap-0.5 rounded-md bg-indigo-50 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-800">
                             <GlobeAltIcon className="h-3 w-3 shrink-0" aria-hidden />
                             Meta · {metaLinkCount}
+                          </span>
+                        )}
+                        {showDistributionPriorityBadge(b) && (
+                          <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-900">
+                            <BoltIcon className="h-3 w-3 shrink-0" aria-hidden />
+                            Voorrang
                           </span>
                         )}
                       </div>
@@ -1071,6 +1131,12 @@ function BatchDetailPanel({ batchId, branches, onClose, onEdit, onListRefresh }:
                   ) : (
                     <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-1 text-xs font-medium text-red-600">
                       <ExclamationCircleIcon className="h-3.5 w-3.5" /> Onbetaald
+                    </span>
+                  )}
+                  {showDistributionPriorityBadge(batch) && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-900">
+                      <BoltIcon className="h-3.5 w-3.5" aria-hidden />
+                      Voorrang leadverdeling
                     </span>
                   )}
                 </div>
@@ -1568,6 +1634,12 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
   const [metaCampaignPicks, setMetaCampaignPicks] = useState<MetaCampaignPick[]>(() => picksFromBatchMeta(batch));
   const [metaSyncEnabled, setMetaSyncEnabled] = useState(() => batch.meta_campaign_sync_enabled !== false);
   const [saveBranchMetaDefault, setSaveBranchMetaDefault] = useState(false);
+  const [distributionPriority, setDistributionPriority] = useState(() => batch.distribution_priority === true);
+  const priorityEditable = isPipelineBatchKind(batch.batch_kind) && batch.status !== 'completed';
+
+  useEffect(() => {
+    setDistributionPriority(batch.distribution_priority === true);
+  }, [batch.id, batch.distribution_priority]);
 
   useEffect(() => {
     if (!isPipelineBatchKind(batch.batch_kind)) return;
@@ -1609,6 +1681,7 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
       if (isPipelineBatchKind(batch.batch_kind)) {
         Object.assign(payload, metaFieldsFromPicks(metaCampaignPicks));
         payload.meta_campaign_sync_enabled = metaSyncEnabled;
+        if (priorityEditable) payload.distribution_priority = distributionPriority;
         if (saveBranchMetaDefault) payload.save_branch_meta_default = true;
       }
       if (extraLeads > 0) {
@@ -1804,6 +1877,14 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
               </div>
             )}
           </div>
+          )}
+
+          {isPipelineBatchKind(batch.batch_kind) && (
+            <DistributionPriorityField
+              checked={distributionPriority}
+              onChange={setDistributionPriority}
+              disabled={!priorityEditable}
+            />
           )}
 
           {!isNicheResearch && (
@@ -2036,6 +2117,11 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
   const [startsAtTime, setStartsAtTime] = useState('09:00');
   const [metaCampaignPicks, setMetaCampaignPicks] = useState<MetaCampaignPick[]>([]);
   const [metaSyncEnabled, setMetaSyncEnabled] = useState(true);
+  const [distributionPriority, setDistributionPriority] = useState(false);
+
+  useEffect(() => {
+    if (form.batch_delivery !== 'pipeline') setDistributionPriority(false);
+  }, [form.batch_delivery]);
 
   useEffect(() => {
     if ((form.batch_product === 'leads' && form.batch_delivery === 'niche_research') || !form.branch) {
@@ -2258,6 +2344,7 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
             ? {
                 ...metaFieldsFromPicks(metaCampaignPicks),
                 meta_campaign_sync_enabled: metaSyncEnabled,
+                distribution_priority: distributionPriority,
               }
             : {}),
         }),
@@ -2546,6 +2633,13 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
             </div>
           </div>
           </>
+          )}
+
+          {form.batch_product === 'leads' && form.batch_delivery === 'pipeline' && (
+            <DistributionPriorityField
+              checked={distributionPriority}
+              onChange={setDistributionPriority}
+            />
           )}
 
           {/* Lookback — alleen zinvol voor lead pijplijn-batches */}

@@ -242,6 +242,7 @@ export async function POST(request: NextRequest) {
   };
 
   if (isPipelineBatchKind(batch_kind)) {
+    insertPayload.distribution_priority = body.distribution_priority === true;
     if (body.meta_campaign_ids !== undefined) {
       insertPayload.meta_campaign_ids = sanitizeMetaCampaignIdsInput(body.meta_campaign_ids) ?? [];
     }
@@ -474,8 +475,19 @@ export async function PUT(request: NextRequest) {
     'notes', 'lead_filters', 'status', 'completed_at', 'lookback_days',
     'compensations', 'starts_at', 'account_manager_id', 'batch_kind', 'niche_title',
     'meta_campaign_ids', 'meta_campaign_paused_ids', 'meta_campaign_sync_enabled',
-    'lead_branch_slug',
+    'lead_branch_slug', 'distribution_priority',
   ];
+  const effectiveBatchKind =
+    updates.batch_kind !== undefined
+      ? String(updates.batch_kind)
+      : String((existing as { batch_kind?: string }).batch_kind || 'leads');
+  if (updates.distribution_priority !== undefined) {
+    if (!isPipelineBatchKind(effectiveBatchKind)) {
+      delete updates.distribution_priority;
+    } else {
+      updates.distribution_priority = updates.distribution_priority === true;
+    }
+  }
   const safeUpdates: Record<string, unknown> = {};
   for (const key of allowedFields) {
     if (key in updates) safeUpdates[key] = updates[key];

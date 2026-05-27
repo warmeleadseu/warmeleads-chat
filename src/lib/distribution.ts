@@ -6,6 +6,7 @@ import { isPipelineBatchKind } from './batchKind';
 import { batchIsAtCapacity, isCappedDeliveryModel } from './batchDeliveryModel';
 import { getLeadLimitPeriodAnchors } from './batchAssignmentCaps';
 import { leadMatchesAnyProvinceTarget } from './provinceTargetMatch';
+import { filterPipelineBatchesToFifoHeads, isPipelineFifoHeadBatch } from './pipelineBatchFifo';
 
 /** Hard plafond in het product (gedeelde leads). */
 const MAX_ASSIGNMENTS = 3;
@@ -91,31 +92,6 @@ export function isPipelineBatchOpenForInbound<T extends {
   if (b.starts_at && new Date(b.starts_at) > now) return false;
   if (batchIsAtCapacity(b)) return false;
   return true;
-}
-
-function filterActivePipelineBatchesToFifoHeadPerCustomer<T extends {
-  id: string;
-  customer_id: string;
-  branch: string;
-  created_at: string;
-  leads_delivered: number | null;
-  batch_size: number;
-  starts_at?: string | null;
-}>(batches: T[], now: Date): T[] {
-  const byCustomer = new Map<string, T[]>();
-  for (const b of batches) {
-    const key = b.customer_id;
-    const list = byCustomer.get(key);
-    if (list) list.push(b);
-    else byCustomer.set(key, [b]);
-  }
-  const keep = new Set<string>();
-  for (const list of byCustomer.values()) {
-    list.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-    const head = list.find(b => isPipelineBatchOpenForInbound(b, now));
-    if (head) keep.add(head.id);
-  }
-  return batches.filter(b => keep.has(b.id));
 }
 
 function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
@@ -234,6 +210,9 @@ type ActiveCustomerBatch = {
   created_at: string;
   is_paid: boolean | null;
   starts_at: string | null;
+  distribution_priority?: boolean | null;
+  delivery_model?: string | null;
+  batch_kind?: string | null;
   customers: { id: string; is_active: boolean; portal_active: boolean };
 };
 
@@ -243,7 +222,7 @@ async function fetchActiveBatchesForBranch(
 ): Promise<ActiveCustomerBatch[]> {
   const { data } = await supabase
     .from('customer_batches')
-    .select('id, customer_id, branch, batch_size, leads_delivered, leads_delivered_external, leads_per_week, leads_per_day, lead_filters, created_at, is_paid, starts_at, delivery_model, batch_kind, customers!inner(id, is_active, portal_active)')
+    .select('id, customer_id, branch, batch_size, leads_delivered, leads_delivered_external, leads_per_week, leads_per_day, lead_filters, created_at, is_paid, starts_at, distribution_priority, delivery_model, batch_kind, customers!inner(id, is_active, portal_active)')
     .eq('branch', branch)
     .eq('status', 'active')
     .eq('batch_kind', 'leads')
@@ -347,7 +326,7 @@ export async function distributeLead(
   if (!activeBatches || activeBatches.length === 0) return result;
 
   const now = new Date();
-  const fifoActiveBatches = filterActivePipelineBatchesToFifoHeadPerCustomer(activeBatches, now);
+  const fifoActiveBatches = filterPipelineBatchesToFifoHeads(activeBatches, now);
   if (fifoActiveBatches.length === 0) return result;
 
   const batchesWithWeeklyLimit = fifoActiveBatches.filter(b => b.leads_per_week && b.leads_per_week > 0);
@@ -413,6 +392,7 @@ export async function distributeLead(
     min_radius: number;
     distance_km: number;
     recent_24h: number;
+    distribution_priority: boolean;
   }
 
   const matches: Match[] = [];
@@ -486,6 +466,7 @@ export async function distributeLead(
           min_radius: bestMatch.radius,
           distance_km: Math.round(bestMatch.distance * 10) / 10,
           recent_24h: 0,
+          distribution_priority: batch.distribution_priority === true,
         });
       }
     }
@@ -517,6 +498,9 @@ export async function distributeLead(
       const aPref = a.customer_id === prefer;
       const bPref = b.customer_id === prefer;
       if (aPref !== bPref) return aPref ? -1 : 1;
+    }
+    if (a.distribution_priority !== b.distribution_priority) {
+      return a.distribution_priority ? -1 : 1;
     }
     // 1. Smallest target radius wins (specific area > broad area)
     if (a.min_radius !== b.min_radius) return a.min_radius - b.min_radius;
@@ -686,16 +670,14 @@ export async function backfillBatch(batchId: string, lookbackDays: number): Prom
   const nowBf = new Date();
   const { data: fifoSiblings } = await supabase
     .from('customer_batches')
-    .select('id, created_at, leads_delivered, batch_size, starts_at')
+    .select('id, customer_id, branch, created_at, leads_delivered, batch_size, starts_at, distribution_priority, delivery_model, batch_kind')
     .eq('customer_id', batch.customer_id)
     .eq('branch', batch.branch)
     .eq('status', 'active')
     .eq('batch_kind', 'leads')
-    .neq('is_paid', false)
-    .order('created_at', { ascending: true });
+    .neq('is_paid', false);
 
-  const fifoHead = (fifoSiblings || []).find(b => isPipelineBatchOpenForInbound(b, nowBf));
-  if (!fifoHead || fifoHead.id !== batch.id) {
+  if (!isPipelineFifoHeadBatch(batch, fifoSiblings || [], nowBf)) {
     return { assigned: 0 };
   }
 

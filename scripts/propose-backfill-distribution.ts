@@ -11,6 +11,7 @@ import { resolve } from 'node:path';
 import { createClient } from '@supabase/supabase-js';
 import { batchIsAtCapacity, isCappedDeliveryModel } from '../src/lib/batchDeliveryModel';
 import { isPipelineBatchOpenForInbound } from '../src/lib/distribution';
+import { filterPipelineBatchesToFifoHeads } from '../src/lib/pipelineBatchFifo';
 import { leadMatchesAnyProvinceTarget } from '../src/lib/provinceTargetMatch';
 import { syncBatchDelivered } from '../src/lib/batchSync';
 import { onLeadAssignedToCustomer } from '../src/lib/integrations/onLeadAssigned';
@@ -35,25 +36,6 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
       Math.cos((lat2 * Math.PI) / 180) *
       Math.sin(dLng / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-function filterFifoHead<T extends { id: string; customer_id: string; created_at: string; leads_delivered: number | null; batch_size: number; starts_at?: string | null }>(
-  batches: T[],
-  now: Date,
-): T[] {
-  const byCustomer = new Map<string, T[]>();
-  for (const b of batches) {
-    const list = byCustomer.get(b.customer_id);
-    if (list) list.push(b);
-    else byCustomer.set(b.customer_id, [b]);
-  }
-  const keep = new Set<string>();
-  for (const list of byCustomer.values()) {
-    list.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-    const head = list.find((b) => isPipelineBatchOpenForInbound(b, now));
-    if (head) keep.add(head.id);
-  }
-  return batches.filter((b) => keep.has(b.id));
 }
 
 function supabase() {
@@ -303,7 +285,7 @@ async function main() {
 
   const batches = (batchesRaw || []) as unknown as BatchRow[];
   const now = new Date();
-  const fifoBatches = filterFifoHead(batches, now);
+  const fifoBatches = filterPipelineBatchesToFifoHeads(batches, now);
 
   const customerIds = [...new Set(fifoBatches.map((b) => b.customer_id))];
   const { data: targets } = await sb

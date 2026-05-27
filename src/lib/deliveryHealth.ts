@@ -1,4 +1,4 @@
-import { isPipelineBatchOpenForInbound } from './distribution';
+import { filterPipelineBatchesToFifoHeads } from './pipelineBatchFifo';
 
 /** Zichtbaar in admin: duidelijke labels, geen intern jargon. */
 export type LeveringBadge = 'goed' | 'let_op' | 'actie';
@@ -45,7 +45,7 @@ function kalenderdagenSindsReferentieAmsterdam(refIso: string): number {
   return Math.max(0, Math.round((t1 - t0) / 86400000));
 }
 
-/** FIFO per klant én branche: alleen de “kop”-batch krijgt nieuwe leads uit de pijplijn. */
+/** FIFO per klant én branche: alleen de “kop”-batch krijgt nieuwe leads (voorrang mogelijk). */
 export function fifoHeadBatchIdsVoorLevering<
   T extends {
     id: string;
@@ -55,22 +55,13 @@ export function fifoHeadBatchIdsVoorLevering<
     leads_delivered: number | null;
     batch_size: number;
     starts_at?: string | null;
+    delivery_model?: string | null;
+    batch_kind?: string | null;
+    distribution_priority?: boolean | null;
   },
 >(batches: T[], now: Date = new Date()): Set<string> {
-  const byKey = new Map<string, T[]>();
-  for (const b of batches) {
-    const key = `${b.customer_id}|${b.branch}`;
-    const list = byKey.get(key);
-    if (list) list.push(b);
-    else byKey.set(key, [b]);
-  }
-  const keep = new Set<string>();
-  for (const list of byKey.values()) {
-    list.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-    const head = list.find(x => isPipelineBatchOpenForInbound(x, now));
-    if (head) keep.add(head.id);
-  }
-  return keep;
+  const heads = filterPipelineBatchesToFifoHeads(batches, now);
+  return new Set(heads.map((b) => b.id));
 }
 
 function dagLabelNl(ymd: string): string {
