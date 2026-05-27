@@ -2,14 +2,18 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { resolvePartnerProspectAccountManagerId } from '@/lib/partnerProspectAssignment';
 import {
   DEFAULT_PARTNER_PROSPECT_AM_ID,
+  PARTNER_PROSPECT_BRANCH_LABELS,
   PARTNER_PROSPECT_BRANCH_SLUG,
+  type PartnerProspectBranchSlug,
+  isPartnerProspectBranchSlug,
+  normalizePartnerProspectBranchSlug,
 } from '@/lib/partnerProspectConstants';
 
 /** @deprecated Gebruik `resolvePartnerProspectAccountManagerId`; blijft als alias voor oude imports. */
 export const PARTNER_PROSPECT_ACCOUNT_MANAGER_ID = DEFAULT_PARTNER_PROSPECT_AM_ID;
 
 export function isPartnerProspectBranch(branch: string | undefined | null): boolean {
-  return (branch || '').trim() === PARTNER_PROSPECT_BRANCH_SLUG;
+  return isPartnerProspectBranchSlug(branch);
 }
 
 export type PartnerProspectPayload = {
@@ -85,6 +89,7 @@ function stripEmptyEntries(obj: Record<string, unknown>): Record<string, unknown
  * `enriched` optioneel: output van enrichLeadAddress (plaats/prov/land/postcode).
  */
 export function buildPartnerProspectInsertRow(
+  branchSlug: PartnerProspectBranchSlug,
   body: PartnerProspectPayload,
   customFields: Record<string, string>,
   enriched: { plaatsnaam?: string; provincie?: string; postcode?: string; land?: string } | null | undefined,
@@ -137,7 +142,7 @@ export function buildPartnerProspectInsertRow(
   });
 
   const source_metadata: Record<string, unknown> = {
-    partner_branch: PARTNER_PROSPECT_BRANCH_SLUG,
+    partner_branch: branchSlug,
     meta_campaign_id: metaCamp || null,
     meta_adset_id: metaSet || null,
     meta_ad_id: metaAd || null,
@@ -153,7 +158,7 @@ export function buildPartnerProspectInsertRow(
     postcode,
     city,
     country,
-    branches: [PARTNER_PROSPECT_BRANCH_SLUG],
+    branches: [branchSlug],
     status: 'nieuw',
     source: 'meta_partner',
     source_metadata,
@@ -167,6 +172,7 @@ export function buildPartnerProspectInsertRow(
 export async function findRecentPartnerProspectByEmail(
   supabase: SupabaseClient,
   email: string,
+  branchSlug: PartnerProspectBranchSlug,
   days = 30,
 ): Promise<{ id: string } | null> {
   const e = email.trim().toLowerCase();
@@ -176,10 +182,14 @@ export async function findRecentPartnerProspectByEmail(
     .from('prospects')
     .select('id')
     .eq('email', e)
-    .contains('branches', [PARTNER_PROSPECT_BRANCH_SLUG])
+    .contains('branches', [branchSlug])
     .gte('created_at', since)
     .maybeSingle();
   return data;
+}
+
+export function partnerProspectIngestLabel(branchSlug: PartnerProspectBranchSlug): string {
+  return PARTNER_PROSPECT_BRANCH_LABELS[branchSlug] ?? branchSlug;
 }
 
 export async function insertPartnerProspect(
@@ -211,7 +221,8 @@ export async function insertPartnerProspectFromEnrichedLeadRow(
   activity: { title: string; body?: string; type?: string; adminUserId?: string | null },
 ): Promise<{ id: string } | null> {
   const lr = leadRow;
-  const branchSlug = str(lr.branch) || PARTNER_PROSPECT_BRANCH_SLUG;
+  const branchSlug =
+    normalizePartnerProspectBranchSlug(str(lr.branch)) ?? PARTNER_PROSPECT_BRANCH_SLUG;
   const accountManagerId = await resolvePartnerProspectAccountManagerId(supabase, branchSlug);
   const payload: PartnerProspectPayload = {
     ...(lr as unknown as PartnerProspectPayload),
@@ -224,11 +235,17 @@ export async function insertPartnerProspectFromEnrichedLeadRow(
     lead_status: str(lr.status),
     lead_customer_id: lr.customer_id != null ? String(lr.customer_id) : undefined,
   };
-  const row = buildPartnerProspectInsertRow(payload, customFields, {
-    plaatsnaam: lr.plaatsnaam as string | undefined,
-    provincie: lr.provincie as string | undefined,
-    postcode: lr.postcode as string | undefined,
-    land: lr.land as string | undefined,
-  }, accountManagerId);
+  const row = buildPartnerProspectInsertRow(
+    branchSlug,
+    payload,
+    customFields,
+    {
+      plaatsnaam: lr.plaatsnaam as string | undefined,
+      provincie: lr.provincie as string | undefined,
+      postcode: lr.postcode as string | undefined,
+      land: lr.land as string | undefined,
+    },
+    accountManagerId,
+  );
   return insertPartnerProspect(supabase, row, activity);
 }

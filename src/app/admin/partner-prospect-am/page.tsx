@@ -9,7 +9,11 @@ import {
   type PartnerProspectAmConfigDoc,
   type PartnerProspectAmStrategy,
 } from '@/lib/partnerProspectAssignment';
-import { PARTNER_PROSPECT_BRANCH_SLUG } from '@/lib/partnerProspectConstants';
+import {
+  PARTNER_PROSPECT_BRANCH_LABELS,
+  PARTNER_PROSPECT_BRANCH_SLUGS,
+  type PartnerProspectBranchSlug,
+} from '@/lib/partnerProspectConstants';
 
 type AdminOption = {
   id: string;
@@ -43,6 +47,24 @@ export default function PartnerProspectAmPage() {
     { admin_user_id: '', weight: 1 },
   ]);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
+  const [configDoc, setConfigDoc] = useState<PartnerProspectAmConfigDoc>({});
+  const [selectedBranch, setSelectedBranch] = useState<PartnerProspectBranchSlug>(
+    PARTNER_PROSPECT_BRANCH_SLUGS[0],
+  );
+
+  const applyBranchToForm = useCallback(
+    (branch: PartnerProspectBranchSlug, doc: PartnerProspectAmConfigDoc) => {
+      const bc = doc[branch];
+      if (bc?.assignees?.length) {
+        setStrategy(bc.strategy);
+        setAssignees(bc.assignees.map(a => ({ admin_user_id: a.admin_user_id, weight: a.weight ?? 1 })));
+      } else {
+        setStrategy('single');
+        setAssignees([{ admin_user_id: '', weight: 1 }]);
+      }
+    },
+    [],
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -57,17 +79,14 @@ export default function PartnerProspectAmPage() {
       }
       setUsers(data.users || []);
       setUpdatedAt(data.updated_at ?? null);
-      const doc = data.config as PartnerProspectAmConfigDoc;
-      const bc: PartnerProspectAmBranchConfig | undefined = doc?.[PARTNER_PROSPECT_BRANCH_SLUG];
-      if (bc?.assignees?.length) {
-        setStrategy(bc.strategy);
-        setAssignees(bc.assignees.map(a => ({ admin_user_id: a.admin_user_id, weight: a.weight ?? 1 })));
-      }
+      const doc = (data.config as PartnerProspectAmConfigDoc) || {};
+      setConfigDoc(doc);
+      applyBranchToForm(selectedBranch, doc);
     } catch {
       setError('Laden mislukt');
     }
     setLoading(false);
-  }, []);
+  }, [applyBranchToForm]);
 
   useEffect(() => {
     load();
@@ -88,7 +107,8 @@ export default function PartnerProspectAmPage() {
       return;
     }
     const config: PartnerProspectAmConfigDoc = {
-      [PARTNER_PROSPECT_BRANCH_SLUG]: { strategy, assignees: cleaned },
+      ...configDoc,
+      [selectedBranch]: { strategy, assignees: cleaned },
     };
     try {
       const res = await adminFetch('/api/admin/partner-prospect-am', {
@@ -112,6 +132,19 @@ export default function PartnerProspectAmPage() {
   const addRow = () => setAssignees(prev => [...prev, { admin_user_id: '', weight: 1 }]);
   const removeRow = (i: number) => setAssignees(prev => prev.filter((_, idx) => idx !== i));
 
+  const onBranchChange = (branch: PartnerProspectBranchSlug) => {
+    const merged: PartnerProspectAmConfigDoc = {
+      ...configDoc,
+      [selectedBranch]: {
+        strategy,
+        assignees: assignees.filter(a => a.admin_user_id.trim()),
+      },
+    };
+    setConfigDoc(merged);
+    setSelectedBranch(branch);
+    applyBranchToForm(branch, merged);
+  };
+
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-4 py-8">
       <div>
@@ -120,8 +153,8 @@ export default function PartnerProspectAmPage() {
           Partner-prospects — accountmanagers
         </h1>
         <p className="mt-1 text-sm text-slate-600">
-          Nieuwe prospects voor branch <span className="font-mono text-slate-800">{PARTNER_PROSPECT_BRANCH_SLUG}</span>{' '}
-          (webhook, import, backfill) krijgen automatisch een toegewezen accountmanager volgens onderstaande regels.
+          Nieuwe prospects voor partner-branches ({PARTNER_PROSPECT_BRANCH_SLUGS.join(', ')}) via webhook, import of
+          backfill krijgen automatisch een accountmanager volgens onderstaande regels per branch.
         </p>
         {updatedAt && (
           <p className="mt-1 text-xs text-slate-400">Laatst opgeslagen in instellingen: {new Date(updatedAt).toLocaleString('nl-NL')}</p>
@@ -138,6 +171,21 @@ export default function PartnerProspectAmPage() {
         <div className="h-40 animate-pulse rounded-xl bg-slate-100" />
       ) : (
         <div className="space-y-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Partner-branch</label>
+            <select
+              value={selectedBranch}
+              onChange={e => onBranchChange(e.target.value as PartnerProspectBranchSlug)}
+              className="mt-2 w-full max-w-md rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
+            >
+              {PARTNER_PROSPECT_BRANCH_SLUGS.map(slug => (
+                <option key={slug} value={slug}>
+                  {PARTNER_PROSPECT_BRANCH_LABELS[slug]} ({slug})
+                </option>
+              ))}
+            </select>
+          </div>
+
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Verdelingsstrategie</label>
             <select

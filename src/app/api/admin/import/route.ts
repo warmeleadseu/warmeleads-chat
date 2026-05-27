@@ -13,6 +13,11 @@ import {
   type PartnerProspectPayload,
 } from '@/lib/partnerProspectIngest';
 import { resolvePartnerProspectAccountManagerId } from '@/lib/partnerProspectAssignment';
+import {
+  normalizePartnerProspectBranchSlug,
+  type PartnerProspectBranchSlug,
+} from '@/lib/partnerProspectConstants';
+import { partnerProspectIngestLabel } from '@/lib/partnerProspectIngest';
 
 const ENRICH_CONCURRENCY = 8;
 
@@ -209,8 +214,14 @@ export async function POST(request: NextRequest) {
             !Array.isArray(row.custom_fields)
               ? (row.custom_fields as Record<string, string>)
               : {};
-          const accountManagerId = await resolvePartnerProspectAccountManagerId(supabase, branch);
+          const partnerBranch =
+            normalizePartnerProspectBranchSlug(branch) as PartnerProspectBranchSlug;
+          const accountManagerId = await resolvePartnerProspectAccountManagerId(
+            supabase,
+            partnerBranch,
+          );
           const insRow = buildPartnerProspectInsertRow(
+            partnerBranch,
             row as unknown as PartnerProspectPayload,
             cf,
             {
@@ -222,7 +233,7 @@ export async function POST(request: NextRequest) {
             accountManagerId,
           );
           const pr = await insertPartnerProspect(supabase, insRow, {
-            title: 'Spreadsheet import (Thuisbatterij Partners)',
+            title: `Spreadsheet import (${partnerProspectIngestLabel(partnerBranch)})`,
             body: 'Geïmporteerd via admin spreadsheet-import.',
             type: 'import',
             adminUserId: admin.id,

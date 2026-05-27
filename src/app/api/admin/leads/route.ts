@@ -13,7 +13,10 @@ import {
   insertPartnerProspectFromEnrichedLeadRow,
   isPartnerProspectBranch,
 } from '@/lib/partnerProspectIngest';
-import { PARTNER_PROSPECT_BRANCH_SLUG } from '@/lib/partnerProspectConstants';
+import {
+  normalizePartnerProspectBranchSlug,
+  PARTNER_PROSPECT_BRANCH_SLUGS,
+} from '@/lib/partnerProspectConstants';
 import { buildPhoneSearchIlikeClauses, sanitizePostgrestIlike } from '@/lib/phoneSearch';
 
 export async function GET(request: NextRequest) {
@@ -43,7 +46,11 @@ export async function GET(request: NextRequest) {
     .select('*, customers(id, name)', { count: 'exact' });
 
   if (!branch) {
-    query = query.neq('branch', PARTNER_PROSPECT_BRANCH_SLUG);
+    query = query.not(
+      'branch',
+      'in',
+      `(${PARTNER_PROSPECT_BRANCH_SLUGS.map(s => `"${s}"`).join(',')})`,
+    );
   }
 
   if (branch) {
@@ -178,8 +185,10 @@ export async function POST(request: NextRequest) {
       for (const l of partnerRows) {
         if (!l.naam_klant) continue;
         const cf = (l.custom_fields as Record<string, string>) || {};
+        const partnerBranch = normalizePartnerProspectBranchSlug(l.branch as string);
+        if (!partnerBranch) continue;
         if (l.email) {
-          const dup = await findRecentPartnerProspectByEmail(supabase, l.email as string);
+          const dup = await findRecentPartnerProspectByEmail(supabase, l.email as string, partnerBranch);
           if (dup) {
             deduplicatedPartner++;
             continue;
@@ -250,8 +259,12 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Naam is verplicht' }, { status: 400 });
       }
       const cf = (enriched.custom_fields as Record<string, string>) || {};
+      const partnerBranch = normalizePartnerProspectBranchSlug(enriched.branch);
+      if (!partnerBranch) {
+        return NextResponse.json({ error: 'Ongeldige partner-branch' }, { status: 400 });
+      }
       if (enriched.email) {
-        const dup = await findRecentPartnerProspectByEmail(supabase, enriched.email);
+        const dup = await findRecentPartnerProspectByEmail(supabase, enriched.email, partnerBranch);
         if (dup) {
           logAudit({
             adminId: admin.id,

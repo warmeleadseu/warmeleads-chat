@@ -7,11 +7,12 @@ import { checkLeadProfanity } from '@/lib/profanityFilter';
 import { checkRateLimit } from '@/lib/rateLimit';
 import { calculateQualityScore } from '@/lib/leadQuality';
 import { fireLeadCapi } from '@/lib/aiCapiHooks';
+import { normalizePartnerProspectBranchSlug } from '@/lib/partnerProspectConstants';
 import {
   buildPartnerProspectInsertRow,
   findRecentPartnerProspectByEmail,
   insertPartnerProspect,
-  isPartnerProspectBranch,
+  partnerProspectIngestLabel,
   type PartnerProspectPayload,
 } from '@/lib/partnerProspectIngest';
 import { resolvePartnerProspectAccountManagerId } from '@/lib/partnerProspectAssignment';
@@ -105,10 +106,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'naam_klant is verplicht' }, { status: 400 });
     }
 
-    /* ── Thuisbatterij Partners → prospects (geen lead-pool / distributie) ── */
-    if (isPartnerProspectBranch(branchSlug)) {
+    /* ── Partner-branches → prospects (geen lead-pool / distributie) ── */
+    const partnerBranch = normalizePartnerProspectBranchSlug(branchSlug);
+    if (partnerBranch) {
       if (lead.email) {
-        const dup = await findRecentPartnerProspectByEmail(supabase, lead.email);
+        const dup = await findRecentPartnerProspectByEmail(supabase, lead.email, partnerBranch);
         if (dup) {
           await supabase
             .from('webhook_keys')
@@ -153,18 +155,24 @@ export async function POST(request: NextRequest) {
         lead_customer_id: lead.customer_id != null ? String(lead.customer_id) : undefined,
       };
 
-      const accountManagerId = await resolvePartnerProspectAccountManagerId(supabase, branchSlug);
+      const accountManagerId = await resolvePartnerProspectAccountManagerId(supabase, partnerBranch);
 
-      const row = buildPartnerProspectInsertRow(payload, customFields, {
-        plaatsnaam: lead.plaatsnaam,
-        provincie: lead.provincie,
-        postcode: lead.postcode,
-        land: lead.land,
-      }, accountManagerId);
+      const row = buildPartnerProspectInsertRow(
+        partnerBranch,
+        payload,
+        customFields,
+        {
+          plaatsnaam: lead.plaatsnaam,
+          provincie: lead.provincie,
+          postcode: lead.postcode,
+          land: lead.land,
+        },
+        accountManagerId,
+      );
 
       const pr = await insertPartnerProspect(supabase, row, {
         title: 'Ingekomen via partner-webhook',
-        body: 'Thuisbatterij Partners (Zapier/Meta).',
+        body: `${partnerProspectIngestLabel(partnerBranch)} (Zapier/Meta).`,
         type: 'created',
       });
 

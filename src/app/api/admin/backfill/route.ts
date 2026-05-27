@@ -8,10 +8,12 @@ import { checkLeadProfanity } from '@/lib/profanityFilter';
 import { calculateQualityScore } from '@/lib/leadQuality';
 import { distributeLead } from '@/lib/distribution';
 import { syncBatchDelivered } from '@/lib/batchSync';
+import { normalizePartnerProspectBranchSlug } from '@/lib/partnerProspectConstants';
 import {
   findRecentPartnerProspectByEmail,
   insertPartnerProspectFromEnrichedLeadRow,
   isPartnerProspectBranch,
+  partnerProspectIngestLabel,
 } from '@/lib/partnerProspectIngest';
 
 const META_GRAPH_URL = 'https://graph.facebook.com/v21.0';
@@ -371,9 +373,10 @@ export async function POST(request: NextRequest) {
 
       if (!lead.naam_klant) { skipped++; continue; }
 
-      if (isPartnerProspectBranch(branch)) {
+      const partnerBranch = normalizePartnerProspectBranchSlug(branch);
+      if (partnerBranch) {
         if (lead.email) {
-          const dup = await findRecentPartnerProspectByEmail(supabase, lead.email);
+          const dup = await findRecentPartnerProspectByEmail(supabase, lead.email, partnerBranch);
           if (dup) {
             skipped++;
             continue;
@@ -387,7 +390,7 @@ export async function POST(request: NextRequest) {
           lead as Record<string, unknown>,
           customFields,
           {
-            title: 'Meta Lead Ads (Thuisbatterij Partners)',
+            title: `Meta Lead Ads (${partnerProspectIngestLabel(partnerBranch)})`,
             body: 'Geïmporteerd via admin backfill.',
             type: 'import',
           },
