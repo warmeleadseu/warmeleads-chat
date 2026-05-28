@@ -58,7 +58,8 @@ export function hasBatchAdvertisingWindowStarted(startsAt: string | null | undef
 /**
  * Gewenste Meta campaign status voor alle gekoppelde campagnes van deze batch.
  * PAUSED = veilig default (onbetaald, niet actief, vol [alleen capped], pauze, sync uit, bulk, vóór starts_at,
- * of dag-/weeklimiet bereikt zoals in `distributeLead` op `assigned_at`).
+ * of dag-/weeklimiet bereikt — gemeten op `lead.created_at` zodat backfilled leads
+ * tegen hun eigen kalenderdag tellen i.p.v. tegen de dag waarop ze ge-assignd werden).
  *
  * Bij ingestelde `leads_per_day` / `leads_per_week` moet `capCounts` gezet zijn (anders PAUSED).
  */

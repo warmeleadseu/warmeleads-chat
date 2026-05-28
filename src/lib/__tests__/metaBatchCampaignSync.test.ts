@@ -53,7 +53,7 @@ describe('getDesiredMetaCampaignStatus + starts_at', () => {
     expect(getDesiredMetaCampaignStatus({ ...base, leads_delivered: 10, starts_at: null })).toBe('PAUSED');
   });
 
-  it('is PAUSED at daily cap (assigned_at semantics via capCounts)', () => {
+  it('is PAUSED at daily cap (lead.created_at semantics via capCounts)', () => {
     expect(
       getDesiredMetaCampaignStatus({ ...base, leads_per_day: 3, starts_at: null }, { todayCount: 3, weekCount: 1 }),
     ).toBe('PAUSED');
