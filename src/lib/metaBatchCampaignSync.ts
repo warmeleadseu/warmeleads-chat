@@ -291,8 +291,8 @@ export async function reconcileBatchMetaCampaigns(
   }
 
   const batchDrivesSync = isBatchEligibleForMetaSync(batch);
-  /** Voltooide batch: geen status-sync voor gekoppelde campagnes (alleen ontkoppelde → PAUSED). */
-  const campaignIdsToSync = batchDrivesSync ? ids : [...orphanPause];
+  /** Altijd gekoppelde + expliciet te pauzeren campagnes evalueren (voltooid → PAUSED indien exclusief). */
+  const campaignIdsToSync = ids;
 
   if (campaignIdsToSync.length === 0) {
     await supabase
@@ -394,13 +394,32 @@ export async function reconcileBatchMetaCampaigns(
   await supabase.from('customer_batches').update(payload).eq('id', batchId);
 }
 
-/** Cron: alleen actieve betaalde batches met Meta-koppeling — idempotente reconcile. */
+function filterMetaSyncBatchIds(
+  rows: { id: string; meta_campaign_ids: unknown; batch_kind?: string; meta_campaign_sync_enabled?: boolean }[] | null,
+): string[] {
+  return (rows || [])
+    .filter(r => {
+      const mids = r.meta_campaign_ids as string[] | null;
+      return (
+        isMetaCampaignSyncBatchKind(r.batch_kind) &&
+        r.meta_campaign_sync_enabled !== false &&
+        Array.isArray(mids) &&
+        mids.length > 0
+      );
+    })
+    .map(r => r.id);
+}
+
+/** Cron: actieve batches + recent voltooide (heal gemiste pauze bij 75/75). */
 export async function reconcileMetaCampaignsForCron(supabase: SupabaseClient, limit = 60): Promise<{
   processed: number;
   errors: string[];
 }> {
   const errors: string[] = [];
-  const { data: rows, error } = await supabase
+  const activeLimit = Math.max(1, Math.ceil(limit * 0.6));
+  const completedLimit = Math.max(0, limit - activeLimit);
+
+  const { data: activeRows, error: activeErr } = await supabase
     .from('customer_batches')
     .select('id, meta_campaign_ids, batch_kind, status, is_paid, meta_campaign_sync_enabled')
     .eq('status', 'active')
@@ -409,23 +428,15 @@ export async function reconcileMetaCampaignsForCron(supabase: SupabaseClient, li
     .order('created_at', { ascending: false })
     .limit(300);
 
-  if (error) {
-    errors.push(error.message);
+  if (activeErr) {
+    errors.push(activeErr.message);
     return { processed: 0, errors };
   }
 
-  const candidateIds = (rows || [])
-    .filter(r => {
-      const mids = r.meta_campaign_ids as string[] | null;
-      return (
-        isMetaCampaignSyncBatchKind((r as { batch_kind?: string }).batch_kind) &&
-        (r as { meta_campaign_sync_enabled?: boolean }).meta_campaign_sync_enabled !== false &&
-        Array.isArray(mids) &&
-        mids.length > 0
-      );
-    })
-    .slice(0, limit)
-    .map(r => r.id as string);
+  const candidateIds = filterMetaSyncBatchIds(activeRows as Parameters<typeof filterMetaSyncBatchIds>[0]).slice(
+    0,
+    activeLimit,
+  );
 
   let processed = 0;
   for (const id of candidateIds) {
@@ -434,6 +445,40 @@ export async function reconcileMetaCampaignsForCron(supabase: SupabaseClient, li
       processed++;
     } catch (e) {
       errors.push(`${id}: ${(e as Error).message}`);
+    }
+  }
+
+  if (completedLimit > 0) {
+    const since = new Date(Date.now() - 90 * 86_400_000).toISOString();
+    const { data: completedRows, error: completedErr } = await supabase
+      .from('customer_batches')
+      .select(
+        'id, meta_campaign_ids, batch_kind, status, is_paid, meta_campaign_sync_enabled, completed_at, meta_sync_last_success_at',
+      )
+      .eq('status', 'completed')
+      .eq('is_paid', true)
+      .not('meta_campaign_ids', 'eq', '{}')
+      .gte('completed_at', since)
+      .order('completed_at', { ascending: false })
+      .limit(150);
+
+    if (completedErr) {
+      errors.push(completedErr.message);
+    } else {
+      const completedIds = filterMetaSyncBatchIds(
+        completedRows as Parameters<typeof filterMetaSyncBatchIds>[0],
+      )
+        .filter(id => !candidateIds.includes(id))
+        .slice(0, completedLimit);
+
+      for (const id of completedIds) {
+        try {
+          await reconcileBatchMetaCampaigns(supabase, id, 'cron');
+          processed++;
+        } catch (e) {
+          errors.push(`${id}: ${(e as Error).message}`);
+        }
+      }
     }
   }
 

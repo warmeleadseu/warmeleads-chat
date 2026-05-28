@@ -205,6 +205,17 @@ describe('resolveAggregatedMetaCampaignDesiredStatus', () => {
     expect(resolveAggregatedMetaCampaignDesiredStatus(sharedId, [])).toBe('PAUSED');
   });
 
+  it('pauses exclusive campaigns when only a completed batch still lists them', () => {
+    const exclusiveId = '999888777666';
+    const completedOnly = {
+      ...completedBatch,
+      meta_campaign_ids: [exclusiveId],
+    };
+    expect(resolveAggregatedMetaCampaignDesiredStatus(exclusiveId, [completedOnly])).toBe('PAUSED');
+    expect(isBatchEligibleForMetaSync(completedOnly)).toBe(false);
+    expect(getDesiredMetaCampaignStatus(completedOnly)).toBe('PAUSED');
+  });
+
   it('is PAUSED when manually paused on active batch', () => {
     expect(
       resolveAggregatedMetaCampaignDesiredStatus(sharedId, [
