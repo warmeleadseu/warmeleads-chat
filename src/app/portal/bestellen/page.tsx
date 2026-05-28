@@ -45,6 +45,11 @@ import {
 import NewCustomerOrderView from './NewCustomerOrderView';
 import NicheResearchOrderView from './NicheResearchOrderView';
 import type { Batch, Order, PricingData, WelcomeDiscountState } from './types';
+import { PortalPendingBatchesCard } from '../_components/PortalPendingBatchesCard';
+import {
+  collectPortalBatchesAwaitingPayment,
+  pickPortalReorderSourceBatch,
+} from '@/lib/portalBatches';
 
 export default function BestellenPage() {
   const { customer } = usePortal();
@@ -85,6 +90,7 @@ export default function BestellenPage() {
   const [cancellingOrder, setCancellingOrder] = useState(false);
   const [pricingData, setPricingData] = useState<PricingData | null>(null);
   const [welcomeDiscount, setWelcomeDiscount] = useState<WelcomeDiscountState>({ active: false, expiresAt: null });
+  const [payingBatchId, setPayingBatchId] = useState<string | null>(null);
 
   const [redirectOrder, setRedirectOrder] = useState<Order | null>(null);
   const pollRef = useRef<NodeJS.Timeout | null>(null);
@@ -136,7 +142,11 @@ export default function BestellenPage() {
     if (!customer) return;
     fetchData().then((result) => {
       if (!result) return;
-      const allBatches = [...(result.batches.active || []), ...(result.batches.completed || [])];
+      const allBatches = [
+        ...(result.batches.pending_payment || []),
+        ...(result.batches.active || []),
+        ...(result.batches.completed || []),
+      ];
 
       if (orderRedirectId && redirectStatus === 'redirect') {
         const found = result.orders.find((o: Order) => o.id === orderRedirectId);
@@ -167,23 +177,26 @@ export default function BestellenPage() {
         const match = allBatches.find((b: Batch) => b.id === sourceBatchId);
         if (match) {
           setSelectedBranch(match.branch);
-          const comps: { amount: number }[] = Array.isArray(match.compensations) ? match.compensations : [];
-          const totalComp = comps.reduce((s: number, c: { amount: number }) => s + c.amount, 0);
-          const originalSize = match.batch_size - totalComp;
-          setBatchSize(originalSize);
-          const standardSizes = [30, 50, 100, 200, 500];
-          if (!standardSizes.includes(originalSize)) {
-            setUseCustom(true);
-            setCustomSize(String(originalSize));
-          }
-          if (match.leads_per_day && match.leads_per_day > 0) {
-            setLeadsPerDay(match.leads_per_day);
+          if (match.status !== 'pending_payment') {
+            const comps: { amount: number }[] = Array.isArray(match.compensations) ? match.compensations : [];
+            const totalComp = comps.reduce((s: number, c: { amount: number }) => s + c.amount, 0);
+            const originalSize = match.batch_size - totalComp;
+            setBatchSize(originalSize);
+            const standardSizes = [30, 50, 100, 200, 500];
+            if (!standardSizes.includes(originalSize)) {
+              setUseCustom(true);
+              setCustomSize(String(originalSize));
+            }
+            if (match.leads_per_day && match.leads_per_day > 0) {
+              setLeadsPerDay(match.leads_per_day);
+            }
           }
         }
       }
 
       if (!sourceBatchId && !orderRedirectId && allBatches.length > 0) {
-        setSelectedBranch(allBatches[0].branch);
+        const firstReorder = pickPortalReorderSourceBatch(allBatches, allBatches[0].branch) || allBatches[0];
+        setSelectedBranch(firstReorder.branch);
       }
     }).finally(() => setLoading(false));
 
@@ -221,7 +234,14 @@ export default function BestellenPage() {
   }, [allBatches]);
 
   const activeBranch = useMemo(() => branchGroups.find(g => g.branch === selectedBranch), [branchGroups, selectedBranch]);
-  const sourceBatch = useMemo(() => activeBranch?.batches[0] || null, [activeBranch]);
+  const unpaidBatches = useMemo(
+    () => collectPortalBatchesAwaitingPayment(batches),
+    [batches],
+  );
+  const sourceBatch = useMemo((): Batch | null => {
+    if (!selectedBranch) return null;
+    return pickPortalReorderSourceBatch(allBatches, selectedBranch, sourceBatchId) as Batch | null;
+  }, [allBatches, selectedBranch, sourceBatchId]);
 
   const effectiveSize = useCustom ? (parseInt(customSize) || 0) : batchSize;
   const effectiveSpeed = useCustomSpeed ? (parseInt(customSpeed) || 0) : leadsPerDay;
@@ -275,6 +295,28 @@ export default function BestellenPage() {
       toast.error('Verwijderen mislukt');
     } finally {
       setCancellingOrder(false);
+    }
+  };
+
+  const payPendingBatch = async (batchId: string) => {
+    setPayingBatchId(batchId);
+    try {
+      const res = await portalFetch('/api/portal/pay-batch', {
+        method: 'POST',
+        body: JSON.stringify({ batch_id: batchId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(typeof data.error === 'string' ? data.error : 'Betaling starten mislukt');
+        return;
+      }
+      if (data.checkoutUrl) {
+        window.location.href = data.checkoutUrl;
+      }
+    } catch {
+      toast.error('Er is iets misgegaan');
+    } finally {
+      setPayingBatchId(null);
     }
   };
 
@@ -416,6 +458,15 @@ export default function BestellenPage() {
 
       {productTabs}
 
+      {unpaidBatches.length > 0 && (
+        <PortalPendingBatchesCard
+          batches={unpaidBatches}
+          btwRate={btwRate}
+          payingBatchId={payingBatchId}
+          onPay={payPendingBatch}
+        />
+      )}
+
       <AnimatePresence initial={false}>
         {showOrders && orders.length > 0 && (
           <motion.div
@@ -491,7 +542,14 @@ export default function BestellenPage() {
           <div className="h-2 overflow-hidden rounded-full bg-slate-100">
             <div
               className="h-full rounded-full bg-gradient-to-r from-brand-purple to-brand-pink transition-all duration-700"
-              style={{ width: `${Math.min(100, sourceBatch.batch_size > 0 ? (sourceBatch.leads_delivered / sourceBatch.batch_size) * 100 : 0)}%` }}
+              style={{
+                width: `${Math.min(
+                  100,
+                  Number(sourceBatch.batch_size) > 0
+                    ? (Number(sourceBatch.leads_delivered) / Number(sourceBatch.batch_size)) * 100
+                    : 0,
+                )}%`,
+              }}
             />
           </div>
           {sourceBatch.status === 'pending_payment' && (
@@ -499,7 +557,8 @@ export default function BestellenPage() {
               Betaling nog open — automatische lead-toewijzing start na betaling.
             </p>
           )}
-          {sourceBatch.status === 'active' && sourceBatch.leads_delivered >= sourceBatch.batch_size * 0.8 && (
+          {sourceBatch.status === 'active' &&
+            Number(sourceBatch.leads_delivered) >= Number(sourceBatch.batch_size) * 0.8 && (
             <p className="mt-2 text-xs font-medium text-amber-600">
               <SparklesIcon className="mr-1 inline h-3.5 w-3.5" />
               Bijna vol! Bestel nu een vervolg batch zodat je geen leads mist.

@@ -56,6 +56,11 @@ import { PERMISSIONS } from '@/lib/portalPermissions';
 import { PageHeader, useToast } from './_ui';
 import { STATUS_COLORS, STATUS_OPTIONS } from './_constants/leadStatus';
 import { getBatchProgressView, isCappedDeliveryModel } from '@/lib/batchDeliveryModel';
+import {
+  collectPortalBatchesAwaitingPayment,
+  pickPortalProgressBatch,
+} from '@/lib/portalBatches';
+import { PortalPendingBatchesCard } from './_components/PortalPendingBatchesCard';
 
 function WhatsAppIcon({ className }: { className?: string }) {
   return (
@@ -379,50 +384,29 @@ export default function PortalPage() {
   const conversionRate = stats.totalLeads > 0
     ? Math.round((stats.sold / stats.totalLeads) * 100)
     : 0;
-  const liveAndPendingBatches = useMemo(
-    () => [...(batches.pending_payment || []), ...batches.active],
-    [batches.pending_payment, batches.active],
+  const unpaidBatches = useMemo(
+    () => collectPortalBatchesAwaitingPayment(batches) as Batch[],
+    [batches],
   );
-  const hasUnpaidBatch = useMemo(
-    () =>
-      liveAndPendingBatches.some(
-        (b) => b.is_paid === false || b.status === 'pending_payment',
-      ),
-    [liveAndPendingBatches],
+  const hasUnpaidBatch = unpaidBatches.length > 0;
+  const progressBatch = useMemo(
+    () => pickPortalProgressBatch(batches) as Batch | null,
+    [batches],
   );
-  const primaryBatch = useMemo(() => {
-    if (liveAndPendingBatches.length === 0) return null;
-    const unpaid = liveAndPendingBatches.find(
-      (b) => b.is_paid === false || b.status === 'pending_payment',
-    );
-    if (unpaid) return unpaid;
-    const sorted = [...batches.active].sort((a, b) => {
-      const aSize = Number(a.batch_size);
-      const bSize = Number(b.batch_size);
-      const aPct = aSize > 0 ? Number(a.leads_delivered) / aSize : 0;
-      const bPct = bSize > 0 ? Number(b.leads_delivered) / bSize : 0;
-      return bPct - aPct;
-    });
-    return sorted[0];
-  }, [liveAndPendingBatches, batches.active]);
-  const primaryBatchProgressView = useMemo(() => {
-    if (!primaryBatch) return null;
+  const progressBatchView = useMemo(() => {
+    if (!progressBatch) return null;
     return getBatchProgressView({
-      delivery_model: primaryBatch.delivery_model,
-      batch_kind: primaryBatch.batch_kind,
-      batch_size: Number(primaryBatch.batch_size),
-      leads_delivered: Number(primaryBatch.leads_delivered),
+      delivery_model: progressBatch.delivery_model,
+      batch_kind: progressBatch.batch_kind,
+      batch_size: Number(progressBatch.batch_size),
+      leads_delivered: Number(progressBatch.leads_delivered),
     });
-  }, [primaryBatch]);
-  const primaryBatchProgressPct = primaryBatchProgressView?.progressPercent ?? 0;
-  const primaryBatchIsUnpaid = primaryBatch
-    ? primaryBatch.is_paid === false || primaryBatch.status === 'pending_payment'
-    : false;
-  const primaryBatchShouldUpsell =
-    !!primaryBatch &&
-    !primaryBatchIsUnpaid &&
-    isCappedDeliveryModel(primaryBatch.delivery_model, primaryBatch.batch_kind) &&
-    primaryBatchProgressPct >= 80;
+  }, [progressBatch]);
+  const progressBatchPct = progressBatchView?.progressPercent ?? 0;
+  const progressBatchShouldUpsell =
+    !!progressBatch &&
+    isCappedDeliveryModel(progressBatch.delivery_model, progressBatch.batch_kind) &&
+    progressBatchPct >= 80;
   const latestHistoricalBatchId = useMemo(() => {
     if (batches.completed.length > 0 && typeof batches.completed[0].id === 'string') {
       return batches.completed[0].id;
@@ -894,15 +878,16 @@ export default function PortalPage() {
       <BatchConversionCard
         showDemoPortal={showDemoPortal}
         batchesLoading={batchesLoading}
-        primaryBatch={primaryBatch}
+        unpaidBatches={unpaidBatches}
+        progressBatch={progressBatch}
         latestHistoricalBatchId={latestHistoricalBatchId}
-        progressPct={primaryBatchProgressPct}
-        isUnpaid={primaryBatchIsUnpaid}
-        shouldUpsell={primaryBatchShouldUpsell}
+        progressPct={progressBatchPct}
+        shouldUpsell={progressBatchShouldUpsell}
         payingBatch={payingBatch}
         onPayBatch={handlePayBatch}
         onOpenOverview={() => setShowOverviewPanel(true)}
         customer={customer}
+        btwRate={portalBtwRate(customer)}
       />
 
       <div className="overflow-x-auto hide-scrollbar">
@@ -944,7 +929,8 @@ export default function PortalPage() {
         onClose={() => setShowOverviewPanel(false)}
         customer={customer}
         showDemoPortal={showDemoPortal}
-        primaryBatch={primaryBatch}
+        unpaidBatches={unpaidBatches}
+        progressBatch={progressBatch}
         batchesLoading={batchesLoading}
         stats={stats}
         statsLoading={statsLoading}
@@ -954,6 +940,7 @@ export default function PortalPage() {
         payingBatch={payingBatch}
         onViewNewLeads={viewNewLeads}
         getBranch={getBranch}
+        btwRate={portalBtwRate(customer)}
       />
 
       {/* Toolbar */}
@@ -1730,27 +1717,29 @@ function LeadDetailPanel({
 function BatchConversionCard({
   showDemoPortal,
   batchesLoading,
-  primaryBatch,
+  unpaidBatches,
+  progressBatch,
   latestHistoricalBatchId,
   progressPct,
-  isUnpaid,
   shouldUpsell,
   payingBatch,
   onPayBatch,
   onOpenOverview,
   customer,
+  btwRate,
 }: {
   showDemoPortal: boolean;
   batchesLoading: boolean;
-  primaryBatch: Batch | null;
+  unpaidBatches: Batch[];
+  progressBatch: Batch | null;
   latestHistoricalBatchId: string | null;
   progressPct: number;
-  isUnpaid: boolean;
   shouldUpsell: boolean;
   payingBatch: string | null;
   onPayBatch: (batchId: string) => void;
   onOpenOverview: () => void;
   customer: { country?: string | null; vat_id?: string | null; reverse_charge?: boolean };
+  btwRate: number;
 }) {
   if (batchesLoading) {
     return (
@@ -1764,7 +1753,20 @@ function BatchConversionCard({
     );
   }
 
-  if (!primaryBatch) {
+  const pendingSection =
+    unpaidBatches.length > 0 ? (
+      <PortalPendingBatchesCard
+        batches={unpaidBatches}
+        btwRate={btwRate}
+        payingBatchId={payingBatch}
+        onPay={onPayBatch}
+      />
+    ) : null;
+
+  if (!progressBatch) {
+    if (pendingSection) {
+      return <div className="space-y-3">{pendingSection}</div>;
+    }
     if (showDemoPortal) {
       return (
         <div className="rounded-xl border border-brand-purple/25 bg-gradient-to-r from-brand-purple/[0.06] via-brand-pink/[0.05] to-brand-orange/[0.05] p-3 sm:p-4">
@@ -1817,42 +1819,32 @@ function BatchConversionCard({
     );
   }
 
-  const batchId = typeof primaryBatch.id === 'string' ? primaryBatch.id : null;
-  const branchLabel = String(primaryBatch.branch_name || primaryBatch.branch || 'Batch');
-  const isApptProduct = primaryBatch.batch_product === 'appointments';
+  const batchId = typeof progressBatch.id === 'string' ? progressBatch.id : null;
+  const branchLabel = String(progressBatch.branch_name || progressBatch.branch || 'Batch');
+  const isApptProduct = progressBatch.batch_product === 'appointments';
   const delivered = Math.min(
-    Number(primaryBatch.leads_delivered || 0),
-    Number(primaryBatch.batch_size || 0),
+    Number(progressBatch.leads_delivered || 0),
+    Number(progressBatch.batch_size || 0),
   );
-  const size = Number(primaryBatch.batch_size || 0);
-  const btwRate = portalBtwRate(customer);
-  const isReverseCharge = btwRate === 0;
-  const amountForPayment = Number(primaryBatch.total_price || 0) > 0
-    ? Math.round(Number(primaryBatch.total_price || 0) * (1 + btwRate) * 100) / 100
-    : null;
-  const amountLabel = amountForPayment != null
-    ? `${formatCurrencyEUR(amountForPayment)} ${isReverseCharge ? '(BTW verlegd)' : 'incl. btw'}`
-    : '';
-  const statusTone = isUnpaid
-    ? 'border-red-200 bg-red-50/70'
-    : shouldUpsell
-      ? 'border-brand-purple/30 bg-brand-purple/[0.04]'
-      : 'border-slate-200 bg-white';
-  const progressTone = isUnpaid
-    ? 'from-red-500 to-orange-500'
-    : shouldUpsell
-      ? 'from-brand-purple to-brand-pink'
-      : 'from-brand-purple/70 to-brand-pink/70';
+  const size = Number(progressBatch.batch_size || 0);
+  const statusTone = shouldUpsell
+    ? 'border-brand-purple/30 bg-brand-purple/[0.04]'
+    : 'border-slate-200 bg-white';
+  const progressTone = shouldUpsell
+    ? 'from-brand-purple to-brand-pink'
+    : 'from-brand-purple/70 to-brand-pink/70';
 
   return (
-    <div className={`rounded-xl p-3 shadow-sm sm:p-4 ${statusTone}`}>
+    <div className="space-y-3">
+      {pendingSection}
+      <div className={`rounded-xl p-3 shadow-sm sm:p-4 ${statusTone}`}>
       <div className="flex flex-col gap-3">
         {showDemoPortal && (
           <div className="rounded-lg border border-brand-purple/25 bg-white/90 px-3 py-2 text-[11px] leading-relaxed text-slate-600">
             <span className="font-semibold text-brand-purple">Demo modus:</span>{' '}
             {isApptProduct
               ? 'Je ziet nog voorbeeldleads op het Leads-tabblad. Betaal je afspraak-batch om live te gaan met afspraken.'
-              : 'Je ziet nog voorbeeldleads in het overzicht. Na betaling van deze batch start levering met echte leads.'}
+              : 'Je ziet nog voorbeeldleads in het overzicht. Na betaling van openstaande batches start levering met echte leads.'}
           </div>
         )}
         <div className="flex items-start justify-between gap-3">
@@ -1862,30 +1854,22 @@ function BatchConversionCard({
               {branchLabel}
             </div>
             <p className="mt-2 text-sm font-semibold text-slate-900">
-              {isUnpaid
+              {shouldUpsell
                 ? isApptProduct
-                  ? 'Afspraak-batch staat klaar voor betaling'
-                  : 'Batch staat klaar voor betaling'
-                : shouldUpsell
-                  ? isApptProduct
-                    ? 'Afspraak-batch bijna vol'
-                    : 'Batch bijna afgerond'
-                  : isApptProduct
-                    ? 'Afspraak-batch actief'
-                    : 'Batch actief'}
+                  ? 'Afspraak-batch bijna vol'
+                  : 'Batch bijna afgerond'
+                : isApptProduct
+                  ? 'Afspraak-batch actief'
+                  : 'Batch actief'}
             </p>
             <p className="mt-0.5 text-xs text-slate-600">
-              {isUnpaid
+              {shouldUpsell
                 ? isApptProduct
-                  ? 'Na betaling wordt je afspraak-batch actief in het portaal.'
-                  : 'Na betaling start levering direct.'
-                : shouldUpsell
-                  ? isApptProduct
-                    ? 'Plan tijdig een vervolg zodat je agenda gevuld blijft.'
-                    : 'Bijna klaar - voorkom een gat in je instroom.'
-                  : isApptProduct
-                    ? 'Volg je voortgang in Agenda / Bestellen (afspraken).'
-                    : 'Volg je voortgang en houd grip op je planning.'}
+                  ? 'Plan tijdig een vervolg zodat je agenda gevuld blijft.'
+                  : 'Bijna klaar - voorkom een gat in je instroom.'
+                : isApptProduct
+                  ? 'Volg je voortgang in Agenda / Bestellen (afspraken).'
+                  : 'Volg je voortgang en houd grip op je planning.'}
             </p>
           </div>
           <div className="text-right">
@@ -1900,8 +1884,8 @@ function BatchConversionCard({
         <div>
           <div className="mb-1.5 flex items-center justify-between text-[11px] font-medium text-slate-500">
             <span>{progressPct}% geleverd</span>
-            {Number(primaryBatch.leads_per_day || 0) > 0 && (
-              <span>Max {Number(primaryBatch.leads_per_day)} per dag</span>
+            {Number(progressBatch.leads_per_day || 0) > 0 && (
+              <span>Max {Number(progressBatch.leads_per_day)} per dag</span>
             )}
           </div>
           <div className="h-2.5 overflow-hidden rounded-full bg-slate-200/70">
@@ -1913,20 +1897,7 @@ function BatchConversionCard({
         </div>
 
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          {isUnpaid && batchId ? (
-            <button
-              onClick={() => onPayBatch(batchId)}
-              disabled={payingBatch === batchId}
-              className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg border border-red-300 bg-red-100 px-4 py-2.5 text-sm font-semibold text-red-700 transition hover:bg-red-200 disabled:opacity-60"
-            >
-              <CreditCardIcon className="h-4 w-4" />
-              {payingBatch === batchId
-                ? 'Betaling openen...'
-                : isApptProduct
-                  ? `Afspraak-batch betalen${amountLabel ? ` - ${amountLabel}` : ''}`
-                  : `Batch betalen${amountLabel ? ` - ${amountLabel}` : ''}`}
-            </button>
-          ) : shouldUpsell ? (
+          {shouldUpsell ? (
             <Link
               href={batchId ? `/portal/bestellen?batch=${batchId}` : '/portal/bestellen'}
               className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg bg-button-gradient px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-brand-orange/20 transition hover:brightness-105"
@@ -1952,6 +1923,7 @@ function BatchConversionCard({
           </button>
         </div>
       </div>
+      </div>
     </div>
   );
 }
@@ -1961,7 +1933,8 @@ function OverviewDetailPanel({
   onClose,
   customer,
   showDemoPortal,
-  primaryBatch,
+  unpaidBatches,
+  progressBatch,
   batchesLoading,
   stats,
   statsLoading,
@@ -1971,12 +1944,14 @@ function OverviewDetailPanel({
   payingBatch,
   onViewNewLeads,
   getBranch,
+  btwRate,
 }: {
   open: boolean;
   onClose: () => void;
   customer: { demo_mode: boolean };
   showDemoPortal: boolean;
-  primaryBatch: Batch | null;
+  unpaidBatches: Batch[];
+  progressBatch: Batch | null;
   batchesLoading: boolean;
   stats: Stats;
   statsLoading: boolean;
@@ -1986,8 +1961,10 @@ function OverviewDetailPanel({
   payingBatch: string | null;
   onViewNewLeads: () => void;
   getBranch: (slug: string) => { name: string; light: string; text: string };
+  btwRate: number;
 }) {
-  const showBatchSection = batchesLoading || primaryBatch != null || !showDemoPortal;
+  const showBatchSection =
+    batchesLoading || unpaidBatches.length > 0 || progressBatch != null || !showDemoPortal;
 
   return (
     <AnimatePresence>
@@ -2027,7 +2004,7 @@ function OverviewDetailPanel({
               <p className="text-sm font-semibold text-slate-800">Demo modus actief</p>
               {hasUnpaidBatch ? (
                 <p className="mt-1 text-xs text-slate-500">
-                  Je ziet nog voorbeeldleads in het portaal. Er staat een batch klaar om te betalen — gebruik het blok &ldquo;Actieve batch&rdquo; hieronder.
+                  Je ziet nog voorbeeldleads in het portaal. Er staan batch(es) klaar om te betalen — zie het blok &ldquo;Betaling openstaand&rdquo; hieronder.
                 </p>
               ) : (
                 <>
@@ -2046,51 +2023,51 @@ function OverviewDetailPanel({
           )}
 
           {showBatchSection && (
-            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="space-y-3">
+              {!batchesLoading && unpaidBatches.length > 0 && (
+                <PortalPendingBatchesCard
+                  batches={unpaidBatches}
+                  btwRate={btwRate}
+                  payingBatchId={payingBatch}
+                  onPay={onPayBatch}
+                />
+              )}
+              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
               {batchesLoading ? (
                 <div className="space-y-2">
                   <div className="h-4 w-28 animate-pulse rounded bg-slate-100" />
                   <div className="h-2.5 w-full animate-pulse rounded bg-slate-100" />
                   <div className="h-3 w-40 animate-pulse rounded bg-slate-50" />
                 </div>
-              ) : primaryBatch ? (
+              ) : progressBatch ? (
                 <>
                   <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Actieve batch</p>
                   <div className="mb-2 flex items-center justify-between">
                     <span className="rounded-full bg-brand-purple/10 px-2.5 py-0.5 text-[11px] font-semibold text-brand-purple">
-                      {String(primaryBatch.branch_name || primaryBatch.branch || 'Batch')}
+                      {String(progressBatch.branch_name || progressBatch.branch || 'Batch')}
                     </span>
                     <span className="text-xs font-bold text-slate-900">
                       {Math.min(
-                        Number(primaryBatch.leads_delivered || 0),
-                        Number(primaryBatch.batch_size || 0),
-                      )} / {Number(primaryBatch.batch_size || 0)}
+                        Number(progressBatch.leads_delivered || 0),
+                        Number(progressBatch.batch_size || 0),
+                      )} / {Number(progressBatch.batch_size || 0)}
                     </span>
                   </div>
                   <div className="mb-2 h-2.5 overflow-hidden rounded-full bg-slate-100">
                     <div
                       className="h-full rounded-full bg-gradient-to-r from-brand-purple to-brand-pink"
                       style={{
-                        width: `${Number(primaryBatch.batch_size || 0) > 0
-                          ? Math.min(100, Math.round((Number(primaryBatch.leads_delivered || 0) / Number(primaryBatch.batch_size || 1)) * 100))
+                        width: `${Number(progressBatch.batch_size || 0) > 0
+                          ? Math.min(100, Math.round((Number(progressBatch.leads_delivered || 0) / Number(progressBatch.batch_size || 1)) * 100))
                           : 0}%`,
                       }}
                     />
                   </div>
                   <p className="text-xs text-slate-500">
-                    {Number(primaryBatch.leads_per_day || 0) > 0 ? `Max ${Number(primaryBatch.leads_per_day)} per dag` : 'Geen daglimiet'}
+                    {Number(progressBatch.leads_per_day || 0) > 0 ? `Max ${Number(progressBatch.leads_per_day)} per dag` : 'Geen daglimiet'}
                   </p>
-                  {primaryBatch.is_paid === false && typeof primaryBatch.id === 'string' && (
-                    <button
-                      onClick={() => onPayBatch(primaryBatch.id as string)}
-                      disabled={payingBatch === primaryBatch.id}
-                      className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 transition hover:bg-red-100 disabled:opacity-50"
-                    >
-                      {payingBatch === primaryBatch.id ? 'Laden...' : 'Batch betalen'}
-                    </button>
-                  )}
                 </>
-              ) : !showDemoPortal ? (
+              ) : !showDemoPortal && unpaidBatches.length === 0 ? (
                 <div>
                   <p className="text-sm font-semibold text-slate-800">Geen actieve batch</p>
                   <p className="mt-1 text-xs text-slate-500">Bestel een batch om nieuwe leads te ontvangen.</p>
@@ -2104,6 +2081,7 @@ function OverviewDetailPanel({
                   </Link>
                 </div>
               ) : null}
+              </div>
             </div>
           )}
 
