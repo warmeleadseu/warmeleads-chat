@@ -62,19 +62,21 @@ export default function LeadAppointmentSchedulePrompt({
         onClick={onDismiss}
         aria-hidden
       />
-      <motion.div
-        initial={{ y: '100%', opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        exit={{ y: '100%', opacity: 0 }}
-        transition={MOTION.springSheet}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="schedule-prompt-title"
-        aria-describedby="schedule-prompt-desc"
-        className="fixed inset-x-0 bottom-0 z-[60] mx-auto flex max-h-[min(92vh,640px)] w-full max-w-md flex-col overflow-hidden rounded-t-2xl border border-slate-200 bg-white shadow-2xl sm:inset-x-auto sm:left-1/2 sm:top-1/2 sm:bottom-auto sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-2xl"
-        style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 0px)' }}
-        onClick={e => e.stopPropagation()}
-      >
+      {/* Flex-centrering i.p.v. translate: framer-motion y overschrijft anders sm:-translate-* */}
+      <div className="pointer-events-none fixed inset-0 z-[60] flex items-end justify-center sm:items-center sm:p-4">
+        <motion.div
+          initial={{ y: '100%', opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: '100%', opacity: 0 }}
+          transition={MOTION.springSheet}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="schedule-prompt-title"
+          aria-describedby="schedule-prompt-desc"
+          className="pointer-events-auto flex max-h-[min(92vh,640px)] w-full max-w-md flex-col overflow-hidden rounded-t-2xl border border-slate-200 bg-white shadow-2xl sm:rounded-2xl"
+          style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 0px)' }}
+          onClick={e => e.stopPropagation()}
+        >
         <div className="h-1 bg-warmeleads-gradient sm:rounded-t-2xl" />
         <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-slate-200 sm:hidden" />
 
@@ -161,7 +163,8 @@ export default function LeadAppointmentSchedulePrompt({
             </>
           )}
         </footer>
-      </motion.div>
+        </motion.div>
+      </div>
     </>,
     document.body,
   );

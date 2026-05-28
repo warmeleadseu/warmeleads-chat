@@ -70,15 +70,16 @@ export function SheetModal({
             className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm"
             onClick={() => dismissible && onClose()}
           />
-          <motion.div
-            role="dialog"
-            aria-modal="true"
-            initial={{ y: '100%', opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: '100%', opacity: 0 }}
-            transition={MOTION.springSheet}
-            className={`fixed inset-x-0 bottom-0 z-[60] mx-auto flex max-h-[92vh] flex-col rounded-t-2xl border border-slate-200 bg-white shadow-2xl sm:inset-x-auto sm:left-1/2 sm:top-1/2 sm:bottom-auto sm:w-[calc(100%-2rem)] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-2xl ${SIZE[size]}`}
-          >
+          <div className="pointer-events-none fixed inset-0 z-[60] flex items-end justify-center sm:items-center sm:p-4">
+            <motion.div
+              role="dialog"
+              aria-modal="true"
+              initial={{ y: '100%', opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: '100%', opacity: 0 }}
+              transition={MOTION.springSheet}
+              className={`pointer-events-auto flex max-h-[92vh] w-full flex-col rounded-t-2xl border border-slate-200 bg-white shadow-2xl sm:w-[calc(100%-2rem)] sm:rounded-2xl ${SIZE[size]}`}
+            >
             <div className="h-1 bg-warmeleads-gradient sm:hidden" />
             {showHandle && <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-slate-200 sm:hidden" />}
 
@@ -108,7 +109,8 @@ export function SheetModal({
                 {footer}
               </footer>
             )}
-          </motion.div>
+            </motion.div>
+          </div>
         </>
       )}
     </AnimatePresence>,
