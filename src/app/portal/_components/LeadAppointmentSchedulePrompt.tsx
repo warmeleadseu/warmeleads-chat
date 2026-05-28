@@ -2,15 +2,16 @@
 
 import { useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import Link from 'next/link';
 import { motion } from 'framer-motion';
+import Link from 'next/link';
 import {
   CalendarDaysIcon,
   XMarkIcon,
   MapPinIcon,
   UserIcon,
-  ArrowRightIcon,
 } from '@heroicons/react/24/outline';
+import { StatusBadge } from '../_ui/StatusBadge';
+import { MOTION, T } from '../_ui/tokens';
 
 type LeadSummary = {
   id: string;
@@ -52,54 +53,66 @@ export default function LeadAppointmentSchedulePrompt({
   if (typeof window === 'undefined') return null;
 
   return createPortal(
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[55] flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4"
-      onClick={onDismiss}
-      role="presentation"
-    >
+    <>
       <motion.div
-        initial={{ y: 32, opacity: 0 }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm"
+        onClick={onDismiss}
+        aria-hidden
+      />
+      <motion.div
+        initial={{ y: '100%', opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        exit={{ y: 24, opacity: 0 }}
-        transition={{ type: 'spring', damping: 28, stiffness: 320 }}
-        onClick={e => e.stopPropagation()}
+        exit={{ y: '100%', opacity: 0 }}
+        transition={MOTION.springSheet}
         role="dialog"
+        aria-modal="true"
         aria-labelledby="schedule-prompt-title"
         aria-describedby="schedule-prompt-desc"
-        className="w-full max-w-md overflow-hidden rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl"
+        className="fixed inset-x-0 bottom-0 z-[60] mx-auto flex max-h-[min(92vh,640px)] w-full max-w-md flex-col overflow-hidden rounded-t-2xl border border-slate-200 bg-white shadow-2xl sm:inset-x-auto sm:left-1/2 sm:top-1/2 sm:bottom-auto sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-2xl"
         style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 0px)' }}
+        onClick={e => e.stopPropagation()}
       >
-        <div className="relative bg-gradient-to-br from-brand-purple via-brand-purple/95 to-brand-pink px-5 pb-5 pt-5 text-white sm:rounded-t-2xl">
+        <div className="h-1 bg-warmeleads-gradient sm:rounded-t-2xl" />
+        <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-slate-200 sm:hidden" />
+
+        <header className="flex items-start gap-3 px-5 pb-2 pt-4">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-purple/10 text-brand-purple">
+            <CalendarDaysIcon className="h-5 w-5" aria-hidden />
+          </div>
+          <div className="min-w-0 flex-1 pr-2">
+            <h2 id="schedule-prompt-title" className="text-base font-semibold text-slate-900">
+              {canSchedule ? 'Afspraak inplannen?' : 'Status bijgewerkt'}
+            </h2>
+            <p id="schedule-prompt-desc" className="mt-0.5 text-sm leading-snug text-slate-500">
+              {canSchedule
+                ? 'De lead staat op Afspraak. Kies een tijdstip in je agenda of sluit dit venster.'
+                : 'De lead staat op Afspraak. Voor het inplannen heb je rechten op de agenda nodig.'}
+            </p>
+          </div>
           <button
             type="button"
             onClick={onDismiss}
-            className="absolute right-3 top-3 rounded-full p-2 text-white/90 transition hover:bg-white/15"
+            className="shrink-0 rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
             aria-label="Sluiten"
           >
             <XMarkIcon className="h-5 w-5" />
           </button>
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/15 backdrop-blur-sm">
-            <CalendarDaysIcon className="h-6 w-6" />
-          </div>
-          <h2 id="schedule-prompt-title" className="mt-3 pr-10 text-lg font-bold leading-snug">
-            Status opgeslagen als Afspraak
-          </h2>
-          <p id="schedule-prompt-desc" className="mt-1 text-sm text-white/85">
-            Wil je meteen een moment in de agenda zetten? Dat mag — het is optioneel.
-          </p>
-        </div>
+        </header>
 
-        <div className="space-y-4 px-5 py-5">
-          <div className="rounded-xl border border-slate-100 bg-slate-50/80 p-3.5">
+        <div className="flex-1 overflow-y-auto px-5 pb-3">
+          <div className={`${T.cardMuted} p-3.5`}>
             <div className="flex items-start gap-3">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white shadow-sm">
-                <UserIcon className="h-5 w-5 text-brand-purple" />
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-100 bg-white">
+                <UserIcon className="h-5 w-5 text-slate-400" />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold text-slate-900">{lead.naam_klant}</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="truncate text-sm font-semibold text-slate-900">{lead.naam_klant}</p>
+                  <StatusBadge status="afspraak" scope="lead" className="shrink-0" />
+                </div>
                 <p className="mt-0.5 text-xs text-slate-500">{branchLabel}</p>
                 {lead.plaatsnaam ? (
                   <p className="mt-1 flex items-center gap-1 text-xs text-slate-500">
@@ -110,28 +123,25 @@ export default function LeadAppointmentSchedulePrompt({
               </div>
             </div>
           </div>
+        </div>
 
+        <footer className="space-y-2 border-t border-slate-100 px-5 py-4">
           {canSchedule ? (
             <>
-              <button
-                type="button"
-                onClick={onSchedule}
-                className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-brand-orange to-brand-pink px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-brand-orange/25 transition hover:brightness-105"
-              >
+              <button type="button" onClick={onSchedule} className={`${T.btnPrimaryLg} w-full`}>
                 <CalendarDaysIcon className="h-5 w-5" />
-                Afspraak inplannen in agenda
-                <ArrowRightIcon className="h-4 w-4 opacity-90" />
+                Tijdstip kiezen
               </button>
-              <button
-                type="button"
-                onClick={onDismiss}
-                className="min-h-11 w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-slate-50"
-              >
-                Later — geen afspraak nu
+              <button type="button" onClick={onDismiss} className={`${T.btnSecondary} w-full`}>
+                Niet nu
               </button>
-              <p className="text-center text-[11px] leading-relaxed text-slate-400">
-                Je kunt dit altijd nog doen via{' '}
-                <Link href="/portal/agenda" className="font-medium text-brand-purple hover:underline" onClick={onDismiss}>
+              <p className={T.helper + ' text-center'}>
+                Later via{' '}
+                <Link
+                  href="/portal/agenda"
+                  className="font-medium text-brand-purple hover:underline"
+                  onClick={onDismiss}
+                >
                   Agenda
                 </Link>
                 .
@@ -140,28 +150,19 @@ export default function LeadAppointmentSchedulePrompt({
           ) : (
             <>
               <p className="text-sm leading-relaxed text-slate-600">
-                De status is opgeslagen. Voor het inplannen van afspraken heb je rechten op de agenda nodig — vraag
-                je beheerder of open de agenda als je daar toegang toe hebt.
+                Vraag je beheerder om rechten voor de agenda, of open Agenda als je daar al toegang toe hebt.
               </p>
-              <Link
-                href="/portal/agenda"
-                onClick={onDismiss}
-                className="flex min-h-11 w-full items-center justify-center rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
-              >
+              <Link href="/portal/agenda" onClick={onDismiss} className={`${T.btnSecondary} w-full`}>
                 Naar agenda
               </Link>
-              <button
-                type="button"
-                onClick={onDismiss}
-                className="min-h-11 w-full rounded-xl border border-transparent px-4 py-2.5 text-sm font-medium text-slate-500 transition hover:text-slate-700"
-              >
+              <button type="button" onClick={onDismiss} className={`${T.btnGhost} w-full`}>
                 Sluiten
               </button>
             </>
           )}
-        </div>
+        </footer>
       </motion.div>
-    </motion.div>,
+    </>,
     document.body,
   );
 }
