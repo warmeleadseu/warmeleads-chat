@@ -61,6 +61,9 @@ import {
   pickPortalProgressBatch,
 } from '@/lib/portalBatches';
 import { PortalPendingBatchesCard } from './_components/PortalPendingBatchesCard';
+import LeadAppointmentSchedulePrompt from './_components/LeadAppointmentSchedulePrompt';
+import BookAppointmentModal from './agenda/BookAppointmentModal';
+import { leadRowToAppointmentPrefill } from '@/lib/leadAppointmentPrefill';
 
 function WhatsAppIcon({ className }: { className?: string }) {
   return (
@@ -267,9 +270,11 @@ function ReclamationListBadge({ status, reason }: { status: string; reason?: str
 }
 
 export default function PortalPage() {
-  const { customer, isOwner, hasPermission } = usePortal();
+  const { customer, isOwner, hasPermission, portalUser } = usePortal();
   const showDemoPortal = isDemoPortalExperience(customer);
   const canExport = isOwner || hasPermission(PERMISSIONS.LEADS_EXPORT);
+  const canScheduleAppointments = hasPermission(PERMISSIONS.APPOINTMENTS_EDIT);
+  const canViewAllAppointments = hasPermission(PERMISSIONS.APPOINTMENTS_VIEW_ALL);
   const searchParams = useSearchParams();
   const { crmLabel, crmReady } = useCrmBackfillReady(isOwner);
 
@@ -301,6 +306,9 @@ export default function PortalPage() {
   const [leadsScopeMaxRows, setLeadsScopeMaxRows] = useState<number | null>(null);
 
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
+  const [schedulePromptLead, setSchedulePromptLead] = useState<Lead | null>(null);
+  const [showBookFromLead, setShowBookFromLead] = useState(false);
+  const [agendaTeam, setAgendaTeam] = useState<{ id: string; name: string; role: string }[]>([]);
   const [showFilters, setShowFilters] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showExportWizard, setShowExportWizard] = useState(false);
@@ -536,6 +544,24 @@ export default function PortalPage() {
   useEffect(() => { fetchBatches(); }, [fetchBatches]);
   useEffect(() => { fetchNotifPrefs(); }, [fetchNotifPrefs]);
 
+  useEffect(() => {
+    if (!schedulePromptLead && !showBookFromLead) return;
+    portalFetch('/api/portal/team-list')
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => {
+        if (data?.members) {
+          setAgendaTeam(
+            data.members.map((m: { id: string; name: string; role: string }) => ({
+              id: m.id,
+              name: m.name,
+              role: m.role,
+            })),
+          );
+        }
+      })
+      .catch(() => {});
+  }, [schedulePromptLead, showBookFromLead]);
+
   const branchMap = useMemo(() => {
     const m: Record<string, BranchConfig> = {};
     branchConfigs.forEach(b => { m[b.slug] = b; });
@@ -577,6 +603,10 @@ export default function PortalPage() {
       }
       showToast('Status bijgewerkt');
       fetchStats(true);
+      if (newStatus === 'afspraak') {
+        const updated = { ...lead, status: newStatus };
+        setSchedulePromptLead(updated);
+      }
     } catch (err) {
       setLeads(prev => prev.map(l => l.id === lead.id ? { ...l, status: oldStatus } : l));
       if (selectedLead?.id === lead.id) {
@@ -585,6 +615,18 @@ export default function PortalPage() {
       showToast(err instanceof Error ? err.message : 'Fout bij bijwerken status', 'error');
     }
   };
+
+  const dismissSchedulePrompt = () => {
+    setShowBookFromLead(false);
+    setSchedulePromptLead(null);
+  };
+
+  const bookAppointmentInitialStart = useMemo(() => {
+    const d = new Date();
+    d.setMinutes(0, 0, 0);
+    d.setHours(d.getHours() + 1);
+    return d;
+  }, [schedulePromptLead?.id]);
 
   const handleNotesUpdate = async (lead: Lead, newNotes: string) => {
     const oldNotes = lead.notities;
@@ -1443,6 +1485,41 @@ export default function PortalPage() {
         exportSelection={exportSelection}
         showToast={showToast}
       />
+
+      <AnimatePresence>
+        {schedulePromptLead && !showBookFromLead && (
+          <LeadAppointmentSchedulePrompt
+            lead={schedulePromptLead}
+            branchLabel={getBranch(schedulePromptLead.branch).name}
+            canSchedule={canScheduleAppointments}
+            onSchedule={() => setShowBookFromLead(true)}
+            onDismiss={dismissSchedulePrompt}
+          />
+        )}
+      </AnimatePresence>
+
+      {showBookFromLead && schedulePromptLead && (
+        <BookAppointmentModal
+          customer={customer}
+          team={agendaTeam}
+          canViewAll={canViewAllAppointments}
+          portalUser={portalUser}
+          initialStart={bookAppointmentInitialStart}
+          initialPortalUserId={
+            canViewAllAppointments
+              ? (typeof schedulePromptLead.portal_user_id === 'string'
+                  ? schedulePromptLead.portal_user_id
+                  : null)
+              : portalUser?.id ?? null
+          }
+          initialLead={leadRowToAppointmentPrefill(schedulePromptLead as unknown as Record<string, unknown>)}
+          onClose={dismissSchedulePrompt}
+          onCreated={() => {
+            dismissSchedulePrompt();
+            showToast('Afspraak ingepland in je agenda');
+          }}
+        />
+      )}
 
       {/* Settings slide-over (portalled to body) */}
       {typeof document !== 'undefined' && createPortal(

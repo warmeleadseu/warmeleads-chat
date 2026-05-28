@@ -27,6 +27,7 @@ const LEAD_STATUS: Record<string, StatusStyle> = {
   gecontacteerd: { text: 'Gecontacteerd', cls: 'bg-amber-50 text-amber-700', dot: 'bg-amber-500' },
   geen_gehoor: { text: 'Geen gehoor', cls: 'bg-orange-50 text-orange-700', dot: 'bg-orange-500' },
   offerte: { text: 'Offerte', cls: 'bg-purple-50 text-purple-700', dot: 'bg-purple-500' },
+  afspraak: { text: 'Afspraak', cls: 'bg-indigo-50 text-indigo-700', dot: 'bg-indigo-500' },
   verkocht: { text: 'Verkocht', cls: 'bg-emerald-50 text-emerald-700', dot: 'bg-emerald-500' },
   afgewezen: { text: 'Afgewezen', cls: 'bg-slate-100 text-slate-500', dot: 'bg-slate-400' },
 };

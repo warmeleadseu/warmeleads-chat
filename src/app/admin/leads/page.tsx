@@ -327,10 +327,10 @@ interface LeadExport {
   lead_ids?: string[];
 }
 
-const STATUSES = ['nieuw', 'gecontacteerd', 'geen_gehoor', 'offerte', 'verkocht', 'afgewezen'] as const;
+const STATUSES = ['nieuw', 'gecontacteerd', 'geen_gehoor', 'offerte', 'afspraak', 'verkocht', 'afgewezen'] as const;
 const STATUS_LABELS: Record<string, string> = {
   nieuw: 'Nieuw', gecontacteerd: 'Gecontacteerd', geen_gehoor: 'Geen gehoor',
-  offerte: 'Offerte', verkocht: 'Verkocht', afgewezen: 'Afgewezen',
+  offerte: 'Offerte', afspraak: 'Afspraak', verkocht: 'Verkocht', afgewezen: 'Afgewezen',
 };
 const statusLabel = (s: string) => STATUS_LABELS[s] || s;
 const STATUS_COLORS: Record<string, string> = {
@@ -338,6 +338,7 @@ const STATUS_COLORS: Record<string, string> = {
   gecontacteerd: 'bg-amber-100 text-amber-700',
   geen_gehoor: 'bg-orange-100 text-orange-700',
   offerte: 'bg-purple-100 text-purple-700',
+  afspraak: 'bg-indigo-100 text-indigo-700',
   verkocht: 'bg-emerald-100 text-emerald-700',
   afgewezen: 'bg-red-100 text-red-700',
 };

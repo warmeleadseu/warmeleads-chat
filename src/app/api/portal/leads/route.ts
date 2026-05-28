@@ -6,6 +6,7 @@ import { repairDemoAssignmentsIfNeeded } from '@/lib/demoPortalLeads';
 import { getHasPaidCustomerBatch, shouldUseDemoPortalExperience } from '@/lib/demoPortalEligibility';
 import { buildPhoneSearchIlikeClauses, sanitizePostgrestIlike } from '@/lib/phoneSearch';
 import { normalizeProvincie } from '@/lib/pdok';
+import { isValidLeadStatus } from '@/lib/leadStatuses';
 
 const PAGE_SIZE = 1000;
 const IN_CHUNK = 500;
@@ -139,6 +140,7 @@ function enrichPortalLeadDistances(leads: Record<string, unknown>[], activeTarge
 }
 
 interface AssignmentMeta {
+  assignment_id: string;
   assigned_at: string;
   distance_km: number | null;
   status: string | null;
@@ -177,13 +179,29 @@ async function getCustomerLeadData(
   const ids = new Set<string>();
   const metaMap: Record<string, AssignmentMeta> = {};
   let partial = false;
-  const selectFields = 'lead_id, assigned_at, distance_km, status, notities, portal_user_id';
+  const selectFields = 'id, lead_id, assigned_at, distance_km, status, notities, portal_user_id';
 
-  type AssignRow = { lead_id: string; assigned_at: string; distance_km: number | null; status: string | null; notities: string | null; portal_user_id: string | null };
+  type AssignRow = {
+    id: string;
+    lead_id: string;
+    assigned_at: string;
+    distance_km: number | null;
+    status: string | null;
+    notities: string | null;
+    portal_user_id: string | null;
+  };
   const pushRow = (a: AssignRow) => {
     ids.add(a.lead_id);
     if (!metaMap[a.lead_id]) {
-      metaMap[a.lead_id] = { assigned_at: a.assigned_at, distance_km: a.distance_km, status: a.status, notities: a.notities, portal_user_id: a.portal_user_id, portal_user_name: null };
+      metaMap[a.lead_id] = {
+        assignment_id: a.id,
+        assigned_at: a.assigned_at,
+        distance_km: a.distance_km,
+        status: a.status,
+        notities: a.notities,
+        portal_user_id: a.portal_user_id,
+        portal_user_name: null,
+      };
     }
   };
 
@@ -423,6 +441,7 @@ export async function GET(request: NextRequest) {
         distance_km: meta?.distance_km ?? null,
         portal_user_id: meta?.portal_user_id ?? null,
         portal_user_name: meta?.portal_user_name ?? null,
+        assignment_id: meta?.assignment_id ?? null,
       };
     });
 
@@ -476,6 +495,7 @@ export async function GET(request: NextRequest) {
       distance_km: meta?.distance_km ?? null,
       portal_user_id: meta?.portal_user_id ?? null,
       portal_user_name: meta?.portal_user_name ?? null,
+      assignment_id: meta?.assignment_id ?? null,
     };
   });
 
@@ -529,8 +549,6 @@ export async function GET(request: NextRequest) {
   });
 }
 
-const VALID_STATUSES = ['nieuw', 'gecontacteerd', 'geen_gehoor', 'offerte', 'verkocht', 'afgewezen'];
-
 export async function PUT(request: NextRequest) {
   const session = await verifyCustomer(request);
   if (!session) return portalUnauthorized();
@@ -545,7 +563,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Lead ID is verplicht' }, { status: 400 });
     }
 
-    if (status !== undefined && !VALID_STATUSES.includes(status)) {
+    if (status !== undefined && !isValidLeadStatus(status)) {
       return NextResponse.json({ error: `Ongeldige status: ${status}` }, { status: 400 });
     }
 
