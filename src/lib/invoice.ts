@@ -369,7 +369,7 @@ export async function resendOpenInvoiceWithPaymentLinks(invoiceId: string): Prom
   }
   const { data: customer } = await supabase
     .from('customers')
-    .select('id, name, email, contact_person')
+    .select('id, name, email, contact_person, country')
     .eq('id', invoice.customer_id)
     .single();
   if (!customer?.email) throw new Error('Klant heeft geen e-mailadres');
@@ -387,7 +387,7 @@ export async function resendOpenInvoiceWithPaymentLinks(invoiceId: string): Prom
 }
 
 export async function sendOpenInvoiceEmail(
-  customer: { name: string; email: string; contact_person?: string },
+  customer: { name: string; email: string; contact_person?: string; country?: string | null },
   invoice: { invoice_number: string; total_incl_btw: number; description: string; id: string; vat_mode?: string },
   directCheckoutUrl?: string,
   options?: SendOpenInvoiceEmailOptions,
@@ -399,12 +399,14 @@ export async function sendOpenInvoiceEmail(
   const nb = options?.newBatchOrder;
   const esc = (s: string) =>
     s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const isBE = String(customer.country || 'NL').trim().toUpperCase() === 'BE';
+  const paymentMethodCopy = isBE ? 'Bancontact / kaart' : 'iDEAL / kaart';
   const subject = nb
     ? `Nieuwe lead-batch — factuur ${invoice.invoice_number} - WarmeLeads`
     : `Nieuwe factuur ${invoice.invoice_number} - WarmeLeads`;
   const introBlock = nb
     ? `<p style="margin:0 0 12px;font-size:15px;color:#475569;line-height:1.7">We hebben zojuist een <strong>nieuwe lead-batch</strong> voor je aangemaakt: <strong>${nb.batch_size} leads</strong> voor <strong>${esc(nb.branch_name)}</strong>.</p>
-              <p style="margin:0 0 28px;font-size:15px;color:#475569;line-height:1.7">Hieronder vind je de bijbehorende openstaande factuur. Betaal direct via de oranje knop (iDEAL / kaart), of open je portaal onder het tabblad Facturen — allebei dezelfde veilige Mollie-betaallink.</p>`
+              <p style="margin:0 0 28px;font-size:15px;color:#475569;line-height:1.7">Hieronder vind je de bijbehorende openstaande factuur. Betaal direct via de oranje knop (${paymentMethodCopy}), of open je portaal onder het tabblad Facturen — allebei dezelfde veilige Mollie-betaallink.</p>`
     : `<p style="margin:0 0 28px;font-size:15px;color:#475569;line-height:1.7">Er staat een nieuwe factuur voor je klaar.</p>`;
 
   const openReverseNote =
@@ -453,7 +455,7 @@ export async function sendOpenInvoiceEmail(
               ${directCheckoutUrl ? `
               <table cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom:12px">
                 <tr><td style="border-radius:10px;background:linear-gradient(135deg,#FF6B35,#FF4757)">
-                  <a href="${directCheckoutUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:14px 32px;color:#ffffff;font-size:14px;font-weight:700;text-decoration:none;letter-spacing:0.3px">Nu online betalen (iDEAL / kaart) &rarr;</a>
+                  <a href="${directCheckoutUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:14px 32px;color:#ffffff;font-size:14px;font-weight:700;text-decoration:none;letter-spacing:0.3px">Nu online betalen (${paymentMethodCopy}) &rarr;</a>
                 </td></tr>
               </table>` : ''}
               <table cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom:8px">

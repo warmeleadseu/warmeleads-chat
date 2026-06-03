@@ -98,6 +98,7 @@ export async function POST(request: NextRequest) {
         webhookUrl: `${baseUrl}/api/webhooks/mollie`,
         customerEmail: custData.email,
         customerName: custData.name,
+        billingCountry: (custData.country as string | null | undefined) ?? customer.country ?? null,
       });
 
       await supabase
@@ -176,6 +177,7 @@ export async function POST(request: NextRequest) {
       webhookUrl: `${baseUrlAppt}/api/webhooks/mollie`,
       customerEmail: custDataAppt.email,
       customerName: custDataAppt.name,
+      billingCountry: (custDataAppt.country as string | null | undefined) ?? customer.country ?? null,
     });
 
     await supabase

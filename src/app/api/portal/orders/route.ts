@@ -137,6 +137,7 @@ export async function POST(request: NextRequest) {
           webhookUrl: `${baseUrl}/api/webhooks/mollie`,
           customerEmail: custData.email,
           customerName: custData.name,
+          billingCountry: (custData as { country?: string | null }).country ?? null,
         });
       } catch (mollieErr) {
         console.error('Mollie payment creation failed, cleaning up order:', mollieErr);
@@ -304,6 +305,7 @@ export async function POST(request: NextRequest) {
         webhookUrl: `${baseUrl}/api/webhooks/mollie`,
         customerEmail: custData.email,
         customerName: custData.name,
+        billingCountry: (custData as { country?: string | null }).country ?? null,
       });
     } catch (mollieErr) {
       console.error('Mollie payment creation failed, cleaning up order:', mollieErr);

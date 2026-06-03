@@ -13,6 +13,7 @@ import {
   normalizeCustomerBranchSlugs,
   validateCustomerBranchSlugs,
 } from '@/lib/customerBranches';
+import { validateVatIdForCountry } from '@/lib/invoiceVat';
 
 const DEFAULT_LIMIT = 25;
 const MAX_LIMIT = 100;
@@ -179,6 +180,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Selecteer minimaal één branche' }, { status: 400 });
     }
 
+    if ('vat_id' in rest) {
+      const v = validateVatIdForCountry(rest.country as string | null | undefined, rest.vat_id as string | null | undefined);
+      if (!v.ok) return NextResponse.json({ error: v.error }, { status: 400 });
+      rest.vat_id = v.vat_id;
+    }
+
     const insertPayload = await sanitizeCustomerWritePayload(supabase, rest);
     const { data, error } = await supabase.from('customers').insert(insertPayload).select().single();
 
@@ -233,6 +240,18 @@ export async function PUT(request: NextRequest) {
         return NextResponse.json({ error: validated.error }, { status: 400 });
       }
       updates.branches = validated.slugs;
+    }
+
+    if ('vat_id' in updates) {
+      const nextCountry = 'country' in updates
+        ? (updates.country as string | null | undefined)
+        : (before?.country ?? null);
+      const v = validateVatIdForCountry(
+        nextCountry,
+        updates.vat_id as string | null | undefined,
+      );
+      if (!v.ok) return NextResponse.json({ error: v.error }, { status: 400 });
+      updates.vat_id = v.vat_id;
     }
 
     const updatePayload = await sanitizeCustomerWritePayload(supabase, updates);

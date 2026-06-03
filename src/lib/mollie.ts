@@ -12,6 +12,22 @@ export function getMollieClient() {
   return mollieClient;
 }
 
+export type MollieBillingCountry = 'NL' | 'BE';
+
+/**
+ * Mapt het facturatie-land naar de Mollie-locale die de checkout bepaalt
+ * welke betaalmethodes prominent getoond worden:
+ *   - `nl_NL` → iDEAL als hoofdkeuze (Nederland)
+ *   - `nl_BE` → Bancontact als hoofdkeuze (België)
+ *
+ * We laten Mollie zelf de set methodes bepalen op basis van locale; door geen
+ * `method` parameter mee te geven blijven creditcard, bankoverschrijving etc.
+ * beschikbaar zodat klanten zelf kunnen kiezen.
+ */
+export function mollieLocaleForCountry(country: string | null | undefined): 'nl_NL' | 'nl_BE' {
+  return String(country || 'NL').trim().toUpperCase() === 'BE' ? 'nl_BE' : 'nl_NL';
+}
+
 export interface CreateBatchPaymentParams {
   orderId: string;
   amount: number;
@@ -22,6 +38,12 @@ export interface CreateBatchPaymentParams {
   customerName: string;
   /** Kind discriminator for Mollie metadata; defaults to 'batch' (leads). */
   kind?: 'batch' | 'appointment_order' | 'invoice';
+  /**
+   * Facturatie-land van de klant. Bepaalt de Mollie-locale, en daarmee welke
+   * betaalmethode prominent wordt getoond (Bancontact voor BE, iDEAL voor NL).
+   * Default: NL.
+   */
+  billingCountry?: string | null;
 }
 
 export async function createBatchPayment({
@@ -33,8 +55,10 @@ export async function createBatchPayment({
   customerEmail,
   customerName,
   kind = 'batch',
+  billingCountry,
 }: CreateBatchPaymentParams) {
   const mollie = getMollieClient();
+  const locale = mollieLocaleForCountry(billingCountry);
 
   const payment = await mollie.payments.create({
     amount: {
@@ -46,6 +70,7 @@ export async function createBatchPayment({
     webhookUrl,
     metadata: { orderId, kind },
     billingEmail: customerEmail,
+    locale,
   });
 
   void customerName;

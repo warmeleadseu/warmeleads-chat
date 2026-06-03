@@ -150,6 +150,7 @@ export async function POST(request: NextRequest) {
         customerEmail: custData.email,
         customerName: custData.name,
         kind: 'appointment_order',
+        billingCountry: (custData as { country?: string | null }).country ?? null,
       });
     } catch (mollieErr) {
       console.error('Mollie appointment payment creation failed:', mollieErr);

@@ -17,6 +17,80 @@ export function isValidBelgianVatFormat(vat: string | null | undefined): boolean
   return /^\d{10}$/.test(digits);
 }
 
+/** NL + 9 cijfers + 'B' + 2 cijfers (NL BTW-nummer). */
+export function isValidDutchVatFormat(vat: string | null | undefined): boolean {
+  if (!vat) return false;
+  const s = vat.replace(/[\s.]/g, '').toUpperCase();
+  return /^NL\d{9}B\d{2}$/.test(s);
+}
+
+/** Compacte, hoofdletter-genormaliseerde representatie van een BTW-id. */
+export function normalizeVatId(vat: string | null | undefined): string | null {
+  if (typeof vat !== 'string') return null;
+  const s = vat.replace(/[\s.]/g, '').toUpperCase();
+  return s.length > 0 ? s : null;
+}
+
+/**
+ * Valideer een BTW-id in context van het opgegeven land.
+ * - Lege waarde mag (klant kan particulier zijn of nog onbekend).
+ * - Voor BE: moet exact `BE` + 10 cijfers zijn (anders 21% BTW i.p.v. verlegging).
+ * - Voor NL: als ingevuld, moet het NL-formaat hebben.
+ *
+ * Retourneert de genormaliseerde waarde of een foutmelding.
+ */
+export function validateVatIdForCountry(
+  country: string | null | undefined,
+  rawVatId: string | null | undefined,
+):
+  | { ok: true; vat_id: string | null }
+  | { ok: false; error: string } {
+  const normalized = normalizeVatId(rawVatId);
+  if (!normalized) return { ok: true, vat_id: null };
+
+  if (/[^A-Z0-9]/.test(normalized)) {
+    return {
+      ok: false,
+      error: 'BTW-nummer mag alleen letters en cijfers bevatten (geen e-mailadres of telefoonnummer).',
+    };
+  }
+
+  const billingCountry = normalizeBillingCountry(country);
+
+  if (billingCountry === 'BE') {
+    if (!isValidBelgianVatFormat(normalized)) {
+      return {
+        ok: false,
+        error: 'Ongeldig Belgisch BTW-nummer. Verwacht formaat: BE gevolgd door 10 cijfers (bv. BE0123456789).',
+      };
+    }
+    return { ok: true, vat_id: normalized };
+  }
+
+  // NL of fallback: accepteer als het NL-formaat heeft, of een ander geldig EU-prefix.
+  if (normalized.startsWith('NL')) {
+    if (!isValidDutchVatFormat(normalized)) {
+      return {
+        ok: false,
+        error: 'Ongeldig Nederlands BTW-nummer. Verwacht formaat: NL123456789B01.',
+      };
+    }
+  } else if (/^[A-Z]{2}/.test(normalized)) {
+    // Andere EU-prefix: minimaal 2 cijfers/letters na het landcode-prefix.
+    if (normalized.length < 6) {
+      return { ok: false, error: 'BTW-nummer is te kort.' };
+    }
+  } else {
+    // Geen landcode-prefix: te onduidelijk, blokkeer.
+    return {
+      ok: false,
+      error: 'BTW-nummer moet beginnen met een landcode (BE, NL, …).',
+    };
+  }
+
+  return { ok: true, vat_id: normalized };
+}
+
 /** Normaliseer naar BE of NL. */
 export function normalizeBillingCountry(raw: string | null | undefined): BillingCountry {
   const u = String(raw || 'NL')

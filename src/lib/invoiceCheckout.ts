@@ -46,7 +46,7 @@ export async function ensureInvoiceMollieCheckout(invoice: InvoiceRowMinimal): P
 
   const { data: cust } = await supabase
     .from('customers')
-    .select('id, name, email')
+    .select('id, name, email, country')
     .eq('id', invoice.customer_id)
     .single();
 
@@ -68,6 +68,7 @@ export async function ensureInvoiceMollieCheckout(invoice: InvoiceRowMinimal): P
     customerEmail: cust.email,
     customerName: cust.name,
     kind: 'invoice',
+    billingCountry: (cust as { country?: string | null }).country ?? null,
   });
 
   await supabase
