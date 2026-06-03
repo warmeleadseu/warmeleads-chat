@@ -6,6 +6,7 @@ import { isPhoneValid } from '@/lib/phoneValidation';
 import { checkLeadProfanity } from '@/lib/profanityFilter';
 import { calculateQualityScore } from '@/lib/leadQuality';
 import { logAudit } from '@/lib/audit';
+import { parseImportDate } from '@/lib/parseImportDate';
 import {
   buildPartnerProspectInsertRow,
   insertPartnerProspect,
@@ -36,27 +37,6 @@ function cleanPostcode(raw: string): string {
   return raw.replace(/\s+/g, '').toUpperCase().trim();
 }
 
-function parseDateValue(raw: string): string {
-  if (!raw) return new Date().toISOString().split('T')[0];
-
-  // Excel serial date (number like 45678)
-  const num = Number(raw);
-  if (!isNaN(num) && num > 30000 && num < 60000) {
-    const epoch = new Date(Date.UTC(1899, 11, 30));
-    epoch.setUTCDate(epoch.getUTCDate() + num);
-    return epoch.toISOString().split('T')[0];
-  }
-
-  // DD-MM-YYYY or DD/MM/YYYY
-  const dmy = raw.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);
-  if (dmy) return `${dmy[3]}-${dmy[2].padStart(2, '0')}-${dmy[1].padStart(2, '0')}`;
-
-  // YYYY-MM-DD (already ISO)
-  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
-
-  return new Date().toISOString().split('T')[0];
-}
 
 export async function POST(request: NextRequest) {
   const { admin, error } = await requireSuperAdmin(request);
@@ -122,6 +102,7 @@ export async function POST(request: NextRequest) {
     let skipped = 0;
     let duplicates = 0;
     let errors = 0;
+    let unparseableDates = 0;
     const errorDetails: string[] = [];
 
     // Pass 1: Validate, dedup, build lead objects (fast, no API calls)
@@ -152,6 +133,8 @@ export async function POST(request: NextRequest) {
       const postcode = cleanPostcode(lead.postcode || '');
       const huisnummer = (lead.huisnummer || '').trim();
 
+      const parsedWervingsdatum = parseImportDate(lead.wervingsdatum);
+      if (parsedWervingsdatum === null) unparseableDates++;
       const fields: Record<string, unknown> = {
         branch,
         naam_klant: naam,
@@ -162,7 +145,8 @@ export async function POST(request: NextRequest) {
         huisnummer: huisnummer || null,
         plaatsnaam: (lead.plaatsnaam || '').trim() || null,
         provincie: (lead.provincie || '').trim() || null,
-        wervingsdatum: parseDateValue(lead.wervingsdatum || ''),
+        wervingsdatum: parsedWervingsdatum,
+        wervingsdatum_unknown: parsedWervingsdatum === null,
         status: 'nieuw',
         bron: 'excel_import',
         notities: (lead.notities || '').trim() || null,
@@ -290,6 +274,7 @@ export async function POST(request: NextRequest) {
       skipped,
       duplicates,
       errors,
+      unparseableDates,
       errorDetails,
       insertedIds,
       ...(isPartnerProspectBranch(branch) ? { ingest: 'prospect' as const } : {}),

@@ -33,6 +33,10 @@ export async function GET(request: NextRequest) {
   const source = url.get('source');
   const dateFrom = url.get('date_from');
   const dateTo = url.get('date_to');
+  // Bij datum-range filters: als true/onbeperkt (default), neem ook leads
+  // mee waarvan de wervingsdatum onbekend is (bv. via een import zonder
+  // datum-kolom). Voorkomt dat ze onzichtbaar worden in date-range views.
+  const includeUnknownDate = url.get('include_unknown_date') !== 'false';
   const search = url.get('search');
   const phoneValid = url.get('phone_valid');
   const page = parseInt(url.get('page') || '1');
@@ -89,8 +93,20 @@ export async function GET(request: NextRequest) {
   }
   if (phoneValid === 'false') query = query.eq('phone_valid', false);
   if (phoneValid === 'true') query = query.eq('phone_valid', true);
-  if (dateFrom) query = query.gte('wervingsdatum', dateFrom);
-  if (dateTo) query = query.lte('wervingsdatum', dateTo);
+  if (dateFrom || dateTo) {
+    if (includeUnknownDate) {
+      // OR-clause: binnen de range OF wervingsdatum_unknown=true.
+      const conds: string[] = [];
+      if (dateFrom && dateTo) conds.push(`and(wervingsdatum.gte.${dateFrom},wervingsdatum.lte.${dateTo})`);
+      else if (dateFrom) conds.push(`wervingsdatum.gte.${dateFrom}`);
+      else if (dateTo) conds.push(`wervingsdatum.lte.${dateTo}`);
+      conds.push('wervingsdatum_unknown.eq.true');
+      query = query.or(conds.join(','));
+    } else {
+      if (dateFrom) query = query.gte('wervingsdatum', dateFrom);
+      if (dateTo) query = query.lte('wervingsdatum', dateTo);
+    }
+  }
   if (search) {
     const s = sanitizePostgrestIlike(search);
     const parts = [

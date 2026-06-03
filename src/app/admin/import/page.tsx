@@ -22,6 +22,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
 import { isSellableLeadBranch } from '@/lib/branchPolicy';
+import { parseImportDate } from '@/lib/parseImportDate';
 
 /* ─── Types ───────────────────────────────────────────────────────────── */
 
@@ -547,6 +548,27 @@ export default function ImportPage() {
   const currentMappingSheet = mappingActiveSheets[activeTab];
   const allMapped = mappingActiveSheets.every(s => Object.values(s.mapping).includes('naam_klant'));
 
+  // Telt per sheet: hoeveel rijen zouden een onparseerbare wervingsdatum krijgen
+  // (= leeg, ontbrekend of niet-herkend formaat → wervingsdatum wordt NULL na import).
+  const dateAudit = useMemo(() => {
+    return mappingActiveSheets.map(s => {
+      const dateHeader = Object.entries(s.mapping).find(([, f]) => f === 'wervingsdatum')?.[0];
+      const total = s.rows.length;
+      if (!dateHeader) return { name: s.name, total, unparseable: total, mapped: false };
+      let unparseable = 0;
+      for (const row of s.rows) {
+        if (parseImportDate(row[dateHeader]) === null) unparseable++;
+      }
+      return { name: s.name, total, unparseable, mapped: true };
+    });
+  }, [mappingActiveSheets]);
+
+  const totalRowsForImport = mappingActiveSheets.reduce((s, sh) => s + sh.rows.length, 0);
+  const totalUnparseableDates = dateAudit.reduce((s, a) => s + a.unparseable, 0);
+  const datePctUnparseable = totalRowsForImport > 0 ? (totalUnparseableDates / totalRowsForImport) * 100 : 0;
+  const showDateWarning = totalUnparseableDates > 0 && datePctUnparseable >= 5;
+  const [dateWarningAck, setDateWarningAck] = useState(false);
+
   /* ── Render ───────────────────────────────────────────────────── */
 
   const stepLabels = ['Upload', 'Tabbladen', 'Mapping', 'Importeren', 'Resultaat'];
@@ -865,6 +887,42 @@ export default function ImportPage() {
               </div>
             </div>
 
+            {/* Datum-waarschuwing */}
+            {showDateWarning && (
+              <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                <div className="flex items-start gap-3">
+                  <ExclamationTriangleIcon className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-amber-900">
+                      {totalUnparseableDates} van {totalRowsForImport} rijen ({datePctUnparseable.toFixed(0)}%) hebben geen leesbare wervingsdatum
+                    </p>
+                    <p className="mt-1 text-xs text-amber-800">
+                      Deze leads worden geïmporteerd met <strong>wervingsdatum onbekend</strong>. Ze blijven
+                      vindbaar en exporteerbaar (toggle &quot;leads zonder wervingsdatum meenemen&quot; staat
+                      standaard aan), maar tellen niet mee in datum-range filters tenzij die toggle aanstaat.
+                    </p>
+                    <ul className="mt-2 space-y-0.5 text-xs text-amber-800">
+                      {dateAudit.filter(a => a.unparseable > 0).map(a => (
+                        <li key={a.name}>
+                          <strong>{a.name}</strong>: {a.unparseable}/{a.total}{' '}
+                          {a.mapped ? 'cellen leeg of onleesbaar' : '— geen datumkolom gemapt'}
+                        </li>
+                      ))}
+                    </ul>
+                    <label className="mt-3 flex cursor-pointer items-center gap-2 text-xs font-medium text-amber-900">
+                      <input
+                        type="checkbox"
+                        checked={dateWarningAck}
+                        onChange={e => setDateWarningAck(e.target.checked)}
+                        className="h-4 w-4 rounded border-amber-300 text-amber-600 focus:ring-amber-500"
+                      />
+                      Ja, ik weet het — toch importeren
+                    </label>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Navigation */}
             <div className="mt-6 flex items-center justify-between">
               <div className="flex gap-3">
@@ -885,7 +943,7 @@ export default function ImportPage() {
                 ) : (
                   <button
                     onClick={runImport}
-                    disabled={!allMapped}
+                    disabled={!allMapped || (showDateWarning && !dateWarningAck)}
                     className="rounded-lg bg-button-gradient px-5 py-2.5 text-sm font-bold text-white shadow-sm disabled:opacity-50"
                   >
                     {activeSheets.reduce((s, sh) => s + sh.rows.length, 0)} leads importeren <ArrowRightIcon className="ml-1 inline h-3.5 w-3.5" />

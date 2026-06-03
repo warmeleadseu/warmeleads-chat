@@ -97,10 +97,15 @@ export async function POST(request: NextRequest) {
     branch, customer_id, exclude_customer_id, assignment,
     status, province, source,
     phone_valid, date_from, date_to, search, bulk_status,
+    include_unknown_date,
     target_customer_id, add_to_portal, format,
     max_leads, prioritize_least_exported,
     bulk_batch_id,
   } = body as Record<string, string | boolean | number | undefined>;
+  // Bij datum-range exports: standaard ook leads met onbekende wervingsdatum
+  // meenemen, zodat (bv. via een import zonder datum-kolom) deze leads niet
+  // permanent uit datum-range exports vallen.
+  const includeUnknownDate = include_unknown_date !== false && include_unknown_date !== 'false';
 
   const supabase = createServerClient();
 
@@ -142,8 +147,19 @@ export async function POST(request: NextRequest) {
   }
   if (phone_valid === 'false' || phone_valid === false) query = query.eq('phone_valid', false);
   if (phone_valid === 'true' || phone_valid === true) query = query.eq('phone_valid', true);
-  if (date_from) query = query.gte('wervingsdatum', String(date_from));
-  if (date_to) query = query.lte('wervingsdatum', String(date_to));
+  if (date_from || date_to) {
+    if (includeUnknownDate) {
+      const conds: string[] = [];
+      if (date_from && date_to) conds.push(`and(wervingsdatum.gte.${String(date_from)},wervingsdatum.lte.${String(date_to)})`);
+      else if (date_from) conds.push(`wervingsdatum.gte.${String(date_from)}`);
+      else if (date_to) conds.push(`wervingsdatum.lte.${String(date_to)}`);
+      conds.push('wervingsdatum_unknown.eq.true');
+      query = query.or(conds.join(','));
+    } else {
+      if (date_from) query = query.gte('wervingsdatum', String(date_from));
+      if (date_to) query = query.lte('wervingsdatum', String(date_to));
+    }
+  }
   if (search) {
     const s = sanitizePostgrestIlike(String(search));
     const parts = [
@@ -309,6 +325,7 @@ export async function POST(request: NextRequest) {
   if (phone_valid !== undefined) filterSnapshot.phone_valid = phone_valid;
   if (date_from) filterSnapshot.date_from = date_from;
   if (date_to) filterSnapshot.date_to = date_to;
+  if (date_from || date_to) filterSnapshot.include_unknown_date = includeUnknownDate;
   if (search) filterSnapshot.search = search;
   if (bulk_status) filterSnapshot.bulk_status = bulk_status;
   if (max_leads) filterSnapshot.max_leads = max_leads;

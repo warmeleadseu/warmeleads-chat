@@ -304,7 +304,7 @@ interface BranchConfig { id: string; slug: string; name: string; color: string; 
 interface Lead {
   id: string; branch: string; customer_id: string | null; customers?: { id: string; name: string } | null;
   naam_klant: string; email: string; telefoonnummer: string; postcode: string; huisnummer: string;
-  plaatsnaam: string; provincie: string; wervingsdatum: string; status: string; notities: string; bron: string;
+  plaatsnaam: string; provincie: string; wervingsdatum: string | null; wervingsdatum_unknown?: boolean; status: string; notities: string; bron: string;
   phone_valid?: boolean;
   lead_cost?: number | string | null;
   bulk_export_count?: number;
@@ -389,6 +389,9 @@ export default function LeadsCRMPage() {
   const [phoneFilter, setPhoneFilter] = useState('all');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  // Bij datum-range filter: standaard ook leads met onbekende wervingsdatum
+  // (bv. excel-import zonder datum-kolom) meenemen, anders verdwijnen ze.
+  const [includeUnknownDate, setIncludeUnknownDate] = useState(true);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(25);
@@ -433,6 +436,7 @@ export default function LeadsCRMPage() {
     if (bulkFilter !== 'all') p.set('bulk_status', bulkFilter);
     if (dateFrom) p.set('date_from', dateFrom);
     if (dateTo) p.set('date_to', dateTo);
+    if ((dateFrom || dateTo) && !includeUnknownDate) p.set('include_unknown_date', 'false');
     if (search) p.set('search', search);
     p.set('page', String(page));
     p.set('per_page', String(perPage));
@@ -441,7 +445,7 @@ export default function LeadsCRMPage() {
     const res = await adminFetch(`/api/admin/leads?${p}`);
     if (res.ok) { const d = await res.json(); setLeads(d.leads || []); setTotal(d.total || 0); }
     setLoading(false);
-  }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, search, page, perPage, sortBy, sortDir]);
+  }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, includeUnknownDate, search, page, perPage, sortBy, sortDir]);
 
   const fetchFacets = useCallback(async () => {
     const p = new URLSearchParams();
@@ -455,10 +459,11 @@ export default function LeadsCRMPage() {
     if (bulkFilter !== 'all') p.set('bulk_status', bulkFilter);
     if (dateFrom) p.set('date_from', dateFrom);
     if (dateTo) p.set('date_to', dateTo);
+    if ((dateFrom || dateTo) && !includeUnknownDate) p.set('include_unknown_date', 'false');
     if (search) p.set('search', search);
     const res = await adminFetch(`/api/admin/leads/facets?${p}`);
     if (res.ok) { const d = await res.json(); setFacets(d.facets || {}); }
-  }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, search]);
+  }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, includeUnknownDate, search]);
 
   const fetchExportHistory = useCallback(async () => {
     const res = await adminFetch('/api/admin/leads/export');
@@ -485,7 +490,7 @@ export default function LeadsCRMPage() {
   useEffect(() => { fetchMeta(); fetchExportHistory(); }, [fetchMeta, fetchExportHistory]);
   useEffect(() => { fetchLeads(); }, [fetchLeads]);
   useEffect(() => { fetchFacets(); }, [fetchFacets]);
-  useEffect(() => { setPage(1); }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, search, perPage]);
+  useEffect(() => { setPage(1); }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, includeUnknownDate, search, perPage]);
 
   useEffect(() => {
     const c = searchParams.get('customer');
@@ -564,9 +569,10 @@ export default function LeadsCRMPage() {
     if (bulkFilter !== 'all') p.bulk_status = bulkFilter;
     if (dateFrom) p.date_from = dateFrom;
     if (dateTo) p.date_to = dateTo;
+    if ((dateFrom || dateTo) && !includeUnknownDate) p.include_unknown_date = 'false';
     if (search) p.search = search;
     return p;
-  }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, search]);
+  }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, includeUnknownDate, search]);
 
   const handleQuickStatus = async (id: string, newStatus: string) => {
     await adminFetch('/api/admin/leads', { method: 'PUT', body: JSON.stringify({ id, status: newStatus }) });
@@ -734,6 +740,17 @@ export default function LeadsCRMPage() {
             <span className="text-xs text-slate-400">t/m</span>
             <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700" />
           </div>
+          {(dateFrom || dateTo) && (
+            <label className="flex cursor-pointer select-none items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
+              <input
+                type="checkbox"
+                checked={includeUnknownDate}
+                onChange={e => setIncludeUnknownDate(e.target.checked)}
+                className="h-3.5 w-3.5 rounded border-slate-300 text-brand-purple focus:ring-brand-purple"
+              />
+              <span>Ook leads zonder bekende datum</span>
+            </label>
+          )}
           <button
             onClick={handleValidatePhones}
             disabled={validatingPhones}
@@ -1005,7 +1022,11 @@ export default function LeadsCRMPage() {
                     {lead.phone_valid === false && <ExclamationTriangleIcon className="h-3 w-3 text-amber-500" />}
                   </span>
                 )}
-                {lead.wervingsdatum && <span>{lead.wervingsdatum}</span>}
+                {lead.wervingsdatum ? (
+                  <span>{lead.wervingsdatum}</span>
+                ) : lead.wervingsdatum_unknown ? (
+                  <span className="italic text-slate-400" title="Wervingsdatum onbekend (was leeg/onleesbaar bij import)">Datum onbekend</span>
+                ) : null}
               </div>
             </div>
           );

@@ -848,7 +848,13 @@ export default function AdminDashboard() {
                   </td>
                   <td className="px-3 py-2.5 text-slate-500">{lead.customers?.name || '-'}</td>
                   <td className="px-3 py-2.5 text-slate-500">{STATUS_LABELS[lead.status] || lead.status}</td>
-                  <td className="px-3 py-2.5 text-slate-400">{lead.wervingsdatum || '-'}</td>
+                  <td className="px-3 py-2.5 text-slate-400">
+                    {lead.wervingsdatum
+                      ? lead.wervingsdatum
+                      : lead.wervingsdatum_unknown
+                        ? <span className="italic" title="Wervingsdatum onbekend (was leeg/onleesbaar bij import)">onbekend</span>
+                        : '-'}
+                  </td>
                 </tr>
               ))}
               {stats.recentLeads.length === 0 && (
@@ -877,7 +883,11 @@ export default function AdminDashboard() {
                 {(() => { const b = getBranch(lead.branch); return (
                   <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${b.light} ${b.text}`}>{b.name}</span>
                 ); })()}
-                {lead.wervingsdatum && <span>{lead.wervingsdatum}</span>}
+                {lead.wervingsdatum ? (
+                  <span>{lead.wervingsdatum}</span>
+                ) : lead.wervingsdatum_unknown ? (
+                  <span className="italic">datum onbekend</span>
+                ) : null}
               </div>
             </div>
           ))}
