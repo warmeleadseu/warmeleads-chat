@@ -64,6 +64,7 @@ import { BatchTargetAreaBadges } from '@/components/admin/BatchTargetAreaBadges'
 import { BatchProgressDisplay } from '@/components/admin/BatchProgressDisplay';
 import type { CustomerTargetRow } from '@/lib/batchTargetAreas';
 import { getBatchProgressView, isCappedDeliveryModel } from '@/lib/batchDeliveryModel';
+import { EmailPreviewModal } from '../_components/EmailPreviewModal';
 
 interface LeadFilter { field: string; operator: string; value: string; values?: string[] }
 interface Compensation { amount: number; reason: string; date: string }
@@ -878,10 +879,10 @@ function BatchDetailPanel({ batchId, branches, onClose, onEdit, onListRefresh }:
   const [copied, setCopied] = useState<string | null>(null);
   const [amOptions, setAmOptions] = useState<AMOption[]>([]);
   const [savingAM, setSavingAM] = useState(false);
-  const [sendingReminder, setSendingReminder] = useState(false);
   const [reminderFeedback, setReminderFeedback] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
-  const [sendingInvoice, setSendingInvoice] = useState(false);
   const [invoiceSendFeedback, setInvoiceSendFeedback] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
+  const [invoicePreviewOpen, setInvoicePreviewOpen] = useState(false);
+  const [reminderPreviewOpen, setReminderPreviewOpen] = useState(false);
   const [openingPortal, setOpeningPortal] = useState(false);
   const [portalOpenError, setPortalOpenError] = useState<string | null>(null);
   const [pauseBusy, setPauseBusy] = useState(false);
@@ -968,54 +969,16 @@ function BatchDetailPanel({ batchId, branches, onClose, onEdit, onListRefresh }:
     setTimeout(() => setCopied(null), 2000);
   };
 
-  const sendPaymentReminder = async () => {
+  const openPaymentReminderPreview = () => {
     if (!batch || batch.is_paid) return;
-    setSendingReminder(true);
     setReminderFeedback(null);
-    try {
-      const res = await adminFetch(`/api/admin/batches/${batch.id}/payment-reminder`, {
-        method: 'POST',
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.error || 'Herinnering versturen mislukt');
-      }
-      setReminderFeedback({
-        kind: 'success',
-        message: 'Herinneringsmail is verstuurd naar de klant.',
-      });
-    } catch (err) {
-      setReminderFeedback({
-        kind: 'error',
-        message: err instanceof Error ? err.message : 'Herinnering versturen mislukt',
-      });
-    } finally {
-      setSendingReminder(false);
-    }
+    setReminderPreviewOpen(true);
   };
 
-  const sendInvoiceWithPayLink = async () => {
+  const openInvoicePreview = () => {
     if (!batch || batch.is_paid) return;
-    setSendingInvoice(true);
     setInvoiceSendFeedback(null);
-    try {
-      const res = await adminFetch(`/api/admin/batches/${batch.id}/send-invoice`, { method: 'POST' });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.error || 'Factuur versturen mislukt');
-      }
-      setInvoiceSendFeedback({
-        kind: 'success',
-        message: 'Factuur met betaallink is per e-mail naar de klant verstuurd.',
-      });
-    } catch (err) {
-      setInvoiceSendFeedback({
-        kind: 'error',
-        message: err instanceof Error ? err.message : 'Factuur versturen mislukt',
-      });
-    } finally {
-      setSendingInvoice(false);
-    }
+    setInvoicePreviewOpen(true);
   };
 
   const openCustomerPortal = async () => {
@@ -1393,39 +1356,19 @@ function BatchDetailPanel({ batchId, branches, onClose, onEdit, onListRefresh }:
                             <div className="flex flex-wrap gap-2">
                               <button
                                 type="button"
-                                onClick={sendInvoiceWithPayLink}
-                                disabled={sendingInvoice}
-                                className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-brand-purple/30 bg-brand-purple/5 px-3 py-2 text-xs font-semibold text-brand-purple transition hover:bg-brand-purple/10 disabled:opacity-60"
+                                onClick={openInvoicePreview}
+                                className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-brand-purple/30 bg-brand-purple/5 px-3 py-2 text-xs font-semibold text-brand-purple transition hover:bg-brand-purple/10"
                               >
-                                {sendingInvoice ? (
-                                  <>
-                                    <ArrowPathIcon className="h-4 w-4 animate-spin" />
-                                    Verzenden...
-                                  </>
-                                ) : (
-                                  <>
-                                    <DocumentTextIcon className="h-4 w-4" />
-                                    Stuur factuur + betaallink
-                                  </>
-                                )}
+                                <DocumentTextIcon className="h-4 w-4" />
+                                Stuur factuur + betaallink
                               </button>
                               <button
                                 type="button"
-                                onClick={sendPaymentReminder}
-                                disabled={sendingReminder}
-                                className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 transition hover:bg-amber-100 disabled:opacity-60"
+                                onClick={openPaymentReminderPreview}
+                                className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 transition hover:bg-amber-100"
                               >
-                                {sendingReminder ? (
-                                  <>
-                                    <ArrowPathIcon className="h-4 w-4 animate-spin" />
-                                    Verzenden...
-                                  </>
-                                ) : (
-                                  <>
-                                    <EnvelopeIcon className="h-4 w-4" />
-                                    Stuur betaalherinnering
-                                  </>
-                                )}
+                                <EnvelopeIcon className="h-4 w-4" />
+                                Stuur betaalherinnering
                               </button>
                             </div>
                             {invoiceSendFeedback && (
@@ -1618,6 +1561,32 @@ function BatchDetailPanel({ batchId, branches, onClose, onEdit, onListRefresh }:
           </div>
         )}
       </motion.div>
+      {batch && (
+        <>
+          <EmailPreviewModal
+            open={invoicePreviewOpen}
+            onClose={() => setInvoicePreviewOpen(false)}
+            title="Stuur factuur + betaallink"
+            previewUrl={`/api/admin/batches/${batch.id}/send-invoice/preview`}
+            sendUrl={`/api/admin/batches/${batch.id}/send-invoice`}
+            confirmLabel="Nu factuur versturen"
+            successMessage="Factuur met betaallink is per e-mail naar de klant verstuurd."
+            variant="invoice"
+            onSent={(message) => setInvoiceSendFeedback({ kind: 'success', message })}
+          />
+          <EmailPreviewModal
+            open={reminderPreviewOpen}
+            onClose={() => setReminderPreviewOpen(false)}
+            title="Stuur betaalherinnering"
+            previewUrl={`/api/admin/batches/${batch.id}/payment-reminder/preview`}
+            sendUrl={`/api/admin/batches/${batch.id}/payment-reminder`}
+            confirmLabel="Nu herinnering versturen"
+            successMessage="Herinneringsmail is verstuurd naar de klant."
+            variant="reminder"
+            onSent={(message) => setReminderFeedback({ kind: 'success', message })}
+          />
+        </>
+      )}
     </>
   );
 }

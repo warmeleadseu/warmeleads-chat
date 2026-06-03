@@ -386,12 +386,33 @@ export async function resendOpenInvoiceWithPaymentLinks(invoiceId: string): Prom
   await sendOpenInvoiceEmail(customer, invoice, checkoutUrl);
 }
 
-export async function sendOpenInvoiceEmail(
+export type OpenInvoiceEmailContent = {
+  subject: string;
+  html: string;
+  to: { email: string; name: string };
+  type: 'invoice_open' | 'invoice_open_new_batch';
+  metadata: Record<string, unknown>;
+  /** Korte samenvatting voor preview-kop. */
+  summary: {
+    invoice_number: string;
+    total_incl_btw: number;
+    vat_mode: 'reverse_charge_be' | 'domestic_nl';
+    payment_method_copy: string;
+    has_payment_link: boolean;
+  };
+};
+
+/**
+ * Bouwt de open-factuurmail (subject + HTML) zonder te versturen. Wordt door
+ * `sendOpenInvoiceEmail` gebruikt om de mail daadwerkelijk te sturen, en door
+ * de admin-preview-route om dezelfde inhoud aan een AM te tonen vóór verzending.
+ */
+export function buildOpenInvoiceEmailContent(
   customer: { name: string; email: string; contact_person?: string; country?: string | null },
   invoice: { invoice_number: string; total_incl_btw: number; description: string; id: string; vat_mode?: string },
   directCheckoutUrl?: string,
   options?: SendOpenInvoiceEmailOptions,
-): Promise<boolean> {
+): OpenInvoiceEmailContent {
   const portalUrl = `${BASE_URL}/portal/account?tab=invoices`;
   const logoUrl = `${BASE_URL}/warmeleads-logo-2026.png`;
   const greeting = customer.contact_person || customer.name;
@@ -480,20 +501,38 @@ export async function sendOpenInvoiceEmail(
 </body>
 </html>`;
 
-  return sendEmail(
-    customer.email,
+  return {
     subject,
-    fullHtml,
-    {
-      type: nb ? 'invoice_open_new_batch' : 'invoice_open',
-      toName: greeting,
-      metadata: {
-        invoice_id: invoice.id,
-        invoice_number: invoice.invoice_number,
-        ...(nb ? { batch_intro: true, branch: nb.branch_name, batch_size: nb.batch_size } : {}),
-      },
+    html: fullHtml,
+    to: { email: customer.email, name: greeting },
+    type: nb ? 'invoice_open_new_batch' : 'invoice_open',
+    metadata: {
+      invoice_id: invoice.id,
+      invoice_number: invoice.invoice_number,
+      ...(nb ? { batch_intro: true, branch: nb.branch_name, batch_size: nb.batch_size } : {}),
     },
-  );
+    summary: {
+      invoice_number: invoice.invoice_number,
+      total_incl_btw: Number(invoice.total_incl_btw),
+      vat_mode: invoice.vat_mode === 'reverse_charge_be' ? 'reverse_charge_be' : 'domestic_nl',
+      payment_method_copy: paymentMethodCopy,
+      has_payment_link: !!directCheckoutUrl,
+    },
+  };
+}
+
+export async function sendOpenInvoiceEmail(
+  customer: { name: string; email: string; contact_person?: string; country?: string | null },
+  invoice: { invoice_number: string; total_incl_btw: number; description: string; id: string; vat_mode?: string },
+  directCheckoutUrl?: string,
+  options?: SendOpenInvoiceEmailOptions,
+): Promise<boolean> {
+  const c = buildOpenInvoiceEmailContent(customer, invoice, directCheckoutUrl, options);
+  return sendEmail(c.to.email, c.subject, c.html, {
+    type: c.type,
+    toName: c.to.name,
+    metadata: c.metadata,
+  });
 }
 
 function sendInvoiceEmail(

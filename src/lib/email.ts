@@ -562,11 +562,26 @@ export async function sendBatchMilestoneEmail(
   );
 }
 
-export async function sendUnpaidBatchReminderEmail(
+export type UnpaidBatchReminderEmailContent = {
+  subject: string;
+  html: string;
+  to: { email: string; name: string };
+  type: 'batch_payment_reminder';
+  metadata: Record<string, unknown>;
+  summary: {
+    branch_label: string;
+    batch_size: number;
+    total_incl_btw: number;
+    vat_mode: 'reverse_charge_be' | 'domestic_nl';
+    has_payment_link: boolean;
+  };
+};
+
+export function buildUnpaidBatchReminderEmailContent(
   customer: Customer,
   batch: UnpaidBatchReminderInfo,
   options?: { directCheckoutUrl?: string | null },
-): Promise<boolean> {
+): UnpaidBatchReminderEmailContent {
   const branchLabel = batch.branch_name || batch.branch;
   const greeting = customer.contact_person || customer.name;
   const portalAccountInvoicesUrl = `${BASE_URL}/portal/account?tab=invoices`;
@@ -611,20 +626,37 @@ export async function sendUnpaidBatchReminderEmail(
     ${cta('Factuur openen in je portaal &rarr;', portalAccountInvoicesUrl)}
     <p style="margin:12px 0 0;font-size:13px;color:#94a3b8">Na betaling gaat je batch direct live.</p>`;
 
-  return sendEmail(
-    customer.email,
-    `Herinnering: je batch ${branchLabel} wacht op betaling`,
-    layout('Batch betaling herinnering', content),
-    {
-      type: 'batch_payment_reminder',
-      toName: greeting,
-      metadata: {
-        customer_id: customer.id,
-        batch_id: batch.id,
-        branch: batch.branch,
-      },
+  return {
+    subject: `Herinnering: je batch ${branchLabel} wacht op betaling`,
+    html: layout('Batch betaling herinnering', content),
+    to: { email: customer.email, name: greeting },
+    type: 'batch_payment_reminder',
+    metadata: {
+      customer_id: customer.id,
+      batch_id: batch.id,
+      branch: batch.branch,
     },
-  );
+    summary: {
+      branch_label: branchLabel,
+      batch_size: batch.batch_size,
+      total_incl_btw: totalInclBtw,
+      vat_mode: isReverseRem ? 'reverse_charge_be' : 'domestic_nl',
+      has_payment_link: !!options?.directCheckoutUrl,
+    },
+  };
+}
+
+export async function sendUnpaidBatchReminderEmail(
+  customer: Customer,
+  batch: UnpaidBatchReminderInfo,
+  options?: { directCheckoutUrl?: string | null },
+): Promise<boolean> {
+  const c = buildUnpaidBatchReminderEmailContent(customer, batch, options);
+  return sendEmail(c.to.email, c.subject, c.html, {
+    type: c.type,
+    toName: c.to.name,
+    metadata: c.metadata,
+  });
 }
 
 export async function sendOrderConfirmationEmail(
