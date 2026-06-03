@@ -2,6 +2,7 @@
 export const PARTNER_PROSPECT_BRANCH_SLUGS = [
   'thuisbatterij_partners',
   'airco_partners',
+  'nei_begun_partners',
 ] as const;
 
 export type PartnerProspectBranchSlug = (typeof PARTNER_PROSPECT_BRANCH_SLUGS)[number];
@@ -12,6 +13,7 @@ export const PARTNER_PROSPECT_BRANCH_SLUG: PartnerProspectBranchSlug = PARTNER_P
 export const PARTNER_PROSPECT_BRANCH_LABELS: Record<PartnerProspectBranchSlug, string> = {
   thuisbatterij_partners: 'Thuisbatterij Partners',
   airco_partners: 'Airco Partners',
+  nei_begun_partners: 'Nei Begun Partners',
 };
 
 /** Fallback accountmanager als er geen geldige config staat (Rick Schlimback). */

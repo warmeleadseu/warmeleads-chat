@@ -21,6 +21,7 @@ import {
   ClockIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
+import { isSellableLeadBranch } from '@/lib/branchPolicy';
 
 /* ─── Types ───────────────────────────────────────────────────────────── */
 
@@ -30,6 +31,7 @@ interface BranchConfig {
   name: string;
   color: string;
   is_active: boolean;
+  is_partner_branch?: boolean;
   branch_fields: { key: string; label: string }[];
 }
 
@@ -614,7 +616,7 @@ export default function ImportPage() {
                   className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm sm:w-64"
                 >
                   <option value="">- Selecteer branche -</option>
-                  {branches.filter(b => b.is_active).map(b => <option key={b.slug} value={b.slug}>{b.name}</option>)}
+                  {branches.filter(isSellableLeadBranch).map(b => <option key={b.slug} value={b.slug}>{b.name}</option>)}
                 </select>
               </div>
               <div>
@@ -722,7 +724,7 @@ export default function ImportPage() {
                         className={`rounded-lg border px-3 py-2 text-sm sm:w-48 ${s.branch ? c.border + ' ' + c.bg + ' ' + c.text + ' font-medium' : 'border-slate-200 bg-white text-slate-500'}`}
                       >
                         <option value="">- Overslaan -</option>
-                        {branches.filter(b => b.is_active).map(b => <option key={b.slug} value={b.slug}>{b.name}</option>)}
+                        {branches.filter(isSellableLeadBranch).map(b => <option key={b.slug} value={b.slug}>{b.name}</option>)}
                       </select>
                     </div>
                   </div>

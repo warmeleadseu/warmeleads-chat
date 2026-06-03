@@ -42,6 +42,7 @@ interface Branch {
   color: string;
   description: string;
   is_active: boolean;
+  is_partner_branch?: boolean;
   sort_order: number;
   branch_fields: BranchField[];
   lead_count: number;
@@ -190,6 +191,11 @@ export default function BranchesPage() {
                       <div>
                         <h3 className="font-semibold text-slate-900">{b.name}</h3>
                         <p className="text-xs font-mono text-slate-400">{b.slug}</p>
+                        {b.is_partner_branch && (
+                          <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
+                            Partner-branche · prospects-pijplijn
+                          </span>
+                        )}
                       </div>
                     </div>
                     <button
@@ -310,6 +316,7 @@ function BranchForm({ branch, onClose, onSaved }: { branch: Branch | null; onClo
     color: branch?.color || 'slate',
     description: branch?.description || '',
     is_active: branch?.is_active ?? true,
+    is_partner_branch: branch?.is_partner_branch ?? false,
     min_batch_size: branch?.min_batch_size ?? 10,
     nationwide_discount: branch?.nationwide_discount ?? 0,
     appointment_min_batch_size: branch?.appointment_min_batch_size ?? 5,
@@ -477,6 +484,27 @@ function BranchForm({ branch, onClose, onSaved }: { branch: Branch | null; onClo
               className="rounded border-slate-300"
             />
             <label htmlFor="branch-active" className="text-sm text-slate-700">Actief</label>
+          </div>
+
+          <div className="rounded-lg border border-amber-200 bg-amber-50/40 p-3">
+            <div className="flex items-start gap-2">
+              <input
+                type="checkbox"
+                id="branch-partner"
+                checked={form.is_partner_branch}
+                onChange={e => setForm(f => ({ ...f, is_partner_branch: e.target.checked }))}
+                className="mt-0.5 rounded border-slate-300"
+              />
+              <div className="flex-1">
+                <label htmlFor="branch-partner" className="block text-sm font-medium text-amber-900">
+                  Partner-branche (prospects-pijplijn)
+                </label>
+                <p className="mt-0.5 text-xs text-amber-800/80">
+                  Aan: leads op deze branche gaan naar de prospects-pijplijn (partner-acquisitie).
+                  Deze branche is dan niet selecteerbaar bij batch-creatie of klant-branches.
+                </p>
+              </div>
+            </div>
           </div>
 
           {/* Pricing section */}

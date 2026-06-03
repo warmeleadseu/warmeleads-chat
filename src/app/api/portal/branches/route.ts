@@ -10,9 +10,10 @@ export async function GET(request: NextRequest) {
 
   const { data: branches, error } = await supabase
     .from('branches')
-    .select('slug, name, color, branch_fields(key, label, field_type, options, is_required, sort_order)')
+    .select('slug, name, color, is_partner_branch, branch_fields(key, label, field_type, options, is_required, sort_order)')
     .eq('is_active', true)
     .eq('hidden_from_admin', false)
+    .neq('is_partner_branch', true)
     .order('sort_order', { ascending: true });
 
   if (error) {

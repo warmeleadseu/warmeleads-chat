@@ -76,6 +76,7 @@ export async function POST(request: NextRequest) {
         appointment_nationwide_discount: typeof body.appointment_nationwide_discount === 'number' ? body.appointment_nationwide_discount : 0,
         default_appointment_duration: typeof body.default_appointment_duration === 'number' ? body.default_appointment_duration : 60,
         default_travel_buffer: typeof body.default_travel_buffer === 'number' ? body.default_travel_buffer : 30,
+        is_partner_branch: body.is_partner_branch === true,
       })
       .select()
       .single();

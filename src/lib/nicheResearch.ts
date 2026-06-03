@@ -39,7 +39,7 @@ export async function validateLeadBranchSlug(
   }
   const { data, error } = await supabase
     .from('branches')
-    .select('slug, name, is_active')
+    .select('slug, name, is_active, is_partner_branch')
     .eq('slug', trimmed)
     .maybeSingle();
   if (error || !data) {
@@ -47,6 +47,9 @@ export async function validateLeadBranchSlug(
   }
   if (!data.is_active) {
     return { ok: false, error: 'De gekozen branche is niet actief.' };
+  }
+  if ((data as { is_partner_branch?: boolean | null }).is_partner_branch === true) {
+    return { ok: false, error: 'Partner-branches kunnen niet als inbound lead-branche worden gekozen.' };
   }
   return { ok: true, name: data.name };
 }

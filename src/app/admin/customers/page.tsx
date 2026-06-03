@@ -45,6 +45,7 @@ import {
   digitsOnly,
 } from '@/lib/beEnterprise';
 import { isValidBelgianVatFormat } from '@/lib/invoiceVat';
+import { isSellableLeadBranch } from '@/lib/branchPolicy';
 import { useAdmin } from '../adminContext';
 import { PROVINCE_OPTIONS_BE, PROVINCE_OPTIONS_NL } from '@/data/provinces';
 import { formatProvinceTargetLabel } from '@/lib/provinceTargetMatch';
@@ -133,7 +134,7 @@ function timeAgo(dateStr: string): string {
   return `${Math.floor(days / 30)}m geleden`;
 }
 
-interface BranchOption { slug: string; name: string; color: string; is_active: boolean; }
+interface BranchOption { slug: string; name: string; color: string; is_active: boolean; is_partner_branch?: boolean; }
 
 interface Target {
   id: string; customer_id: string; label: string; lat: number | null; lng: number | null;
@@ -343,7 +344,7 @@ export default function CustomersPage() {
 
   const fetchBranches = useCallback(async () => {
     const res = await adminFetch('/api/admin/branches');
-    if (res.ok) { const d = await res.json(); setBranchOptions((d.branches || []).map((b: any) => ({ slug: b.slug, name: b.name, color: b.color, is_active: b.is_active }))); }
+    if (res.ok) { const d = await res.json(); setBranchOptions((d.branches || []).map((b: any) => ({ slug: b.slug, name: b.name, color: b.color, is_active: b.is_active, is_partner_branch: b.is_partner_branch === true }))); }
   }, []);
   useEffect(() => { fetchBranches(); }, [fetchBranches]);
 
@@ -935,7 +936,9 @@ function CustomerDetailPanel({
         bySlug.set(slug, { slug, name: slug, color: 'slate', is_active: false });
       }
     }
-    return [...bySlug.values()].filter(bo => bo.is_active || branchEdit.includes(bo.slug));
+    return [...bySlug.values()].filter(bo =>
+      branchEdit.includes(bo.slug) || isSellableLeadBranch(bo),
+    );
   })();
 
   const toggleDetailBranch = (slug: string) => {
@@ -1705,7 +1708,9 @@ function CustomerForm({ customer, branchOptions, allCustomers, accountManagers, 
         bySlug.set(slug, { slug, name: slug, color: 'slate', is_active: false });
       }
     }
-    return [...bySlug.values()].filter(bo => bo.is_active || form.branches.includes(bo.slug));
+    return [...bySlug.values()].filter(bo =>
+      form.branches.includes(bo.slug) || isSellableLeadBranch(bo),
+    );
   })();
 
   const save = async () => {
@@ -3213,7 +3218,7 @@ function BatchesPanel({ customer, branchOptions, onClose, embedded }: { customer
                 <select value={form.branch} onChange={e => setForm(f => ({ ...f, branch: e.target.value }))}
                   className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50">
                   <option value="">Kies branche...</option>
-                  {branchOptions.filter(b => b.is_active).map(b => (
+                  {branchOptions.filter(isSellableLeadBranch).map(b => (
                     <option key={b.slug} value={b.slug}>{b.name}</option>
                   ))}
                 </select>
@@ -3323,7 +3328,7 @@ function BatchesPanel({ customer, branchOptions, onClose, embedded }: { customer
                 <select value={apptForm.branch} onChange={e => setApptForm(f => ({ ...f, branch: e.target.value }))}
                   className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50">
                   <option value="">Kies branche...</option>
-                  {branchOptions.filter(b => b.is_active).map(b => (
+                  {branchOptions.filter(isSellableLeadBranch).map(b => (
                     <option key={b.slug} value={b.slug}>{b.name}</option>
                   ))}
                 </select>
@@ -4073,12 +4078,13 @@ function CustomerPricingPanel({ customer, branchOptions, onClose, embedded }: {
         slug: string;
         name: string;
         is_active: boolean;
+        is_partner_branch?: boolean;
         pricing_tiers?: PricingTierItem[];
         nationwide_discount?: number | string | null;
         appointment_pricing_tiers?: PricingTierItem[];
         appointment_nationwide_discount?: number | string | null;
       };
-      setBranches((d.branches || []).filter((b: RawBranch) => b.is_active).map((b: RawBranch) => ({
+      setBranches((d.branches || []).filter(isSellableLeadBranch).map((b: RawBranch) => ({
         slug: b.slug,
         name: b.name,
         pricing_tiers: b.pricing_tiers || [],

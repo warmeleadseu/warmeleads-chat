@@ -229,6 +229,24 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Vereiste velden ontbreken' }, { status: 400 });
   }
 
+  const { data: branchRow } = await supabase
+    .from('branches')
+    .select('slug, is_active, is_partner_branch')
+    .eq('slug', branch)
+    .maybeSingle();
+  if (!branchRow) {
+    return NextResponse.json({ error: `Branche '${branch}' bestaat niet.` }, { status: 400 });
+  }
+  if (!branchRow.is_active) {
+    return NextResponse.json({ error: `Branche '${branch}' is niet actief.` }, { status: 400 });
+  }
+  if ((branchRow as { is_partner_branch?: boolean | null }).is_partner_branch === true) {
+    return NextResponse.json(
+      { error: `Branche '${branch}' is een partner-branche en is niet leverbaar als leadbatch. Gebruik de prospects-pijplijn.` },
+      { status: 400 },
+    );
+  }
+
   const total_price = price_per_lead ? price_per_lead * batch_size : null;
   const lookback = typeof lookback_days === 'number' ? Math.max(0, Math.min(30, lookback_days)) : 3;
   const sanitizedFilters = Array.isArray(lead_filters) ? lead_filters.filter(

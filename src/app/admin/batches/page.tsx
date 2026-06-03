@@ -39,6 +39,7 @@ import SearchableSelect from '@/components/ui/SearchableSelect';
 import { useAdmin } from '../adminContext';
 import { mergeCustomTiers } from '@/lib/pricing';
 import { isMetaCampaignSyncBatchKind, isPipelineBatchKind } from '@/lib/batchKind';
+import { isSellableLeadBranch } from '@/lib/branchPolicy';
 import { coerceCustomerBatchMetaCampaignIds, type MetaCampaignPick } from '@/lib/metaCampaignIds';
 import { MetaCampaignLinkerFields } from './MetaCampaignLinkerFields';
 
@@ -166,7 +167,7 @@ function batchProgressProps(b: Pick<Batch, 'delivery_model' | 'batch_kind' | 'ba
     leads_delivered: b.leads_delivered,
   };
 }
-interface BranchOption { slug: string; name: string; color: string; is_active: boolean }
+interface BranchOption { slug: string; name: string; color: string; is_active: boolean; is_partner_branch?: boolean }
 interface Customer { id: string; name: string; is_active: boolean }
 interface BranchField { id: string; key: string; label: string; field_type: string; options: string[] }
 
@@ -1776,7 +1777,7 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
                   className="w-full rounded-lg border border-fuchsia-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-fuchsia-500/50"
                 >
                   <option value="">Kies branche…</option>
-                  {branches.filter(b => b.is_active && b.slug !== 'niche_research').map(b => (
+                  {branches.filter(isSellableLeadBranch).map(b => (
                     <option key={b.slug} value={b.slug}>{b.name}</option>
                   ))}
                 </select>
@@ -2397,7 +2398,7 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
   const isNicheDelivery = form.batch_product === 'leads' && form.batch_delivery === 'niche_research';
   const isAppointments = form.batch_product === 'appointments';
   const activeCustomers = customers.filter(c => c.is_active);
-  const activeBranches = branches.filter(b => b.is_active);
+  const activeBranches = branches.filter(isSellableLeadBranch);
 
   return (
     <>
@@ -2546,7 +2547,7 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
                   className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-fuchsia-500/50"
                 >
                   <option value="">Kies branche…</option>
-                  {activeBranches.filter(b => b.slug !== 'niche_research').map(b => (
+                  {activeBranches.map(b => (
                     <option key={b.slug} value={b.slug}>{b.name}</option>
                   ))}
                 </select>

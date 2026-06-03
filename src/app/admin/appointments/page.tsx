@@ -21,9 +21,10 @@ import {
 import AdminAppointmentBookModal from './AdminAppointmentBookModal';
 import AdminAppointmentDetail from './AdminAppointmentDetail';
 import SearchableSelect from '@/components/ui/SearchableSelect';
+import { isSellableLeadBranch } from '@/lib/branchPolicy';
 
 interface Customer { id: string; name: string }
-interface BranchOption { slug: string; name: string }
+interface BranchOption { slug: string; name: string; is_active?: boolean; is_partner_branch?: boolean }
 
 export interface AdminAppointment {
   id: string;
@@ -386,7 +387,7 @@ export default function AdminAppointmentsPage() {
         {showBook && (
           <AdminAppointmentBookModal
             customers={customers}
-            branches={branches}
+            branches={branches.filter(isSellableLeadBranch)}
             prefillCustomerId={bookPrefill?.customerId}
             prefillStart={bookPrefill?.start}
             onClose={() => setShowBook(false)}
@@ -400,7 +401,7 @@ export default function AdminAppointmentsPage() {
           <AdminAppointmentDetail
             appointment={detail}
             customers={customers}
-            branches={branches}
+            branches={branches.filter(isSellableLeadBranch)}
             onClose={() => setDetail(null)}
             onUpdated={() => { setDetail(null); load(); }}
           />

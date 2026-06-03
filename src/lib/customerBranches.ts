@@ -47,14 +47,16 @@ export async function validateCustomerBranchSlugs(
 
   const { data: rows, error } = await supabase
     .from('branches')
-    .select('slug, is_active')
+    .select('slug, is_active, is_partner_branch')
     .in('slug', normalized);
 
   if (error) {
     return { ok: false, error: 'Branches valideren mislukt' };
   }
 
-  const bySlug = new Map((rows || []).map(r => [r.slug as string, r]));
+  const bySlug = new Map(
+    (rows || []).map(r => [r.slug as string, r as { slug: string; is_active: boolean; is_partner_branch?: boolean | null }]),
+  );
   const unknown = normalized.filter(s => !bySlug.has(s));
   if (unknown.length > 0) {
     return {
@@ -68,6 +70,14 @@ export async function validateCustomerBranchSlugs(
     return {
       ok: false,
       error: `Branche(s) niet actief: ${inactive.join(', ')}. Activeer de branche eerst in Beheer → Branches.`,
+    };
+  }
+
+  const partner = normalized.filter(s => bySlug.get(s)?.is_partner_branch === true);
+  if (partner.length > 0) {
+    return {
+      ok: false,
+      error: `Branche(s) ${partner.join(', ')} is/zijn partner-branches en kunnen niet aan een klant worden gekoppeld. Gebruik de prospects-pijplijn voor partner-acquisitie.`,
     };
   }
 
