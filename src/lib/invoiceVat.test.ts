@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   computeInvoiceVat,
+  isReverseChargeRate,
   isValidBelgianVatFormat,
   isValidDutchVatFormat,
   normalizeVatId,
   qualifiesBelgiumReverseCharge,
   validateVatIdForCountry,
+  vatTotalSuffix,
+  vatUnitSuffix,
 } from './invoiceVat';
 
 describe('isValidBelgianVatFormat', () => {
@@ -80,6 +83,27 @@ describe('validateVatIdForCountry', () => {
   it('weigert vat_id zonder landcode', () => {
     const r = validateVatIdForCountry('NL', '0831630290');
     expect(r.ok).toBe(false);
+  });
+});
+
+describe('isReverseChargeRate', () => {
+  it('btwRate=0 wijst op verlegging, 0.21 niet', () => {
+    expect(isReverseChargeRate(0)).toBe(true);
+    expect(isReverseChargeRate(0.21)).toBe(false);
+  });
+});
+
+describe('vatUnitSuffix', () => {
+  it('NL: " excl. BTW", BE: leeg', () => {
+    expect(vatUnitSuffix({ reverseCharge: false })).toBe(' excl. BTW');
+    expect(vatUnitSuffix({ reverseCharge: true })).toBe('');
+  });
+});
+
+describe('vatTotalSuffix', () => {
+  it('NL: "incl. BTW", BE: "BTW verlegd"', () => {
+    expect(vatTotalSuffix({ reverseCharge: false })).toBe('incl. BTW');
+    expect(vatTotalSuffix({ reverseCharge: true })).toBe('BTW verlegd');
   });
 });
 

@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { usePortal } from '../portalContext';
-import { portalBtwRate } from '@/lib/invoiceVat';
+import { isReverseChargeRate, portalBtwRate, vatTotalSuffix } from '@/lib/invoiceVat';
 import { portalFetch, portalHeaders } from '@/lib/portalAuth';
 import { formatProvinceTargetLabel } from '@/lib/provinceTargetMatch';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -908,12 +908,13 @@ function AreasTab({
 
 /* ─── Invoices Tab ─────────────────────────────────────── */
 
-function InvoicesTab({ data, loading, onDownload, onPay, payingInvoiceId }: {
+function InvoicesTab({ data, loading, onDownload, onPay, payingInvoiceId, totalSuffix }: {
   data: { id: string; invoice_number: string; description: string; subtotal: number; btw_amount: number; total_incl_btw: number; status: string; paid_at: string | null; created_at: string; batch_id: string | null }[];
   loading: boolean;
   onDownload: (inv: { id: string; invoice_number: string }) => void;
   onPay: (inv: { id: string }) => void;
   payingInvoiceId: string | null;
+  totalSuffix: string;
 }) {
   if (loading) {
     return (
@@ -1016,7 +1017,7 @@ function InvoicesTab({ data, loading, onDownload, onPay, payingInvoiceId }: {
         <div className="flex items-center justify-between">
           <div>
             <p className="text-xs font-medium text-slate-500">{data.length} facturen totaal</p>
-            <p className="text-lg font-bold text-slate-900">&euro;{totalInclBtw.toFixed(2)} <span className="text-xs font-normal text-slate-400">incl. BTW</span></p>
+            <p className="text-lg font-bold text-slate-900">&euro;{totalInclBtw.toFixed(2)} <span className="text-xs font-normal text-slate-400">{totalSuffix}</span></p>
             {openTotal > 0 && (
               <p className="mt-0.5 text-xs font-medium text-amber-600">Openstaand: &euro;{openTotal.toFixed(2)}</p>
             )}
@@ -1139,7 +1140,7 @@ function OrdersTab({ data, loading, onDelete }: { data: OrderData[]; loading: bo
                       {st.text}
                     </span>
                     <p className="mt-1.5 text-sm font-bold text-slate-900">&euro;{(Number(order.total_price) * (1 + btwRate)).toFixed(2)}</p>
-                    <p className="text-[10px] text-slate-400">{isReverseCharge ? 'BTW verlegd' : 'incl. BTW'} &middot; &euro;{Number(order.price_per_lead).toFixed(2)} /lead excl.</p>
+                    <p className="text-[10px] text-slate-400">{isReverseCharge ? 'BTW verlegd' : 'incl. BTW'} &middot; &euro;{Number(order.price_per_lead).toFixed(2)} /lead{isReverseCharge ? '' : ' excl.'}</p>
                   </div>
                   {order.status !== 'paid' && (
                     <button
@@ -1441,7 +1442,7 @@ export default function AccountPage() {
           )}
 
           {activeTab === 'invoices' && (
-            <InvoicesTab data={invoicesData} loading={invoicesLoading} onDownload={downloadInvoicePdf} onPay={handlePayInvoice} payingInvoiceId={payingInvoiceId} />
+            <InvoicesTab data={invoicesData} loading={invoicesLoading} onDownload={downloadInvoicePdf} onPay={handlePayInvoice} payingInvoiceId={payingInvoiceId} totalSuffix={vatTotalSuffix({ reverseCharge: isReverseChargeRate(portalBtwRate(customer)) })} />
           )}
         </motion.div>
       </AnimatePresence>

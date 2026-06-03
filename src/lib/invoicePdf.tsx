@@ -174,7 +174,7 @@ export function InvoicePdf({ data }: { data: InvoiceData }) {
         {/* Totals */}
         <View style={s.totalsBox}>
           <View style={s.totalsRow}>
-            <Text style={s.totalsLabel}>Subtotaal excl. BTW</Text>
+            <Text style={s.totalsLabel}>{isReverseBe ? 'Subtotaal' : 'Subtotaal excl. BTW'}</Text>
             <Text style={s.totalsValue}>{eur(data.subtotal)}</Text>
           </View>
           {isReverseBe ? (

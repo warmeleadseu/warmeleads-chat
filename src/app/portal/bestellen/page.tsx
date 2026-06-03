@@ -21,7 +21,7 @@ import {
 } from '@heroicons/react/24/outline';
 import AppointmentsOrderView from '../AppointmentsOrderView';
 import { CheckCircleIcon as CheckCircleSolid } from '@heroicons/react/24/solid';
-import { portalBtwRate } from '@/lib/invoiceVat';
+import { isReverseChargeRate, portalBtwRate, vatTotalSuffix, vatUnitSuffix } from '@/lib/invoiceVat';
 import { roundMoney, formatCurrency, formatDateNl } from '@/lib/portalFormat';
 import {
   ChoicePill,
@@ -266,7 +266,10 @@ export default function BestellenPage() {
   );
   const btwAmount = roundMoney(subtotal * btwRate);
   const totalInclBtw = subtotal + btwAmount;
-  const btwSummaryLabel = btwRate === 0 ? 'BTW (verlegd)' : 'BTW 21%';
+  const reverseCharge = isReverseChargeRate(btwRate);
+  const btwSummaryLabel = reverseCharge ? 'BTW (verlegd)' : 'BTW 21%';
+  const unitSuffix = vatUnitSuffix({ reverseCharge });
+  const totalSuffix = vatTotalSuffix({ reverseCharge });
   const minBatchSize = pricingData?.min_batch_size || 10;
   const QUICK_SIZES = useMemo(() => computeQuickSizes(minBatchSize), [minBatchSize]);
   const pricingReady = !!pricingData && (!selectedBranch || pricingData.branch === selectedBranch);
@@ -524,7 +527,7 @@ export default function BestellenPage() {
           </div>
           <div>
             <p className="text-sm font-bold text-slate-900">{activeBranch.name}</p>
-            <p className="text-xs text-slate-400">&euro;{pricePerLead.toFixed(2)} per lead excl. BTW</p>
+            <p className="text-xs text-slate-400">&euro;{pricePerLead.toFixed(2)} per lead{unitSuffix}</p>
           </div>
         </section>
       )}
@@ -615,7 +618,7 @@ export default function BestellenPage() {
                 step={10}
                 prompt="Ander aantal kiezen..."
                 previewTitle={`${effectiveSize} leads`}
-                previewSubtitle={`${formatCurrency(totalInclBtw)} incl. BTW`}
+                previewSubtitle={`${formatCurrency(totalInclBtw)} ${totalSuffix}`}
               />
             </div>
 
@@ -750,6 +753,7 @@ export default function BestellenPage() {
         onCheckout={handleOrder}
         submitting={submitting}
         disabled={!canCheckout}
+        totalLabel={`Totaal ${totalSuffix}`}
       />
 
       {pendingOrders.length > 0 && (
@@ -781,7 +785,7 @@ export default function BestellenPage() {
         <div className="mt-5 flex items-center gap-2 text-[11px] text-slate-400">
           <CheckCircleSolid className="h-3.5 w-3.5 text-emerald-400" />
           {paidOrders.length} eerdere {paidOrders.length === 1 ? 'bestelling' : 'bestellingen'} &middot;
-          &euro;{(paidOrders.reduce((s, o) => s + Number(o.total_price) * (1 + btwRate), 0)).toFixed(2)} {btwRate === 0 ? 'totaal' : 'totaal incl. BTW'}
+          &euro;{(paidOrders.reduce((s, o) => s + Number(o.total_price) * (1 + btwRate), 0)).toFixed(2)} totaal{reverseCharge ? ' (BTW verlegd)' : ' incl. BTW'}
         </div>
       )}
 
@@ -849,7 +853,7 @@ function OrdersPanel({ orders, btwRate, onCancel }: { orders: Order[]; btwRate: 
               </div>
               <p className="mt-0.5 text-xs text-slate-400">
                 {formatDateNl(o.created_at)}
-                {o.status === 'paid' && <> &middot; &euro;{(Number(o.total_price) * (1 + btwRate)).toFixed(2)} {btwRate === 0 ? 'totaal' : 'incl. BTW'}</>}
+                {o.status === 'paid' && <> &middot; &euro;{(Number(o.total_price) * (1 + btwRate)).toFixed(2)} {btwRate === 0 ? '(BTW verlegd)' : 'incl. BTW'}</>}
               </p>
             </div>
             {o.status !== 'paid' && (
@@ -937,7 +941,7 @@ function RedirectResultView({
             <div className="flex items-center gap-2">
               <CheckCircleSolid className="h-5 w-5 text-emerald-500" />
               <p className="text-sm font-semibold text-emerald-800">
-              {redirectOrder.batch_size} leads &middot; {formatCurrency(Number(redirectOrder.total_price) * (1 + btwRate))} {btwRate === 0 ? 'totaal' : 'incl. BTW'}
+              {redirectOrder.batch_size} leads &middot; {formatCurrency(Number(redirectOrder.total_price) * (1 + btwRate))} {btwRate === 0 ? '(BTW verlegd)' : 'incl. BTW'}
               </p>
             </div>
           <p className="mt-1 text-xs text-emerald-600">Je batch is direct actief en leads worden automatisch toegewezen</p>

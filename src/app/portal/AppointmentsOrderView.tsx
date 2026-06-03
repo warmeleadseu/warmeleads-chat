@@ -13,7 +13,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { portalFetch } from '@/lib/portalAuth';
 import type { PortalCustomer } from './portalContext';
-import { portalBtwRate } from '@/lib/invoiceVat';
+import { isReverseChargeRate, portalBtwRate, vatTotalSuffix, vatUnitSuffix } from '@/lib/invoiceVat';
 import { formatCurrency, formatDateNl, roundMoney } from '@/lib/portalFormat';
 import { PortalPendingBatchesCard } from './_components/PortalPendingBatchesCard';
 import { collectPortalBatchesAwaitingPayment } from '@/lib/portalBatches';
@@ -207,7 +207,10 @@ export default function AppointmentsOrderView({
   const subtotal = roundMoney(subtotalBeforeDiscount - discountAmount);
   const btw = roundMoney(subtotal * btwRate);
   const total = subtotal + btw;
-  const btwSummaryLabel = btwRate === 0 ? 'BTW (verlegd)' : 'BTW 21%';
+  const reverseCharge = isReverseChargeRate(btwRate);
+  const btwSummaryLabel = reverseCharge ? 'BTW (verlegd)' : 'BTW 21%';
+  const unitSuffix = vatUnitSuffix({ reverseCharge });
+  const totalSuffix = vatTotalSuffix({ reverseCharge });
 
   const QUICK_SIZES = useMemo(() => computeQuickSizes(minBatchSize, [5, 10, 20, 50]), [minBatchSize]);
 
@@ -370,7 +373,7 @@ export default function AppointmentsOrderView({
                       </div>
                       <p className="mt-0.5 text-xs text-slate-400">
                         {formatDateNl(o.created_at)}
-                        {o.status === 'paid' && <> &middot; {formatCurrency(Number(o.total_price) * (1 + btwRate))} {btwRate === 0 ? '(BTW verlegd)' : 'incl. BTW'}</>}
+                        {o.status === 'paid' && <> &middot; {formatCurrency(Number(o.total_price) * (1 + btwRate))} {totalSuffix}</>}
                       </p>
                     </div>
                     {o.status !== 'paid' && (
@@ -416,7 +419,7 @@ export default function AppointmentsOrderView({
           </div>
           <div>
             <p className="text-sm font-bold text-slate-900">{branchName}</p>
-            {dynamicPrice > 0 && <p className="text-xs text-slate-400">{formatCurrency(dynamicPrice)} per afspraak excl. BTW</p>}
+            {dynamicPrice > 0 && <p className="text-xs text-slate-400">{formatCurrency(dynamicPrice)} per afspraak{unitSuffix}</p>}
           </div>
         </section>
       )}
@@ -478,7 +481,7 @@ export default function AppointmentsOrderView({
                 step={1}
                 prompt="Ander aantal kiezen..."
                 previewTitle={`${effectiveSize} afspraken`}
-                previewSubtitle={`${formatCurrency(total)} incl. BTW`}
+                previewSubtitle={`${formatCurrency(total)} ${totalSuffix}`}
               />
             </div>
 
@@ -573,6 +576,7 @@ export default function AppointmentsOrderView({
             onCheckout={handleOrder}
             submitting={submitting}
             disabled={!canCheckout}
+            totalLabel={`Totaal ${totalSuffix}`}
           />
 
           {pendingOrders.length > 0 && (

@@ -578,12 +578,15 @@ export async function sendUnpaidBatchReminderEmail(
   });
   const btwAmount = vat.btw_amount;
   const totalInclBtw = vat.total_incl_btw;
-  const btwRowLabel = vat.vat_mode === 'reverse_charge_be' ? 'BTW (verlegd)' : 'BTW 21%';
-  const totalRowLabel = vat.vat_mode === 'reverse_charge_be' ? 'Totaal' : 'Totaal incl. BTW';
+  const isReverseRem = vat.vat_mode === 'reverse_charge_be';
+  const btwRowLabel = isReverseRem ? 'BTW (verlegd)' : 'BTW 21%';
+  const totalRowLabel = isReverseRem ? 'Totaal' : 'Totaal incl. BTW';
+  const exclSuffix = isReverseRem ? '' : ' (excl. BTW)';
+  const subtotalLabel = isReverseRem ? 'Subtotaal' : 'Subtotaal excl. BTW';
 
   const pricingRows = batch.price_per_lead
-    ? row('Prijs per lead (excl. BTW)', `&euro;${Number(batch.price_per_lead).toFixed(2)}`) +
-      row('Subtotaal excl. BTW', `&euro;${subtotal.toFixed(2)}`) +
+    ? row(`Prijs per lead${exclSuffix}`, `&euro;${Number(batch.price_per_lead).toFixed(2)}`) +
+      row(subtotalLabel, `&euro;${subtotal.toFixed(2)}`) +
       row(btwRowLabel, `&euro;${btwAmount.toFixed(2)}`) +
       `<tr>
         <td style="padding:16px 20px;font-size:15px;color:#3B2F75;font-weight:700;border-bottom:none">${totalRowLabel}</td>
@@ -638,10 +641,13 @@ export async function sendOrderConfirmationEmail(
   });
   const btwAmount = vat.btw_amount;
   const totalInclBtw = vat.total_incl_btw;
-  const btwRowLabel = vat.vat_mode === 'reverse_charge_be' ? 'BTW (verlegd)' : 'BTW 21%';
-  const totalRowLabel = vat.vat_mode === 'reverse_charge_be' ? 'Totaal' : 'Totaal incl. BTW';
+  const isReverseConf = vat.vat_mode === 'reverse_charge_be';
+  const btwRowLabel = isReverseConf ? 'BTW (verlegd)' : 'BTW 21%';
+  const totalRowLabel = isReverseConf ? 'Totaal' : 'Totaal incl. BTW';
+  const exclSuffixConf = isReverseConf ? '' : ' (excl. BTW)';
+  const subtotalLabelConf = isReverseConf ? 'Subtotaal' : 'Subtotaal excl. BTW';
   const reverseNote =
-    vat.vat_mode === 'reverse_charge_be'
+    isReverseConf
       ? `<p style="margin:12px 0 0;font-size:12px;color:#64748b;line-height:1.5">Intracommunautaire levering: Nederlandse BTW is verlegd naar u als Belgische ondernemer (reverse charge).</p>`
       : '';
 
@@ -652,8 +658,8 @@ export async function sendOrderConfirmationEmail(
     ${dataTable(
       row('Branche', `<strong style="color:#0f172a">${branchLabel}</strong>`) +
       row('Batch grootte', `<strong style="color:#0f172a">${order.batch_size}</strong> leads`) +
-      (order.price_per_lead ? row('Prijs per lead (excl. BTW)', `&euro;${Number(order.price_per_lead).toFixed(2)}`) : '') +
-      row('Subtotaal excl. BTW', `&euro;${subtotal.toFixed(2)}`) +
+      (order.price_per_lead ? row(`Prijs per lead${exclSuffixConf}`, `&euro;${Number(order.price_per_lead).toFixed(2)}`) : '') +
+      row(subtotalLabelConf, `&euro;${subtotal.toFixed(2)}`) +
       row(btwRowLabel, `&euro;${btwAmount.toFixed(2)}`) +
       `<tr>
         <td style="padding:16px 20px;font-size:15px;color:#3B2F75;font-weight:700;border-bottom:none">${totalRowLabel}</td>

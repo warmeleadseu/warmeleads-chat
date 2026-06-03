@@ -7,6 +7,7 @@ import {
   type PortalBatchLike,
 } from '@/lib/portalBatches';
 import { formatCurrency, roundMoney } from '@/lib/portalFormat';
+import { isReverseChargeRate, vatTotalSuffix, vatUnitSuffix } from '@/lib/invoiceVat';
 
 type Props = {
   batches: PortalBatchLike[];
@@ -27,6 +28,10 @@ export function PortalPendingBatchesCard({
   className = '',
 }: Props) {
   if (batches.length === 0) return null;
+
+  const reverseCharge = isReverseChargeRate(btwRate);
+  const unitSuffix = vatUnitSuffix({ reverseCharge });
+  const totalSuffix = vatTotalSuffix({ reverseCharge });
 
   const defaultIntro =
     batches.length === 1
@@ -63,10 +68,10 @@ export function PortalPendingBatchesCard({
                 <p className="text-xs text-slate-500">
                   {pricePer > 0 ? (
                     <>
-                      {formatCurrency(pricePer)} per stuk excl. BTW ·{' '}
+                      {formatCurrency(pricePer)} per stuk{unitSuffix} ·{' '}
                     </>
                   ) : null}
-                  <span className="font-medium text-slate-700">{formatCurrency(incl)} incl. BTW</span>
+                  <span className="font-medium text-slate-700">{formatCurrency(incl)} {totalSuffix}</span>
                 </p>
               </div>
               <button

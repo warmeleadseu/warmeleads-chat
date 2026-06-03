@@ -147,3 +147,29 @@ export function portalBtwRate(input: { country?: string | null; vat_id?: string 
 export function mollieBtwLabel(vatMode: InvoiceVatMode): string {
   return vatMode === 'reverse_charge_be' ? 'BTW verlegd' : 'incl. 21% BTW';
 }
+
+/**
+ * Of de gegeven portaal-BTW-rate (0 of 0.21) overeenkomt met BTW-verlegging.
+ * `portalBtwRate(...)` retourneert 0 voor B2B-klanten waar de BTW verlegd is.
+ */
+export function isReverseChargeRate(btwRate: number): boolean {
+  return btwRate === 0;
+}
+
+/**
+ * Suffix achter een eenheidsprijs (bv. "€25,00 per stuk").
+ *  - NL (21%): " excl. BTW" (met leading spatie zodat hij direct geconcat kan worden)
+ *  - BE (verlegd): "" (er is geen BTW; "excl. BTW" zou onjuist zijn)
+ */
+export function vatUnitSuffix(opts: { reverseCharge: boolean }): string {
+  return opts.reverseCharge ? '' : ' excl. BTW';
+}
+
+/**
+ * Suffix achter een totaalbedrag (bv. "€500,00").
+ *  - NL (21%): "incl. BTW"
+ *  - BE (verlegd): "BTW verlegd"
+ */
+export function vatTotalSuffix(opts: { reverseCharge: boolean }): string {
+  return opts.reverseCharge ? 'BTW verlegd' : 'incl. BTW';
+}

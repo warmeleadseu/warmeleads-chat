@@ -8,6 +8,8 @@ interface StickyCheckoutBarProps {
   submitting?: boolean;
   disabled?: boolean;
   label?: string;
+  /** Toon "Totaal" + suffix (incl. BTW / BTW verlegd). Default: 'incl. BTW'. */
+  totalLabel?: string;
 }
 
 export function StickyCheckoutBar({
@@ -16,11 +18,12 @@ export function StickyCheckoutBar({
   submitting = false,
   disabled = false,
   label = 'Afrekenen',
+  totalLabel = 'Totaal incl. BTW',
 }: StickyCheckoutBarProps) {
   return (
     <div className={T.stickyBar}>
       <div className="mb-2 flex items-center justify-between">
-        <p className="text-xs text-slate-500">Totaal incl. BTW</p>
+        <p className="text-xs text-slate-500">{totalLabel}</p>
         <p className="text-base font-bold text-brand-purple">{formatCurrency(total)}</p>
       </div>
       <button

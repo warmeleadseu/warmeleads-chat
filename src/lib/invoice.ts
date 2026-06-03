@@ -523,7 +523,7 @@ function sendInvoiceEmail(
                       <td colspan="2" style="padding:12px 20px;font-size:11px;color:#64748b;line-height:1.5;border-bottom:1px solid #f1f5f9">Intracommunautaire levering: BTW verlegd naar de Belgische afnemer (reverse charge).</td>
                     </tr>
                     <tr>
-                      <td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">Subtotaal excl. BTW</td>
+                      <td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">Subtotaal</td>
                       <td style="padding:12px 20px;font-size:14px;color:#0f172a;border-bottom:1px solid #f1f5f9">&euro;${sub.toFixed(2)}</td>
                     </tr>
                     <tr>

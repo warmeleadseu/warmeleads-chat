@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { MagnifyingGlassCircleIcon, SignalIcon } from '@heroicons/react/24/outline';
 import { portalFetch } from '@/lib/portalAuth';
 import { usePortal } from '../portalContext';
-import { portalBtwRate } from '@/lib/invoiceVat';
+import { isReverseChargeRate, portalBtwRate, vatTotalSuffix } from '@/lib/invoiceVat';
 import { roundMoney } from '@/lib/portalFormat';
 import {
   OrderSummaryCard,
@@ -56,7 +56,9 @@ export default function NicheResearchOrderView() {
   );
   const btw = roundMoney(subtotal * btwRate);
   const total = subtotal + btw;
-  const btwSummaryLabel = btwRate === 0 ? 'BTW (verlegd)' : 'BTW 21%';
+  const reverseCharge = isReverseChargeRate(btwRate);
+  const btwSummaryLabel = reverseCharge ? 'BTW (verlegd)' : 'BTW 21%';
+  const totalSuffix = vatTotalSuffix({ reverseCharge });
 
   const selectedBranch = branches.find(b => b.slug === leadBranchSlug);
 
@@ -97,7 +99,7 @@ export default function NicheResearchOrderView() {
     <div className={`space-y-6 ${T.pagePaddingForSticky}`}>
       <PageHeader
         title="Onderzoeksbatch nieuwe niche"
-        subtitle="Voor branches die we nog niet standaard aanbieden. €1.000 excl. btw wordt volledig gecrediteerd in leads zodra je campagne live gaat."
+        subtitle={`Voor branches die we nog niet standaard aanbieden. €1.000${reverseCharge ? ' (BTW verlegd)' : ' excl. btw'} wordt volledig gecrediteerd in leads zodra je campagne live gaat.`}
       />
 
       <section className={`${T.card} ${T.cardPadding} border-violet-100 bg-gradient-to-br from-violet-50/80 to-white`}>
@@ -219,6 +221,7 @@ export default function NicheResearchOrderView() {
         onCheckout={handleOrder}
         submitting={submitting}
         disabled={!canSubmit}
+        totalLabel={`Totaal ${totalSuffix}`}
       />
     </div>
   );

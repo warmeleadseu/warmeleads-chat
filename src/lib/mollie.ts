@@ -1,4 +1,4 @@
-import createMollieClient from '@mollie/api-client';
+import createMollieClient, { Locale } from '@mollie/api-client';
 
 const MOLLIE_API_KEY = process.env.MOLLIE_API_KEY || '';
 
@@ -26,6 +26,10 @@ export type MollieBillingCountry = 'NL' | 'BE';
  */
 export function mollieLocaleForCountry(country: string | null | undefined): 'nl_NL' | 'nl_BE' {
   return String(country || 'NL').trim().toUpperCase() === 'BE' ? 'nl_BE' : 'nl_NL';
+}
+
+function toMollieLocale(country: string | null | undefined): Locale {
+  return mollieLocaleForCountry(country) === 'nl_BE' ? Locale.nl_BE : Locale.nl_NL;
 }
 
 export interface CreateBatchPaymentParams {
@@ -58,7 +62,7 @@ export async function createBatchPayment({
   billingCountry,
 }: CreateBatchPaymentParams) {
   const mollie = getMollieClient();
-  const locale = mollieLocaleForCountry(billingCountry);
+  const locale = toMollieLocale(billingCountry);
 
   const payment = await mollie.payments.create({
     amount: {

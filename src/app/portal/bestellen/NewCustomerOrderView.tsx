@@ -6,7 +6,7 @@ import {
   BoltIcon,
 } from '@heroicons/react/24/outline';
 import { portalFetch } from '@/lib/portalAuth';
-import { portalBtwRate } from '@/lib/invoiceVat';
+import { isReverseChargeRate, portalBtwRate, vatTotalSuffix, vatUnitSuffix } from '@/lib/invoiceVat';
 import { formatCurrency, formatDateNl, roundMoney } from '@/lib/portalFormat';
 import {
   ChoicePill,
@@ -85,7 +85,10 @@ export default function NewCustomerOrderView({
   );
   const btw = roundMoney(subtotal * btwRate);
   const total = subtotal + btw;
-  const btwSummaryLabel = btwRate === 0 ? 'BTW (verlegd)' : 'BTW 21%';
+  const reverseCharge = isReverseChargeRate(btwRate);
+  const btwSummaryLabel = reverseCharge ? 'BTW (verlegd)' : 'BTW 21%';
+  const unitSuffix = vatUnitSuffix({ reverseCharge });
+  const totalSuffix = vatTotalSuffix({ reverseCharge });
 
   const QUICK_SIZES = useMemo(() => computeQuickSizes(minBatchSize), [minBatchSize]);
 
@@ -172,7 +175,7 @@ export default function NewCustomerOrderView({
           </div>
           <div>
             <p className="text-sm font-bold text-slate-900">{branchName}</p>
-            {dynamicPrice > 0 && <p className="text-xs text-slate-400">&euro;{dynamicPrice.toFixed(2)} per lead excl. BTW</p>}
+            {dynamicPrice > 0 && <p className="text-xs text-slate-400">&euro;{dynamicPrice.toFixed(2)} per lead{unitSuffix}</p>}
           </div>
         </section>
       )}
@@ -209,7 +212,7 @@ export default function NewCustomerOrderView({
               step={10}
               prompt="Ander aantal kiezen..."
               previewTitle={`${effectiveSize} leads`}
-              previewSubtitle={`${formatCurrency(total)} incl. BTW`}
+              previewSubtitle={`${formatCurrency(total)} ${totalSuffix}`}
             />
           </div>
 
@@ -274,6 +277,7 @@ export default function NewCustomerOrderView({
           onCheckout={handleOrder}
           submitting={submitting}
           disabled={!canCheckout}
+          totalLabel={`Totaal ${totalSuffix}`}
         />
       )}
     </div>
