@@ -271,7 +271,8 @@ export async function distributeLead(
   // Double-check after DB fetch in case bron wasn't passed by caller
   if (fullLead.bron === 'demo') return result;
 
-  // Niche-onderzoek: geen geo vereist; telt niet mee voor pipeline 12u-cooldown
+  // Niche-onderzoek: geo-targeting via customer_targets (provincies/radius),
+  // telt niet mee voor pipeline 12u-cooldown.
   if (fullLead.phone_valid !== false) {
     const { tryAssignLeadToNicheResearchBatch } = await import('./nicheResearchDistribution');
     const nicheHit = await tryAssignLeadToNicheResearchBatch(supabase, fullLead);
