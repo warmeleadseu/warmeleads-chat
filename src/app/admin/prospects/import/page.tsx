@@ -144,6 +144,8 @@ export default function ProspectsImportPage() {
     total: number;
     partial?: boolean;
     chunk_errors?: number;
+    dropped_branch_terms?: { term: string; count: number }[];
+    dropped_branch_total?: number;
   } | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -307,6 +309,11 @@ export default function ProspectsImportPage() {
           total: data.total,
           partial: !!data.partial,
           chunk_errors: Array.isArray(data.chunk_errors) ? data.chunk_errors.length : 0,
+          dropped_branch_terms: Array.isArray(data.dropped_branch_terms)
+            ? data.dropped_branch_terms
+            : [],
+          dropped_branch_total:
+            typeof data.dropped_branch_total === 'number' ? data.dropped_branch_total : 0,
         });
         setSubmitError(null);
         setStep('done');
@@ -721,6 +728,30 @@ export default function ProspectsImportPage() {
               <> {result.chunk_errors} batch(es) faalden tijdens insert; controleer de logs.</>
             )}
           </p>
+          {(result.dropped_branch_terms?.length ?? 0) > 0 && (
+            <div className="mx-auto mt-4 max-w-md rounded-xl border border-slate-200 bg-white p-4 text-left">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                Branche-waarden genegeerd
+              </p>
+              <p className="mt-1 text-xs text-slate-600">
+                {result.dropped_branch_total ?? 0} cel(len) bevatten een waarde die niet matchte
+                met een geldige branche en zijn weggelaten uit{' '}
+                <span className="font-medium">prospects.branches</span>:
+              </p>
+              <ul className="mt-2 space-y-0.5 text-xs text-slate-700">
+                {result.dropped_branch_terms!.map(t => (
+                  <li key={t.term} className="flex items-center justify-between">
+                    <span className="font-mono">&ldquo;{t.term}&rdquo;</span>
+                    <span className="text-slate-400">{t.count}×</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-2 text-[11px] text-slate-500">
+                Tip: voeg ontbrekende branches toe in Beheer → Branches, of stel ze nu handmatig
+                in op de betreffende prospects.
+              </p>
+            </div>
+          )}
           <div className="mt-5 flex justify-center gap-2">
             <button
               type="button"

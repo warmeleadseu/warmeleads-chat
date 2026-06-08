@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { XMarkIcon, CheckBadgeIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, CheckBadgeIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
 import type { ProspectDetail, BranchOption } from './ProspectDrawer';
 
@@ -14,12 +14,38 @@ interface Props {
   onDone: (customerId: string) => void;
 }
 
+/**
+ * Splits prospect.branches in (a) slugs die bestaan in de huidige branches-lijst
+ * en kunnen worden voorgeselecteerd, en (b) onbekende strings die we silent
+ * negeren (en als banner aan de AM tonen). Voorkomt dat oude/foute import-data
+ * (bv. 'beide', 'airco leads') de "Onbekende branche(s)"-error veroorzaakt
+ * bij het promoten naar klant.
+ */
+function partitionProspectBranches(
+  prospectBranches: string[] | null | undefined,
+  validBranches: BranchOption[],
+): { valid: string[]; ignored: string[] } {
+  const validSet = new Set(validBranches.map(b => b.slug));
+  const valid: string[] = [];
+  const ignored: string[] = [];
+  for (const raw of prospectBranches || []) {
+    if (typeof raw !== 'string') continue;
+    if (validSet.has(raw)) valid.push(raw);
+    else ignored.push(raw);
+  }
+  return { valid, ignored };
+}
+
 export function ConvertToCustomerDialog({ open, onClose, prospect, branches, onDone }: Props) {
   const [name, setName] = useState(prospect.company_name || '');
   const [contact, setContact] = useState(prospect.contact_person || '');
   const [email, setEmail] = useState(prospect.email || '');
   const [phone, setPhone] = useState(prospect.phone || '');
-  const [picked, setPicked] = useState<Set<string>>(new Set(prospect.branches || []));
+  const partitioned = useMemo(
+    () => partitionProspectBranches(prospect.branches, branches),
+    [prospect.branches, branches],
+  );
+  const [picked, setPicked] = useState<Set<string>>(new Set(partitioned.valid));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -29,10 +55,10 @@ export function ConvertToCustomerDialog({ open, onClose, prospect, branches, onD
       setContact(prospect.contact_person || '');
       setEmail(prospect.email || '');
       setPhone(prospect.phone || '');
-      setPicked(new Set(prospect.branches || []));
+      setPicked(new Set(partitioned.valid));
       setError(null);
     }
-  }, [open, prospect]);
+  }, [open, prospect, partitioned.valid]);
 
   if (!open) return null;
 
@@ -155,6 +181,21 @@ export function ConvertToCustomerDialog({ open, onClose, prospect, branches, onD
                 );
               })}
             </div>
+            {partitioned.ignored.length > 0 && (
+              <div className="mt-2 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                <ExclamationTriangleIcon className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                <div>
+                  <p className="font-medium">
+                    Genegeerde interesse{partitioned.ignored.length > 1 ? 's' : ''} uit de prospect:{' '}
+                    {partitioned.ignored.map(s => `"${s}"`).join(', ')}
+                  </p>
+                  <p className="mt-0.5 text-amber-700">
+                    Komt niet overeen met een bestaande branche. Kies hierboven handmatig de juiste
+                    branche(s) voor deze klant.
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
 
           {error && <p className="rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700">{error}</p>}

@@ -3,6 +3,7 @@ import { createServerClient } from '@/lib/supabase';
 import { verifyAdmin, unauthorized, forbidden } from '@/lib/adminAuth';
 import { logAudit } from '@/lib/audit';
 import { isAccountManagerScope } from '@/lib/prospects';
+import { loadValidBranchSlugs, resolveBranchSlugsAgainst } from '@/lib/branchSlugs';
 
 const PROSPECT_FIELDS = [
   'company_name', 'contact_person', 'email', 'phone', 'website',
@@ -48,15 +49,6 @@ function cleanPostcode(raw: unknown): string {
   if (!raw) return '';
   const s = String(raw).replace(/\s+/g, '').toUpperCase().trim();
   return /^\d{4}[A-Z]{2}$/.test(s) ? `${s.slice(0, 4)} ${s.slice(4)}` : String(raw).trim();
-}
-
-function parseBranches(raw: unknown): string[] {
-  if (Array.isArray(raw)) return raw.filter(x => typeof x === 'string').map(s => s.trim()).filter(Boolean);
-  if (!raw) return [];
-  return String(raw)
-    .split(/[,;|]/)
-    .map(s => s.trim().toLowerCase())
-    .filter(Boolean);
 }
 
 function isValidEmail(s: unknown): boolean {
@@ -117,25 +109,21 @@ export async function POST(request: NextRequest) {
     for (const r of cRes.data || []) if (r.email) existingEmail.add(String(r.email).toLowerCase());
   }
 
-  // Valideer optionele default_branches tegen de branches-tabel zodat we nooit
-  // ongeldige slugs in prospects.branches krijgen, ongeacht wat de UI stuurt.
-  const requestedDefaultBranches = Array.isArray(body.default_branches)
-    ? Array.from(
-        new Set(
-          body.default_branches
-            .map(s => (typeof s === 'string' ? s.trim().toLowerCase() : ''))
-            .filter(Boolean),
-        ),
-      )
-    : [];
-  let validatedDefaultBranches: string[] = [];
-  if (requestedDefaultBranches.length > 0) {
-    const { data: branchRows } = await supabase
-      .from('branches')
-      .select('slug')
-      .in('slug', requestedDefaultBranches);
-    validatedDefaultBranches = (branchRows || []).map(b => String(b.slug));
+  // Laad eenmalig alle geldige actieve branche-slugs zodat we per rij
+  // tegen deze single source of truth kunnen valideren — nooit meer
+  // onbekende slugs (zoals 'beide', 'airco leads') in prospects.branches.
+  let validBranchSlugs: Set<string>;
+  try {
+    validBranchSlugs = await loadValidBranchSlugs(supabase);
+  } catch {
+    return NextResponse.json({ error: 'Branches laden mislukt' }, { status: 500 });
   }
+
+  const defaultBranchResolution = resolveBranchSlugsAgainst(
+    body.default_branches ?? [],
+    validBranchSlugs,
+  );
+  const validatedDefaultBranches = defaultBranchResolution.valid;
 
   // Bepaal toewijzings-pool
   const strategy = body.assignment_strategy ?? 'manual';
@@ -168,11 +156,14 @@ export async function POST(request: NextRequest) {
 
   // Bouw rijen op
   type Built =
-    | { ok: true; row: Record<string, unknown> }
+    | { ok: true; row: Record<string, unknown>; droppedBranchTerms: string[] }
     | { ok: false; kind: 'duplicate' | 'invalid'; reason: string; index: number };
   const built: Built[] = [];
   const seenInBatchKvk = new Set<string>();
   const seenInBatchEmail = new Set<string>();
+  // Verzamel alle ongemapte branche-strings + count, zodat we ze in de
+  // import-respons + audit-log kunnen tonen.
+  const droppedBranchCounts = new Map<string, number>();
 
   body.rows.forEach((r, idx) => {
     const company = typeof r.company_name === 'string' ? r.company_name.trim() : '';
@@ -199,6 +190,7 @@ export async function POST(request: NextRequest) {
       source: body.format === 'csv' ? 'csv_import' : 'xlsx_import',
       created_by_admin_id: admin.id,
     };
+    let droppedBranchTerms: string[] = [];
     for (const f of PROSPECT_FIELDS) {
       if (f === 'company_name') continue;
       if (f === 'phone') {
@@ -210,8 +202,15 @@ export async function POST(request: NextRequest) {
         const v = cleanPostcode(r.postcode);
         if (v) out.postcode = v;
       } else if (f === 'branches') {
-        const fromFile = parseBranches(r.branches);
-        const merged = Array.from(new Set([...fromFile, ...validatedDefaultBranches]));
+        // Splits + canonicaliseer + valideer tegen branches-tabel. Onbekende
+        // waarden (bv. 'beide', 'airco leads' zonder match) belanden in
+        // `dropped` zodat we ze in de respons kunnen rapporteren, maar
+        // NOOIT in prospects.branches.
+        const resolution = resolveBranchSlugsAgainst(r.branches, validBranchSlugs);
+        droppedBranchTerms = resolution.dropped;
+        const merged = Array.from(
+          new Set([...resolution.valid, ...validatedDefaultBranches]),
+        );
         if (merged.length > 0) out.branches = merged;
       } else if (f === 'email') {
         if (email) out.email = email;
@@ -221,10 +220,15 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    built.push({ ok: true, row: out });
+    for (const term of droppedBranchTerms) {
+      droppedBranchCounts.set(term, (droppedBranchCounts.get(term) || 0) + 1);
+    }
+    built.push({ ok: true, row: out, droppedBranchTerms });
   });
 
-  const validRows = built.filter((b): b is { ok: true; row: Record<string, unknown> } => b.ok);
+  const validRows = built.filter(
+    (b): b is { ok: true; row: Record<string, unknown>; droppedBranchTerms: string[] } => b.ok,
+  );
   const errors = built.filter(
     (b): b is { ok: false; kind: 'duplicate' | 'invalid'; reason: string; index: number } => !b.ok,
   );
@@ -316,6 +320,17 @@ export async function POST(request: NextRequest) {
   const partial = chunkErrors.length > 0 || (validRows.length > 0 && imported < validRows.length);
   const success = partial ? false : true;
 
+  // Top-N gedropte branche-termen voor reporting/audit. Geeft de admin
+  // direct inzicht in welke kolomwaarden niet matchten met een geldige slug.
+  const droppedBranchSummary = Array.from(droppedBranchCounts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 20)
+    .map(([term, count]) => ({ term, count }));
+  const droppedBranchTotal = Array.from(droppedBranchCounts.values()).reduce(
+    (sum, n) => sum + n,
+    0,
+  );
+
   logAudit({
     adminId: admin.id,
     adminName: admin.name,
@@ -331,6 +346,8 @@ export async function POST(request: NextRequest) {
       chunk_errors: chunkErrors.length,
       strategy,
       default_branches: validatedDefaultBranches.length > 0 ? validatedDefaultBranches : undefined,
+      dropped_branch_terms: droppedBranchSummary.length > 0 ? droppedBranchSummary : undefined,
+      dropped_branch_total: droppedBranchTotal || undefined,
     },
   });
 
@@ -344,6 +361,8 @@ export async function POST(request: NextRequest) {
     errors_count: invalidCount + insertFailed,
     chunk_errors: chunkErrors,
     error_samples: errors.slice(0, 20),
+    dropped_branch_terms: droppedBranchSummary,
+    dropped_branch_total: droppedBranchTotal,
   });
 }
 
