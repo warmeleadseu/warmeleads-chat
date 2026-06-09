@@ -140,6 +140,7 @@ interface Target {
   id: string; customer_id: string; label: string; lat: number | null; lng: number | null;
   radius_km: number; is_active: boolean; created_at: string;
   target_type: 'radius' | 'province'; provinces: string[];
+  country: 'NL' | 'BE' | null;
 }
 
 interface LeadFilter {
@@ -2323,6 +2324,7 @@ function TargetsPanel({ customer, onClose, embedded }: { customer: Customer; onC
   const [editCitySearching, setEditCitySearching] = useState(false);
   const [editCityError, setEditCityError] = useState('');
   const [editProvinces, setEditProvinces] = useState<string[]>([]);
+  const [editCountry, setEditCountry] = useState<'' | 'NL' | 'BE'>('');
   const editSearchTimer = useRef<NodeJS.Timeout | null>(null);
 
   const fetchTargets = useCallback(async () => {
@@ -2423,6 +2425,7 @@ function TargetsPanel({ customer, onClose, embedded }: { customer: Customer; onC
     setEditCityResult(null);
     setEditCityError('');
     setEditProvinces([...(t.provinces || [])]);
+    setEditCountry(t.country === 'NL' || t.country === 'BE' ? t.country : '');
   };
 
   const cancelEdit = () => {
@@ -2473,6 +2476,7 @@ function TargetsPanel({ customer, onClose, embedded }: { customer: Customer; onC
       updates.label = editLabel.trim() || editProvinces.join(', ');
       updates.provinces = editProvinces;
     }
+    updates.country = editCountry === '' ? null : editCountry;
     await adminFetch('/api/admin/targets', {
       method: 'PUT',
       body: JSON.stringify(updates),
@@ -2704,6 +2708,21 @@ function TargetsPanel({ customer, onClose, embedded }: { customer: Customer; onC
                         <input type="number" value={editRadius} onChange={e => setEditRadius(Number(e.target.value))} min={1} max={500}
                           className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
                       </div>
+                      <div className="mb-3">
+                        <label className="mb-1 block text-xs font-medium text-slate-500">Land-restrictie</label>
+                        <select
+                          value={editCountry}
+                          onChange={e => setEditCountry(e.target.value as '' | 'NL' | 'BE')}
+                          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50"
+                        >
+                          <option value="">Geen restrictie (radius bepaalt — incl. grensgebied)</option>
+                          <option value="NL">Alleen Nederlandse leads</option>
+                          <option value="BE">Alleen Belgische leads</option>
+                        </select>
+                        <p className="mt-1 text-[11px] text-slate-400">
+                          Voorkom dat een radius-target ongewenst leads uit het buurland binnenhaalt (bv. &quot;Heel Nederland&quot; 200km vanaf Utrecht raakt noord-België).
+                        </p>
+                      </div>
                     </>
                   ) : (
                     <>
@@ -2765,6 +2784,18 @@ function TargetsPanel({ customer, onClose, embedded }: { customer: Customer; onC
                           {editProvinces.length} {editProvinces.length === 1 ? 'provincie' : 'provincies'} geselecteerd
                         </p>
                       )}
+                      <div className="mb-3">
+                        <label className="mb-1 block text-xs font-medium text-slate-500">Land-restrictie</label>
+                        <select
+                          value={editCountry}
+                          onChange={e => setEditCountry(e.target.value as '' | 'NL' | 'BE')}
+                          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50"
+                        >
+                          <option value="">Geen restrictie (provincies bepalen)</option>
+                          <option value="NL">Alleen Nederlandse leads</option>
+                          <option value="BE">Alleen Belgische leads</option>
+                        </select>
+                      </div>
                     </>
                   )}
                   <div className="flex gap-2">
@@ -2802,6 +2833,17 @@ function TargetsPanel({ customer, onClose, embedded }: { customer: Customer; onC
                             </>
                           )}
                         </p>
+                      )}
+                      {t.country === 'NL' || t.country === 'BE' ? (
+                        <p className="mt-1 text-[11px] font-medium text-slate-500">
+                          Alleen leads uit <span className="text-brand-purple">{t.country === 'NL' ? 'Nederland' : 'België'}</span>
+                        </p>
+                      ) : (
+                        (t.target_type || 'radius') === 'radius' && (
+                          <p className="mt-1 text-[11px] text-slate-400">
+                            Geen land-restrictie · radius bepaalt
+                          </p>
+                        )
                       )}
                     </div>
                     <div className="flex shrink-0 items-center gap-1 ml-2">

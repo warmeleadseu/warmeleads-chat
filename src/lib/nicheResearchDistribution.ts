@@ -4,6 +4,7 @@ import { sendLeadNotification } from './email';
 import { sendNewLeadPush } from './pushNotification';
 import { isInboundLeadBranchSlug } from './nicheResearch';
 import { leadMatchesAnyProvinceTarget } from './provinceTargetMatch';
+import { targetCountryAllowsLead } from './targetCountryMatch';
 
 type NicheResearchBatch = {
   id: string;
@@ -26,6 +27,7 @@ type NicheResearchTarget = {
   lng: number | null;
   radius_km: number | null;
   provinces: string[] | null;
+  country?: string | null;
 };
 
 type NicheLeadGeoInput = {
@@ -66,6 +68,7 @@ export function nicheLeadMatchesCustomerTargets(
   if (!targets || targets.length === 0) return false;
 
   for (const t of targets) {
+    if (!targetCountryAllowsLead(t, lead)) continue;
     const kind = t.target_type || 'radius';
     if (kind === 'province') {
       const provs = Array.isArray(t.provinces) ? t.provinces : [];
@@ -139,7 +142,7 @@ export async function tryAssignLeadToNicheResearchBatch(
   const candidateCustomerIds = Array.from(new Set(list.map((b) => b.customer_id)));
   const { data: targetsData } = await supabase
     .from('customer_targets')
-    .select('customer_id, target_type, lat, lng, radius_km, provinces')
+    .select('customer_id, target_type, lat, lng, radius_km, provinces, country')
     .in('customer_id', candidateCustomerIds)
     .eq('is_active', true);
   const targetsByCustomer = new Map<string, NicheResearchTarget[]>();

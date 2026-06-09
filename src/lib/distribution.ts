@@ -6,6 +6,7 @@ import { isPipelineBatchKind } from './batchKind';
 import { batchIsAtCapacity, isCappedDeliveryModel } from './batchDeliveryModel';
 import { getLeadLimitPeriodAnchors } from './batchAssignmentCaps';
 import { leadMatchesAnyProvinceTarget } from './provinceTargetMatch';
+import { targetCountryAllowsLead } from './targetCountryMatch';
 import { filterPipelineBatchesToFifoHeads, isPipelineFifoHeadBatch } from './pipelineBatchFifo';
 
 /** Hard plafond in het product (gedeelde leads). */
@@ -438,6 +439,7 @@ export async function distributeLead(
 
     let bestMatch: { radius: number; distance: number } | null = null;
     for (const t of custTargets) {
+      if (!targetCountryAllowsLead(t as { country?: string | null }, fullLead)) continue;
       if ((t.target_type || 'radius') === 'province') {
         const provs: string[] = Array.isArray(t.provinces) ? t.provinces : [];
         if (provs.length > 0 && leadMatchesAnyProvinceTarget(fullLead, provs)) {
@@ -812,6 +814,7 @@ export async function backfillBatch(batchId: string, lookbackDays: number): Prom
     let inRange = false;
     let bestDist = Infinity;
     for (const t of targets) {
+      if (!targetCountryAllowsLead(t as { country?: string | null }, lead)) continue;
       if ((t.target_type || 'radius') === 'province') {
         const provs: string[] = Array.isArray(t.provinces) ? t.provinces : [];
         if (provs.length > 0 && leadMatchesAnyProvinceTarget(lead, provs)) {

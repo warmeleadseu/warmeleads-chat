@@ -25,6 +25,41 @@ async function provinceTokensForCustomer(
 
 const KNOWN_PRESETS = ['Heel Nederland', 'Heel België'];
 
+/** Normaliseer een binnenkomende `country`-waarde naar 'NL' | 'BE' | null. */
+function sanitizeCountry(raw: unknown): 'NL' | 'BE' | null {
+  if (raw === null || raw === undefined || raw === '') return null;
+  const v = String(raw).trim().toUpperCase();
+  return v === 'NL' || v === 'BE' ? v : null;
+}
+
+/**
+ * Default land-restrictie afleiden voor radius-targets:
+ *   "Heel Nederland" → 'NL'
+ *   "Heel België"    → 'BE'
+ *   andere labels    → null (bewust over de grens — radius rond Eindhoven
+ *                       mag bv. ook BE-leads pakken).
+ */
+function deriveRadiusCountryDefault(label: string): 'NL' | 'BE' | null {
+  const lower = (label || '').toLowerCase();
+  if (/(heel\s+nederland|hele\s+nederland|geheel\s+nederland|heel\s+nl\b)/.test(lower)) return 'NL';
+  if (/(heel\s+belg|hele\s+belg|geheel\s+belg|heel\s+be\b)/.test(lower)) return 'BE';
+  return null;
+}
+
+/**
+ * Default land-restrictie afleiden voor province-targets:
+ *   alle provs `NL:` → 'NL'
+ *   alle provs `BE:` → 'BE'
+ *   gemengd          → null
+ */
+function deriveProvinceCountryDefault(tokens: string[]): 'NL' | 'BE' | null {
+  if (!tokens.length) return null;
+  const lands = new Set(tokens.map(t => (t.startsWith('NL:') ? 'NL' : t.startsWith('BE:') ? 'BE' : '?')));
+  if (lands.size === 1 && lands.has('NL')) return 'NL';
+  if (lands.size === 1 && lands.has('BE')) return 'BE';
+  return null;
+}
+
 function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371;
   const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -90,6 +125,7 @@ export async function POST(request: NextRequest) {
   }
 
   const type = target_type || 'radius';
+  const explicitCountry = 'country' in body ? sanitizeCountry((body as { country?: unknown }).country) : undefined;
 
   if (type === 'province') {
     if (!Array.isArray(provinces) || provinces.length === 0) {
@@ -103,6 +139,7 @@ export async function POST(request: NextRequest) {
       label && String(label).trim()
         ? String(label).trim()
         : normalized.map(formatProvinceTargetLabel).join(', ');
+    const country = explicitCountry !== undefined ? explicitCountry : deriveProvinceCountryDefault(normalized);
     const { data, error } = await supabase
       .from('customer_targets')
       .insert({
@@ -113,6 +150,7 @@ export async function POST(request: NextRequest) {
         lat: null,
         lng: null,
         radius_km: 0,
+        country,
       })
       .select()
       .single();
@@ -126,6 +164,7 @@ export async function POST(request: NextRequest) {
   }
 
   const verified = await verifyAndResolveCoords(label, lat, lng);
+  const country = explicitCountry !== undefined ? explicitCountry : deriveRadiusCountryDefault(verified.resolvedLabel);
 
   const { data, error } = await supabase
     .from('customer_targets')
@@ -136,6 +175,7 @@ export async function POST(request: NextRequest) {
       lat: verified.lat,
       lng: verified.lng,
       radius_km: radius_km || 25,
+      country,
     })
     .select()
     .single();
@@ -156,6 +196,10 @@ export async function PUT(request: NextRequest) {
   const { id, ...updates } = body;
 
   if (!id) return NextResponse.json({ error: 'ID ontbreekt' }, { status: 400 });
+
+  if ('country' in updates) {
+    updates.country = sanitizeCountry(updates.country);
+  }
 
   if ('provinces' in updates && Array.isArray(updates.provinces)) {
     const { data: existing } = await supabase

@@ -77,6 +77,65 @@ describe('nicheLeadMatchesCustomerTargets', () => {
     });
   });
 
+  describe('country-restrictie (migratie 136)', () => {
+    it('NL-only radius-target weigert Belgische lead in radius (echte case Den Held Dakwerk)', () => {
+      const heelNlTarget = {
+        customer_id: 'c1',
+        target_type: 'radius',
+        lat: 52.1326,
+        lng: 5.2913, // Utrecht
+        radius_km: 200,
+        provinces: null,
+        country: 'NL',
+      };
+      // Destelbergen (Oost-Vlaanderen) ligt geometrisch in radius (~158km),
+      // maar lead.land=BE moet hem wegfilteren door country='NL'.
+      expect(
+        nicheLeadMatchesCustomerTargets(
+          { lat: 51.06, lng: 3.80, provincie: 'Oost-Vlaanderen', land: 'BE' },
+          [heelNlTarget],
+        ),
+      ).toBe(false);
+    });
+
+    it('NL-only radius-target accepteert wel NL-lead in radius', () => {
+      const heelNlTarget = {
+        customer_id: 'c1',
+        target_type: 'radius',
+        lat: 52.1326,
+        lng: 5.2913,
+        radius_km: 200,
+        provinces: null,
+        country: 'NL',
+      };
+      expect(
+        nicheLeadMatchesCustomerTargets(
+          { lat: 53.20, lng: 7.09, provincie: 'Groningen', land: 'NL' },
+          [heelNlTarget],
+        ),
+      ).toBe(true);
+    });
+
+    it('country=NULL houdt oude gedrag: cross-border via radius blijft toegestaan', () => {
+      const eindhovenTarget = {
+        customer_id: 'c1',
+        target_type: 'radius',
+        lat: 51.45,
+        lng: 5.46,
+        radius_km: 50,
+        provinces: null,
+        country: null, // Total Energy-stijl: bewust grensoverschrijdend
+      };
+      // Maaseik BE (~40km) — moet matchen want geen land-restrictie.
+      expect(
+        nicheLeadMatchesCustomerTargets(
+          { lat: 51.10, lng: 5.79, provincie: 'Limburg', land: 'BE' },
+          [eindhovenTarget],
+        ),
+      ).toBe(true);
+    });
+  });
+
   describe('mixed targets (any-match)', () => {
     const targets = [
       {
