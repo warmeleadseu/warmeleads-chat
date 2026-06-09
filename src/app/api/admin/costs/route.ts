@@ -6,6 +6,7 @@ import {
   getApprovedReclamationStats,
   countApprovedReclamationsForAssignments,
 } from '@/lib/reclamationStats';
+import { batchRevenueForCosts } from '@/lib/batchRevenue';
 
 /** Na zware wijzigingen: Supabase → Query Performance + advisors (indexes i.c.m. costs-vensters). */
 
@@ -95,7 +96,7 @@ export async function GET(request: NextRequest) {
   const [batchesRes, lastSyncRes, bulkCustRes, leadBundle, assignBundle] = await Promise.all([
     supabase
       .from('customer_batches')
-      .select('id, customer_id, branch, batch_size, leads_delivered, price_per_lead, total_price, status, leads_per_week, created_at, is_paid, customers(name)')
+      .select('id, customer_id, branch, batch_size, leads_delivered, price_per_lead, total_price, status, leads_per_week, created_at, is_paid, batch_kind, customers(name)')
       .in('status', ['active', 'completed'])
       .neq('is_paid', false)
       .order('created_at', { ascending: false })
@@ -331,14 +332,18 @@ export async function GET(request: NextRequest) {
   }
 
   for (const b of allBatches) {
-    if (!b.price_per_lead) continue;
     const ba = batchAssignments.get(b.id);
     const n = ba?.lead_ids.length ?? 0;
     if (n === 0) continue;
 
+    // Reguliere batches betalen per geleverde lead → revenue schaalt met n.
+    // Niche-onderzoeksbatches betalen één eenmalig pakketbedrag (`total_price`)
+    // bij bestelling: elke extra geleverde lead voegt geen extra omzet toe.
+    const revenue = batchRevenueForCosts(b as { batch_kind?: string; price_per_lead?: number | null; total_price?: number | null }, n);
+    if (revenue <= 0) continue;
+
     const cust = b.customers as unknown as { name: string } | { name: string }[] | null;
     const custName = Array.isArray(cust) ? cust[0]?.name : cust?.name || 'Onbekend';
-    const revenue = n * Number(b.price_per_lead);
     const startDate = b.created_at ? b.created_at.split('T')[0] : today;
 
     let cost = 0;
@@ -402,8 +407,14 @@ export async function GET(request: NextRequest) {
     }
 
     if (a.batch_id) {
-      const b = batchById.get(a.batch_id) as { price_per_lead?: number; customers?: unknown; customer_id: string } | undefined;
-      if (!b?.price_per_lead) continue;
+      const b = batchById.get(a.batch_id) as {
+        price_per_lead?: number;
+        total_price?: number;
+        batch_kind?: string;
+        customers?: unknown;
+        customer_id: string;
+      } | undefined;
+      if (!b) continue;
       if (leadBronById.get(a.lead_id) === 'demo') continue;
       const cust = b.customers as unknown as { name: string } | { name: string }[] | null;
       const custName = Array.isArray(cust) ? cust[0]?.name : cust?.name || 'Onbekend';
@@ -411,10 +422,17 @@ export async function GET(request: NextRequest) {
         customerMargins[b.customer_id] = { name: custName, revenue: 0, cost: 0, margin: 0, leads: 0, marginPct: 0 };
       }
       const cm = customerMargins[b.customer_id];
-      cm.revenue += Number(b.price_per_lead);
+
+      // Per assignment: lead-count + advertentiekosten altijd doortellen.
+      // Revenue echter alleen voor reguliere lead-batches (per geleverde lead).
+      // Niche-onderzoek wordt eenmalig afgerekend → revenue zit in `total_price`
+      // en wordt na deze loop één keer per batch aan de omzet toegevoegd.
       cm.leads += 1;
       if (isCplPoolAssignment(a)) cm.cost += costPerAssignment;
-      batchRevenue += Number(b.price_per_lead);
+      if (b.batch_kind !== 'niche_research' && b.price_per_lead) {
+        cm.revenue += Number(b.price_per_lead);
+        batchRevenue += Number(b.price_per_lead);
+      }
       continue;
     }
 
@@ -430,6 +448,24 @@ export async function GET(request: NextRequest) {
     if (!bulkByCustomer[a.customer_id]) bulkByCustomer[a.customer_id] = { name: bp.name, count: 0, revenue: 0 };
     bulkByCustomer[a.customer_id].count++;
     bulkByCustomer[a.customer_id].revenue += bp.price;
+  }
+
+  // Niche-onderzoeksbatches: eenmalige `total_price` als revenue voor batches
+  // die in deze periode zijn besteld (i.p.v. per geleverde lead schalen).
+  // Zonder deze tak telde elke binnenkomende lead in de batch nogmaals
+  // €1.000 als omzet — terwijl de klant maar één keer betaalt.
+  for (const b of allBatches) {
+    if ((b as { batch_kind?: string }).batch_kind !== 'niche_research') continue;
+    if (!b.total_price) continue;
+    if (!b.created_at || b.created_at < periodStartIso) continue;
+    const cust = b.customers as unknown as { name: string } | { name: string }[] | null;
+    const custName = Array.isArray(cust) ? cust[0]?.name : cust?.name || 'Onbekend';
+    if (!customerMargins[b.customer_id]) {
+      customerMargins[b.customer_id] = { name: custName, revenue: 0, cost: 0, margin: 0, leads: 0, marginPct: 0 };
+    }
+    const cm = customerMargins[b.customer_id];
+    cm.revenue += Number(b.total_price);
+    batchRevenue += Number(b.total_price);
   }
 
   for (const cm of Object.values(customerMargins)) {
