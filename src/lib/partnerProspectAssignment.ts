@@ -8,6 +8,13 @@ import {
 
 export const PARTNER_PROSPECT_AM_CONFIG_KEY = 'partner_prospect_am_config' as const;
 
+/**
+ * Per partner-branch onthouden welke `admin_users.id` als laatste een prospect
+ * kreeg. Wordt gebruikt door strict-alternerende round-robin in
+ * `pickRoundRobin`. Opslagvorm: `{ "thuisbatterij_partners": "<uuid>", … }`.
+ */
+export const PARTNER_PROSPECT_AM_POINTER_KEY = 'partner_prospect_am_pointer' as const;
+
 export type PartnerProspectAmStrategy = 'single' | 'round_robin' | 'weighted_random';
 
 export interface PartnerProspectAmAssignee {
@@ -92,36 +99,87 @@ function branchConfig(
   return doc[branchSlug] ?? doc[PARTNER_PROSPECT_BRANCH_SLUG] ?? null;
 }
 
+/**
+ * Strict round-robin op basis van een persistente "last-assigned"-pointer per
+ * branche in `app_settings.partner_prospect_am_pointer`. Iedere nieuwe
+ * prospect gaat naar de eerstvolgende AM ná de laatst-toegewezen, cyclisch
+ * door de pool. Dit is wat een gebruiker verwacht onder de noemer
+ * "round-robin": strict om de beurt, ongeacht historische scheefheid in de
+ * dataset.
+ *
+ * Robuustheid:
+ *  - Pool-volgorde wijzigt → we zoeken `last` op id (niet op index), dus
+ *    correct.
+ *  - `last` is niet (meer) in pool → we starten weer bij index 0.
+ *  - Pointer-doc bestaat nog niet → eerste pick = pool[0].
+ *  - Schrijfactie van pointer faalt → we gebruiken alsnog de gekozen AM
+ *    voor deze prospect (verlies van strikte volgorde bij volgende pick is
+ *    een acceptabel restrisico in zeldzame gevallen).
+ */
+export function pickNextRoundRobinId(
+  assigneeIds: string[],
+  lastAssignedId: string | null | undefined,
+): string {
+  if (assigneeIds.length === 0) {
+    throw new Error('pickNextRoundRobinId: empty assigneeIds');
+  }
+  if (assigneeIds.length === 1) return assigneeIds[0];
+  if (!lastAssignedId) return assigneeIds[0];
+  const idx = assigneeIds.indexOf(lastAssignedId);
+  if (idx === -1) return assigneeIds[0];
+  return assigneeIds[(idx + 1) % assigneeIds.length];
+}
+
+type PointerDoc = Record<string, string>;
+
+function parsePointerDoc(raw: unknown): PointerDoc {
+  if (typeof raw !== 'string' || !raw.trim()) return {};
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    const out: PointerDoc = {};
+    for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof v === 'string' && isUuid(v)) out[k] = v;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
 async function pickRoundRobin(
   supabase: SupabaseClient,
   branchSlug: string,
   assigneeIds: string[],
 ): Promise<string> {
-  const since = new Date(Date.now() - 90 * 86_400_000).toISOString();
   const { data } = await supabase
-    .from('prospects')
-    .select('account_manager_id')
-    .contains('branches', [branchSlug])
-    .not('account_manager_id', 'is', null)
-    .gte('created_at', since);
+    .from('app_settings')
+    .select('value')
+    .eq('key', PARTNER_PROSPECT_AM_POINTER_KEY)
+    .maybeSingle();
 
-  const counts = new Map<string, number>();
-  for (const id of assigneeIds) counts.set(id, 0);
-  for (const row of data || []) {
-    const id = row.account_manager_id as string;
-    if (counts.has(id)) counts.set(id, (counts.get(id) ?? 0) + 1);
+  const pointers = parsePointerDoc(data?.value);
+  const last = pointers[branchSlug] ?? null;
+  const next = pickNextRoundRobinId(assigneeIds, last);
+
+  // Persisteer de nieuwe pointer; falen mag niet-blokkerend zijn want we
+  // hebben al een geldige `next` bepaald voor deze prospect.
+  const updated: PointerDoc = { ...pointers, [branchSlug]: next };
+  try {
+    await supabase
+      .from('app_settings')
+      .upsert(
+        { key: PARTNER_PROSPECT_AM_POINTER_KEY, value: JSON.stringify(updated) },
+        { onConflict: 'key' },
+      );
+  } catch (err) {
+    console.error(
+      '[partnerProspectAssignment] pointer-upsert failed:',
+      (err as Error)?.message,
+    );
   }
 
-  let bestId = assigneeIds[0];
-  let bestCount = counts.get(bestId) ?? 0;
-  for (const id of assigneeIds) {
-    const c = counts.get(id) ?? 0;
-    if (c < bestCount) {
-      bestId = id;
-      bestCount = c;
-    }
-  }
-  return bestId;
+  return next;
 }
 
 function pickWeightedRandom(assignees: PartnerProspectAmAssignee[]): string {
