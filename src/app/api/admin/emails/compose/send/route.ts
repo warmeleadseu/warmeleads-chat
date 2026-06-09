@@ -13,7 +13,12 @@ import {
   type ComposeRenderResult,
   type ResolvedRecipient,
 } from '@/lib/email/composeContext';
-import { getTemplate, type EmailTemplate } from '@/lib/email/templates';
+import {
+  findRecipientsMissingBranchRequirement,
+  getTemplate,
+  templateBranchRequirement,
+  type EmailTemplate,
+} from '@/lib/email/templates';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -136,6 +141,7 @@ async function sendOneAndLog(
   bcc: string[],
 ): Promise<void> {
   const r = rendered.recipient.recipient;
+  const isTransactional = template.scope === 'transactional';
   const result = await sendAsAdmin({
     admin: { id: admin.id, name: admin.name, email: admin.email },
     to: r.email,
@@ -143,11 +149,12 @@ async function sendOneAndLog(
     html: rendered.html,
     text: rendered.text,
     scope: template.scope,
+    bypassOptOut: isTransactional,
     prospectId: r.type === 'prospect' ? r.id : null,
     customerId: r.type === 'customer' ? r.id : null,
     templateKey: template.key,
     templateOptions: manuallyEdited ? { ...options, _manually_edited: true } : options,
-    unsubscribeToken: rendered.recipient.unsubscribeToken,
+    unsubscribeToken: isTransactional ? null : rendered.recipient.unsubscribeToken,
     toName: r.name,
     cc: cc.length > 0 ? cc : undefined,
     bcc: bcc.length > 0 ? bcc : undefined,
@@ -320,6 +327,32 @@ export async function POST(request: NextRequest) {
       },
       { status: 400 },
     );
+  }
+
+  // Server-side guard voor branche-gebonden templates (bv. nei_begun_intro
+  // alleen voor recipients met `nei_begun_partners` in `branches`). We
+  // weigeren de hele verzending als één ontvanger niet voldoet, zodat de
+  // afzender direct ziet welke ID's er niet bij passen.
+  const branchRequirement = templateBranchRequirement(template.key);
+  if (branchRequirement && branchRequirement.length > 0) {
+    const missing = findRecipientsMissingBranchRequirement(
+      template.key,
+      resolved.map(r => ({
+        id: r.recipient.id,
+        branchSlugs: r.branchSlugs,
+      })),
+    );
+    if (missing.length > 0) {
+      return NextResponse.json(
+        {
+          error: `Template "${template.key}" vereist dat ontvangers minstens één van deze branches hebben: ${branchRequirement.join(', ')}.`,
+          template_key: template.key,
+          required_branches: branchRequirement,
+          recipients_without_required_branch: missing,
+        },
+        { status: 400 },
+      );
+    }
   }
 
   const rendered = await renderForRecipients(supabase, admin, resolved, {

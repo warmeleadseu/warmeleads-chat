@@ -13,6 +13,7 @@ import { meetingRequestTemplate } from './meeting_request';
 import { welcomeCustomerTemplate } from './welcome_customer';
 import { reEngageTemplate } from './re_engage';
 import { customTemplate } from './custom';
+import { neiBegunIntroTemplate } from './nei_begun_intro';
 import { applyMergeTags } from './_helpers';
 
 const TEMPLATES: EmailTemplate[] = [
@@ -24,14 +25,58 @@ const TEMPLATES: EmailTemplate[] = [
   followUpTemplate,
   welcomeCustomerTemplate,
   reEngageTemplate,
+  neiBegunIntroTemplate,
   customTemplate,
 ];
 
 const REGISTRY = new Map<string, EmailTemplate>(TEMPLATES.map(t => [t.key, t]));
 
-export function listTemplates(applicableTo?: TemplateApplicableTo): EmailTemplate[] {
-  if (!applicableTo) return TEMPLATES.slice();
-  return TEMPLATES.filter(t => t.applicableTo.includes(applicableTo));
+/**
+ * Sommige templates zijn alleen relevant wanneer de ontvanger een specifieke
+ * branche-koppeling heeft (bv. de Nij Begun-template alleen voor prospects op
+ * `nei_begun_partners`). De drawer mag de hele lijst van geselecteerde
+ * recipient-branche-slugs meegeven; we tonen de template als minstens één van
+ * de vereiste slugs in die set zit.
+ */
+const TEMPLATE_BRANCH_REQUIREMENTS: Record<string, readonly string[]> = {
+  nei_begun_intro: ['nei_begun_partners'],
+};
+
+export function templateBranchRequirement(key: string): readonly string[] | undefined {
+  return TEMPLATE_BRANCH_REQUIREMENTS[key];
+}
+
+/**
+ * Server-side guard: gegeven een template-key en een lijst van resolved
+ * recipients met hun originele branche-slugs, geeft de IDs terug van
+ * recipients die niet aan de branche-eis voldoen. Lege array = alles oké.
+ */
+export function findRecipientsMissingBranchRequirement(
+  templateKey: string,
+  recipients: readonly { id: string; branchSlugs: readonly string[] }[],
+): string[] {
+  const required = TEMPLATE_BRANCH_REQUIREMENTS[templateKey];
+  if (!required || required.length === 0) return [];
+  const requiredSet = new Set(required);
+  return recipients
+    .filter(r => !r.branchSlugs.some(slug => requiredSet.has(slug)))
+    .map(r => r.id);
+}
+
+export function listTemplates(
+  applicableTo?: TemplateApplicableTo,
+  recipientBranches?: readonly string[],
+): EmailTemplate[] {
+  const branchSet = recipientBranches ? new Set(recipientBranches) : null;
+  return TEMPLATES.filter(t => {
+    if (applicableTo && !t.applicableTo.includes(applicableTo)) return false;
+    const required = TEMPLATE_BRANCH_REQUIREMENTS[t.key];
+    if (required && required.length > 0) {
+      if (!branchSet) return false;
+      if (!required.some(slug => branchSet.has(slug))) return false;
+    }
+    return true;
+  });
 }
 
 export function getTemplate(key: string): EmailTemplate | null {

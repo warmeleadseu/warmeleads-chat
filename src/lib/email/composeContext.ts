@@ -29,6 +29,12 @@ export interface ResolvedRecipient {
   recipient: RecipientCtx;
   unsubscribeToken: string;
   unsubscribeUrl: string;
+  /**
+   * Originele branche-slugs van de prospect/customer (vóór mapping naar
+   * leesbare labels in `recipient.branches`). Wordt gebruikt voor
+   * server-side validatie van branche-gebonden templates.
+   */
+  branchSlugs: string[];
 }
 
 export interface RecipientResolutionResult {
@@ -165,6 +171,7 @@ export async function resolveRecipients(
       continue;
     }
     const token = generateUnsubscribeToken();
+    const slugs = (p.branches || []).filter((s): s is string => typeof s === 'string' && s.length > 0);
     resolved.push({
       recipient: {
         type: 'prospect',
@@ -173,10 +180,11 @@ export async function resolveRecipients(
         name: p.contact_person?.trim() || p.company_name || p.email,
         firstName: pickFirstName(p.contact_person || ''),
         companyName: p.company_name || '',
-        branches: (p.branches || []).map(branchLabel),
+        branches: slugs.map(branchLabel),
       },
       unsubscribeToken: token,
       unsubscribeUrl: buildUnsubscribeUrl(token),
+      branchSlugs: slugs,
     });
   }
 
@@ -197,6 +205,7 @@ export async function resolveRecipients(
       continue;
     }
     const token = generateUnsubscribeToken();
+    const slugs = (c.branches || []).filter((s): s is string => typeof s === 'string' && s.length > 0);
     resolved.push({
       recipient: {
         type: 'customer',
@@ -205,10 +214,11 @@ export async function resolveRecipients(
         name: c.contact_person?.trim() || c.name || c.email,
         firstName: pickFirstName(c.contact_person || ''),
         companyName: c.name || '',
-        branches: (c.branches || []).map(branchLabel),
+        branches: slugs.map(branchLabel),
       },
       unsubscribeToken: token,
       unsubscribeUrl: buildUnsubscribeUrl(token),
+      branchSlugs: slugs,
     });
   }
 
@@ -320,6 +330,11 @@ export async function renderForRecipients(
 
   const adminCtx = buildAdminCtx(admin);
   const signatureHtml = resolveSignature(adminCtx, EMAIL_BASE_URL);
+  // Transactionele templates (bv. account-bevestigingen, partner-onboarding)
+  // tonen geen unsubscribe-blok; ontvangers worden geacht deze mail altijd
+  // te krijgen. We zetten de URL hier op null zodat composeShell het blok
+  // achterwege laat en geen List-Unsubscribe-header gegenereerd wordt.
+  const isTransactional = input.template.scope === 'transactional';
 
   return resolved.map(r => {
     const branchesSelected: BranchCtx[] = branchSlugs
@@ -339,7 +354,7 @@ export async function renderForRecipients(
       admin: adminCtx,
       branchesSelected,
       optionValues: input.optionValues,
-      unsubscribeUrl: r.unsubscribeUrl,
+      unsubscribeUrl: isTransactional ? null : r.unsubscribeUrl,
       signatureHtml,
       baseUrl: EMAIL_BASE_URL,
     };

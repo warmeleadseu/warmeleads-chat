@@ -133,6 +133,7 @@ export async function POST(request: NextRequest) {
         },
         unsubscribeToken: 'test-' + Date.now(),
         unsubscribeUrl: '#',
+        branchSlugs: [] as string[],
       },
     ];
   }

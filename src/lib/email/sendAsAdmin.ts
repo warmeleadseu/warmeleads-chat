@@ -7,7 +7,7 @@ import {
   type DispatchEmailResult,
 } from '@/lib/email';
 
-export type EmailScope = 'all' | 'marketing' | 'nurture' | 'pricing';
+export type EmailScope = 'all' | 'marketing' | 'nurture' | 'pricing' | 'transactional';
 
 export interface SendAsAdminInput {
   /** AM die afzendt; geeft from-line en reply-to */

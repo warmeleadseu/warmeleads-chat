@@ -8,7 +8,11 @@ import {
   resolveRecipients,
   type ComposeRecipient,
 } from '@/lib/email/composeContext';
-import { getTemplate } from '@/lib/email/templates';
+import {
+  findRecipientsMissingBranchRequirement,
+  getTemplate,
+  templateBranchRequirement,
+} from '@/lib/email/templates';
 import { normalizeCcBcc } from '@/lib/email/sendAsAdmin';
 
 const MAX_PREVIEW = 5;
@@ -106,6 +110,28 @@ export async function POST(request: NextRequest) {
     { id: admin.id, role: admin.role },
     recipients,
   );
+
+  // Server-side guard voor branche-gebonden templates (bv. nei_begun_intro):
+  // weiger de preview als één van de gekozen ontvangers niet aan de branche-
+  // eis voldoet, zodat de UI direct een duidelijke foutmelding kan tonen.
+  const branchRequirement = templateBranchRequirement(template.key);
+  if (branchRequirement && branchRequirement.length > 0) {
+    const missing = findRecipientsMissingBranchRequirement(
+      template.key,
+      resolved.map(r => ({ id: r.recipient.id, branchSlugs: r.branchSlugs })),
+    );
+    if (missing.length > 0) {
+      return NextResponse.json(
+        {
+          error: `Template "${template.key}" vereist dat ontvangers minstens één van deze branches hebben: ${branchRequirement.join(', ')}.`,
+          template_key: template.key,
+          required_branches: branchRequirement,
+          recipients_without_required_branch: missing,
+        },
+        { status: 400 },
+      );
+    }
+  }
 
   // Optouts checken voor preview-info (we blokkeren niet, alleen waarschuwen)
   const recipientEmails = resolved.map(r => r.recipient.email.toLowerCase());

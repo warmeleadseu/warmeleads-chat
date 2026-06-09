@@ -59,7 +59,7 @@ interface TemplateSummary {
   label: string;
   description: string;
   applicable_to: ('prospect' | 'customer')[];
-  scope: 'marketing' | 'nurture' | 'pricing' | 'all';
+  scope: 'marketing' | 'nurture' | 'pricing' | 'all' | 'transactional';
   options: TemplateOption[];
 }
 
@@ -155,6 +155,7 @@ const SCOPE_LABELS: Record<string, string> = {
   pricing: 'Prijsinfo',
   nurture: 'Opvolging',
   all: 'Algemeen',
+  transactional: 'Transactioneel',
 };
 
 const APPLICABLE_LABEL = (a: ('prospect' | 'customer')[]) => {
@@ -226,33 +227,70 @@ export function ComposeMailDrawer({
     setOverrides({});
   }, [selectedKey, optionValues]);
 
-  // Templates en branches laden bij eerste open.
+  // Branches laden bij eerste open (statische lijst voor de OptionsForm).
   useEffect(() => {
     if (!open) return;
     let active = true;
     (async () => {
       try {
-        const [tplRes, brRes] = await Promise.all([
-          adminFetch('/api/admin/emails/templates'),
-          adminFetch('/api/admin/branches'),
-        ]);
+        const brRes = await adminFetch('/api/admin/branches');
         if (!active) return;
-        if (tplRes.ok) {
-          const j = await tplRes.json();
-          setTemplates(j.templates || []);
-        }
         if (brRes.ok) {
           const j = await brRes.json();
           setBranches((j.branches || []) as BranchOption[]);
         }
       } catch (err) {
-        console.error('compose:init', err);
+        console.error('compose:init-branches', err);
       }
     })();
     return () => {
       active = false;
     };
   }, [open]);
+
+  // Templates herladen op basis van de geselecteerde ontvangers. Sommige
+  // templates (bv. Nij Begun) zijn alleen relevant voor ontvangers met een
+  // specifieke branche-koppeling, dus we sturen de unieke set branche-slugs
+  // van de huidige recipients mee als query-param.
+  useEffect(() => {
+    if (!open) return;
+    let active = true;
+    (async () => {
+      try {
+        const recipientBody = {
+          prospects: recipients.filter(r => r.type === 'prospect').map(r => r.id),
+          customers: recipients.filter(r => r.type === 'customer').map(r => r.id),
+        };
+        let recipientBranches: string[] = [];
+        if (recipientBody.prospects.length > 0 || recipientBody.customers.length > 0) {
+          const rbRes = await adminFetch('/api/admin/emails/recipient-branches', {
+            method: 'POST',
+            body: JSON.stringify(recipientBody),
+          });
+          if (rbRes.ok) {
+            const j = (await rbRes.json()) as { branches?: string[] };
+            recipientBranches = Array.isArray(j.branches) ? j.branches : [];
+          }
+        }
+        const params = new URLSearchParams();
+        for (const slug of recipientBranches) params.append('branches', slug);
+        const url = params.toString()
+          ? `/api/admin/emails/templates?${params.toString()}`
+          : '/api/admin/emails/templates';
+        const tplRes = await adminFetch(url);
+        if (!active) return;
+        if (tplRes.ok) {
+          const j = await tplRes.json();
+          setTemplates(j.templates || []);
+        }
+      } catch (err) {
+        console.error('compose:init-templates', err);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [open, recipients]);
 
   // Default option values invullen wanneer template wisselt.
   useEffect(() => {
