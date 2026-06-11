@@ -1,12 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
   PARTNER_PROSPECT_BRANCH_SLUGS,
+  humanizePartnerBranchLabel,
+  isPartnerBranchSlugDynamic,
   isPartnerProspectBranchSlug,
+  loadPartnerBranchSlugs,
   normalizePartnerProspectBranchSlug,
 } from '@/lib/partnerProspectConstants';
 import {
   buildPartnerProspectInsertRow,
   isPartnerProspectBranch,
+  partnerProspectIngestLabel,
 } from '@/lib/partnerProspectIngest';
 import { pickNextRoundRobinId } from '@/lib/partnerProspectAssignment';
 
@@ -19,6 +23,101 @@ describe('partner prospect branches', () => {
     }
     expect(isPartnerProspectBranch('airco')).toBe(false);
     expect(isPartnerProspectBranch('thuisbatterij')).toBe(false);
+    expect(isPartnerProspectBranch('bulk')).toBe(false);
+  });
+});
+
+describe('humanizePartnerBranchLabel', () => {
+  it('gebruikt expliciete labels voor well-known slugs', () => {
+    expect(humanizePartnerBranchLabel('thuisbatterij_partners')).toBe('Thuisbatterij Partners');
+    expect(humanizePartnerBranchLabel('airco_partners')).toBe('Airco Partners');
+    expect(humanizePartnerBranchLabel('nei_begun_partners')).toBe('Nei Begun Partners');
+  });
+
+  it('humanized onbekende slugs naar Title Case', () => {
+    expect(humanizePartnerBranchLabel('bulk')).toBe('Bulk');
+    expect(humanizePartnerBranchLabel('mediabink_warm')).toBe('Mediabink Warm');
+    expect(humanizePartnerBranchLabel('nieuwe-partner')).toBe('Nieuwe Partner');
+  });
+
+  it('valt elegant terug bij lege of vreemde input', () => {
+    expect(humanizePartnerBranchLabel('')).toBe('');
+    expect(humanizePartnerBranchLabel('___')).toBe('___');
+  });
+});
+
+describe('partnerProspectIngestLabel', () => {
+  it('matcht humanizePartnerBranchLabel voor zowel hardcoded als dynamische slugs', () => {
+    expect(partnerProspectIngestLabel('thuisbatterij_partners')).toBe('Thuisbatterij Partners');
+    expect(partnerProspectIngestLabel('bulk')).toBe('Bulk');
+  });
+});
+
+describe('loadPartnerBranchSlugs', () => {
+  function mockSupabase(rows: Array<{ slug: string }> | { error: string }) {
+    return {
+      from: () => ({
+        select: () => ({
+          eq: () =>
+            'error' in rows
+              ? Promise.resolve({ data: null, error: { message: rows.error } })
+              : Promise.resolve({ data: rows, error: null }),
+        }),
+      }),
+    } as unknown as Parameters<typeof loadPartnerBranchSlugs>[0];
+  }
+
+  it('combineert DB-rijen met de hardcoded fallback', async () => {
+    const sb = mockSupabase([{ slug: 'bulk' }, { slug: 'mediabink_warm' }]);
+    const set = await loadPartnerBranchSlugs(sb);
+    expect(set.has('bulk')).toBe(true);
+    expect(set.has('mediabink_warm')).toBe(true);
+    for (const slug of PARTNER_PROSPECT_BRANCH_SLUGS) {
+      expect(set.has(slug)).toBe(true);
+    }
+  });
+
+  it('valt terug op de hardcoded lijst bij DB-fout', async () => {
+    const sb = mockSupabase({ error: 'boom' });
+    const set = await loadPartnerBranchSlugs(sb);
+    for (const slug of PARTNER_PROSPECT_BRANCH_SLUGS) {
+      expect(set.has(slug)).toBe(true);
+    }
+  });
+});
+
+describe('isPartnerBranchSlugDynamic', () => {
+  function makeSb(dbResult: { is_partner_branch?: boolean | null } | null) {
+    return {
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            maybeSingle: () => Promise.resolve({ data: dbResult, error: null }),
+          }),
+        }),
+      }),
+    } as unknown as Parameters<typeof isPartnerBranchSlugDynamic>[0];
+  }
+
+  it('true voor hardcoded slug zonder DB-call', async () => {
+    const sb = makeSb(null);
+    expect(await isPartnerBranchSlugDynamic(sb, 'thuisbatterij_partners')).toBe(true);
+  });
+
+  it('true wanneer DB de vlag op true heeft', async () => {
+    const sb = makeSb({ is_partner_branch: true });
+    expect(await isPartnerBranchSlugDynamic(sb, 'bulk')).toBe(true);
+  });
+
+  it('false wanneer DB-vlag uit staat en geen hardcoded match', async () => {
+    const sb = makeSb({ is_partner_branch: false });
+    expect(await isPartnerBranchSlugDynamic(sb, 'badkamer')).toBe(false);
+  });
+
+  it('false bij lege input', async () => {
+    const sb = makeSb(null);
+    expect(await isPartnerBranchSlugDynamic(sb, '')).toBe(false);
+    expect(await isPartnerBranchSlugDynamic(sb, null)).toBe(false);
   });
 });
 

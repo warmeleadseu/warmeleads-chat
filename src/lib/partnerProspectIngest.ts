@@ -2,18 +2,30 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { resolvePartnerProspectAccountManagerId } from '@/lib/partnerProspectAssignment';
 import {
   DEFAULT_PARTNER_PROSPECT_AM_ID,
-  PARTNER_PROSPECT_BRANCH_LABELS,
-  PARTNER_PROSPECT_BRANCH_SLUG,
-  type PartnerProspectBranchSlug,
+  humanizePartnerBranchLabel,
+  isPartnerBranchSlugDynamic,
   isPartnerProspectBranchSlug,
-  normalizePartnerProspectBranchSlug,
+  type PartnerProspectBranchSlug,
 } from '@/lib/partnerProspectConstants';
 
 /** @deprecated Gebruik `resolvePartnerProspectAccountManagerId`; blijft als alias voor oude imports. */
 export const PARTNER_PROSPECT_ACCOUNT_MANAGER_ID = DEFAULT_PARTNER_PROSPECT_AM_ID;
 
+/**
+ * Synchrone check tegen de hardcoded well-known slugs. Voor runtime-routing
+ * (webhook/backfill) waar ook DB-gevlagde partner-branches mee moeten doen,
+ * gebruik je `isPartnerProspectBranchAsync(supabase, slug)`.
+ */
 export function isPartnerProspectBranch(branch: string | undefined | null): boolean {
   return isPartnerProspectBranchSlug(branch);
+}
+
+/** True als de slug een partner-branche is via DB-vlag of hardcoded lijst. */
+export async function isPartnerProspectBranchAsync(
+  supabase: SupabaseClient,
+  branch: string | undefined | null,
+): Promise<boolean> {
+  return isPartnerBranchSlugDynamic(supabase, branch);
 }
 
 export type PartnerProspectPayload = {
@@ -189,7 +201,7 @@ export async function findRecentPartnerProspectByEmail(
 }
 
 export function partnerProspectIngestLabel(branchSlug: PartnerProspectBranchSlug): string {
-  return PARTNER_PROSPECT_BRANCH_LABELS[branchSlug] ?? branchSlug;
+  return humanizePartnerBranchLabel(branchSlug);
 }
 
 export async function insertPartnerProspect(
@@ -221,8 +233,11 @@ export async function insertPartnerProspectFromEnrichedLeadRow(
   activity: { title: string; body?: string; type?: string; adminUserId?: string | null },
 ): Promise<{ id: string } | null> {
   const lr = leadRow;
-  const branchSlug =
-    normalizePartnerProspectBranchSlug(str(lr.branch)) ?? PARTNER_PROSPECT_BRANCH_SLUG;
+  const branchSlug = str(lr.branch);
+  if (!branchSlug) {
+    console.error('[partnerProspectIngest] missing branch on lead row');
+    return null;
+  }
   const accountManagerId = await resolvePartnerProspectAccountManagerId(supabase, branchSlug);
   const payload: PartnerProspectPayload = {
     ...(lr as unknown as PartnerProspectPayload),

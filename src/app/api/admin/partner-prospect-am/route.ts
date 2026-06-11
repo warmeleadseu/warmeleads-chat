@@ -7,26 +7,56 @@ import {
   parsePartnerProspectAmConfigDoc,
   type PartnerProspectAmConfigDoc,
 } from '@/lib/partnerProspectAssignment';
+import {
+  PARTNER_PROSPECT_BRANCH_SLUGS,
+  humanizePartnerBranchLabel,
+} from '@/lib/partnerProspectConstants';
+
+type PartnerBranchOption = { slug: string; label: string };
 
 export async function GET(_request: NextRequest) {
   const { error } = await requireSuperAdmin(_request);
   if (error) return error;
 
   const supabase = createServerClient();
-  const [{ data: row }, { data: users }] = await Promise.all([
+  const [{ data: row }, { data: users }, { data: dbBranches }] = await Promise.all([
     supabase.from('app_settings').select('value, updated_at').eq('key', PARTNER_PROSPECT_AM_CONFIG_KEY).maybeSingle(),
     supabase
       .from('admin_users')
       .select('id, name, email, role, is_active, is_account_manager')
       .eq('is_active', true)
       .order('name', { ascending: true }),
+    supabase
+      .from('branches')
+      .select('slug, name, is_active, is_partner_branch')
+      .eq('is_partner_branch', true)
+      .eq('is_active', true)
+      .order('sort_order', { ascending: true }),
   ]);
 
   const parsed = parsePartnerProspectAmConfigDoc(row?.value ?? null);
   const config: PartnerProspectAmConfigDoc = parsed ?? defaultPartnerProspectAmConfigDoc();
 
+  const seen = new Set<string>();
+  const branches: PartnerBranchOption[] = [];
+  for (const r of dbBranches || []) {
+    const slug = String((r as { slug?: unknown }).slug ?? '').trim();
+    if (!slug || seen.has(slug)) continue;
+    seen.add(slug);
+    const dbLabel = String((r as { name?: unknown }).name ?? '').trim();
+    branches.push({ slug, label: dbLabel || humanizePartnerBranchLabel(slug) });
+  }
+  // Veiligheidsnet: voeg legacy hardcoded slugs toe als ze (om wat voor reden
+  // dan ook) niet meer in de DB als partner-branche staan.
+  for (const slug of PARTNER_PROSPECT_BRANCH_SLUGS) {
+    if (seen.has(slug)) continue;
+    seen.add(slug);
+    branches.push({ slug, label: humanizePartnerBranchLabel(slug) });
+  }
+
   return NextResponse.json({
     config,
+    branches,
     updated_at: row?.updated_at ?? null,
     users: users || [],
   });

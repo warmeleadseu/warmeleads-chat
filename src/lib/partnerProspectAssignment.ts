@@ -3,7 +3,6 @@ import {
   DEFAULT_PARTNER_PROSPECT_AM_ID,
   PARTNER_PROSPECT_BRANCH_SLUG,
   PARTNER_PROSPECT_BRANCH_SLUGS,
-  type PartnerProspectBranchSlug,
 } from '@/lib/partnerProspectConstants';
 
 export const PARTNER_PROSPECT_AM_CONFIG_KEY = 'partner_prospect_am_config' as const;
@@ -93,7 +92,7 @@ async function loadConfigDoc(supabase: SupabaseClient): Promise<PartnerProspectA
 
 function branchConfig(
   doc: PartnerProspectAmConfigDoc | null,
-  branchSlug: PartnerProspectBranchSlug,
+  branchSlug: string,
 ): PartnerProspectAmBranchConfig | null {
   if (!doc) return null;
   return doc[branchSlug] ?? doc[PARTNER_PROSPECT_BRANCH_SLUG] ?? null;
@@ -197,17 +196,20 @@ function pickWeightedRandom(assignees: PartnerProspectAmAssignee[]): string {
 /**
  * Bepaalt welke `admin_users.id` op een nieuwe partner-prospect gezet wordt.
  * Leest `app_settings.partner_prospect_am_config` (JSON per branch).
+ *
+ * Werkt voor zowel hardcoded well-known partner-slugs als nieuwe DB-gevlagde
+ * partner-branches. Als er geen specifieke config voor de branche staat, valt
+ * het terug op de default voor de eerste hardcoded slug.
  */
 export async function resolvePartnerProspectAccountManagerId(
   supabase: SupabaseClient,
-  branchSlug: PartnerProspectBranchSlug = PARTNER_PROSPECT_BRANCH_SLUG,
+  branchSlug: string = PARTNER_PROSPECT_BRANCH_SLUG,
 ): Promise<string> {
   const defaults = defaultPartnerProspectAmConfigDoc();
   const doc = (await loadConfigDoc(supabase)) ?? defaults;
   const bc = branchConfig(doc, branchSlug);
-  const assignees = bc?.assignees?.length
-    ? bc.assignees
-    : (defaults[branchSlug] ?? defaults[PARTNER_PROSPECT_BRANCH_SLUG]).assignees;
+  const fallbackBranch = defaults[branchSlug] ?? defaults[PARTNER_PROSPECT_BRANCH_SLUG];
+  const assignees = bc?.assignees?.length ? bc.assignees : fallbackBranch.assignees;
   const strategy = bc?.strategy ?? 'single';
   const ids = assignees.map(a => a.admin_user_id).filter(Boolean);
   if (ids.length === 0) return DEFAULT_PARTNER_PROSPECT_AM_ID;

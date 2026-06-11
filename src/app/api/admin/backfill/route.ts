@@ -8,11 +8,10 @@ import { checkLeadProfanity } from '@/lib/profanityFilter';
 import { calculateQualityScore } from '@/lib/leadQuality';
 import { distributeLead } from '@/lib/distribution';
 import { syncBatchDelivered } from '@/lib/batchSync';
-import { normalizePartnerProspectBranchSlug } from '@/lib/partnerProspectConstants';
+import { isPartnerBranch } from '@/lib/branchPolicy';
 import {
   findRecentPartnerProspectByEmail,
   insertPartnerProspectFromEnrichedLeadRow,
-  isPartnerProspectBranch,
   partnerProspectIngestLabel,
 } from '@/lib/partnerProspectIngest';
 
@@ -285,12 +284,22 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, fetched: 0, imported: 0, skipped: 0, message: 'Geen leads gevonden in deze periode' });
   }
 
-  const { data: branchRow } = await supabase.from('branches').select('id').eq('slug', branch).single();
+  const { data: branchRow } = await supabase
+    .from('branches')
+    .select('id, is_partner_branch')
+    .eq('slug', branch)
+    .single();
   const { data: branchFields } = await supabase
     .from('branch_fields')
     .select('key')
     .eq('branch_id', branchRow?.id || '');
   const fieldKeys = new Set((branchFields || []).map((f: { key: string }) => f.key));
+
+  const isPartnerProspect = isPartnerBranch({
+    slug: branch,
+    is_partner_branch:
+      (branchRow as { is_partner_branch?: boolean | null } | null)?.is_partner_branch ?? null,
+  });
 
   const COMMON_KEYS = new Set([
     'branch', 'naam_klant', 'email', 'telefoonnummer', 'postcode',
@@ -306,7 +315,7 @@ export async function POST(request: NextRequest) {
   const existingEmails = new Set(
     (existingLeads || []).map(l => l.email?.toLowerCase()).filter(Boolean),
   );
-  if (isPartnerProspectBranch(branch)) {
+  if (isPartnerProspect) {
     const { data: existingProspects } = await supabase
       .from('prospects')
       .select('email')
@@ -373,8 +382,8 @@ export async function POST(request: NextRequest) {
 
       if (!lead.naam_klant) { skipped++; continue; }
 
-      const partnerBranch = normalizePartnerProspectBranchSlug(branch);
-      if (partnerBranch) {
+      if (isPartnerProspect) {
+        const partnerBranch = branch;
         if (lead.email) {
           const dup = await findRecentPartnerProspectByEmail(supabase, lead.email, partnerBranch);
           if (dup) {
@@ -436,7 +445,7 @@ export async function POST(request: NextRequest) {
     await supabase.from('app_settings').upsert({
       key: runId,
       value: JSON.stringify({
-        ...(isPartnerProspectBranch(branch)
+        ...(isPartnerProspect
           ? { prospect_ids: importedIds, ingest: 'prospect' as const }
           : { lead_ids: importedIds }),
         webhook_key_id: webhook_key_id || null,

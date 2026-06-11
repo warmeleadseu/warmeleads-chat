@@ -7,7 +7,7 @@ import { checkLeadProfanity } from '@/lib/profanityFilter';
 import { checkRateLimit } from '@/lib/rateLimit';
 import { calculateQualityScore } from '@/lib/leadQuality';
 import { fireLeadCapi } from '@/lib/aiCapiHooks';
-import { normalizePartnerProspectBranchSlug } from '@/lib/partnerProspectConstants';
+import { isPartnerBranch } from '@/lib/branchPolicy';
 import {
   buildPartnerProspectInsertRow,
   findRecentPartnerProspectByEmail,
@@ -57,12 +57,22 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const branchSlug = body.branch || keyRecord.branch;
 
+    const { data: branchRow } = await supabase
+      .from('branches')
+      .select('id, is_partner_branch')
+      .eq('slug', branchSlug)
+      .maybeSingle();
+
+    const isPartnerProspectBranchHere = isPartnerBranch({
+      slug: branchSlug,
+      is_partner_branch:
+        (branchRow as { is_partner_branch?: boolean | null } | null)?.is_partner_branch ?? null,
+    });
+
     const { data: branchFields } = await supabase
       .from('branch_fields')
       .select('key')
-      .eq('branch_id', (
-        await supabase.from('branches').select('id').eq('slug', branchSlug).single()
-      ).data?.id || '');
+      .eq('branch_id', branchRow?.id || '');
 
     const fieldKeys = new Set((branchFields || []).map((f: { key: string }) => f.key));
 
@@ -107,8 +117,8 @@ export async function POST(request: NextRequest) {
     }
 
     /* ── Partner-branches → prospects (geen lead-pool / distributie) ── */
-    const partnerBranch = normalizePartnerProspectBranchSlug(branchSlug);
-    if (partnerBranch) {
+    if (isPartnerProspectBranchHere) {
+      const partnerBranch = branchSlug as string;
       if (lead.email) {
         const dup = await findRecentPartnerProspectByEmail(supabase, lead.email, partnerBranch);
         if (dup) {
