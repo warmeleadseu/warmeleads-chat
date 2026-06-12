@@ -26,6 +26,91 @@ import { PERMISSIONS } from '@/lib/portalPermissions';
 import { UsersIcon } from '@heroicons/react/24/outline';
 import { ToastProvider, AnnouncementBar } from './_ui';
 
+/**
+ * Self-healing loading-screen voor het portal.
+ *
+ * Probleem: op iOS Safari kon deze loading-state in zeldzame gevallen blijven
+ * draaien — bv. wanneer een oude Service Worker (pre-v5) chunks of HTML uit
+ * een cache leverde die niet meer bestonden, of wanneer Safari de pagina uit
+ * BFCache restored zonder dat de useEffect opnieuw afvuurde. Gebruikers
+ * konden er niet uitkomen omdat ze nooit voorbij dit scherm raakten.
+ *
+ * Deze component:
+ * - Toont na 5 sec een "Pagina herladen"-knop zodat de gebruiker zelf kan
+ *   ingrijpen.
+ * - Probeert na 12 sec automatisch te herstellen door alle Service Workers en
+ *   Cache Storage te wissen en daarna een hard reload te doen.
+ *
+ * Een sessionStorage-vlag in dezelfde flow als het kill-switch-script in
+ * <head> voorkomt reload-loops.
+ */
+function PortalLoadingScreen() {
+  const [showRetry, setShowRetry] = useState(false);
+  const [recovering, setRecovering] = useState(false);
+
+  const performRecovery = useCallback(async () => {
+    setRecovering(true);
+    try {
+      try {
+        sessionStorage.removeItem('wl-sw-checked-v5');
+        sessionStorage.removeItem('wl-sw-reloaded-v5');
+      } catch {
+        /* ignore */
+      }
+      if ('serviceWorker' in navigator) {
+        try {
+          const regs = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(regs.map((r) => r.unregister().catch(() => false)));
+        } catch {
+          /* ignore */
+        }
+      }
+      if (typeof caches !== 'undefined') {
+        try {
+          const keys = await caches.keys();
+          await Promise.all(keys.map((k) => caches.delete(k).catch(() => false)));
+        } catch {
+          /* ignore */
+        }
+      }
+    } finally {
+      window.location.reload();
+    }
+  }, []);
+
+  useEffect(() => {
+    const retryTimer = window.setTimeout(() => setShowRetry(true), 5000);
+    const autoTimer = window.setTimeout(() => {
+      void performRecovery();
+    }, 12000);
+    return () => {
+      window.clearTimeout(retryTimer);
+      window.clearTimeout(autoTimer);
+    };
+  }, [performRecovery]);
+
+  return (
+    <div className="flex min-h-screen flex-col items-center justify-center bg-brand-navy px-6 text-center">
+      <div className="h-10 w-10 animate-spin rounded-full border-[3px] border-white/10 border-t-brand-purple" />
+      {showRetry && (
+        <div className="mt-8 max-w-xs space-y-3">
+          <p className="text-sm text-white/70">
+            Duurt het te lang? Tik hieronder om de pagina opnieuw te laden.
+          </p>
+          <button
+            type="button"
+            onClick={() => void performRecovery()}
+            disabled={recovering}
+            className="w-full rounded-lg bg-white/10 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/15 disabled:opacity-60"
+          >
+            {recovering ? 'Bezig met herladen…' : 'Pagina herladen'}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function LoginScreen({ onLogin }: { onLogin: (c: PortalCustomer, pu: ClientPortalUser | null) => void }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -574,7 +659,21 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
 
     async function restoreFromCookieOrLegacy() {
       try {
-        const res = await fetch('/api/portal/auth/session', { credentials: 'include' });
+        // Fetch met harde timeout zodat de loading-state nooit eindeloos
+        // blijft hangen wanneer een (oude) Service Worker of netwerk-issue
+        // het request niet afhandelt.
+        const controller = new AbortController();
+        const timeoutId = window.setTimeout(() => controller.abort(), 8000);
+        let res: Response;
+        try {
+          res = await fetch('/api/portal/auth/session', {
+            credentials: 'include',
+            cache: 'no-store',
+            signal: controller.signal,
+          });
+        } finally {
+          window.clearTimeout(timeoutId);
+        }
         if (cancelled) return;
         if (res.ok) {
           const data = await res.json();
@@ -663,22 +762,21 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  // Service Worker wordt NIET preëmptief geregistreerd — alleen wanneer een
+  // gebruiker push-notificaties activeert (zie usePushNotifications.ts). Een
+  // SW met scope '/' onderschept anders alle navigaties op het hele domein,
+  // wat in eerdere versies stale chunks/HTML opleverde en op iOS Safari een
+  // hard-vastlopende loading-state veroorzaakte.
   useEffect(() => {
     if (!customer || isAdminView) return;
-    if ('serviceWorker' in navigator) {
-      (async () => {
-        try {
-          const existing = await navigator.serviceWorker.getRegistration('/');
-          if (existing) {
-            existing.update().catch(() => {});
-            return;
-          }
-          await navigator.serviceWorker.register('/sw.js', { scope: '/' });
-        } catch (err) {
-          console.error('SW registration failed:', err);
-        }
-      })();
-    }
+    if (!('serviceWorker' in navigator)) return;
+    // Bestaande registratie alleen updaten, nooit nieuw aanmaken.
+    navigator.serviceWorker
+      .getRegistration('/')
+      .then((reg) => {
+        if (reg) reg.update().catch(() => {});
+      })
+      .catch(() => {});
   }, [customer, isAdminView]);
 
   // Sync account (o.a. show_demo_portal) from server: na betaling, tab refresh, of periodiek
@@ -803,11 +901,7 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
   }, []);
 
   if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-brand-navy">
-        <div className="h-10 w-10 animate-spin rounded-full border-[3px] border-white/10 border-t-brand-purple" />
-      </div>
-    );
+    return <PortalLoadingScreen />;
   }
 
   if (!customer) return <LoginScreen onLogin={handleLogin} />;

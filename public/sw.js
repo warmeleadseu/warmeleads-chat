@@ -1,8 +1,16 @@
 /**
- * WarmeLeads service worker v4 — alleen push + cache-opruiming.
- * Geen fetch-handler: voorkomt conflicten met Next.js chunks/RSC en verouderde SW in browsers.
+ * WarmeLeads service worker v5 — push-only met version-probe voor recovery.
+ *
+ * Belangrijk:
+ * - GEEN fetch-handler. Oudere versies (v3.x) hadden er een en die zorgden voor
+ *   stale-cached HTML die naar verdwenen Next.js-chunks verwees, met als gevolg
+ *   dat React nooit kon hydrateren (vooral op iOS Safari, waar oude SW's lang
+ *   blijven plakken). Door de fetch-handler weg te laten lopen alle requests
+ *   gewoon naar het netwerk.
+ * - Reageert op `getVersion`-postMessage zodat de pagina kan detecteren of een
+ *   stale/onresponsieve SW is geregistreerd en die kan opruimen.
  */
-const CACHE_VERSION = 'warmeleads-v4-push-only';
+const CACHE_VERSION = 'warmeleads-v5-push-only';
 
 self.addEventListener('install', () => {
   console.info('[WL SW] install', CACHE_VERSION, self.location.origin);
@@ -24,6 +32,25 @@ self.addEventListener('activate', (event) => {
       .then(() => self.clients.claim())
       .then(() => console.info('[WL SW] activate: oude warmeleads-caches gewist', CACHE_VERSION)),
   );
+});
+
+self.addEventListener('message', (event) => {
+  const data = event.data;
+  if (!data || typeof data !== 'object') return;
+
+  if (data.type === 'getVersion') {
+    const reply = { type: 'wl-sw-version', value: CACHE_VERSION };
+    if (event.source && typeof event.source.postMessage === 'function') {
+      event.source.postMessage(reply);
+    } else if (event.ports && event.ports[0]) {
+      event.ports[0].postMessage(reply);
+    }
+    return;
+  }
+
+  if (data.type === 'skipWaiting') {
+    self.skipWaiting();
+  }
 });
 
 self.addEventListener('push', (event) => {

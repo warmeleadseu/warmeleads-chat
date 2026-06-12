@@ -107,6 +107,74 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-title" content="WarmeLeads" />
         <meta name="msapplication-TileColor" content="#3B2F75" />
         <meta name="msapplication-tap-highlight" content="no" />
+        {/*
+          Recovery-script voor iOS Safari:
+          1) Reload bij BFCache-restore (pageshow met persisted=true). Voorkomt
+             dat Safari een gerestorede pagina toont waarvan de _next/static-
+             chunks inmiddels door een nieuwe deploy zijn vervangen.
+          2) Detecteert verouderde Service Workers (uit pre-v5 versies die wel
+             een fetch-handler hadden). Als de actieve SW niet binnen 1.5s
+             reageert op een version-probe, of een oude versie reporteert,
+             worden alle SW's en caches opgeruimd en wordt de pagina opnieuw
+             geladen. SessionStorage-flag voorkomt reload-loops.
+        */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{
+var EXPECTED='warmeleads-v5-push-only';
+var FLAG='wl-sw-checked-v5';
+var RELOAD_FLAG='wl-sw-reloaded-v5';
+window.addEventListener('pageshow',function(e){
+  if(e.persisted){try{sessionStorage.removeItem(FLAG);}catch(_){}}
+  if(e.persisted){location.reload();}
+});
+if(typeof navigator==='undefined'||!('serviceWorker' in navigator))return;
+try{if(sessionStorage.getItem(FLAG)==='1')return;}catch(_){}
+var triggered=false;
+function recover(){
+  if(triggered)return;triggered=true;
+  try{sessionStorage.setItem(FLAG,'1');}catch(_){}
+  var alreadyReloaded=false;
+  try{alreadyReloaded=sessionStorage.getItem(RELOAD_FLAG)==='1';}catch(_){}
+  navigator.serviceWorker.getRegistrations().then(function(regs){
+    return Promise.all(regs.map(function(r){return r.unregister().catch(function(){});}));
+  }).then(function(){
+    if(typeof caches==='undefined')return;
+    return caches.keys().then(function(keys){
+      return Promise.all(keys.map(function(k){return caches.delete(k).catch(function(){});}));
+    });
+  }).then(function(){
+    if(alreadyReloaded)return;
+    try{sessionStorage.setItem(RELOAD_FLAG,'1');}catch(_){}
+    location.reload();
+  }).catch(function(){});
+}
+function markOk(){
+  try{sessionStorage.setItem(FLAG,'1');}catch(_){}
+  try{sessionStorage.removeItem(RELOAD_FLAG);}catch(_){}
+}
+navigator.serviceWorker.getRegistrations().then(function(regs){
+  if(!regs||regs.length===0){markOk();return;}
+  var ctrl=navigator.serviceWorker.controller;
+  if(!ctrl){
+    Promise.all(regs.map(function(r){return r.update().catch(function(){});})).then(function(){markOk();});
+    return;
+  }
+  var done=false;
+  var probeTimeout=setTimeout(function(){if(done)return;done=true;recover();},1500);
+  function onMessage(ev){
+    if(!ev||!ev.data||ev.data.type!=='wl-sw-version')return;
+    if(done)return;done=true;clearTimeout(probeTimeout);
+    navigator.serviceWorker.removeEventListener('message',onMessage);
+    if(ev.data.value===EXPECTED){markOk();}
+    else{recover();}
+  }
+  navigator.serviceWorker.addEventListener('message',onMessage);
+  try{ctrl.postMessage({type:'getVersion'});}catch(_){clearTimeout(probeTimeout);recover();}
+}).catch(function(){markOk();});
+}catch(_){}})();`,
+          }}
+        />
       </head>
       <body className="antialiased">
         <GoogleAnalytics />
