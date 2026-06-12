@@ -7,6 +7,7 @@ import {
   PlusIcon,
   MagnifyingGlassIcon,
   ArrowDownTrayIcon,
+  ArrowUpTrayIcon,
   Squares2X2Icon,
   ListBulletIcon,
   UserPlusIcon,
@@ -30,6 +31,7 @@ import { ProspectDrawer, type ProspectDetail, type AdminUserOption, type BranchO
 import { ProspectFormFields, EMPTY_PROSPECT, type ProspectFormState } from './_components/ProspectFormFields';
 import { BulkAssignDialog } from './_components/BulkAssignDialog';
 import { ConvertToCustomerDialog } from './_components/ConvertToCustomerDialog';
+import { ExportProspectsDialog } from './_components/ExportProspectsDialog';
 import { ProspectsKanban, type KanbanProspect } from './_components/ProspectsKanban';
 
 interface ProspectListRow extends KanbanProspect {
@@ -90,6 +92,7 @@ export default function ProspectsPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkOpen, setBulkOpen] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const [convertProspect, setConvertProspect] = useState<ProspectDetail | null>(null);
 
   const limit = view === 'kanban' ? 200 : 50;
@@ -261,12 +264,20 @@ export default function ProspectsPage() {
             <ListBulletIcon className="h-4 w-4" />
             Taken-overzicht
           </Link>
+          <button
+            type="button"
+            onClick={() => setExportOpen(true)}
+            className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 sm:flex-initial"
+          >
+            <ArrowDownTrayIcon className="h-4 w-4" />
+            Exporteren
+          </button>
           {canManage && (
             <Link
               href="/admin/prospects/import"
               className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 sm:flex-initial"
             >
-              <ArrowDownTrayIcon className="h-4 w-4" />
+              <ArrowUpTrayIcon className="h-4 w-4" />
               Importeren
             </Link>
           )}
@@ -414,6 +425,14 @@ export default function ProspectsPage() {
             </button>
             <button
               type="button"
+              onClick={() => setExportOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-md bg-white px-2.5 py-1 text-xs font-medium text-slate-700 ring-1 ring-inset ring-slate-200 hover:bg-slate-50"
+            >
+              <ArrowDownTrayIcon className="h-3.5 w-3.5" />
+              Exporteren
+            </button>
+            <button
+              type="button"
               onClick={() => setSelected(new Set())}
               className="ml-auto inline-flex items-center gap-1 rounded-md bg-white px-2 py-1 text-[11px] text-slate-500 ring-1 ring-inset ring-slate-200 hover:bg-slate-50"
             >
@@ -553,6 +572,19 @@ export default function ProspectsPage() {
           setComposeOpen(false);
           setSelected(new Set());
           fetchData(true);
+        }}
+      />
+
+      <ExportProspectsDialog
+        open={exportOpen}
+        onClose={() => setExportOpen(false)}
+        filterCount={stats.total ?? total}
+        selectedIds={Array.from(selected)}
+        filters={{
+          search: deferredSearch.trim() || undefined,
+          status: statusFilter,
+          account_manager_id: amFilter,
+          branch: branchFilter,
         }}
       />
     </div>

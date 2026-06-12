@@ -9,42 +9,13 @@ import {
   isValidStatus,
   PROSPECT_STATUSES,
 } from '@/lib/prospects';
-import { buildPhoneSearchIlikeClauses, phoneSearchDigitVariants, sanitizePostgrestIlike } from '@/lib/phoneSearch';
+import {
+  buildProspectFilterApplicator,
+  readProspectListFiltersFromUrl,
+} from '@/lib/prospectsListFilters';
 
 const DEFAULT_LIMIT = 25;
 const MAX_LIMIT = 200;
-
-/**
- * PostgREST `.or()` filter: bedrijf, contact, e-mail, plaats, KVK, telefoon (NL-varianten 06/316/0031).
- * Aanvullend: RPC `prospect_ids_by_phone_digits` per cijfer-variant (substring op genormaliseerde cijfers).
- */
-function buildProspectTextSearchOrFilter(searchRaw: string): string {
-  const trimmed = searchRaw.trim();
-  if (!trimmed) return '';
-
-  const sanitized = sanitizePostgrestIlike(trimmed);
-  return [
-    `company_name.ilike.%${sanitized}%`,
-    `contact_person.ilike.%${sanitized}%`,
-    `email.ilike.%${sanitized}%`,
-    `city.ilike.%${sanitized}%`,
-    `kvk_nummer.ilike.%${sanitized}%`,
-    ...buildPhoneSearchIlikeClauses('phone', trimmed),
-  ].join(',');
-}
-
-function asUuidStringArray(raw: unknown): string[] {
-  if (!raw || !Array.isArray(raw) || raw.length === 0) return [];
-  const first = raw[0];
-  if (typeof first === 'string') return (raw as string[]).filter(Boolean);
-  if (typeof first === 'object' && first !== null) {
-    const key = 'prospect_ids_by_phone_digits';
-    return (raw as Record<string, string>[])
-      .map((row) => (typeof row[key] === 'string' ? row[key] : Object.values(row).find((v) => typeof v === 'string')))
-      .filter((x): x is string => typeof x === 'string' && x.length > 0);
-  }
-  return [];
-}
 
 export async function GET(request: NextRequest) {
   const admin = await verifyAdmin(request);
@@ -55,82 +26,17 @@ export async function GET(request: NextRequest) {
 
   const page = Math.max(1, parseInt(url.searchParams.get('page') || '1'));
   const limit = Math.min(MAX_LIMIT, Math.max(1, parseInt(url.searchParams.get('limit') || String(DEFAULT_LIMIT))));
-  const search = (url.searchParams.get('search') || '').trim();
-  const status = url.searchParams.get('status');
-  const amId = url.searchParams.get('account_manager_id');
-  const branch = url.searchParams.get('branch');
-  const source = url.searchParams.get('source');
-  const hasOpenTasks = url.searchParams.get('has_open_tasks');
   const sort = url.searchParams.get('sort') || 'updated_at';
   const order = url.searchParams.get('order') || 'desc';
   const includeStats = url.searchParams.get('include_stats') === '1';
 
-  let countQuery = supabase.from('prospects').select('id', { count: 'exact', head: true });
-  let dataQuery = supabase.from('prospects').select('*');
+  const filters = readProspectListFiltersFromUrl(url.searchParams);
+  const applyFilters = await buildProspectFilterApplicator(supabase, admin, filters);
 
-  countQuery = applyAmScope(countQuery, admin);
-  dataQuery = applyAmScope(dataQuery, admin);
-
-  if (search) {
-    const textFilter = buildProspectTextSearchOrFilter(search);
-    let orFilter = textFilter;
-
-    const digitIdSet = new Set<string>();
-    for (const variant of phoneSearchDigitVariants(search)) {
-      if (variant.length < 3) continue;
-      const { data: digitIdRows, error: rpcErr } = await supabase.rpc('prospect_ids_by_phone_digits', {
-        digits: variant,
-        p_am_id: isAccountManagerScope(admin) ? admin.id : null,
-      });
-      if (rpcErr) {
-        console.warn('[prospects] prospect_ids_by_phone_digits RPC:', rpcErr.message);
-      } else {
-        for (const id of asUuidStringArray(digitIdRows)) {
-          digitIdSet.add(id);
-        }
-      }
-    }
-    if (digitIdSet.size > 0) {
-      const maxIds = 800;
-      const capped = [...digitIdSet].slice(0, maxIds);
-      orFilter = `${textFilter},id.in.(${capped.join(',')})`;
-    }
-
-    if (orFilter) {
-      countQuery = countQuery.or(orFilter);
-      dataQuery = dataQuery.or(orFilter);
-    }
-  }
-
-  if (status && status !== 'all' && isValidStatus(status)) {
-    countQuery = countQuery.eq('status', status);
-    dataQuery = dataQuery.eq('status', status);
-  }
-
-  if (amId && !isAccountManagerScope(admin)) {
-    if (amId === 'unassigned') {
-      countQuery = countQuery.is('account_manager_id', null);
-      dataQuery = dataQuery.is('account_manager_id', null);
-    } else {
-      countQuery = countQuery.eq('account_manager_id', amId);
-      dataQuery = dataQuery.eq('account_manager_id', amId);
-    }
-  }
-
-  if (branch) {
-    countQuery = countQuery.contains('branches', [branch]);
-    dataQuery = dataQuery.contains('branches', [branch]);
-  }
-
-  if (source && isValidSource(source)) {
-    countQuery = countQuery.eq('source', source);
-    dataQuery = dataQuery.eq('source', source);
-  }
-
-  if (hasOpenTasks === '1') {
-    countQuery = countQuery.not('next_action_at', 'is', null);
-    dataQuery = dataQuery.not('next_action_at', 'is', null);
-  }
+  const countQuery = applyFilters(
+    supabase.from('prospects').select('id', { count: 'exact', head: true }),
+  );
+  let dataQuery = applyFilters(supabase.from('prospects').select('*'));
 
   const allowedSorts: Record<string, string> = {
     company_name: 'company_name',
