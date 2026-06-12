@@ -2309,6 +2309,10 @@ function TargetsPanel({ customer, onClose, embedded }: { customer: Customer; onC
   const [cityError, setCityError] = useState('');
   const [newRadius, setNewRadius] = useState(25);
   const [newLabel, setNewLabel] = useState('');
+  // Verplichte land-keuze voor radius-targets om stille cross-country
+  // matches te voorkomen (bv. NL-klant rond Eindhoven dat BE-Limburg
+  // raakt). 'BOTH' = bewust grensoverschrijdend → API-country = null.
+  const [newRadiusCountry, setNewRadiusCountry] = useState<'' | 'NL' | 'BE' | 'BOTH'>('');
   const searchTimer = useRef<NodeJS.Timeout | null>(null);
 
   // Province form state
@@ -2339,6 +2343,7 @@ function TargetsPanel({ customer, onClose, embedded }: { customer: Customer; onC
     setShowAdd(false);
     setCityQuery(''); setCityResult(null); setCityError('');
     setNewLabel(''); setNewRadius(25);
+    setNewRadiusCountry('');
     setSelectedProvinces([]); setProvLabel('');
   };
 
@@ -2364,10 +2369,12 @@ function TargetsPanel({ customer, onClose, embedded }: { customer: Customer; onC
 
   const addRadiusTarget = async () => {
     if (!cityResult) return;
+    if (newRadiusCountry === '') return;
     setSaving(true);
+    const country = newRadiusCountry === 'BOTH' ? null : newRadiusCountry;
     await adminFetch('/api/admin/targets', {
       method: 'POST',
-      body: JSON.stringify({ customer_id: customer.id, label: cityResult.naam, target_type: 'radius', lat: cityResult.lat, lng: cityResult.lng, radius_km: newRadius }),
+      body: JSON.stringify({ customer_id: customer.id, label: cityResult.naam, target_type: 'radius', lat: cityResult.lat, lng: cityResult.lng, radius_km: newRadius, country }),
     });
     setSaving(false);
     resetAddForm();
@@ -2560,10 +2567,44 @@ function TargetsPanel({ customer, onClose, embedded }: { customer: Customer; onC
                 <input type="number" value={newRadius} onChange={e => setNewRadius(Number(e.target.value))} min={1} max={200}
                   className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
               </div>
+              <div className="mb-3">
+                <label className="mb-1.5 block text-xs font-medium text-slate-500">
+                  Land-restrictie <span className="text-rose-500">*</span>
+                </label>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {([
+                    { value: 'NL' as const, label: 'Alleen NL', hint: 'leads alleen uit Nederland' },
+                    { value: 'BE' as const, label: 'Alleen BE', hint: 'leads alleen uit België' },
+                    { value: 'BOTH' as const, label: 'Beide', hint: 'grensoverschrijdend (NL + BE)' },
+                  ]).map(opt => {
+                    const selected = newRadiusCountry === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setNewRadiusCountry(opt.value)}
+                        title={opt.hint}
+                        className={`rounded-lg border px-2.5 py-2 text-xs font-medium transition ${
+                          selected
+                            ? 'border-brand-purple bg-brand-purple/10 text-brand-purple'
+                            : 'border-slate-200 bg-white text-slate-600 hover:border-brand-purple/50'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                {newRadiusCountry === '' && (
+                  <p className="mt-1.5 text-[11px] text-slate-500">
+                    Kies een land-restrictie. Een radius rond grenssteden (Eindhoven, Maastricht…) raakt anders ongewild leads aan de andere kant van de grens.
+                  </p>
+                )}
+              </div>
               <div className="flex gap-2">
                 <button onClick={resetAddForm}
                   className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-500 hover:bg-slate-50">Annuleren</button>
-                <button onClick={addRadiusTarget} disabled={!cityResult || saving}
+                <button onClick={addRadiusTarget} disabled={!cityResult || saving || newRadiusCountry === ''}
                   className="rounded-lg bg-button-gradient px-4 py-2 text-xs font-bold text-white disabled:opacity-50">
                   {saving ? 'Opslaan...' : 'Toevoegen'}
                 </button>
