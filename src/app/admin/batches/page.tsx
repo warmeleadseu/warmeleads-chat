@@ -751,7 +751,11 @@ function BatchDetailMetaBlock({
   const [metaCampaignPicks, setMetaCampaignPicks] = useState<MetaCampaignPick[]>(() => picksFromBatchMeta(batch));
   const [metaSyncEnabled, setMetaSyncEnabled] = useState(() => batch.meta_campaign_sync_enabled !== false);
   const [savingMeta, setSavingMeta] = useState(false);
+  // Persistente staat: bestaat er een `customer_branch_meta_defaults`-rij voor
+  // deze klant + (lead_)branche? Wordt opgehaald op mount en opnieuw na elke
+  // opslag, zodat het vinkje altijd de waarheid uit de DB toont.
   const [saveBranchMetaDefault, setSaveBranchMetaDefault] = useState(false);
+  const [defaultLoaded, setDefaultLoaded] = useState(false);
 
   useEffect(() => {
     if (!supportsBatchMetaCampaigns(batch.batch_kind)) return;
@@ -762,6 +766,33 @@ function BatchDetailMetaBlock({
     setMetaSyncEnabled(batch.meta_campaign_sync_enabled !== false);
   }, [batch.meta_campaign_sync_enabled, batch.id]);
 
+  const reloadBranchDefault = useCallback(async () => {
+    if (!supportsBatchMetaCampaigns(batch.batch_kind)) {
+      setDefaultLoaded(true);
+      return;
+    }
+    const params = new URLSearchParams({
+      customer_id: batch.customer_id,
+      branch: batch.branch,
+      batch_kind: batch.batch_kind || '',
+    });
+    if (batch.lead_branch_slug) params.set('lead_branch_slug', batch.lead_branch_slug);
+    try {
+      const res = await adminFetch(`/api/admin/customer-branch-meta-defaults?${params.toString()}`);
+      if (res.ok) {
+        const d = await res.json();
+        setSaveBranchMetaDefault(Boolean(d?.exists));
+      }
+    } catch { /* niet-blokkerend */ } finally {
+      setDefaultLoaded(true);
+    }
+  }, [batch.batch_kind, batch.branch, batch.customer_id, batch.lead_branch_slug]);
+
+  useEffect(() => {
+    setDefaultLoaded(false);
+    void reloadBranchDefault();
+  }, [reloadBranchDefault]);
+
   const saveMeta = async () => {
     setSavingMeta(true);
     try {
@@ -771,7 +802,9 @@ function BatchDetailMetaBlock({
           id: batch.id,
           ...metaFieldsFromPicks(metaCampaignPicks),
           meta_campaign_sync_enabled: metaSyncEnabled,
-          ...(saveBranchMetaDefault ? { save_branch_meta_default: true } : {}),
+          // Stuur ALTIJD het vinkje mee, zodat de server bij `false` ook
+          // de bestaande default kan opruimen (i.p.v. stilzwijgend laten staan).
+          save_branch_meta_default: saveBranchMetaDefault,
         }),
       });
       if (!res.ok) {
@@ -780,6 +813,7 @@ function BatchDetailMetaBlock({
       }
       await onReload();
       onListRefresh?.();
+      await reloadBranchDefault();
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Opslaan mislukt');
     } finally {
@@ -831,19 +865,31 @@ function BatchDetailMetaBlock({
           type="checkbox"
           checked={saveBranchMetaDefault}
           onChange={e => setSaveBranchMetaDefault(e.target.checked)}
+          disabled={!defaultLoaded}
           className="mt-0.5 shrink-0"
         />
         <span>
-          <strong>Standaard voor nieuwe batches</strong> — na opslaan wordt deze koppeling bewaard voor deze klant
-          {nicheMeta && batch.lead_branch_slug ? (
-            <>
-              {' '}
-              + inbound branche <strong className="font-mono text-[10px]">{batch.lead_branch_slug}</strong>
-            </>
-          ) : (
-            <> + branche</>
-          )}{' '}
-          (nieuwe leads-batches zonder handmatige Meta-IDs pakken dit op).
+          <strong>Standaard voor nieuwe batches</strong>{' '}
+          {defaultLoaded && saveBranchMetaDefault && (
+            <span className="rounded-full bg-emerald-100 px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-emerald-800">
+              actief
+            </span>
+          )}
+          <span className="block">
+            Toekomstige batches voor deze klant
+            {nicheMeta && batch.lead_branch_slug ? (
+              <>
+                {' '}
+                + inbound branche <strong className="font-mono text-[10px]">{batch.lead_branch_slug}</strong>
+              </>
+            ) : (
+              <> + branche</>
+            )}{' '}
+            erven deze meta-koppeling automatisch (tenzij handmatig overschreven).
+            {defaultLoaded && saveBranchMetaDefault && (
+              <> Uitvinken &amp; opslaan verwijdert de standaard.</>
+            )}
+          </span>
         </span>
       </label>
 
@@ -1625,6 +1671,7 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
 
   const [metaCampaignPicks, setMetaCampaignPicks] = useState<MetaCampaignPick[]>(() => picksFromBatchMeta(batch));
   const [metaSyncEnabled, setMetaSyncEnabled] = useState(() => batch.meta_campaign_sync_enabled !== false);
+  // Persistente staat: gespiegeld op `customer_branch_meta_defaults`.
   const [saveBranchMetaDefault, setSaveBranchMetaDefault] = useState(false);
   const [distributionPriority, setDistributionPriority] = useState(() => batch.distribution_priority === true);
   const priorityEditable = isPipelineBatchKind(batch.batch_kind) && batch.status !== 'completed';
@@ -1637,6 +1684,22 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
     if (!supportsBatchMetaCampaigns(batch.batch_kind)) return;
     setMetaCampaignPicks(picksFromBatchMeta(batch));
   }, [batch.batch_kind, batch.id, editServerMetaKey, batch.meta_campaign_paused_ids]);
+
+  useEffect(() => {
+    if (!supportsBatchMetaCampaigns(batch.batch_kind)) return;
+    const params = new URLSearchParams({
+      customer_id: batch.customer_id,
+      branch: batch.branch,
+      batch_kind: batch.batch_kind || '',
+    });
+    if (batch.lead_branch_slug) params.set('lead_branch_slug', batch.lead_branch_slug);
+    let cancelled = false;
+    adminFetch(`/api/admin/customer-branch-meta-defaults?${params.toString()}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (!cancelled && d) setSaveBranchMetaDefault(Boolean(d.exists)); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [batch.id, batch.batch_kind, batch.customer_id, batch.branch, batch.lead_branch_slug]);
 
   useEffect(() => {
     adminFetch(`/api/admin/branches/fields?branch=${batch.branch}`)
@@ -1673,7 +1736,9 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
       if (supportsBatchMetaCampaigns(batch.batch_kind)) {
         Object.assign(payload, metaFieldsFromPicks(metaCampaignPicks));
         payload.meta_campaign_sync_enabled = metaSyncEnabled;
-        if (saveBranchMetaDefault) payload.save_branch_meta_default = true;
+        // Stuur expliciet true OF false: bij false ruimt de server een
+        // bestaande `customer_branch_meta_defaults`-rij op.
+        payload.save_branch_meta_default = saveBranchMetaDefault;
       }
       if (priorityEditable) payload.distribution_priority = distributionPriority;
       if (extraLeads > 0) {
@@ -2125,10 +2190,69 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
   const [metaCampaignPicks, setMetaCampaignPicks] = useState<MetaCampaignPick[]>([]);
   const [metaSyncEnabled, setMetaSyncEnabled] = useState(true);
   const [distributionPriority, setDistributionPriority] = useState(false);
+  // Defaults uit `customer_branch_meta_defaults` worden automatisch geladen
+  // wanneer (klant + branche) of (klant + niche-onderzoek + lead-branche)
+  // bekend zijn. We onthouden welke combinatie geladen is om dubbel
+  // overschrijven te voorkomen wanneer de admin handmatig picks aanpast.
+  const [metaDefaultLoadedKey, setMetaDefaultLoadedKey] = useState('');
+  const [metaDefaultLoadedFromDb, setMetaDefaultLoadedFromDb] = useState(false);
 
   useEffect(() => {
     if (form.batch_delivery !== 'pipeline') setDistributionPriority(false);
   }, [form.batch_delivery]);
+
+  // Welke (customer + branche-of-niche) is relevant voor defaults?
+  const metaDefaultsKey = (() => {
+    if (form.batch_product !== 'leads') return '';
+    if (!form.customer_id) return '';
+    if (form.batch_delivery === 'pipeline') {
+      return form.branch ? `pipeline|${form.customer_id}|${form.branch}` : '';
+    }
+    if (form.batch_delivery === 'niche_research') {
+      return form.lead_branch_slug
+        ? `niche|${form.customer_id}|${form.lead_branch_slug}`
+        : '';
+    }
+    return '';
+  })();
+
+  useEffect(() => {
+    if (!metaDefaultsKey) return;
+    if (metaDefaultsKey === metaDefaultLoadedKey) return;
+    let cancelled = false;
+    const params = new URLSearchParams({ customer_id: form.customer_id });
+    if (form.batch_delivery === 'pipeline') {
+      params.set('branch', form.branch);
+      params.set('batch_kind', 'leads');
+    } else {
+      // niche-research: server gebruikt lead_branch_slug als branche-sleutel
+      params.set('branch', form.lead_branch_slug);
+      params.set('batch_kind', 'niche_research');
+      params.set('lead_branch_slug', form.lead_branch_slug);
+    }
+    adminFetch(`/api/admin/customer-branch-meta-defaults?${params.toString()}`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => {
+        if (cancelled || !d) return;
+        const ids: string[] = Array.isArray(d.meta_campaign_ids) ? d.meta_campaign_ids : [];
+        const paused = new Set<string>(
+          Array.isArray(d.meta_campaign_paused_ids) ? d.meta_campaign_paused_ids : [],
+        );
+        if (d.exists && ids.length > 0) {
+          setMetaCampaignPicks(ids.map((id: string) => ({ id, name: id, paused: paused.has(id) })));
+          setMetaSyncEnabled(d.meta_campaign_sync_enabled !== false);
+          setMetaDefaultLoadedFromDb(true);
+        } else {
+          // Geen default voor deze combinatie: laat een eventueel handmatig
+          // gevulde picker niet ten onrechte wegspoelen — alleen als de
+          // picker leeg én niet eerder uit defaults gevuld is, leeg laten.
+          setMetaDefaultLoadedFromDb(false);
+        }
+        setMetaDefaultLoadedKey(metaDefaultsKey);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [metaDefaultsKey, metaDefaultLoadedKey, form.customer_id, form.branch, form.lead_branch_slug, form.batch_delivery]);
 
   useEffect(() => {
     if ((form.batch_product === 'leads' && form.batch_delivery === 'niche_research') || !form.branch) {
@@ -2312,6 +2436,16 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
         const nlOffset = getNLOffset(new Date(nlDateTime));
         startsAtISO = `${nlDateTime}${nlOffset}`;
       }
+      // Race-veilig: als de defaults-fetch voor de huidige (klant + branche)
+      // nog niet is afgerond, sturen we `meta_campaign_ids` bewust NIET mee.
+      // De API past dan zelf inheritance toe via
+      // `resolveMetaCampaignFieldsForNewLeadBatch`. Zodra defaults geladen
+      // zijn, sturen we de IDs uit de picker mee (ook leeg = bewust leeg).
+      const metaFetchPending = metaDefaultsKey !== '' && metaDefaultLoadedKey !== metaDefaultsKey;
+      const metaPayload = metaFetchPending
+        ? { meta_campaign_sync_enabled: metaSyncEnabled }
+        : { ...metaFieldsFromPicks(metaCampaignPicks), meta_campaign_sync_enabled: metaSyncEnabled };
+
       if (form.batch_delivery === 'niche_research') {
         const res = await adminFetch('/api/admin/batches', {
           method: 'POST',
@@ -2324,8 +2458,7 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
             notes: form.notes || null,
             ...(startsAtISO ? { starts_at: startsAtISO } : {}),
             ...(form.is_paid ? {} : { send_payment_email: form.send_payment_email }),
-            ...metaFieldsFromPicks(metaCampaignPicks),
-            meta_campaign_sync_enabled: metaSyncEnabled,
+            ...metaPayload,
           }),
         });
         if (res.ok) onCreated();
@@ -2351,8 +2484,7 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
           ...(form.is_paid ? {} : { send_payment_email: form.send_payment_email }),
           ...(form.batch_delivery === 'pipeline'
             ? {
-                ...metaFieldsFromPicks(metaCampaignPicks),
-                meta_campaign_sync_enabled: metaSyncEnabled,
+                ...metaPayload,
                 distribution_priority: distributionPriority,
               }
             : {}),
@@ -2704,27 +2836,38 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
           )}
 
           {!isAppointments && (form.batch_delivery === 'pipeline' || form.batch_delivery === 'niche_research') && (
-            <MetaCampaignLinkerFields
-              title="Meta campagnes (optioneel)"
-              helpText={
-                form.batch_delivery === 'niche_research' ? (
-                  <>
-                    Koppel campagnes voor het onderzoek. Actief + betaald + sync aan → <strong>ACTIVE</strong> in Meta. Later
-                    altijd aanpasbaar in batchdetail.
-                  </>
-                ) : (
-                  <>
-                    Koppel één of <strong>meerdere</strong> Meta-campagnes. Ze worden samen op <strong>ACTIVE</strong> of{' '}
-                    <strong>PAUSED</strong> gezet volgens deze batch (zoals bij bewerken). Leeg laten kan; je kunt later altijd
-                    alsnog koppelen.
-                  </>
-                )
-              }
-              picks={metaCampaignPicks}
-              setPicks={setMetaCampaignPicks}
-              syncEnabled={metaSyncEnabled}
-              setSyncEnabled={setMetaSyncEnabled}
-            />
+            <div>
+              {metaDefaultLoadedFromDb && metaDefaultsKey === metaDefaultLoadedKey && metaCampaignPicks.length > 0 && (
+                <div className="mb-2 flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] text-emerald-900">
+                  <CheckCircleIcon className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+                  <span>
+                    <strong>Standaard meta-koppeling geladen</strong> voor deze klant + branche. Je kunt deze hier
+                    overschrijven of aanvullen.
+                  </span>
+                </div>
+              )}
+              <MetaCampaignLinkerFields
+                title="Meta campagnes (optioneel)"
+                helpText={
+                  form.batch_delivery === 'niche_research' ? (
+                    <>
+                      Koppel campagnes voor het onderzoek. Actief + betaald + sync aan → <strong>ACTIVE</strong> in Meta. Later
+                      altijd aanpasbaar in batchdetail.
+                    </>
+                  ) : (
+                    <>
+                      Koppel één of <strong>meerdere</strong> Meta-campagnes. Ze worden samen op <strong>ACTIVE</strong> of{' '}
+                      <strong>PAUSED</strong> gezet volgens deze batch (zoals bij bewerken). Leeg laten kan; je kunt later altijd
+                      alsnog koppelen.
+                    </>
+                  )
+                }
+                picks={metaCampaignPicks}
+                setPicks={setMetaCampaignPicks}
+                syncEnabled={metaSyncEnabled}
+                setSyncEnabled={setMetaSyncEnabled}
+              />
+            </div>
           )}
 
           {/* Startdatum */}

@@ -602,33 +602,44 @@ export async function PUT(request: NextRequest) {
     forcePauseCampaignIds: removedMetaCampaignIds,
   }).catch(e => console.error('[admin/batches PUT] meta reconcile:', e));
 
-  if (save_branch_meta_default === true && isMetaCampaignSyncBatchKind(batchKindAfterUpdate)) {
+  if (save_branch_meta_default !== undefined && isMetaCampaignSyncBatchKind(batchKindAfterUpdate)) {
     try {
-      const idsForDefault =
-        safeUpdates.meta_campaign_ids !== undefined
-          ? normalizeCampaignIds(safeUpdates.meta_campaign_ids)
-          : normalizeCampaignIds(existing.meta_campaign_ids);
-      const pausedForDefault =
-        safeUpdates.meta_campaign_paused_ids !== undefined
-          ? sanitizePausedMetaCampaignIds(idsForDefault, safeUpdates.meta_campaign_paused_ids)
-          : sanitizePausedMetaCampaignIds(idsForDefault, existing.meta_campaign_paused_ids);
-      const syncForDefault =
-        safeUpdates.meta_campaign_sync_enabled !== undefined
-          ? safeUpdates.meta_campaign_sync_enabled === true
-          : existing.meta_campaign_sync_enabled !== false;
       const defaultsBranch = metaDefaultsBranchForBatch({
         branch: String(data.branch),
         batch_kind: batchKindAfterUpdate,
         lead_branch_slug: (data as { lead_branch_slug?: string | null }).lead_branch_slug,
       });
-      await upsertCustomerBranchMetaDefaults(supabase, {
-        customerId: existing.customer_id,
-        branch: defaultsBranch,
-        meta_campaign_ids: idsForDefault,
-        meta_campaign_paused_ids: pausedForDefault,
-        meta_campaign_sync_enabled: syncForDefault,
-        updatedBy: admin.id,
-      });
+
+      if (save_branch_meta_default === true) {
+        const idsForDefault =
+          safeUpdates.meta_campaign_ids !== undefined
+            ? normalizeCampaignIds(safeUpdates.meta_campaign_ids)
+            : normalizeCampaignIds(existing.meta_campaign_ids);
+        const pausedForDefault =
+          safeUpdates.meta_campaign_paused_ids !== undefined
+            ? sanitizePausedMetaCampaignIds(idsForDefault, safeUpdates.meta_campaign_paused_ids)
+            : sanitizePausedMetaCampaignIds(idsForDefault, existing.meta_campaign_paused_ids);
+        const syncForDefault =
+          safeUpdates.meta_campaign_sync_enabled !== undefined
+            ? safeUpdates.meta_campaign_sync_enabled === true
+            : existing.meta_campaign_sync_enabled !== false;
+        await upsertCustomerBranchMetaDefaults(supabase, {
+          customerId: existing.customer_id,
+          branch: defaultsBranch,
+          meta_campaign_ids: idsForDefault,
+          meta_campaign_paused_ids: pausedForDefault,
+          meta_campaign_sync_enabled: syncForDefault,
+          updatedBy: admin.id,
+        });
+      } else if (save_branch_meta_default === false) {
+        // Standaard expliciet uitgezet → verwijder de bestaande default zodat
+        // nieuwe batches niet meer automatisch deze meta-koppeling erven.
+        await supabase
+          .from('customer_branch_meta_defaults')
+          .delete()
+          .eq('customer_id', existing.customer_id)
+          .eq('branch', defaultsBranch);
+      }
     } catch (e) {
       console.error('[admin/batches PUT] branch meta defaults:', e);
     }
