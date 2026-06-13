@@ -41,6 +41,7 @@ import { mergeCustomTiers } from '@/lib/pricing';
 import { isMetaCampaignSyncBatchKind, isPipelineBatchKind } from '@/lib/batchKind';
 import { isSellableLeadBranch } from '@/lib/branchPolicy';
 import { coerceCustomerBatchMetaCampaignIds, type MetaCampaignPick } from '@/lib/metaCampaignIds';
+import { batchMatchesBranchDefault } from '@/lib/metaCampaignDefaults';
 import { MetaCampaignLinkerFields } from './MetaCampaignLinkerFields';
 
 function metaFieldsFromPicks(picks: MetaCampaignPick[]) {
@@ -58,8 +59,9 @@ function picksFromBatchMeta(batch: {
 }): MetaCampaignPick[] {
   const ids = coerceCustomerBatchMetaCampaignIds(batch.meta_campaign_ids);
   const paused = new Set(coerceCustomerBatchMetaCampaignIds(batch.meta_campaign_paused_ids));
-  return ids.map(id => ({ id, name: id, paused: paused.has(id) }));
+  return ids.map(id => ({ id, name: id, ...(paused.has(id) ? { paused: true as const } : {}) }));
 }
+
 import { BatchTargetAreaBadges } from '@/components/admin/BatchTargetAreaBadges';
 import { BatchProgressDisplay } from '@/components/admin/BatchProgressDisplay';
 import type { CustomerTargetRow } from '@/lib/batchTargetAreas';
@@ -751,10 +753,15 @@ function BatchDetailMetaBlock({
   const [metaCampaignPicks, setMetaCampaignPicks] = useState<MetaCampaignPick[]>(() => picksFromBatchMeta(batch));
   const [metaSyncEnabled, setMetaSyncEnabled] = useState(() => batch.meta_campaign_sync_enabled !== false);
   const [savingMeta, setSavingMeta] = useState(false);
-  // Persistente staat: bestaat er een `customer_branch_meta_defaults`-rij voor
-  // deze klant + (lead_)branche? Wordt opgehaald op mount en opnieuw na elke
-  // opslag, zodat het vinkje altijd de waarheid uit de DB toont.
+  // Match-aware staat:
+  //  - `defaultExists`: heeft deze klant+branche een actieve default?
+  //  - `defaultMatches`: zijn de IDs/sync-vlag van deze batch identiek aan de default?
+  //  - `saveBranchMetaDefault`: vinkje-state, geïnitialiseerd op `defaultMatches`.
+  // Door de drie afzonderlijk te tracken kunnen we voorkomen dat een save op
+  // batch Y stilletjes de default van batch X overschrijft.
   const [saveBranchMetaDefault, setSaveBranchMetaDefault] = useState(false);
+  const [initialSaveBranchMetaDefault, setInitialSaveBranchMetaDefault] = useState(false);
+  const [defaultExists, setDefaultExists] = useState(false);
   const [defaultLoaded, setDefaultLoaded] = useState(false);
 
   useEffect(() => {
@@ -765,6 +772,10 @@ function BatchDetailMetaBlock({
   useEffect(() => {
     setMetaSyncEnabled(batch.meta_campaign_sync_enabled !== false);
   }, [batch.meta_campaign_sync_enabled, batch.id]);
+
+  // Stabiele fingerprint van de meta-staat van de batch zodat de fetch alleen
+  // re-runt wanneer relevante velden wijzigen (niet bij elke parent re-render).
+  const batchMetaFingerprint = `${batch.id}|${batch.batch_kind || ''}|${batch.customer_id}|${batch.branch}|${batch.lead_branch_slug || ''}|${serverIdsKey}|${coerceCustomerBatchMetaCampaignIds(batch.meta_campaign_paused_ids).join(',')}|${batch.meta_campaign_sync_enabled !== false ? 1 : 0}`;
 
   const reloadBranchDefault = useCallback(async () => {
     if (!supportsBatchMetaCampaigns(batch.batch_kind)) {
@@ -781,12 +792,23 @@ function BatchDetailMetaBlock({
       const res = await adminFetch(`/api/admin/customer-branch-meta-defaults?${params.toString()}`);
       if (res.ok) {
         const d = await res.json();
-        setSaveBranchMetaDefault(Boolean(d?.exists));
+        const exists = Boolean(d?.exists);
+        const matches = exists && batchMatchesBranchDefault(batch, {
+          meta_campaign_ids: Array.isArray(d.meta_campaign_ids) ? d.meta_campaign_ids : [],
+          meta_campaign_paused_ids: Array.isArray(d.meta_campaign_paused_ids) ? d.meta_campaign_paused_ids : [],
+          meta_campaign_sync_enabled: d.meta_campaign_sync_enabled !== false,
+        });
+        setDefaultExists(exists);
+        setSaveBranchMetaDefault(matches);
+        setInitialSaveBranchMetaDefault(matches);
       }
     } catch { /* niet-blokkerend */ } finally {
       setDefaultLoaded(true);
     }
-  }, [batch.batch_kind, batch.branch, batch.customer_id, batch.lead_branch_slug]);
+    // We willen reload wanneer de meta-fingerprint (id/branch/IDs/paused/sync)
+    // wijzigt, óók al gebruikt de body `batch` direct.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [batchMetaFingerprint]);
 
   useEffect(() => {
     setDefaultLoaded(false);
@@ -796,15 +818,28 @@ function BatchDetailMetaBlock({
   const saveMeta = async () => {
     setSavingMeta(true);
     try {
+      // Stuur het vinkje alleen mee als er werkelijk iets te doen is op de
+      // default. Anders laten we de server-state ongemoeid (geen silent
+      // overwrite van een default die door een andere batch is gezet).
+      let savePayload: { save_branch_meta_default?: boolean } = {};
+      if (saveBranchMetaDefault) {
+        // Aan: upsert (zet deze batch's koppeling als de actieve standaard).
+        savePayload = { save_branch_meta_default: true };
+      } else if (initialSaveBranchMetaDefault) {
+        // Was aan, nu uit: deze batch was de standaard → expliciet verwijderen.
+        savePayload = { save_branch_meta_default: false };
+      }
+      // Geval "vinkje uit en nooit aan geweest voor deze batch": niets
+      // versturen → een eventueel door een andere batch gezette default
+      // blijft intact.
+
       const res = await adminFetch('/api/admin/batches', {
         method: 'PUT',
         body: JSON.stringify({
           id: batch.id,
           ...metaFieldsFromPicks(metaCampaignPicks),
           meta_campaign_sync_enabled: metaSyncEnabled,
-          // Stuur ALTIJD het vinkje mee, zodat de server bij `false` ook
-          // de bestaande default kan opruimen (i.p.v. stilzwijgend laten staan).
-          save_branch_meta_default: saveBranchMetaDefault,
+          ...savePayload,
         }),
       });
       if (!res.ok) {
@@ -870,9 +905,14 @@ function BatchDetailMetaBlock({
         />
         <span>
           <strong>Standaard voor nieuwe batches</strong>{' '}
-          {defaultLoaded && saveBranchMetaDefault && (
+          {defaultLoaded && initialSaveBranchMetaDefault && (
             <span className="rounded-full bg-emerald-100 px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-emerald-800">
               actief
+            </span>
+          )}
+          {defaultLoaded && !initialSaveBranchMetaDefault && defaultExists && (
+            <span className="rounded-full bg-amber-100 px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-amber-800">
+              andere batch is standaard
             </span>
           )}
           <span className="block">
@@ -886,8 +926,11 @@ function BatchDetailMetaBlock({
               <> + branche</>
             )}{' '}
             erven deze meta-koppeling automatisch (tenzij handmatig overschreven).
-            {defaultLoaded && saveBranchMetaDefault && (
+            {defaultLoaded && initialSaveBranchMetaDefault && (
               <> Uitvinken &amp; opslaan verwijdert de standaard.</>
+            )}
+            {defaultLoaded && !initialSaveBranchMetaDefault && defaultExists && (
+              <> Aanvinken &amp; opslaan zet deze batch&apos;s koppeling als nieuwe standaard.</>
             )}
           </span>
         </span>
@@ -1671,8 +1714,11 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
 
   const [metaCampaignPicks, setMetaCampaignPicks] = useState<MetaCampaignPick[]>(() => picksFromBatchMeta(batch));
   const [metaSyncEnabled, setMetaSyncEnabled] = useState(() => batch.meta_campaign_sync_enabled !== false);
-  // Persistente staat: gespiegeld op `customer_branch_meta_defaults`.
+  // Match-aware staat (zie BatchDetailMetaBlock voor uitleg).
   const [saveBranchMetaDefault, setSaveBranchMetaDefault] = useState(false);
+  const [initialSaveBranchMetaDefault, setInitialSaveBranchMetaDefault] = useState(false);
+  const [defaultExists, setDefaultExists] = useState(false);
+  const [defaultLoaded, setDefaultLoaded] = useState(false);
   const [distributionPriority, setDistributionPriority] = useState(() => batch.distribution_priority === true);
   const priorityEditable = isPipelineBatchKind(batch.batch_kind) && batch.status !== 'completed';
 
@@ -1685,8 +1731,14 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
     setMetaCampaignPicks(picksFromBatchMeta(batch));
   }, [batch.batch_kind, batch.id, editServerMetaKey, batch.meta_campaign_paused_ids]);
 
+  // Stabiele fingerprint (zie BatchDetailMetaBlock).
+  const editBatchMetaFingerprint = `${batch.id}|${batch.batch_kind || ''}|${batch.customer_id}|${batch.branch}|${batch.lead_branch_slug || ''}|${editServerMetaKey}|${coerceCustomerBatchMetaCampaignIds(batch.meta_campaign_paused_ids).join(',')}|${batch.meta_campaign_sync_enabled !== false ? 1 : 0}`;
+
   useEffect(() => {
-    if (!supportsBatchMetaCampaigns(batch.batch_kind)) return;
+    if (!supportsBatchMetaCampaigns(batch.batch_kind)) {
+      setDefaultLoaded(true);
+      return;
+    }
     const params = new URLSearchParams({
       customer_id: batch.customer_id,
       branch: batch.branch,
@@ -1694,12 +1746,26 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
     });
     if (batch.lead_branch_slug) params.set('lead_branch_slug', batch.lead_branch_slug);
     let cancelled = false;
+    setDefaultLoaded(false);
     adminFetch(`/api/admin/customer-branch-meta-defaults?${params.toString()}`)
       .then(r => r.ok ? r.json() : null)
-      .then(d => { if (!cancelled && d) setSaveBranchMetaDefault(Boolean(d.exists)); })
-      .catch(() => {});
+      .then(d => {
+        if (cancelled || !d) return;
+        const exists = Boolean(d.exists);
+        const matches = exists && batchMatchesBranchDefault(batch, {
+          meta_campaign_ids: Array.isArray(d.meta_campaign_ids) ? d.meta_campaign_ids : [],
+          meta_campaign_paused_ids: Array.isArray(d.meta_campaign_paused_ids) ? d.meta_campaign_paused_ids : [],
+          meta_campaign_sync_enabled: d.meta_campaign_sync_enabled !== false,
+        });
+        setDefaultExists(exists);
+        setSaveBranchMetaDefault(matches);
+        setInitialSaveBranchMetaDefault(matches);
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setDefaultLoaded(true); });
     return () => { cancelled = true; };
-  }, [batch.id, batch.batch_kind, batch.customer_id, batch.branch, batch.lead_branch_slug]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editBatchMetaFingerprint]);
 
   useEffect(() => {
     adminFetch(`/api/admin/branches/fields?branch=${batch.branch}`)
@@ -1736,9 +1802,16 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
       if (supportsBatchMetaCampaigns(batch.batch_kind)) {
         Object.assign(payload, metaFieldsFromPicks(metaCampaignPicks));
         payload.meta_campaign_sync_enabled = metaSyncEnabled;
-        // Stuur expliciet true OF false: bij false ruimt de server een
-        // bestaande `customer_branch_meta_defaults`-rij op.
-        payload.save_branch_meta_default = saveBranchMetaDefault;
+        // Match-aware (zie BatchDetailMetaBlock):
+        //  - vinkje aan → upsert met huidige meta-staat;
+        //  - was aan, nu uit → expliciete delete;
+        //  - was uit en blijft uit → niets sturen, raak een door een andere
+        //    batch gezette default niet aan.
+        if (saveBranchMetaDefault) {
+          payload.save_branch_meta_default = true;
+        } else if (initialSaveBranchMetaDefault) {
+          payload.save_branch_meta_default = false;
+        }
       }
       if (priorityEditable) payload.distribution_priority = distributionPriority;
       if (extraLeads > 0) {
@@ -2015,20 +2088,39 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
                 type="checkbox"
                 checked={saveBranchMetaDefault}
                 onChange={e => setSaveBranchMetaDefault(e.target.checked)}
+                disabled={!defaultLoaded}
                 className="mt-0.5 shrink-0"
               />
               <span>
-                <strong>Standaard voor nieuwe batches</strong> — sla deze Meta-koppeling op voor{' '}
-                <strong>{cust?.name || 'deze klant'}</strong>
-                {isNicheResearch && leadBranchSlug ? (
-                  <>
-                    {' '}
-                    + inbound <strong>{branches.find(b => b.slug === leadBranchSlug)?.name || leadBranchSlug}</strong>
-                  </>
-                ) : (
-                  <> + <strong>{br?.name || batch.branch}</strong></>
+                <strong>Standaard voor nieuwe batches</strong>{' '}
+                {defaultLoaded && initialSaveBranchMetaDefault && (
+                  <span className="rounded-full bg-emerald-100 px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-emerald-800">
+                    actief
+                  </span>
                 )}
-                . Nieuwe leads-batches zonder handmatige Meta-IDs pakken dit op.
+                {defaultLoaded && !initialSaveBranchMetaDefault && defaultExists && (
+                  <span className="rounded-full bg-amber-100 px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-amber-800">
+                    andere batch is standaard
+                  </span>
+                )}
+                <span className="block">
+                  Toekomstige batches voor <strong>{cust?.name || 'deze klant'}</strong>
+                  {isNicheResearch && leadBranchSlug ? (
+                    <>
+                      {' '}
+                      + inbound <strong>{branches.find(b => b.slug === leadBranchSlug)?.name || leadBranchSlug}</strong>
+                    </>
+                  ) : (
+                    <> + <strong>{br?.name || batch.branch}</strong></>
+                  )}{' '}
+                  erven deze Meta-koppeling automatisch.
+                  {defaultLoaded && initialSaveBranchMetaDefault && (
+                    <> Uitvinken &amp; opslaan verwijdert de standaard.</>
+                  )}
+                  {defaultLoaded && !initialSaveBranchMetaDefault && defaultExists && (
+                    <> Aanvinken &amp; opslaan zet deze batch&apos;s koppeling als nieuwe standaard.</>
+                  )}
+                </span>
               </span>
             </label>
             </>
@@ -2219,6 +2311,14 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
   useEffect(() => {
     if (!metaDefaultsKey) return;
     if (metaDefaultsKey === metaDefaultLoadedKey) return;
+
+    // Andere (klant + branche)-combinatie dan vorige load: fresh start.
+    // Reset de picks zodat oude defaults van een andere combo niet blijven
+    // hangen, en zet de banner-vlag uit tot de nieuwe fetch resolved.
+    setMetaCampaignPicks([]);
+    setMetaSyncEnabled(true);
+    setMetaDefaultLoadedFromDb(false);
+
     let cancelled = false;
     const params = new URLSearchParams({ customer_id: form.customer_id });
     if (form.batch_delivery === 'pipeline') {
@@ -2239,14 +2339,23 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
           Array.isArray(d.meta_campaign_paused_ids) ? d.meta_campaign_paused_ids : [],
         );
         if (d.exists && ids.length > 0) {
-          setMetaCampaignPicks(ids.map((id: string) => ({ id, name: id, paused: paused.has(id) })));
-          setMetaSyncEnabled(d.meta_campaign_sync_enabled !== false);
-          setMetaDefaultLoadedFromDb(true);
-        } else {
-          // Geen default voor deze combinatie: laat een eventueel handmatig
-          // gevulde picker niet ten onrechte wegspoelen — alleen als de
-          // picker leeg én niet eerder uit defaults gevuld is, leeg laten.
-          setMetaDefaultLoadedFromDb(false);
+          // Race-veilig: alleen pre-fillen als de admin in de tussentijd
+          // nog niets handmatig heeft getypt. Functionele setter leest de
+          // actuele staat (na de reset hierboven) i.p.v. closure-waarde.
+          let didPrefill = false;
+          setMetaCampaignPicks(prev => {
+            if (prev.length > 0) return prev;
+            didPrefill = true;
+            return ids.map(id => ({
+              id,
+              name: id,
+              ...(paused.has(id) ? { paused: true as const } : {}),
+            }));
+          });
+          if (didPrefill) {
+            setMetaSyncEnabled(d.meta_campaign_sync_enabled !== false);
+            setMetaDefaultLoadedFromDb(true);
+          }
         }
         setMetaDefaultLoadedKey(metaDefaultsKey);
       })
