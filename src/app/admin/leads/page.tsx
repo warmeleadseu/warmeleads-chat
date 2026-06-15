@@ -1067,6 +1067,7 @@ export default function LeadsCRMPage() {
             key={exportModalKey}
             total={total}
             customers={customers}
+            branches={branches}
             filterParams={currentFilterParams}
             presetCustomerId={exportPresetCustomerId}
             presetBulkBatchId={exportPresetBulkBatchId}
@@ -1079,17 +1080,29 @@ export default function LeadsCRMPage() {
   );
 }
 
+type ExportBatchInfo = {
+  customer_id: string | null;
+  customer_name: string | null;
+  branch: string | null;
+  batch_size: number;
+  leads_delivered: number;
+  remaining: number;
+};
+
 function ExportModal({
-  total, customers, filterParams, presetCustomerId, presetBulkBatchId, onClose, onExported,
+  total: initialTotal, customers, branches, filterParams, presetCustomerId, presetBulkBatchId, onClose, onExported,
 }: {
   total: number;
   customers: Customer[];
+  branches: BranchConfig[];
   filterParams: Record<string, string>;
   presetCustomerId?: string;
   presetBulkBatchId?: string;
   onClose: () => void;
   onExported: () => void;
 }) {
+  const isBulkBatchFlow = !!presetBulkBatchId;
+
   const [targetCustomerId, setTargetCustomerId] = useState(presetCustomerId || '');
   const [bulkBatchId, setBulkBatchId] = useState(presetBulkBatchId || '');
   const [addToPortal, setAddToPortal] = useState(!!(presetCustomerId && presetBulkBatchId));
@@ -1102,12 +1115,148 @@ function ExportModal({
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState('');
 
+  // Filter-state binnen de modal — geïnitialiseerd vanuit `filterParams` zodat
+  // de admin verder kan met wat al actief was op de leads-pagina, en daarna
+  // vrij kan tweaken zonder de buiten-state te wijzigen.
+  const [selFilterBranches, setSelFilterBranches] = useState<string[]>(() =>
+    filterParams.branch ? filterParams.branch.split(',').filter(Boolean) : []);
+  const [selFilterStatuses, setSelFilterStatuses] = useState<string[]>(() =>
+    filterParams.status ? filterParams.status.split(',').filter(Boolean) : []);
+  const [selFilterProvinces, setSelFilterProvinces] = useState<string[]>(() =>
+    filterParams.province ? filterParams.province.split(',').filter(Boolean) : []);
+  const [selFilterSources, setSelFilterSources] = useState<string[]>(() =>
+    filterParams.source ? filterParams.source.split(',').filter(Boolean) : []);
+  const [filterPhone, setFilterPhone] = useState<string>(filterParams.phone_valid || 'all');
+  const [filterBulkStatus, setFilterBulkStatus] = useState<string>(filterParams.bulk_status || 'all');
+  const [filterDateFrom, setFilterDateFrom] = useState<string>(filterParams.date_from || '');
+  const [filterDateTo, setFilterDateTo] = useState<string>(filterParams.date_to || '');
+  const [filterIncludeUnknownDate, setFilterIncludeUnknownDate] = useState<boolean>(
+    filterParams.include_unknown_date !== 'false');
+  const [filtersExpanded, setFiltersExpanded] = useState<boolean>(isBulkBatchFlow);
+
+  // Bulk-batch context: opgehaald via /api/admin/batches/[id] zodat we
+  // klantnaam, branche en remaining-count weten voor de info-banner en
+  // smart-defaults.
+  const [batchInfo, setBatchInfo] = useState<ExportBatchInfo | null>(null);
+  const smartDefaultsAppliedRef = useRef(false);
+
+  useEffect(() => {
+    if (!presetBulkBatchId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await adminFetch(`/api/admin/batches/${presetBulkBatchId}`);
+        if (!res.ok) return;
+        const d = await res.json();
+        if (cancelled) return;
+        const b = d.batch;
+        if (!b) return;
+        const batchSize = Number(b.batch_size || 0);
+        const delivered = Number(b.leads_delivered || 0);
+        const remaining = Math.max(0, batchSize - delivered);
+        const branch = (typeof b.branch === 'string' && b.branch) ? b.branch : null;
+        const customerId = (typeof b.customer_id === 'string' && b.customer_id) ? b.customer_id : null;
+        setBatchInfo({
+          customer_id: customerId,
+          customer_name: b.customers?.name || null,
+          branch,
+          batch_size: batchSize,
+          leads_delivered: delivered,
+          remaining,
+        });
+        if (!smartDefaultsAppliedRef.current) {
+          smartDefaultsAppliedRef.current = true;
+          if (branch) {
+            setSelFilterBranches(prev => prev.length === 0 ? [branch] : prev);
+          }
+          if (remaining > 0) {
+            setMaxLeads(prev => prev ? prev : String(remaining));
+          }
+          if (customerId) {
+            setExcludeCustomers(prev => prev.includes(customerId) ? prev : [...prev, customerId]);
+          }
+        }
+      } catch { /* non-blocking */ }
+    })();
+    return () => { cancelled = true; };
+  }, [presetBulkBatchId]);
+
+  // Body voor zowel /api/admin/leads/count als /api/admin/leads/export.
+  // Bevat ALLE filters die de export-route ook respecteert, behalve format
+  // en target_customer_id.
+  const buildFilterBody = useCallback((): Record<string, string> => {
+    const body: Record<string, string> = {};
+    if (selFilterBranches.length > 0) body.branch = selFilterBranches.join(',');
+    if (selFilterStatuses.length > 0) body.status = selFilterStatuses.join(',');
+    if (selFilterProvinces.length > 0) body.province = selFilterProvinces.join(',');
+    if (selFilterSources.length > 0) body.source = selFilterSources.join(',');
+    if (filterPhone !== 'all') body.phone_valid = filterPhone;
+    if (filterBulkStatus !== 'all') body.bulk_status = filterBulkStatus;
+    if (filterDateFrom) body.date_from = filterDateFrom;
+    if (filterDateTo) body.date_to = filterDateTo;
+    if ((filterDateFrom || filterDateTo) && !filterIncludeUnknownDate) body.include_unknown_date = 'false';
+    if (excludeCustomers.length > 0) body.exclude_customer_id = excludeCustomers.join(',');
+    // De "Sluit reeds uitgedeelde leads uit"-checkbox is in de bulk-batch
+    // flow verborgen; daar regelt klant-exclude (`exclude_customer_id`) dat
+    // op een minder strenge manier.
+    if (excludeAlreadyAssigned && !isBulkBatchFlow) body.assignment = 'unassigned';
+    return body;
+  }, [
+    selFilterBranches, selFilterStatuses, selFilterProvinces, selFilterSources,
+    filterPhone, filterBulkStatus, filterDateFrom, filterDateTo, filterIncludeUnknownDate,
+    excludeCustomers, excludeAlreadyAssigned, isBulkBatchFlow,
+  ]);
+
+  const [liveCount, setLiveCount] = useState<number | null>(null);
+  const [countLoading, setCountLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setCountLoading(true);
+    const handle = setTimeout(async () => {
+      try {
+        const params = new URLSearchParams(buildFilterBody());
+        const res = await adminFetch(`/api/admin/leads/count?${params}`);
+        if (!cancelled && res.ok) {
+          const d = await res.json();
+          setLiveCount(typeof d.count === 'number' ? d.count : 0);
+        }
+      } finally {
+        if (!cancelled) setCountLoading(false);
+      }
+    }, 300);
+    return () => { cancelled = true; clearTimeout(handle); };
+  }, [buildFilterBody]);
+
+  const effectiveTotal = liveCount ?? initialTotal;
+  const exportCount = useMemo(() => {
+    const cap = maxLeads && Number(maxLeads) > 0 ? Number(maxLeads) : Number.POSITIVE_INFINITY;
+    return Math.min(effectiveTotal, cap);
+  }, [effectiveTotal, maxLeads]);
+
+  const activeFilterCount = useMemo(() => {
+    let n = 0;
+    if (selFilterBranches.length > 0) n++;
+    if (selFilterStatuses.length > 0) n++;
+    if (selFilterProvinces.length > 0) n++;
+    if (selFilterSources.length > 0) n++;
+    if (filterPhone !== 'all') n++;
+    if (filterBulkStatus !== 'all') n++;
+    if (filterDateFrom || filterDateTo) n++;
+    return n;
+  }, [selFilterBranches, selFilterStatuses, selFilterProvinces, selFilterSources, filterPhone, filterBulkStatus, filterDateFrom, filterDateTo]);
+
+  const branchOptions = useMemo(
+    () => branches.filter(b => b.is_active).map(b => ({ value: b.slug, label: b.name })),
+    [branches],
+  );
+
   const handleExport = async () => {
     setExporting(true);
     setError('');
     try {
       const body: Record<string, unknown> = {
-        ...filterParams,
+        ...buildFilterBody(),
         format,
         prioritize_least_exported: prioritize,
       };
@@ -1117,12 +1266,6 @@ function ExportModal({
         if (addToPortal && bulkBatchId) {
           body.bulk_batch_id = bulkBatchId;
         }
-      }
-      if (excludeCustomers.length > 0) {
-        body.exclude_customer_id = excludeCustomers.join(',');
-      }
-      if (excludeAlreadyAssigned) {
-        body.assignment = 'unassigned';
       }
       if (maxLeads && Number(maxLeads) > 0) body.max_leads = Number(maxLeads);
 
@@ -1153,22 +1296,53 @@ function ExportModal({
     }
   };
 
+  const branchLabel = (slug: string | null) => {
+    if (!slug) return '';
+    return branches.find(b => b.slug === slug)?.name || slug;
+  };
+
+  const headerCount = countLoading && liveCount === null
+    ? initialTotal
+    : effectiveTotal;
+
   return (
     <>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm" onClick={onClose} />
       <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-        className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-        <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl" onClick={e => e.stopPropagation()}>
+        className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto p-4 sm:items-center">
+        <div className="my-8 w-full max-w-2xl rounded-2xl bg-white shadow-2xl" onClick={e => e.stopPropagation()}>
           <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
             <div>
               <h2 className="text-lg font-bold text-slate-900">Bulk Lead Export</h2>
-              <p className="mt-0.5 text-sm text-slate-500">{total.toLocaleString('nl-NL')} leads in huidige filters</p>
+              <p className="mt-0.5 text-sm text-slate-500">
+                <span className={countLoading ? 'opacity-60' : ''}>
+                  {headerCount.toLocaleString('nl-NL')} leads in huidige filters
+                </span>
+                {countLoading && <span className="ml-2 text-xs text-slate-400">…</span>}
+              </p>
             </div>
             <button onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"><XMarkIcon className="h-5 w-5" /></button>
           </div>
 
           <div className="space-y-4 p-5">
             {error && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-600">{error}</div>}
+
+            {isBulkBatchFlow && batchInfo && (
+              <div className="rounded-lg border border-violet-200 bg-violet-50/60 px-4 py-3 text-sm text-violet-900">
+                <div className="font-semibold">
+                  Bulk-batch voor {batchInfo.customer_name || 'klant'}
+                </div>
+                <p className="mt-1 text-xs text-violet-800/90">
+                  {batchInfo.batch_size.toLocaleString('nl-NL')} leads pakket
+                  {batchInfo.branch ? <> op branche <strong>{branchLabel(batchInfo.branch)}</strong></> : null}
+                  , <strong>{batchInfo.remaining.toLocaleString('nl-NL')}</strong> resterend
+                  {batchInfo.leads_delivered > 0 ? ` (${batchInfo.leads_delivered.toLocaleString('nl-NL')} al uitgedeeld)` : ''}.
+                </p>
+                <p className="mt-1 text-xs text-violet-800/90">
+                  Leads die al via bulk of vers aan deze klant zijn toegewezen worden automatisch overgeslagen.
+                </p>
+              </div>
+            )}
 
             <div>
               <label className="mb-1.5 block text-xs font-medium text-slate-500">Exporteren voor klant (optioneel)</label>
@@ -1190,6 +1364,7 @@ function ExportModal({
                 searchPlaceholder="Zoek klant…"
                 ariaLabel="Exporteren voor klant"
                 className="py-2.5"
+                disabled={isBulkBatchFlow}
               />
             </div>
 
@@ -1212,14 +1387,176 @@ function ExportModal({
               </label>
             )}
 
-            <label className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-slate-50/50 px-4 py-3 text-sm text-slate-700 cursor-pointer hover:bg-slate-50">
-              <input type="checkbox" checked={excludeAlreadyAssigned} onChange={e => setExcludeAlreadyAssigned(e.target.checked)}
-                className="h-4 w-4 rounded border-slate-300 text-brand-purple focus:ring-brand-purple/30" />
-              <div>
-                <span className="font-medium">Sluit reeds uitgedeelde leads uit</span>
-                <p className="text-xs text-slate-500">Alleen leads exporteren die nog niet aan een klant zijn toegewezen</p>
-              </div>
-            </label>
+            <div className="rounded-lg border border-slate-200 bg-slate-50/30">
+              <button
+                type="button"
+                onClick={() => setFiltersExpanded(s => !s)}
+                className="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-medium text-slate-700"
+              >
+                <span className="inline-flex items-center gap-2">
+                  Filters
+                  {activeFilterCount > 0 && (
+                    <span className="rounded-full bg-brand-purple/10 px-2 py-0.5 text-[10px] font-semibold text-brand-purple">
+                      {activeFilterCount} actief
+                    </span>
+                  )}
+                </span>
+                <ChevronDownIcon className={`h-4 w-4 text-slate-400 transition ${filtersExpanded ? 'rotate-180' : ''}`} />
+              </button>
+
+              {filtersExpanded && (
+                <div className="space-y-3 border-t border-slate-200 px-4 py-3">
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    {branchOptions.length > 0 && (
+                      <MultiSelect
+                        label="branches"
+                        allLabel="Alle branches"
+                        options={branchOptions}
+                        selected={selFilterBranches}
+                        onChange={setSelFilterBranches}
+                        searchable
+                      />
+                    )}
+                    <MultiSelect
+                      label="provincies"
+                      allLabel="Alle provincies"
+                      groups={[
+                        { label: 'Nederland', options: PROVINCES_NL.map(p => ({ value: p, label: p })) },
+                        { label: 'België', options: PROVINCES_BE.map(p => ({ value: p, label: p })) },
+                      ]}
+                      selected={selFilterProvinces}
+                      onChange={setSelFilterProvinces}
+                      searchable
+                    />
+                    <MultiSelect
+                      label="statussen"
+                      allLabel="Alle statussen"
+                      options={STATUSES.map(s => ({ value: s, label: statusLabel(s) }))}
+                      selected={selFilterStatuses}
+                      onChange={setSelFilterStatuses}
+                    />
+                    <MultiSelect
+                      label="bronnen"
+                      allLabel="Alle bronnen"
+                      options={[
+                        { value: 'handmatig', label: 'Handmatig' },
+                        { value: 'excel_import', label: 'Excel import' },
+                        { value: 'zapier', label: 'Zapier' },
+                      ]}
+                      selected={selFilterSources}
+                      onChange={setSelFilterSources}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1.5 block text-xs font-medium text-slate-500">Wervingsdatum</label>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <input
+                        type="date"
+                        value={filterDateFrom}
+                        onChange={e => setFilterDateFrom(e.target.value)}
+                        className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+                        aria-label="Datum vanaf"
+                      />
+                      <span className="text-xs text-slate-400">t/m</span>
+                      <input
+                        type="date"
+                        value={filterDateTo}
+                        onChange={e => setFilterDateTo(e.target.value)}
+                        className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+                        aria-label="Datum tot"
+                      />
+                      {(filterDateFrom || filterDateTo) && (
+                        <label className="flex cursor-pointer select-none items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
+                          <input
+                            type="checkbox"
+                            checked={filterIncludeUnknownDate}
+                            onChange={e => setFilterIncludeUnknownDate(e.target.checked)}
+                            className="h-3.5 w-3.5 rounded border-slate-300 text-brand-purple focus:ring-brand-purple"
+                          />
+                          <span>Ook leads zonder bekende datum</span>
+                        </label>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div>
+                      <label className="mb-1.5 block text-xs font-medium text-slate-500">Telefoon</label>
+                      <div className="flex rounded-lg border border-slate-200 overflow-hidden">
+                        {[
+                          { v: 'all', l: 'Alle' },
+                          { v: 'true', l: 'Geldig' },
+                          { v: 'false', l: 'Verdacht' },
+                        ].map(opt => (
+                          <button
+                            key={opt.v}
+                            type="button"
+                            onClick={() => setFilterPhone(opt.v)}
+                            className={`flex-1 px-2 py-1.5 text-xs font-medium transition ${filterPhone === opt.v ? 'bg-brand-purple text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
+                          >
+                            {opt.l}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="mb-1.5 block text-xs font-medium text-slate-500">Bulk-status</label>
+                      <div className="flex rounded-lg border border-slate-200 overflow-hidden">
+                        {[
+                          { v: 'all', l: 'Alle' },
+                          { v: 'never', l: 'Nooit' },
+                          { v: 'once', l: '1×' },
+                          { v: 'multiple', l: '2×+' },
+                        ].map(opt => (
+                          <button
+                            key={opt.v}
+                            type="button"
+                            onClick={() => setFilterBulkStatus(opt.v)}
+                            className={`flex-1 px-2 py-1.5 text-xs font-medium transition ${filterBulkStatus === opt.v ? 'bg-brand-purple text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
+                          >
+                            {opt.l}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {activeFilterCount > 0 && (
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelFilterBranches([]);
+                          setSelFilterStatuses([]);
+                          setSelFilterProvinces([]);
+                          setSelFilterSources([]);
+                          setFilterPhone('all');
+                          setFilterBulkStatus('all');
+                          setFilterDateFrom('');
+                          setFilterDateTo('');
+                          setFilterIncludeUnknownDate(true);
+                        }}
+                        className="text-xs font-medium text-slate-500 hover:text-slate-700"
+                      >
+                        Filters wissen
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {!isBulkBatchFlow && (
+              <label className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-slate-50/50 px-4 py-3 text-sm text-slate-700 cursor-pointer hover:bg-slate-50">
+                <input type="checkbox" checked={excludeAlreadyAssigned} onChange={e => setExcludeAlreadyAssigned(e.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300 text-brand-purple focus:ring-brand-purple/30" />
+                <div>
+                  <span className="font-medium">Sluit reeds uitgedeelde leads uit</span>
+                  <p className="text-xs text-slate-500">Alleen leads exporteren die nog niet aan een klant zijn toegewezen</p>
+                </div>
+              </label>
+            )}
 
             <div className="rounded-lg border border-slate-200 bg-slate-50/50 px-4 py-3">
               <button type="button" onClick={() => setShowExcludePicker(s => !s)} className="flex w-full items-center justify-between text-left text-sm font-medium text-slate-700">
@@ -1234,27 +1571,42 @@ function ExportModal({
                 <ChevronDownIcon className={`h-4 w-4 text-slate-400 transition ${showExcludePicker ? 'rotate-180' : ''}`} />
               </button>
               {!showExcludePicker && (
-                <p className="mt-1 text-xs text-slate-500">Verberg leads die al aan deze klanten zijn uitgedeeld</p>
+                <p className="mt-1 text-xs text-slate-500">
+                  {isBulkBatchFlow && batchInfo?.customer_id
+                    ? `Leads die al aan ${batchInfo.customer_name || 'deze klant'} zijn uitgedeeld worden overgeslagen.`
+                    : 'Verberg leads die al aan deze klanten zijn uitgedeeld'}
+                </p>
               )}
               {showExcludePicker && (
                 <div className="mt-3 max-h-44 overflow-y-auto rounded-lg border border-slate-200 bg-white p-2">
                   {customers.length === 0 && <p className="px-2 py-1 text-xs text-slate-400">Geen klanten</p>}
                   {customers.map(c => {
                     const checked = excludeCustomers.includes(c.id);
+                    const isPresetExclude = isBulkBatchFlow && batchInfo?.customer_id === c.id;
                     return (
-                      <label key={c.id} className="flex items-center gap-2 rounded px-2 py-1.5 text-sm text-slate-700 hover:bg-slate-50 cursor-pointer">
+                      <label key={c.id} className={`flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-slate-50 ${isPresetExclude ? 'cursor-not-allowed text-slate-500' : 'cursor-pointer text-slate-700'}`}>
                         <input
                           type="checkbox"
                           checked={checked}
+                          disabled={isPresetExclude}
                           onChange={() => setExcludeCustomers(prev => checked ? prev.filter(id => id !== c.id) : [...prev, c.id])}
                           className="h-4 w-4 rounded border-slate-300 text-brand-purple focus:ring-brand-purple/30"
                         />
-                        <span>{c.name}</span>
+                        <span>
+                          {c.name}
+                          {isPresetExclude && <span className="ml-1 text-[10px] text-slate-400">(bulk-batch klant)</span>}
+                        </span>
                       </label>
                     );
                   })}
                   {excludeCustomers.length > 0 && (
-                    <button type="button" onClick={() => setExcludeCustomers([])} className="mt-2 text-xs font-medium text-slate-500 hover:text-slate-700">
+                    <button
+                      type="button"
+                      onClick={() => setExcludeCustomers(prev => isBulkBatchFlow && batchInfo?.customer_id
+                        ? prev.filter(id => id === batchInfo.customer_id)
+                        : [])}
+                      className="mt-2 text-xs font-medium text-slate-500 hover:text-slate-700"
+                    >
                       Selectie wissen
                     </button>
                   )}
@@ -1296,7 +1648,11 @@ function ExportModal({
               <button onClick={onClose} className="flex-1 rounded-lg border border-slate-200 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50">
                 Annuleren
               </button>
-              <button onClick={handleExport} disabled={exporting} className="flex-1 rounded-lg bg-button-gradient py-2.5 text-sm font-bold text-white shadow-sm disabled:opacity-60">
+              <button
+                onClick={handleExport}
+                disabled={exporting || effectiveTotal === 0}
+                className="flex-1 rounded-lg bg-button-gradient py-2.5 text-sm font-bold text-white shadow-sm disabled:opacity-60"
+              >
                 {exporting ? (
                   <span className="inline-flex items-center gap-2">
                     <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
@@ -1305,7 +1661,9 @@ function ExportModal({
                 ) : (
                   <span className="inline-flex items-center gap-1.5">
                     <ArrowDownTrayIcon className="h-4 w-4" />
-                    {maxLeads ? `${Number(maxLeads).toLocaleString('nl-NL')} leads exporteren` : `${total.toLocaleString('nl-NL')} leads exporteren`}
+                    {Number.isFinite(exportCount)
+                      ? `${Math.max(0, exportCount).toLocaleString('nl-NL')} leads exporteren`
+                      : 'Exporteren'}
                   </span>
                 )}
               </button>

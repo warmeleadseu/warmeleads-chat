@@ -6,6 +6,7 @@ import { isBulkLeadsBatchKind, normalizeBatchKind } from '@/lib/batchKind';
 import { buildPhoneSearchIlikeClauses, sanitizePostgrestIlike } from '@/lib/phoneSearch';
 import * as XLSX from 'xlsx';
 import { onLeadAssignedToCustomer } from '@/lib/integrations/onLeadAssigned';
+import { syncBatchDelivered } from '@/lib/batchSync';
 
 const COLUMN_HEADERS = [
   'Branche', 'Naam', 'E-mail', 'Telefoon', 'Postcode', 'Huisnr.',
@@ -306,6 +307,17 @@ export async function POST(request: NextRequest) {
         }
       }
     }
+
+    // Houd `customer_batches.leads_delivered` in sync zodat de progressbar op
+    // de batch-detail-pagina direct na een bulk-export klopt. Op basis van het
+    // werkelijke aantal `lead_assignments`-rijen voor deze batch.
+    if (portalBatchId) {
+      try {
+        await syncBatchDelivered(supabase, portalBatchId);
+      } catch (syncErr) {
+        console.error('[admin/leads/export] syncBatchDelivered failed', { portalBatchId, syncErr });
+      }
+    }
   }
 
   const UPDATE_CHUNK = 500;
@@ -440,6 +452,17 @@ export async function DELETE(request: NextRequest) {
         .in('lead_id', chunk)
         .eq('customer_id', exportRecord.customer_id)
         .eq('source', 'bulk_export');
+    }
+
+    // Sync `leads_delivered` na het verwijderen van assignments zodat de
+    // progressbar op de bulk-batch terugloopt naar het juiste aantal.
+    const undoneBulkBatchId = (exportRecord.filters as { bulk_batch_id?: unknown } | null)?.bulk_batch_id;
+    if (typeof undoneBulkBatchId === 'string' && undoneBulkBatchId) {
+      try {
+        await syncBatchDelivered(supabase, undoneBulkBatchId);
+      } catch (syncErr) {
+        console.error('[admin/leads/export] syncBatchDelivered (undo) failed', { undoneBulkBatchId, syncErr });
+      }
     }
   }
 
