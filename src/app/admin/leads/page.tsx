@@ -17,6 +17,7 @@ import {
   CheckIcon,
   ChevronDownIcon,
   ArrowUturnLeftIcon,
+  UserPlusIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
 import { PROVINCES_ALL, PROVINCES_BE, PROVINCES_NL } from '@/data/provinces';
@@ -414,6 +415,15 @@ export default function LeadsCRMPage() {
   const [showExportHistory, setShowExportHistory] = useState(false);
   const [undoingExportId, setUndoingExportId] = useState<string | null>(null);
 
+  const [showBulkAssignModal, setShowBulkAssignModal] = useState(false);
+  const [bulkAssignModalKey, setBulkAssignModalKey] = useState(0);
+  const [bulkAssignInitialScope, setBulkAssignInitialScope] = useState<'selected' | 'all_filtered'>('selected');
+  const [bulkAssignFeedback, setBulkAssignFeedback] = useState<
+    | { kind: 'success'; assigned: number; skipped: number; total: number; customerName: string }
+    | { kind: 'error'; message: string }
+    | null
+  >(null);
+
   const fetchMeta = useCallback(async () => {
     const [custRes, branchRes] = await Promise.all([
       adminFetch('/api/admin/customers/options'),
@@ -627,6 +637,16 @@ export default function LeadsCRMPage() {
           </button>
           <button
             onClick={() => {
+              setBulkAssignInitialScope('all_filtered');
+              setBulkAssignModalKey(k => k + 1);
+              setShowBulkAssignModal(true);
+            }}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+          >
+            <UserPlusIcon className="h-4 w-4" /> Bulk toewijzen
+          </button>
+          <button
+            onClick={() => {
               setExportPresetCustomerId('');
               setExportPresetBulkBatchId('');
               setExportModalKey(k => k + 1);
@@ -657,6 +677,29 @@ export default function LeadsCRMPage() {
               </p>
               <button onClick={() => setEnrichResult(null)} className="ml-3 text-emerald-400 hover:text-emerald-600"><XMarkIcon className="h-4 w-4" /></button>
             </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {bulkAssignFeedback && (
+          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+            {bulkAssignFeedback.kind === 'success' ? (
+              <div className="mb-4 flex items-start justify-between rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
+                <p className="text-sm text-emerald-700">
+                  <strong>{bulkAssignFeedback.assigned.toLocaleString('nl-NL')}</strong> lead{bulkAssignFeedback.assigned === 1 ? '' : 's'} toegewezen aan <strong>{bulkAssignFeedback.customerName}</strong>
+                  {bulkAssignFeedback.skipped > 0 && (
+                    <> · <span className="text-emerald-600/80">{bulkAssignFeedback.skipped.toLocaleString('nl-NL')} overgeslagen (binnen 30 dagen al toegewezen)</span></>
+                  )}
+                </p>
+                <button onClick={() => setBulkAssignFeedback(null)} className="ml-3 text-emerald-400 hover:text-emerald-600"><XMarkIcon className="h-4 w-4" /></button>
+              </div>
+            ) : (
+              <div className="mb-4 flex items-start justify-between rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+                <p className="text-sm text-red-700">{bulkAssignFeedback.message}</p>
+                <button onClick={() => setBulkAssignFeedback(null)} className="ml-3 text-red-400 hover:text-red-600"><XMarkIcon className="h-4 w-4" /></button>
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -878,6 +921,16 @@ export default function LeadsCRMPage() {
                 {STATUSES.map(s => <option key={s} value={s}>{statusLabel(s)}</option>)}
               </select>
               {bulkStatus && <button onClick={handleBulkStatus} className="rounded-lg bg-brand-purple px-3 py-1.5 text-sm font-medium text-white">Toepassen</button>}
+              <button
+                onClick={() => {
+                  setBulkAssignInitialScope('selected');
+                  setBulkAssignModalKey(k => k + 1);
+                  setShowBulkAssignModal(true);
+                }}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700"
+              >
+                <UserPlusIcon className="h-3.5 w-3.5" /> Toewijzen aan klant
+              </button>
               <button onClick={handleBulkDelete} className="rounded-lg bg-red-500 px-3 py-1.5 text-sm font-medium text-white">Verwijderen</button>
               <button onClick={() => setSelected(new Set())} className="ml-auto text-sm text-slate-500 hover:text-slate-700">Deselecteren</button>
             </div>
@@ -1073,6 +1126,36 @@ export default function LeadsCRMPage() {
             presetBulkBatchId={exportPresetBulkBatchId}
             onClose={() => setShowExportModal(false)}
             onExported={() => { fetchLeads(); fetchExportHistory(); }}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showBulkAssignModal && (
+          <BulkAssignModal
+            key={bulkAssignModalKey}
+            customers={customers}
+            selectedLeadIds={Array.from(selected)}
+            filterParams={currentFilterParams}
+            totalInFilter={total}
+            initialScope={bulkAssignInitialScope}
+            onClose={() => setShowBulkAssignModal(false)}
+            onAssigned={(result) => {
+              setBulkAssignFeedback({
+                kind: 'success',
+                assigned: result.assigned,
+                skipped: result.skipped_already,
+                total: result.total,
+                customerName: result.customer_name,
+              });
+              setSelected(new Set());
+              fetchLeads();
+              setTimeout(() => setBulkAssignFeedback(null), 7000);
+            }}
+            onError={(message) => {
+              setBulkAssignFeedback({ kind: 'error', message });
+              setTimeout(() => setBulkAssignFeedback(null), 7000);
+            }}
           />
         )}
       </AnimatePresence>
@@ -1664,6 +1747,256 @@ function ExportModal({
                     {Number.isFinite(exportCount)
                       ? `${Math.max(0, exportCount).toLocaleString('nl-NL')} leads exporteren`
                       : 'Exporteren'}
+                  </span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      </motion.div>
+    </>
+  );
+}
+
+type BulkAssignResult = {
+  assigned: number;
+  skipped_already: number;
+  total: number;
+  customer_name: string;
+};
+
+function BulkAssignModal({
+  customers,
+  selectedLeadIds,
+  filterParams,
+  totalInFilter,
+  initialScope,
+  onClose,
+  onAssigned,
+  onError,
+}: {
+  customers: Customer[];
+  selectedLeadIds: string[];
+  filterParams: Record<string, string>;
+  totalInFilter: number;
+  initialScope: 'selected' | 'all_filtered';
+  onClose: () => void;
+  onAssigned: (result: BulkAssignResult) => void;
+  onError: (message: string) => void;
+}) {
+  const hasSelection = selectedLeadIds.length > 0;
+  const initial = initialScope === 'selected' && !hasSelection ? 'all_filtered' : initialScope;
+
+  const [customerId, setCustomerId] = useState('');
+  const [scope, setScope] = useState<'selected' | 'all_filtered'>(initial);
+  const [maxLeads, setMaxLeads] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const [filterCount, setFilterCount] = useState<number | null>(totalInFilter > 0 ? totalInFilter : null);
+  const [filterCountLoading, setFilterCountLoading] = useState(false);
+
+  // Live filter-count via /api/admin/leads/count zodat de teller exact
+  // overeenkomt met wat het backend-endpoint gaat resolven (en dus identiek
+  // is aan de export-modal-count).
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setFilterCountLoading(true);
+      try {
+        const params = new URLSearchParams(filterParams);
+        const res = await adminFetch(`/api/admin/leads/count?${params}`);
+        if (!cancelled && res.ok) {
+          const d = await res.json();
+          setFilterCount(typeof d.count === 'number' ? d.count : 0);
+        }
+      } finally {
+        if (!cancelled) setFilterCountLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [filterParams]);
+
+  const customerName = useMemo(
+    () => customers.find(c => c.id === customerId)?.name || '',
+    [customerId, customers],
+  );
+
+  const filterTotal = filterCount ?? totalInFilter;
+  const cap = maxLeads && Number(maxLeads) > 0 ? Number(maxLeads) : Number.POSITIVE_INFINITY;
+  const targetCount = scope === 'selected'
+    ? selectedLeadIds.length
+    : Math.max(0, Math.min(filterTotal, cap));
+
+  const handleSubmit = async () => {
+    if (!customerId) { setError('Kies eerst een klant'); return; }
+    if (targetCount === 0) { setError('Geen leads om toe te wijzen'); return; }
+    setSubmitting(true);
+    setError('');
+    try {
+      const body: Record<string, unknown> = {
+        customer_id: customerId,
+        scope,
+      };
+      if (scope === 'selected') {
+        body.lead_ids = selectedLeadIds;
+      } else {
+        Object.assign(body, filterParams);
+        if (maxLeads && Number(maxLeads) > 0) body.max_leads = Number(maxLeads);
+      }
+      const res = await adminFetch('/api/admin/leads/bulk-assign', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const msg = d?.error || 'Toewijzen mislukt';
+        throw new Error(msg);
+      }
+      onAssigned({
+        assigned: typeof d.assigned === 'number' ? d.assigned : 0,
+        skipped_already: typeof d.skipped_already === 'number' ? d.skipped_already : 0,
+        total: typeof d.total === 'number' ? d.total : targetCount,
+        customer_name: typeof d.customer_name === 'string' ? d.customer_name : customerName,
+      });
+      onClose();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Er ging iets mis';
+      setError(msg);
+      onError(msg);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm" onClick={onClose} />
+      <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+        className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+        <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl" onClick={e => e.stopPropagation()}>
+          <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+            <div>
+              <h2 className="text-lg font-bold text-slate-900">Leads toewijzen aan klant</h2>
+              <p className="mt-0.5 text-sm text-slate-500">
+                Wijst geselecteerde of gefilterde leads in één keer aan een klant toe.
+              </p>
+            </div>
+            <button onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"><XMarkIcon className="h-5 w-5" /></button>
+          </div>
+
+          <div className="space-y-4 p-5">
+            {error && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-600">{error}</div>}
+
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-slate-500">Klant</label>
+              <SearchableSelect
+                value={customerId}
+                onChange={v => setCustomerId(v || '')}
+                options={customers.map(c => ({ value: c.id, label: c.name }))}
+                emptyOptionLabel="—"
+                placeholder="Kies een klant…"
+                searchPlaceholder="Zoek klant…"
+                ariaLabel="Klant kiezen voor toewijzen"
+                className="py-2.5"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-slate-500">Welke leads toewijzen?</label>
+              <div className="space-y-2">
+                <label className={`flex cursor-pointer items-start gap-3 rounded-lg border px-4 py-3 text-sm transition ${scope === 'selected' ? 'border-brand-purple/50 bg-brand-purple/5' : 'border-slate-200 bg-white hover:bg-slate-50'} ${!hasSelection ? 'cursor-not-allowed opacity-50' : ''}`}>
+                  <input
+                    type="radio"
+                    name="bulk-assign-scope"
+                    value="selected"
+                    disabled={!hasSelection}
+                    checked={scope === 'selected'}
+                    onChange={() => setScope('selected')}
+                    className="mt-0.5 h-4 w-4 border-slate-300 text-brand-purple focus:ring-brand-purple/30"
+                  />
+                  <div>
+                    <span className="font-medium text-slate-700">
+                      Alleen geselecteerde leads
+                      <span className="ml-2 text-slate-500">({selectedLeadIds.length.toLocaleString('nl-NL')})</span>
+                    </span>
+                    {!hasSelection && (
+                      <p className="mt-0.5 text-xs text-slate-400">Selecteer eerst leads in de tabel om deze optie te gebruiken.</p>
+                    )}
+                  </div>
+                </label>
+                <label className={`flex cursor-pointer items-start gap-3 rounded-lg border px-4 py-3 text-sm transition ${scope === 'all_filtered' ? 'border-brand-purple/50 bg-brand-purple/5' : 'border-slate-200 bg-white hover:bg-slate-50'}`}>
+                  <input
+                    type="radio"
+                    name="bulk-assign-scope"
+                    value="all_filtered"
+                    checked={scope === 'all_filtered'}
+                    onChange={() => setScope('all_filtered')}
+                    className="mt-0.5 h-4 w-4 border-slate-300 text-brand-purple focus:ring-brand-purple/30"
+                  />
+                  <div className="flex-1">
+                    <span className="font-medium text-slate-700">
+                      Alle leads in huidige filters
+                      <span className={`ml-2 text-slate-500 ${filterCountLoading ? 'opacity-60' : ''}`}>
+                        ({filterTotal.toLocaleString('nl-NL')}{filterCountLoading ? '…' : ''})
+                      </span>
+                    </span>
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      Pas de filters op de leads-pagina aan om deze set te wijzigen.
+                    </p>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            {scope === 'all_filtered' && (
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-slate-500">Max. aantal leads (optioneel)</label>
+                <input
+                  type="number"
+                  value={maxLeads}
+                  onChange={e => setMaxLeads(e.target.value)}
+                  placeholder={`Alle ${filterTotal.toLocaleString('nl-NL')}`}
+                  min={1}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50"
+                />
+                <p className="mt-1 text-xs text-slate-400">
+                  Leads worden eerst gesorteerd op &quot;minst eerder als bulk verkocht&quot;, daarna op werving­datum (nieuwste eerst).
+                </p>
+              </div>
+            )}
+
+            <div className="rounded-lg border border-violet-200 bg-violet-50/60 px-4 py-3 text-xs text-violet-900">
+              <p className="font-semibold">Wat gebeurt er bij toewijzen?</p>
+              <ul className="mt-1 space-y-0.5 text-violet-800/90">
+                <li>• Leads die binnen de afgelopen 30 dagen al aan deze klant zijn toegewezen worden overgeslagen.</li>
+                <li>• Heeft de klant een actieve betaalde leads-batch? Dan komen de toewijzingen daarin (progress klopt direct).</li>
+                <li>• Bestaande Teamleader/Google Sheets integraties worden automatisch gesynced.</li>
+              </ul>
+            </div>
+          </div>
+
+          <div className="border-t border-slate-100 px-5 py-4">
+            <div className="flex gap-3">
+              <button onClick={onClose} className="flex-1 rounded-lg border border-slate-200 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50">
+                Annuleren
+              </button>
+              <button
+                onClick={handleSubmit}
+                disabled={submitting || !customerId || targetCount === 0}
+                className="flex-1 rounded-lg bg-emerald-600 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-60"
+              >
+                {submitting ? (
+                  <span className="inline-flex items-center gap-2">
+                    <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                    Toewijzen…
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5">
+                    <UserPlusIcon className="h-4 w-4" />
+                    {Number.isFinite(targetCount)
+                      ? `${Math.max(0, targetCount).toLocaleString('nl-NL')} leads toewijzen`
+                      : 'Toewijzen'}
+                    {customerName && ` aan ${customerName}`}
                   </span>
                 )}
               </button>
