@@ -324,15 +324,27 @@ export async function GET(request: NextRequest) {
   const { data: rows } = await supabase
     .from('app_settings')
     .select('key, value')
-    .like('key', 'spreadsheet_import:%')
-    .order('key', { ascending: false });
+    .like('key', 'spreadsheet_import:%');
 
-  const history = (rows || []).map(r => {
-    try {
-      const val = JSON.parse(r.value);
-      return { run_id: r.key, ...val };
-    } catch { return null; }
-  }).filter(Boolean);
+  // De keys hebben format `spreadsheet_import:${branch}:${Date.now()}`. Sorteren
+  // op de hele key levert een alfabetische sort op branch-naam (Zonnepanelen
+  // staat dan altijd bovenaan, terwijl Thuisbatterij-imports verstopt blijven).
+  // Daarom sorteren we expliciet op de timestamp uit de value (`date`), met
+  // fallback op de trailing numerieke component uit de key zelf.
+  const history = (rows || [])
+    .map(r => {
+      try {
+        const val = JSON.parse(r.value);
+        const dateMs = val?.date ? Date.parse(val.date) : NaN;
+        const tail = r.key.split(':').pop() || '';
+        const tailMs = /^\d+$/.test(tail) ? Number(tail) : NaN;
+        const sortKey = Number.isFinite(dateMs) ? dateMs : Number.isFinite(tailMs) ? tailMs : 0;
+        return { run_id: r.key, sortKey, ...val };
+      } catch { return null; }
+    })
+    .filter(Boolean)
+    .sort((a, b) => (b!.sortKey as number) - (a!.sortKey as number))
+    .map(({ sortKey: _ignored, ...rest }) => rest);
 
   return NextResponse.json({ history });
 }
