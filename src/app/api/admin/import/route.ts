@@ -135,6 +135,34 @@ export async function POST(request: NextRequest) {
 
       const parsedWervingsdatum = parseImportDate(lead.wervingsdatum);
       if (parsedWervingsdatum === null) unparseableDates++;
+
+      // Status uit het bestand respecteren als die op een geldige
+      // CRM-waarde matcht (Nederlands of Engels). Onbekende waarden vallen
+      // terug op 'nieuw' zodat we nooit met een illegale enum-status in
+      // de database belanden.
+      const validStatuses = new Set([
+        'nieuw', 'gecontacteerd', 'geen_gehoor', 'offerte', 'afspraak', 'verkocht', 'afgewezen',
+      ]);
+      const statusAlias: Record<string, string> = {
+        nieuw: 'nieuw', new: 'nieuw', open: 'nieuw', instroom: 'nieuw', initial: 'nieuw',
+        gecontacteerd: 'gecontacteerd', contacted: 'gecontacteerd',
+        'geen gehoor': 'geen_gehoor', geengehoor: 'geen_gehoor', nopickup: 'geen_gehoor',
+        offerte: 'offerte', quote: 'offerte', proposal: 'offerte',
+        afspraak: 'afspraak', appointment: 'afspraak',
+        verkocht: 'verkocht', won: 'verkocht', sold: 'verkocht', closed: 'verkocht',
+        afgewezen: 'afgewezen', lost: 'afgewezen', rejected: 'afgewezen',
+      };
+      const rawStatus = (lead.status || '').trim().toLowerCase().replace(/[^a-z\s]/g, '');
+      const mappedStatus = rawStatus
+        ? (statusAlias[rawStatus] || (validStatuses.has(rawStatus) ? rawStatus : 'nieuw'))
+        : 'nieuw';
+
+      // Bron-tag uit het bestand behouden mits aanwezig; anders houden we
+      // de import-tag 'excel_import' zodat audit-rapportages onveranderd
+      // blijven werken.
+      const rawBron = (lead.bron || '').trim();
+      const bron = rawBron || 'excel_import';
+
       const fields: Record<string, unknown> = {
         branch,
         naam_klant: naam,
@@ -147,8 +175,8 @@ export async function POST(request: NextRequest) {
         provincie: (lead.provincie || '').trim() || null,
         wervingsdatum: parsedWervingsdatum,
         wervingsdatum_unknown: parsedWervingsdatum === null,
-        status: 'nieuw',
-        bron: 'excel_import',
+        status: mappedStatus,
+        bron,
         notities: (lead.notities || '').trim() || null,
       };
 

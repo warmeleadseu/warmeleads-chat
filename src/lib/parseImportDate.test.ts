@@ -63,4 +63,42 @@ describe('parseImportDate', () => {
       expect(parseImportDate('garbage')).toBeNull();
     });
   });
+
+  describe('JavaScript Date instances (XLSX cellDates)', () => {
+    it('Date object → ISO datum (UTC)', () => {
+      expect(parseImportDate(new Date(Date.UTC(2026, 3, 2, 10, 0, 0)))).toBe('2026-04-02');
+    });
+    it('Ongeldig Date object → null', () => {
+      expect(parseImportDate(new Date('invalid'))).toBeNull();
+    });
+    it('Date buiten range → null', () => {
+      expect(parseImportDate(new Date(Date.UTC(1800, 0, 1)))).toBeNull();
+    });
+  });
+
+  describe('MM/DD/YYYY (Amerikaans formaat)', () => {
+    it('onambigu MDY (tweede > 12)', () =>
+      expect(parseImportDate('06/15/2026')).toBe('2026-06-15'));
+    it('onambigu DMY (eerste > 12) blijft DMY', () =>
+      expect(parseImportDate('15/06/2026')).toBe('2026-06-15'));
+    it('ambigu zonder am/pm → DMY (Europees default)', () =>
+      expect(parseImportDate('06/05/2026')).toBe('2026-05-06'));
+  });
+
+  describe('Datum + tijd-suffix', () => {
+    it('US datum + 12u am-suffix → MDY', () =>
+      expect(parseImportDate('06/15/2026 12:32am')).toBe('2026-06-15'));
+    it('US datum + 12u pm-suffix → MDY', () =>
+      expect(parseImportDate('06/14/2026 11:26pm')).toBe('2026-06-14'));
+    it('NL datum + 24u tijd', () =>
+      expect(parseImportDate('15-06-2026 14:32')).toBe('2026-06-15'));
+    it('NL datum + 24u tijd met seconden', () =>
+      expect(parseImportDate('15-06-2026 14:32:10')).toBe('2026-06-15'));
+    it('ISO datum + spatie + tijd', () =>
+      expect(parseImportDate('2026-04-02 10:14:40')).toBe('2026-04-02'));
+    it('Ambigue datum + am/pm → kies MDY', () =>
+      expect(parseImportDate('05/06/2026 9:00am')).toBe('2026-05-06'));
+    it('DMY ongeldig → fallback naar MDY (geen am/pm nodig)', () =>
+      expect(parseImportDate('06/15/2026')).toBe('2026-06-15'));
+  });
 });
