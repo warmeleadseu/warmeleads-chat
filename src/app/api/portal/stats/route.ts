@@ -53,25 +53,34 @@ export async function GET(request: NextRequest) {
   });
   const customerBranches: string[] = custData?.branches ?? [];
 
-  let assignQuery = supabase.from('lead_assignments').select('lead_id, status').eq('customer_id', customer.id).order('assigned_at', { ascending: false });
+  // Optionele branche-scope (uit pill-tabs op /portal). 'all' / leeg / onbekende
+  // slug = volledige set; bij geldige slug filteren we lokaal op `leads.branch`
+  // voor totalLeads/bulkLeads/statusBreakdown e.d. `branchBreakdown` en
+  // `branchLastLeadAt` blijven altijd globaal — die voeden de tabs zelf.
+  const branchParam = request.nextUrl.searchParams.get('branch') || '';
+  const branchScope = branchParam && branchParam !== 'all' && customerBranches.includes(branchParam)
+    ? branchParam
+    : null;
+
+  let assignQuery = supabase.from('lead_assignments').select('lead_id, status, source').eq('customer_id', customer.id).order('assigned_at', { ascending: false });
   if (demoMode) {
     assignQuery = assignQuery.eq('source', 'demo');
   } else {
     assignQuery = assignQuery.neq('source', 'demo');
   }
-  let assignRes = await paginateQuery<{ lead_id: string; status: string | null }>(assignQuery);
+  const assignRes = await paginateQuery<{ lead_id: string; status: string | null; source: string | null }>(assignQuery);
   let assignments = assignRes.rows;
   let partial = assignRes.truncated;
 
   if (demoMode && assignments.length === 0) {
     await repairDemoAssignmentsIfNeeded(supabase, customer.id, customerBranches);
-    let retryQ = supabase
+    const retryQ = supabase
       .from('lead_assignments')
-      .select('lead_id, status')
+      .select('lead_id, status, source')
       .eq('customer_id', customer.id)
       .eq('source', 'demo')
       .order('assigned_at', { ascending: false });
-    const retryRes = await paginateQuery<{ lead_id: string; status: string | null }>(retryQ);
+    const retryRes = await paginateQuery<{ lead_id: string; status: string | null; source: string | null }>(retryQ);
     assignments = retryRes.rows;
     partial ||= retryRes.truncated;
   }
@@ -83,12 +92,14 @@ export async function GET(request: NextRequest) {
   partial ||= directRes.truncated;
 
   const assignmentStatusMap: Record<string, string> = {};
+  const bulkLeadIds = new Set<string>();
   const leadIds = new Set<string>();
   assignments.forEach(a => {
     leadIds.add(a.lead_id);
     if (!assignmentStatusMap[a.lead_id]) {
       assignmentStatusMap[a.lead_id] = a.status || 'nieuw';
     }
+    if (a.source === 'bulk_export') bulkLeadIds.add(a.lead_id);
   });
   directLeads.forEach(l => leadIds.add(l.id));
 
@@ -98,7 +109,7 @@ export async function GET(request: NextRequest) {
     console.info('[portal/stats]', { computeMs: Date.now() - t0, partial: false, totalLeads: 0 });
     return NextResponse.json({
       totalLeads: 0, newThisWeek: 0, contacted: 0, sold: 0,
-      bulkLeads: 0, statusBreakdown: {}, branchBreakdown: {},
+      bulkLeads: 0, statusBreakdown: {}, branchBreakdown: {}, branchLastLeadAt: {},
       partial: false,
       maxPaginateRows: PORTAL_PAGINATE_MAX_ROWS,
       maxLeadDetailRows: PORTAL_STATS_MAX_LEAD_DETAIL,
@@ -123,31 +134,38 @@ export async function GET(request: NextRequest) {
     status: assignmentStatusMap[l.id] ?? l.status,
   }));
 
+  // Globale branche-stats (altijd over alle branches; voedt de pill-tabs).
+  const branchCounts: Record<string, number> = {};
+  const branchLastLeadAt: Record<string, string> = {};
+  enriched.forEach(l => {
+    branchCounts[l.branch] = (branchCounts[l.branch] || 0) + 1;
+    if (!branchLastLeadAt[l.branch] || l.created_at > branchLastLeadAt[l.branch]) {
+      branchLastLeadAt[l.branch] = l.created_at;
+    }
+  });
+
+  // Scoped set voor de geselecteerde branche (of alles).
+  const scoped = branchScope ? enriched.filter(l => l.branch === branchScope) : enriched;
+
   const weekAgo = new Date();
   weekAgo.setDate(weekAgo.getDate() - 7);
 
-  const totalLeads = enriched.length;
-  const newThisWeek = enriched.filter(l => new Date(l.created_at) >= weekAgo).length;
-  const contacted = enriched.filter(l => l.status === 'gecontacteerd').length;
-  const sold = enriched.filter(l => l.status === 'verkocht').length;
+  const totalLeads = scoped.length;
+  const newThisWeek = scoped.filter(l => new Date(l.created_at) >= weekAgo).length;
+  const contacted = scoped.filter(l => l.status === 'gecontacteerd').length;
+  const sold = scoped.filter(l => l.status === 'verkocht').length;
 
   const statusCounts: Record<string, number> = {};
-  enriched.forEach(l => { statusCounts[l.status] = (statusCounts[l.status] || 0) + 1; });
+  scoped.forEach(l => { statusCounts[l.status] = (statusCounts[l.status] || 0) + 1; });
 
-  const branchCounts: Record<string, number> = {};
-  enriched.forEach(l => { branchCounts[l.branch] = (branchCounts[l.branch] || 0) + 1; });
-
-  const bulkLeads = demoMode ? 0 : (await supabase
-    .from('lead_assignments')
-    .select('id', { count: 'exact', head: true })
-    .eq('customer_id', customer.id)
-    .eq('source', 'bulk_export')).count || 0;
+  const bulkLeads = demoMode ? 0 : scoped.filter(l => bulkLeadIds.has(l.id)).length;
 
   console.info('[portal/stats]', {
     computeMs: Date.now() - t0,
     partial,
     totalLeads,
     idSampleSize: idList.length,
+    branchScope: branchScope ?? 'all',
   });
 
   return NextResponse.json({
@@ -155,9 +173,10 @@ export async function GET(request: NextRequest) {
     newThisWeek,
     contacted,
     sold,
-    bulkLeads: bulkLeads || 0,
+    bulkLeads,
     statusBreakdown: statusCounts,
     branchBreakdown: branchCounts,
+    branchLastLeadAt,
     partial,
     maxPaginateRows: PORTAL_PAGINATE_MAX_ROWS,
     maxLeadDetailRows: PORTAL_STATS_MAX_LEAD_DETAIL,

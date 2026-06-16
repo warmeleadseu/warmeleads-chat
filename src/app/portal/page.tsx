@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
@@ -53,7 +53,7 @@ import {
   useLeadCrmBackfill,
 } from './LeadCrmBackfill';
 import { PERMISSIONS } from '@/lib/portalPermissions';
-import { PageHeader, useToast } from './_ui';
+import { PageHeader, useToast, ChoicePill } from './_ui';
 import { STATUS_COLORS, STATUS_OPTIONS } from './_constants/leadStatus';
 import { getBatchProgressView, isCappedDeliveryModel } from '@/lib/batchDeliveryModel';
 import {
@@ -82,17 +82,17 @@ function whatsappUrl(phone: string) {
 interface BranchField { key: string; label: string; field_type: string; options: string[]; is_required: boolean; sort_order: number; }
 interface BranchConfig { slug: string; name: string; color: string; branch_fields: BranchField[]; }
 
-const BRANCH_COLOR_MAP: Record<string, { light: string; text: string }> = {
-  emerald: { light: 'bg-emerald-50', text: 'text-emerald-600' },
-  sky: { light: 'bg-sky-50', text: 'text-sky-600' },
-  amber: { light: 'bg-amber-50', text: 'text-amber-600' },
-  purple: { light: 'bg-purple-50', text: 'text-purple-600' },
-  rose: { light: 'bg-rose-50', text: 'text-rose-600' },
-  cyan: { light: 'bg-cyan-50', text: 'text-cyan-600' },
-  lime: { light: 'bg-lime-50', text: 'text-lime-600' },
-  indigo: { light: 'bg-indigo-50', text: 'text-indigo-600' },
-  teal: { light: 'bg-teal-50', text: 'text-teal-600' },
-  slate: { light: 'bg-slate-50', text: 'text-slate-600' },
+const BRANCH_COLOR_MAP: Record<string, { light: string; text: string; dot: string }> = {
+  emerald: { light: 'bg-emerald-50', text: 'text-emerald-600', dot: 'bg-emerald-500' },
+  sky: { light: 'bg-sky-50', text: 'text-sky-600', dot: 'bg-sky-500' },
+  amber: { light: 'bg-amber-50', text: 'text-amber-600', dot: 'bg-amber-500' },
+  purple: { light: 'bg-purple-50', text: 'text-purple-600', dot: 'bg-purple-500' },
+  rose: { light: 'bg-rose-50', text: 'text-rose-600', dot: 'bg-rose-500' },
+  cyan: { light: 'bg-cyan-50', text: 'text-cyan-600', dot: 'bg-cyan-500' },
+  lime: { light: 'bg-lime-50', text: 'text-lime-600', dot: 'bg-lime-500' },
+  indigo: { light: 'bg-indigo-50', text: 'text-indigo-600', dot: 'bg-indigo-500' },
+  teal: { light: 'bg-teal-50', text: 'text-teal-600', dot: 'bg-teal-500' },
+  slate: { light: 'bg-slate-50', text: 'text-slate-600', dot: 'bg-slate-400' },
 };
 
 interface Lead {
@@ -125,7 +125,10 @@ interface Stats {
   sold: number;
   bulkLeads?: number;
   statusBreakdown?: Record<string, number>;
+  /** Globale telling per branche — voedt de pill-tabs en is niet scoped. */
   branchBreakdown?: Record<string, number>;
+  /** Globale "laatst binnengekomen lead" per branche — voor default-tab keuze. */
+  branchLastLeadAt?: Record<string, string>;
   /** True when API capped rows for DB safety; totals may be approximate. */
   partial?: boolean;
   maxPaginateRows?: number;
@@ -295,7 +298,21 @@ export default function PortalPage() {
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [branchFilter, setBranchFilter] = useState('all');
+  // Pill-tab "Alle branches" of een specifieke branch-slug. Vervangt het
+  // oude `branchFilter`-dropdown. Init uit URL `?branch=` zodat refresh +
+  // delen van een link werken; default wordt later eventueel bijgewerkt
+  // naar de branche met de meest recente lead (via stats-response).
+  const [activeBranchTab, setActiveBranchTab] = useState<string>(() => {
+    if (typeof window === 'undefined') return 'all';
+    const param = new URLSearchParams(window.location.search).get('branch');
+    if (!param) return 'all';
+    if (param === 'all') return 'all';
+    if (customer.branches.includes(param)) return param;
+    return 'all';
+  });
+  // Eenmalige default-keuze nadat stats binnen zijn (bij multi-branche +
+  // geen URL-param): kies de branche met de laatste lead.
+  const branchDefaultAppliedRef = useRef(false);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [sort, setSort] = useState('received_at');
@@ -371,7 +388,7 @@ export default function PortalPage() {
 
   useEffect(() => {
     clearSelection();
-  }, [statusFilter, branchFilter, dateFrom, dateTo, leadSource, search, clearSelection]);
+  }, [statusFilter, activeBranchTab, dateFrom, dateTo, leadSource, search, clearSelection]);
 
   const openExportWizard = useCallback((selection: ExportSelection | null, count: number) => {
     setExportSelection(selection);
@@ -388,18 +405,31 @@ export default function PortalPage() {
   };
 
   const showLeadSelection = !showDemoPortal && ((isOwner && crmReady) || canExport);
-  const showBranchFilter = customer.branches.length > 1;
+  const showBranchTabs = customer.branches.length > 1;
   const conversionRate = stats.totalLeads > 0
     ? Math.round((stats.sold / stats.totalLeads) * 100)
     : 0;
+
+  // Voortgangskaart, openstaande betalingen en "laatste afgeronde batch"
+  // moeten allemaal dezelfde branche-scope volgen als de actieve pill-tab.
+  const scopedBatches = useMemo(() => {
+    if (activeBranchTab === 'all') return batches;
+    const filter = (b: Batch) => (b.branch ?? null) === activeBranchTab;
+    return {
+      active: batches.active.filter(filter),
+      pending_payment: batches.pending_payment.filter(filter),
+      completed: batches.completed.filter(filter),
+    };
+  }, [batches, activeBranchTab]);
+
   const unpaidBatches = useMemo(
-    () => collectPortalBatchesAwaitingPayment(batches) as Batch[],
-    [batches],
+    () => collectPortalBatchesAwaitingPayment(scopedBatches) as Batch[],
+    [scopedBatches],
   );
   const hasUnpaidBatch = unpaidBatches.length > 0;
   const progressBatch = useMemo(
-    () => pickPortalProgressBatch(batches) as Batch | null,
-    [batches],
+    () => pickPortalProgressBatch(scopedBatches) as Batch | null,
+    [scopedBatches],
   );
   const progressBatchView = useMemo(() => {
     if (!progressBatch) return null;
@@ -416,11 +446,11 @@ export default function PortalPage() {
     isCappedDeliveryModel(progressBatch.delivery_model, progressBatch.batch_kind) &&
     progressBatchPct >= 80;
   const latestHistoricalBatchId = useMemo(() => {
-    if (batches.completed.length > 0 && typeof batches.completed[0].id === 'string') {
-      return batches.completed[0].id;
+    if (scopedBatches.completed.length > 0 && typeof scopedBatches.completed[0].id === 'string') {
+      return scopedBatches.completed[0].id;
     }
     return null;
-  }, [batches.completed]);
+  }, [scopedBatches.completed]);
 
   useEffect(() => {
     if (!showOverviewPanel) return;
@@ -434,7 +464,10 @@ export default function PortalPage() {
   const fetchStats = useCallback(async (silent = false) => {
     if (!silent) setStatsLoading(true);
     try {
-      const res = await portalFetch('/api/portal/stats');
+      const params = new URLSearchParams();
+      if (activeBranchTab !== 'all') params.set('branch', activeBranchTab);
+      const qs = params.toString();
+      const res = await portalFetch(`/api/portal/stats${qs ? `?${qs}` : ''}`);
       if (res.ok) {
         const data = await res.json();
         setStats(data);
@@ -446,7 +479,7 @@ export default function PortalPage() {
     } finally {
       if (!silent) setStatsLoading(false);
     }
-  }, [showToast]);
+  }, [activeBranchTab, showToast]);
 
   const fetchLeads = useCallback(async () => {
     setLoading(true);
@@ -456,7 +489,7 @@ export default function PortalPage() {
     params.set('sort', sort);
     params.set('order', order);
     if (statusFilter !== 'all') params.set('status', statusFilter);
-    if (branchFilter !== 'all') params.set('branch', branchFilter);
+    if (activeBranchTab !== 'all') params.set('branch', activeBranchTab);
     if (search) params.set('search', search);
     if (dateFrom) params.set('from', dateFrom);
     if (dateTo) params.set('to', dateTo);
@@ -484,7 +517,7 @@ export default function PortalPage() {
       showToast('Leads konden niet geladen worden', 'error');
     }
     setLoading(false);
-  }, [page, sort, order, statusFilter, branchFilter, search, dateFrom, dateTo, leadSource, showToast]);
+  }, [page, sort, order, statusFilter, activeBranchTab, search, dateFrom, dateTo, leadSource, showToast]);
 
   const fetchBranches = useCallback(async () => {
     try {
@@ -544,6 +577,31 @@ export default function PortalPage() {
   useEffect(() => { fetchBatches(); }, [fetchBatches]);
   useEffect(() => { fetchNotifPrefs(); }, [fetchNotifPrefs]);
 
+  // Eenmalige default: zodra de eerste stats binnen zijn voor een
+  // multi-branche klant zonder URL-`?branch=`, springen we naar de branche
+  // met de meest recente lead. Voorkomt dat een Zonnepanelen-customer
+  // standaard naar Airco moet zoeken.
+  useEffect(() => {
+    if (branchDefaultAppliedRef.current) return;
+    if (!showBranchTabs) return;
+    if (!stats.branchLastLeadAt) return;
+    branchDefaultAppliedRef.current = true;
+
+    if (typeof window === 'undefined') return;
+    const urlBranch = new URLSearchParams(window.location.search).get('branch');
+    if (urlBranch) return;
+
+    const candidates = customer.branches
+      .map(slug => ({ slug, ts: stats.branchLastLeadAt?.[slug] || '' }))
+      .filter(c => c.ts);
+    if (candidates.length === 0) return;
+    candidates.sort((a, b) => b.ts.localeCompare(a.ts));
+    const target = candidates[0].slug;
+    if (target !== activeBranchTab) {
+      setActiveBranchTab(target);
+    }
+  }, [stats.branchLastLeadAt, showBranchTabs, customer.branches, activeBranchTab]);
+
   useEffect(() => {
     if (!schedulePromptLead && !showBookFromLead) return;
     portalFetch('/api/portal/team-list')
@@ -571,7 +629,7 @@ export default function PortalPage() {
   const getBranch = useCallback((slug: string) => {
     const b = branchMap[slug];
     const c = BRANCH_COLOR_MAP[b?.color || 'slate'] || BRANCH_COLOR_MAP.slate;
-    return { name: b?.name || slug, color: b?.color || 'slate', light: c.light, text: c.text, fields: b?.branch_fields || [] };
+    return { name: b?.name || slug, color: b?.color || 'slate', light: c.light, text: c.text, dot: c.dot, fields: b?.branch_fields || [] };
   }, [branchMap]);
 
   const toggleSort = (col: string) => {
@@ -657,12 +715,12 @@ export default function PortalPage() {
 
   const exportFilters = useMemo<ExportFilters>(() => ({
     statusFilter,
-    branchFilter,
+    branchFilter: activeBranchTab,
     dateFrom,
     dateTo,
     leadSource,
     search,
-  }), [statusFilter, branchFilter, dateFrom, dateTo, leadSource, search]);
+  }), [statusFilter, activeBranchTab, dateFrom, dateTo, leadSource, search]);
 
   const handleCrmBackfill = (forceResend: boolean) => {
     if (!crmLabel) return;
@@ -699,22 +757,33 @@ export default function PortalPage() {
     return fields;
   }, [branchConfigs, customer.branches]);
 
+  // De pill-tabs zijn een view-keuze, geen filter — niet meetellen.
   const activeFilters = useMemo(() => {
     let count = 0;
     if (statusFilter !== 'all') count++;
-    if (branchFilter !== 'all') count++;
     if (dateFrom) count++;
     if (dateTo) count++;
     return count;
-  }, [statusFilter, branchFilter, dateFrom, dateTo]);
+  }, [statusFilter, dateFrom, dateTo]);
 
   const resetFilters = () => {
     setStatusFilter('all');
-    setBranchFilter('all');
     setDateFrom('');
     setDateTo('');
     setPage(1);
   };
+
+  const selectBranchTab = useCallback((tab: string) => {
+    setActiveBranchTab(tab);
+    setPage(1);
+    clearSelection();
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      if (tab === 'all') url.searchParams.delete('branch');
+      else url.searchParams.set('branch', tab);
+      window.history.replaceState({}, '', url.toString());
+    }
+  }, [clearSelection]);
 
   const handlePayBatch = useCallback(async (batchId: string) => {
     setPayingBatch(batchId);
@@ -887,6 +956,42 @@ export default function PortalPage() {
         subtitle={`Leadoverzicht voor ${customer.name}`}
       />
 
+      {showBranchTabs && (
+        <div className="hide-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1 pb-1.5">
+          <ChoicePill
+            selected={activeBranchTab === 'all'}
+            onClick={() => selectBranchTab('all')}
+          >
+            <span className="flex items-center gap-2">
+              <span>Alle branches</span>
+              <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-slate-500">
+                {Object.values(stats.branchBreakdown ?? {}).reduce((s, n) => s + n, 0).toLocaleString('nl-NL')}
+              </span>
+            </span>
+          </ChoicePill>
+          {customer.branches.map(slug => {
+            const b = getBranch(slug);
+            const count = stats.branchBreakdown?.[slug] ?? 0;
+            const isActive = activeBranchTab === slug;
+            return (
+              <ChoicePill
+                key={slug}
+                selected={isActive}
+                onClick={() => selectBranchTab(slug)}
+              >
+                <span className="flex items-center gap-2">
+                  <span className={`h-2 w-2 shrink-0 rounded-full ${b.dot}`} />
+                  <span>{b.name}</span>
+                  <span className={`rounded-full px-1.5 py-0.5 text-[11px] font-semibold tabular-nums ${isActive ? 'bg-brand-purple/10 text-brand-purple' : 'bg-slate-100 text-slate-500'}`}>
+                    {count.toLocaleString('nl-NL')}
+                  </span>
+                </span>
+              </ChoicePill>
+            );
+          })}
+        </div>
+      )}
+
       {(stats.partial || leadsScopePartial) && (
         <div
           role="status"
@@ -1054,21 +1159,6 @@ export default function PortalPage() {
                   {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
               </div>
-              {showBranchFilter && (
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-slate-500">Branche</label>
-                  <select
-                    value={branchFilter}
-                    onChange={(e) => { setBranchFilter(e.target.value); setPage(1); }}
-                    className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-700 outline-none focus:border-brand-purple/50"
-                  >
-                    <option value="all">Alle branches</option>
-                    {customer.branches.map(b => (
-                      <option key={b} value={b}>{getBranch(b).name}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
               <div>
                 <label className="mb-1 block text-xs font-medium text-slate-500">Datum vanaf</label>
                 <input
