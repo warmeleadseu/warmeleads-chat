@@ -1697,6 +1697,10 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
     leads_per_week: batch.leads_per_week ? String(batch.leads_per_week) : '',
     notes: batch.notes || '',
     lead_filters: batch.lead_filters || [],
+    lookback_days:
+      batch.lookback_days !== null && batch.lookback_days !== undefined
+        ? String(batch.lookback_days)
+        : '',
   });
   const [saving, setSaving] = useState(false);
   const [branchFields, setBranchFields] = useState<BranchField[]>([]);
@@ -1799,6 +1803,17 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
         trigger_backfill: batchSizeGrew,
         starts_at: startsAtISO,
       };
+      // Lookback is alleen aanpasbaar zolang de batch nog niet betaald is
+      // én het een pijplijn-batch is (bulk/appointments/research kennen geen lookback).
+      if (
+        batch.is_paid !== true &&
+        isPipelineBatchKind(batch.batch_kind) &&
+        !isNicheResearch
+      ) {
+        const parsed = parseInt(form.lookback_days, 10);
+        const clamped = Number.isFinite(parsed) ? Math.max(0, Math.min(30, parsed)) : 0;
+        payload.lookback_days = clamped;
+      }
       if (supportsBatchMetaCampaigns(batch.batch_kind)) {
         Object.assign(payload, metaFieldsFromPicks(metaCampaignPicks));
         payload.meta_campaign_sync_enabled = metaSyncEnabled;
@@ -2126,21 +2141,72 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
             </>
           )}
 
-          {/* Lookback info (read-only) */}
+          {/* Lookback — aanpasbaar zolang batch niet betaald is (alleen pijplijn-batches). */}
           {batch.lookback_days !== null && batch.lookback_days !== undefined && (
-            <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 p-3">
-              <div>
-                <p className="text-sm font-medium text-slate-700">Lookback bij aanmaak</p>
-                <p className="text-[11px] text-slate-400">
-                  {batch.lookback_days === 0
-                    ? 'Geen backfill, alleen nieuwe leads'
-                    : `Bestaande leads van ${batch.lookback_days} dag(en) toegewezen`}
-                </p>
-              </div>
-              <span className="rounded-full bg-slate-200 px-2.5 py-0.5 text-xs font-semibold text-slate-600">
-                {batch.lookback_days}d
-              </span>
-            </div>
+            (() => {
+              const lookbackEditable =
+                batch.is_paid !== true &&
+                isPipelineBatchKind(batch.batch_kind) &&
+                !isNicheResearch;
+              if (!lookbackEditable) {
+                return (
+                  <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 p-3">
+                    <div>
+                      <p className="text-sm font-medium text-slate-700">Lookback bij aanmaak</p>
+                      <p className="text-[11px] text-slate-400">
+                        {batch.lookback_days === 0
+                          ? 'Geen backfill, alleen nieuwe leads'
+                          : `Bestaande leads van ${batch.lookback_days} dag(en) toegewezen`}
+                      </p>
+                    </div>
+                    <span className="rounded-full bg-slate-200 px-2.5 py-0.5 text-xs font-semibold text-slate-600">
+                      {batch.lookback_days}d
+                    </span>
+                  </div>
+                );
+              }
+              return (
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-slate-700">Lookback dagen</p>
+                      <p className="text-[11px] text-slate-400">
+                        {form.lookback_days === '0' || form.lookback_days === ''
+                          ? 'Geen backfill, alleen nieuwe leads bij betaling'
+                          : `Bij betaling: bestaande leads van de afgelopen ${form.lookback_days} dag(en) toewijzen`}
+                      </p>
+                    </div>
+                    <input
+                      type="number"
+                      value={form.lookback_days}
+                      onChange={e => setForm(f => ({ ...f, lookback_days: e.target.value }))}
+                      min={0}
+                      max={30}
+                      className="w-16 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-center text-sm font-semibold text-slate-900 outline-none focus:border-brand-purple/50"
+                    />
+                  </div>
+                  <div className="flex gap-1">
+                    {[0, 1, 3, 7, 14].map(d => (
+                      <button
+                        key={d}
+                        type="button"
+                        onClick={() => setForm(f => ({ ...f, lookback_days: String(d) }))}
+                        className={`rounded-md px-2 py-1 text-[11px] font-medium transition ${
+                          form.lookback_days === String(d)
+                            ? 'bg-brand-purple text-white'
+                            : 'bg-white text-slate-500 hover:bg-slate-100'
+                        }`}
+                      >
+                        {d === 0 ? 'Geen' : `${d}d`}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-[11px] text-slate-400">
+                    Alleen aanpasbaar zolang de batch nog niet betaald is. Backfill draait automatisch zodra de batch betaald wordt.
+                  </p>
+                </div>
+              );
+            })()
           )}
 
           {/* Startdatum */}
