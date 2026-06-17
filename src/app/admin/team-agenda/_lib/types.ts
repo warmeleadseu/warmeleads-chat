@@ -93,6 +93,8 @@ export interface CalendarEvent {
   participants: Participant[];
   meeting_url: string | null;
   meeting_invite_sent_at: string | null;
+  /** Tijdstip waarop de afspraakbevestiging naar de klant/prospect is verstuurd. */
+  confirmation_sent_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -111,6 +113,8 @@ export interface EventInput {
   participant_ids: string[];
   meeting_url: string | null;
   send_invite: boolean;
+  /** Opt-in: stuur na opslaan een bevestigingsmail naar de gekoppelde klant/prospect (met preview-akkoord). */
+  send_confirmation: boolean;
 }
 
 export type CalendarView = 'month' | 'week' | 'list';

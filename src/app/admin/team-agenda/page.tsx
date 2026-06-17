@@ -24,6 +24,7 @@ import { CalendarWeekView } from './_components/CalendarWeekView';
 import { CalendarListView } from './_components/CalendarListView';
 import { EventDrawer } from './_components/EventDrawer';
 import { AdminAvatar } from './_components/AdminAvatar';
+import { EmailPreviewModal } from '../_components/EmailPreviewModal';
 import {
   EVENT_TYPES,
   TYPE_META,
@@ -122,6 +123,10 @@ function TeamAgendaInner() {
   const [drawerMode, setDrawerMode] = useState<'create' | 'edit'>('create');
   const [drawerInitial, setDrawerInitial] = useState<Partial<EventInput> | null>(null);
   const [activeEvent, setActiveEvent] = useState<CalendarEvent | null>(null);
+
+  // Event-id waarvoor de afspraakbevestiging-preview open staat + succesmelding.
+  const [confirmEventId, setConfirmEventId] = useState<string | null>(null);
+  const [confirmToast, setConfirmToast] = useState<string | null>(null);
 
   const range = useMemo(() => rangeForView(view, anchor), [view, anchor]);
 
@@ -562,7 +567,33 @@ function TeamAgendaInner() {
         onClose={() => setDrawerOpen(false)}
         onSaved={handleSaved}
         onDeleted={handleDeleted}
+        onConfirmationRequested={id => setConfirmEventId(id)}
       />
+
+      {confirmEventId && (
+        <EmailPreviewModal
+          open={!!confirmEventId}
+          onClose={() => setConfirmEventId(null)}
+          title="Stuur afspraakbevestiging"
+          previewUrl={`/api/admin/team-calendar/${confirmEventId}/appointment-confirmation/preview`}
+          sendUrl={`/api/admin/team-calendar/${confirmEventId}/appointment-confirmation/send`}
+          confirmLabel="Verstuur bevestiging"
+          variant="reminder"
+          successMessage="Bevestigingsmail verstuurd naar de klant/prospect."
+          onSent={msg => {
+            setConfirmToast(msg);
+            void fetchEvents();
+            window.setTimeout(() => setConfirmToast(null), 5000);
+          }}
+        />
+      )}
+
+      {confirmToast && (
+        <div className="fixed bottom-5 right-5 z-[60] flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 shadow-lg">
+          <CheckCircleIcon className="h-5 w-5 shrink-0 text-emerald-600" />
+          {confirmToast}
+        </div>
+      )}
     </div>
   );
 }

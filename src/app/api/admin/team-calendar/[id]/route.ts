@@ -76,6 +76,7 @@ interface EventRow {
   updated_at: string;
   meeting_url: string | null;
   meeting_invite_sent_at: string | null;
+  confirmation_sent_at: string | null;
   customer: { id: string; name: string; email: string | null } | null;
   prospect: { id: string; company_name: string; email: string | null; contact_person: string | null } | null;
   creator: { id: string; name: string; avatar_url: string | null } | null;
@@ -94,6 +95,7 @@ function shapeEvent(row: EventRow) {
     location: row.location,
     meeting_url: row.meeting_url,
     meeting_invite_sent_at: row.meeting_invite_sent_at,
+    confirmation_sent_at: row.confirmation_sent_at,
     customer: row.customer_id
       ? {
           id: row.customer_id,

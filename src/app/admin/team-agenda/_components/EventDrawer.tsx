@@ -16,6 +16,7 @@ import {
   PaperAirplaneIcon,
   CheckCircleIcon,
   ExclamationTriangleIcon,
+  EnvelopeIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
 import {
@@ -44,6 +45,11 @@ interface Props {
   onClose: () => void;
   onSaved: (event: CalendarEvent) => void;
   onDeleted: (id: string) => void;
+  /**
+   * Wordt aangeroepen ná het opslaan wanneer de AM een bevestigingsmail wil
+   * sturen. De parent opent dan de preview-modal voor dit event-id.
+   */
+  onConfirmationRequested?: (eventId: string) => void;
 }
 
 const DEFAULT_VALUES: EventInput = {
@@ -59,6 +65,7 @@ const DEFAULT_VALUES: EventInput = {
   participant_ids: [],
   meeting_url: null,
   send_invite: false,
+  send_confirmation: false,
 };
 
 /**
@@ -117,6 +124,7 @@ export function EventDrawer({
   onClose,
   onSaved,
   onDeleted,
+  onConfirmationRequested,
 }: Props) {
   const [form, setForm] = useState<EventInput>(DEFAULT_VALUES);
   const [customer, setCustomer] = useState<EntityValue | null>(null);
@@ -163,6 +171,7 @@ export function EventDrawer({
         participant_ids: existingEvent.participants.map(p => p.id),
         meeting_url: existingEvent.meeting_url,
         send_invite: false,
+        send_confirmation: false,
       });
       setCustomer(
         existingEvent.customer
@@ -198,6 +207,14 @@ export function EventDrawer({
   function patch(p: Partial<EventInput>) {
     setForm(prev => ({ ...prev, ...p }));
   }
+
+  /**
+   * Een "afspraak met een klant/prospect" waarvoor een bevestigingsmail
+   * relevant is. Videocalls hebben hun eigen uitnodigingsflow, dus die
+   * vallen hier bewust buiten.
+   */
+  const isVisitType =
+    form.event_type === 'customer_visit' || form.event_type === 'prospect_visit';
 
   /**
    * Voor nieuwe videocall-events met een gekoppelde klant of prospect
@@ -335,7 +352,20 @@ export function EventDrawer({
       }
       const { invite: _invite, ...event } = data as CalendarEvent & { invite?: unknown };
       void _invite;
-      onSaved(event as CalendarEvent);
+      const savedEvent = event as CalendarEvent;
+      // Opt-in bevestigingsmail: het event is nu opgeslagen; de parent opent de
+      // preview-modal zodat de AM de mail kan controleren en akkorderen vóór
+      // verzenden. We versturen dus bewust niet automatisch bij opslaan.
+      const wantsConfirmation =
+        isVisitType &&
+        form.send_confirmation &&
+        !!(customer || prospect) &&
+        !!savedEvent.id &&
+        !!onConfirmationRequested;
+      onSaved(savedEvent);
+      if (wantsConfirmation) {
+        onConfirmationRequested!(savedEvent.id);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Onbekende fout');
     } finally {
@@ -659,6 +689,80 @@ export function EventDrawer({
                   />
                 </div>
               </div>
+
+              {/* Bevestigingsmail naar klant/prospect (klant- of prospect-bezoek) */}
+              {isVisitType && canMutate && (customer || prospect) && (
+                <div className="rounded-xl border border-violet-200 bg-violet-50/60 p-4">
+                  <div className="mb-3 flex items-center gap-2">
+                    <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand-purple text-white">
+                      <EnvelopeIcon className="h-4 w-4" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-bold text-violet-900">Bevestigingsmail</div>
+                      <p className="text-[11px] text-violet-700">
+                        Stuur de {customer ? 'klant' : 'prospect'} een bevestiging van deze afspraak.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3 rounded-lg border border-violet-200 bg-white px-3 py-2.5">
+                    <button
+                      type="button"
+                      onClick={() => patch({ send_confirmation: !form.send_confirmation })}
+                      className={`mt-0.5 relative h-5 w-9 shrink-0 rounded-full transition-colors ${
+                        form.send_confirmation ? 'bg-brand-purple' : 'bg-slate-300'
+                      }`}
+                      aria-pressed={form.send_confirmation}
+                    >
+                      <span
+                        className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${
+                          form.send_confirmation ? 'left-4' : 'left-0.5'
+                        }`}
+                      />
+                    </button>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[13px] font-semibold text-slate-800">
+                        Stuur bevestigingsmail naar de {customer ? 'klant' : 'prospect'}
+                      </div>
+                      <p className="text-[11px] text-slate-500">
+                        Na het opslaan zie je eerst een <strong>preview</strong> van de mail en kun je
+                        deze akkorderen voordat hij verstuurd wordt.
+                        {linkedRecipientEmail && (
+                          <> Naar: <span className="font-medium text-slate-700">{linkedRecipientEmail}</span></>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Status: bevestiging eerder verstuurd + opnieuw versturen */}
+                  {mode === 'edit' && existingEvent?.confirmation_sent_at && (
+                    <div className="mt-3 flex items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
+                      <div className="flex items-center gap-2 text-[12px] text-emerald-800">
+                        <CheckCircleIcon className="h-4 w-4 shrink-0" />
+                        <span>
+                          Bevestiging verstuurd op{' '}
+                          {new Date(existingEvent.confirmation_sent_at).toLocaleString('nl-NL', {
+                            day: 'numeric',
+                            month: 'short',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </span>
+                      </div>
+                      {form.id && onConfirmationRequested && (
+                        <button
+                          type="button"
+                          onClick={() => onConfirmationRequested(form.id!)}
+                          className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-1 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-200 hover:bg-emerald-100"
+                        >
+                          <PaperAirplaneIcon className="h-3 w-3" />
+                          Opnieuw versturen
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Videocall sectie */}
               {form.event_type === 'videocall' && (() => {
