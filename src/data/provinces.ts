@@ -73,3 +73,28 @@ function provinceOption(name: string, land: ProvinceLand): ProvinceOption {
 
 export const PROVINCE_OPTIONS_NL = PROVINCES_NL.map(p => provinceOption(p, 'NL'));
 export const PROVINCE_OPTIONS_BE = PROVINCES_BE.map(p => provinceOption(p, 'BE'));
+
+/**
+ * Provincie-waarde zoals opgeslagen in `leads.provincie`. De leads-tabel (en
+ * daarmee de CRM-filters/facets) onderscheidt NL- en BE-Limburg via twee
+ * aparte strings: "Limburg" (NL) en "Limburg (BE)" (BE). Alle overige
+ * provincies worden onder hun gewone naam opgeslagen. Gebruik deze helper voor
+ * filter-/facet-waarden zodat beide Limburgen los te selecteren en te tellen
+ * zijn (anders sturen beide opties `provincie=Limburg` en tonen ze hetzelfde
+ * aantal).
+ */
+export function leadProvinceValue(name: string, land: ProvinceLand): string {
+  if (name === 'Limburg' && land === 'BE') return 'Limburg (BE)';
+  return name;
+}
+
+/** UI-label dat NL- en BE-Limburg van elkaar onderscheidt. */
+export function leadProvinceLabel(name: string, land: ProvinceLand): string {
+  return name === 'Limburg' ? `Limburg (${land})` : name;
+}
+
+/** Filter-/facet-opties voor de Leads CRM, gekoppeld aan `leads.provincie`. */
+export const LEAD_PROVINCE_OPTIONS_NL: { value: string; label: string }[] =
+  PROVINCES_NL.map(p => ({ value: leadProvinceValue(p, 'NL'), label: leadProvinceLabel(p, 'NL') }));
+export const LEAD_PROVINCE_OPTIONS_BE: { value: string; label: string }[] =
+  PROVINCES_BE.map(p => ({ value: leadProvinceValue(p, 'BE'), label: leadProvinceLabel(p, 'BE') }));

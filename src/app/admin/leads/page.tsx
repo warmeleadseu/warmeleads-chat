@@ -20,7 +20,11 @@ import {
   UserPlusIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
-import { PROVINCES_ALL, PROVINCES_BE, PROVINCES_NL } from '@/data/provinces';
+import {
+  PROVINCES_ALL,
+  LEAD_PROVINCE_OPTIONS_NL,
+  LEAD_PROVINCE_OPTIONS_BE,
+} from '@/data/provinces';
 import SearchableSelect from '@/components/ui/SearchableSelect';
 
 /* ── Multi-select dropdown ─────────────────────────────────── */
@@ -740,8 +744,8 @@ export default function LeadsCRMPage() {
             label="provincies"
             allLabel="Alle provincies"
             groups={[
-              { label: 'Nederland', options: PROVINCES_NL.map(p => ({ value: p, label: p })) },
-              { label: 'België', options: PROVINCES_BE.map(p => ({ value: p, label: p })) },
+              { label: 'Nederland', options: LEAD_PROVINCE_OPTIONS_NL },
+              { label: 'België', options: LEAD_PROVINCE_OPTIONS_BE },
             ]}
             selected={selProvinces}
             onChange={setSelProvinces}
@@ -822,7 +826,7 @@ export default function LeadsCRMPage() {
           <FacetBreakdown
             title="Verdeling per provincie"
             counts={facets.province || {}}
-            options={[...PROVINCES_NL, ...PROVINCES_BE].map(p => ({ value: p, label: p }))}
+            options={[...LEAD_PROVINCE_OPTIONS_NL, ...LEAD_PROVINCE_OPTIONS_BE]}
             selected={selProvinces}
           />
           <FacetBreakdown
@@ -1504,8 +1508,8 @@ function ExportModal({
                       label="provincies"
                       allLabel="Alle provincies"
                       groups={[
-                        { label: 'Nederland', options: PROVINCES_NL.map(p => ({ value: p, label: p })) },
-                        { label: 'België', options: PROVINCES_BE.map(p => ({ value: p, label: p })) },
+                        { label: 'Nederland', options: LEAD_PROVINCE_OPTIONS_NL },
+                        { label: 'België', options: LEAD_PROVINCE_OPTIONS_BE },
                       ]}
                       selected={selFilterProvinces}
                       onChange={setSelFilterProvinces}
@@ -2179,8 +2183,8 @@ function LeadFormPanel({
                 <label className="mb-1 block text-xs font-medium text-slate-500">Provincie</label>
                 <select value={form.provincie || ''} onChange={e => set('provincie', e.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900">
                   <option value="">- Selecteer -</option>
-                  <optgroup label="Nederland">{PROVINCES_NL.map(p => <option key={p} value={p}>{p}</option>)}</optgroup>
-                  <optgroup label="België">{PROVINCES_BE.map(p => <option key={p} value={p}>{p}</option>)}</optgroup>
+                  <optgroup label="Nederland">{LEAD_PROVINCE_OPTIONS_NL.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</optgroup>
+                  <optgroup label="België">{LEAD_PROVINCE_OPTIONS_BE.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</optgroup>
                 </select>
               </div>
             </div>
