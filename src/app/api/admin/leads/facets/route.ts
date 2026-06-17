@@ -18,6 +18,9 @@ export async function GET(request: NextRequest) {
   const bulkStatus = url.get('bulk_status');
   const dateFrom = url.get('date_from');
   const dateTo = url.get('date_to');
+  // Spiegelt de list/count/export-semantiek: bij een datum-range tellen leads
+  // met onbekende wervingsdatum standaard mee, tenzij expliciet uitgezet.
+  const includeUnknownDate = url.get('include_unknown_date') !== 'false';
   const search = url.get('search');
 
   const supabase = createServerClient();
@@ -35,6 +38,7 @@ export async function GET(request: NextRequest) {
     p_assignment: assignment === 'assigned' || assignment === 'unassigned' ? assignment : null,
     p_exclude_customers: excludeCustomerId ? excludeCustomerId.split(',').filter(Boolean) : null,
     p_bulk_status: bulkStatus === 'never' || bulkStatus === 'once' || bulkStatus === 'multiple' ? bulkStatus : null,
+    p_include_unknown_date: includeUnknownDate,
   });
 
   if (error) {
