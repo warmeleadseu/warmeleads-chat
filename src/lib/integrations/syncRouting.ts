@@ -8,6 +8,8 @@ import { hasSavedSheetMappings } from '@/lib/googleSheets/fieldMappingLogic';
 import { GOOGLE_SHEETS_PROVIDER } from '@/lib/googleSheets/types';
 import { getTeamleaderIntegration } from '@/lib/teamleader/integrationRepo';
 import { TEAMLEADER_PROVIDER } from '@/lib/teamleader/types';
+import { isOutboundWebhookReadyForCustomer } from '@/lib/integrations/outboundWebhook/integrationRepo';
+import { OUTBOUND_WEBHOOK_PROVIDER } from '@/lib/integrations/outboundWebhook/types';
 
 export type IntegrationSyncTargets = {
   teamleader: boolean;
@@ -96,6 +98,9 @@ export async function shouldRetryIntegrationSync(
   provider: string,
   customerBranches: string[] = [],
 ): Promise<boolean> {
+  if (provider === OUTBOUND_WEBHOOK_PROVIDER) {
+    return isOutboundWebhookReadyForCustomer(supabase, customerId);
+  }
   const targets = await resolveIntegrationSyncTargets(supabase, customerId, customerBranches);
   if (provider === TEAMLEADER_PROVIDER) return targets.teamleader;
   if (provider === GOOGLE_SHEETS_PROVIDER) return targets.google_sheets;

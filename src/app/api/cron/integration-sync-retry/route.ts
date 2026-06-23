@@ -9,6 +9,16 @@ import { GOOGLE_SHEETS_PROVIDER } from '@/lib/googleSheets/types';
 import { syncAssignmentToTeamleader } from '@/lib/teamleader/syncAssignment';
 import { TEAMLEADER_PROVIDER } from '@/lib/teamleader/types';
 import { getTeamleaderConnectionState } from '@/lib/teamleader/integrationRepo';
+import { syncAssignmentToOutboundWebhook } from '@/lib/integrations/outboundWebhook/syncAssignment';
+import {
+  OUTBOUND_WEBHOOK_PROVIDER,
+  type OutboundWebhookSettings,
+} from '@/lib/integrations/outboundWebhook/types';
+import {
+  getOutboundWebhookConfig,
+  isBranchAllowed,
+  isOutboundWebhookSyncReady,
+} from '@/lib/integrations/outboundWebhook/integrationRepo';
 
 const MAX_ATTEMPTS = 8;
 const MISSING_LOOKBACK_HOURS = 72;
@@ -69,6 +79,12 @@ async function runSyncJob(
       leadId: row.lead_id,
       assignmentId: row.assignment_id,
     });
+  } else if (row.provider === OUTBOUND_WEBHOOK_PROVIDER) {
+    await syncAssignmentToOutboundWebhook({
+      customerId: row.customer_id,
+      leadId: row.lead_id,
+      assignmentId: row.assignment_id,
+    });
   } else {
     return false;
   }
@@ -88,7 +104,7 @@ export async function GET(request: NextRequest) {
   const { data: failed } = await supabase
     .from('integration_sync_log')
     .select('customer_id, lead_id, assignment_id, attempts, created_at, provider')
-    .in('provider', [TEAMLEADER_PROVIDER, GOOGLE_SHEETS_PROVIDER])
+    .in('provider', [TEAMLEADER_PROVIDER, GOOGLE_SHEETS_PROVIDER, OUTBOUND_WEBHOOK_PROVIDER])
     .eq('status', 'failed')
     .lt('attempts', MAX_ATTEMPTS)
     .order('created_at', { ascending: true })
@@ -104,7 +120,7 @@ export async function GET(request: NextRequest) {
   const cutoff = new Date(Date.now() - MISSING_LOOKBACK_HOURS * 3_600_000).toISOString();
   const { data: recentAssignments } = await supabase
     .from('lead_assignments')
-    .select('id, lead_id, customer_id, assigned_at, customers(branches)')
+    .select('id, lead_id, customer_id, assigned_at, customers(branches), leads(branch, bron)')
     .gte('assigned_at', cutoff)
     .neq('source', 'demo')
     .order('assigned_at', { ascending: true })
@@ -114,10 +130,20 @@ export async function GET(request: NextRequest) {
     if (jobs.length >= 60 + MISSING_BATCH_LIMIT) break;
     const branches = ((a as { customers?: { branches?: string[] } }).customers?.branches ??
       []) as string[];
+    const lead = (a as { leads?: { branch?: string | null; bron?: string | null } }).leads;
     const targets = await resolveIntegrationSyncTargets(supabase, a.customer_id, branches);
     const providers: string[] = [];
     if (targets.google_sheets) providers.push(GOOGLE_SHEETS_PROVIDER);
     if (targets.teamleader) providers.push(TEAMLEADER_PROVIDER);
+
+    const webhookConfig = await getOutboundWebhookConfig(supabase, a.customer_id);
+    if (
+      isOutboundWebhookSyncReady(webhookConfig) &&
+      lead?.bron !== 'demo' &&
+      isBranchAllowed(webhookConfig.settings as OutboundWebhookSettings, lead?.branch ?? null)
+    ) {
+      providers.push(OUTBOUND_WEBHOOK_PROVIDER);
+    }
 
     for (const provider of providers) {
       const key = `${a.id}:${provider}`;

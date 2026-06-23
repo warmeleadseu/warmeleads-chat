@@ -2,6 +2,8 @@ import { createServerClient } from '@/lib/supabase';
 import { resolveIntegrationSyncTargets } from '@/lib/integrations/syncRouting';
 import { syncAssignmentToGoogleSheets } from '@/lib/googleSheets/syncAssignment';
 import { syncAssignmentToTeamleader } from '@/lib/teamleader/syncAssignment';
+import { isOutboundWebhookReadyForCustomer } from '@/lib/integrations/outboundWebhook/integrationRepo';
+import { syncAssignmentToOutboundWebhook } from '@/lib/integrations/outboundWebhook/syncAssignment';
 
 export function onLeadAssignedToCustomer(args: {
   customerId: string;
@@ -45,6 +47,17 @@ async function runIntegrationSyncs(args: {
   if (targets.google_sheets) {
     await syncAssignmentToGoogleSheets(args).catch((err) => {
       console.error('[google_sheets] sync failed', {
+        customerId: args.customerId,
+        assignmentId: args.assignmentId,
+        message: err instanceof Error ? err.message : String(err),
+      });
+    });
+  }
+
+  // Uitgaande webhook staat los van de CRM-keuze: vuurt altijd als ingesteld.
+  if (await isOutboundWebhookReadyForCustomer(supabase, args.customerId)) {
+    await syncAssignmentToOutboundWebhook(args).catch((err) => {
+      console.error('[outbound_webhook] sync failed', {
         customerId: args.customerId,
         assignmentId: args.assignmentId,
         message: err instanceof Error ? err.message : String(err),

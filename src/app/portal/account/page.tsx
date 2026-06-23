@@ -32,10 +32,12 @@ import {
   ArrowDownTrayIcon,
   CreditCardIcon,
   PuzzlePieceIcon,
+  BoltIcon,
 } from '@heroicons/react/24/outline';
 import { usePushNotifications } from '../usePushNotifications';
 import { PageHeader } from '../_ui';
 import { IntegrationsTab } from './IntegrationsTab';
+import { WebhookIntegration } from './WebhookIntegration';
 
 /* ─── Types ────────────────────────────────────────────────── */
 
@@ -95,6 +97,7 @@ interface OrderData {
 const TABS = [
   { key: 'account', label: 'Mijn Account', icon: UserCircleIcon },
   { key: 'integraties', label: 'Integraties', icon: PuzzlePieceIcon },
+  { key: 'webhook', label: 'Webhook', icon: BoltIcon },
   { key: 'insights', label: 'Prestaties', icon: ChartBarIcon },
   { key: 'areas', label: 'Gebieden', icon: GlobeAltIcon },
   { key: 'orders', label: 'Bestellingen', icon: ShoppingCartIcon },
@@ -1409,6 +1412,9 @@ export default function AccountPage() {
               sheetsOauthHint={sheetsOauthHint}
               sheetsOauthReason={sheetsOauthHint ? sheetsOauthReason : null}
             />
+          )}
+          {activeTab === 'webhook' && (
+            <WebhookIntegration isOwner={isOwner} showToast={showToast} />
           )}
           {activeTab === 'insights' && (
             <InsightsTab data={insightsData} loading={insightsLoading} />
