@@ -5,6 +5,9 @@ import { LockClosedIcon, BoltIcon, CheckCircleIcon } from '@heroicons/react/24/o
 import { portalFetch } from '@/lib/portalAuth';
 import { PortalSection, T } from '../_ui';
 
+type SourceField = { key: string; defaultTarget: string; label: string };
+type FieldMapping = { source: string; target: string; enabled: boolean };
+
 type WebhookConfig = {
   enabled: boolean;
   url: string;
@@ -13,6 +16,8 @@ type WebhookConfig = {
   token_hint: string | null;
   sync_ready: boolean;
   available_branches: string[];
+  available_fields: SourceField[];
+  field_mappings: FieldMapping[];
   last_delivery: { status: string; at: string; error: string | null } | null;
 };
 
@@ -57,11 +62,19 @@ export function WebhookIntegration({
   const [url, setUrl] = useState('');
   const [token, setToken] = useState('');
   const [branches, setBranches] = useState<string[]>([]);
+  const [fields, setFields] = useState<SourceField[]>([]);
+  const [mappings, setMappings] = useState<Record<string, { target: string; enabled: boolean }>>(
+    {},
+  );
 
   const applyConfig = useCallback((c: WebhookConfig) => {
     setConfig(c);
     setUrl(c.url);
     setBranches(c.branches);
+    setFields(c.available_fields ?? []);
+    const map: Record<string, { target: string; enabled: boolean }> = {};
+    for (const m of c.field_mappings ?? []) map[m.source] = { target: m.target, enabled: m.enabled };
+    setMappings(map);
     setToken('');
   }, []);
 
@@ -93,12 +106,34 @@ export function WebhookIntegration({
     );
   };
 
+  const toggleField = (key: string, defaultTarget: string) => {
+    setMappings((prev) => {
+      const cur = prev[key] ?? { target: defaultTarget, enabled: false };
+      return { ...prev, [key]: { ...cur, enabled: !cur.enabled } };
+    });
+  };
+
+  const setFieldTarget = (key: string, target: string) => {
+    setMappings((prev) => {
+      const cur = prev[key] ?? { target: '', enabled: true };
+      return { ...prev, [key]: { ...cur, target } };
+    });
+  };
+
   const save = async (nextEnabled?: boolean) => {
     setSaving(true);
     try {
       const body: Record<string, unknown> = {
         url,
         branches,
+        field_mappings: fields.map((f) => {
+          const m = mappings[f.key] ?? { target: f.defaultTarget, enabled: false };
+          return {
+            source: f.key,
+            target: m.target.trim() || f.defaultTarget,
+            enabled: m.enabled,
+          };
+        }),
       };
       if (token.trim().length > 0) body.token = token.trim();
       if (typeof nextEnabled === 'boolean') body.enabled = nextEnabled;
@@ -266,6 +301,42 @@ export function WebhookIntegration({
                     {active && <CheckCircleIcon className="h-4 w-4" />}
                     {branchLabel(slug)}
                   </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {fields.length > 0 && (
+          <div>
+            <p className="mb-1.5 block text-xs font-medium text-slate-700">Velden &amp; JSON-keys</p>
+            <p className="mb-2 text-[11px] text-slate-400">
+              Vink aan welke gegevens we sturen en bepaal de veldnaam (JSON-key) die jouw systeem
+              verwacht.
+            </p>
+            <div className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200">
+              {fields.map((f) => {
+                const m = mappings[f.key] ?? { target: f.defaultTarget, enabled: false };
+                return (
+                  <div key={f.key} className="flex items-center gap-3 px-3 py-2">
+                    <input
+                      type="checkbox"
+                      checked={m.enabled}
+                      onChange={() => toggleField(f.key, f.defaultTarget)}
+                      className="h-4 w-4 shrink-0 rounded border-slate-300 text-brand-purple focus:ring-brand-purple"
+                    />
+                    <span className="w-36 shrink-0 truncate text-sm text-slate-700 sm:w-44">
+                      {f.label}
+                    </span>
+                    <input
+                      type="text"
+                      value={m.target}
+                      onChange={(e) => setFieldTarget(f.key, e.target.value)}
+                      disabled={!m.enabled}
+                      placeholder={f.defaultTarget}
+                      className="min-w-0 flex-1 rounded-lg border border-slate-200 px-2.5 py-1.5 font-mono text-sm text-slate-900 outline-none transition focus:border-brand-purple focus:ring-1 focus:ring-brand-purple/20 disabled:bg-slate-50 disabled:text-slate-400"
+                    />
+                  </div>
                 );
               })}
             </div>

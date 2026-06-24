@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { decryptSecret, encryptSecret } from '@/lib/integrations/tokenEncrypt';
 import {
   OUTBOUND_WEBHOOK_PROVIDER,
+  type OutboundWebhookFieldMapping,
   type OutboundWebhookSettings,
   type StoredOutboundWebhook,
 } from './types';
@@ -89,6 +90,7 @@ export type SaveOutboundWebhookInput = {
   token?: string | null;
   enabled?: boolean;
   branches?: string[];
+  field_mappings?: OutboundWebhookFieldMapping[];
 };
 
 export async function saveOutboundWebhookConfig(
@@ -103,6 +105,7 @@ export async function saveOutboundWebhookConfig(
   if (input.url !== undefined) settings.url = input.url?.trim() || null;
   if (input.enabled !== undefined) settings.enabled = input.enabled;
   if (input.branches !== undefined) settings.branches = input.branches;
+  if (input.field_mappings !== undefined) settings.field_mappings = input.field_mappings;
 
   const payload: Record<string, unknown> = {
     customer_id: customerId,

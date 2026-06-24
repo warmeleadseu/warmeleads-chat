@@ -1,5 +1,6 @@
 import { resolveCategorieen } from './categoryMap';
-import type { LeadForWebhook, OutboundWebhookPayload } from './types';
+import { resolveFieldMappings } from './fields';
+import type { LeadForWebhook, OutboundWebhookFieldMapping } from './types';
 
 function nullable(value: unknown): string | null {
   if (value === null || value === undefined) return null;
@@ -8,16 +9,17 @@ function nullable(value: unknown): string | null {
 }
 
 /**
- * Bouwt de JSON-payload voor de klant-webhook. Nederlandse keys conform de
- * door de klant aangeleverde veldenlijst. `lead_id` dient als idempotency-key.
+ * Alle beschikbare bronwaarden voor een lead, gekeyd op de interne veldsleutel
+ * (zie fields.ts). De mapping bepaalt vervolgens welke hiervan, onder welke
+ * JSON-key, daadwerkelijk verstuurd worden.
  *
  * Let op: wij slaan geen losse straatnaam op (alleen postcode + huisnummer);
  * `adres` is daarom de combinatie postcode + huisnummer.
  */
-export function buildWebhookPayload(
+export function buildLeadSourceValues(
   lead: LeadForWebhook,
   assignmentId: string,
-): OutboundWebhookPayload {
+): Record<string, unknown> {
   const categorieen = resolveCategorieen(lead.branch, lead.custom_fields ?? null);
   const adres = [nullable(lead.postcode), nullable(lead.huisnummer)]
     .filter(Boolean)
@@ -25,10 +27,6 @@ export function buildWebhookPayload(
     .trim();
 
   return {
-    id: lead.id,
-    lead_id: lead.id,
-    assignment_id: assignmentId,
-    branch: nullable(lead.branch),
     categorie: categorieen[0] ?? null,
     categorieen,
     aanhef: null,
@@ -41,17 +39,40 @@ export function buildWebhookPayload(
     plaats: nullable(lead.plaatsnaam),
     provincie: nullable(lead.provincie),
     land: nullable(lead.land) ?? 'NL',
+    branch: nullable(lead.branch),
+    lead_id: lead.id,
+    assignment_id: assignmentId,
     aangemaakt_op: nullable(lead.created_at),
   };
 }
 
-/** Voorbeeld-payload voor de "test"-knop in het portaal. */
-export function buildSampleWebhookPayload(): OutboundWebhookPayload {
+/** Past de veld-mapping toe op een set bronwaarden. */
+export function applyFieldMappings(
+  values: Record<string, unknown>,
+  mappings: OutboundWebhookFieldMapping[],
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const m of mappings) {
+    if (m.enabled === false) continue;
+    const target = m.target?.trim();
+    if (!target) continue;
+    out[target] = values[m.source] ?? null;
+  }
+  return out;
+}
+
+/** Bouwt de uiteindelijke payload voor een lead volgens de (opgeslagen) mapping. */
+export function buildWebhookPayload(
+  lead: LeadForWebhook,
+  assignmentId: string,
+  mappings?: OutboundWebhookFieldMapping[] | null,
+): Record<string, unknown> {
+  const values = buildLeadSourceValues(lead, assignmentId);
+  return applyFieldMappings(values, resolveFieldMappings(mappings));
+}
+
+function sampleSourceValues(): Record<string, unknown> {
   return {
-    id: '00000000-0000-0000-0000-000000000000',
-    lead_id: '00000000-0000-0000-0000-000000000000',
-    assignment_id: '00000000-0000-0000-0000-000000000000',
-    branch: 'isolatie',
     categorie: 'Spouwmuurisolatie',
     categorieen: ['Spouwmuurisolatie'],
     aanhef: null,
@@ -64,6 +85,16 @@ export function buildSampleWebhookPayload(): OutboundWebhookPayload {
     plaats: 'Amsterdam',
     provincie: 'Noord-Holland',
     land: 'NL',
+    branch: 'isolatie',
+    lead_id: '00000000-0000-0000-0000-000000000000',
+    assignment_id: '00000000-0000-0000-0000-000000000000',
     aangemaakt_op: new Date().toISOString(),
   };
+}
+
+/** Voorbeeld-payload voor de "test"-knop, volgens dezelfde mapping. */
+export function buildSampleWebhookPayload(
+  mappings?: OutboundWebhookFieldMapping[] | null,
+): Record<string, unknown> {
+  return applyFieldMappings(sampleSourceValues(), resolveFieldMappings(mappings));
 }

@@ -72,7 +72,7 @@ export async function syncAssignmentToOutboundWebhook(args: WebhookSyncArgs): Pr
   }
 
   try {
-    const payload = buildWebhookPayload(lead, assignmentId);
+    const payload = buildWebhookPayload(lead, assignmentId, config.settings.field_mappings);
     const res = await sendWebhookRequest(config.settings.url!, config.token, payload);
     if (!res.ok) {
       const detail = res.bodySnippet ? `: ${res.bodySnippet}` : '';

@@ -8,6 +8,11 @@ import {
   saveOutboundWebhookConfig,
 } from '@/lib/integrations/outboundWebhook/integrationRepo';
 import { OUTBOUND_WEBHOOK_PROVIDER } from '@/lib/integrations/outboundWebhook/types';
+import {
+  WEBHOOK_SOURCE_FIELDS,
+  resolveFieldMappings,
+  sanitizeFieldMappings,
+} from '@/lib/integrations/outboundWebhook/fields';
 
 type LastDelivery = {
   status: string;
@@ -41,15 +46,13 @@ function tokenHint(token: string | null): string | null {
   return `••••${token.slice(-4)}`;
 }
 
-export async function GET(request: NextRequest) {
-  const session = await verifyCustomer(request);
-  if (!session) return portalUnauthorized();
-  const denied = requireIntegrationOwner(session);
-  if (denied) return denied;
-
-  const supabase = createServerClient();
-  const config = await getOutboundWebhookConfig(supabase, session.customer.id);
-  const lastDelivery = await loadLastDelivery(supabase, session.customer.id);
+async function buildStateResponse(
+  supabase: ReturnType<typeof createServerClient>,
+  customerId: string,
+  availableBranches: string[],
+) {
+  const config = await getOutboundWebhookConfig(supabase, customerId);
+  const lastDelivery = await loadLastDelivery(supabase, customerId);
 
   return NextResponse.json({
     enabled: config?.settings.enabled ?? false,
@@ -58,9 +61,21 @@ export async function GET(request: NextRequest) {
     has_token: Boolean(config?.token),
     token_hint: tokenHint(config?.token ?? null),
     sync_ready: isOutboundWebhookSyncReady(config),
-    available_branches: session.customer.branches ?? [],
+    available_branches: availableBranches,
+    available_fields: WEBHOOK_SOURCE_FIELDS,
+    field_mappings: resolveFieldMappings(config?.settings.field_mappings),
     last_delivery: lastDelivery,
   });
+}
+
+export async function GET(request: NextRequest) {
+  const session = await verifyCustomer(request);
+  if (!session) return portalUnauthorized();
+  const denied = requireIntegrationOwner(session);
+  if (denied) return denied;
+
+  const supabase = createServerClient();
+  return buildStateResponse(supabase, session.customer.id, session.customer.branches ?? []);
 }
 
 export async function PUT(request: NextRequest) {
@@ -74,6 +89,7 @@ export async function PUT(request: NextRequest) {
     url?: string | null;
     token?: string | null;
     branches?: string[];
+    field_mappings?: unknown;
   };
 
   const patch: Parameters<typeof saveOutboundWebhookConfig>[2] = {};
@@ -105,6 +121,10 @@ export async function PUT(request: NextRequest) {
     patch.branches = branches;
   }
 
+  if (body.field_mappings !== undefined) {
+    patch.field_mappings = sanitizeFieldMappings(body.field_mappings);
+  }
+
   if (typeof body.enabled === 'boolean') patch.enabled = body.enabled;
 
   const supabase = createServerClient();
@@ -129,17 +149,5 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 
-  const config = await getOutboundWebhookConfig(supabase, session.customer.id);
-  const lastDelivery = await loadLastDelivery(supabase, session.customer.id);
-
-  return NextResponse.json({
-    enabled: config?.settings.enabled ?? false,
-    url: config?.settings.url ?? '',
-    branches: config?.settings.branches ?? [],
-    has_token: Boolean(config?.token),
-    token_hint: tokenHint(config?.token ?? null),
-    sync_ready: isOutboundWebhookSyncReady(config),
-    available_branches: session.customer.branches ?? [],
-    last_delivery: lastDelivery,
-  });
+  return buildStateResponse(supabase, session.customer.id, session.customer.branches ?? []);
 }

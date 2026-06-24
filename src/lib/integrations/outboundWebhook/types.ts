@@ -1,10 +1,21 @@
 export const OUTBOUND_WEBHOOK_PROVIDER = 'outbound_webhook' as const;
 
+/** Per-veld instelling: welke bronveld onder welke JSON-key, aan/uit. */
+export type OutboundWebhookFieldMapping = {
+  /** Vaste interne bronsleutel (zie fields.ts). */
+  source: string;
+  /** JSON-key in de uitgaande payload (door de klant te bepalen). */
+  target: string;
+  enabled: boolean;
+};
+
 export type OutboundWebhookSettings = {
   enabled?: boolean;
   url?: string | null;
   /** Branche-filter. Lege lijst = alle branches van de klant. */
   branches?: string[];
+  /** Veld-mapping; leeg/undefined = standaardmapping (zie fields.ts). */
+  field_mappings?: OutboundWebhookFieldMapping[];
 };
 
 export type StoredOutboundWebhook = {
@@ -31,24 +42,4 @@ export type LeadForWebhook = {
   bron: string | null;
   created_at: string | null;
   custom_fields: Record<string, unknown> | null;
-};
-
-export type OutboundWebhookPayload = {
-  id: string;
-  lead_id: string;
-  assignment_id: string;
-  branch: string | null;
-  categorie: string | null;
-  categorieen: string[];
-  aanhef: string | null;
-  naam: string | null;
-  email: string | null;
-  telefoonnummer: string | null;
-  adres: string | null;
-  huisnummer: string | null;
-  postcode: string | null;
-  plaats: string | null;
-  provincie: string | null;
-  land: string | null;
-  aangemaakt_op: string | null;
 };
