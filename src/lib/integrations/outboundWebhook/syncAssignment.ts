@@ -6,6 +6,7 @@ import {
 } from './integrationRepo';
 import { buildWebhookPayload } from './payload';
 import { sendWebhookRequest } from './transport';
+import { resolveStreetName } from '@/lib/pdok';
 import { OUTBOUND_WEBHOOK_PROVIDER, type LeadForWebhook } from './types';
 
 export type WebhookSyncArgs = {
@@ -72,7 +73,16 @@ export async function syncAssignmentToOutboundWebhook(args: WebhookSyncArgs): Pr
   }
 
   try {
-    const payload = buildWebhookPayload(lead, assignmentId, config.settings.field_mappings);
+    // Straatnaam afleiden uit postcode + huisnummer (slaan we zelf niet op).
+    let straat: string | null = null;
+    if (lead.postcode && lead.huisnummer) {
+      straat = await resolveStreetName(lead.postcode, lead.huisnummer, {
+        land: (lead.land as 'NL' | 'BE' | null) ?? null,
+        telefoonnummer: lead.telefoonnummer ?? undefined,
+        email: lead.email ?? undefined,
+      });
+    }
+    const payload = buildWebhookPayload(lead, assignmentId, config.settings.field_mappings, straat);
     const res = await sendWebhookRequest(config.settings.url!, config.token, payload);
     if (!res.ok) {
       const detail = res.bodySnippet ? `: ${res.bodySnippet}` : '';

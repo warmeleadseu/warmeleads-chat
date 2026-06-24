@@ -422,6 +422,89 @@ export async function resolveAddress(
   return nlResult || beResult || null;
 }
 
+// ─── Street name lookup (postcode + huisnummer → straatnaam) ─────────────
+
+async function pdokStreet(query: string): Promise<string | null> {
+  try {
+    const q = encodeURIComponent(query.trim());
+    const res = await fetch(
+      `${PDOK_URL}?q=${q}&fq=type:adres&rows=1&fl=straatnaam`,
+      { signal: AbortSignal.timeout(4000) }
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    const doc = data?.response?.docs?.[0];
+    return (doc?.straatnaam as string | undefined) || null;
+  } catch {
+    return null;
+  }
+}
+
+async function resolveStreetNameNL(postcode: string, huisnummer: string): Promise<string | null> {
+  const hnr = extractHuisnummer(huisnummer);
+  if (!hnr) return null;
+  const clean = extractPostcodeNL(postcode);
+  if (clean) {
+    const r = await pdokStreet(`${clean} ${hnr}`);
+    if (r) return r;
+  }
+  const digits = extract4Digits(postcode);
+  if (digits) {
+    const r = await pdokStreet(`${digits} ${hnr}`);
+    if (r) return r;
+  }
+  return pdokStreet(`${postcode} ${huisnummer}`);
+}
+
+async function resolveStreetNameBE(postcode: string, huisnummer: string): Promise<string | null> {
+  const clean = extractPostcodeBE(postcode);
+  const hnr = extractHuisnummer(huisnummer);
+  if (!clean || !hnr) return null;
+  try {
+    const params = new URLSearchParams({
+      q: `${hnr} ${clean}, Belgium`,
+      format: 'json',
+      addressdetails: '1',
+      limit: '1',
+      countrycodes: 'be',
+    });
+    const res = await nominatimFetch(`${NOMINATIM_URL}?${params}`);
+    if (!res.ok) return null;
+    const ct = res.headers.get('content-type') || '';
+    if (!ct.includes('application/json')) return null;
+    const data = await res.json();
+    const addr = (data?.[0]?.address as Record<string, string> | undefined) || {};
+    return addr.road || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Leidt de straatnaam af uit postcode + huisnummer (we slaan straat zelf niet op).
+ * NL via PDOK, BE via Nominatim. Geeft null als het niet lukt.
+ */
+export async function resolveStreetName(
+  postcode: string,
+  huisnummer: string,
+  opts?: { land?: 'NL' | 'BE' | null; telefoonnummer?: string; email?: string }
+): Promise<string | null> {
+  if (!postcode?.trim() || !huisnummer?.trim()) return null;
+  const country = resolveEffectiveCountry(
+    postcode,
+    opts?.land ?? undefined,
+    opts?.telefoonnummer,
+    opts?.email
+  );
+
+  if (country === 'BE') return resolveStreetNameBE(postcode, huisnummer);
+
+  const nl = await resolveStreetNameNL(postcode, huisnummer);
+  if (nl) return nl;
+  if (country == null) return resolveStreetNameBE(postcode, huisnummer);
+  return null;
+}
+
 // ─── City lookup ─────────────────────────────────────────────────────────
 
 export async function resolveCity(

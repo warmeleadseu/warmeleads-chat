@@ -13,18 +13,22 @@ function nullable(value: unknown): string | null {
  * (zie fields.ts). De mapping bepaalt vervolgens welke hiervan, onder welke
  * JSON-key, daadwerkelijk verstuurd worden.
  *
- * Let op: wij slaan geen losse straatnaam op (alleen postcode + huisnummer);
- * `adres` is daarom de combinatie postcode + huisnummer.
+ * Straatnaam slaan we zelf niet op; die wordt bij aflevering afgeleid uit
+ * postcode + huisnummer (PDOK/Nominatim) en hier als `straat` meegegeven.
+ * `adres` = straat + huisnummer; lukt de straat-lookup niet, dan valt `adres`
+ * terug op postcode + huisnummer.
  */
 export function buildLeadSourceValues(
   lead: LeadForWebhook,
   assignmentId: string,
+  straat?: string | null,
 ): Record<string, unknown> {
   const categorieen = resolveCategorieen(lead.branch, lead.custom_fields ?? null);
-  const adres = [nullable(lead.postcode), nullable(lead.huisnummer)]
-    .filter(Boolean)
-    .join(' ')
-    .trim();
+  const straatnaam = nullable(straat);
+  const huisnummer = nullable(lead.huisnummer);
+  const adres = straatnaam
+    ? [straatnaam, huisnummer].filter(Boolean).join(' ').trim()
+    : [nullable(lead.postcode), huisnummer].filter(Boolean).join(' ').trim();
 
   return {
     categorie: categorieen[0] ?? null,
@@ -34,7 +38,8 @@ export function buildLeadSourceValues(
     email: nullable(lead.email),
     telefoonnummer: nullable(lead.telefoonnummer),
     adres: adres.length > 0 ? adres : null,
-    huisnummer: nullable(lead.huisnummer),
+    straat: straatnaam,
+    huisnummer,
     postcode: nullable(lead.postcode),
     plaats: nullable(lead.plaatsnaam),
     provincie: nullable(lead.provincie),
@@ -66,8 +71,9 @@ export function buildWebhookPayload(
   lead: LeadForWebhook,
   assignmentId: string,
   mappings?: OutboundWebhookFieldMapping[] | null,
+  straat?: string | null,
 ): Record<string, unknown> {
-  const values = buildLeadSourceValues(lead, assignmentId);
+  const values = buildLeadSourceValues(lead, assignmentId, straat);
   return applyFieldMappings(values, resolveFieldMappings(mappings));
 }
 
@@ -79,7 +85,8 @@ function sampleSourceValues(): Record<string, unknown> {
     naam: 'Test Lead',
     email: 'test@voorbeeld.nl',
     telefoonnummer: '0612345678',
-    adres: '1234 AB 10',
+    adres: 'Dorpsstraat 10',
+    straat: 'Dorpsstraat',
     huisnummer: '10',
     postcode: '1234 AB',
     plaats: 'Amsterdam',
