@@ -59,6 +59,13 @@ export function WebhookIntegration({
   const [testing, setTesting] = useState(false);
   const [config, setConfig] = useState<WebhookConfig | null>(null);
 
+  const [backfilling, setBackfilling] = useState(false);
+  const [backfillProgress, setBackfillProgress] = useState<{
+    sent: number;
+    failed: number;
+    total: number | null;
+  } | null>(null);
+
   const [url, setUrl] = useState('');
   const [token, setToken] = useState('');
   const [branches, setBranches] = useState<string[]>([]);
@@ -153,6 +160,65 @@ export function WebhookIntegration({
       showToast('Opslaan mislukt', 'error');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const runBackfill = async () => {
+    if (
+      !window.confirm(
+        'Alle eerder ingeladen leads die nog niet zijn verstuurd, worden nu alsnog naar je webhook gestuurd. Doorgaan?',
+      )
+    ) {
+      return;
+    }
+    setBackfilling(true);
+    setBackfillProgress({ sent: 0, failed: 0, total: null });
+    let cursor: string | null = null;
+    let totalSent = 0;
+    let totalFailed = 0;
+    let total: number | null = null;
+    try {
+      // Herhaaldelijk aanroepen tot de server "done" teruggeeft; elke call
+      // verstuurt een beperkt aantal leads, met live voortgang.
+      for (let guard = 0; guard < 10_000; guard += 1) {
+        const res = await portalFetch('/api/portal/integrations/webhook/backfill', {
+          method: 'POST',
+          body: JSON.stringify({ cursor }),
+        });
+        const d = (await res.json().catch(() => ({}))) as {
+          done?: boolean;
+          cursor?: string | null;
+          sent?: number;
+          failed?: number;
+          estimate_total?: number | null;
+          error?: string;
+        };
+        if (!res.ok) {
+          showToast(d.error || 'Versturen van bestaande leads mislukt', 'error');
+          break;
+        }
+        totalSent += d.sent ?? 0;
+        totalFailed += d.failed ?? 0;
+        if (total === null && typeof d.estimate_total === 'number') total = d.estimate_total;
+        setBackfillProgress({ sent: totalSent, failed: totalFailed, total });
+        cursor = d.cursor ?? null;
+        if (d.done) {
+          const failMsg = totalFailed > 0 ? `, ${totalFailed} mislukt (worden automatisch opnieuw geprobeerd)` : '';
+          showToast(
+            totalSent > 0
+              ? `${totalSent} bestaande lead(s) verstuurd${failMsg}`
+              : 'Geen nieuwe leads om te versturen — alles is al verstuurd',
+            totalFailed > 0 ? 'error' : 'success',
+          );
+          break;
+        }
+      }
+      await load();
+    } catch {
+      showToast('Versturen van bestaande leads mislukt', 'error');
+    } finally {
+      setBackfilling(false);
+      setBackfillProgress(null);
     }
   };
 
@@ -360,6 +426,47 @@ export function WebhookIntegration({
             <span className="text-slate-400"> · {formatDateTime(config.last_delivery.at)}</span>
             {config.last_delivery.error && (
               <p className="mt-1 text-[11px] text-red-500">{config.last_delivery.error}</p>
+            )}
+          </div>
+        )}
+
+        {enabled && (
+          <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-medium text-slate-700">Bestaande leads versturen</p>
+                <p className="mt-0.5 text-[11px] text-slate-400">
+                  Stuur leads die al in je portaal stonden vóór de webhook actief was alsnog na.
+                  Al verstuurde leads worden overgeslagen.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => void runBackfill()}
+                disabled={backfilling || saving}
+                className={T.btnSecondary}
+              >
+                {backfilling ? 'Bezig met versturen…' : 'Bestaande leads versturen'}
+              </button>
+            </div>
+            {backfillProgress && (
+              <div className="mt-3">
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
+                  <div
+                    className="h-full rounded-full bg-brand-purple transition-all"
+                    style={{
+                      width: backfillProgress.total
+                        ? `${Math.min(100, Math.round(((backfillProgress.sent + backfillProgress.failed) / Math.max(backfillProgress.total, 1)) * 100))}%`
+                        : '100%',
+                    }}
+                  />
+                </div>
+                <p className="mt-1.5 text-[11px] text-slate-500">
+                  {backfillProgress.sent} verstuurd
+                  {backfillProgress.failed > 0 && ` · ${backfillProgress.failed} mislukt`}
+                  {backfillProgress.total ? ` van ± ${backfillProgress.total}` : ''}
+                </p>
+              </div>
             )}
           </div>
         )}
