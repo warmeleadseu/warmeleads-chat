@@ -8,6 +8,7 @@ import { adminFetch } from '@/lib/adminAuth';
 import { getSupabaseBrowserClient } from '@/lib/supabaseBrowser';
 import { audioManager } from '@/lib/celebrationSounds';
 import { TvVerticalCarousel } from './TvVerticalCarousel';
+import { AmRacePodium } from './AmRacePodium';
 import { BatchTargetAreaBadges } from '@/components/admin/BatchTargetAreaBadges';
 
 /** Langzamer pollen = minder Supabase-load bij open Live-tab (Pro of niet). */
@@ -766,67 +767,6 @@ function ProvinceMap({ data }: { data: Record<string, number> }) {
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
-  );
-}
-
-// ─── Branch Donut Component ──────────────────────────────────────────
-function BranchDonut({ data }: { data: Record<string, number> }) {
-  const total = Object.values(data).reduce((s, v) => s + v, 0);
-  if (total === 0) return <p className="text-center text-xs text-white/20">Geen data</p>;
-
-  const entries = Object.entries(data).sort((a, b) => b[1] - a[1]);
-  let cumAngle = -90;
-
-  return (
-    <div className="flex items-center gap-3">
-      <svg viewBox="0 0 100 100" className="h-20 w-20 shrink-0 lg:h-24 lg:w-24">
-        {entries.map(([branch, count]) => {
-          const bc = BRANCH_COLORS[branch] || DEFAULT_BRANCH;
-          const pct = count / total;
-          const angle = pct * 360;
-          const startAngle = cumAngle;
-          cumAngle += angle;
-          const endAngle = cumAngle;
-
-          const largeArc = angle > 180 ? 1 : 0;
-          const rad = (a: number) => (a * Math.PI) / 180;
-          const x1 = 50 + 40 * Math.cos(rad(startAngle));
-          const y1 = 50 + 40 * Math.sin(rad(startAngle));
-          const x2 = 50 + 40 * Math.cos(rad(endAngle));
-          const y2 = 50 + 40 * Math.sin(rad(endAngle));
-
-          return (
-            <path key={branch}
-              d={entries.length === 1
-                ? 'M50,10 A40,40 0 1,1 49.99,10 Z'
-                : `M50,50 L${x1},${y1} A40,40 0 ${largeArc},1 ${x2},${y2} Z`}
-              fill={bc.fill}
-              opacity="0.85"
-              stroke="#0B0E1A"
-              strokeWidth="1"
-            />
-          );
-        })}
-        <circle cx="50" cy="50" r="22" fill="#0B0E1A" />
-        <text x="50" y="48" textAnchor="middle" fill="white" fontSize="14" fontWeight="900" opacity="0.9">
-          {total >= 1000 ? `${(total / 1000).toFixed(1)}k` : total}
-        </text>
-        <text x="50" y="58" textAnchor="middle" fill="white" fontSize="6" opacity="0.35">totaal</text>
-      </svg>
-      <div className="space-y-1.5">
-        {entries.map(([branch, count]) => {
-          const bc = BRANCH_COLORS[branch] || DEFAULT_BRANCH;
-          return (
-            <div key={branch} className="flex items-center gap-2">
-              <div className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: bc.fill }} />
-              <span className="text-[11px] font-medium text-white/60">{branch}</span>
-              <span className="text-[11px] font-bold tabular-nums text-white/80">{count.toLocaleString('nl-NL')}</span>
-              <span className="text-[10px] text-white/25">({Math.round((count / total) * 100)}%)</span>
-            </div>
-          );
-        })}
-      </div>
     </div>
   );
 }
@@ -1854,12 +1794,17 @@ export default function LiveDashboard() {
           ))}
         </div>
 
+        {/* AM Race + Podium — full-width hero op de TV */}
+        {data.amLeaderboard && data.amLeaderboard.length > 0 && (
+          <AmRacePodium entries={data.amLeaderboard} reducedMotion={reducedMotion} />
+        )}
+
         {/* Main content + AM sidebar wrapper */}
         <div className="flex min-h-0 flex-1 gap-3">
         {/* Main content column */}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-x-hidden overflow-y-auto lg:min-h-0 lg:overflow-y-auto">
         {/* Middle section: actieve batches + wacht op betaling + kaart — één max-h op lg zodat kolommen gelijk blijven en niets onder/achter elkaar doorloopt */}
-        <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-7 lg:grid-rows-1 lg:items-stretch lg:gap-3 lg:overflow-hidden lg:min-h-0 lg:max-h-[min(580px,calc(100svh-12.25rem))]">
+        <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-7 lg:grid-rows-1 lg:items-stretch lg:gap-3 lg:overflow-hidden lg:min-h-0 lg:max-h-[min(460px,calc(100svh-27rem))]">
           {/* Active batches - 3 cols */}
           <div className="flex min-h-0 max-h-[min(560px,calc(100svh-9.5rem))] flex-col overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 backdrop-blur-sm sm:max-h-[min(600px,calc(100svh-10rem))] lg:col-span-3 lg:max-h-none lg:h-full">
             <div className="mb-2 flex shrink-0 items-center justify-between">
@@ -2069,15 +2014,6 @@ export default function LiveDashboard() {
                 <h2 className="text-sm font-bold text-white/70">Leads per provincie</h2>
               </div>
               <ProvinceMap data={data.provinceBreakdown} />
-            </div>
-
-            {/* Branch breakdown */}
-            <div className="shrink-0 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-3 backdrop-blur-sm">
-              <div className="mb-2 flex items-center gap-2">
-                <svg className="h-4 w-4 text-white/40" viewBox="0 0 20 20" fill="currentColor"><path d="M2 10a8 8 0 018-8v8h8a8 8 0 11-16 0z"/><path d="M12 2.252A8.014 8.014 0 0117.748 8H12V2.252z"/></svg>
-                <h2 className="text-sm font-bold text-white/70">Branches</h2>
-              </div>
-              <BranchDonut data={data.branchBreakdown} />
             </div>
 
             {/* Mobile: openstaande batches + telefoonkwaliteit */}
