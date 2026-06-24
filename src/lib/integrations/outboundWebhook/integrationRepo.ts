@@ -56,14 +56,16 @@ export async function getOutboundWebhookConfig(
   };
 }
 
-/** Sync-ready = ingeschakeld + URL + bruikbaar bearer-token. */
+/**
+ * Sync-ready = ingeschakeld + URL. Een bearer-token is optioneel: sommige
+ * endpoints (bv. Softr-workflow-webhooks) accepteren de POST zonder auth.
+ */
 export function isOutboundWebhookSyncReady(
   config: StoredOutboundWebhook | null,
 ): config is StoredOutboundWebhook {
   if (!config) return false;
   if (config.settings.enabled !== true) return false;
   if (!config.settings.url) return false;
-  if (!config.token) return false;
   return true;
 }
 
@@ -109,21 +111,19 @@ export async function saveOutboundWebhookConfig(
     updated_at: now,
   };
 
-  let willHaveToken = Boolean(existing?.access_token_enc);
   if (input.token !== undefined) {
     if (input.token) {
       const enc = encryptSecret(input.token);
       decryptSecret(enc); // faal hard als encrypt/decrypt inconsistent is
       payload.access_token_enc = enc;
-      willHaveToken = true;
     } else {
       payload.access_token_enc = null;
-      willHaveToken = false;
     }
   }
 
+  // Token is optioneel; een ingestelde URL is voldoende om "gekoppeld" te zijn.
   const willHaveUrl = Boolean(settings.url);
-  payload.connected_at = willHaveToken && willHaveUrl ? existing?.connected_at ?? now : null;
+  payload.connected_at = willHaveUrl ? existing?.connected_at ?? now : null;
 
   const { error } = await supabase
     .from('customer_integrations')

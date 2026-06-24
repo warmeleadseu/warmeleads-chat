@@ -109,15 +109,14 @@ export async function PUT(request: NextRequest) {
 
   const supabase = createServerClient();
 
-  // Inschakelen kan alleen met een geldige URL + token.
+  // Inschakelen kan alleen met een geldige URL. Een token is optioneel
+  // (sommige endpoints, bv. Softr-workflows, vereisen geen auth-header).
   if (patch.enabled === true) {
     const current = await getOutboundWebhookConfig(supabase, session.customer.id);
     const finalUrl = patch.url !== undefined ? patch.url : current?.settings.url ?? null;
-    const finalHasToken =
-      patch.token !== undefined ? Boolean(patch.token) : Boolean(current?.token);
-    if (!finalUrl || !finalHasToken) {
+    if (!finalUrl) {
       return NextResponse.json(
-        { error: 'Vul eerst een webhook-URL en een token in voordat je de koppeling inschakelt.' },
+        { error: 'Vul eerst een webhook-URL in voordat je de koppeling inschakelt.' },
         { status: 400 },
       );
     }

@@ -203,8 +203,10 @@ export function WebhookIntegration({
           <BoltIcon className="h-5 w-5 shrink-0 text-brand-purple" />
           <p className="text-xs text-slate-500">
             Wij doen een <code className="rounded bg-slate-200/70 px-1">POST</code> met JSON naar
-            jouw URL, met je token als <code className="rounded bg-slate-200/70 px-1">Authorization: Bearer</code>-header.
-            Mislukte afleveringen worden automatisch opnieuw geprobeerd.
+            jouw URL. Vul je token alleen in als jouw endpoint een{' '}
+            <code className="rounded bg-slate-200/70 px-1">Authorization: Bearer</code>-header
+            vereist (Softr-workflows bijvoorbeeld niet). Mislukte afleveringen worden automatisch
+            opnieuw geprobeerd.
           </p>
         </div>
 
@@ -224,7 +226,7 @@ export function WebhookIntegration({
 
         <div>
           <label htmlFor="webhook-token" className="mb-1.5 block text-xs font-medium text-slate-700">
-            Bearer-token
+            Bearer-token <span className="font-normal text-slate-400">(optioneel)</span>
           </label>
           <input
             id="webhook-token"
@@ -234,7 +236,7 @@ export function WebhookIntegration({
             placeholder={
               config?.has_token
                 ? `Token ingesteld (${config.token_hint}) — laat leeg om te behouden`
-                : 'Plak hier je token'
+                : 'Leeg laten als je endpoint geen token vereist'
             }
             autoComplete="off"
             className={T.input}

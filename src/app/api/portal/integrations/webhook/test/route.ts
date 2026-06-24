@@ -35,10 +35,8 @@ export async function POST(request: NextRequest) {
       { status: 400 },
     );
   }
-  if (!token) {
-    return NextResponse.json({ error: 'Geen token ingesteld' }, { status: 400 });
-  }
 
+  // Token is optioneel: endpoints zoals Softr-workflows accepteren geen auth-header.
   const payload = { ...buildSampleWebhookPayload(), test: true };
 
   try {

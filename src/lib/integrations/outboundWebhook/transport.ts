@@ -7,24 +7,26 @@ export type WebhookResponse = {
 };
 
 /**
- * Verstuurt een JSON-payload met Bearer-auth naar de opgegeven URL.
- * Gooit bij netwerkfouten/timeouts; HTTP-statussen geeft hij terug in `ok`.
+ * Verstuurt een JSON-payload naar de opgegeven URL. Een bearer-token is
+ * optioneel: sommige endpoints (bv. Softr-workflow-webhooks) accepteren de
+ * POST zonder auth-header. Gooit bij netwerkfouten/timeouts; HTTP-statussen
+ * geeft hij terug in `ok`.
  */
 export async function sendWebhookRequest(
   url: string,
-  token: string,
+  token: string | null | undefined,
   payload: unknown,
 ): Promise<WebhookResponse> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), WEBHOOK_TIMEOUT_MS);
 
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
   try {
     const res = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
+      headers,
       body: JSON.stringify(payload),
       signal: controller.signal,
     });
