@@ -1,7 +1,7 @@
 import type { OutboundWebhookFieldMapping } from './types';
 
 export type WebhookSourceField = {
-  /** Vaste interne sleutel. */
+  /** Vaste interne sleutel. Branche-specifieke velden krijgen het prefix 'custom:'. */
   key: string;
   /** Standaard JSON-key in de uitgaande payload. */
   defaultTarget: string;
@@ -9,12 +9,14 @@ export type WebhookSourceField = {
   label: string;
 };
 
+/** Prefix voor branche-specifieke velden uit lead.custom_fields. */
+export const CUSTOM_FIELD_PREFIX = 'custom:';
+
 /**
- * Catalogus van alle leadgegevens die we naar een klant-webhook kunnen sturen.
- * De klant bepaalt zelf (in het portaal) welke velden meegaan en onder welke
- * JSON-key. Volgorde = volgorde in de UI.
+ * Vaste basisvelden die voor elke lead beschikbaar zijn. Branche-specifieke
+ * velden (uit branch_fields) worden hier dynamisch aan toegevoegd per klant.
  */
-export const WEBHOOK_SOURCE_FIELDS: WebhookSourceField[] = [
+export const WEBHOOK_BASE_FIELDS: WebhookSourceField[] = [
   { key: 'categorie', defaultTarget: 'categorie', label: 'Categorie' },
   { key: 'categorieen', defaultTarget: 'categorieen', label: 'Categorieën (lijst)' },
   { key: 'aanhef', defaultTarget: 'aanhef', label: 'Aanhef' },
@@ -34,19 +36,30 @@ export const WEBHOOK_SOURCE_FIELDS: WebhookSourceField[] = [
   { key: 'aangemaakt_op', defaultTarget: 'aangemaakt_op', label: 'Aangemaakt op' },
 ];
 
-const FIELD_BY_KEY = new Map(WEBHOOK_SOURCE_FIELDS.map((f) => [f.key, f]));
+export type DynamicField = { key: string; label: string };
 
-export function isValidSourceFieldKey(key: string): boolean {
-  return FIELD_BY_KEY.has(key);
+/**
+ * Bouwt de volledige veld-catalogus: basisvelden + branche-specifieke velden
+ * (uit branch_fields) onder het 'custom:'-prefix. Dedupliceert op sleutel.
+ */
+export function buildSourceFieldCatalog(dynamic: DynamicField[] = []): WebhookSourceField[] {
+  const out = [...WEBHOOK_BASE_FIELDS];
+  const seen = new Set(out.map((f) => f.key));
+  for (const d of dynamic) {
+    if (!d?.key) continue;
+    const key = `${CUSTOM_FIELD_PREFIX}${d.key}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ key, defaultTarget: d.key, label: d.label?.trim() || d.key });
+  }
+  return out;
 }
 
-/** Standaardmapping: alle velden aan, met hun standaard JSON-key. */
-export function defaultFieldMappings(): OutboundWebhookFieldMapping[] {
-  return WEBHOOK_SOURCE_FIELDS.map((f) => ({
-    source: f.key,
-    target: f.defaultTarget,
-    enabled: true,
-  }));
+/** Standaardmapping voor een catalogus: alle velden aan, met standaard JSON-key. */
+export function defaultFieldMappings(
+  catalog: WebhookSourceField[] = WEBHOOK_BASE_FIELDS,
+): OutboundWebhookFieldMapping[] {
+  return catalog.map((f) => ({ source: f.key, target: f.defaultTarget, enabled: true }));
 }
 
 /**
@@ -56,15 +69,17 @@ export function defaultFieldMappings(): OutboundWebhookFieldMapping[] {
  *   (de klant heeft die bewust niet gekozen / het is een nieuw veld).
  */
 export function resolveFieldMappings(
-  stored?: OutboundWebhookFieldMapping[] | null,
+  stored: OutboundWebhookFieldMapping[] | null | undefined,
+  catalog: WebhookSourceField[] = WEBHOOK_BASE_FIELDS,
 ): OutboundWebhookFieldMapping[] {
-  if (!stored || stored.length === 0) return defaultFieldMappings();
+  if (!stored || stored.length === 0) return defaultFieldMappings(catalog);
 
+  const validKeys = new Set(catalog.map((f) => f.key));
   const byKey = new Map(
-    stored.filter((m) => isValidSourceFieldKey(m.source)).map((m) => [m.source, m]),
+    stored.filter((m) => validKeys.has(m.source)).map((m) => [m.source, m]),
   );
 
-  return WEBHOOK_SOURCE_FIELDS.map((f) => {
+  return catalog.map((f) => {
     const m = byKey.get(f.key);
     if (!m) return { source: f.key, target: f.defaultTarget, enabled: false };
     return {
@@ -75,14 +90,17 @@ export function resolveFieldMappings(
   });
 }
 
-/** Saneert binnenkomende mapping uit een portal-request. */
-export function sanitizeFieldMappings(input: unknown): OutboundWebhookFieldMapping[] {
+/** Saneert binnenkomende mapping uit een portal-request tegen de geldige sleutels. */
+export function sanitizeFieldMappings(
+  input: unknown,
+  validKeys: Set<string>,
+): OutboundWebhookFieldMapping[] {
   if (!Array.isArray(input)) return [];
   const out: OutboundWebhookFieldMapping[] = [];
   for (const raw of input) {
     if (!raw || typeof raw !== 'object') continue;
     const m = raw as { source?: unknown; target?: unknown; enabled?: unknown };
-    if (typeof m.source !== 'string' || !isValidSourceFieldKey(m.source)) continue;
+    if (typeof m.source !== 'string' || !validKeys.has(m.source)) continue;
     const target = typeof m.target === 'string' ? m.target.trim().slice(0, 100) : '';
     out.push({ source: m.source, target, enabled: m.enabled !== false });
   }

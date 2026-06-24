@@ -9,10 +9,11 @@ import {
 } from '@/lib/integrations/outboundWebhook/integrationRepo';
 import { OUTBOUND_WEBHOOK_PROVIDER } from '@/lib/integrations/outboundWebhook/types';
 import {
-  WEBHOOK_SOURCE_FIELDS,
+  buildSourceFieldCatalog,
   resolveFieldMappings,
   sanitizeFieldMappings,
 } from '@/lib/integrations/outboundWebhook/fields';
+import { getWebhookDynamicFields } from '@/lib/integrations/outboundWebhook/branchFields';
 
 type LastDelivery = {
   status: string;
@@ -54,6 +55,9 @@ async function buildStateResponse(
   const config = await getOutboundWebhookConfig(supabase, customerId);
   const lastDelivery = await loadLastDelivery(supabase, customerId);
 
+  const dynamicFields = await getWebhookDynamicFields(supabase, availableBranches);
+  const catalog = buildSourceFieldCatalog(dynamicFields);
+
   return NextResponse.json({
     enabled: config?.settings.enabled ?? false,
     url: config?.settings.url ?? '',
@@ -62,8 +66,8 @@ async function buildStateResponse(
     token_hint: tokenHint(config?.token ?? null),
     sync_ready: isOutboundWebhookSyncReady(config),
     available_branches: availableBranches,
-    available_fields: WEBHOOK_SOURCE_FIELDS,
-    field_mappings: resolveFieldMappings(config?.settings.field_mappings),
+    available_fields: catalog,
+    field_mappings: resolveFieldMappings(config?.settings.field_mappings, catalog),
     last_delivery: lastDelivery,
   });
 }
@@ -121,13 +125,19 @@ export async function PUT(request: NextRequest) {
     patch.branches = branches;
   }
 
+  const supabase = createServerClient();
+
   if (body.field_mappings !== undefined) {
-    patch.field_mappings = sanitizeFieldMappings(body.field_mappings);
+    const dynamicFields = await getWebhookDynamicFields(
+      supabase,
+      session.customer.branches ?? [],
+    );
+    const catalog = buildSourceFieldCatalog(dynamicFields);
+    const validKeys = new Set(catalog.map((f) => f.key));
+    patch.field_mappings = sanitizeFieldMappings(body.field_mappings, validKeys);
   }
 
   if (typeof body.enabled === 'boolean') patch.enabled = body.enabled;
-
-  const supabase = createServerClient();
 
   // Inschakelen kan alleen met een geldige URL. Een token is optioneel
   // (sommige endpoints, bv. Softr-workflows, vereisen geen auth-header).
