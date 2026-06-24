@@ -1804,7 +1804,7 @@ export default function LiveDashboard() {
         {/* Main content column */}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-x-hidden overflow-y-auto lg:min-h-0 lg:overflow-y-auto">
         {/* Middle section: actieve batches + wacht op betaling + kaart — één max-h op lg zodat kolommen gelijk blijven en niets onder/achter elkaar doorloopt */}
-        <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-7 lg:grid-rows-1 lg:items-stretch lg:gap-3 lg:overflow-hidden lg:min-h-0 lg:max-h-[min(460px,calc(100svh-27rem))]">
+        <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-7 lg:grid-rows-1 lg:items-stretch lg:gap-3 lg:overflow-hidden lg:min-h-0 lg:max-h-[min(440px,calc(100svh-29.5rem))]">
           {/* Active batches - 3 cols */}
           <div className="flex min-h-0 max-h-[min(560px,calc(100svh-9.5rem))] flex-col overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 backdrop-blur-sm sm:max-h-[min(600px,calc(100svh-10rem))] lg:col-span-3 lg:max-h-none lg:h-full">
             <div className="mb-2 flex shrink-0 items-center justify-between">
