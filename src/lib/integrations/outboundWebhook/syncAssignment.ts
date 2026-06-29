@@ -83,10 +83,34 @@ export async function syncAssignmentToOutboundWebhook(args: WebhookSyncArgs): Pr
       });
     }
     const payload = buildWebhookPayload(lead, assignmentId, config.settings.field_mappings, straat);
-    const res = await sendWebhookRequest(config.settings.url!, config.token, payload);
+    const res = await sendWebhookRequest(config.settings.url!, config.token, payload, {
+      idempotencyKey: assignmentId,
+    });
+
+    // Een timeout betekent dat de POST (incl. body) al is verstuurd; de
+    // ontvanger heeft hem vrijwel zeker verwerkt, alleen het antwoord bleef uit.
+    // Opnieuw versturen zou een dubbele lead opleveren — dus markeren we 'm als
+    // afgeleverd en laten we de cron-retry hem met rust.
+    if (res.outcome === 'timeout') {
+      await supabase
+        .from('integration_sync_log')
+        .update({
+          status: 'success',
+          error_message: res.errorMessage,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('assignment_id', assignmentId)
+        .eq('provider', OUTBOUND_WEBHOOK_PROVIDER);
+      console.warn('[outbound_webhook] afgeleverd zonder bevestiging (timeout), geen retry', {
+        customerId,
+        assignmentId,
+      });
+      return;
+    }
+
     if (!res.ok) {
-      const detail = res.bodySnippet ? `: ${res.bodySnippet}` : '';
-      throw new Error(`Webhook gaf HTTP ${res.status}${detail}`);
+      // HTTP-fout of netwerkfout: laat de cron-retry het opnieuw proberen.
+      throw new Error(res.errorMessage ?? `Webhook gaf HTTP ${res.status}`);
     }
 
     await supabase

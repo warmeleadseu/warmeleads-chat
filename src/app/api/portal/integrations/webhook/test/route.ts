@@ -43,15 +43,15 @@ export async function POST(request: NextRequest) {
     test: true,
   };
 
-  try {
-    const res = await sendWebhookRequest(url, token, payload);
-    return NextResponse.json({
-      ok: res.ok,
-      status: res.status,
-      body_snippet: res.bodySnippet,
-    });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Test mislukt';
-    return NextResponse.json({ ok: false, error: message }, { status: 502 });
-  }
+  const res = await sendWebhookRequest(url, token, payload);
+  // Een timeout telt als geslaagd: de payload is verstuurd, alleen het antwoord
+  // bleef uit (gedrag dat we ook bij echte leads als afgeleverd beschouwen).
+  const delivered = res.ok || res.outcome === 'timeout';
+  return NextResponse.json({
+    ok: delivered,
+    status: res.status,
+    body_snippet: res.bodySnippet,
+    ...(delivered ? {} : { error: res.errorMessage }),
+    ...(res.outcome === 'timeout' ? { note: res.errorMessage } : {}),
+  });
 }
