@@ -5,6 +5,7 @@ import { sendNewLeadPush } from './pushNotification';
 import { isInboundLeadBranchSlug } from './nicheResearch';
 import { leadMatchesAnyProvinceTarget } from './provinceTargetMatch';
 import { targetCountryAllowsLead } from './targetCountryMatch';
+import { effectiveMaxAssignments, recentDistinctCustomerIds } from './assignmentCap';
 
 type NicheResearchBatch = {
   id: string;
@@ -111,6 +112,7 @@ export async function tryAssignLeadToNicheResearchBatch(
     provincie?: string | null;
     land?: string | null;
     postcode?: string | null;
+    custom_fields?: Record<string, unknown> | null;
   },
 ): Promise<NicheResearchAssignment | null> {
   if (!isInboundLeadBranchSlug(lead.branch)) return null;
@@ -119,9 +121,15 @@ export async function tryAssignLeadToNicheResearchBatch(
 
   const { data: existing } = await supabase
     .from('lead_assignments')
-    .select('customer_id')
+    .select('customer_id, assigned_at')
     .eq('lead_id', lead.id);
   const assignedCustomerIds = new Set((existing || []).map((r) => r.customer_id));
+
+  // Globale cap: niche-onderzoek mag een lead nooit boven het max. aantal
+  // klanten tillen (zelfde regel als de reguliere pipeline-distributie).
+  if (recentDistinctCustomerIds(existing || []).size >= effectiveMaxAssignments(lead)) {
+    return null;
+  }
 
   const { data: batches } = await supabase
     .from('customer_batches')

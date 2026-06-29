@@ -8,14 +8,17 @@ import { getLeadLimitPeriodAnchors } from './batchAssignmentCaps';
 import { leadMatchesAnyProvinceTarget } from './provinceTargetMatch';
 import { targetCountryAllowsLead } from './targetCountryMatch';
 import { filterPipelineBatchesToFifoHeads, isPipelineFifoHeadBatch } from './pipelineBatchFifo';
+import {
+  TARGET_AVG_ASSIGNMENTS,
+  REASSIGNMENT_COOLDOWN_DAYS,
+  effectiveMaxAssignments,
+  recentDistinctCustomerIds,
+  canAssignWithinCap,
+} from './assignmentCap';
 
-/** Hard plafond in het product (gedeelde leads). */
-const MAX_ASSIGNMENTS = 3;
-const TARGET_AVG_ASSIGNMENTS = 2;
 const MAX_LEAD_AGE_DAYS = 3;
 const COOLDOWN_HOURS = 12;
 const FAIRNESS_WINDOW_HOURS = 24;
-const REASSIGNMENT_COOLDOWN_DAYS = 30;
 
 const ASSIGNMENT_PAGE_SIZE = 1000;
 
@@ -51,6 +54,36 @@ async function fetchAssignmentsForLeadIds(
     }
   }
   return out;
+}
+
+/**
+ * Per lead-id de toewijzingen (customer_id + assigned_at) over alle klanten/batches.
+ * Nodig om de globale max-toewijzingen-cap te bewaken bij backfill.
+ */
+async function fetchAssignmentCustomersForLeadIds(
+  supabase: SupabaseClient,
+  leadIds: string[],
+): Promise<Map<string, { customer_id: string | null; assigned_at: string | null }[]>> {
+  const map = new Map<string, { customer_id: string | null; assigned_at: string | null }[]>();
+  if (leadIds.length === 0) return map;
+  for (let i = 0; i < leadIds.length; i += LEAD_ID_IN_CHUNK) {
+    const chunk = leadIds.slice(i, i + LEAD_ID_IN_CHUNK);
+    const { data, error } = await supabase
+      .from('lead_assignments')
+      .select('lead_id, customer_id, assigned_at')
+      .in('lead_id', chunk);
+    if (error) {
+      console.error('[distribution] fetchAssignmentCustomersForLeadIds:', error.message);
+      continue;
+    }
+    for (const row of data || []) {
+      if (!row.lead_id) continue;
+      const arr = map.get(row.lead_id) || [];
+      arr.push({ customer_id: row.customer_id ?? null, assigned_at: row.assigned_at ?? null });
+      map.set(row.lead_id, arr);
+    }
+  }
+  return map;
 }
 
 /**
@@ -123,21 +156,6 @@ interface LeadForDistribution {
   dynamisch_contract?: string | null;
   stroomverbruik?: string | null;
   [key: string]: unknown;
-}
-
-/** Optioneel per lead: `custom_fields.max_customer_assignments` (1–3). */
-function effectiveMaxAssignments(lead: LeadForDistribution): number {
-  const cf = lead.custom_fields;
-  if (!cf || typeof cf !== 'object') return MAX_ASSIGNMENTS;
-  const raw = (cf as Record<string, unknown>).max_customer_assignments;
-  const n =
-    typeof raw === 'number'
-      ? raw
-      : typeof raw === 'string'
-        ? parseInt(raw, 10)
-        : NaN;
-  if (!Number.isFinite(n) || n < 1) return MAX_ASSIGNMENTS;
-  return Math.min(MAX_ASSIGNMENTS, Math.max(1, Math.floor(n)));
 }
 
 interface LeadFilter {
@@ -305,9 +323,7 @@ export async function distributeLead(
     return kind !== 'niche_research';
   });
 
-  const reassignmentCutoff = new Date(Date.now() - REASSIGNMENT_COOLDOWN_DAYS * 24 * 60 * 60 * 1000);
-  const recentAssignments = (existingAssignments || []).filter(a => new Date(a.assigned_at) >= reassignmentCutoff);
-  const recentAssignedIds = new Set(recentAssignments.map(a => a.customer_id));
+  const recentAssignedIds = recentDistinctCustomerIds(existingAssignments || []);
   if (recentAssignedIds.size >= effectiveMaxAssignments(fullLead as LeadForDistribution)) return result;
 
   // 12-hour cooldown: alleen pipeline-toewijzingen (niche-onderzoek blokkeert andere klanten niet structureel)
@@ -746,6 +762,14 @@ export async function backfillBatch(batchId: string, lookbackDays: number): Prom
 
   const alreadyAssigned = await fetchAllLeadIdsAssignedToCustomer(supabase, batch.customer_id);
 
+  // Globale cap-bewaking: per kandidaat-lead alle bestaande toewijzingen ophalen
+  // zodat backfill een lead nooit aan een (N+1)e klant koppelt.
+  const assignmentsByLead = await fetchAssignmentCustomersForLeadIds(
+    supabase,
+    leads.map((l) => l.id),
+  );
+  const nowCap = new Date();
+
   const filters: LeadFilter[] = Array.isArray(batch.lead_filters) ? batch.lead_filters : [];
   let assigned = 0;
 
@@ -790,6 +814,7 @@ export async function backfillBatch(batchId: string, lookbackDays: number): Prom
 
   let skippedByDailyLimit = 0;
   let skippedByWeeklyLimit = 0;
+  let skippedByCap = 0;
 
   for (const lead of leads) {
     if (batchIsAtCapacity({ ...batch, leads_delivered: runningAssignCount + backfillExternal })) break;
@@ -797,6 +822,19 @@ export async function backfillBatch(batchId: string, lookbackDays: number): Prom
     if (alreadyAssigned.has(lead.id)) continue;
     if (excludedLeadIds.has(lead.id)) continue;
     if (!matchesAllFilters(lead as LeadForDistribution, filters)) continue;
+
+    // Max. aantal klanten per lead respecteren (zelfde regel als de pipeline).
+    if (
+      !canAssignWithinCap(
+        lead as LeadForDistribution,
+        assignmentsByLead.get(lead.id) || [],
+        batch.customer_id,
+        nowCap,
+      )
+    ) {
+      skippedByCap++;
+      continue;
+    }
 
     const leadCreatedAt = (lead as { created_at?: string | null }).created_at ?? null;
     const dayKey = dailyLimit !== null ? backfillDayKey(leadCreatedAt) : null;
@@ -868,12 +906,13 @@ export async function backfillBatch(batchId: string, lookbackDays: number): Prom
     await syncBatchDelivered(supabase, batch.id);
   }
 
-  if (skippedByDailyLimit > 0 || skippedByWeeklyLimit > 0) {
-    console.info('[backfillBatch] rate-limit respected', {
+  if (skippedByDailyLimit > 0 || skippedByWeeklyLimit > 0 || skippedByCap > 0) {
+    console.info('[backfillBatch] limits respected', {
       batchId: batch.id,
       assigned,
       skippedByDailyLimit,
       skippedByWeeklyLimit,
+      skippedByCap,
       leads_per_day: dailyLimit,
       leads_per_week: weeklyLimit,
       lookbackDays,
