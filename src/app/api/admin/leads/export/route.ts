@@ -7,52 +7,18 @@ import { buildPhoneSearchIlikeClauses, sanitizePostgrestIlike } from '@/lib/phon
 import * as XLSX from 'xlsx';
 import { onLeadAssignedToCustomer } from '@/lib/integrations/onLeadAssigned';
 import { syncBatchDelivered } from '@/lib/batchSync';
-
-const COLUMN_HEADERS = [
-  'Branche', 'Naam', 'E-mail', 'Telefoon', 'Postcode', 'Huisnr.',
-  'Plaats', 'Provincie', 'Datum', 'Status', 'Notities', 'Bron',
-  'CPL', 'Kwaliteit', 'Klant',
-];
-
-function formatDate(value: string | null): string {
-  if (!value) return '';
-  try { return new Date(value).toLocaleDateString('nl-NL'); } catch { return value; }
-}
-
-function leadToRow(lead: Record<string, unknown>): string[] {
-  return [
-    String(lead.branch || ''),
-    String(lead.naam_klant || ''),
-    String(lead.email || ''),
-    String(lead.telefoonnummer || ''),
-    String(lead.postcode || ''),
-    String(lead.huisnummer || ''),
-    String(lead.plaatsnaam || ''),
-    String(lead.provincie || ''),
-    formatDate(lead.wervingsdatum as string | null),
-    String(lead.status || ''),
-    String(lead.notities || ''),
-    String(lead.bron || ''),
-    lead.lead_cost ? `€${Number(lead.lead_cost).toFixed(2)}` : '',
-    lead.quality_score != null ? String(lead.quality_score) : '',
-    String((lead.customers as { name?: string } | null)?.name || ''),
-  ];
-}
+import { buildLeadExportTable } from '@/lib/leadExportTable';
 
 function buildCsv(leads: Record<string, unknown>[]): NextResponse {
   const BOM = '\uFEFF';
-  const rows = leads.map(leadToRow);
-  const lines = [
-    COLUMN_HEADERS.join(';'),
-    ...rows.map(row =>
-      row.map(cell => {
-        const str = String(cell);
-        return str.includes(';') || str.includes('"') || str.includes('\n')
-          ? `"${str.replace(/"/g, '""')}"`
-          : str;
-      }).join(';'),
-    ),
-  ];
+  const { headers, rows } = buildLeadExportTable(leads);
+  const escape = (cell: string) => {
+    const str = String(cell);
+    return str.includes(';') || str.includes('"') || str.includes('\n')
+      ? `"${str.replace(/"/g, '""')}"`
+      : str;
+  };
+  const lines = [headers.map(escape).join(';'), ...rows.map(row => row.map(escape).join(';'))];
   const csv = BOM + lines.join('\r\n');
   const stamp = new Date().toISOString().split('T')[0];
   return new NextResponse(csv, {
@@ -65,12 +31,12 @@ function buildCsv(leads: Record<string, unknown>[]): NextResponse {
 }
 
 function buildXlsx(leads: Record<string, unknown>[]): NextResponse {
-  const rows = leads.map(leadToRow);
-  const sheetData = [COLUMN_HEADERS, ...rows];
+  const { headers, rows } = buildLeadExportTable(leads);
+  const sheetData = [headers, ...rows];
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.aoa_to_sheet(sheetData);
-  ws['!cols'] = COLUMN_HEADERS.map((h, i) => {
-    const maxLen = Math.max(h.length, ...rows.map(r => String(r[i]).length));
+  ws['!cols'] = headers.map((h, i) => {
+    const maxLen = Math.max(h.length, ...rows.map(r => String(r[i] ?? '').length));
     return { wch: Math.min(maxLen + 2, 40) };
   });
   XLSX.utils.book_append_sheet(wb, ws, 'Leads');
