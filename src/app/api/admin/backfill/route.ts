@@ -39,7 +39,9 @@ const KEYWORD_MAP: [RegExp, string][] = [
   [/post\s?code|zip/i, 'postcode'],
   [/huis\s?n|house/i, 'huisnummer'],
   [/straat|street|adres|address/i, '_street'],
-  [/stad|city|woon\s?plaats|plaats/i, 'plaatsnaam'],
+  // `\bplaats\b` matcht "plaats"/"plaatsnaam" maar NIET "laten plaatsen"
+  // (een veelvoorkomende keuzevraag bij o.a. zonnepanelen).
+  [/\bstad\b|\bcity\b|woon\s?plaats|plaatsnaam|\bplaats\b/i, 'plaatsnaam'],
   [/provin|state/i, 'provincie'],
   [/land|country/i, 'land'],
 ];

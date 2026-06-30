@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
-import { enrichLeadAddress } from '@/lib/pdok';
+import { enrichLeadAddress, isValidPlace } from '@/lib/pdok';
 import { distributeLead } from '@/lib/distribution';
 import { isPhoneValid } from '@/lib/phoneValidation';
 import { checkLeadProfanity } from '@/lib/profanityFilter';
@@ -83,6 +83,22 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Sommige Zapier-koppelingen mappen per ongeluk een keuzevraag (bv.
+    // "wanneer wil je laten plaatsen?") op `plaatsnaam` i.p.v. op het juiste
+    // branche-veld. De waarde is dan een ruwe optie ("binnen_1_maand") en geen
+    // echte plaats. We slaan die niet als plaatsnaam op (PDOK vult de echte
+    // plaats o.b.v. postcode), en bewaren de waarde alsnog in een passend
+    // tijds-/planning-veld van de branche als dat nog leeg is.
+    const rawPlace = body.plaatsnaam || body.city || '';
+    let plaatsnaam = rawPlace;
+    if (rawPlace && !isValidPlace(rawPlace)) {
+      plaatsnaam = '';
+      const timingKey = [...fieldKeys].find((k) => /wanneer|installat|planning/i.test(k));
+      if (timingKey && !customFields[timingKey]) {
+        customFields[timingKey] = String(rawPlace);
+      }
+    }
+
     const phone = body.telefoonnummer || body.phone || '';
     const metaCampaignId = body.meta_campaign_id || body.campaign_id || null;
     const metaAdsetId = body.meta_adset_id || body.adset_id || null;
@@ -98,7 +114,7 @@ export async function POST(request: NextRequest) {
       phone_valid: isPhoneValid(phone),
       postcode: body.postcode || '',
       huisnummer: body.huisnummer || '',
-      plaatsnaam: body.plaatsnaam || body.city || '',
+      plaatsnaam,
       provincie: body.provincie || '',
       land: body.land || '',
       wervingsdatum: body.wervingsdatum || new Date().toISOString().split('T')[0],

@@ -34,6 +34,10 @@ export function isValidPlace(val: string | undefined): boolean {
   if (v.includes('@')) return false;
   if (/^\+?\d[\d\s\-().]{6,}$/.test(v)) return false;
   if (/^\d+$/.test(v)) return false;
+  // Ruwe Facebook/Zapier keuzewaarden zijn snake_case (bv. "binnen_1_maand",
+  // "na_6_maanden", "schuin_dak"). Echte NL/BE plaatsnamen bevatten nooit een
+  // underscore, dus dit is een betrouwbaar signaal dat het géén plaatsnaam is.
+  if (v.includes('_')) return false;
   const low = v.toLowerCase();
   if (['n/a', 'nvt', 'n.v.t.', 'onbekend', 'unknown', 'geen', 'x', 'xx', 'xxx', 'test', '?', '??', 'null', 'undefined', 'none'].includes(low)) return false;
   return true;
