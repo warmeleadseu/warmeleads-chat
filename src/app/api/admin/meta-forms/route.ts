@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
-import { getMetaCredentials } from '@/lib/meta';
+import { getMetaCredentials, listMetaPages, META_GRAPH_URL } from '@/lib/meta';
 import { createServerClient } from '@/lib/supabase';
-
-const META_GRAPH_URL = 'https://graph.facebook.com/v21.0';
 
 interface LeadGenForm {
   id: string;
@@ -15,10 +13,42 @@ interface LeadGenForm {
   questions_count?: number;
 }
 
-async function metaGet(path: string, token: string) {
+async function metaGet(path: string, token: string): Promise<Record<string, unknown> | null> {
   const sep = path.includes('?') ? '&' : '?';
   const res: Response = await fetch(`${META_GRAPH_URL}/${path}${sep}access_token=${token}`);
   return res.json();
+}
+
+/**
+ * Lijst alle leadgen-forms van één pagina, met paginatie.
+ *
+ * BELANGRIJK: de `/{page_id}/leadgen_forms`-edge MOET met een **Page Access
+ * Token** worden aangeroepen. Met een user-/system-user-token geeft Meta
+ * `(#190) This method must be called with a Page Access Token` en kregen we
+ * vroeger stilzwijgend 0 formulieren terug ("Geen lead formulieren gevonden").
+ */
+async function listFormsForPage(
+  pageId: string,
+  pageToken: string,
+  into: Map<string, LeadGenForm>,
+): Promise<void> {
+  let url: string | null = `${pageId}/leadgen_forms?fields=id,name,status&limit=100`;
+  let guard = 0;
+  while (url && guard < 10) {
+    guard++;
+    const data: Record<string, unknown> | null = await metaGet(url, pageToken).catch(() => null);
+    if (!data || data.error) break;
+    for (const form of (data.data as Array<{ id: string; name?: string; status?: string }>) || []) {
+      into.set(form.id, {
+        id: form.id,
+        name: form.name || `Form ${form.id}`,
+        status: form.status || 'ACTIVE',
+        page_id: pageId,
+      });
+    }
+    const paging = data.paging as { next?: string } | undefined;
+    url = paging?.next ? paging.next.replace(`${META_GRAPH_URL}/`, '') : null;
+  }
 }
 
 export async function GET(request: NextRequest) {
@@ -35,10 +65,20 @@ export async function GET(request: NextRequest) {
   const supabase = createServerClient();
 
   try {
-    const formIds = new Set<string>();
-    const pageIds = new Set<string>();
+    // Page-access-tokens voor alle pagina's die onze (system-)user beheert.
+    // leadgen_forms vereist een page-token (zie listFormsForPage). 5-min cached.
+    let managedPages: { id: string; access_token: string }[] = [];
+    try {
+      managedPages = await listMetaPages();
+    } catch (e) {
+      console.error('[meta-forms] listMetaPages faalde:', e);
+    }
+    const pageTokenById = new Map(managedPages.map(p => [p.id, p.access_token]));
 
-    // ── Strategy 1: Detect forms from existing leads in CRM ─────────
+    const candidatePageIds = new Set<string>();
+    const directFormIds = new Set<string>();
+
+    // ── Strategy 1: leid pagina's af uit bestaande CRM-leads van deze branche ──
     if (branch) {
       const { data: leads } = await supabase
         .from('leads')
@@ -50,105 +90,107 @@ export async function GET(request: NextRequest) {
       const campaignIds = [...new Set((leads || []).map(l => l.meta_campaign_id).filter(Boolean))];
       const adIds = [...new Set((leads || []).map(l => l.meta_ad_id).filter(Boolean))];
 
-      // From campaigns → get page_id (promoted_object)
-      const campaignFetches = campaignIds.slice(0, 10).map(cid =>
-        metaGet(`${cid}?fields=promoted_object`, token).catch(() => null),
+      // Campagnes → promoted_object.page_id (vaak leeg op campagne-niveau).
+      const campaignResults = await Promise.all(
+        campaignIds.slice(0, 10).map(cid => metaGet(`${cid}?fields=promoted_object`, token).catch(() => null)),
       );
-      const campaignResults = await Promise.all(campaignFetches);
       for (const cr of campaignResults) {
-        if (cr?.promoted_object?.page_id) pageIds.add(cr.promoted_object.page_id);
+        const pid = (cr?.promoted_object as { page_id?: string } | undefined)?.page_id;
+        if (pid) candidatePageIds.add(pid);
       }
 
-      // From pages → get all leadgen_forms directly
-      for (const pageId of pageIds) {
-        let formsUrl: string | null = `${pageId}/leadgen_forms?fields=id,name,status&limit=100`;
-        while (formsUrl) {
-          const pgData: Record<string, unknown> | null = await metaGet(formsUrl, token).catch(() => null);
-          if (!pgData || pgData.error) break;
-          for (const form of (pgData.data as Array<{ id: string }>) || []) {
-            formIds.add(form.id);
-          }
-          const paging = pgData.paging as { next?: string } | undefined;
-          formsUrl = paging?.next
-            ? paging.next.replace(`${META_GRAPH_URL}/`, '')
-            : null;
-        }
-      }
+      // Ads → adset.promoted_object.page_id (hier zit de page_id meestal wél),
+      // plus creative.object_story_spec voor page_id én een directe lead_gen_form_id.
+      const adResults = await Promise.all(
+        adIds.slice(0, 15).map(aid =>
+          metaGet(`${aid}?fields=adset{promoted_object},creative{object_story_spec}`, token).catch(() => null),
+        ),
+      );
+      for (const ar of adResults) {
+        if (!ar) continue;
+        const adset = ar.adset as { promoted_object?: { page_id?: string } } | undefined;
+        if (adset?.promoted_object?.page_id) candidatePageIds.add(adset.promoted_object.page_id);
 
-      // Fallback: if no page found, try ad → creative → form
-      if (formIds.size === 0 && adIds.length > 0) {
-        const adFetches = adIds.slice(0, 10).map(aid =>
-          metaGet(`${aid}?fields=creative`, token).catch(() => null),
-        );
-        const adResults = await Promise.all(adFetches);
-        const creativeIds = [...new Set(
-          adResults.map(r => r?.creative?.id).filter(Boolean),
-        )];
-
-        const creativeFetches = creativeIds.map(cid =>
-          metaGet(`${cid}?fields=object_story_spec`, token).catch(() => null),
-        );
-        const creativeResults = await Promise.all(creativeFetches);
-        for (const cr of creativeResults) {
-          const spec = cr?.object_story_spec;
-          const fid =
-            spec?.link_data?.call_to_action?.value?.lead_gen_form_id ||
-            spec?.video_data?.call_to_action?.value?.lead_gen_form_id;
-          if (fid) formIds.add(fid);
-        }
+        const spec = (ar.creative as { object_story_spec?: Record<string, unknown> } | undefined)?.object_story_spec;
+        if (spec?.page_id) candidatePageIds.add(spec.page_id as string);
+        const linkData = spec?.link_data as { call_to_action?: { value?: { lead_gen_form_id?: string } } } | undefined;
+        const videoData = spec?.video_data as { call_to_action?: { value?: { lead_gen_form_id?: string } } } | undefined;
+        const fid = linkData?.call_to_action?.value?.lead_gen_form_id || videoData?.call_to_action?.value?.lead_gen_form_id;
+        if (fid) directFormIds.add(fid);
       }
     }
 
-    // ── Strategy 2 (fallback): Get pages from ad account ────────────
-    if (formIds.size === 0) {
-      const acctData = await metaGet(
-        `act_${credentials.adAccountId}/campaigns?fields=promoted_object&effective_status=["ACTIVE","PAUSED"]&limit=50`,
-        token,
-      ).catch(() => null);
-
-      if (acctData?.data) {
-        for (const camp of acctData.data) {
-          if (camp.promoted_object?.page_id) pageIds.add(camp.promoted_object.page_id);
+    // ── Strategy 2 (fallback): pagina's uit de ad-sets van het ad-account ──
+    // We lezen promoted_object op AD-SET-niveau (niet campagne), want daar staat
+    // de page_id doorgaans wél.
+    if (candidatePageIds.size === 0 && directFormIds.size === 0) {
+      let url: string | null =
+        `act_${credentials.adAccountId}/adsets?fields=promoted_object&effective_status=["ACTIVE","PAUSED"]&limit=200`;
+      let guard = 0;
+      while (url && guard < 5) {
+        guard++;
+        const d: Record<string, unknown> | null = await metaGet(url, token).catch(() => null);
+        if (!d || d.error) break;
+        for (const a of (d.data as Array<{ promoted_object?: { page_id?: string } }>) || []) {
+          if (a.promoted_object?.page_id) candidatePageIds.add(a.promoted_object.page_id);
         }
-      }
-
-      for (const pageId of pageIds) {
-        const data = await metaGet(`${pageId}/leadgen_forms?fields=id,name,status&limit=50`, token).catch(() => null);
-        if (data?.data) {
-          for (const form of data.data) formIds.add(form.id);
-        }
+        const paging = d.paging as { next?: string } | undefined;
+        url = paging?.next ? paging.next.replace(`${META_GRAPH_URL}/`, '') : null;
       }
     }
 
-    if (formIds.size === 0) {
+    // ── Laatste fallback: alle beheerde pagina's ──
+    // Zo is de lijst nooit onterecht leeg wanneer er wél formulieren bestaan
+    // (bv. een branche zonder Meta-geattribueerde leads of campagnes).
+    if (candidatePageIds.size === 0 && directFormIds.size === 0) {
+      for (const p of managedPages) candidatePageIds.add(p.id);
+    }
+
+    // ── Forms per pagina ophalen met PAGE-token (parallel over pagina's) ──
+    const formsById = new Map<string, LeadGenForm>();
+    await Promise.all(
+      [...candidatePageIds].map(pid => listFormsForPage(pid, pageTokenById.get(pid) || token, formsById)),
+    );
+
+    // Direct via creatives gevonden form-ids die nog niet in de lijst staan
+    // (bv. forms op een pagina zonder page-token): resolve per id met user-token.
+    const missingDirect = [...directFormIds].filter(fid => !formsById.has(fid));
+    await Promise.all(
+      missingDirect.map(async fid => {
+        const d = await metaGet(`${fid}?fields=id,name,status,page`, token).catch(() => null);
+        if (d && !d.error) {
+          formsById.set(d.id as string, {
+            id: d.id as string,
+            name: (d.name as string) || `Form ${fid}`,
+            status: (d.status as string) || 'ACTIVE',
+            page_id: (d.page as { id?: string } | undefined)?.id,
+          });
+        }
+      }),
+    );
+
+    if (formsById.size === 0) {
       return NextResponse.json({
         forms: [],
-        message: 'Geen lead formulieren gevonden. Zorg dat er leads met Meta IDs in het CRM staan of dat er actieve Lead Ads draaien.',
+        message: 'Geen lead formulieren gevonden. Controleer of de Meta-koppeling toegang heeft tot de juiste Facebook-pagina.',
       });
     }
 
-    // ── Get form details + page binding (parallel) ──────────────────
-    // Meta exposeert het page-object direct op een leadgen_form, dus we vragen
-    // het mee in dezelfde call: `?fields=id,name,status,questions{id},page`.
-    // Dat werkt óók voor forms die niet meer in de page's actieve leadgen_forms-lijst staan
-    // (gearchiveerd, of anderszins niet via pageId/leadgen_forms vindbaar).
-    const formFetches = [...formIds].map(async (fid): Promise<LeadGenForm> => {
-      try {
-        const d = await metaGet(`${fid}?fields=id,name,status,questions{id},page`, token);
-        if (!d.error) {
-          return {
-            id: d.id,
-            name: d.name || `Form ${fid}`,
-            status: d.status || 'ACTIVE',
-            page_id: d.page?.id,
-            questions_count: Array.isArray(d.questions?.data) ? d.questions.data.length : undefined,
-          };
-        }
-      } catch { /* ignore */ }
-      return { id: fid, name: `Form ${fid}`, status: 'unknown' };
-    });
+    const forms = [...formsById.values()];
 
-    const forms = await Promise.all(formFetches);
+    // questions_count alleen verrijken bij een overzichtelijke (branche-gerichte)
+    // lijst — voor grote fallback-lijsten slaan we dit over i.v.m. snelheid.
+    if (forms.length <= 60) {
+      await Promise.all(
+        forms.map(async f => {
+          const tok = (f.page_id && pageTokenById.get(f.page_id)) || token;
+          const d = await metaGet(`${f.id}?fields=questions{id}`, tok).catch(() => null);
+          const qs = (d?.questions as { data?: unknown[] } | undefined)?.data;
+          if (Array.isArray(qs)) f.questions_count = qs.length;
+        }),
+      );
+    }
+
     forms.sort((a, b) => a.name.localeCompare(b.name));
 
     return NextResponse.json({ forms });
