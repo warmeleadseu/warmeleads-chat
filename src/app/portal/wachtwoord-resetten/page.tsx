@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -8,6 +8,14 @@ import { motion } from 'framer-motion';
 import { ArrowLeftIcon, CheckCircleIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 
 export default function ResetPasswordPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-brand-navy" />}>
+      <ResetPasswordInner />
+    </Suspense>
+  );
+}
+
+function ResetPasswordInner() {
   const searchParams = useSearchParams();
   const token = searchParams.get('token');
 

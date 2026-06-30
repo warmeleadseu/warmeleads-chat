@@ -640,11 +640,17 @@ function RoleSubBar({ role, customerName }: { role: string; customerName: string
 }
 
 export default function PortalLayout({ children }: { children: ReactNode }) {
+  const layoutPathname = usePathname();
   const [customer, setCustomer] = useState<PortalCustomer | null>(null);
   const [portalUser, setPortalUser] = useState<ClientPortalUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [isAdminView, setIsAdminView] = useState(false);
   const [adminName, setAdminName] = useState('');
+
+  // Publieke portaalpagina's die zonder ingelogde sessie bereikbaar moeten zijn.
+  // De wachtwoord-reset-pagina wordt juist geopend door uitgelogde gebruikers
+  // (vanuit de reset-mail), dus die mag nooit achter het login-scherm vallen.
+  const isPublicPortalPage = layoutPathname === '/portal/wachtwoord-resetten';
 
   const isOwner = !portalUser || portalUser.role === 'owner';
 
@@ -899,6 +905,10 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
     localStorage.removeItem('warmeleads-portal-auth');
     window.location.href = '/admin/customers';
   }, []);
+
+  if (isPublicPortalPage) {
+    return <>{children}</>;
+  }
 
   if (loading) {
     return <PortalLoadingScreen />;
