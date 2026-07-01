@@ -73,9 +73,18 @@ export async function syncAssignmentToOutboundWebhook(args: WebhookSyncArgs): Pr
   }
 
   try {
-    // Straatnaam afleiden uit postcode + huisnummer (slaan we zelf niet op).
-    let straat: string | null = null;
-    if (lead.postcode && lead.huisnummer) {
+    // Straatnaam: bij voorkeur de al op de lead opgeslagen waarde
+    // (`custom_fields.straat`, gezet tijdens ingestie), anders live afleiden uit
+    // postcode + huisnummer. Zo blijft de webhook werken als PDOK/Nominatim even
+    // niet bereikbaar is en besparen we een lookup.
+    const cf =
+      lead.custom_fields && typeof lead.custom_fields === 'object' && !Array.isArray(lead.custom_fields)
+        ? (lead.custom_fields as Record<string, unknown>)
+        : {};
+    const storedStraat = cf.straat ?? cf.street ?? cf.adres;
+    let straat: string | null =
+      typeof storedStraat === 'string' && storedStraat.trim() !== '' ? storedStraat.trim() : null;
+    if (!straat && lead.postcode && lead.huisnummer) {
       straat = await resolveStreetName(lead.postcode, lead.huisnummer, {
         land: (lead.land as 'NL' | 'BE' | null) ?? null,
         telefoonnummer: lead.telefoonnummer ?? undefined,

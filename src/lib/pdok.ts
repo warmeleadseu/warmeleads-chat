@@ -566,6 +566,47 @@ export async function resolveCity(
 
 // ─── Lead enrichment ─────────────────────────────────────────────────────
 
+/**
+ * Zet (idempotent) de afgeleide straatnaam in `custom_fields.straat`, zodat de
+ * straat overal beschikbaar is waar de lead getoond/geëxporteerd wordt en waar
+ * een afspraak wordt voorgevuld (`leadRowToAppointmentPrefill` leest `straat`).
+ *
+ * - Alleen wanneer postcode én huisnummer aanwezig zijn.
+ * - Nooit overschrijven als het formulier zelf al een straat/adres meegaf.
+ * - Best-effort: faalt de PDOK/Nominatim-lookup, dan blijft de lead ongewijzigd
+ *   (blokkeert nooit de ingestie/import).
+ */
+async function attachResolvedStreet<
+  T extends {
+    postcode?: string;
+    huisnummer?: string;
+    land?: string;
+    telefoonnummer?: string;
+    email?: string;
+    custom_fields?: Record<string, unknown> | null;
+  }
+>(lead: T): Promise<T> {
+  const postcode = (lead.postcode ?? '').trim();
+  const huisnummer = (lead.huisnummer ?? '').trim();
+  if (!postcode || !huisnummer) return lead;
+
+  const cf =
+    lead.custom_fields && typeof lead.custom_fields === 'object' && !Array.isArray(lead.custom_fields)
+      ? (lead.custom_fields as Record<string, unknown>)
+      : {};
+  const existing = cf.straat ?? cf.street ?? cf.adres;
+  if (typeof existing === 'string' && existing.trim() !== '') return lead;
+
+  const straat = await resolveStreetName(postcode, huisnummer, {
+    land: (lead.land as 'NL' | 'BE' | null | undefined) ?? null,
+    telefoonnummer: lead.telefoonnummer,
+    email: lead.email,
+  });
+  if (!straat) return lead;
+
+  return { ...lead, custom_fields: { ...cf, straat } };
+}
+
 export async function enrichLeadAddress<
   T extends {
     postcode?: string;
@@ -577,6 +618,7 @@ export async function enrichLeadAddress<
     land?: string;
     telefoonnummer?: string;
     email?: string;
+    custom_fields?: Record<string, unknown> | null;
   }
 >(lead: T): Promise<T> {
   const needsPlace = !isValidPlace(lead.plaatsnaam);
@@ -586,35 +628,34 @@ export async function enrichLeadAddress<
   // verrijken; dat voorkomt dat handmatige inserts of webhooks 'Fryslân'
   // doorlaten.
   const normalizedExisting = normalizeProvincie(lead.provincie);
-  if ((!needsPlace && !needsProv && !needsCoords) || !lead.postcode) {
-    if (normalizedExisting !== lead.provincie) {
-      return { ...lead, provincie: normalizedExisting };
+
+  let enriched: T = lead;
+  if (lead.postcode && (needsPlace || needsProv || needsCoords)) {
+    const result = await resolveAddress(
+      lead.postcode,
+      lead.huisnummer ?? '',
+      lead.land as 'NL' | 'BE' | undefined,
+      lead.telefoonnummer,
+      lead.email
+    );
+    if (result) {
+      enriched = {
+        ...lead,
+        plaatsnaam: needsPlace && result.plaatsnaam ? result.plaatsnaam : lead.plaatsnaam,
+        provincie: needsProv && result.provincie ? result.provincie : normalizedExisting,
+        lat: needsCoords && result.lat ? result.lat : lead.lat,
+        lng: needsCoords && result.lng ? result.lng : lead.lng,
+        land: result.land ?? lead.land,
+      };
+    } else if (normalizedExisting !== lead.provincie) {
+      enriched = { ...lead, provincie: normalizedExisting };
     }
-    return lead;
+  } else if (normalizedExisting !== lead.provincie) {
+    enriched = { ...lead, provincie: normalizedExisting };
   }
 
-  const result = await resolveAddress(
-    lead.postcode,
-    lead.huisnummer ?? '',
-    lead.land as 'NL' | 'BE' | undefined,
-    lead.telefoonnummer,
-    lead.email
-  );
-  if (!result) {
-    if (normalizedExisting !== lead.provincie) {
-      return { ...lead, provincie: normalizedExisting };
-    }
-    return lead;
-  }
-
-  return {
-    ...lead,
-    plaatsnaam: needsPlace && result.plaatsnaam ? result.plaatsnaam : lead.plaatsnaam,
-    provincie: needsProv && result.provincie ? result.provincie : normalizedExisting,
-    lat: needsCoords && result.lat ? result.lat : lead.lat,
-    lng: needsCoords && result.lng ? result.lng : lead.lng,
-    land: result.land ?? lead.land,
-  };
+  // Straatnaam afleiden uit postcode + huisnummer en op de lead zetten.
+  return attachResolvedStreet(enriched);
 }
 
 export async function enrichLeadsAddress<
@@ -628,6 +669,7 @@ export async function enrichLeadsAddress<
     land?: string;
     telefoonnummer?: string;
     email?: string;
+    custom_fields?: Record<string, unknown> | null;
   }
 >(leads: T[]): Promise<T[]> {
   const CONCURRENCY = 5;
