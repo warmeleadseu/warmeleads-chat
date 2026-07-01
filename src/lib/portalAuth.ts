@@ -68,9 +68,19 @@ export async function verifyCustomer(request: NextRequest): Promise<PortalSessio
     bearer = authHeader.slice(7).trim();
   }
 
+  // Per-tab impersonatie (admin "bekijk als klant"). Dit token wordt in de
+  // client per browser-tab (sessionStorage) bewaard en als header meegestuurd,
+  // en heeft VOORRANG op de browserbrede sessie-cookie. Zo delen twee gelijktijdig
+  // geopende portaal-tabs niet dezelfde sessie (anders "springen" statussen en
+  // schrijven bewerkingen naar de verkeerde klant).
+  const impersonateHeader = request.headers.get('X-Impersonate-Token');
+  const impersonateJwt =
+    impersonateHeader && looksLikeJwt(impersonateHeader) ? impersonateHeader : null;
+
   const cookieJwt = request.cookies.get(PORTAL_SESSION_COOKIE)?.value ?? null;
 
   const jwtCandidate =
+    impersonateJwt ||
     cookieJwt ||
     (bearer && looksLikeJwt(bearer) ? bearer : null);
 
@@ -182,11 +192,25 @@ export function portalUnauthorized() {
   return NextResponse.json({ error: 'Niet geautoriseerd' }, { status: 401 });
 }
 
+/** sessionStorage-sleutel voor per-tab admin-impersonatie (zie verifyCustomer). */
+export const PORTAL_IMPERSONATION_KEY = 'warmeleads-portal-impersonation';
+
 export function portalHeaders(): Record<string, string> {
   if (typeof window === 'undefined') return {};
+  const h: Record<string, string> = { 'Content-Type': 'application/json' };
   try {
+    // Per-tab impersonatie heeft voorrang: is deze tab geopend als "bekijk als
+    // klant", dan sturen we dat tab-eigen token mee zodat een andere tab (met
+    // een andere klant) de sessie niet overschrijft.
+    const imp = sessionStorage.getItem(PORTAL_IMPERSONATION_KEY);
+    if (imp) {
+      const parsedImp = JSON.parse(imp);
+      if (parsedImp.token && typeof parsedImp.token === 'string') {
+        h['X-Impersonate-Token'] = parsedImp.token;
+        return h;
+      }
+    }
     const raw = localStorage.getItem('warmeleads-portal-auth');
-    const h: Record<string, string> = { 'Content-Type': 'application/json' };
     if (raw) {
       const parsed = JSON.parse(raw);
       if (parsed.token && typeof parsed.token === 'string') {
@@ -205,9 +229,11 @@ export async function portalFetch(url: string, options: RequestInit = {}) {
 
   if (res.status === 401 && typeof window !== 'undefined') {
     try {
+      // Impersonatie-tabs (admin) nooit automatisch uitloggen/redirecten.
+      const isImpersonating = !!sessionStorage.getItem(PORTAL_IMPERSONATION_KEY);
       const raw = localStorage.getItem('warmeleads-portal-auth');
       const isAdmin = raw ? JSON.parse(raw).is_admin_view : false;
-      if (!isAdmin) {
+      if (!isImpersonating && !isAdmin) {
         localStorage.removeItem('warmeleads-portal-auth');
         localStorage.removeItem('warmeleads-portal-customer');
         window.location.href = '/portal';

@@ -56,6 +56,11 @@ export async function POST(request: NextRequest) {
         show_demo_portal,
         has_paid_customer_batch: hasPaidCustomerBatch,
       },
+      // Per-tab token: de client bewaart dit in sessionStorage en stuurt het als
+      // X-Impersonate-Token mee, zodat twee "bekijk als klant"-tabs elkaars
+      // sessie niet overschrijven (de cookie is browserbreed en blijft alleen
+      // als fallback staan).
+      portal_token: portalJwt,
       impersonation: {
         admin_id: payload.admin_id,
         admin_name: payload.admin_name,

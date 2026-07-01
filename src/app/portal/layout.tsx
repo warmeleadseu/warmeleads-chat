@@ -21,7 +21,7 @@ import {
   CalendarDaysIcon,
 } from '@heroicons/react/24/outline';
 import { PortalContext, type PortalCustomer, type ClientPortalUser, isDemoPortalExperience } from './portalContext';
-import { portalFetch } from '@/lib/portalAuth';
+import { portalFetch, PORTAL_IMPERSONATION_KEY } from '@/lib/portalAuth';
 import { PERMISSIONS } from '@/lib/portalPermissions';
 import { UsersIcon } from '@heroicons/react/24/outline';
 import { ToastProvider, AnnouncementBar } from './_ui';
@@ -715,6 +715,27 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
       }
     }
 
+    // Per-tab impersonatie herstellen (voorrang op de browserbrede cookie), zodat
+    // een reload van deze tab dezelfde klant houdt als een andere tab intussen
+    // een andere klant impersoneert.
+    function restoreImpersonationFromSession(): boolean {
+      try {
+        const impRaw = sessionStorage.getItem(PORTAL_IMPERSONATION_KEY);
+        if (!impRaw) return false;
+        const imp = JSON.parse(impRaw);
+        const fresh = imp.timestamp && Date.now() - imp.timestamp < 60 * 60 * 1000;
+        if (imp.customer && imp.token && fresh) {
+          setCustomer(imp.customer);
+          setPortalUser(null);
+          setIsAdminView(true);
+          setAdminName(imp.admin_name || 'Admin');
+          return true;
+        }
+        sessionStorage.removeItem(PORTAL_IMPERSONATION_KEY);
+      } catch { /* noop */ }
+      return false;
+    }
+
     const params = new URLSearchParams(window.location.search);
     const impersonateToken = params.get('impersonate');
 
@@ -736,15 +757,19 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
           setIsAdminView(true);
           setAdminName(data.impersonation?.admin_name || 'Admin');
 
-          localStorage.setItem(
-            'warmeleads-portal-auth',
-            JSON.stringify({
-              customer: data.customer,
-              timestamp: Date.now(),
-              is_admin_view: true,
-              admin_name: data.impersonation?.admin_name || 'Admin',
-            }),
-          );
+          // Per-tab bewaren (sessionStorage): zo krijgt elke "bekijk als klant"-tab
+          // zijn eigen sessie/token en overschrijven twee tabs elkaar niet.
+          try {
+            sessionStorage.setItem(
+              PORTAL_IMPERSONATION_KEY,
+              JSON.stringify({
+                customer: data.customer,
+                token: data.portal_token,
+                timestamp: Date.now(),
+                admin_name: data.impersonation?.admin_name || 'Admin',
+              }),
+            );
+          } catch { /* sessionStorage niet beschikbaar: cookie fungeert als fallback */ }
 
           window.history.replaceState({}, '', '/portal');
         } catch {
@@ -753,6 +778,13 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
           if (!cancelled) setLoading(false);
         }
       })();
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (restoreImpersonationFromSession()) {
+      setLoading(false);
       return () => {
         cancelled = true;
       };
@@ -890,6 +922,7 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
     setIsAdminView(false);
     setAdminName('');
     localStorage.removeItem('warmeleads-portal-auth');
+    try { sessionStorage.removeItem(PORTAL_IMPERSONATION_KEY); } catch { /* noop */ }
   }, []);
 
   const stopAdminView = useCallback(async () => {
@@ -903,6 +936,7 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
     setIsAdminView(false);
     setAdminName('');
     localStorage.removeItem('warmeleads-portal-auth');
+    try { sessionStorage.removeItem(PORTAL_IMPERSONATION_KEY); } catch { /* noop */ }
     window.location.href = '/admin/customers';
   }, []);
 
