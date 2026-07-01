@@ -124,10 +124,31 @@ export default function AdminAppointmentBookModal({
     }
   };
 
+  // Maandag als eerste dag van de week (zelfde conventie als de agenda).
+  const startOfWeek = (d: Date): Date => {
+    const r = new Date(d);
+    r.setHours(0, 0, 0, 0);
+    const day = r.getDay();
+    r.setDate(r.getDate() + (day === 0 ? -6 : 1 - day));
+    return r;
+  };
+
+  // De datumstrip toont de volledige week (ma–zo) van de geselecteerde datum,
+  // zodat hij overeenkomt met de week die in de agenda geopend was.
+  const weekStart = startOfWeek(date);
   const weekDays = Array.from({ length: 7 }, (_, i) => {
-    const today = new Date(); today.setHours(0, 0, 0, 0);
-    const d = new Date(today); d.setDate(today.getDate() + i); return d;
+    const d = new Date(weekStart);
+    d.setDate(weekStart.getDate() + i);
+    return d;
   });
+  const weekEnd = weekDays[6];
+
+  // De pijltjes wisselen per week; de geselecteerde weekdag blijft behouden.
+  const shiftWeek = (n: number) => {
+    const d = new Date(date);
+    d.setDate(d.getDate() + n * 7);
+    setDate(d);
+  };
 
   if (typeof window === 'undefined') return null;
 
@@ -185,7 +206,20 @@ export default function AdminAppointmentBookModal({
             )}
 
             <div>
-              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-500">Datum</label>
+              <div className="mb-2 flex items-center justify-between">
+                <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">Datum</label>
+                <div className="flex items-center gap-1">
+                  <button type="button" onClick={() => shiftWeek(-1)} aria-label="Vorige week" className="h-8 w-8 rounded-lg border border-slate-200 hover:bg-slate-50">
+                    <ChevronLeftIcon className="mx-auto h-3.5 w-3.5" />
+                  </button>
+                  <span className="px-2 text-xs font-semibold text-slate-700">
+                    {weekStart.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })} – {weekEnd.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}
+                  </span>
+                  <button type="button" onClick={() => shiftWeek(1)} aria-label="Volgende week" className="h-8 w-8 rounded-lg border border-slate-200 hover:bg-slate-50">
+                    <ChevronRightIcon className="mx-auto h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
               <div className="flex gap-1.5 overflow-x-auto pb-1">
                 {weekDays.map(d => {
                   const active = d.toDateString() === date.toDateString();

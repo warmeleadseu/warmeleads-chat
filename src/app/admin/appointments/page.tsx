@@ -200,6 +200,35 @@ export default function AdminAppointmentsPage() {
     return m;
   }, [branches]);
 
+  // Opent de boek-modal op de periode die in de agenda getoond wordt, zodat de
+  // datumstrip daar meteen de juiste week laat zien (vandaag als die in de
+  // getoonde week valt, anders de eerste getoonde dag om 09:00).
+  const openNewAppointment = () => {
+    const now = new Date();
+    let start: Date;
+    if (view === 'day') {
+      start = new Date(anchor);
+      start.setHours(9, 0, 0, 0);
+      if (sameYMD(anchor, now)) {
+        start = new Date(now);
+        start.setMinutes(now.getMinutes() < 30 ? 30 : 60, 0, 0);
+      }
+    } else if (view === 'week') {
+      if (now >= weekStart && now < addDays(weekStart, 7)) {
+        start = new Date(now);
+        start.setMinutes(now.getMinutes() < 30 ? 30 : 60, 0, 0);
+      } else {
+        start = new Date(weekStart);
+        start.setHours(9, 0, 0, 0);
+      }
+    } else {
+      start = new Date(now);
+      start.setMinutes(now.getMinutes() < 30 ? 30 : 60, 0, 0);
+    }
+    setBookPrefill({ start });
+    setShowBook(true);
+  };
+
   return (
     <div className="space-y-5">
       {/* Header */}
@@ -209,7 +238,7 @@ export default function AdminAppointmentsPage() {
           <p className="mt-0.5 text-sm text-slate-500">Plan en beheer klant-afspraken · {filtered.length} in zicht</p>
         </div>
         <button
-          onClick={() => { setBookPrefill(null); setShowBook(true); }}
+          onClick={openNewAppointment}
           className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-gradient-to-r from-brand-purple to-brand-pink px-4 text-sm font-bold text-white shadow-sm hover:shadow-md"
         >
           <PlusIcon className="h-4 w-4" />
