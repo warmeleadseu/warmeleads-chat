@@ -769,7 +769,7 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
                 admin_name: data.impersonation?.admin_name || 'Admin',
               }),
             );
-          } catch { /* sessionStorage niet beschikbaar: cookie fungeert als fallback */ }
+          } catch { /* sessionStorage niet beschikbaar: sessie blijft in geheugen tot reload */ }
 
           window.history.replaceState({}, '', '/portal');
         } catch {

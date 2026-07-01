@@ -3,11 +3,7 @@ import { createServerClient } from '@/lib/supabase';
 import { jwtVerify } from 'jose';
 import { getSessionSecretKey } from '@/lib/sessionSecrets';
 import { getHasPaidCustomerBatch, shouldUseDemoPortalExperience } from '@/lib/demoPortalEligibility';
-import {
-  PORTAL_SESSION_COOKIE,
-  portalSessionCookieOptions,
-  signPortalOwnerSession,
-} from '@/lib/portalSession';
+import { signPortalOwnerSession } from '@/lib/portalSession';
 import { qualifiesBelgiumReverseCharge } from '@/lib/invoiceVat';
 
 const ISSUER = 'warmeleads-admin';
@@ -47,7 +43,13 @@ export async function POST(request: NextRequest) {
     const portalJwt = await signPortalOwnerSession(customer.id);
     const billingCountry = (customer.country as string | null | undefined) ?? 'NL';
     const reverse_charge = qualifiesBelgiumReverseCharge({ country: billingCountry, vat_id: customer.vat_id });
-    const res = NextResponse.json({
+
+    // BEWUST géén sessie-cookie zetten: impersonatie is volledig per-tab. De client
+    // bewaart onderstaand token in sessionStorage en stuurt het als
+    // X-Impersonate-Token mee bij elke aanvraag. Zo kan een admin tegelijk het
+    // klantportaal én ons eigen portaal (evt. via echte login) open hebben zonder
+    // dat de browserbrede cookie de sessies door elkaar haalt.
+    return NextResponse.json({
       success: true,
       customer: {
         ...customer,
@@ -56,18 +58,12 @@ export async function POST(request: NextRequest) {
         show_demo_portal,
         has_paid_customer_batch: hasPaidCustomerBatch,
       },
-      // Per-tab token: de client bewaart dit in sessionStorage en stuurt het als
-      // X-Impersonate-Token mee, zodat twee "bekijk als klant"-tabs elkaars
-      // sessie niet overschrijven (de cookie is browserbreed en blijft alleen
-      // als fallback staan).
       portal_token: portalJwt,
       impersonation: {
         admin_id: payload.admin_id,
         admin_name: payload.admin_name,
       },
     });
-    res.cookies.set(PORTAL_SESSION_COOKIE, portalJwt, portalSessionCookieOptions());
-    return res;
   } catch {
     return NextResponse.json({ error: 'Token ongeldig of verlopen' }, { status: 403 });
   }
