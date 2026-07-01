@@ -6,6 +6,7 @@ import { isInboundLeadBranchSlug } from './nicheResearch';
 import { leadMatchesAnyProvinceTarget } from './provinceTargetMatch';
 import { targetCountryAllowsLead } from './targetCountryMatch';
 import { effectiveMaxAssignments, recentDistinctCustomerIds } from './assignmentCap';
+import { MIRROR_ASSIGNMENT_SOURCE } from './masterPortalMirror';
 
 type NicheResearchBatch = {
   id: string;
@@ -122,6 +123,7 @@ export async function tryAssignLeadToNicheResearchBatch(
   const { data: existing } = await supabase
     .from('lead_assignments')
     .select('customer_id, assigned_at')
+    .neq('source', MIRROR_ASSIGNMENT_SOURCE)
     .eq('lead_id', lead.id);
   const assignedCustomerIds = new Set((existing || []).map((r) => r.customer_id));
 

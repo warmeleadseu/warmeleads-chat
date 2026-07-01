@@ -15,6 +15,7 @@ import {
   recentDistinctCustomerIds,
   canAssignWithinCap,
 } from './assignmentCap';
+import { mirrorLeadToMasterPortal, MIRROR_ASSIGNMENT_SOURCE } from './masterPortalMirror';
 
 const MAX_LEAD_AGE_DAYS = 3;
 const COOLDOWN_HOURS = 12;
@@ -44,6 +45,7 @@ async function fetchAssignmentsForLeadIds(
     const { data, error } = await supabase
       .from('lead_assignments')
       .select('lead_id, assigned_at')
+      .neq('source', MIRROR_ASSIGNMENT_SOURCE)
       .in('lead_id', chunk);
     if (error) {
       console.error('[distribution] fetchAssignmentsForLeadIds:', error.message);
@@ -71,6 +73,7 @@ async function fetchAssignmentCustomersForLeadIds(
     const { data, error } = await supabase
       .from('lead_assignments')
       .select('lead_id, customer_id, assigned_at')
+      .neq('source', MIRROR_ASSIGNMENT_SOURCE)
       .in('lead_id', chunk);
     if (error) {
       console.error('[distribution] fetchAssignmentCustomersForLeadIds:', error.message);
@@ -290,6 +293,16 @@ export async function distributeLead(
   // Double-check after DB fetch in case bron wasn't passed by caller
   if (fullLead.bron === 'demo') return result;
 
+  // Master-portaal mirror: bepaalde branches (bv. kozijnen) worden altijd in
+  // een overkoepelend portaal getoond. Dit gebeurt vóór alle geo-/cap-checks
+  // zodat ook leads zonder coördinaten meteen zichtbaar zijn. De mirror-rij
+  // telt niet mee voor de verdeel-cap (zie de `source='mirror'`-filters boven).
+  await mirrorLeadToMasterPortal(supabase, {
+    id: fullLead.id,
+    branch: fullLead.branch,
+    bron: fullLead.bron,
+  });
+
   // Niche-onderzoek: geo-targeting via customer_targets (provincies/radius),
   // telt niet mee voor pipeline 12u-cooldown.
   if (fullLead.phone_valid !== false) {
@@ -316,6 +329,7 @@ export async function distributeLead(
   const { data: existingAssignments } = await supabase
     .from('lead_assignments')
     .select('customer_id, assigned_at, batch_id, customer_batches(batch_kind)')
+    .neq('source', MIRROR_ASSIGNMENT_SOURCE)
     .eq('lead_id', lead.id);
 
   const pipelineCooldownAssignments = (existingAssignments || []).filter((a) => {
