@@ -293,6 +293,12 @@ export default function PortalPage() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  // Aantal leads per pagina; keuze blijft bewaard per browser.
+  const [pageSize, setPageSize] = useState<number>(() => {
+    if (typeof window === 'undefined') return 25;
+    const stored = parseInt(window.localStorage.getItem('portalLeadsPageSize') || '', 10);
+    return [25, 50, 100, 200].includes(stored) ? stored : 25;
+  });
   const [loading, setLoading] = useState(true);
   const [branchConfigs, setBranchConfigs] = useState<BranchConfig[]>([]);
 
@@ -485,7 +491,7 @@ export default function PortalPage() {
     setLoading(true);
     const params = new URLSearchParams();
     params.set('page', page.toString());
-    params.set('limit', '25');
+    params.set('limit', pageSize.toString());
     params.set('sort', sort);
     params.set('order', order);
     if (statusFilter !== 'all') params.set('status', statusFilter);
@@ -517,7 +523,7 @@ export default function PortalPage() {
       showToast('Leads konden niet geladen worden', 'error');
     }
     setLoading(false);
-  }, [page, sort, order, statusFilter, activeBranchTab, search, dateFrom, dateTo, leadSource, showToast]);
+  }, [page, pageSize, sort, order, statusFilter, activeBranchTab, search, dateFrom, dateTo, leadSource, showToast]);
 
   const fetchBranches = useCallback(async () => {
     try {
@@ -1505,27 +1511,51 @@ export default function PortalPage() {
           </div>
 
           {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between">
-              <p className="text-xs text-slate-500">
-                Pagina {page} van {totalPages}
-              </p>
-              <div className="flex gap-1">
-                <button
-                  onClick={() => setPage(p => Math.max(1, p - 1))}
-                  disabled={page <= 1}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:bg-slate-50 disabled:opacity-40"
+          {total > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-xs text-slate-500">
+                <span>Per pagina:</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    const next = parseInt(e.target.value, 10);
+                    setPageSize(next);
+                    setPage(1);
+                    if (typeof window !== 'undefined') {
+                      window.localStorage.setItem('portalLeadsPageSize', String(next));
+                    }
+                  }}
+                  className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 focus:border-brand-navy focus:outline-none"
+                  aria-label="Aantal leads per pagina"
                 >
-                  <ChevronLeftIcon className="h-4 w-4" />
-                </button>
-                <button
-                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                  disabled={page >= totalPages}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:bg-slate-50 disabled:opacity-40"
-                >
-                  <ChevronRightIcon className="h-4 w-4" />
-                </button>
+                  {[25, 50, 100, 200].map((n) => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </select>
               </div>
+              {totalPages > 1 && (
+                <div className="flex items-center gap-3">
+                  <p className="text-xs text-slate-500">
+                    Pagina {page} van {totalPages}
+                  </p>
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => setPage(p => Math.max(1, p - 1))}
+                      disabled={page <= 1}
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:bg-slate-50 disabled:opacity-40"
+                    >
+                      <ChevronLeftIcon className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                      disabled={page >= totalPages}
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:bg-slate-50 disabled:opacity-40"
+                    >
+                      <ChevronRightIcon className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
