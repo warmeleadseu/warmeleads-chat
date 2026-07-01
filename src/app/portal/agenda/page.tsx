@@ -210,9 +210,29 @@ export default function AgendaPage() {
   const openNewAppointment = () => {
     if (!canEdit) return;
     const now = new Date();
-    const rounded = new Date(now);
-    rounded.setMinutes(now.getMinutes() < 30 ? 30 : 60, 0, 0);
-    setBookSlot({ start: rounded });
+    // Open de modal op de periode die in de agenda getoond wordt, zodat de
+    // datumstrip daar meteen de juiste week laat zien. Valt "vandaag" binnen de
+    // getoonde periode, dan starten we op nu (afgerond); anders op de eerste
+    // getoonde dag om 09:00.
+    let start: Date;
+    if (view === 'day') {
+      start = new Date(anchor);
+      start.setHours(9, 0, 0, 0);
+      if (anchor.toDateString() === now.toDateString()) {
+        start = new Date(now);
+        start.setMinutes(now.getMinutes() < 30 ? 30 : 60, 0, 0);
+      }
+    } else {
+      const todayInWeek = now >= weekStart && now < addDays(weekStart, 7);
+      if (todayInWeek) {
+        start = new Date(now);
+        start.setMinutes(now.getMinutes() < 30 ? 30 : 60, 0, 0);
+      } else {
+        start = new Date(weekStart);
+        start.setHours(9, 0, 0, 0);
+      }
+    }
+    setBookSlot({ start });
     setShowBook(true);
   };
 
