@@ -458,14 +458,14 @@ export default function TestPanelPage() {
         transition={{ delay: 0.15 }}
         className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
       >
-        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 px-5 py-4">
           <div>
             <h2 className="font-bold text-slate-900">Accountmanagers &amp; Video&apos;s</h2>
             <p className="text-xs text-slate-500">Overzicht van alle AMs en hun celebration video status</p>
           </div>
           <button
             onClick={cleanupEvents}
-            className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-500 hover:bg-slate-50"
+            className="self-start flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-500 hover:bg-slate-50"
           >
             <TrashIcon className="h-3.5 w-3.5" />
             Oude events opruimen
@@ -494,7 +494,7 @@ export default function TestPanelPage() {
               const hasVideo = !!am.celebration_video_url;
               const ytId = hasVideo ? extractYouTubeId(am.celebration_video_url!) : null;
               return (
-                <div key={am.id} className="flex items-center gap-4 px-5 py-3.5">
+                <div key={am.id} className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4 px-5 py-3.5">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-purple/10 text-sm font-bold text-brand-purple">
                     {am.name.charAt(0).toUpperCase()}
                   </div>
@@ -503,7 +503,7 @@ export default function TestPanelPage() {
                     <p className="text-xs text-slate-500">{am.email}</p>
                   </div>
                   {hasVideo ? (
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 self-start">
                       <img
                         src={`https://img.youtube.com/vi/${ytId}/default.jpg`}
                         alt="Video"
@@ -531,7 +531,7 @@ export default function TestPanelPage() {
                       </div>
                     </div>
                   ) : (
-                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-400">
+                    <span className="self-start rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-400">
                       Geen video
                     </span>
                   )}

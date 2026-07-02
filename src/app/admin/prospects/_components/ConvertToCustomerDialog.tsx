@@ -108,18 +108,18 @@ export function ConvertToCustomerDialog({ open, onClose, prospect, branches, onD
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         onClick={e => e.stopPropagation()}
-        className="w-full max-w-lg rounded-2xl bg-white shadow-xl"
+        className="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-xl"
       >
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
           <h2 className="flex items-center gap-2 text-lg font-bold text-slate-900">
             <CheckBadgeIcon className="h-5 w-5 text-emerald-600" />
             Promoveer naar klant
           </h2>
-          <button type="button" onClick={onClose} className="rounded p-1 text-slate-400 hover:bg-slate-100">
+          <button type="button" onClick={onClose} className="inline-flex h-10 w-10 items-center justify-center rounded text-slate-400 hover:bg-slate-100">
             <XMarkIcon className="h-5 w-5" />
           </button>
         </div>
-        <div className="space-y-4 p-5">
+        <div className="flex-1 space-y-4 overflow-y-auto p-5">
           <div className="rounded-xl bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
             Er wordt een nieuwe klant aangemaakt. De prospect krijgt status <strong>Gewonnen</strong> en blijft als
             historische referentie bestaan, gekoppeld aan de nieuwe klant.
@@ -184,11 +184,20 @@ export function ConvertToCustomerDialog({ open, onClose, prospect, branches, onD
             {partitioned.ignored.length > 0 && (
               <div className="mt-2 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
                 <ExclamationTriangleIcon className="mt-0.5 h-4 w-4 flex-shrink-0" />
-                <div>
-                  <p className="font-medium">
-                    Genegeerde interesse{partitioned.ignored.length > 1 ? 's' : ''} uit de prospect:{' '}
-                    {partitioned.ignored.map(s => `"${s}"`).join(', ')}
+                <div className="min-w-0">
+                  <p className="break-words font-medium">
+                    Genegeerde interesse{partitioned.ignored.length > 1 ? 's' : ''} uit de prospect:
                   </p>
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {partitioned.ignored.map(s => (
+                      <span
+                        key={s}
+                        className="break-all rounded bg-amber-100 px-1.5 py-0.5 font-mono text-[11px] text-amber-800"
+                      >
+                        {s}
+                      </span>
+                    ))}
+                  </div>
                   <p className="mt-0.5 text-amber-700">
                     Komt niet overeen met een bestaande branche. Kies hierboven handmatig de juiste
                     branche(s) voor deze klant.

@@ -155,7 +155,7 @@ function PreviewModal({
             <h2 className="text-lg font-semibold text-slate-800 truncate">{subject}</h2>
             {meta && (
               <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1.5 text-xs text-slate-500">
-                {meta.to_email && <span>Aan: <span className="text-slate-700 font-medium">{meta.to_email}</span></span>}
+                {meta.to_email && <span>Aan: <span className="text-slate-700 font-medium break-all">{meta.to_email}</span></span>}
                 {meta.created_at && <span>{fmtDate(meta.created_at)}</span>}
                 {meta.status && <span className="inline-flex">{statusBadge(meta.status)}</span>}
                 {meta.type && <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${typeColor(meta.type)}`}>{TYPE_LABELS[meta.type] || meta.type}</span>}
@@ -165,7 +165,7 @@ function PreviewModal({
               <p className="mt-2 text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-2.5 py-1.5">{meta.error}</p>
             )}
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors shrink-0">
+          <button onClick={onClose} className="inline-flex items-center justify-center p-2.5 min-h-[44px] min-w-[44px] rounded-lg hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors shrink-0">
             <XMarkIcon className="w-5 h-5" />
           </button>
         </div>
@@ -185,7 +185,7 @@ function PreviewModal({
         {onTest && (
           <div className="p-4 border-t border-slate-200 bg-slate-50">
             <p className="text-xs font-medium text-slate-500 mb-2">Test verzending</p>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-col sm:flex-row gap-2">
               <input
                 type="email"
                 value={testAddress}
@@ -197,7 +197,7 @@ function PreviewModal({
               <button
                 onClick={handleTest}
                 disabled={testSending || !testAddress}
-                className="flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-sm font-medium transition-colors"
+                className="flex items-center justify-center gap-2 w-full sm:w-auto shrink-0 px-4 py-2 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-sm font-medium transition-colors"
               >
                 {testSending ? (
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -389,7 +389,7 @@ export default function EmailLogPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-xl p-1">
+      <div className="flex flex-wrap items-center gap-1 bg-white border border-slate-200 rounded-xl p-1">
         <button
           onClick={() => setTab('templates')}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
@@ -656,7 +656,7 @@ export default function EmailLogPage() {
                       </div>
                       <div>
                         <p className="text-sm font-medium text-slate-700 line-clamp-1">{em.subject}</p>
-                        <p className="text-xs text-slate-500 mt-0.5">{em.to_email}{em.to_name ? ` (${em.to_name})` : ''}</p>
+                        <p className="text-xs text-slate-500 mt-0.5 break-all">{em.to_email}{em.to_name ? ` (${em.to_name})` : ''}</p>
                         {(em.cc_emails?.length || em.bcc_emails?.length) ? (
                           <p className="mt-0.5 text-[10px] text-slate-400 truncate">
                             {(em.cc_emails?.length ?? 0) > 0 && <span><span className="font-semibold mr-0.5">Cc</span>{em.cc_emails!.join(', ')}</span>}
@@ -678,7 +678,7 @@ export default function EmailLogPage() {
 
               {/* Pagination */}
               {totalPages > 1 && (
-                <div className="flex items-center justify-between bg-white border border-slate-200 rounded-2xl px-4 py-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between bg-white border border-slate-200 rounded-2xl px-4 py-3">
                   <p className="text-sm text-slate-500">
                     Pagina <span className="font-medium text-slate-700">{page}</span> van <span className="font-medium text-slate-700">{totalPages}</span>
                     <span className="hidden sm:inline"> · {total} resultaten</span>

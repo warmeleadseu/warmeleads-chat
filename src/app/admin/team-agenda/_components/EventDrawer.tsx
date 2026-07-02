@@ -496,7 +496,7 @@ export function EventDrawer({
             transition={{ type: 'spring', stiffness: 300, damping: 30 }}
             className="fixed inset-y-0 right-0 z-50 flex w-full max-w-xl flex-col bg-white shadow-2xl"
           >
-            <header className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+            <header className="flex items-center justify-between border-b border-slate-200 px-5 py-4" style={{ paddingTop: 'max(env(safe-area-inset-top), 1rem)' }}>
               <div>
                 <h2 className="text-lg font-bold text-slate-900">
                   {mode === 'edit' ? 'Event bewerken' : 'Nieuw event'}
@@ -531,7 +531,7 @@ export function EventDrawer({
               </div>
               <button
                 onClick={onClose}
-                className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
               >
                 <XMarkIcon className="h-5 w-5" />
               </button>
@@ -612,7 +612,7 @@ export function EventDrawer({
               </div>
 
               {/* Date/time */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <label className="mb-1.5 block text-xs font-semibold text-slate-700">
                     Start
@@ -736,8 +736,8 @@ export function EventDrawer({
 
                   {/* Status: bevestiging eerder verstuurd + opnieuw versturen */}
                   {mode === 'edit' && existingEvent?.confirmation_sent_at && (
-                    <div className="mt-3 flex items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
-                      <div className="flex items-center gap-2 text-[12px] text-emerald-800">
+                    <div className="mt-3 flex flex-col gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex min-w-0 items-center gap-2 text-[12px] text-emerald-800">
                         <CheckCircleIcon className="h-4 w-4 shrink-0" />
                         <span>
                           Bevestiging verstuurd op{' '}
@@ -753,7 +753,7 @@ export function EventDrawer({
                         <button
                           type="button"
                           onClick={() => onConfirmationRequested(form.id!)}
-                          className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-1 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-200 hover:bg-emerald-100"
+                          className="inline-flex shrink-0 items-center gap-1 rounded-md bg-white px-2 py-1 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-200 hover:bg-emerald-100"
                         >
                           <PaperAirplaneIcon className="h-3 w-3" />
                           Opnieuw versturen
@@ -844,14 +844,14 @@ export function EventDrawer({
                           onChange={e => patch({ meeting_url: e.target.value })}
                           disabled={!canMutate}
                           placeholder="Plak hier je videocall-link, bv. https://meet.google.com/abc-defg-hij"
-                          className="w-full bg-transparent text-[13px] text-indigo-900 outline-none placeholder:text-indigo-300"
+                          className="w-full min-w-0 bg-transparent text-[13px] text-indigo-900 outline-none placeholder:text-indigo-300"
                         />
                         {hasUrl && (
                           <>
                             <button
                               type="button"
                               onClick={handleCopyMeetingUrl}
-                              className="rounded p-1.5 text-indigo-600 hover:bg-indigo-50"
+                              className="shrink-0 rounded p-1.5 text-indigo-600 hover:bg-indigo-50"
                               title="Kopieer link"
                             >
                               {copiedMeetingUrl ? (
@@ -867,7 +867,7 @@ export function EventDrawer({
                               onClick={e => {
                                 if (!isValidHttps) e.preventDefault();
                               }}
-                              className={`rounded p-1.5 ${
+                              className={`shrink-0 rounded p-1.5 ${
                                 isValidHttps
                                   ? 'text-indigo-600 hover:bg-indigo-50'
                                   : 'pointer-events-none text-slate-300'
@@ -960,8 +960,8 @@ export function EventDrawer({
 
                     {/* Status: uitnodiging eerder verstuurd + opnieuw versturen */}
                     {mode === 'edit' && existingEvent?.meeting_invite_sent_at && (
-                      <div className="mt-3 flex items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
-                        <div className="flex items-center gap-2 text-[12px] text-emerald-800">
+                      <div className="mt-3 flex flex-col gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex min-w-0 items-center gap-2 text-[12px] text-emerald-800">
                           <CheckCircleIcon className="h-4 w-4 shrink-0" />
                           <span>
                             Uitnodiging verstuurd op{' '}
@@ -978,7 +978,7 @@ export function EventDrawer({
                             type="button"
                             onClick={handleResendInvite}
                             disabled={inviteSending}
-                            className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-1 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-200 hover:bg-emerald-100 disabled:opacity-60"
+                            className="inline-flex shrink-0 items-center gap-1 rounded-md bg-white px-2 py-1 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-200 hover:bg-emerald-100 disabled:opacity-60"
                           >
                             <PaperAirplaneIcon className="h-3 w-3" />
                             {inviteSending ? 'Bezig…' : 'Opnieuw versturen'}
@@ -1089,7 +1089,7 @@ export function EventDrawer({
               )}
             </div>
 
-            <footer className="flex items-center justify-between gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
+            <footer className="flex flex-col gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3 sm:flex-row sm:items-center sm:justify-between" style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 0.75rem)' }}>
               <div>
                 {mode === 'edit' && canMutate && (
                   <>
@@ -1122,10 +1122,10 @@ export function EventDrawer({
                   </>
                 )}
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                 <button
                   onClick={onClose}
-                  className="rounded-md bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50"
+                  className="w-full rounded-md bg-white px-3 py-2 text-xs font-semibold text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50 sm:w-auto sm:py-1.5"
                 >
                   Annuleer
                 </button>
@@ -1133,7 +1133,7 @@ export function EventDrawer({
                   <button
                     onClick={handleSubmit}
                     disabled={saving}
-                    className="rounded-md bg-brand-purple px-4 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-brand-purple/90 disabled:opacity-60"
+                    className="w-full rounded-md bg-brand-purple px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-brand-purple/90 disabled:opacity-60 sm:w-auto sm:py-1.5"
                   >
                     {saving ? 'Opslaan…' : mode === 'edit' ? 'Wijzigingen opslaan' : 'Event aanmaken'}
                   </button>

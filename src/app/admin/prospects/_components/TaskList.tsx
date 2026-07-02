@@ -149,7 +149,7 @@ export function TaskList({ prospectId, tasks, onChange }: Props) {
               placeholder="Bv. 'Bel maandag voor offerte'"
               className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-brand-purple/50"
             />
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <select
                 value={type}
                 onChange={e => setType(e.target.value as typeof type)}
@@ -172,7 +172,7 @@ export function TaskList({ prospectId, tasks, onChange }: Props) {
               <button
                 type="button"
                 onClick={() => setAdding(false)}
-                className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                className="min-h-[44px] rounded-lg border border-slate-200 px-3 py-2.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
               >
                 Annuleren
               </button>
@@ -180,7 +180,7 @@ export function TaskList({ prospectId, tasks, onChange }: Props) {
                 type="button"
                 onClick={create}
                 disabled={saving || !title.trim()}
-                className="rounded-lg bg-brand-purple px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-purple/90 disabled:opacity-50"
+                className="min-h-[44px] rounded-lg bg-brand-purple px-3 py-2.5 text-xs font-semibold text-white hover:bg-brand-purple/90 disabled:opacity-50"
               >
                 Toevoegen
               </button>
@@ -208,7 +208,7 @@ export function TaskList({ prospectId, tasks, onChange }: Props) {
                 <button
                   type="button"
                   onClick={() => toggle(t)}
-                  className={`mt-0.5 rounded-full ${
+                  className={`inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full ${
                     completed ? 'text-emerald-500' : 'text-slate-300 hover:text-emerald-500'
                   }`}
                   aria-label={completed ? 'Markeer als open' : 'Afronden'}
@@ -234,7 +234,7 @@ export function TaskList({ prospectId, tasks, onChange }: Props) {
                 <button
                   type="button"
                   onClick={() => remove(t)}
-                  className="rounded p-1 text-slate-300 hover:bg-rose-50 hover:text-rose-500"
+                  className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded text-slate-300 hover:bg-rose-50 hover:text-rose-500"
                   aria-label="Verwijderen"
                 >
                   <TrashIcon className="h-4 w-4" />

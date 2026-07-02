@@ -266,7 +266,7 @@ function Section({
 }) {
   return (
     <div>
-      <div className="mb-2 flex items-center justify-between">
+      <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">{title}</h3>
         {right}
       </div>

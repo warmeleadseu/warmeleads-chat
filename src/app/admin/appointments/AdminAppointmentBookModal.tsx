@@ -171,7 +171,7 @@ export default function AdminAppointmentBookModal({
               <p className="text-xs text-slate-500">Selecteer klant, branche en tijdslot</p>
             </div>
           </div>
-          <button onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100">
+          <button onClick={onClose} className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg p-2.5 text-slate-400 hover:bg-slate-100">
             <XMarkIcon className="h-5 w-5" />
           </button>
         </header>
@@ -209,13 +209,13 @@ export default function AdminAppointmentBookModal({
               <div className="mb-2 flex items-center justify-between">
                 <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">Datum</label>
                 <div className="flex items-center gap-1">
-                  <button type="button" onClick={() => shiftWeek(-1)} aria-label="Vorige week" className="h-8 w-8 rounded-lg border border-slate-200 hover:bg-slate-50">
+                  <button type="button" onClick={() => shiftWeek(-1)} aria-label="Vorige week" className="flex h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-lg border border-slate-200 hover:bg-slate-50">
                     <ChevronLeftIcon className="mx-auto h-3.5 w-3.5" />
                   </button>
                   <span className="px-2 text-xs font-semibold text-slate-700">
                     {weekStart.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })} – {weekEnd.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}
                   </span>
-                  <button type="button" onClick={() => shiftWeek(1)} aria-label="Volgende week" className="h-8 w-8 rounded-lg border border-slate-200 hover:bg-slate-50">
+                  <button type="button" onClick={() => shiftWeek(1)} aria-label="Volgende week" className="flex h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-lg border border-slate-200 hover:bg-slate-50">
                     <ChevronRightIcon className="mx-auto h-3.5 w-3.5" />
                   </button>
                 </div>
@@ -276,7 +276,7 @@ export default function AdminAppointmentBookModal({
                 <Field label="Straat"><input value={street} onChange={e => setStreet(e.target.value)} className={inputCls} /></Field>
                 <div className="w-24"><Field label="Nr."><input value={houseNumber} onChange={e => setHouseNumber(e.target.value)} className={inputCls} /></Field></div>
               </div>
-              <div className="grid grid-cols-[120px_1fr] gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-[120px_1fr]">
                 <Field label="Postcode"><input value={postcode} onChange={e => setPostcode(e.target.value)} className={inputCls} /></Field>
                 <Field label="Plaats"><input value={city} onChange={e => setCity(e.target.value)} className={inputCls} /></Field>
               </div>

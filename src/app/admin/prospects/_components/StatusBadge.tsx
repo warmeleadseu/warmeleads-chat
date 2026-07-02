@@ -10,7 +10,7 @@ export function StatusBadge({ status, size = 'md' }: Props) {
   const padding = size === 'sm' ? 'px-2 py-0.5 text-[11px]' : 'px-2.5 py-1 text-xs';
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full font-medium ring-1 ring-inset ${c.bg} ${c.text} ${c.ring} ${padding}`}
+      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full font-medium ring-1 ring-inset ${c.bg} ${c.text} ${c.ring} ${padding}`}
     >
       <span className={`h-1.5 w-1.5 rounded-full ${c.dot}`} aria-hidden />
       {PROSPECT_STATUS_LABELS[status]}

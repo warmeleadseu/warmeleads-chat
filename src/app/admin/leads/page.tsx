@@ -782,10 +782,10 @@ export default function LeadsCRMPage() {
           </select>
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-2">
-            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700" />
+          <div className="flex flex-wrap items-center gap-2">
+            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="w-full max-w-[9.5rem] rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 sm:w-auto" />
             <span className="text-xs text-slate-400">t/m</span>
-            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700" />
+            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="w-full max-w-[9.5rem] rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 sm:w-auto" />
           </div>
           {(dateFrom || dateTo) && (
             <label className="flex cursor-pointer select-none items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
@@ -868,7 +868,7 @@ export default function LeadsCRMPage() {
           <AnimatePresence>
             {showExportHistory && (
               <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
-                <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+                <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
                   <table className="w-full text-left text-sm">
                     <thead>
                       <tr className="border-b border-slate-100 bg-slate-50/80">
@@ -1028,7 +1028,7 @@ export default function LeadsCRMPage() {
                       </td>
                     ))}
                     <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
-                      <button onClick={() => handleDeleteSingle(lead.id, lead.naam_klant)} className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500"><TrashIcon className="h-4 w-4" /></button>
+                      <button onClick={() => handleDeleteSingle(lead.id, lead.naam_klant)} className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500"><TrashIcon className="h-4 w-4" /></button>
                     </td>
                   </tr>
                 );
@@ -1060,7 +1060,7 @@ export default function LeadsCRMPage() {
                 </div>
                 <div onClick={e => e.stopPropagation()}>
                   <select value={lead.status} onChange={e => handleQuickStatus(lead.id, e.target.value)}
-                    className={`ml-2 shrink-0 rounded-full border-0 px-2 py-0.5 text-[11px] font-medium ${STATUS_COLORS[lead.status] || 'bg-slate-100 text-slate-600'}`}>
+                    className={`ml-2 min-h-10 shrink-0 rounded-full border-0 px-2 py-0.5 text-[11px] font-medium ${STATUS_COLORS[lead.status] || 'bg-slate-100 text-slate-600'}`}>
                     {STATUSES.map(s => <option key={s} value={s}>{statusLabel(s)}</option>)}
                   </select>
                 </div>
@@ -1074,9 +1074,9 @@ export default function LeadsCRMPage() {
                 })()}
                 {lead.plaatsnaam && <span>{lead.plaatsnaam}</span>}
                 {lead.telefoonnummer && (
-                  <span className="flex items-center gap-0.5">
-                    {lead.telefoonnummer}
-                    {lead.phone_valid === false && <ExclamationTriangleIcon className="h-3 w-3 text-amber-500" />}
+                  <span className="flex min-w-0 items-center gap-0.5">
+                    <span className="truncate break-all">{lead.telefoonnummer}</span>
+                    {lead.phone_valid === false && <ExclamationTriangleIcon className="h-3 w-3 shrink-0 text-amber-500" />}
                   </span>
                 )}
                 {lead.wervingsdatum ? (
@@ -1397,7 +1397,7 @@ function ExportModal({
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm" onClick={onClose} />
       <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ type: 'spring', damping: 25, stiffness: 300 }}
         className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto p-4 sm:items-center">
-        <div className="my-8 w-full max-w-2xl rounded-2xl bg-white shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="my-8 flex max-h-[calc(100dvh-2rem)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl" onClick={e => e.stopPropagation()}>
           <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
             <div>
               <h2 className="text-lg font-bold text-slate-900">Bulk Lead Export</h2>
@@ -1411,7 +1411,7 @@ function ExportModal({
             <button onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"><XMarkIcon className="h-5 w-5" /></button>
           </div>
 
-          <div className="space-y-4 p-5">
+          <div className="flex-1 space-y-4 overflow-y-auto p-5">
             {error && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-600">{error}</div>}
 
             {isBulkBatchFlow && batchInfo && (
@@ -1876,8 +1876,8 @@ function BulkAssignModal({
     <>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm" onClick={onClose} />
       <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-        className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-        <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl" onClick={e => e.stopPropagation()}>
+        className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto p-4 sm:items-center">
+        <div className="my-8 max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto rounded-2xl bg-white shadow-2xl" onClick={e => e.stopPropagation()}>
           <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
             <div>
               <h2 className="text-lg font-bold text-slate-900">Leads toewijzen aan klant</h2>
@@ -2123,7 +2123,7 @@ function LeadFormPanel({
         </div>
         <div className="space-y-5 p-5">
           {error && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-600">{error}</div>}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-500">Branche</label>
               <select value={formBranch} onChange={e => setFormBranch(e.target.value)} disabled={isEdit}
@@ -2146,8 +2146,8 @@ function LeadFormPanel({
           </div>
           <div className="border-t border-slate-100 pt-4">
             <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">Contactgegevens</p>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="col-span-2">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="sm:col-span-2">
                 <label className="mb-1 block text-xs font-medium text-slate-500">Naam klant *</label>
                 <input value={form.naam_klant || ''} onChange={e => set('naam_klant', e.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
               </div>
@@ -2191,7 +2191,7 @@ function LeadFormPanel({
           </div>
           <div className="border-t border-slate-100 pt-4">
             <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">Status & metadata</p>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
                 <label className="mb-1 block text-xs font-medium text-slate-500">Status</label>
                 <select value={form.status || 'nieuw'} onChange={e => set('status', e.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900">
@@ -2211,7 +2211,7 @@ function LeadFormPanel({
           {branchFields.length > 0 && (
             <div className="border-t border-slate-100 pt-4">
               <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">{branchConfig?.name} details</p>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {branchFields.map(f => (
                   <div key={f.key}>
                     <label className="mb-1 block text-xs font-medium text-slate-500">{f.label}{f.is_required ? ' *' : ''}</label>
@@ -2240,7 +2240,7 @@ function LeadFormPanel({
           {isEdit && (lead?.meta_campaign_id || lead?.meta_ad_id || lead?.lead_cost) && (
             <div className="border-t border-slate-100 pt-4">
               <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">Meta Ads</p>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {lead?.meta_campaign_id && (
                   <div>
                     <label className="mb-1 block text-xs font-medium text-slate-500">Campaign ID</label>

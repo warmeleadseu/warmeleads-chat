@@ -171,7 +171,7 @@ export function ActivityTimeline({ prospectId, activities, onAdded }: Props) {
       </div>
 
       {activities.length > 0 && (
-        <div className="flex items-center gap-1 text-[11px]">
+        <div className="flex flex-wrap items-center gap-2 text-[11px]">
           {([
             { id: 'all', label: 'Alles' },
             { id: 'contact', label: 'Contact' },
@@ -218,7 +218,7 @@ export function ActivityTimeline({ prospectId, activities, onAdded }: Props) {
                     <p className="text-sm font-medium text-slate-800">{a.title}</p>
                     <span className="shrink-0 text-[11px] text-slate-400">{relTime(a.created_at)}</span>
                   </div>
-                  {a.body && <p className="mt-1 whitespace-pre-wrap text-xs text-slate-500">{a.body}</p>}
+                  {a.body && <p className="mt-1 whitespace-pre-wrap break-words text-xs text-slate-500">{a.body}</p>}
                 </div>
               </li>
             );

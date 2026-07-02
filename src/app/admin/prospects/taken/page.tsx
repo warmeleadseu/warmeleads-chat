@@ -327,7 +327,7 @@ export default function ProspectTasksOverviewPage() {
   const allowedTypes = ['todo', 'call', 'email', 'meeting', 'followup'];
 
   return (
-    <div className="space-y-5 px-4 py-6 sm:px-6 lg:px-8">
+    <div className="space-y-5">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="flex items-center gap-2 text-xl font-bold text-slate-900 sm:text-2xl">
@@ -536,7 +536,7 @@ export default function ProspectTasksOverviewPage() {
                         : '—';
                       return (
                         <tr key={t.id} className={open ? 'bg-white' : 'bg-slate-50/80'}>
-                          <td className="whitespace-nowrap px-4 py-3 text-slate-700">
+                          <td className="whitespace-normal px-4 py-3 text-slate-700 sm:whitespace-nowrap">
                             <span
                               className={`mb-1 inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold ${BUCKET_STYLE[t.bucket]}`}
                             >
@@ -571,21 +571,21 @@ export default function ProspectTasksOverviewPage() {
                             {t.prospect?.status ? <StatusBadge status={t.prospect.status} /> : '—'}
                           </td>
                           <td className="px-4 py-3 text-slate-600">{t.assignee_name || '—'}</td>
-                          <td className="whitespace-nowrap px-4 py-3 text-right">
+                          <td className="whitespace-normal px-4 py-3 text-right md:whitespace-nowrap">
                             {open ? (
-                              <div className="flex justify-end gap-1.5">
+                              <div className="flex flex-wrap justify-end gap-1.5">
                                 <SnoozeMenu onSnooze={hours => snoozeTask(t, hours)} />
                                 <button
                                   type="button"
                                   onClick={() => completeTask(t)}
-                                  className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-800 hover:bg-emerald-100"
+                                  className="inline-flex min-h-[44px] items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800 hover:bg-emerald-100"
                                 >
                                   <CheckCircleIcon className="h-3.5 w-3.5" />
                                   Afronden
                                 </button>
                                 <Link
                                   href={`/admin/prospects?id=${t.prospect_id}`}
-                                  className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                                  className="inline-flex min-h-[44px] items-center rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                                 >
                                   Open
                                 </Link>
@@ -808,14 +808,14 @@ function SnoozeMenu({ onSnooze }: { onSnooze: (hours: number) => void }) {
         type="button"
         onClick={() => setOpen(v => !v)}
         onBlur={() => setTimeout(() => setOpen(false), 120)}
-        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+        className="inline-flex min-h-[44px] items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
         aria-label="Uitstellen"
       >
         <ClockIcon className="h-3.5 w-3.5" />
         Snooze
       </button>
       {open && (
-        <div className="absolute right-0 z-10 mt-1 w-40 rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+        <div className="absolute right-0 z-10 mt-1 w-40 rounded-lg border border-slate-200 bg-white py-1 shadow-lg max-sm:left-0 max-sm:right-auto">
           <SnoozeItem onClick={() => onSnooze(3)}>+3 uur</SnoozeItem>
           <SnoozeItem onClick={() => onSnooze(24)}>Morgen</SnoozeItem>
           <SnoozeItem onClick={() => onSnooze(24 * 3)}>+3 dagen</SnoozeItem>
@@ -832,7 +832,7 @@ function SnoozeItem({ onClick, children }: { onClick: () => void; children: Reac
       type="button"
       onMouseDown={e => e.preventDefault()}
       onClick={onClick}
-      className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-slate-700 hover:bg-slate-50"
+      className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs text-slate-700 hover:bg-slate-50"
     >
       <PlusIcon className="h-3 w-3 text-slate-400" />
       {children}

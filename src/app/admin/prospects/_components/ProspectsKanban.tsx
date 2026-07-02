@@ -9,6 +9,7 @@ import {
   PROSPECT_STATUS_LABELS,
   type ProspectStatus,
 } from '@/lib/prospects';
+import { ProspectTypeBadge } from './ProspectTypeBadge';
 
 export interface KanbanProspect {
   id: string;
@@ -20,6 +21,8 @@ export interface KanbanProspect {
   next_action_at: string | null;
   open_task_count?: number;
   branches?: string[] | null;
+  source?: string | null;
+  source_metadata?: Record<string, unknown> | null;
   updated_at: string;
 }
 
@@ -78,12 +81,12 @@ export function ProspectsKanban({ prospects, amNames, branchNames = {}, onMove, 
   return (
     <>
       <DragDropContext onDragEnd={handleDragEnd}>
-        <div className="flex gap-3 overflow-x-auto pb-4">
+        <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-4 sm:mx-0 sm:px-0">
           {PROSPECT_STATUSES.map(status => {
             const items = grouped.get(status) || [];
             const c = PROSPECT_STATUS_COLORS[status];
             return (
-              <div key={status} className="flex w-72 shrink-0 flex-col rounded-2xl bg-slate-100/70 p-2">
+              <div key={status} className="flex w-[min(85vw,18rem)] shrink-0 flex-col rounded-2xl bg-slate-100/70 p-2 sm:w-72">
                 <div className={`mb-2 flex items-center justify-between rounded-xl px-3 py-2 ${c.bg} ${c.ring} ring-1 ring-inset`}>
                   <span className={`flex items-center gap-2 text-sm font-semibold ${c.text}`}>
                     <span className={`h-2 w-2 rounded-full ${c.dot}`} aria-hidden />
@@ -140,8 +143,16 @@ export function ProspectsKanban({ prospects, amNames, branchNames = {}, onMove, 
                                 <div className="flex items-start justify-between gap-2">
                                   <p className="line-clamp-2 text-sm font-semibold text-slate-900">{p.company_name}</p>
                                 </div>
+                                <div className="mt-1.5">
+                                  <ProspectTypeBadge
+                                    branches={p.branches}
+                                    source={p.source}
+                                    source_metadata={p.source_metadata}
+                                    size="sm"
+                                  />
+                                </div>
                                 {p.contact_person && (
-                                  <p className="mt-1 text-xs text-slate-500">{p.contact_person}</p>
+                                  <p className="mt-1.5 text-xs text-slate-500">{p.contact_person}</p>
                                 )}
                                 <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500">
                                   {p.city && (
@@ -204,7 +215,7 @@ export function ProspectsKanban({ prospects, amNames, branchNames = {}, onMove, 
               <button
                 type="button"
                 onClick={() => setPendingLost(null)}
-                className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                className="min-h-[44px] rounded-lg border border-slate-200 px-3 py-2.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
               >
                 Annuleren
               </button>
@@ -212,7 +223,7 @@ export function ProspectsKanban({ prospects, amNames, branchNames = {}, onMove, 
                 type="button"
                 onClick={submitLost}
                 disabled={!lostReason.trim()}
-                className="rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
+                className="min-h-[44px] rounded-lg bg-rose-600 px-3 py-2.5 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
               >
                 Markeer als verloren
               </button>

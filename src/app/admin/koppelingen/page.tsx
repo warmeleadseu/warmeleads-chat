@@ -129,7 +129,7 @@ export default function KoppelingenPage() {
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">Koppelingen</h1>
           <p className="mt-0.5 text-sm text-slate-500">Verbind je Zapier zaps om leads automatisch binnen te krijgen</p>
@@ -197,14 +197,14 @@ export default function KoppelingenPage() {
               <div key={k.id} className="group rounded-xl border border-slate-200 bg-white shadow-sm transition hover:shadow-md">
                 <div className="p-5">
                   {/* Header */}
-                  <div className="mb-3 flex items-start justify-between">
+                  <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <span className={`h-2 w-2 shrink-0 rounded-full ${dotColor}`} />
                         <h3 className="truncate text-sm font-semibold text-slate-900">{k.label}</h3>
                       </div>
                     </div>
-                    <div className="flex shrink-0 items-center gap-1.5">
+                    <div className="flex flex-wrap items-center gap-1.5 sm:justify-end">
                       <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${statusColor}`}>
                         {statusLabel}
                       </span>
@@ -260,23 +260,26 @@ export default function KoppelingenPage() {
                 <div className="flex items-center border-t border-slate-100">
                   <button
                     onClick={() => setActiveInstructions(activeInstructions === k.id ? null : k.id)}
+                    aria-label={hasLeads ? 'Instructies' : 'Instellen'}
                     className="flex flex-1 items-center justify-center gap-1.5 py-3.5 text-sm font-medium text-brand-purple transition hover:bg-brand-purple/5"
                   >
                     <DocumentDuplicateIcon className="h-4 w-4" />
-                    {hasLeads ? 'Instructies' : 'Instellen'}
+                    <span className="hidden sm:inline">{hasLeads ? 'Instructies' : 'Instellen'}</span>
                   </button>
                   <div className="h-8 w-px bg-slate-100" />
                   <button
                     onClick={() => setActiveBackfill(activeBackfill === k.id ? null : k.id)}
+                    aria-label="Historisch"
                     className="flex flex-1 items-center justify-center gap-1.5 py-3.5 text-sm font-medium text-amber-600 transition hover:bg-amber-50"
                   >
                     <ClockIcon className="h-4 w-4" />
-                    Historisch
+                    <span className="hidden sm:inline">Historisch</span>
                   </button>
                   <div className="h-8 w-px bg-slate-100" />
                   <button
                     onClick={() => testWebhookFromPanel(k.id)}
                     disabled={testing === k.id}
+                    aria-label="Test"
                     className="flex flex-1 items-center justify-center gap-1.5 py-3.5 text-sm font-medium text-emerald-600 transition hover:bg-emerald-50 disabled:opacity-50"
                   >
                     {testing === k.id ? (
@@ -284,7 +287,7 @@ export default function KoppelingenPage() {
                     ) : (
                       <BoltIcon className="h-4 w-4" />
                     )}
-                    Test
+                    <span className="hidden sm:inline">Test</span>
                   </button>
                   <div className="h-8 w-px bg-slate-100" />
                   <button
@@ -874,7 +877,7 @@ function InstructionsPanel({
         {/* Header */}
         <div className="shrink-0 border-b border-slate-100 bg-white">
           <div className="h-[3px] bg-warmeleads-gradient" />
-          <div className="flex items-center justify-between px-5 py-4 sm:px-6">
+          <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-4 sm:px-6">
             <div className="min-w-0 flex-1">
               <h2 className="text-base font-bold text-slate-900 sm:text-lg">Zapier instellen</h2>
               <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-slate-500">
@@ -1439,7 +1442,7 @@ function BackfillPanel({
                   <div className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${done ? 'bg-emerald-500 text-white' : active ? 'bg-brand-purple text-white' : 'bg-slate-100 text-slate-400'}`}>
                     {done ? '✓' : i + 1}
                   </div>
-                  <span className={`text-[11px] font-medium ${active || done ? 'text-slate-700' : 'text-slate-400'}`}>{label}</span>
+                  <span className={`hidden text-[11px] font-medium sm:inline ${active || done ? 'text-slate-700' : 'text-slate-400'}`}>{label}</span>
                   {i < 2 && <div className={`mx-1 h-px flex-1 ${done ? 'bg-emerald-300' : 'bg-slate-100'}`} />}
                 </div>
               );

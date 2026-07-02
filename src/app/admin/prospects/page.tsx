@@ -33,6 +33,7 @@ import { BulkAssignDialog } from './_components/BulkAssignDialog';
 import { ConvertToCustomerDialog } from './_components/ConvertToCustomerDialog';
 import { ExportProspectsDialog } from './_components/ExportProspectsDialog';
 import { ProspectsKanban, type KanbanProspect } from './_components/ProspectsKanban';
+import { ProspectTypeBadge } from './_components/ProspectTypeBadge';
 
 interface ProspectListRow extends KanbanProspect {
   email: string | null;
@@ -40,6 +41,7 @@ interface ProspectListRow extends KanbanProspect {
   postcode: string | null;
   kvk_nummer: string | null;
   source: string;
+  source_metadata: Record<string, unknown> | null;
   created_at: string;
   status_changed_at: string | null;
 }
@@ -245,7 +247,7 @@ export default function ProspectsPage() {
   };
 
   return (
-    <div className="space-y-5 px-4 py-6 sm:px-6 lg:px-8">
+    <div className="space-y-5">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
           <h1 className="flex items-center gap-2 text-xl font-bold text-slate-900 sm:text-2xl">
@@ -373,7 +375,7 @@ export default function ProspectsPage() {
           <button
             type="button"
             onClick={() => fetchData(true)}
-            className="rounded-lg border border-slate-200 bg-white p-2 text-slate-500 hover:bg-slate-50"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
             aria-label="Verversen"
           >
             <ArrowPathIcon className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
@@ -409,7 +411,7 @@ export default function ProspectsPage() {
               <button
                 type="button"
                 onClick={() => setBulkOpen(true)}
-                className="inline-flex items-center gap-1.5 rounded-md bg-white px-2.5 py-1 text-xs font-medium text-slate-700 ring-1 ring-inset ring-slate-200 hover:bg-slate-50"
+                className="inline-flex items-center gap-1.5 rounded-md bg-white px-2.5 py-2 text-xs font-medium text-slate-700 ring-1 ring-inset ring-slate-200 hover:bg-slate-50"
               >
                 <UserPlusIcon className="h-3.5 w-3.5" />
                 Bulk-toewijzen
@@ -418,7 +420,7 @@ export default function ProspectsPage() {
             <button
               type="button"
               onClick={() => setComposeOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-md bg-white px-2.5 py-1 text-xs font-medium text-slate-700 ring-1 ring-inset ring-slate-200 hover:bg-slate-50"
+              className="inline-flex items-center gap-1.5 rounded-md bg-white px-2.5 py-2 text-xs font-medium text-slate-700 ring-1 ring-inset ring-slate-200 hover:bg-slate-50"
             >
               <EnvelopeIcon className="h-3.5 w-3.5" />
               Mail versturen
@@ -426,7 +428,7 @@ export default function ProspectsPage() {
             <button
               type="button"
               onClick={() => setExportOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-md bg-white px-2.5 py-1 text-xs font-medium text-slate-700 ring-1 ring-inset ring-slate-200 hover:bg-slate-50"
+              className="inline-flex items-center gap-1.5 rounded-md bg-white px-2.5 py-2 text-xs font-medium text-slate-700 ring-1 ring-inset ring-slate-200 hover:bg-slate-50"
             >
               <ArrowDownTrayIcon className="h-3.5 w-3.5" />
               Exporteren
@@ -501,7 +503,7 @@ export default function ProspectsPage() {
               <button
                 type="button"
                 onClick={() => { setShowCreate(false); setCreateError(null); }}
-                className="rounded p-1 text-slate-400 hover:bg-slate-100"
+                className="inline-flex h-10 w-10 items-center justify-center rounded p-2 text-slate-400 hover:bg-slate-100"
               >
                 <XMarkIcon className="h-5 w-5" />
               </button>
@@ -514,7 +516,7 @@ export default function ProspectsPage() {
                 </div>
               )}
             </div>
-            <div className="flex justify-end gap-2 border-t border-slate-100 bg-slate-50 px-5 py-3">
+            <div className="flex flex-col-reverse gap-2 border-t border-slate-100 bg-slate-50 px-5 py-3 sm:flex-row sm:justify-end">
               <button
                 type="button"
                 onClick={() => { setShowCreate(false); setCreateError(null); }}
@@ -720,6 +722,7 @@ function ListView({
                 </th>
               )}
               <th className="px-3 py-2.5">Bedrijf</th>
+              <th className="px-3 py-2.5">Type</th>
               <th className="px-3 py-2.5">Contact</th>
               <th className="px-3 py-2.5">Status</th>
               <th className="px-3 py-2.5">AM</th>
@@ -746,15 +749,23 @@ function ListView({
                   </td>
                 )}
                 <td className="px-3 py-2.5">
-                  <div className="font-semibold text-slate-900">{p.company_name}</div>
+                  <div className="max-w-[240px] truncate font-semibold text-slate-900">{p.company_name}</div>
                   <div className="flex items-center gap-2 text-[11px] text-slate-400">
                     {p.kvk_nummer && <span className="font-mono">KVK {p.kvk_nummer}</span>}
-                    {p.city && <span>{p.city}</span>}
+                    {p.city && <span className="truncate">{p.city}</span>}
                   </div>
                 </td>
                 <td className="px-3 py-2.5">
+                  <ProspectTypeBadge
+                    branches={p.branches}
+                    source={p.source}
+                    source_metadata={p.source_metadata}
+                    size="sm"
+                  />
+                </td>
+                <td className="px-3 py-2.5">
                   {p.contact_person && <div className="text-slate-700">{p.contact_person}</div>}
-                  {p.email && <div className="text-[11px] text-slate-400">{p.email}</div>}
+                  {p.email && <div className="max-w-[200px] truncate text-[11px] text-slate-400">{p.email}</div>}
                   {p.phone && <div className="text-[11px] text-slate-400">{p.phone}</div>}
                 </td>
                 <td className="px-3 py-2.5">
@@ -792,7 +803,7 @@ function ListView({
         </table>
       </div>
       {totalPages > 1 && (
-        <div className="flex items-center justify-between border-t border-slate-100 px-3 py-2.5 text-xs text-slate-500">
+        <div className="flex flex-col gap-2 border-t border-slate-100 px-3 py-2.5 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
           <span>
             Pagina {page} van {totalPages} <span className="text-slate-400">({total} prospects)</span>
           </span>

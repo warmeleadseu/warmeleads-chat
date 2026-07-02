@@ -339,15 +339,15 @@ export default function ProspectsImportPage() {
   const dupeEmailSet = new Set(dupes?.duplicate_emails || []);
 
   return (
-    <div className="space-y-5 px-4 py-6 sm:px-6 lg:px-8">
-      <div className="flex items-center justify-between">
+    <div className="space-y-5">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <Link href="/admin/prospects" className="text-xs text-slate-500 hover:text-slate-700">
             <ArrowLeftIcon className="mr-1 inline h-3 w-3" />
             Terug naar prospects
           </Link>
-          <h1 className="mt-1 flex items-center gap-2 text-2xl font-bold text-slate-900">
-            <ArrowDownTrayIcon className="h-7 w-7 text-brand-purple" />
+          <h1 className="mt-1 flex items-center gap-2 text-xl font-bold text-slate-900 sm:text-2xl">
+            <ArrowDownTrayIcon className="h-6 w-6 text-brand-purple sm:h-7 sm:w-7" />
             Prospects importeren
           </h1>
           <p className="mt-1 text-sm text-slate-500">
@@ -451,18 +451,18 @@ export default function ProspectsImportPage() {
 
           <div className="grid gap-2 md:grid-cols-2">
             {headers.map(h => (
-              <div key={h} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50/40 p-2">
+              <div key={h} className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50/40 p-2 sm:flex-row sm:items-center">
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-slate-700">{h}</p>
                   <p className="truncate text-[11px] text-slate-400">
                     {(rows[0]?.[h] !== undefined && rows[0]?.[h] !== '') ? String(rows[0][h]).slice(0, 80) : 'leeg'}
                   </p>
                 </div>
-                <ArrowRightIcon className="h-3 w-3 text-slate-300" />
+                <ArrowRightIcon className="hidden h-3 w-3 text-slate-300 sm:block" />
                 <select
                   value={mapping[h] || ''}
                   onChange={e => setMapping(prev => ({ ...prev, [h]: e.target.value as TargetKey | '' }))}
-                  className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs outline-none focus:border-brand-purple/50"
+                  className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs outline-none focus:border-brand-purple/50 sm:min-w-[160px] sm:shrink-0"
                 >
                   <option value="">— Niet importeren —</option>
                   {TARGET_FIELDS.map(t => (
@@ -474,7 +474,7 @@ export default function ProspectsImportPage() {
               </div>
             ))}
           </div>
-          <div className="mt-5 flex justify-between">
+          <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-between">
             <button
               type="button"
               onClick={() => setStep('upload')}
@@ -485,7 +485,7 @@ export default function ProspectsImportPage() {
             <button
               type="button"
               onClick={goPreview}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-brand-purple px-4 py-2 text-sm font-semibold text-white hover:bg-brand-purple/90"
+              className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-brand-purple px-4 py-2 text-sm font-semibold text-white hover:bg-brand-purple/90 sm:w-auto"
             >
               Voorbeeld bekijken
               <ArrowRightIcon className="h-4 w-4" />
@@ -568,7 +568,7 @@ export default function ProspectsImportPage() {
                         <td className="px-3 py-2 font-medium text-slate-800">{name || <span className="text-rose-500">—</span>}</td>
                         <td className="px-3 py-2 font-mono text-slate-500">{kvk || ''}</td>
                         <td className="px-3 py-2 text-slate-600">{(r.contact_person as string) || ''}</td>
-                        <td className="px-3 py-2 text-slate-500">{email}</td>
+                        <td className="max-w-[120px] truncate px-3 py-2 text-slate-500 sm:max-w-none">{email}</td>
                         <td className="px-3 py-2 text-slate-500">{(r.city as string) || ''}</td>
                         <td className="px-3 py-2">
                           <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${issue.cls}`}>{issue.txt}</span>
@@ -581,7 +581,7 @@ export default function ProspectsImportPage() {
             </div>
           </div>
 
-          <div className="flex justify-between">
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-between">
             <button
               type="button"
               onClick={() => setStep('map')}
@@ -592,7 +592,7 @@ export default function ProspectsImportPage() {
             <button
               type="button"
               onClick={() => setStep('assign')}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-brand-purple px-4 py-2 text-sm font-semibold text-white hover:bg-brand-purple/90"
+              className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-brand-purple px-4 py-2 text-sm font-semibold text-white hover:bg-brand-purple/90 sm:w-auto"
             >
               Toewijzing
               <ArrowRightIcon className="h-4 w-4" />
@@ -682,7 +682,7 @@ export default function ProspectsImportPage() {
             </div>
           )}
 
-          <div className="mt-6 flex justify-between border-t border-slate-100 pt-4">
+          <div className="mt-6 flex flex-col-reverse gap-2 border-t border-slate-100 pt-4 sm:flex-row sm:justify-between">
             <button
               type="button"
               onClick={() => setStep('preview')}
@@ -699,7 +699,7 @@ export default function ProspectsImportPage() {
                 (strategy === 'round_robin' && poolIds.size === 0) ||
                 validation.valid - dupeKvkSet.size - dupeEmailSet.size <= 0
               }
-              className="inline-flex items-center gap-1.5 rounded-lg bg-brand-purple px-5 py-2 text-sm font-semibold text-white hover:bg-brand-purple/90 disabled:opacity-50"
+              className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-brand-purple px-5 py-2 text-sm font-semibold text-white hover:bg-brand-purple/90 disabled:opacity-50 sm:w-auto"
             >
               <CheckIcon className="h-4 w-4" />
               {submitting
@@ -800,20 +800,22 @@ function Stepper({ step }: { step: Step }) {
   ];
   const idx = steps.findIndex(s => s.id === step);
   return (
-    <div className="flex items-center gap-1.5 text-xs text-slate-500">
-      {steps.map((s, i) => (
-        <div key={s.id} className="flex items-center gap-1.5">
-          <span
-            className={`flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-bold ${
-              i < idx ? 'bg-emerald-500 text-white' : i === idx ? 'bg-brand-purple text-white' : 'bg-slate-200 text-slate-500'
-            }`}
-          >
-            {i < idx ? <CheckIcon className="h-3 w-3" /> : i + 1}
-          </span>
-          <span className={i === idx ? 'font-semibold text-slate-700' : ''}>{s.label}</span>
-          {i < steps.length - 1 && <ChevronDownIcon className="-rotate-90 text-slate-300 h-3 w-3" />}
-        </div>
-      ))}
+    <div className="-mx-1 overflow-x-auto px-1 pb-1">
+      <div className="flex min-w-max items-center gap-1.5 text-xs text-slate-500">
+        {steps.map((s, i) => (
+          <div key={s.id} className="flex items-center gap-1.5">
+            <span
+              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
+                i < idx ? 'bg-emerald-500 text-white' : i === idx ? 'bg-brand-purple text-white' : 'bg-slate-200 text-slate-500'
+              }`}
+            >
+              {i < idx ? <CheckIcon className="h-3 w-3" /> : i + 1}
+            </span>
+            <span className={`hidden sm:inline ${i === idx ? 'font-semibold text-slate-700' : ''}`}>{s.label}</span>
+            {i < steps.length - 1 && <ChevronDownIcon className="-rotate-90 text-slate-300 h-3 w-3" />}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

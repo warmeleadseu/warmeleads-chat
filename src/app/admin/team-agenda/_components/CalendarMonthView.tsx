@@ -39,7 +39,8 @@ export function CalendarMonthView({ month, events, onSelectEvent, onSelectDay }:
   const [popoverDay, setPopoverDay] = useState<string | null>(null);
 
   return (
-    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+      <div className="min-w-[360px]">
       <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
         {WEEKDAY_LABELS.map(d => (
           <div key={d} className="px-2 py-2 text-center">
@@ -58,7 +59,7 @@ export function CalendarMonthView({ month, events, onSelectEvent, onSelectDay }:
           return (
             <Fragment key={dayKey}>
               <div
-                className={`group relative min-h-[112px] cursor-pointer border-b border-r border-slate-100 p-1.5 transition-colors hover:bg-slate-50 ${
+                className={`group relative min-h-[88px] cursor-pointer border-b border-r border-slate-100 p-1.5 transition-colors hover:bg-slate-50 sm:min-h-[112px] ${
                   inMonth ? 'bg-white' : 'bg-slate-50/40'
                 } ${idx % 7 === 6 ? 'border-r-0' : ''}`}
                 onClick={() => onSelectDay(day)}
@@ -124,7 +125,7 @@ export function CalendarMonthView({ month, events, onSelectEvent, onSelectDay }:
                 </div>
                 {popoverDay === dayKey && (
                   <div
-                    className="absolute left-1 top-9 z-20 w-56 rounded-lg border border-slate-200 bg-white p-2 shadow-lg"
+                    className="absolute left-1 right-1 top-9 z-20 w-auto max-w-[calc(100vw-2rem)] rounded-lg border border-slate-200 bg-white p-2 shadow-lg sm:left-1 sm:right-auto sm:w-56"
                     onClick={e => e.stopPropagation()}
                   >
                     <div className="mb-1 flex items-center justify-between">
@@ -173,6 +174,7 @@ export function CalendarMonthView({ month, events, onSelectEvent, onSelectDay }:
             </Fragment>
           );
         })}
+      </div>
       </div>
     </div>
   );

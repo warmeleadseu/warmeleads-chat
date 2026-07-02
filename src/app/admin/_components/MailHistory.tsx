@@ -300,7 +300,7 @@ function DetailModal({
               </>
             )}
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100">
+          <button onClick={onClose} className="inline-flex items-center justify-center p-2.5 min-h-[44px] min-w-[44px] rounded-lg hover:bg-slate-100">
             <XMarkIcon className="h-5 w-5 text-slate-500" />
           </button>
         </div>

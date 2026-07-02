@@ -54,7 +54,7 @@ export function MyPipelineWidget() {
 
   return (
     <div className="mb-6 rounded-xl border border-brand-purple/20 bg-gradient-to-br from-brand-purple/5 via-white to-white p-5 shadow-sm">
-      <div className="mb-4 flex items-start justify-between gap-3">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex items-center gap-2">
           <div className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-brand-purple/10">
             <BriefcaseIcon className="h-4 w-4 text-brand-purple" />
@@ -119,8 +119,8 @@ export function MyPipelineWidget() {
               const c = PROSPECT_STATUS_COLORS[status as ProspectStatus];
               const pct = maxStatus > 0 ? (count / maxStatus) * 100 : 0;
               return (
-                <div key={status} className="flex items-center gap-2">
-                  <span className={`min-w-[120px] rounded-md px-2 py-0.5 text-[11px] font-medium ${c.bg} ${c.text}`}>
+                <div key={status} className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
+                  <span className={`min-w-0 truncate rounded-md px-2 py-0.5 text-[11px] font-medium sm:min-w-[120px] ${c.bg} ${c.text}`}>
                     {PROSPECT_STATUS_LABELS[status as ProspectStatus]}
                   </span>
                   <div className="relative h-3 flex-1 overflow-hidden rounded-full bg-slate-100">

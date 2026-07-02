@@ -429,10 +429,10 @@ function TargetCard({
 
       {canEdit && (
         <div className="absolute right-3 top-3 flex gap-1">
-          <button onClick={onEdit} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-brand-purple">
+          <button onClick={onEdit} className="inline-flex items-center justify-center rounded-lg p-2 min-h-[44px] min-w-[44px] text-slate-400 hover:bg-slate-100 hover:text-brand-purple">
             <PencilSquareIcon className="h-4 w-4" />
           </button>
-          <button onClick={onDelete} className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500">
+          <button onClick={onDelete} className="inline-flex items-center justify-center rounded-lg p-2 min-h-[44px] min-w-[44px] text-slate-400 hover:bg-red-50 hover:text-red-500">
             <TrashIcon className="h-4 w-4" />
           </button>
         </div>

@@ -91,19 +91,19 @@ export function BulkAssignDialog({ open, onClose, prospectIds, ams, onDone }: Pr
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         onClick={e => e.stopPropagation()}
-        className="w-full max-w-md rounded-2xl bg-white shadow-xl"
+        className="flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-xl"
       >
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
           <h2 className="flex items-center gap-2 text-lg font-bold text-slate-900">
             <UserPlusIcon className="h-5 w-5 text-brand-purple" />
             Bulk-toewijzen ({prospectIds.length})
           </h2>
-          <button type="button" onClick={onClose} className="rounded p-1 text-slate-400 hover:bg-slate-100">
+          <button type="button" onClick={onClose} className="inline-flex h-10 w-10 items-center justify-center rounded text-slate-400 hover:bg-slate-100">
             <XMarkIcon className="h-5 w-5" />
           </button>
         </div>
-        <div className="space-y-4 p-5">
-          <div className="grid grid-cols-3 gap-2">
+        <div className="flex-1 space-y-4 overflow-y-auto p-5">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             {([
               { id: 'specific_am', label: 'Eén AM' },
               { id: 'round_robin', label: 'Round-robin' },

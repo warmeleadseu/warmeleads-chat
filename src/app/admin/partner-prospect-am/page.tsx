@@ -168,9 +168,9 @@ export default function PartnerProspectAmPage() {
   };
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6 px-4 py-8">
+    <div className="mx-auto max-w-3xl space-y-6">
       <div>
-        <h1 className="flex items-center gap-2 text-2xl font-bold text-slate-900">
+        <h1 className="flex items-center gap-2 text-xl font-bold text-slate-900 sm:text-2xl">
           <UserGroupIcon className="h-7 w-7 text-brand-purple" />
           Partner-prospects — accountmanagers
         </h1>
@@ -285,7 +285,7 @@ export default function PartnerProspectAmPage() {
                     type="button"
                     onClick={() => removeRow(i)}
                     disabled={assignees.length <= 1}
-                    className="rounded p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-30"
+                    className="inline-flex min-h-10 min-w-10 items-center justify-center rounded p-2.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-30"
                     aria-label="Verwijder rij"
                   >
                     <TrashIcon className="h-4 w-4" />

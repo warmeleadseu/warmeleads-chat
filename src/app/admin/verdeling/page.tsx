@@ -276,7 +276,7 @@ export default function VerdelingPage() {
         {distResult && (
           <motion.div
             initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-            className="mb-4 flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3"
+            className="mb-4 flex flex-col gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
           >
             <div className="flex items-center gap-2">
               <CheckCircleIcon className="h-5 w-5 text-emerald-600" />
@@ -292,7 +292,7 @@ export default function VerdelingPage() {
         {enrichResult && (
           <motion.div
             initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-            className="mb-4 flex items-center justify-between rounded-xl border border-blue-200 bg-blue-50 px-4 py-3"
+            className="mb-4 flex flex-col gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
           >
             <div className="flex items-center gap-2">
               <MapPinIcon className="h-5 w-5 text-blue-600" />
@@ -324,10 +324,10 @@ export default function VerdelingPage() {
       )}
 
       {/* Tabs */}
-      <div className="mb-4 flex gap-1 rounded-xl bg-slate-100 p-1">
+      <div className="mb-4 flex gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1">
         {(['overzicht', 'leadstatus', 'assignments', 'batches'] as const).map(t => (
           <button key={t} onClick={() => { setTab(t); if (t === 'leadstatus' && debugLeads.length === 0) fetchDebug(); }}
-            className={`flex-1 rounded-lg py-2 text-xs font-medium transition sm:text-sm ${tab === t ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+            className={`shrink-0 whitespace-nowrap rounded-lg px-3 py-2 text-xs font-medium transition sm:text-sm ${tab === t ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
             {t === 'overzicht' ? 'Overzicht' : t === 'leadstatus' ? 'Lead status' : t === 'assignments' ? 'Toewijzingen' : 'Alle batches'}
           </button>
         ))}
@@ -342,7 +342,7 @@ export default function VerdelingPage() {
                 <CalendarDaysIcon className="h-4 w-4 text-indigo-500" />
                 <h3 className="text-sm font-semibold text-slate-700">Periode statistieken</h3>
               </div>
-              <div className="flex rounded-lg border border-slate-200 bg-slate-50 p-0.5">
+              <div className="flex flex-wrap gap-1 rounded-lg border border-slate-200 bg-slate-50 p-0.5">
                 {Object.entries(PERIOD_LABELS).map(([key, label]) => (
                   <button
                     key={key}
@@ -413,9 +413,9 @@ export default function VerdelingPage() {
                   const c = COLOR_MAP[br?.color || 'slate'] || COLOR_MAP.slate;
                   return (
                     <div key={b.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                      <div className="mb-2 flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-slate-800">{b.customers?.name || 'Onbekend'}</span>
+                      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex min-w-0 flex-wrap items-center gap-2">
+                          <span className="min-w-0 truncate font-semibold text-slate-800">{b.customers?.name || 'Onbekend'}</span>
                           <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${c.light} ${c.text}`}>
                             {br?.name || b.branch}
                           </span>
@@ -560,9 +560,9 @@ export default function VerdelingPage() {
                     const durationDays = completedAt ? Math.max(1, Math.round((completedAt.getTime() - created.getTime()) / (1000 * 60 * 60 * 24))) : null;
                     return (
                       <div key={b.id} className="rounded-lg bg-white p-4 shadow-sm">
-                        <div className="flex items-start justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium text-slate-800">{b.customers?.name || '-'}</span>
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                            <span className="min-w-0 truncate font-medium text-slate-800">{b.customers?.name || '-'}</span>
                             <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${c.light} ${c.text}`}>{br?.name || b.branch}</span>
                             <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-700">Voltooid</span>
                           </div>
@@ -571,7 +571,7 @@ export default function VerdelingPage() {
                             {compensatingBatch !== b.id && (
                               <button
                                 onClick={() => { setCompensatingBatch(b.id); setCompensationAmount(''); setCompensationNote(''); }}
-                                className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-700 transition hover:bg-amber-100"
+                                className="min-h-10 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-medium text-amber-700 transition hover:bg-amber-100"
                               >
                                 Compensatie
                               </button>
@@ -609,13 +609,13 @@ export default function VerdelingPage() {
                             </div>
                             <div className="flex gap-2">
                               <button onClick={() => setCompensatingBatch(null)}
-                                className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-500 hover:bg-slate-50">
+                                className="min-h-10 rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-500 hover:bg-slate-50">
                                 Annuleren
                               </button>
                               <button
                                 onClick={() => handleCompensation(b.id)}
                                 disabled={!compensationAmount || parseInt(compensationAmount) <= 0 || compensating}
-                                className="rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-amber-600 disabled:opacity-50"
+                                className="min-h-10 rounded-lg bg-amber-500 px-3 py-2 text-xs font-bold text-white transition hover:bg-amber-600 disabled:opacity-50"
                               >
                                 {compensating ? 'Bezig...' : `+${compensationAmount || '0'} leads toekennen`}
                               </button>
@@ -941,9 +941,9 @@ function StatCard({ icon: Icon, label, value, sub, color }: {
         <div className={`rounded-lg p-2 ${c.bg}`}>
           <Icon className={`h-4 w-4 ${c.icon}`} />
         </div>
-        <span className="text-xs font-medium text-slate-500">{label}</span>
+        <span className="line-clamp-2 min-w-0 text-xs font-medium text-slate-500">{label}</span>
       </div>
-      <div className="text-xl font-bold text-slate-800">{value}</div>
+      <div className="break-all text-xl font-bold text-slate-800">{value}</div>
       {sub && <div className="mt-0.5 text-xs text-slate-400">{sub}</div>}
     </div>
   );

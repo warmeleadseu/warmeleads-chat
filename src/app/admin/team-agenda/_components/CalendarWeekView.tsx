@@ -70,7 +70,8 @@ export function CalendarWeekView({ weekStart, events, onSelectEvent, onSelectSlo
   const today = useMemo(() => new Date(), []);
 
   return (
-    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+      <div className="min-w-[640px]">
       {/* Day header */}
       <div className="grid grid-cols-[60px_repeat(7,1fr)] border-b border-slate-200 bg-slate-50">
         <div />
@@ -99,7 +100,7 @@ export function CalendarWeekView({ weekStart, events, onSelectEvent, onSelectSlo
 
       {/* All-day strip */}
       <div className="grid grid-cols-[60px_repeat(7,1fr)] border-b border-slate-200 bg-slate-50/60">
-        <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+        <div className="px-2 py-1 text-[10px] font-semibold uppercase leading-tight tracking-wider text-slate-400">
           Hele dag
         </div>
         {days.map(d => {
@@ -218,6 +219,7 @@ export function CalendarWeekView({ weekStart, events, onSelectEvent, onSelectSlo
             </div>
           );
         })}
+      </div>
       </div>
     </div>
   );

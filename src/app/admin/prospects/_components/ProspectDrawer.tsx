@@ -367,13 +367,13 @@ export function ProspectDrawer({
               <button
                 type="button"
                 onClick={onClose}
-                className="ml-3 rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"
+                className="ml-3 inline-flex h-10 w-10 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100"
               >
                 <XMarkIcon className="h-5 w-5" />
               </button>
             </div>
 
-            <div className="flex shrink-0 gap-1 border-b border-slate-200 bg-white px-3">
+            <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-slate-200 bg-white px-3">
               {([
                 { id: 'overzicht', label: 'Overzicht', Icon: Bars3CenterLeftIcon },
                 { id: 'activiteiten', label: `Activiteiten${activities.length ? ` (${activities.length})` : ''}`, Icon: ClockIcon },
@@ -385,7 +385,7 @@ export function ProspectDrawer({
                   key={t.id}
                   type="button"
                   onClick={() => setTab(t.id)}
-                  className={`relative inline-flex items-center gap-1.5 px-3 py-3 text-sm font-medium transition-colors ${
+                  className={`relative inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap px-3 py-3 text-sm font-medium transition-colors ${
                     tab === t.id ? 'text-brand-purple' : 'text-slate-500 hover:text-slate-700'
                   }`}
                 >
@@ -452,7 +452,7 @@ export function ProspectDrawer({
                     </div>
                   )}
                   <ProspectFormFields value={editForm} onChange={setEditForm} branches={branches} />
-                  <div className="flex justify-end gap-2 border-t border-slate-200 pt-4">
+                  <div className="flex flex-col-reverse gap-2 border-t border-slate-200 pt-4 sm:flex-row sm:justify-end">
                     {canManage && (
                       <button
                         type="button"
@@ -735,7 +735,7 @@ function Overview({
   return (
     <div className="space-y-4">
       <div className="rounded-xl border border-slate-200 bg-white p-4">
-        <div className="mb-2 flex items-center justify-between">
+        <div className="mb-2 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
           <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Pipeline</h3>
           <span className="text-[11px] text-slate-400">
             <ArrowsRightLeftIcon className="mr-1 inline h-3 w-3" />
@@ -779,7 +779,7 @@ function Overview({
             label="E-mail"
             value={
               <div className="flex flex-wrap items-center gap-2">
-                <a href={`mailto:${prospect.email}`} className="text-brand-purple hover:underline">
+                <a href={`mailto:${prospect.email}`} className="break-all text-brand-purple hover:underline">
                   {prospect.email}
                 </a>
                 <button
@@ -815,7 +815,7 @@ function Overview({
                 href={prospect.website.startsWith('http') ? prospect.website : `https://${prospect.website}`}
                 target="_blank"
                 rel="noreferrer"
-                className="text-brand-purple hover:underline"
+                className="break-all text-brand-purple hover:underline"
               >
                 {prospect.website}
               </a>
@@ -1001,7 +1001,7 @@ function Detail({
         <Icon className="h-3.5 w-3.5" />
         {label}
       </div>
-      <div className="text-sm text-slate-800">{value}</div>
+      <div className="min-w-0 break-words text-sm text-slate-800">{value}</div>
     </div>
   );
 }

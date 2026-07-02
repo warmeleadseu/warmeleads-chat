@@ -413,7 +413,7 @@ export default function CustomersPage() {
           <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">Klanten</h1>
           <p className="mt-0.5 text-sm text-slate-500">Bedrijven waarvoor we leads genereren</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => setBulkComposeOpen(true)}
             disabled={customers.length === 0}
@@ -723,16 +723,16 @@ export default function CustomersPage() {
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className="mt-4 flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+            <div className="mt-4 flex flex-col gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
               <p className="text-xs text-slate-500">
                 Pagina <span className="font-semibold text-slate-700">{page}</span> van <span className="font-semibold text-slate-700">{totalPages}</span>
                 <span className="ml-2 text-slate-400">({total} klanten)</span>
               </p>
-              <div className="flex items-center gap-1">
+              <div className="flex flex-wrap items-center justify-center gap-1">
                 <button
                   onClick={() => setPage(1)}
                   disabled={page <= 1}
-                  className="rounded-lg px-2 py-1.5 text-xs font-medium text-slate-500 transition hover:bg-slate-100 disabled:opacity-30"
+                  className="hidden rounded-lg px-2 py-1.5 text-xs font-medium text-slate-500 transition hover:bg-slate-100 disabled:opacity-30 sm:inline-flex"
                 >
                   Eerste
                 </button>
@@ -778,7 +778,7 @@ export default function CustomersPage() {
                 <button
                   onClick={() => setPage(totalPages)}
                   disabled={page >= totalPages}
-                  className="rounded-lg px-2 py-1.5 text-xs font-medium text-slate-500 transition hover:bg-slate-100 disabled:opacity-30"
+                  className="hidden rounded-lg px-2 py-1.5 text-xs font-medium text-slate-500 transition hover:bg-slate-100 disabled:opacity-30 sm:inline-flex"
                 >
                   Laatste
                 </button>
@@ -1012,9 +1012,9 @@ function CustomerDetailPanel({
         {/* Header */}
         <div className="shrink-0 border-b border-slate-100">
           <div className="h-[3px] bg-warmeleads-gradient" />
-          <div className="flex items-center justify-between px-5 py-4">
+          <div className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-2">
                 <h2 className="truncate text-lg font-bold text-slate-900">{c.name}</h2>
                 <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${c.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
                   {c.is_active ? 'Actief' : 'Inactief'}
@@ -1041,13 +1041,13 @@ function CustomerDetailPanel({
                   {activity.label}
                 </span>
               </div>
-              <div className="mt-0.5 flex items-center gap-3 text-xs text-slate-500">
+              <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
                 {c.contact_person && <span>{c.contact_person}</span>}
-                {c.email && <span>{c.email}</span>}
+                {c.email && <span className="max-w-full truncate break-all">{c.email}</span>}
                 {am && <span className="font-medium text-amber-600">AM: {am.name}</span>}
               </div>
             </div>
-            <div className="ml-3 flex items-center gap-2">
+            <div className="flex w-full flex-wrap gap-2 sm:ml-3 sm:w-auto">
               {c.email && (
                 <button
                   onClick={() => setComposeOpen(true)}
@@ -1921,7 +1921,7 @@ function CustomerForm({ customer, branchOptions, allCustomers, accountManagers, 
             <input value={form.contact_person} onChange={e => setForm(f => ({ ...f, contact_person: e.target.value }))}
               className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-500">E-mail</label>
               <input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
@@ -1962,7 +1962,7 @@ function CustomerForm({ customer, branchOptions, allCustomers, accountManagers, 
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-500">
                 {form.country === 'BE' ? 'KBO / ondernemingsnr.' : 'KVK-nummer'}
@@ -3946,7 +3946,7 @@ function LeadManagerPanel({ customer, onClose, embedded }: {
               placeholder="Zoek op naam, e-mail, postcode, plaats..."
               className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-sm text-slate-900 outline-none focus:border-brand-purple/50 focus:bg-white" />
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <select value={branchFilter} onChange={e => setBranchFilter(e.target.value)}
               className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 outline-none">
               <option value="all">Alle branches</option>
@@ -4000,12 +4000,13 @@ function LeadManagerPanel({ customer, onClose, embedded }: {
               {leads.length === 0 ? 'Geen leads gekoppeld aan deze klant' : 'Geen leads gevonden met deze filters'}
             </div>
           ) : (
+            <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="sticky top-0 z-10 bg-slate-50/95 backdrop-blur-sm">
                 <tr className="border-b border-slate-100 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
                   <th className="px-4 py-2.5 w-10">
                     <input type="checkbox" checked={allFilteredSelected} onChange={toggleAll}
-                      className="h-3.5 w-3.5 rounded border-slate-300 text-brand-purple focus:ring-brand-purple/30" />
+                      className="h-4 w-4 rounded border-slate-300 text-brand-purple focus:ring-brand-purple/30 sm:h-3.5 sm:w-3.5" />
                   </th>
                   <th className="px-3 py-2.5">Naam</th>
                   <th className="hidden px-3 py-2.5 sm:table-cell">E-mail</th>
@@ -4021,7 +4022,7 @@ function LeadManagerPanel({ customer, onClose, embedded }: {
                     <td className="px-4 py-2.5">
                       <input type="checkbox" checked={selected.has(lead.id)}
                         onChange={(e) => toggleOne(lead.id, idx, (e.nativeEvent as MouseEvent).shiftKey)}
-                        className="h-3.5 w-3.5 rounded border-slate-300 text-brand-purple focus:ring-brand-purple/30" />
+                        className="h-4 w-4 rounded border-slate-300 text-brand-purple focus:ring-brand-purple/30 sm:h-3.5 sm:w-3.5" />
                     </td>
                     <td className="px-3 py-2.5">
                       <p className="font-medium text-slate-900 truncate max-w-[140px]">{lead.naam_klant || '-'}</p>
@@ -4040,18 +4041,19 @@ function LeadManagerPanel({ customer, onClose, embedded }: {
                 ))}
               </tbody>
             </table>
+            </div>
           )}
         </div>
 
         {/* Footer */}
         <div className="shrink-0 border-t border-slate-100 px-5 py-3">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-xs text-slate-400">
               {filtered.length} van {leads.length} leads zichtbaar
             </p>
             {filtered.length > 0 && (
               <button onClick={unassignAll} disabled={deleting}
-                className="flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600 transition hover:bg-red-100 disabled:opacity-50">
+                className="flex min-h-10 w-full items-center justify-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600 transition hover:bg-red-100 disabled:opacity-50 sm:w-auto sm:justify-start">
                 <ExclamationTriangleIcon className="h-3.5 w-3.5" />
                 Alle zichtbare loskoppelen ({filtered.length})
               </button>

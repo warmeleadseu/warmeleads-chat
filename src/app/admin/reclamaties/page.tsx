@@ -185,7 +185,7 @@ export default function AdminReclamatiesPage() {
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold text-slate-900">
+          <h1 className="flex items-center gap-2 text-xl font-bold text-slate-900 sm:text-2xl">
             <FlagIcon className="h-7 w-7 text-brand-purple" />
             Reclamaties
           </h1>
@@ -324,8 +324,8 @@ export default function AdminReclamatiesPage() {
                           {REASON_LABELS[r.reason] || r.reason}
                         </span>
                       </div>
-                      <p className="text-sm font-medium text-slate-900">{r.customers?.name || '—'}</p>
-                      <p className="text-xs text-slate-500">{r.leads?.naam_klant} &middot; {r.leads?.telefoonnummer}</p>
+                      <p className="truncate text-sm font-medium text-slate-900">{r.customers?.name || '—'}</p>
+                      <p className="truncate text-xs text-slate-500">{r.leads?.naam_klant} &middot; {r.leads?.telefoonnummer}</p>
                     </div>
                     <p className="shrink-0 text-[10px] text-slate-400">
                       {new Date(r.created_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}
@@ -362,7 +362,7 @@ export default function AdminReclamatiesPage() {
                     <h2 className="text-lg font-bold text-slate-900">Reclamatie {selected.status === 'pending' ? 'beoordelen' : 'details'}</h2>
                     <p className="text-xs text-slate-400">{selected.customers?.name}</p>
                   </div>
-                  <button onClick={() => { setSelected(null); setAdminNotes(''); }} className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-50 hover:text-slate-600">
+                  <button onClick={() => { setSelected(null); setAdminNotes(''); }} className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-50 hover:text-slate-600">
                     <XMarkIcon className="h-5 w-5" />
                   </button>
                 </div>
@@ -431,9 +431,9 @@ export default function AdminReclamatiesPage() {
                         { icon: EnvelopeIcon, label: selected.leads.email },
                         { icon: MapPinIcon, label: [selected.leads.postcode, selected.leads.plaatsnaam, selected.leads.provincie].filter(Boolean).join(', ') },
                       ].filter(item => item.label).map((item, i) => (
-                        <div key={i} className="flex items-center gap-2.5">
+                        <div key={i} className="flex min-w-0 items-center gap-2.5">
                           <item.icon className="h-4 w-4 shrink-0 text-slate-400" />
-                          <p className="text-sm text-slate-700">{item.label}</p>
+                          <p className="min-w-0 break-all text-sm text-slate-700">{item.label}</p>
                         </div>
                       ))}
                     </div>
@@ -449,9 +449,9 @@ export default function AdminReclamatiesPage() {
                         <UserIcon className="h-4 w-4 shrink-0 text-slate-400" />
                         <p className="text-sm font-medium text-slate-700">{selected.customers.name}</p>
                       </div>
-                      <div className="flex items-center gap-2.5">
+                      <div className="flex min-w-0 items-center gap-2.5">
                         <EnvelopeIcon className="h-4 w-4 shrink-0 text-slate-400" />
-                        <p className="text-sm text-slate-700">{selected.customers.email}</p>
+                        <p className="min-w-0 break-all text-sm text-slate-700">{selected.customers.email}</p>
                       </div>
                     </div>
                   </div>
@@ -493,11 +493,11 @@ export default function AdminReclamatiesPage() {
                       </p>
                     </div>
                   )}
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <button
                       onClick={() => handleResolve('rejected')}
                       disabled={saving !== null || selected.status === 'rejected'}
-                      className={`flex items-center justify-center gap-2 rounded-lg border-2 px-4 py-2.5 text-sm font-semibold transition disabled:opacity-50 ${
+                      className={`flex min-h-11 items-center justify-center gap-2 rounded-lg border-2 px-4 py-2.5 text-sm font-semibold transition disabled:opacity-50 ${
                         selected.status === 'rejected'
                           ? 'border-red-300 bg-red-100 text-red-400 cursor-not-allowed'
                           : 'border-red-200 bg-red-50 text-red-700 hover:bg-red-100'
@@ -513,7 +513,7 @@ export default function AdminReclamatiesPage() {
                     <button
                       onClick={() => handleResolve('approved')}
                       disabled={saving !== null || selected.status === 'approved'}
-                      className={`flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold shadow-sm transition disabled:opacity-50 ${
+                      className={`flex min-h-11 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold shadow-sm transition disabled:opacity-50 ${
                         selected.status === 'approved'
                           ? 'bg-emerald-200 text-emerald-400 cursor-not-allowed'
                           : 'bg-emerald-600 text-white hover:bg-emerald-700'

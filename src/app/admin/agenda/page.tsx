@@ -217,10 +217,10 @@ export default function AgendaPage() {
   }
 
   return (
-    <div className="space-y-6 p-4 md:p-6">
+    <div className="space-y-6 md:p-6">
       {/* Toast */}
       {toast && (
-        <div className="fixed right-4 top-4 z-50 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white shadow-lg">
+        <div className="fixed right-4 top-16 z-50 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white shadow-lg sm:top-4">
           {toast}
         </div>
       )}
@@ -247,7 +247,7 @@ export default function AgendaPage() {
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`flex-1 rounded-md px-3 py-2 text-xs font-semibold transition sm:text-sm ${
+            className={`flex-1 rounded-md px-3 py-2 text-[11px] font-semibold leading-tight transition sm:text-sm ${
               tab === t ? 'bg-white text-brand-purple shadow-sm' : 'text-slate-500 hover:text-slate-700'
             }`}
           >
@@ -310,7 +310,7 @@ export default function AgendaPage() {
               })}
             </div>
 
-            <div className="mt-3 flex items-center gap-4 text-[10px] text-slate-400">
+            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] text-slate-400">
               <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-brand-purple" /> Boeking</span>
               <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-red-400" /> Geblokkeerd</span>
               <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-brand-orange" /> Vandaag</span>
@@ -337,7 +337,7 @@ export default function AgendaPage() {
                           {b.message && <p className="mt-0.5 text-[10px] text-amber-600">{b.message}</p>}
                         </div>
                         {b.status === 'bevestigd' && (
-                          <button onClick={() => cancelBooking(b.id)} className="ml-2 shrink-0 rounded p-1 text-slate-400 transition hover:bg-red-50 hover:text-red-500" title="Annuleren">
+                          <button onClick={() => cancelBooking(b.id)} className="ml-2 flex h-10 w-10 shrink-0 items-center justify-center rounded p-1 text-slate-400 transition hover:bg-red-50 hover:text-red-500" title="Annuleren">
                             <XCircleIcon className="h-4 w-4" />
                           </button>
                         )}
@@ -371,7 +371,7 @@ export default function AgendaPage() {
                       <span className="text-[11px] font-bold uppercase tracking-wider text-brand-purple">
                         {fmtDate(b.date)} - {b.time}
                       </span>
-                      <button onClick={() => cancelBooking(b.id)} className="rounded p-0.5 text-slate-300 transition hover:text-red-500" title="Annuleren">
+                      <button onClick={() => cancelBooking(b.id)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded p-0.5 text-slate-300 transition hover:text-red-500" title="Annuleren">
                         <XCircleIcon className="h-3.5 w-3.5" />
                       </button>
                     </div>
@@ -542,7 +542,7 @@ export default function AgendaPage() {
               {DAY_KEYS.map(key => {
                 const day = schedule.days[key] || { enabled: false, start: '09:00', end: '17:00' };
                 return (
-                  <div key={key} className={`flex items-center gap-3 rounded-lg border p-3 transition ${day.enabled ? 'border-slate-200 bg-white' : 'border-slate-100 bg-slate-50/50'}`}>
+                  <div key={key} className={`flex flex-col gap-2 rounded-lg border p-3 transition sm:flex-row sm:items-center sm:gap-3 ${day.enabled ? 'border-slate-200 bg-white' : 'border-slate-100 bg-slate-50/50'}`}>
                     <button
                       onClick={() => {
                         const upd = { ...schedule, days: { ...schedule.days, [key]: { ...day, enabled: !day.enabled } } };
@@ -554,9 +554,9 @@ export default function AgendaPage() {
                     >
                       {day.enabled && <CheckCircleIcon className="h-4 w-4" />}
                     </button>
-                    <span className={`w-24 text-sm font-semibold ${day.enabled ? 'text-slate-800' : 'text-slate-400'}`}>{DAY_LABELS[key]}</span>
+                    <span className={`w-full text-sm font-semibold sm:w-24 ${day.enabled ? 'text-slate-800' : 'text-slate-400'}`}>{DAY_LABELS[key]}</span>
                     {day.enabled ? (
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <input
                           type="time"
                           value={day.start}
@@ -674,12 +674,12 @@ export default function AgendaPage() {
               <div className="space-y-1.5">
                 {blocked.filter(b => !b.time).map(b => (
                   <div key={b.id} className="flex items-center justify-between rounded-lg border border-red-100 bg-red-50/50 px-3 py-2">
-                    <div className="flex items-center gap-2">
-                      <ExclamationTriangleIcon className="h-4 w-4 text-red-400" />
-                      <span className="text-sm font-medium text-slate-800">{fmtDate(b.date)}</span>
-                      {b.reason && <span className="text-xs text-slate-400">{b.reason}</span>}
+                    <div className="flex min-w-0 items-center gap-2">
+                      <ExclamationTriangleIcon className="h-4 w-4 shrink-0 text-red-400" />
+                      <span className="shrink-0 text-sm font-medium text-slate-800">{fmtDate(b.date)}</span>
+                      {b.reason && <span className="min-w-0 truncate text-xs text-slate-400">{b.reason}</span>}
                     </div>
-                    <button onClick={() => removeBlock(b.id)} className="rounded p-1 text-slate-400 transition hover:text-red-500" title="Verwijderen">
+                    <button onClick={() => removeBlock(b.id)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded p-1 text-slate-400 transition hover:text-red-500" title="Verwijderen">
                       <TrashIcon className="h-4 w-4" />
                     </button>
                   </div>

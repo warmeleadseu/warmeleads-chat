@@ -300,7 +300,7 @@ export default function AmLeaderboardPage() {
           <div>
             <label className="block text-xs font-medium text-slate-500">Label</label>
             <input
-              className="mt-0.5 w-56 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              className="mt-0.5 w-full sm:w-56 rounded-lg border border-slate-200 px-3 py-2 text-sm"
               value={manualLabel}
               onChange={e => setManualLabel(e.target.value)}
               placeholder="bv. Bonus Q2"
@@ -347,7 +347,7 @@ export default function AmLeaderboardPage() {
                   {expanded ? <ChevronDownIcon className="h-5 w-5 text-slate-400" /> : <ChevronRightIcon className="h-5 w-5 text-slate-400" />}
                   <div className="min-w-0 flex-1">
                     <p className="font-bold text-slate-900">{am.name}</p>
-                    <p className="text-xs text-slate-500">
+                    <p className="text-xs text-slate-500 break-words">
                       Leaderboard: <span className="font-semibold text-emerald-700">{eur(am.leaderboard_total)}</span> ·{' '}
                       {am.leaderboard_batches} batches · bulk {eur(am.bulk_revenue)} · batches-subtotaal {eur(am.revenue_from_batches)}
                     </p>

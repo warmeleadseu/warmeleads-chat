@@ -108,7 +108,7 @@ export default function BatchLeveringPage() {
             bestelling); ontbreekt die datum, dan vanaf aanmaak.
           </p>
           {dagen.length > 0 && (
-            <p className="mt-2 text-xs text-slate-500">
+            <p className="mt-2 break-words text-xs text-slate-500">
               Gecontroleerde dagen (datavenster): {dagen.map(d => d.replace(/-/g, '/')).join(' → ')}. Per kaart tellen
               alleen voltooide dagen mee vanaf eerste betaling (of aanmaak als die ontbreekt).
             </p>

@@ -508,7 +508,7 @@ export default function ELearningPage() {
   return (
     <div className="relative min-h-[60vh]">
       {/* Top bar */}
-      <div className="mb-6 flex items-center gap-3">
+      <div className="mb-6 flex flex-wrap items-center gap-2">
         <button
           onClick={() => { setView('hub'); setActiveModuleId(null); }}
           className="flex items-center gap-1.5 rounded-lg bg-white border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 shadow-sm transition hover:bg-slate-50"
@@ -525,7 +525,7 @@ export default function ELearningPage() {
         </div>
         <button
           onClick={() => setSidebarOpen(!sidebarOpen)}
-          className="ml-auto lg:hidden flex items-center gap-1.5 rounded-lg bg-white border border-slate-200 px-3 py-2 text-sm text-slate-600 shadow-sm"
+          className="ml-auto shrink-0 lg:hidden flex items-center gap-1.5 rounded-lg bg-white border border-slate-200 px-3 py-2 text-sm text-slate-600 shadow-sm"
         >
           {sidebarOpen ? <XMarkIcon className="h-4 w-4" /> : <Bars3BottomLeftIcon className="h-4 w-4" />}
           Lessen
@@ -542,7 +542,7 @@ export default function ELearningPage() {
               className={`shrink-0 ${sidebarOpen ? 'fixed inset-0 z-50 bg-black/30 lg:static lg:bg-transparent' : 'hidden lg:block'}`}
               onClick={(e) => { if (e.target === e.currentTarget) setSidebarOpen(false); }}
             >
-              <div className={`w-64 rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden ${sidebarOpen ? 'fixed left-4 top-20 bottom-4 z-50 overflow-y-auto lg:static' : ''}`}>
+              <div className={`w-64 rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden ${sidebarOpen ? 'fixed left-4 top-16 bottom-4 z-50 overflow-y-auto lg:static' : ''}`}>
                 <div className="p-3 border-b border-slate-100">
                   <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Lessen</p>
                 </div>
@@ -630,18 +630,18 @@ export default function ELearningPage() {
                     <SectionBlock key={i} section={section} />
                   ))}
                 </div>
-                <div className="flex items-center justify-between border-t border-slate-100 p-5">
+                <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between border-t border-slate-100 p-5">
                   <button
                     onClick={() => activeLessonIdx > 0 && goToLesson(activeLessonIdx - 1)}
                     disabled={activeLessonIdx === 0}
-                    className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-600 shadow-sm transition hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="flex w-full sm:w-auto items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-600 shadow-sm transition hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <ChevronLeftIcon className="h-4 w-4" /> Vorige
                   </button>
                   <button
                     onClick={handleNextLesson}
                     disabled={saving}
-                    className="flex items-center gap-1.5 rounded-lg bg-button-gradient px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:shadow-md disabled:opacity-60"
+                    className="flex w-full sm:w-auto items-center justify-center gap-1.5 rounded-lg bg-button-gradient px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:shadow-md disabled:opacity-60"
                   >
                     {activeLessonIdx < activeModule.lessons.length - 1 ? (
                       <>Volgende les <ChevronRightIcon className="h-4 w-4" /></>

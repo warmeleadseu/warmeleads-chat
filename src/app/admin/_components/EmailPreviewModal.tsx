@@ -192,7 +192,7 @@ export function EmailPreviewModal({
               <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
                 <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-[120px_1fr]">
                   <span className="text-slate-500">Aan</span>
-                  <span className="font-medium text-slate-900">
+                  <span className="font-medium text-slate-900 break-all">
                     {preview.to.name} &lt;{preview.to.email}&gt;
                   </span>
                   <span className="text-slate-500">Onderwerp</span>
@@ -237,7 +237,7 @@ export function EmailPreviewModal({
                   ref={iframeRef}
                   title="Email preview"
                   sandbox="allow-same-origin"
-                  className="h-[480px] w-full rounded-xl border border-slate-200 bg-white"
+                  className="h-[min(480px,50vh)] w-full rounded-xl border border-slate-200 bg-white"
                 />
               </div>
             </div>

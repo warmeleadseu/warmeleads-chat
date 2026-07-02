@@ -816,8 +816,8 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
             {formsError && <p className="mt-1 text-[11px] text-rose-600">{formsError}</p>}
             {selectedForm && (
               <p className="mt-1 text-[11px] text-slate-500">
-                Form ID: <span className="font-mono">{selectedForm.id}</span>
-                {selectedForm.page_id && <> · Page: <span className="font-mono">{selectedForm.page_id}</span></>}
+                Form ID: <span className="font-mono break-all">{selectedForm.id}</span>
+                {selectedForm.page_id && <> · Page: <span className="font-mono break-all">{selectedForm.page_id}</span></>}
               </p>
             )}
           </div>
@@ -854,7 +854,7 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
             <span className="rounded-full bg-purple-50 px-2 py-0.5 text-[10px] font-semibold text-purple-700">AI Strategist</span>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-600">Angles</label>
               <input type="range" min={2} max={5} value={angles} onChange={e => setAngles(parseInt(e.target.value, 10))} className="w-full" />
@@ -1053,7 +1053,7 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
         <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
           <h2 className="text-sm font-semibold text-slate-900">Budget &amp; doel</h2>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-600">Daily (€)</label>
               <input type="number" min={1} step={1} value={dailyBudgetEur} onChange={e => setDailyBudgetEur(e.target.value)} className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm" />
@@ -1381,7 +1381,7 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
                 <div className="mt-2 space-y-2">
                   {c.adsets.map((a, j) => (
                     <div key={j} className="rounded-md bg-slate-50 p-2 text-[10px]">
-                      <div className="flex items-center justify-between">
+                      <div className="flex flex-wrap items-center justify-between gap-1">
                         <span className="font-semibold text-slate-800">{a.strategy_type}</span>
                         <span className="font-mono text-slate-500">~EUR {(a.predicted_cpl_cents / 100).toFixed(2)}/CPL</span>
                       </div>
@@ -1677,7 +1677,7 @@ function RegenButton(props: { onClick: () => void; disabled?: boolean; label: st
       type="button"
       onClick={props.onClick}
       disabled={props.disabled}
-      className="rounded-md border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[9px] font-medium text-amber-800 hover:bg-amber-100 disabled:opacity-50"
+      className="rounded-md border border-amber-300 bg-amber-50 text-[10px] px-2 py-1.5 min-h-[32px] font-medium text-amber-800 hover:bg-amber-100 disabled:opacity-50"
     >
       {props.label}
     </button>

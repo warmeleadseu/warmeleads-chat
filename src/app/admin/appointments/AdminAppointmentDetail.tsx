@@ -154,10 +154,10 @@ export default function AdminAppointmentDetail({
                 )}
                 {(appointment.street || appointment.postcode || appointment.city) && (
                   <a href={`https://maps.google.com/?q=${encodeURIComponent([appointment.street, appointment.house_number, appointment.postcode, appointment.city].filter(Boolean).join(' '))}`} target="_blank" rel="noopener" className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 hover:border-slate-300">
-                    <MapPinIcon className="h-4 w-4 text-slate-400" />
-                    <div className="flex-1">
-                      <p>{[appointment.street, appointment.house_number].filter(Boolean).join(' ')}</p>
-                      <p className="text-xs text-slate-500">{[appointment.postcode, appointment.city].filter(Boolean).join(' ')}</p>
+                    <MapPinIcon className="h-4 w-4 shrink-0 text-slate-400" />
+                    <div className="min-w-0 flex-1">
+                      <p className="break-words">{[appointment.street, appointment.house_number].filter(Boolean).join(' ')}</p>
+                      <p className="break-words text-xs text-slate-500">{[appointment.postcode, appointment.city].filter(Boolean).join(' ')}</p>
                     </div>
                   </a>
                 )}
@@ -206,7 +206,7 @@ export default function AdminAppointmentDetail({
                 <Input label="Straat" value={street} onChange={setStreet} />
                 <div className="w-20"><Input label="Nr." value={houseNumber} onChange={setHouseNumber} /></div>
               </div>
-              <div className="grid grid-cols-[120px_1fr] gap-2">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-[120px_1fr]">
                 <Input label="Postcode" value={postcode} onChange={setPostcode} />
                 <Input label="Plaats" value={city} onChange={setCity} />
               </div>
@@ -220,24 +220,24 @@ export default function AdminAppointmentDetail({
           {err && <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{err}</div>}
         </div>
 
-        <footer className="flex items-center gap-2 border-t border-slate-200 bg-white px-5 py-3" style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 0.75rem)' }}>
+        <footer className="flex flex-wrap items-center gap-2 border-t border-slate-200 bg-white px-5 py-3" style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 0.75rem)' }}>
           {!editing ? (
             <>
               {appointment.status !== 'cancelled' && (
                 <>
                   {!confirmDelete ? (
-                    <button onClick={() => setConfirmDelete(true)} className="flex h-11 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-rose-600 hover:bg-rose-50">
+                    <button onClick={() => setConfirmDelete(true)} className="flex h-11 min-w-[44px] items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-rose-600 hover:bg-rose-50">
                       <TrashIcon className="h-4 w-4" />
                     </button>
                   ) : (
-                    <button onClick={doDelete} disabled={saving} className="flex h-11 items-center gap-1.5 rounded-xl border border-rose-300 bg-rose-50 px-3 text-sm font-semibold text-rose-700">Bevestig</button>
+                    <button onClick={doDelete} disabled={saving} className="flex h-11 min-w-[44px] items-center gap-1.5 rounded-xl border border-rose-300 bg-rose-50 px-3 text-sm font-semibold text-rose-700">Bevestig</button>
                   )}
                   <button onClick={() => setEditing(true)} className="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-50">
                     <PencilSquareIcon className="h-4 w-4" /> Bewerken
                   </button>
                 </>
               )}
-              <button onClick={onClose} className="h-11 flex-1 rounded-xl bg-gradient-to-r from-brand-purple to-brand-pink text-sm font-bold text-white shadow-sm">Sluiten</button>
+              <button onClick={onClose} className="h-11 w-full rounded-xl bg-gradient-to-r from-brand-purple to-brand-pink text-sm font-bold text-white shadow-sm sm:w-auto sm:flex-1">Sluiten</button>
             </>
           ) : (
             <>

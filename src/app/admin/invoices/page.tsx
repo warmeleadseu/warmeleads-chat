@@ -150,7 +150,7 @@ export default function AdminInvoicesPage() {
             {invoices.length} facturen &middot; &euro;{totalRevenue.toFixed(2)} omzet{totalOpen > 0 ? ` \u00B7 \u20AC${totalOpen.toFixed(2)} openstaand` : ''}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap gap-2">
           <button onClick={() => setShowCreate(true)}
             className="flex items-center gap-2 rounded-lg bg-button-gradient px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:shadow-md">
             <PlusIcon className="h-4 w-4" /> Factuur aanmaken
@@ -253,7 +253,7 @@ export default function AdminInvoicesPage() {
           <div className="space-y-3 md:hidden">
             {filtered.map(inv => (
               <div key={inv.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                <div className="mb-2 flex items-center justify-between">
+                <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex items-center gap-2">
                     <span className="rounded bg-brand-purple/10 px-2 py-0.5 text-xs font-bold text-brand-purple">{inv.invoice_number}</span>
                     <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
@@ -262,7 +262,7 @@ export default function AdminInvoicesPage() {
                       {inv.status === 'open' ? 'Open' : inv.status === 'credit_note' ? 'Creditnota' : 'Betaald'}
                     </span>
                   </div>
-                  <div className="flex items-center gap-0.5">
+                  <div className="flex items-center gap-0.5 self-end">
                     <button onClick={() => downloadPdf(inv)} className="rounded-lg p-2.5 text-slate-400 hover:text-brand-purple">
                       <ArrowDownTrayIcon className="h-4 w-4" />
                     </button>
@@ -439,7 +439,7 @@ function InvoicePanel({ customers, onClose, onSaved }: {
           </div>
           <p className="text-[11px] text-slate-400 -mt-2">BTW wordt automatisch bepaald o.b.v. het facturatie-land en BTW-nummer van de klant in het klantenbestand.</p>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-500">Status</label>
               <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}
@@ -634,7 +634,7 @@ function EditInvoicePanel({ invoice, customers, onClose, onSaved }: {
               className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-500">Klantnaam</label>
               <input value={form.customer_name} onChange={e => setForm(f => ({ ...f, customer_name: e.target.value }))}
@@ -647,7 +647,7 @@ function EditInvoicePanel({ invoice, customers, onClose, onSaved }: {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-500">Adres</label>
               <input value={form.customer_address} onChange={e => setForm(f => ({ ...f, customer_address: e.target.value }))}
@@ -670,7 +670,7 @@ function EditInvoicePanel({ invoice, customers, onClose, onSaved }: {
           </div>
           <p className="text-[11px] text-slate-400 -mt-2">BTW herberekend server-side o.b.v. klant in klantenbestand (land + BTW-nummer).</p>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-500">Status</label>
               <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}
@@ -714,7 +714,7 @@ function EditInvoicePanel({ invoice, customers, onClose, onSaved }: {
             <label className="mb-1.5 block text-xs font-medium text-slate-500">Factuur PDF</label>
             {hasUploadedPdf ? (
               <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex items-center gap-2">
                     <PaperClipIcon className="h-4 w-4 text-emerald-600" />
                     <span className="text-sm font-medium text-emerald-700">Eigen PDF geüpload</span>

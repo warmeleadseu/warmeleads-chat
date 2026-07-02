@@ -109,16 +109,16 @@ export function KvkLookupButton({ onApply }: { onApply: (data: KvkApply) => void
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+        className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
       >
         <MagnifyingGlassIcon className="h-3.5 w-3.5" />
         KVK-lookup
       </button>
 
       {open && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 px-4 pt-24" onClick={() => setOpen(false)}>
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 px-4 pb-4 sm:items-start sm:pb-0 sm:pt-24" onClick={() => setOpen(false)}>
           <div
-            className="w-full max-w-lg rounded-2xl bg-white shadow-2xl"
+            className="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-3">
@@ -133,12 +133,12 @@ export function KvkLookupButton({ onApply }: { onApply: (data: KvkApply) => void
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className="rounded-md p-1 text-slate-400 hover:bg-slate-100"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100"
               >
                 <XMarkIcon className="h-5 w-5" />
               </button>
             </div>
-            <div className="max-h-[55vh] overflow-y-auto p-2">
+            <div className="max-h-[55vh] flex-1 overflow-y-auto p-2">
               {loading && <div className="px-3 py-6 text-center text-sm text-slate-400">Zoeken...</div>}
               {error && <div className="px-3 py-4 text-sm text-rose-600">{error}</div>}
               {!loading && !error && q.trim().length >= 2 && results.length === 0 && (
@@ -152,8 +152,8 @@ export function KvkLookupButton({ onApply }: { onApply: (data: KvkApply) => void
                   className="block w-full rounded-lg p-3 text-left hover:bg-slate-50"
                 >
                   <div className="flex items-center justify-between">
-                    <span className="font-semibold text-slate-900">{r.naam}</span>
-                    <span className="font-mono text-xs text-slate-500">KVK {r.kvkNummer}</span>
+                    <span className="min-w-0 flex-1 truncate pr-2 font-semibold text-slate-900">{r.naam}</span>
+                    <span className="shrink-0 font-mono text-xs text-slate-500">KVK {r.kvkNummer}</span>
                   </div>
                   <div className="mt-0.5 text-xs text-slate-500">
                     {[r.straatnaam, r.huisnummer].filter(Boolean).join(' ')}

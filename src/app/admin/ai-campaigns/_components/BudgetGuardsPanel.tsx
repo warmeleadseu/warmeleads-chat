@@ -57,7 +57,7 @@ export default function BudgetGuardsPanel({ guards, onChanged }: Props) {
   };
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
       <div className="mb-4">
         <h2 className="text-sm font-semibold text-slate-900">Budget guards per branche</h2>
         <p className="mt-0.5 text-xs text-slate-500">
@@ -66,8 +66,8 @@ export default function BudgetGuardsPanel({ guards, onChanged }: Props) {
         </p>
       </div>
 
-      <div className="overflow-hidden rounded-lg border border-slate-100">
-        <table className="w-full text-sm">
+      <div className="overflow-x-auto rounded-lg border border-slate-100">
+        <table className="w-full min-w-[640px] text-sm">
           <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-3 py-2 text-left">Branche</th>
@@ -91,17 +91,17 @@ export default function BudgetGuardsPanel({ guards, onChanged }: Props) {
                     <>
                       <td className="px-3 py-1.5 text-right">
                         <input value={draft.daily} onChange={e => setDraft(d => ({ ...d, daily: e.target.value }))}
-                          className="w-24 rounded-md border border-slate-200 px-2 py-1 text-right text-xs" />
+                          className="w-full max-w-[6rem] rounded-md border border-slate-200 px-2 py-1 text-right text-xs" />
                       </td>
                       <td className="px-3 py-2 text-right text-xs text-slate-500">{eur(g.spent_today_cents)}</td>
                       <td className="px-3 py-1.5 text-right">
                         <input value={draft.monthly} onChange={e => setDraft(d => ({ ...d, monthly: e.target.value }))}
-                          className="w-24 rounded-md border border-slate-200 px-2 py-1 text-right text-xs" />
+                          className="w-full max-w-[6rem] rounded-md border border-slate-200 px-2 py-1 text-right text-xs" />
                       </td>
                       <td className="px-3 py-2 text-right text-xs text-slate-500">{eur(g.spent_month_cents)}</td>
                       <td className="px-3 py-1.5 text-right">
                         <input value={draft.openai} onChange={e => setDraft(d => ({ ...d, openai: e.target.value }))}
-                          className="w-24 rounded-md border border-slate-200 px-2 py-1 text-right text-xs" />
+                          className="w-full max-w-[6rem] rounded-md border border-slate-200 px-2 py-1 text-right text-xs" />
                       </td>
                       <td className="px-3 py-2 text-right text-xs text-slate-500">{eur(g.openai_spent_month_cents)}</td>
                       <td className="px-3 py-2 text-right">

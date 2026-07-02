@@ -384,11 +384,11 @@ export default function AccountPage() {
             </div>
           </div>
         </div>
-
-        <div className="mt-6">
-          <EmailSignaturePanel />
-        </div>
       </motion.div>
+
+      <div className="mt-6">
+        <EmailSignaturePanel />
+      </div>
     </div>
   );
 }

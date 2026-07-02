@@ -143,7 +143,7 @@ export default function AdminOrdersPage() {
             className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-sm text-slate-900 outline-none focus:border-brand-purple/50 focus:bg-white"
           />
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <FunnelIcon className="h-4 w-4 text-slate-400" />
           {['all', 'paid', 'pending', 'failed', 'expired', 'cancelled'].map(s => (
             <button key={s} onClick={() => setStatusFilter(s)}
@@ -277,7 +277,7 @@ export default function AdminOrdersPage() {
                       </span>
                       {o.status !== 'paid' && (
                         <button onClick={() => deleteOrder(o.id)} title="Verwijderen"
-                          className="rounded-lg p-1.5 text-slate-400 transition hover:bg-red-50 hover:text-red-500">
+                          className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-lg p-2.5 text-slate-400 transition hover:bg-red-50 hover:text-red-500">
                           <TrashIcon className="h-4 w-4" />
                         </button>
                       )}
@@ -292,7 +292,7 @@ export default function AdminOrdersPage() {
 
       {/* Toast */}
       {toast && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-xl bg-slate-900 px-5 py-3 text-sm font-medium text-white shadow-lg">
+        <div className="fixed bottom-6 left-4 right-4 z-50 flex items-center gap-2 rounded-xl bg-slate-900 px-5 py-3 text-sm font-medium text-white shadow-lg sm:left-auto sm:right-6 sm:max-w-sm">
           <ExclamationTriangleIcon className="h-4 w-4" />
           {toast}
         </div>

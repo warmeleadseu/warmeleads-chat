@@ -529,7 +529,7 @@ function UserFormModal({ user, onClose, onSaved }: { user: AdminUser | null; onC
           <h2 className="text-lg font-bold text-slate-900">
             {isEdit ? 'Gebruiker bewerken' : 'Nieuwe gebruiker'}
           </h2>
-          <button onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100">
+          <button onClick={onClose} className="inline-flex items-center justify-center rounded-lg p-2.5 min-h-[44px] min-w-[44px] text-slate-400 hover:bg-slate-100">
             <XMarkIcon className="h-5 w-5" />
           </button>
         </div>

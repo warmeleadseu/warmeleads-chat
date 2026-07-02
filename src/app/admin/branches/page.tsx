@@ -509,7 +509,7 @@ function BranchForm({ branch, onClose, onSaved }: { branch: Branch | null; onClo
 
           {/* Pricing section */}
           <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-4">
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <h3 className="flex items-center gap-1.5 text-sm font-bold text-slate-800">
                 <CurrencyEuroIcon className="h-4 w-4 text-brand-purple" />
                 Prijzen &amp; staffels
@@ -533,7 +533,7 @@ function BranchForm({ branch, onClose, onSaved }: { branch: Branch | null; onClo
             </div>
 
             {pricingProduct === 'leads' ? (
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <label className="mb-1 block text-xs font-medium text-slate-500">Min. afname (leads)</label>
                   <input
@@ -559,7 +559,7 @@ function BranchForm({ branch, onClose, onSaved }: { branch: Branch | null; onClo
               </div>
             ) : (
               <>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
                     <label className="mb-1 block text-xs font-medium text-slate-500">Min. afname (afspraken)</label>
                     <input
@@ -583,7 +583,7 @@ function BranchForm({ branch, onClose, onSaved }: { branch: Branch | null; onClo
                     <p className="mt-0.5 text-[10px] text-slate-400">Korting per afspraak bij heel NL/BE</p>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
                     <label className="mb-1 block text-xs font-medium text-slate-500">Default duur (min)</label>
                     <input
@@ -846,7 +846,7 @@ function FieldsManager({ branch, onClose, onSaved }: { branch: Branch; onClose: 
                       className="overflow-hidden"
                     >
                       <div className="border-t border-slate-100 p-3 space-y-2.5">
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                           <div>
                             <label className="mb-0.5 block text-[11px] font-medium text-slate-400">Label</label>
                             <input
@@ -907,7 +907,7 @@ function FieldsManager({ branch, onClose, onSaved }: { branch: Branch; onClose: 
             <div className="mt-3 rounded-lg border-2 border-dashed border-brand-purple/30 bg-brand-purple/[0.02] p-4">
               <p className="mb-3 text-sm font-semibold text-slate-900">Nieuw veld toevoegen</p>
               <div className="space-y-2.5">
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <div>
                     <label className="mb-0.5 block text-[11px] font-medium text-slate-400">Label *</label>
                     <input
@@ -927,7 +927,7 @@ function FieldsManager({ branch, onClose, onSaved }: { branch: Branch; onClose: 
                     />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <div>
                     <label className="mb-0.5 block text-[11px] font-medium text-slate-400">Type</label>
                     <select

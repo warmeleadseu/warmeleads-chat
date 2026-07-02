@@ -316,10 +316,10 @@ export default function AdminDashboard() {
               const color = t.progress_pct >= 100 ? '#10b981' : t.progress_pct >= 50 ? '#f59e0b' : '#ef4444';
               return (
                 <div key={t.id} className="rounded-lg bg-white p-4 shadow-sm border border-slate-100">
-                  <div className="mb-2 flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-900 truncate">{t.label}</span>
+                  <div className="mb-2 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                    <span className="truncate text-xs font-bold text-slate-900">{t.label}</span>
                     {t.bonus_amount > 0 && (
-                      <span className="shrink-0 ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700">
+                      <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700 sm:ml-2">
                         Bonus: {new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR' }).format(t.bonus_amount)}
                       </span>
                     )}
@@ -399,7 +399,7 @@ export default function AdminDashboard() {
       {costData && (
         <div className="mb-6 space-y-4">
           {/* Header */}
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-2">
               <div className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50">
                 <CurrencyEuroIcon className="h-4 w-4 text-emerald-500" />
@@ -446,7 +446,7 @@ export default function AdminDashboard() {
               title="Effectieve CPL = spend / netto-toewijzingen. Goedgekeurde reclamaties tellen niet als netto-levering (de kosten blijven volledig staan)."
             >
               <p className="text-xl font-bold text-emerald-700">&euro;{costData.effectieveCpl?.toFixed(2) ?? '-'}</p>
-              <p className="mt-0.5 text-[11px] text-emerald-600 font-medium">Eff. CPL <span className="text-emerald-500">(excl. goedgekeurde reclamaties)</span></p>
+              <p className="mt-0.5 text-[11px] font-medium leading-tight text-emerald-600">Eff. CPL <span className="text-emerald-500">(excl. goedgekeurde reclamaties)</span></p>
               <p className="text-[11px] text-emerald-500">
                 {costData.avgAssignments}x uitgedeeld
                 {costData.approvedReclamations && costData.approvedReclamations > 0
@@ -491,7 +491,7 @@ export default function AdminDashboard() {
                             <span className="text-xs font-medium text-slate-700">{b.name}</span>
                             <span className="text-[11px] text-slate-400">{data.count} leads</span>
                           </div>
-                          <div className="flex items-center gap-2 pl-[18px] sm:pl-0">
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 pl-[18px] sm:pl-0">
                             <span className="text-[11px] text-slate-400">bruto</span>
                             <span className="text-xs font-semibold text-slate-700">&euro;{data.avgCpl.toFixed(2)}</span>
                             <span className="text-slate-300">→</span>
@@ -524,7 +524,7 @@ export default function AdminDashboard() {
                       <div className="flex items-center justify-between">
                         <div className="min-w-0 flex-1">
                           <span className="text-xs font-medium text-slate-700">{cm.name}</span>
-                          <div className="flex gap-2 text-[11px] text-slate-400">
+                          <div className="flex flex-wrap gap-x-2 gap-y-0.5 text-[11px] text-slate-400">
                             <span>{cm.leads} leads</span>
                             <span>&euro;{cm.revenue.toFixed(0)} omzet</span>
                             <span>&euro;{cm.cost.toFixed(0)} kosten</span>

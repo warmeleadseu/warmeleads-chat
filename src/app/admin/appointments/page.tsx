@@ -248,7 +248,7 @@ export default function AdminAppointmentsPage() {
 
       {/* Filter bar */}
       <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white p-3">
-        <div className="flex items-center gap-1">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <button onClick={() => shift(-1)} className="h-9 w-9 rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-50">
             <ChevronLeftIcon className="mx-auto h-4 w-4" />
           </button>
@@ -257,7 +257,7 @@ export default function AdminAppointmentsPage() {
             <ChevronRightIcon className="mx-auto h-4 w-4" />
           </button>
         </div>
-        <span className="ml-1 text-sm font-semibold text-slate-700">{headerLabel}</span>
+        <span className="ml-1 min-w-0 truncate text-sm font-semibold text-slate-700 sm:whitespace-nowrap">{headerLabel}</span>
 
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <div className="relative">
@@ -269,7 +269,7 @@ export default function AdminAppointmentsPage() {
               className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-8 pr-3 text-sm outline-none focus:border-brand-purple/50 sm:w-56"
             />
           </div>
-          <div className="w-48">
+          <div className="w-full sm:w-48">
             <SearchableSelect
               value={customerFilter}
               onChange={v => setCustomerFilter(v || 'all')}
@@ -283,11 +283,11 @@ export default function AdminAppointmentsPage() {
               className="h-9 py-0"
             />
           </div>
-          <select value={branchFilter} onChange={e => setBranchFilter(e.target.value)} className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-sm">
+          <select value={branchFilter} onChange={e => setBranchFilter(e.target.value)} className="h-9 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2 text-sm sm:w-auto">
             <option value="all">Alle branches</option>
             {branches.map(b => <option key={b.slug} value={b.slug}>{b.name}</option>)}
           </select>
-          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-sm">
+          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="h-9 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2 text-sm sm:w-auto">
             <option value="all">Alle statussen</option>
             {Object.entries(STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
@@ -307,7 +307,7 @@ export default function AdminAppointmentsPage() {
 
       {/* Week grid */}
       {view === 'week' && (
-        <div className="overflow-x-auto">
+        <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
           <div className="grid min-w-[900px] grid-cols-7 gap-2">
             {days.map(d => {
               const dayAppts = apptsForDay(d);
@@ -454,9 +454,9 @@ function DayListAdmin({
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
       <header className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-2.5">
-        <div className="flex items-center gap-2">
-          <CalendarDaysIcon className="h-4 w-4 text-slate-400" />
-          <span className="text-sm font-bold text-slate-900">{date.toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' })}</span>
+        <div className="flex min-w-0 items-center gap-2">
+          <CalendarDaysIcon className="h-4 w-4 shrink-0 text-slate-400" />
+          <span className="truncate text-sm font-bold text-slate-900">{date.toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' })}</span>
         </div>
         <button
           onClick={() => { const t = new Date(date); t.setHours(9, 0, 0, 0); onCreate(t); }}

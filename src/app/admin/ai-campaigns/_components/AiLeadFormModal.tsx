@@ -746,13 +746,13 @@ export default function AiLeadFormModal({
                           )}
                         </div>
                         <div className="flex items-center gap-0.5">
-                          <button type="button" onClick={() => moveQuestion(qi, -1)} disabled={qi === 0} className="rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30">
+                          <button type="button" onClick={() => moveQuestion(qi, -1)} disabled={qi === 0} className="inline-flex items-center justify-center rounded p-2 min-h-[44px] min-w-[44px] text-slate-500 hover:bg-slate-100 disabled:opacity-30">
                             <ChevronLeftIcon className="h-3.5 w-3.5 rotate-90" />
                           </button>
-                          <button type="button" onClick={() => moveQuestion(qi, 1)} disabled={qi === draft.custom_questions.length - 1} className="rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30">
+                          <button type="button" onClick={() => moveQuestion(qi, 1)} disabled={qi === draft.custom_questions.length - 1} className="inline-flex items-center justify-center rounded p-2 min-h-[44px] min-w-[44px] text-slate-500 hover:bg-slate-100 disabled:opacity-30">
                             <ChevronRightIcon className="h-3.5 w-3.5 rotate-90" />
                           </button>
-                          <button type="button" onClick={() => removeQuestion(qi)} disabled={draft.custom_questions.length <= 2} className="rounded p-1 text-rose-500 hover:bg-rose-50 disabled:opacity-30">
+                          <button type="button" onClick={() => removeQuestion(qi)} disabled={draft.custom_questions.length <= 2} className="inline-flex items-center justify-center rounded p-2 min-h-[44px] min-w-[44px] text-rose-500 hover:bg-rose-50 disabled:opacity-30">
                             <TrashIcon className="h-3.5 w-3.5" />
                           </button>
                         </div>
@@ -1007,7 +1007,7 @@ export default function AiLeadFormModal({
         </div>
 
         {/* Footer met navigatie */}
-        <div className="shrink-0 flex items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:px-6">
+        <div className="shrink-0 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-t border-slate-200 bg-slate-50 px-4 py-3 sm:px-6">
           <button
             type="button"
             onClick={() => {
@@ -1021,7 +1021,7 @@ export default function AiLeadFormModal({
             {step === 1 ? 'Annuleer' : 'Terug'}
           </button>
 
-          <div className="text-[11px] text-slate-500">
+          <div className="text-center sm:text-left text-[11px] text-slate-500">
             {step === 3 && validation.ok && <span className="text-emerald-600">Klaar om te bevestigen</span>}
             {aiCostCents > 0 && step >= 3 && <span className="ml-2">AI-kosten: {(aiCostCents / 100).toFixed(2).replace('.', ',')} EUR</span>}
           </div>

@@ -404,7 +404,7 @@ export default function BatchesPage() {
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Zoek op klant, branche..."
             className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm text-slate-800 outline-none focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/30" />
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button onClick={() => setShowFilters(!showFilters)}
             className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition ${
               activeFilterCount > 0 ? 'border-brand-purple bg-brand-purple/5 text-brand-purple' : 'border-slate-200 text-slate-600 hover:bg-slate-50'
@@ -616,10 +616,10 @@ export default function BatchesPage() {
               const metaLinkCount = coerceCustomerBatchMetaCampaignIds(b.meta_campaign_ids).length;
               return (
                 <div key={b.id} onClick={() => setDetailBatchId(b.id)} className={`cursor-pointer rounded-xl border p-4 shadow-sm transition hover:shadow-md ${b.status === 'completed' ? 'border-blue-100 bg-blue-50/30' : b.status === 'paused' ? 'border-amber-100 bg-amber-50/20' : b.status === 'pending_payment' ? 'border-orange-100 bg-orange-50/25' : 'border-slate-200 bg-white'}`}>
-                  <div className="mb-2 flex items-start justify-between">
-                    <div>
+                  <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0 flex-1">
                       <p className="font-semibold text-slate-900">{b.customers?.name || 'Onbekend'}</p>
-                      <div className="mt-1 flex items-center gap-1.5">
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
                         <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${c.light} ${c.text}`}>{br.name}</span>
                         <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${STATUS_COLORS[b.status] || 'bg-slate-100 text-slate-600'}`}>{STATUS_LABELS[b.status] || b.status}</span>
                         {isBulkLeadsBatch(b) && (
@@ -678,7 +678,7 @@ export default function BatchesPage() {
                     {b.leads_per_week && <span className="font-medium text-brand-purple">{b.leads_per_week}/week</span>}
                     {b.price_per_lead && <span>€{Number(b.price_per_lead).toFixed(2)}/lead</span>}
                     <span>{new Date(b.created_at).toLocaleDateString('nl-NL')}</span>
-                    {b.notes && <span className="italic">{b.notes}</span>}
+                    {b.notes && <span className="line-clamp-2 break-words italic">{b.notes}</span>}
                   </div>
                   {b.lead_filters && b.lead_filters.length > 0 && (
                     <div className="mt-2 flex flex-wrap items-center gap-1.5">
@@ -1154,7 +1154,7 @@ function BatchDetailPanel({ batchId, branches, onClose, onEdit, onListRefresh }:
                   Portaal
                 </button>
               )}
-              <button type="button" onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100" aria-label="Sluiten">
+              <button type="button" onClick={onClose} className="rounded-lg p-2.5 min-h-11 min-w-11 text-slate-400 hover:bg-slate-100" aria-label="Sluiten">
                 <XMarkIcon className="h-5 w-5" />
               </button>
             </div>
@@ -1880,7 +1880,7 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
               <h2 className="text-lg font-bold text-slate-900">Batch bewerken</h2>
               <p className="mt-0.5 text-xs text-slate-500">{cust?.name || 'Onbekend'} &middot; {br?.name || batch.branch}</p>
             </div>
-            <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><XMarkIcon className="h-5 w-5" /></button>
+            <button onClick={onClose} className="rounded-lg p-2.5 min-h-11 min-w-11 text-slate-400 hover:bg-slate-100"><XMarkIcon className="h-5 w-5" /></button>
           </div>
         </div>
 
@@ -1936,7 +1936,7 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
           </div>
 
           {/* Fields */}
-          <div className={`grid gap-3 ${isNicheResearch ? 'grid-cols-1' : 'grid-cols-2'}`}>
+          <div className={`grid gap-3 ${isNicheResearch ? 'grid-cols-1' : 'grid-cols-1 sm:grid-cols-2'}`}>
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-500">
                 {isNicheResearch ? 'Ingeladen onderzoeksleads' : 'Geleverde leads'}
@@ -1975,14 +1975,14 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
               Voeg extra leads toe als compensatie. De klant ziet dit in het portaal. Het systeem vult de extra plekken direct.
             </p>
             <div className="space-y-2">
-              <div className="grid grid-cols-5 gap-2">
-                <div className="col-span-2">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-5">
+                <div className="sm:col-span-2">
                   <label className="mb-1 block text-[11px] font-medium text-slate-500">Aantal</label>
                   <input type="number" value={extraLeads || ''} onChange={e => setExtraLeads(Math.max(0, Number(e.target.value)))}
                     placeholder="0" min={0}
                     className="w-full rounded-lg border border-brand-purple/20 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/20" />
                 </div>
-                <div className="col-span-3">
+                <div className="sm:col-span-3">
                   <label className="mb-1 block text-[11px] font-medium text-slate-500">Reden *</label>
                   <input type="text" value={extraReason} onChange={e => setExtraReason(e.target.value)}
                     placeholder="Bijv. compensatie slechte leads"
@@ -2033,7 +2033,7 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
           )}
 
           {!isNicheResearch && (
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-500">Per dag</label>
               <input type="number" value={form.leads_per_day} onChange={e => setForm(f => ({ ...f, leads_per_day: e.target.value }))}
@@ -2692,7 +2692,7 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
                 {isAppointments ? 'Afspraak-batch voor een klant (parallel aan lead-batches)' : 'Lead-batch voor een klant'}
               </p>
             </div>
-            <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><XMarkIcon className="h-5 w-5" /></button>
+            <button onClick={onClose} className="rounded-lg p-2.5 min-h-11 min-w-11 text-slate-400 hover:bg-slate-100"><XMarkIcon className="h-5 w-5" /></button>
           </div>
         </div>
 
@@ -2836,7 +2836,7 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
 
           {!isNicheDelivery && (
           <>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-500">Batch grootte *</label>
               <input type="number" value={form.batch_size} onChange={e => setForm(f => ({ ...f, batch_size: Number(e.target.value) }))} min={1}
@@ -2922,7 +2922,7 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-500">Max per dag</label>
               {isAppointments ? (
@@ -3302,8 +3302,8 @@ function FilterValuesSelect({ branchSlug, fieldKey, selected, onChange }: {
       {options.map(opt => (
         <label key={opt} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm hover:bg-white">
           <input type="checkbox" checked={selected.includes(opt)} onChange={() => toggle(opt)}
-            className="h-3.5 w-3.5 rounded border-slate-300 text-brand-purple focus:ring-brand-purple/30" />
-          <span className="text-slate-700">{opt}</span>
+            className="h-3.5 w-3.5 shrink-0 rounded border-slate-300 text-brand-purple focus:ring-brand-purple/30" />
+          <span className="min-w-0 break-words text-slate-700">{opt}</span>
         </label>
       ))}
     </div>

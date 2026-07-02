@@ -100,7 +100,7 @@ export function EntityTypeahead({ kind, value, onChange, disabled }: Props) {
           <button
             type="button"
             onClick={() => onChange(null)}
-            className="rounded-full p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-600"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-600"
             aria-label="Koppeling verwijderen"
           >
             <XMarkIcon className="h-4 w-4" />

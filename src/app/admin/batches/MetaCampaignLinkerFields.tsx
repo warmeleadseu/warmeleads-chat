@@ -183,7 +183,7 @@ export function MetaCampaignLinkerFields({
                 <span className="min-w-0 flex-1 truncate font-medium" title={p.name}>
                   {p.name}
                 </span>
-                <span className="shrink-0 font-mono text-[10px] text-slate-500">({p.id})</span>
+                <span className="hidden shrink-0 font-mono text-[10px] text-slate-500 sm:inline">({p.id})</span>
                 {isPaused && (
                   <span className="shrink-0 rounded bg-slate-200 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-slate-600">
                     Uit
@@ -196,7 +196,7 @@ export function MetaCampaignLinkerFields({
                       prev.map(x => (x.id === p.id ? { ...x, paused: !x.paused } : x)),
                     )
                   }
-                  className={`shrink-0 rounded p-0.5 ${
+                  className={`flex min-h-10 min-w-10 shrink-0 items-center justify-center rounded p-2 ${
                     isPaused
                       ? 'text-emerald-600 hover:bg-emerald-50'
                       : 'text-amber-600 hover:bg-amber-50'
@@ -213,7 +213,7 @@ export function MetaCampaignLinkerFields({
                 <button
                   type="button"
                   onClick={() => setPicks(prev => prev.filter(x => x.id !== p.id))}
-                  className="shrink-0 rounded p-0.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+                  className="flex min-h-10 min-w-10 shrink-0 items-center justify-center rounded p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
                   aria-label="Koppeling verwijderen"
                   title="Verwijderen en in Meta pauzeren (na opslaan)"
                 >

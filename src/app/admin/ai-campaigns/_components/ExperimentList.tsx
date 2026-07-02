@@ -218,7 +218,7 @@ export default function ExperimentList({ reloadKey }: Props) {
         <div className="text-xs text-slate-500">
           {lastSummary && <span className="rounded-full bg-slate-100 px-2 py-1 font-mono text-[11px]">{lastSummary}</span>}
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button
             onClick={() => runOptimizer(true)}
             disabled={!!running}
@@ -253,7 +253,7 @@ export default function ExperimentList({ reloadKey }: Props) {
             animate={{ opacity: 1, y: 0 }}
             className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
           >
-            <div className="flex items-start justify-between gap-3 p-5">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between p-5">
               <button
                 onClick={() => setExpanded(e => ({ ...e, [exp.id]: !isOpen }))}
                 className="flex flex-1 items-start gap-2 text-left"
@@ -387,7 +387,7 @@ function CampaignTree({
             >
               {isOpen ? <ChevronDownIcon className="mt-0.5 h-4 w-4 text-purple-400" /> : <ChevronRightIcon className="mt-0.5 h-4 w-4 text-purple-400" />}
               <div className="flex-1">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-sm font-semibold text-purple-900">{c.angle}</span>
                   <span className="rounded-full bg-purple-100 px-2 py-0.5 text-[10px] text-purple-700">
                     {Math.round(c.daily_budget_share * 100)}% · €{(c.daily_budget_cents / 100).toFixed(2)}/d
@@ -442,7 +442,7 @@ function CampaignTree({
                               )}
                             </span>
                           </div>
-                          <div className="flex gap-1 text-[10px]">
+                          <div className="flex flex-wrap gap-1 text-[10px]">
                             {a.predicted_cpl_cents != null && (
                               <span className="rounded-full bg-purple-50 px-1.5 py-0.5 text-purple-700">~€{(a.predicted_cpl_cents / 100).toFixed(2)}</span>
                             )}

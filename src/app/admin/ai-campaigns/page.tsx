@@ -59,14 +59,14 @@ export default function AiCampaignsPage() {
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">AI Meta-campagnes</h1>
           <p className="mt-0.5 text-sm text-slate-500">Genereer, lanceer en monitor AI-advertentiecampagnes in Meta.</p>
         </div>
         <button
           onClick={toggleMaster}
-          className={`inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-bold shadow-sm transition ${
+          className={`self-start sm:self-auto inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-bold shadow-sm transition ${
             masterEnabled
               ? 'bg-emerald-500 text-white hover:bg-emerald-600'
               : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
@@ -88,7 +88,7 @@ export default function AiCampaignsPage() {
         </motion.div>
       )}
 
-      <div className="mb-5 flex gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1 text-sm font-medium">
+      <div className="mb-5 flex flex-col gap-1 sm:flex-row rounded-xl border border-slate-200 bg-slate-50 p-1 text-sm font-medium">
         <button
           onClick={() => setTab('studio')}
           className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2 transition ${

@@ -731,13 +731,13 @@ export function ComposeMailDrawer({
 
 function Stepper({ labels, current }: { labels: string[]; current: Step }) {
   return (
-    <ol className="flex items-center gap-1 px-6 py-3 bg-white border-b border-slate-200">
+    <ol className="flex items-center gap-1 px-6 py-3 bg-white border-b border-slate-200 overflow-x-auto pb-1">
       {labels.map((label, i) => {
         const idx = (i + 1) as Step;
         const active = idx === current;
         const done = idx < current;
         return (
-          <li key={label} className="flex items-center gap-2 text-xs">
+          <li key={label} className="flex shrink-0 items-center gap-2 text-xs">
             <span
               className={`flex items-center justify-center w-6 h-6 rounded-full font-semibold ${
                 done
@@ -749,7 +749,7 @@ function Stepper({ labels, current }: { labels: string[]; current: Step }) {
             >
               {done ? '✓' : idx}
             </span>
-            <span className={active ? 'font-semibold text-slate-900' : 'text-slate-500'}>
+            <span className={`hidden sm:inline ${active ? 'font-semibold text-slate-900' : 'text-slate-500'}`}>
               {label}
             </span>
             {i < labels.length - 1 && <span className="mx-2 text-slate-300">›</span>}
@@ -1308,13 +1308,13 @@ function PreviewPanel({
         </div>
         <div className="px-4 py-2 border-b border-slate-100 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
           <span className="text-slate-500">Van:</span>
-          <span className="text-slate-900">{preview.from}</span>
+          <span className="text-slate-900 break-all">{preview.from}</span>
           <span className="text-slate-300">·</span>
           <span className="text-slate-500">Reply-To:</span>
-          <span className="text-slate-900">{preview.reply_to}</span>
+          <span className="text-slate-900 break-all">{preview.reply_to}</span>
           <span className="text-slate-300">·</span>
           <span className="text-slate-500">Naar:</span>
-          <span className="text-slate-900 truncate">
+          <span className="text-slate-900 break-all">
             {item?.recipient.name ? `${item.recipient.name} <${item.recipient.email}>` : item?.recipient.email}
           </span>
           <span className="ml-auto inline-flex items-center gap-2">
