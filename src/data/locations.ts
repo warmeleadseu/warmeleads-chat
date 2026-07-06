@@ -2,6 +2,7 @@
  * Local SEO Data - Nederlandse Provincies en Steden
  * Voor dynamische generatie van lokale landing pages
  */
+import { getBranchLeadContent } from './branchLeadContent';
 
 export interface Province {
   name: string;
@@ -140,12 +141,19 @@ export function getLocationMetadata(
   const isCity = type === 'city';
   const province = isCity ? (location as City).province : '';
 
+  // Prijs komt uit de centrale branche-config (single source of truth) i.p.v.
+  // een hardcoded bedrag; "15 minuten delivery" is bewust vervangen door de
+  // realistische, verifieerbare claim "realtime in je portaal".
+  const content = getBranchLeadContent(branch.slug);
+  const priceFrom = content ? `€${content.exclusivePriceFrom.toFixed(2).replace('.', ',')}` : null;
+  const priceZin = priceFrom ? ` Vanaf ${priceFrom} per lead.` : '';
+
   return {
     title: `${branchName} Leads ${locationName} | Exclusieve & Gedeelde Leads | WarmeLeads`,
-    description: `Krijg meer ${branchName.toLowerCase()} klanten in ${locationName}! Exclusieve en gedeelde leads voor installateurs. 15 minuten delivery. Start vandaag nog met €42,50 per lead.`,
+    description: `Krijg meer ${branchName.toLowerCase()} klanten in ${locationName}! Exclusieve en gedeelde leads voor installateurs, realtime in je portaal.${priceZin}`,
     keywords: `${branch.keywords}, ${locationName.toLowerCase()}, warme leads ${locationName.toLowerCase()}, exclusieve leads ${locationName.toLowerCase()}, gedeelde leads ${locationName.toLowerCase()}, energie leads ${locationName.toLowerCase()}`,
     ogTitle: `${branchName} Leads ${locationName} | WarmeLeads`,
-    ogDescription: `Krijg meer ${branchName.toLowerCase()} klanten in ${locationName}! Exclusieve en gedeelde leads voor installateurs. 15 minuten delivery.`,
+    ogDescription: `Krijg meer ${branchName.toLowerCase()} klanten in ${locationName}! Exclusieve en gedeelde leads voor installateurs, realtime in je portaal.`,
     ogImage: `https://www.warmeleads.eu/api/og?title=${encodeURIComponent(`${branchName} Leads ${locationName}`)}&location=${encodeURIComponent(locationName)}`,
     schemaName: `${branchName} Leads ${locationName}`,
     schemaDescription: `Exclusieve en gedeelde ${branchName.toLowerCase()} leads voor installateurs in ${locationName}`,

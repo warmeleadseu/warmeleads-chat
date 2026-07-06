@@ -19,7 +19,7 @@ const STATUS_DOT: Record<string, string> = {
   cancelled: 'bg-slate-400', rescheduled: 'bg-amber-500',
 };
 const STATUS_LABELS: Record<string, string> = {
-  scheduled: 'Ingepland', completed: 'Voltooid', no_show: 'No-show',
+  scheduled: 'Ingepland', completed: 'Voltooid', no_show: 'Niet verschenen',
   cancelled: 'Geannuleerd', rescheduled: 'Verzet',
 };
 
@@ -191,7 +191,7 @@ export default function AdminAppointmentDetail({
                       <CheckCircleIcon className="h-4 w-4" /> Voltooid
                     </button>
                     <button onClick={() => changeStatus('no_show')} disabled={saving} className="flex items-center justify-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-sm font-semibold text-rose-700 hover:bg-rose-100">
-                      <ExclamationCircleIcon className="h-4 w-4" /> No-show
+                      <ExclamationCircleIcon className="h-4 w-4" /> Niet verschenen
                     </button>
                   </div>
                 </section>

@@ -74,7 +74,7 @@ export default function AiCampaignsPage() {
           disabled={masterEnabled === null}
         >
           {masterEnabled ? <PlayIcon className="h-4 w-4" /> : <StopIcon className="h-4 w-4" />}
-          Master {masterEnabled ? 'AAN' : 'UIT'}
+          Hoofdschakelaar {masterEnabled ? 'AAN' : 'UIT'}
         </button>
       </div>
 
@@ -84,7 +84,7 @@ export default function AiCampaignsPage() {
           animate={{ opacity: 1, y: 0 }}
           className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800"
         >
-          AI-campagnes staan op de master-switch UIT. Genereren, lanceren en hervatten zijn geblokkeerd. Kill, monitoring en budgetbeheer blijven beschikbaar.
+          AI-campagnes staan op de hoofdschakelaar UIT. Genereren, lanceren en hervatten zijn geblokkeerd. Kill, monitoring en budgetbeheer blijven beschikbaar.
         </motion.div>
       )}
 

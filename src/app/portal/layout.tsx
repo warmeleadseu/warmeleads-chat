@@ -376,7 +376,7 @@ function PortalHeader({
           <div className="flex items-center gap-2 sm:gap-3">
             {portalUser && portalUser.role !== 'owner' && (
               <span className="hidden rounded-md bg-brand-purple/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-brand-purple sm:inline">
-                {portalUser.role === 'manager' ? 'Manager' : 'Agent'}
+                {portalUser.role === 'manager' ? 'Manager' : 'Medewerker'}
               </span>
             )}
             <div className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-purple/10 text-xs font-bold text-brand-purple">

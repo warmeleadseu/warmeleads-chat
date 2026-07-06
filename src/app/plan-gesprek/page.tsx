@@ -20,6 +20,7 @@ import {
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
 import { SoftGlow } from '@/components/ui/SoftGlow';
+import { validatePhone } from '@/lib/phoneValidation';
 
 const DAYS_NL = ['Ma', 'Di', 'Wo', 'Do', 'Vr', 'Za', 'Zo'];
 const MONTHS_NL = [
@@ -53,6 +54,7 @@ export default function PlanGesprekPage() {
   const [form, setForm] = useState({ name: '', company: '', email: '', phone: '', branch: '', message: '' });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [consent, setConsent] = useState(false);
   const [enabledDays, setEnabledDays] = useState<string[]>(['monday', 'tuesday', 'wednesday', 'thursday', 'friday']);
 
   const now = new Date();
@@ -94,6 +96,14 @@ export default function PlanGesprekPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedDate || !selectedTime) return;
+    if (!validatePhone(form.phone).valid) {
+      setError('Vul een geldig telefoonnummer in (NL of BE).');
+      return;
+    }
+    if (!consent) {
+      setError('Ga akkoord met de privacyverklaring om verder te gaan.');
+      return;
+    }
     setSubmitting(true);
     setError('');
     try {
@@ -343,7 +353,7 @@ export default function PlanGesprekPage() {
                         <label className="mb-1.5 block text-xs font-semibold text-slate-600">Telefoonnummer *</label>
                         <div className="relative">
                           <PhoneIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                          <input type="tel" required value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="06 12345678" className="w-full rounded-lg border border-slate-200 bg-white py-2.5 pl-10 pr-3 text-sm text-slate-900 outline-none transition focus:border-brand-purple/50 focus:ring-2 focus:ring-brand-purple/20" />
+                          <input type="tel" inputMode="tel" autoComplete="tel" required value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="06 12345678" className="w-full rounded-lg border border-slate-200 bg-white py-2.5 pl-10 pr-3 text-sm text-slate-900 outline-none transition focus:border-brand-purple/50 focus:ring-2 focus:ring-brand-purple/20" />
                         </div>
                       </div>
                     </div>
@@ -364,9 +374,25 @@ export default function PlanGesprekPage() {
                       </div>
                     </div>
 
+                    <label className="flex items-start gap-2.5 text-[12px] leading-relaxed text-slate-500">
+                      <input
+                        type="checkbox"
+                        checked={consent}
+                        onChange={e => setConsent(e.target.checked)}
+                        className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-brand-purple focus:ring-brand-purple/30"
+                      />
+                      <span>
+                        Ik ga akkoord dat WarmeLeads mijn gegevens gebruikt om contact met mij op te nemen, conform de{' '}
+                        <Link href="/privacyverklaring" target="_blank" className="font-semibold text-brand-purple underline">
+                          privacyverklaring
+                        </Link>
+                        .
+                      </span>
+                    </label>
+
                     <button
                       type="submit"
-                      disabled={submitting || !form.name || !form.email || !form.phone}
+                      disabled={submitting || !form.name || !form.email || !form.phone || !consent}
                       className="group flex w-full items-center justify-center gap-2 rounded-lg bg-button-gradient px-6 py-3.5 text-sm font-bold text-white shadow-lg shadow-brand-orange/30 transition hover:shadow-brand-orange/40 hover:brightness-110 disabled:opacity-60"
                     >
                       {submitting ? (

@@ -463,14 +463,21 @@ export default function ProspectsPage() {
           canManage={canManage}
         />
       ) : (
-        <ProspectsKanban
-          prospects={prospects}
-          amNames={amNames}
-          branchNames={branchNames}
-          onMove={moveStatus}
-          onOpen={openDrawer}
-          canDrag
-        />
+        <>
+          {total > prospects.length && (
+            <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-800" role="status">
+              Er zijn {total} prospects, maar het bord toont er maximaal {limit}. Gebruik de zoekbalk of filters om het aantal te verfijnen, of schakel naar de lijstweergave.
+            </div>
+          )}
+          <ProspectsKanban
+            prospects={prospects}
+            amNames={amNames}
+            branchNames={branchNames}
+            onMove={moveStatus}
+            onOpen={openDrawer}
+            canDrag
+          />
+        </>
       )}
 
       {/* Drawer */}

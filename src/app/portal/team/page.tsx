@@ -75,7 +75,7 @@ function isOnline(lastSeenAt: string | null): boolean {
   return Date.now() - new Date(lastSeenAt).getTime() < 5 * 60 * 1000;
 }
 
-const ROLE_LABELS: Record<string, string> = { owner: 'Eigenaar', manager: 'Manager', agent: 'Agent' };
+const ROLE_LABELS: Record<string, string> = { owner: 'Eigenaar', manager: 'Manager', agent: 'Medewerker' };
 const ROLE_COLORS: Record<string, string> = {
   owner: 'bg-brand-purple/10 text-brand-purple',
   manager: 'bg-blue-50 text-blue-700',
@@ -164,7 +164,7 @@ export default function TeamPage() {
         <EmptyState
           icon={UserCircleIcon}
           title="Nog geen teamleden"
-          body="Voeg je eerste agent of manager toe om leads te verdelen."
+          body="Voeg je eerste medewerker of manager toe om leads te verdelen."
           cta={
             <button
               onClick={() => setShowAddModal(true)}
@@ -948,7 +948,7 @@ function EditMemberPanel({
             <span className="text-sm text-slate-700">Account actief</span>
             <button type="button" onClick={() => setIsActive(!isActive)}
               className={`relative h-7 w-12 rounded-full transition ${isActive ? 'bg-emerald-500' : 'bg-slate-300'}`}
-              role="switch" aria-pressed={isActive}>
+              role="switch" aria-checked={isActive} aria-label="Account actief">
               <span className={`absolute top-0.5 left-0.5 h-6 w-6 rounded-full bg-white shadow-sm transition-transform ${isActive ? 'translate-x-5' : ''}`} />
             </button>
           </div>

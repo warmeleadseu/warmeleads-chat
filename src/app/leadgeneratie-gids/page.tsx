@@ -26,6 +26,7 @@ export const metadata: Metadata = {
   title: "Leadgeneratie Gids 2026 | Leads Kopen vs Zelf Genereren | WarmeLeads",
   description: "Complete gids voor leadgeneratie in Nederland 2026. Vergelijk leads kopen vs zelf genereren voor thuisbatterijen, zonnepanelen, warmtepompen en meer. Expert tips van WarmeLeads.",
   keywords: "leadgeneratie gids, leads kopen, leadgeneratie strategie, Nederlandse leadgeneratie, B2B leadgeneratie, lead generation Nederland",
+  alternates: { canonical: "/leadgeneratie-gids" },
 };
 
 export default function LeadgeneratieGidsPage() {

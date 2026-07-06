@@ -23,6 +23,7 @@ export const metadata = {
   title: 'Maatwerk Leadgeneratie | Custom Lead Campaigns | Warmeleads.eu',
   description:
     'Op maat gemaakte leadgeneratie campagnes voor jouw specifieke branche. Van niche markten tot grootschalige B2B campagnes. Exclusieve leads op basis van jouw wensen.',
+  alternates: { canonical: '/maatwerk-leads' },
 };
 
 export default function MaatwerkLeadsPage() {

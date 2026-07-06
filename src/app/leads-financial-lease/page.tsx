@@ -1,10 +1,14 @@
 import type { Metadata } from "next";
 import { BranchLeadsPageContent } from "@/components/BranchLeadsPage";
+import { getBranchLeadContent } from "@/data/branchLeadContent";
+
+const content = getBranchLeadContent("financial-lease")!;
 
 export const metadata: Metadata = {
   title: "Financial Lease Leads Kopen | Zakelijke Klant Prospects | WarmeLeads",
   description: "Koop verse financial lease leads in Nederland en België. Exclusieve prospects voor financial lease aanbieders. Automatisch gekwalificeerd, realtime in jouw portaal.",
   keywords: "financial lease leads, zakelijke lease prospects, lease aanbieder leads, exclusieve financial lease leads, zakelijke klant leads",
+  alternates: { canonical: "/leads-financial-lease" },
   openGraph: {
     title: "Financial Lease Leads Kopen Nederland | Exclusieve Prospects | WarmeLeads",
     description: "Exclusieve financial lease leads. Automatisch gekwalificeerd uit eigen campagnes, realtime in jouw portaal.",
@@ -14,14 +18,15 @@ export const metadata: Metadata = {
 
 export default function FinancialLeaseLeadsPage() {
   return (
-    <BranchLeadsPageContent 
+    <BranchLeadsPageContent
+      branchName={content.branchName}
       metadata={{
         title: "Financial Lease Leads Kopen Nederland - Zakelijke Klant Prospects",
-        heroTitle: "Financial Lease Leads",
-        heroSubtitle: "Nederlandse zakelijke prospects voor lease",
-        heroDescription: "Verse leads uit onze campagnes voor financial lease aanbieders. Echte zakelijke geïnteresseerden die actief zoeken naar lease mogelijkheden voor bedrijfsmiddelen.",
-        exclusivePrice: "€35,00 - €40,00",
-        sharedPrice: "€12,50",
+        heroTitle: content.heroTitle,
+        heroSubtitle: content.heroSubtitle,
+        heroDescription: content.heroDescription,
+        exclusivePrice: content.exclusivePrice,
+        sharedPrice: content.sharedPrice,
       }}
     />
   );

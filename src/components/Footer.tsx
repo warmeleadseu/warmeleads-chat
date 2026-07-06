@@ -20,7 +20,7 @@ const footerColumns = [
       { label: 'Hoe het werkt', href: '/hoe-het-werkt' },
       { label: 'Plan gesprek', href: '/plan-gesprek' },
       { label: 'Meer klanten nodig', href: '/meer-klanten-nodig' },
-      { label: 'Blog & inzichten', href: '/blog' },
+      { label: 'Inzichten', href: '/blog' },
       { label: 'Leadgeneratie gids', href: '/leadgeneratie-gids' },
       { label: 'Klantportaal', href: '/portal' },
     ],

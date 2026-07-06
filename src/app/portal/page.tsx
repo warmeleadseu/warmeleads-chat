@@ -303,6 +303,7 @@ export default function PortalPage() {
   const [branchConfigs, setBranchConfigs] = useState<BranchConfig[]>([]);
 
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   // Pill-tab "Alle branches" of een specifieke branch-slug. Vervangt het
   // oude `branchFilter`-dropdown. Init uit URL `?branch=` zodat refresh +
@@ -426,8 +427,13 @@ export default function PortalPage() {
     allPageSelected && total > pageLeadIds.length && pageLeadIds.length > 0;
 
   useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 350);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  useEffect(() => {
     clearSelection();
-  }, [statusFilter, activeBranchTab, dateFrom, dateTo, leadSource, search, clearSelection]);
+  }, [statusFilter, activeBranchTab, dateFrom, dateTo, leadSource, debouncedSearch, clearSelection]);
 
   const openExportWizard = useCallback((selection: ExportSelection | null, count: number) => {
     setExportSelection(selection);
@@ -529,7 +535,7 @@ export default function PortalPage() {
     params.set('order', order);
     if (statusFilter !== 'all') params.set('status', statusFilter);
     if (activeBranchTab !== 'all') params.set('branch', activeBranchTab);
-    if (search) params.set('search', search);
+    if (debouncedSearch) params.set('search', debouncedSearch);
     if (dateFrom) params.set('from', dateFrom);
     if (dateTo) params.set('to', dateTo);
     if (leadSource !== 'all') params.set('lead_source', leadSource);
@@ -556,7 +562,7 @@ export default function PortalPage() {
       showToast('Leads konden niet geladen worden', 'error');
     }
     setLoading(false);
-  }, [page, pageSize, sort, order, statusFilter, activeBranchTab, search, dateFrom, dateTo, leadSource, showToast]);
+  }, [page, pageSize, sort, order, statusFilter, activeBranchTab, debouncedSearch, dateFrom, dateTo, leadSource, showToast]);
 
   const fetchBranches = useCallback(async () => {
     try {
@@ -758,8 +764,8 @@ export default function PortalPage() {
     dateFrom,
     dateTo,
     leadSource,
-    search,
-  }), [statusFilter, activeBranchTab, dateFrom, dateTo, leadSource, search]);
+    search: debouncedSearch,
+  }), [statusFilter, activeBranchTab, dateFrom, dateTo, leadSource, debouncedSearch]);
 
   const handleCrmBackfill = (forceResend: boolean) => {
     if (!crmLabel) return;

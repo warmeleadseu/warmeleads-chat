@@ -4,6 +4,7 @@ export const metadata: Metadata = {
   title: 'Gratis Account Aanmaken | Leadportaal | WarmeLeads',
   description:
     'Maak gratis een WarmeLeads account aan en krijg direct toegang tot je eigen leadportaal. Start met demo leads, ervaar het platform en bestel je eerste batch met 20% welkomstkorting.',
+  alternates: { canonical: '/gratis-account' },
   openGraph: {
     title: 'Gratis Account Aanmaken | WarmeLeads',
     description:

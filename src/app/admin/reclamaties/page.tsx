@@ -119,6 +119,16 @@ export default function AdminReclamatiesPage() {
   const handleResolve = async (status: 'approved' | 'rejected') => {
     if (!selected) return;
     if (selected.status === status) return;
+    const isRevision = selected.status !== 'pending';
+    if (isRevision) {
+      const gevolg = status === 'approved'
+        ? 'Er wordt +1 compensatie lead toegevoegd aan de batch (en de batch wordt zo nodig geheractiveerd).'
+        : 'Een eerder toegekende compensatie lead wordt teruggedraaid.';
+      const bevestiging =
+        `Beslissing van deze reclamatie herzien naar "${status === 'approved' ? 'goedgekeurd' : 'afgewezen'}"?\n\n` +
+        `${gevolg}\n\nDeze actie wordt gelogd.`;
+      if (!confirm(bevestiging)) return;
+    }
     setSaving(status);
     try {
       const res = await adminFetch('/api/admin/reclamations', {

@@ -33,6 +33,7 @@ import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
 import { SoftGlow } from '@/components/ui/SoftGlow';
 import { PROVINCE_OPTIONS_BE, PROVINCE_OPTIONS_NL } from '@/data/provinces';
+import { validatePhone } from '@/lib/phoneValidation';
 
 interface Branch {
   slug: string;
@@ -225,7 +226,7 @@ export default function GratisAccountPage() {
   };
 
   const canNext = (): boolean => {
-    if (step === 1) return !!name && !!contactPerson && !!email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && !!phone && emailAvailable !== false;
+    if (step === 1) return !!name && !!contactPerson && !!email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && !!phone && validatePhone(phone).valid && emailAvailable !== false;
     if (step === 2) return selectedBranches.length > 0;
     if (step === 3) return selectedProvinces.length > 0;
     if (step === 4) return password.length >= 8 && password === passwordConfirm && agreedToTerms;
@@ -513,7 +514,10 @@ export default function GratisAccountPage() {
                       </div>
                       <div>
                         <label className="mb-1.5 block text-xs font-semibold text-slate-600">Telefoonnummer *</label>
-                        <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="06 12345678" className={inputClass} />
+                        <input type="tel" inputMode="tel" autoComplete="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="06 12345678" className={inputClass} />
+                        {phone.length > 0 && !validatePhone(phone).valid && (
+                          <p className="mt-1 text-xs text-red-500">Vul een geldig telefoonnummer in (NL of BE).</p>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -787,7 +791,7 @@ export default function GratisAccountPage() {
                       />
                       <span className="text-sm text-slate-600">
                         Ik ga akkoord met de{' '}
-                        <Link href="/voorwaarden" target="_blank" className="font-medium text-brand-purple underline decoration-brand-purple/30 hover:text-brand-purple/80">
+                        <Link href="/algemene-voorwaarden" target="_blank" className="font-medium text-brand-purple underline decoration-brand-purple/30 hover:text-brand-purple/80">
                           algemene voorwaarden
                         </Link>
                       </span>

@@ -6,6 +6,7 @@ export const metadata: Metadata = {
     'Ontdek hoe WarmeLeads werkt: van strategiegesprek en campagne op maat, tot automatische quality checks en realtime leads in jouw portaal.',
   keywords:
     'hoe werkt warmeleads, leadgeneratie proces, exclusieve leads, lead kwalificatie, klantportaal, lead quality checks',
+  alternates: { canonical: '/hoe-het-werkt' },
   openGraph: {
     title: 'Hoe Het Werkt | WarmeLeads Leadgeneratie Proces',
     description:

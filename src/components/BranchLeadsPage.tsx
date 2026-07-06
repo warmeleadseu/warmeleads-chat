@@ -19,6 +19,23 @@ import {
   BellAlertIcon,
 } from '@heroicons/react/24/outline';
 
+export interface BranchLeadsLocationLink {
+  name: string;
+  href: string;
+}
+
+export interface BranchLeadsLocation {
+  /** Naam van de stad of provincie, bv. "Amsterdam" of "Noord-Holland". */
+  name: string;
+  type: 'city' | 'province';
+  /** Provincie waarin de stad ligt (alleen bij type 'city'). */
+  province?: string;
+  /** Zelfde branche in nabije steden / de provincie (interne links, crawlbaarheid). */
+  relatedLocations?: BranchLeadsLocationLink[];
+  /** Andere branches op dezelfde locatie (interne links). */
+  relatedBranches?: BranchLeadsLocationLink[];
+}
+
 interface BranchLeadsPageProps {
   metadata: {
     title: string;
@@ -28,9 +45,22 @@ interface BranchLeadsPageProps {
     exclusivePrice: string;
     sharedPrice: string;
   };
+  /** Optioneel: maakt er een echte lokale landingspagina van (stad/provincie). */
+  location?: BranchLeadsLocation;
+  /** Branchenaam voor lokale koppen, bv. "Thuisbatterij". */
+  branchName?: string;
 }
 
-export function BranchLeadsPageContent({ metadata }: BranchLeadsPageProps) {
+export function BranchLeadsPageContent({ metadata, location, branchName }: BranchLeadsPageProps) {
+  const heroTitle = location
+    ? `${branchName ?? metadata.heroTitle} leads in ${location.name}`
+    : metadata.heroTitle;
+  const heroSubtitle = location
+    ? location.type === 'city'
+      ? `Exclusieve prospects voor installateurs in ${location.name}${location.province ? ` (${location.province})` : ''}`
+      : `Exclusieve prospects voor installateurs in heel ${location.name}`
+    : metadata.heroSubtitle;
+
   return (
     <>
       <Header />
@@ -49,11 +79,11 @@ export function BranchLeadsPageContent({ metadata }: BranchLeadsPageProps) {
 
         <div className="relative z-10 mx-auto max-w-6xl px-5 text-center text-white lg:px-8">
           <h1 className="mb-4 text-4xl font-bold leading-tight md:text-5xl lg:text-6xl">
-            {metadata.heroTitle}
+            {heroTitle}
             <span className="sr-only">: {metadata.title}</span>
           </h1>
           <p className="mb-4 text-xl text-white/90 md:text-2xl">
-            {metadata.heroSubtitle}
+            {heroSubtitle}
           </p>
           <p className="mx-auto max-w-3xl text-base text-white/70 md:text-lg">
             {metadata.heroDescription}
@@ -75,6 +105,74 @@ export function BranchLeadsPageContent({ metadata }: BranchLeadsPageProps) {
           </div>
         </div>
       </section>
+
+      {/* Lokale content (alleen op stad-/provinciepagina's) */}
+      {location && (
+        <section className="border-b border-slate-100 bg-white py-14 md:py-16">
+          <div className="mx-auto max-w-4xl px-5 lg:px-8">
+            <h2 className="mb-4 text-2xl font-bold tracking-tight text-slate-900 md:text-3xl">
+              {metadata.heroTitle} kopen in {location.name}
+            </h2>
+            <div className="space-y-4 text-[15px] leading-relaxed text-slate-600 md:text-base">
+              <p>
+                Zoek je meer klanten voor {metadata.heroTitle.toLowerCase()} in{' '}
+                {location.type === 'city' ? location.name : `de provincie ${location.name}`}? WarmeLeads
+                genereert verse, exclusieve leads uit eigen campagnes en levert ze realtime in jouw
+                portaal. Je bepaalt zelf je targetgebied{location.type === 'city' && location.province
+                  ? ` rond ${location.name} en de rest van ${location.province}`
+                  : location.type === 'province'
+                    ? ` binnen ${location.name}`
+                    : ''}
+                , zodat je alleen leads ontvangt uit het werkgebied dat voor jou interessant is.
+              </p>
+              <p>
+                Elke lead doorloopt automatische quality checks voordat hij bij je binnenkomt. Geen
+                abonnement, geen vaste kosten &mdash; je betaalt per lead en kunt op elk moment
+                op- of afschalen. Plan een gratis strategiegesprek voor een concreet startschema met
+                verwacht volume en tarief voor {location.name}.
+              </p>
+            </div>
+
+            {location.relatedLocations && location.relatedLocations.length > 0 && (
+              <div className="mt-8">
+                <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-500">
+                  {metadata.heroTitle} leads in de buurt
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  {location.relatedLocations.map((l) => (
+                    <Link
+                      key={l.href}
+                      href={l.href}
+                      className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:border-brand-purple/30 hover:bg-brand-purple/5 hover:text-brand-purple"
+                    >
+                      {l.name}
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {location.relatedBranches && location.relatedBranches.length > 0 && (
+              <div className="mt-6">
+                <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-500">
+                  Andere leads in {location.name}
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  {location.relatedBranches.map((b) => (
+                    <Link
+                      key={b.href}
+                      href={b.href}
+                      className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:border-brand-purple/30 hover:bg-brand-purple/5 hover:text-brand-purple"
+                    >
+                      {b.name}
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
 
       {/* Pricing */}
       <section className="bg-white py-16 md:py-20">

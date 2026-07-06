@@ -5,6 +5,7 @@ import { Footer } from '@/components/Footer';
 export const metadata = {
   title: 'Privacyverklaring | WarmeLeads',
   description: 'Privacyverklaring van WarmeLeads over de verwerking van persoonsgegevens conform de AVG.',
+  alternates: { canonical: '/privacyverklaring' },
 };
 
 export default function PrivacyverklaringPage() {

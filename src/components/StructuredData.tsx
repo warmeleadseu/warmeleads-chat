@@ -1,6 +1,30 @@
 'use client';
 
+import { BRANCH_LEAD_CONTENT } from '@/data/branchLeadContent';
+
 export function StructuredData() {
+  const offerItems = Object.values(BRANCH_LEAD_CONTENT).flatMap(b => ([
+    {
+      "@type": "Offer",
+      "itemOffered": { "@type": "Service", "name": `Exclusieve Leads ${b.branchName}` },
+      "priceSpecification": {
+        "@type": "PriceSpecification",
+        "price": b.exclusivePriceFrom.toFixed(2),
+        "priceCurrency": "EUR",
+        "unitText": "per lead",
+      },
+    },
+    {
+      "@type": "Offer",
+      "itemOffered": { "@type": "Service", "name": `Volume Leads ${b.branchName}` },
+      "priceSpecification": {
+        "@type": "PriceSpecification",
+        "price": b.sharedPriceValue.toFixed(2),
+        "priceCurrency": "EUR",
+        "unitText": "per lead",
+      },
+    },
+  ]));
   const structuredData = {
     "@context": "https://schema.org",
     "@graph": [
@@ -60,72 +84,8 @@ export function StructuredData() {
         "hasOfferCatalog": {
           "@type": "OfferCatalog",
           "name": "Lead Packages",
-          "itemListElement": [
-            {
-              "@type": "Offer",
-              "itemOffered": {
-                "@type": "Service",
-                "name": "Exclusieve Leads Thuisbatterijen"
-              },
-              "priceSpecification": {
-                "@type": "PriceSpecification",
-                "price": "37.50",
-                "priceCurrency": "EUR",
-                "unitText": "per lead"
-              }
-            },
-            {
-              "@type": "Offer",
-              "itemOffered": {
-                "@type": "Service",
-                "name": "Gedeelde Leads Thuisbatterijen"
-              },
-              "priceSpecification": {
-                "@type": "PriceSpecification",
-                "price": "12.50",
-                "priceCurrency": "EUR",
-                "unitText": "per lead"
-              }
-            }
-          ]
+          "itemListElement": offerItems
         }
-      },
-      {
-        "@type": "FAQPage",
-        "mainEntity": [
-          {
-            "@type": "Question",
-            "name": "Hoe snel ontvang ik mijn eerste leads?",
-            "acceptedAnswer": {
-              "@type": "Answer",
-              "text": "De meeste klanten ontvangen hun eerste leads binnen 24 uur na het activeren van hun campagne. Leads worden direct doorgestuurd naar je portaal zodra ze binnenkomen."
-            }
-          },
-          {
-            "@type": "Question",
-            "name": "Hoe worden de leads gegenereerd?",
-            "acceptedAnswer": {
-              "@type": "Answer",
-              "text": "Wij gebruiken gerichte online campagnes op platforms zoals Google, Facebook en Instagram om potentiële klanten te bereiken die actief zoeken naar duurzame energieoplossingen."
-            }
-          },
-          {
-            "@type": "Question",
-            "name": "Kan ik leads ontvangen voor een specifiek gebied?",
-            "acceptedAnswer": {
-              "@type": "Answer",
-              "text": "Ja, je kunt targetgebieden instellen op basis van postcode, stad, provincie of zelfs heel Nederland of België. Je ontvangt alleen leads uit je gekozen werkgebied."
-            }
-          },
-          {
-            "@type": "Question",
-            "name": "Zit ik vast aan een abonnement?",
-            "acceptedAnswer": {
-              "@type": "Answer",
-              "text": "Nee, er is geen abonnement nodig. Je koopt leads per batch en bepaalt zelf hoeveel leads je wilt ontvangen en in welk tempo."
-            }
-          }
-        ]
       },
       {
         "@type": "BreadcrumbList",

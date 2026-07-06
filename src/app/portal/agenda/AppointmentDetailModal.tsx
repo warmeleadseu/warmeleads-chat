@@ -28,7 +28,7 @@ interface TeamMember { id: string; name: string; role: string }
 const STATUS_LABELS: Record<string, string> = {
   scheduled: 'Ingepland',
   completed: 'Voltooid',
-  no_show: 'No-show',
+  no_show: 'Niet verschenen',
   cancelled: 'Geannuleerd',
   rescheduled: 'Verzet',
 };
@@ -254,7 +254,7 @@ export default function AppointmentDetailModal({
                       <CheckCircleIcon className="h-4 w-4" /> Voltooid
                     </button>
                     <button onClick={() => changeStatus('no_show')} disabled={saving} className="flex items-center justify-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-sm font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-50">
-                      <ExclamationCircleIcon className="h-4 w-4" /> No-show
+                      <ExclamationCircleIcon className="h-4 w-4" /> Niet verschenen
                     </button>
                   </div>
                 </section>

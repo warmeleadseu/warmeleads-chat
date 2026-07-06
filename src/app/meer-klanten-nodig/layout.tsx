@@ -6,6 +6,7 @@ export const metadata: Metadata = {
     'Meer klanten nodig voor je installatiebedrijf? Krijg verse, exclusieve leads voor thuisbatterijen, zonnepanelen, warmtepompen en airco\'s. Plan een gratis strategiegesprek.',
   keywords:
     'meer klanten nodig, klanten werven, nieuwe klanten krijgen, klanten vinden, meer opdrachten, installateur leads, duurzame energie klanten',
+  alternates: { canonical: '/meer-klanten-nodig' },
   openGraph: {
     title: 'Meer Klanten Nodig? | Verse Leads Binnen 24 Uur',
     description:

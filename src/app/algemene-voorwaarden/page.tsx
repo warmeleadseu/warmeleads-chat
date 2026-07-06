@@ -5,6 +5,7 @@ import { Footer } from '@/components/Footer';
 export const metadata = {
   title: 'Algemene voorwaarden | Warmeleads.eu',
   description: 'Algemene voorwaarden voor leadgeneratie diensten van Warmeleads.eu voor zonnepanelen, warmtepompen, thuisbatterijen en financial lease.',
+  alternates: { canonical: '/algemene-voorwaarden' },
 };
 
 export default function AlgemeneVoorwaardenPage() {

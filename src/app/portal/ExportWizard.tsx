@@ -680,7 +680,8 @@ export default function ExportWizard({
                         <button
                           onClick={() => setIncludeHeaders(!includeHeaders)}
                           role="switch"
-                          aria-pressed={includeHeaders}
+                          aria-checked={includeHeaders}
+                          aria-label="Kolomkoppen meenemen"
                           className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition ${
                             includeHeaders ? 'bg-brand-purple' : 'bg-slate-200'
                           }`}
@@ -698,7 +699,8 @@ export default function ExportWizard({
                         <button
                           onClick={() => setFeedbackFilter(feedbackFilter === 'unrated' ? '' : 'unrated')}
                           role="switch"
-                          aria-pressed={feedbackFilter === 'unrated'}
+                          aria-checked={feedbackFilter === 'unrated'}
+                          aria-label="Alleen onbeoordeelde leads"
                           className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition ${
                             feedbackFilter === 'unrated' ? 'bg-brand-purple' : 'bg-slate-200'
                           }`}

@@ -61,7 +61,7 @@ const STATUS_DOT: Record<string, string> = {
 const STATUS_LABELS: Record<string, string> = {
   scheduled: 'Ingepland',
   completed: 'Voltooid',
-  no_show: 'No-show',
+  no_show: 'Niet verschenen',
   cancelled: 'Geannuleerd',
   rescheduled: 'Verzet',
 };
@@ -245,6 +245,12 @@ export default function AdminAppointmentsPage() {
           Nieuwe afspraak
         </button>
       </div>
+
+      {appointments.length >= 500 && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-800" role="status">
+          Maximaal 500 afspraken geladen — er kunnen er meer zijn in deze periode. Verklein de periode of gebruik de filters om alles te zien.
+        </div>
+      )}
 
       {/* Filter bar */}
       <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white p-3">

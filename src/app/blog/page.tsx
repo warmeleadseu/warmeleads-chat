@@ -5,6 +5,7 @@ export const metadata: Metadata = {
   title: "Leadgeneratie Blog Nederland | 65+ Expert Artikelen | WarmeLeads",
   description: "Ontdek 65+ diepgaande artikelen over leadgeneratie in Nederland. Van SEO tot AI, van B2B tot conversie optimalisatie. Wekelijks nieuwe inzichten van WarmeLeads experts.",
   keywords: "leadgeneratie blog, lead generation Nederland, marketing strategie, B2B leadgeneratie, conversie optimalisatie, digital marketing tips",
+  alternates: { canonical: "/blog" },
   openGraph: {
     title: "Leadgeneratie Blog | 65+ Expert Artikelen | WarmeLeads",
     description: "De meest complete leadgeneratie kennisbank van Nederland met 65+ expert artikelen",

@@ -29,9 +29,8 @@ export const metadata: Metadata = {
     telephone: false,
   },
   metadataBase: new URL("https://www.warmeleads.eu"),
-  alternates: {
-    canonical: "/",
-  },
+  // Canonical wordt per route gezet (zie de losse pagina's / layouts). Een globale
+  // canonical hier zou elke pagina naar de homepage laten wijzen (SEO-fout).
   icons: {
     icon: [
       { url: "/favicon.ico", sizes: "48x48", type: "image/x-icon" },
