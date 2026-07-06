@@ -100,6 +100,7 @@ export default function AgendaPage() {
   const [anchor, setAnchor] = useState<Date>(new Date());
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [team, setTeam] = useState<TeamMember[]>([]);
   const [filterUserId, setFilterUserId] = useState<string | 'all' | 'unassigned'>('all');
   const [showBook, setShowBook] = useState(false);
@@ -147,9 +148,14 @@ export default function AgendaPage() {
       if (res.ok) {
         const data = await res.json();
         setAppointments(Array.isArray(data) ? data : []);
+        setLoadError('');
       } else {
         setAppointments([]);
+        setLoadError('Afspraken konden niet worden geladen. Probeer het opnieuw.');
       }
+    } catch {
+      setAppointments([]);
+      setLoadError('Netwerkfout bij het laden van de agenda.');
     } finally {
       setLoading(false);
     }
@@ -274,6 +280,15 @@ export default function AgendaPage() {
           </div>
         }
       />
+
+      {loadError && (
+        <div className="flex items-center justify-between rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+          <p className="text-sm text-red-700">{loadError}</p>
+          <button onClick={() => load()} className="rounded-md border border-red-300 bg-white px-3 py-1 text-xs font-semibold text-red-700 hover:bg-red-50">
+            Opnieuw
+          </button>
+        </div>
+      )}
 
       {/* Controls */}
       <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white p-3">

@@ -5,16 +5,34 @@ import {
 } from '../batchAssignmentCaps';
 
 describe('getLeadLimitPeriodAnchors', () => {
-  it('uses Monday 00:00 as week start and local midnight for day', () => {
-    const now = new Date(2026, 4, 13, 14, 30, 0, 0);
+  /** Wall-clock in Europe/Amsterdam, ongeacht de runner-tijdzone. */
+  function amsParts(d: Date) {
+    const p = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Europe/Amsterdam',
+      hour12: false,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', weekday: 'short',
+    }).formatToParts(d);
+    const g = (t: string) => p.find(x => x.type === t)?.value ?? '';
+    return { ymd: `${g('year')}-${g('month')}-${g('day')}`, hour: g('hour'), minute: g('minute'), weekday: g('weekday') };
+  }
+
+  it('gebruikt maandag 00:00 Europe/Amsterdam als weekstart en Amsterdamse middernacht voor de dag', () => {
+    // 2026-05-13 is een woensdag; Amsterdam is in mei UTC+2.
+    const now = new Date('2026-05-13T12:30:00Z');
     const { dayStart, weekStart } = getLeadLimitPeriodAnchors(now);
-    expect(weekStart.getDay()).toBe(1);
-    expect(weekStart.getHours()).toBe(0);
-    expect(weekStart.getMinutes()).toBe(0);
-    expect(dayStart.getHours()).toBe(0);
-    expect(dayStart.getFullYear()).toBe(now.getFullYear());
-    expect(dayStart.getMonth()).toBe(now.getMonth());
-    expect(dayStart.getDate()).toBe(now.getDate());
+
+    const day = amsParts(dayStart);
+    expect(day.hour).toBe('00');
+    expect(day.minute).toBe('00');
+    expect(day.ymd).toBe('2026-05-13');
+
+    const week = amsParts(weekStart);
+    expect(week.hour).toBe('00');
+    expect(week.minute).toBe('00');
+    expect(week.weekday).toBe('Mon');
+    expect(week.ymd).toBe('2026-05-11'); // maandag van die week
+
     expect(dayStart.getTime()).toBeLessThanOrEqual(now.getTime());
     expect(weekStart.getTime()).toBeLessThanOrEqual(dayStart.getTime());
   });

@@ -338,8 +338,15 @@ export async function GET(request: NextRequest) {
 
     // Reguliere batches betalen per geleverde lead → revenue schaalt met n.
     // Niche-onderzoeksbatches betalen één eenmalig pakketbedrag (`total_price`)
-    // bij bestelling: elke extra geleverde lead voegt geen extra omzet toe.
-    const revenue = batchRevenueForCosts(b as { batch_kind?: string; price_per_lead?: number | null; total_price?: number | null }, n);
+    // bij bestelling: elke extra geleverde lead voegt geen extra omzet toe, en
+    // het pakket telt alleen mee in de periode waarin de batch is aangemaakt
+    // (anders dubbeltelling in elke latere maandweergave met leveringen).
+    const oneTimeCountsInPeriod = b.created_at ? b.created_at >= periodStartIso : true;
+    const revenue = batchRevenueForCosts(
+      b as { batch_kind?: string; price_per_lead?: number | null; total_price?: number | null },
+      n,
+      oneTimeCountsInPeriod,
+    );
     if (revenue <= 0) continue;
 
     const cust = b.customers as unknown as { name: string } | { name: string }[] | null;

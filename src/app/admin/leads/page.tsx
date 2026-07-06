@@ -382,8 +382,15 @@ export default function LeadsCRMPage() {
   const [branches, setBranches] = useState<BranchConfig[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
   const [validatingPhones, setValidatingPhones] = useState(false);
   const [phoneValidationResult, setPhoneValidationResult] = useState<{ validated: number; invalid: number } | null>(null);
+
+  const showToast = useCallback((msg: string, type: 'success' | 'error' = 'success') => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 4000);
+  }, []);
 
   const [selBranches, setSelBranches] = useState<string[]>([]);
   const [selCustomers, setSelCustomers] = useState<string[]>([]);
@@ -456,9 +463,22 @@ export default function LeadsCRMPage() {
     p.set('per_page', String(perPage));
     p.set('sort_by', sortBy);
     p.set('sort_dir', sortDir);
-    const res = await adminFetch(`/api/admin/leads?${p}`);
-    if (res.ok) { const d = await res.json(); setLeads(d.leads || []); setTotal(d.total || 0); }
-    setLoading(false);
+    try {
+      const res = await adminFetch(`/api/admin/leads?${p}`);
+      if (res.ok) {
+        const d = await res.json();
+        setLeads(d.leads || []);
+        setTotal(d.total || 0);
+        setLoadError('');
+      } else {
+        const d = await res.json().catch(() => ({}));
+        setLoadError(d.error || 'Leads laden mislukt. Probeer het opnieuw.');
+      }
+    } catch {
+      setLoadError('Netwerkfout bij het laden van leads.');
+    } finally {
+      setLoading(false);
+    }
   }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, includeUnknownDate, search, page, perPage, sortBy, sortDir]);
 
   const fetchFacets = useCallback(async () => {
@@ -547,13 +567,34 @@ export default function LeadsCRMPage() {
 
   const handleBulkStatus = async () => {
     if (!bulkStatus || selected.size === 0) return;
-    await Promise.all(Array.from(selected).map(id => adminFetch('/api/admin/leads', { method: 'PUT', body: JSON.stringify({ id, status: bulkStatus }) })));
+    const ids = Array.from(selected);
+    const results = await Promise.all(
+      ids.map(id =>
+        adminFetch('/api/admin/leads', { method: 'PUT', body: JSON.stringify({ id, status: bulkStatus }) })
+          .then(r => r.ok)
+          .catch(() => false),
+      ),
+    );
+    const failed = results.filter(ok => !ok).length;
     setSelected(new Set()); setBulkStatus(''); fetchLeads();
+    if (failed > 0) showToast(`${failed} van ${ids.length} lead(s) niet bijgewerkt`, 'error');
+    else showToast(`${ids.length} lead(s) bijgewerkt`);
   };
   const handleBulkDelete = async () => {
     if (selected.size === 0 || !confirm(`${selected.size} lead(s) verwijderen?`)) return;
-    await adminFetch('/api/admin/leads', { method: 'DELETE', body: JSON.stringify({ ids: Array.from(selected) }) });
-    setSelected(new Set()); fetchLeads();
+    const count = selected.size;
+    try {
+      const res = await adminFetch('/api/admin/leads', { method: 'DELETE', body: JSON.stringify({ ids: Array.from(selected) }) });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        showToast(d.error || 'Verwijderen mislukt', 'error');
+        return;
+      }
+      setSelected(new Set()); fetchLeads();
+      showToast(`${count} lead(s) verwijderd`);
+    } catch {
+      showToast('Netwerkfout bij verwijderen', 'error');
+    }
   };
 
   const handleValidatePhones = async () => {
@@ -589,13 +630,34 @@ export default function LeadsCRMPage() {
   }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, includeUnknownDate, search]);
 
   const handleQuickStatus = async (id: string, newStatus: string) => {
-    await adminFetch('/api/admin/leads', { method: 'PUT', body: JSON.stringify({ id, status: newStatus }) });
+    const prevStatus = leads.find(l => l.id === id)?.status;
     setLeads(prev => prev.map(l => l.id === id ? { ...l, status: newStatus } : l));
+    try {
+      const res = await adminFetch('/api/admin/leads', { method: 'PUT', body: JSON.stringify({ id, status: newStatus }) });
+      if (!res.ok) {
+        setLeads(prev => prev.map(l => l.id === id ? { ...l, status: prevStatus ?? l.status } : l));
+        const d = await res.json().catch(() => ({}));
+        showToast(d.error || 'Status bijwerken mislukt', 'error');
+      }
+    } catch {
+      setLeads(prev => prev.map(l => l.id === id ? { ...l, status: prevStatus ?? l.status } : l));
+      showToast('Netwerkfout bij bijwerken status', 'error');
+    }
   };
   const handleDeleteSingle = async (id: string, name: string) => {
     if (!confirm(`Lead "${name}" verwijderen?`)) return;
-    await adminFetch('/api/admin/leads', { method: 'DELETE', body: JSON.stringify({ ids: [id] }) });
-    fetchLeads();
+    try {
+      const res = await adminFetch('/api/admin/leads', { method: 'DELETE', body: JSON.stringify({ ids: [id] }) });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        showToast(d.error || 'Verwijderen mislukt', 'error');
+        return;
+      }
+      fetchLeads();
+      showToast('Lead verwijderd');
+    } catch {
+      showToast('Netwerkfout bij verwijderen', 'error');
+    }
   };
 
   const [enriching, setEnriching] = useState(false);
@@ -626,6 +688,21 @@ export default function LeadsCRMPage() {
 
   return (
     <div>
+      {toast && (
+        <div className="fixed right-4 top-4 z-[100] max-w-sm">
+          <div className={`rounded-lg px-4 py-3 text-sm font-medium shadow-lg ${toast.type === 'error' ? 'bg-red-600 text-white' : 'bg-emerald-600 text-white'}`}>
+            {toast.msg}
+          </div>
+        </div>
+      )}
+      {loadError && (
+        <div className="mb-4 flex items-center justify-between rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+          <p className="text-sm text-red-700">{loadError}</p>
+          <button onClick={() => fetchLeads()} className="rounded-md border border-red-300 bg-white px-3 py-1 text-xs font-semibold text-red-700 hover:bg-red-50">
+            Opnieuw
+          </button>
+        </div>
+      )}
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">Leads CRM</h1>

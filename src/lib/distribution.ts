@@ -951,14 +951,15 @@ export async function distributeUnassignedLeads(): Promise<{ distributed: number
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - MAX_LEAD_AGE_DAYS);
 
+  // Neem leads mee met coördinaten (radius-targets) OF met een provincie
+  // (province-targets matchen op `provincie`+land, zonder lat/lng).
   const { data: leads } = await supabase
     .from('leads')
     .select('*')
     .neq('bron', 'excel_import')
     .neq('bron', 'demo')
     .neq('phone_valid', false)
-    .not('lat', 'is', null)
-    .not('lng', 'is', null)
+    .or('and(lat.not.is.null,lng.not.is.null),provincie.not.is.null')
     .gte('created_at', cutoff.toISOString())
     .order('created_at', { ascending: false })
     .limit(DISTRIBUTE_CRON_LEAD_LIMIT);
@@ -989,28 +990,32 @@ export async function distributeUnassignedLeads(): Promise<{ distributed: number
 
   let totalDistributed = 0;
   let totalAssignments = 0;
+  let pass1Distributed = 0;
 
   if (newLeads.length > 0) {
     const r = await distributeLeads(newLeads as LeadForDistribution[]);
     totalDistributed += r.distributed;
     totalAssignments += r.assignments;
+    // `distributed` = aantal leads dat daadwerkelijk ≥1 toewijzing kreeg.
+    pass1Distributed = r.distributed;
   }
 
-  // Recalculate average after pass 1 (zelfde benadering als voorheen; alleen op deze lead-set)
+  // Gemiddelde na pass 1, alleen over deze kandidaat-set:
+  // teller = bestaande recente rijen + nieuw toegewezen rijen;
+  // noemer = leads met ≥1 toewijzing (bestaand + net toegewezen).
+  // Belangrijk: alleen leads die ook echt een toewijzing kregen tellen mee in de
+  // noemer (voorheen werd elke nieuwe lead meegeteld, wat het gemiddelde vervuilde).
   let leadsWithAssignments = 0;
   let sumAssignments = 0;
-  const updatedCounts = { ...recentAssignmentCounts };
-  for (const l of newLeads) {
-    if (!updatedCounts[l.id]) updatedCounts[l.id] = 0;
-  }
-  for (const [, count] of Object.entries(updatedCounts)) {
-    if (count > 0) {
+  for (const l of leads) {
+    const prior = recentAssignmentCounts[l.id] || 0;
+    if (prior > 0) {
       leadsWithAssignments++;
-      sumAssignments += count;
+      sumAssignments += prior;
     }
   }
   sumAssignments += totalAssignments;
-  leadsWithAssignments += newLeads.filter(l => !recentAssignmentCounts[l.id] && totalAssignments > 0).length;
+  leadsWithAssignments += pass1Distributed;
 
   const currentAvg = leadsWithAssignments > 0 ? sumAssignments / leadsWithAssignments : 0;
 

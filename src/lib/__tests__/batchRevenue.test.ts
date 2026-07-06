@@ -43,6 +43,20 @@ describe('batchRevenueForCosts', () => {
         ),
       ).toBe(1500);
     });
+
+    it('telt het eenmalige pakket niet mee buiten de aanmaakperiode', () => {
+      const niche = { batch_kind: 'niche_research', total_price: 1000 };
+      // In de periode waarin de batch is aangemaakt → wel omzet.
+      expect(batchRevenueForCosts(niche, 5, true)).toBe(1000);
+      // Latere periode met alleen na-leveringen → geen dubbele omzet.
+      expect(batchRevenueForCosts(niche, 5, false)).toBe(0);
+    });
+
+    it('reguliere batches negeren de one-time-vlag (blijven per lead tellen)', () => {
+      const leads = { batch_kind: 'leads', price_per_lead: 30 };
+      expect(batchRevenueForCosts(leads, 4, false)).toBe(120);
+      expect(batchRevenueForCosts(leads, 4, true)).toBe(120);
+    });
   });
 
   describe('edge cases', () => {

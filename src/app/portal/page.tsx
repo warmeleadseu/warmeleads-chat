@@ -364,15 +364,48 @@ export default function PortalPage() {
   const [showOverviewPanel, setShowOverviewPanel] = useState(false);
 
   useEffect(() => {
-    const paidParam = searchParams.get('paid');
-    if (paidParam) {
-      showToast('Betaling verwerkt! Je batch is nu actief.');
-      window.history.replaceState({}, '', '/portal');
-    }
     if (searchParams.get('welcome') === 'true') {
       setShowWelcome(true);
       window.history.replaceState({}, '', '/portal');
     }
+
+    const paidParam = searchParams.get('paid');
+    if (!paidParam) return;
+
+    // Toon niet blind "gelukt": verifieer dat de batch daadwerkelijk betaald/actief
+    // is (de Mollie-webhook zet dit). We pollen kort; blijft het hangen, dan tonen we
+    // een neutrale "wordt verwerkt"-melding i.p.v. een valse succesmelding.
+    window.history.replaceState({}, '', '/portal');
+    let cancelled = false;
+    showToast('Betaling wordt geverifieerd…');
+
+    (async () => {
+      for (let attempt = 0; attempt < 10 && !cancelled; attempt++) {
+        try {
+          const res = await portalFetch('/api/portal/batches');
+          if (res.ok) {
+            const data = await res.json();
+            const settled = [...(data.active || []), ...(data.completed || [])] as { id: string }[];
+            const pending = (data.pending_payment || []) as { id: string }[];
+            if (settled.some((b) => b.id === paidParam)) {
+              if (!cancelled) showToast('Betaling verwerkt! Je batch is nu actief.');
+              return;
+            }
+            // Niet meer pending én niet actief kan duiden op annulering/mislukking.
+            if (attempt > 2 && !pending.some((b) => b.id === paidParam)) {
+              if (!cancelled) showToast('We konden de betaling nog niet bevestigen. Controleer je batches of probeer opnieuw.', 'error');
+              return;
+            }
+          }
+        } catch { /* blijf proberen */ }
+        await new Promise((r) => setTimeout(r, 3000));
+      }
+      if (!cancelled) {
+        showToast('Je betaling wordt nog verwerkt. Dit kan even duren — ververs de pagina zo nog eens.');
+      }
+    })();
+
+    return () => { cancelled = true; };
   }, [searchParams, showToast]);
 
   useEffect(() => {

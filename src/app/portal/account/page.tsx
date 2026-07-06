@@ -246,6 +246,8 @@ function AccountTab({
   };
 
   const saveNotifPrefs = async (enabled: boolean, freq: string) => {
+    const prevEnabled = emailEnabled;
+    const prevFreq = frequency;
     setEmailEnabled(enabled);
     setFrequency(freq);
     setNotifSaving(true);
@@ -257,9 +259,14 @@ function AccountTab({
       if (res.ok) {
         showToast(enabled ? 'E-mailnotificaties ingeschakeld' : 'E-mailnotificaties uitgeschakeld');
       } else {
-        showToast('Fout bij opslaan voorkeuren', 'error');
+        setEmailEnabled(prevEnabled);
+        setFrequency(prevFreq);
+        const d = await res.json().catch(() => ({}));
+        showToast(d.error || 'Fout bij opslaan voorkeuren', 'error');
       }
     } catch {
+      setEmailEnabled(prevEnabled);
+      setFrequency(prevFreq);
       showToast('Er ging iets mis', 'error');
     } finally {
       setNotifSaving(false);
@@ -1323,7 +1330,16 @@ export default function AccountPage() {
 
     const paid = searchParams.get('paid');
     if (paid === 'invoice') {
-      showToast('Betaling verwerkt. Je factuur wordt zo bijgewerkt.', 'success');
+      // Verifieer: toon niet blind "betaald". We ververen de facturen een paar keer
+      // zodat de status uit de DB (bijgewerkt door de Mollie-webhook) wordt getoond.
+      setActiveTab('invoices');
+      showToast('Betaling wordt geverifieerd…', 'success');
+      let attempts = 0;
+      const poll = setInterval(() => {
+        attempts++;
+        fetchInvoices();
+        if (attempts >= 5) clearInterval(poll);
+      }, 3000);
       fetchInvoices();
     }
   }, [searchParams, showToast, fetchInvoices]);

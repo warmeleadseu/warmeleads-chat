@@ -802,9 +802,18 @@ export default function CustomersPage() {
             onEdit={(c) => { setSelectedCustomer(null); setEditing(c); }}
             onDelete={async (id, name) => {
               if (!confirm(`${name} verwijderen? Leads van deze klant worden niet verwijderd.`)) return;
-              await adminFetch('/api/admin/customers', { method: 'DELETE', body: JSON.stringify({ id }) });
-              setSelectedCustomer(null);
-              fetchCustomers();
+              try {
+                const res = await adminFetch('/api/admin/customers', { method: 'DELETE', body: JSON.stringify({ id }) });
+                if (!res.ok) {
+                  const d = await res.json().catch(() => ({}));
+                  alert(d.error || 'Klant verwijderen mislukt. Mogelijk heb je hier geen rechten voor.');
+                  return;
+                }
+                setSelectedCustomer(null);
+                fetchCustomers();
+              } catch {
+                alert('Netwerkfout bij verwijderen van klant.');
+              }
             }}
             onReminder={(c) => setPreviewReminder(c)}
             onRefresh={fetchCustomers}
@@ -907,18 +916,38 @@ function CustomerDetailPanel({
   const resetPassword = async () => {
     if (!newPw || newPw.length < 6) return;
     setPwSaving(true);
-    await adminFetch('/api/admin/customers', { method: 'PUT', body: JSON.stringify({ id: c.id, password: newPw }) });
-    setPwSaving(false);
-    setResettingPw(false);
-    setNewPw('');
-    onRefresh();
+    try {
+      const res = await adminFetch('/api/admin/customers', { method: 'PUT', body: JSON.stringify({ id: c.id, password: newPw }) });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        alert(d.error || 'Wachtwoord resetten mislukt.');
+        return;
+      }
+      setResettingPw(false);
+      setNewPw('');
+      onRefresh();
+    } catch {
+      alert('Netwerkfout bij wachtwoord resetten.');
+    } finally {
+      setPwSaving(false);
+    }
   };
 
   const togglePortal = async () => {
     setTogglingPortal(true);
-    await adminFetch('/api/admin/customers', { method: 'PUT', body: JSON.stringify({ id: c.id, portal_active: !c.portal_active }) });
-    setTogglingPortal(false);
-    onRefresh();
+    try {
+      const res = await adminFetch('/api/admin/customers', { method: 'PUT', body: JSON.stringify({ id: c.id, portal_active: !c.portal_active }) });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        alert(d.error || 'Portaaltoegang wijzigen mislukt.');
+        return;
+      }
+      onRefresh();
+    } catch {
+      alert('Netwerkfout bij wijzigen portaaltoegang.');
+    } finally {
+      setTogglingPortal(false);
+    }
   };
 
   const impersonate = async () => {
@@ -2407,16 +2436,34 @@ function TargetsPanel({ customer, onClose, embedded }: { customer: Customer; onC
 
   const removeTarget = async (id: string) => {
     if (!confirm('Dit targetgebied verwijderen?')) return;
-    await adminFetch(`/api/admin/targets?id=${id}`, { method: 'DELETE' });
-    fetchTargets();
+    try {
+      const res = await adminFetch(`/api/admin/targets?id=${id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        alert(d.error || 'Targetgebied verwijderen mislukt.');
+        return;
+      }
+      fetchTargets();
+    } catch {
+      alert('Netwerkfout bij verwijderen van targetgebied.');
+    }
   };
 
   const toggleActive = async (t: Target) => {
-    await adminFetch('/api/admin/targets', {
-      method: 'PUT',
-      body: JSON.stringify({ id: t.id, is_active: !t.is_active }),
-    });
-    fetchTargets();
+    try {
+      const res = await adminFetch('/api/admin/targets', {
+        method: 'PUT',
+        body: JSON.stringify({ id: t.id, is_active: !t.is_active }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        alert(d.error || 'Targetstatus wijzigen mislukt.');
+        return;
+      }
+      fetchTargets();
+    } catch {
+      alert('Netwerkfout bij wijzigen van targetstatus.');
+    }
   };
 
   const toggleProvince = (prov: string) => {
@@ -3228,14 +3275,32 @@ function BatchesPanel({ customer, branchOptions, onClose, embedded }: { customer
 
   const removeBatch = async (id: string) => {
     if (!confirm('Deze batch verwijderen?')) return;
-    await adminFetch(`/api/admin/batches?id=${id}`, { method: 'DELETE' });
-    fetchBatches();
+    try {
+      const res = await adminFetch(`/api/admin/batches?id=${id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        alert(d.error || 'Batch verwijderen mislukt.');
+        return;
+      }
+      fetchBatches();
+    } catch {
+      alert('Netwerkfout bij verwijderen van batch.');
+    }
   };
 
   const removeApptBatch = async (id: string) => {
     if (!confirm('Deze afspraak-batch verwijderen?')) return;
-    await adminFetch(`/api/admin/appointment-batches/${id}`, { method: 'DELETE' });
-    fetchBatches();
+    try {
+      const res = await adminFetch(`/api/admin/appointment-batches/${id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        alert(d.error || 'Afspraak-batch verwijderen mislukt.');
+        return;
+      }
+      fetchBatches();
+    } catch {
+      alert('Netwerkfout bij verwijderen van afspraak-batch.');
+    }
   };
 
   const colorMap: Record<string, string> = {

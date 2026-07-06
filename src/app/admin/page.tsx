@@ -172,7 +172,9 @@ export default function AdminDashboard() {
   const [costData, setCostData] = useState<CostData | null>(null);
   const [myTargets, setMyTargets] = useState<AMTarget[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [period, setPeriod] = useState<string>('week');
+  const [reloadKey, setReloadKey] = useState(0);
   const metaSyncAttempted = useRef(false);
 
   const isAM = user.role === 'accountmanager' || !!user.is_account_manager;
@@ -185,30 +187,47 @@ export default function AdminDashboard() {
         .catch(() => {});
     }
 
-    /* Phase 1 (blocking): consolidated dashboard + batches → shows UI */
-    const phase1 = Promise.all([
-      adminFetch('/api/admin/dashboard').then(r => r.json()),
-      adminFetch('/api/admin/batches').then(r => r.ok ? r.json() : []),
-    ]);
+    let cancelled = false;
+    setLoading(true);
 
-    phase1.then(([dashData, batchData]) => {
-      setStats({
-        total: dashData.total,
-        thisWeek: dashData.thisWeek,
-        thisMonth: dashData.thisMonth,
-        customerCount: dashData.customerCount,
-        byStatus: dashData.byStatus,
-        byBranch: dashData.byBranch,
-        byCustomer: dashData.byCustomer,
-        recentLeads: dashData.recentLeads,
-        periodStats: dashData.periodStats,
-      });
-      setBranchMeta(dashData.branchMeta || {});
-      setBatches(batchData || []);
-      setAssignmentCount(dashData.assignmentCount || 0);
-      setLoading(false);
-    }).catch(() => setLoading(false));
-  }, []);
+    /* Phase 1 (blocking): consolidated dashboard + batches → shows UI */
+    (async () => {
+      try {
+        const [dashRes, batchRes] = await Promise.all([
+          adminFetch('/api/admin/dashboard'),
+          adminFetch('/api/admin/batches'),
+        ]);
+        if (!dashRes.ok) {
+          const d = await dashRes.json().catch(() => ({}));
+          throw new Error(d.error || 'Dashboard laden mislukt');
+        }
+        const dashData = await dashRes.json();
+        const batchData = batchRes.ok ? await batchRes.json() : [];
+        if (cancelled) return;
+        setStats({
+          total: dashData.total,
+          thisWeek: dashData.thisWeek,
+          thisMonth: dashData.thisMonth,
+          customerCount: dashData.customerCount,
+          byStatus: dashData.byStatus,
+          byBranch: dashData.byBranch,
+          byCustomer: dashData.byCustomer,
+          recentLeads: dashData.recentLeads,
+          periodStats: dashData.periodStats,
+        });
+        setBranchMeta(dashData.branchMeta || {});
+        setBatches(batchData || []);
+        setAssignmentCount(dashData.assignmentCount || 0);
+        setLoadError('');
+      } catch (err) {
+        if (!cancelled) setLoadError(err instanceof Error ? err.message : 'Dashboard laden mislukt');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [reloadKey]);
 
   /* Kosten/CPL volgen dezelfde periode als Periodeoverzicht (vandaag / week / …). */
   useEffect(() => {
@@ -247,7 +266,19 @@ export default function AdminDashboard() {
   };
 
   if (loading) return <DashboardSkeleton />;
-  if (!stats) return <p className="py-20 text-center text-slate-400">Kon statistieken niet laden.</p>;
+  if (!stats) {
+    return (
+      <div className="py-20 text-center">
+        <p className="text-slate-500">{loadError || 'Kon statistieken niet laden.'}</p>
+        <button
+          onClick={() => setReloadKey(k => k + 1)}
+          className="mt-4 rounded-lg bg-button-gradient px-4 py-2 text-sm font-bold text-white shadow-sm"
+        >
+          Opnieuw proberen
+        </button>
+      </div>
+    );
+  }
 
   const maxStatus = Math.max(...Object.values(stats.byStatus), 1);
   const activeBatches = batches.filter(

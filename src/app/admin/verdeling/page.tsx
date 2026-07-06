@@ -114,21 +114,32 @@ export default function VerdelingPage() {
   const [compensationAmount, setCompensationAmount] = useState('');
   const [compensationNote, setCompensationNote] = useState('');
   const [compensating, setCompensating] = useState(false);
+  const [loadError, setLoadError] = useState('');
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const [assignRes, batchRes, branchRes] = await Promise.all([
-      adminFetch('/api/admin/assignments'),
-      adminFetch('/api/admin/batches'),
-      adminFetch('/api/admin/branches'),
-    ]);
-    if (assignRes.ok) setAssignments(await assignRes.json());
-    if (batchRes.ok) setBatches(await batchRes.json());
-    if (branchRes.ok) {
-      const bd = await branchRes.json();
-      setBranches((bd.branches || []).map((b: any) => ({ slug: b.slug, name: b.name, color: b.color })));
+    try {
+      const [assignRes, batchRes, branchRes] = await Promise.all([
+        adminFetch('/api/admin/assignments'),
+        adminFetch('/api/admin/batches'),
+        adminFetch('/api/admin/branches'),
+      ]);
+      if (assignRes.ok) setAssignments(await assignRes.json());
+      if (batchRes.ok) setBatches(await batchRes.json());
+      if (branchRes.ok) {
+        const bd = await branchRes.json();
+        setBranches((bd.branches || []).map((b: any) => ({ slug: b.slug, name: b.name, color: b.color })));
+      }
+      if (!assignRes.ok || !batchRes.ok || !branchRes.ok) {
+        setLoadError('Sommige gegevens konden niet worden geladen. Ververs de pagina.');
+      } else {
+        setLoadError('');
+      }
+    } catch {
+      setLoadError('Netwerkfout bij het laden van de verdeling.');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, []);
 
   const fetchDebug = useCallback(async () => {
@@ -147,20 +158,38 @@ export default function VerdelingPage() {
   const handleDistribute = async () => {
     setDistributing(true);
     setDistResult(null);
-    const res = await adminFetch('/api/admin/distribute', { method: 'POST' });
-    if (res.ok) {
-      setDistResult(await res.json());
-      fetchData();
+    try {
+      const res = await adminFetch('/api/admin/distribute', { method: 'POST' });
+      if (res.ok) {
+        setDistResult(await res.json());
+        fetchData();
+      } else {
+        const d = await res.json().catch(() => ({}));
+        alert(d.error || 'Verdelen mislukt. Probeer het opnieuw.');
+      }
+    } catch {
+      alert('Netwerkfout bij het verdelen.');
+    } finally {
+      setDistributing(false);
     }
-    setDistributing(false);
   };
 
   const handleEnrich = async () => {
     setEnriching(true);
     setEnrichResult(null);
-    const res = await adminFetch('/api/admin/leads/enrich', { method: 'POST' });
-    if (res.ok) setEnrichResult(await res.json());
-    setEnriching(false);
+    try {
+      const res = await adminFetch('/api/admin/leads/enrich', { method: 'POST' });
+      if (res.ok) {
+        setEnrichResult(await res.json());
+      } else {
+        const d = await res.json().catch(() => ({}));
+        alert(d.error || 'Adressen aanvullen mislukt.');
+      }
+    } catch {
+      alert('Netwerkfout bij adressen aanvullen.');
+    } finally {
+      setEnriching(false);
+    }
   };
 
   const getBranch = (slug: string) => branches.find(b => b.slug === slug);
@@ -168,9 +197,19 @@ export default function VerdelingPage() {
   const handleCompensation = async (batchId: string) => {
     const amount = parseInt(compensationAmount);
     if (!amount || amount <= 0) return;
-    setCompensating(true);
     const batch = batches.find(b => b.id === batchId);
-    if (!batch) { setCompensating(false); return; }
+    if (!batch) return;
+
+    const nieuweTotaal = batch.batch_size + amount;
+    const bevestiging =
+      `Compensatie toevoegen aan deze batch?\n\n` +
+      `+${amount} leads (batchgrootte ${batch.batch_size} → ${nieuweTotaal}).\n` +
+      `De batch wordt heropend (status "actief") zodat er weer geleverd wordt.` +
+      (compensationNote ? `\n\nReden: ${compensationNote}` : '') +
+      `\n\nDeze actie wordt gelogd.`;
+    if (!confirm(bevestiging)) return;
+
+    setCompensating(true);
 
     const res = await adminFetch('/api/admin/batches', {
       method: 'PUT',
@@ -246,6 +285,14 @@ export default function VerdelingPage() {
 
   return (
     <div>
+      {loadError && (
+        <div className="mb-4 flex items-center justify-between rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+          <p className="text-sm text-red-700">{loadError}</p>
+          <button onClick={() => fetchData()} className="rounded-md border border-red-300 bg-white px-3 py-1 text-xs font-semibold text-red-700 hover:bg-red-50">
+            Opnieuw
+          </button>
+        </div>
+      )}
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">Leadverdeling</h1>

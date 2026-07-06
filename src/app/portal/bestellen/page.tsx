@@ -203,6 +203,17 @@ export default function BestellenPage() {
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [customer, sourceBatchId, orderRedirectId, redirectStatus, fetchData]);
 
+  // Terugkeer van een directe afspraken-batchbetaling (pay-batch → ?paid=1). We
+  // tonen geen blinde "gelukt": de status wordt door de Mollie-webhook gezet, dus
+  // we melden dat de betaling wordt verwerkt en verversen de gegevens.
+  useEffect(() => {
+    if (searchParams.get('paid') !== '1') return;
+    toast.success('Betaling wordt verwerkt. Je afsprakenbatch wordt zo geactiveerd.');
+    fetchData();
+    router.replace('/portal/bestellen?product=appointments');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     if (product === 'appointments' || product === 'research') { setPricingData(null); return; }
     if (!selectedBranch) return;

@@ -19,6 +19,7 @@ import {
   validateLeadBranchSlug,
 } from '@/lib/nicheResearch';
 import { deliveryModelForNewBatch, isCappedDeliveryModel } from '@/lib/batchDeliveryModel';
+import { logAudit } from '@/lib/audit';
 
 function sanitizeMetaCampaignIdsInput(raw: unknown): string[] | undefined {
   if (raw === undefined) return undefined;
@@ -566,6 +567,32 @@ export async function PUT(request: NextRequest) {
   if (error) {
     console.error('[admin/batches PUT] update error:', error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  // Auditlog voor handmatige compensatie / vergroting van de batchgrootte.
+  const prevSize = Number(existing.batch_size ?? 0);
+  const newSize = Number((data as { batch_size?: number }).batch_size ?? prevSize);
+  const sizeGrew = newSize > prevSize;
+  if ((compensation && compensation.amount > 0) || sizeGrew) {
+    const compAmount = compensation?.amount ?? (sizeGrew ? newSize - prevSize : 0);
+    logAudit({
+      adminId: admin.id,
+      adminName: (admin as { name?: string | null }).name ?? null,
+      action: 'update_batch',
+      entityType: 'customer_batch',
+      entityId: id,
+      details: {
+        reason: 'compensatie',
+        customer_id: existing.customer_id,
+        amount: compAmount,
+        note: compensation?.reason ?? null,
+        batch_size_before: prevSize,
+        batch_size_after: newSize,
+        status_before: existing.status,
+        status_after: (data as { status?: string }).status ?? null,
+        reopened: existing.status === 'completed' && (data as { status?: string }).status === 'active',
+      },
+    }).catch(() => {});
   }
 
   const batchKindAfterUpdate = String(
