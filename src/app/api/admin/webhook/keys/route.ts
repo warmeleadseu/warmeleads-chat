@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
-import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
+import { requireSuperAdmin } from '@/lib/adminAuth';
 import crypto from 'crypto';
 
 export async function GET(request: NextRequest) {
-  const admin = await verifyAdmin(request);
-  if (!admin) return unauthorized();
+  const { error: authError } = await requireSuperAdmin(request);
+  if (authError) return authError;
 
   const supabase = createServerClient();
   const { data, error } = await supabase
@@ -20,8 +20,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const admin = await verifyAdmin(request);
-  if (!admin) return unauthorized();
+  const { error: authError } = await requireSuperAdmin(request);
+  if (authError) return authError;
 
   try {
     const { label, branch, customer_id } = await request.json();
@@ -51,8 +51,8 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const admin = await verifyAdmin(request);
-  if (!admin) return unauthorized();
+  const { error: authError } = await requireSuperAdmin(request);
+  if (authError) return authError;
 
   try {
     const { id } = await request.json();

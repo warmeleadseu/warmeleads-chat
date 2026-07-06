@@ -3,8 +3,9 @@ import { createServerClient } from '@/lib/supabase';
 import { jwtVerify } from 'jose';
 import { getSessionSecretKey } from '@/lib/sessionSecrets';
 import { getHasPaidCustomerBatch, shouldUseDemoPortalExperience } from '@/lib/demoPortalEligibility';
-import { signPortalOwnerSession } from '@/lib/portalSession';
+import { signPortalImpersonationSession } from '@/lib/portalSession';
 import { qualifiesBelgiumReverseCharge } from '@/lib/invoiceVat';
+import { logAudit } from '@/lib/audit';
 
 const ISSUER = 'warmeleads-admin';
 
@@ -40,9 +41,20 @@ export async function POST(request: NextRequest) {
       hasPaidCustomerBatch,
     });
 
-    const portalJwt = await signPortalOwnerSession(customer.id);
+    const adminId = typeof payload.admin_id === 'string' ? payload.admin_id : null;
+    // Impersonatie-sessie draagt het admin-id (imp-claim) en heeft een korte TTL.
+    const portalJwt = await signPortalImpersonationSession(customer.id, adminId ?? 'unknown');
     const billingCountry = (customer.country as string | null | undefined) ?? 'NL';
     const reverse_charge = qualifiesBelgiumReverseCharge({ country: billingCountry, vat_id: customer.vat_id });
+
+    logAudit({
+      adminId,
+      adminName: typeof payload.admin_name === 'string' ? payload.admin_name : null,
+      action: 'customer.impersonate_session_started',
+      entityType: 'customer',
+      entityId: customer.id,
+      details: { customer_name: customer.name },
+    }).catch(() => {});
 
     // BEWUST géén sessie-cookie zetten: impersonatie is volledig per-tab. De client
     // bewaart onderstaand token in sessionStorage en stuurt het als

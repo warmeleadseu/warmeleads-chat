@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
-import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
+import { verifyAdmin, unauthorized, forbidden } from '@/lib/adminAuth';
+
+/** Branche-mutaties zijn beheer-acties: accountmanagers mogen niet muteren. */
+function canMutateBranches(role: string): boolean {
+  return role === 'superadmin' || role === 'admin';
+}
 
 export async function GET(request: NextRequest) {
   const admin = await verifyAdmin(request);
@@ -51,6 +56,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const admin = await verifyAdmin(request);
   if (!admin) return unauthorized();
+  if (!canMutateBranches(admin.role)) return forbidden();
 
   try {
     const body = await request.json();
@@ -97,6 +103,7 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   const admin = await verifyAdmin(request);
   if (!admin) return unauthorized();
+  if (!canMutateBranches(admin.role)) return forbidden();
 
   try {
     const { id, ...updates } = await request.json();
@@ -124,6 +131,7 @@ export async function PUT(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   const admin = await verifyAdmin(request);
   if (!admin) return unauthorized();
+  if (admin.role !== 'superadmin') return forbidden();
 
   try {
     const { id } = await request.json();

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyCustomer, portalUnauthorized } from '@/lib/portalAuth';
 import { createServerClient } from '@/lib/supabase';
-import { hasPermission, forbidden, PERMISSIONS } from '@/lib/portalPermissions';
+import { hasPermission, forbidden, PERMISSIONS, sanitizePermissions } from '@/lib/portalPermissions';
 import bcrypt from 'bcryptjs';
 import { escapeForIlikeExact, pickEmailRow } from '@/lib/emailDbLookup';
 
@@ -45,7 +45,7 @@ export async function PUT(
     if (body.role !== undefined && ['manager', 'agent'].includes(body.role)) {
       updates.role = body.role;
     }
-    if (Array.isArray(body.permissions)) updates.permissions = body.permissions;
+    if (Array.isArray(body.permissions)) updates.permissions = sanitizePermissions(body.permissions);
     if (body.assignment_rules !== undefined) updates.assignment_rules = body.assignment_rules;
 
     if (body.password && body.password.length >= 8) {
@@ -138,10 +138,26 @@ export async function DELETE(
 
   // Handle reassignment query param
   const reassignTo = request.nextUrl.searchParams.get('reassign_to');
-  if (reassignTo) {
+  if (reassignTo && reassignTo !== 'unassign') {
+    // Voorkom herverdelen naar een gebruiker van een andere klant.
+    const { data: target } = await supabase
+      .from('portal_users')
+      .select('id')
+      .eq('id', reassignTo)
+      .eq('customer_id', customer.id)
+      .maybeSingle();
+    if (!target) {
+      return NextResponse.json({ error: 'Ongeldige ontvanger voor herverdeling' }, { status: 400 });
+    }
     await supabase
       .from('lead_assignments')
-      .update({ portal_user_id: reassignTo === 'unassign' ? null : reassignTo })
+      .update({ portal_user_id: reassignTo })
+      .eq('portal_user_id', id)
+      .eq('customer_id', customer.id);
+  } else if (reassignTo === 'unassign') {
+    await supabase
+      .from('lead_assignments')
+      .update({ portal_user_id: null })
       .eq('portal_user_id', id)
       .eq('customer_id', customer.id);
   } else {

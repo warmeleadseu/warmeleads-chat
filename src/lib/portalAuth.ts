@@ -22,9 +22,6 @@ const CUSTOMER_SELECT_BASE =
 const PORTAL_USER_SELECT =
   'id, customer_id, name, email, role, is_active, permissions, assignment_rules, last_login_at, last_seen_at, login_count, phone, created_at';
 
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
 type SessionCustomerRow = {
   id: string;
   name: string;
@@ -59,7 +56,8 @@ function mapSessionCustomer(row: SessionCustomerRow): PortalSession['customer'] 
 }
 
 /**
- * Verifies portal session: httpOnly JWT cookie and/or Bearer (JWT or legacy UUID).
+ * Verifies portal session: httpOnly JWT cookie, per-tab impersonatie-JWT, of een
+ * Bearer-JWT. De legacy "UUID-als-Bearer"-route is bewust verwijderd.
  */
 export async function verifyCustomer(request: NextRequest): Promise<PortalSession | null> {
   const authHeader = request.headers.get('Authorization');
@@ -107,6 +105,7 @@ export async function verifyCustomer(request: NextRequest): Promise<PortalSessio
         customer: mapSessionCustomer(customer),
         portalUser: undefined,
         isOwner: true,
+        ...(claims.imp ? { impersonatedByAdminId: claims.imp } : {}),
       };
     }
 
@@ -140,56 +139,38 @@ export async function verifyCustomer(request: NextRequest): Promise<PortalSessio
     }
   }
 
-  // Legacy: Bearer UUID (customer id or portal_user id)
-  const raw = bearer;
-  if (!raw || looksLikeJwt(raw) || !UUID_RE.test(raw)) return null;
-
-  const { data: customer } = await supabase
-    .from('customers')
-    .select(customerSelect)
-    .eq('id', raw)
-    .eq('is_active', true)
-    .eq('portal_active', true)
-    .returns<SessionCustomerRow>()
-    .single();
-
-  if (customer) {
-    return {
-      customer: mapSessionCustomer(customer),
-      portalUser: undefined,
-      isOwner: true,
-    };
-  }
-
-  const { data: portalUser } = await supabase
-    .from('portal_users')
-    .select(PORTAL_USER_SELECT)
-    .eq('id', raw)
-    .eq('is_active', true)
-    .single();
-
-  if (!portalUser) return null;
-
-  const { data: parentCustomer } = await supabase
-    .from('customers')
-    .select(customerSelect)
-    .eq('id', portalUser.customer_id)
-    .eq('is_active', true)
-    .eq('portal_active', true)
-    .returns<SessionCustomerRow>()
-    .single();
-
-  if (!parentCustomer) return null;
-
-  return {
-    customer: mapSessionCustomer(parentCustomer),
-    portalUser,
-    isOwner: portalUser.role === 'owner',
-  };
+  return null;
 }
 
 export function portalUnauthorized() {
   return NextResponse.json({ error: 'Niet geautoriseerd' }, { status: 401 });
+}
+
+/**
+ * Schrijft een auditlog-regel wanneer een mutatie via een admin-impersonatie-
+ * sessie ("bekijk als klant") wordt uitgevoerd. No-op voor echte klant/agent-
+ * sessies. Zo blijft traceerbaar welke admin namens welke klant heeft geschreven.
+ */
+export async function logImpersonatedWrite(
+  session: PortalSession,
+  action: string,
+  entityType: string,
+  entityId?: string | null,
+  details?: Record<string, unknown>,
+): Promise<void> {
+  if (!session.impersonatedByAdminId) return;
+  try {
+    const { logAudit } = await import('@/lib/audit');
+    await logAudit({
+      adminId: session.impersonatedByAdminId,
+      action: `impersonation.${action}`,
+      entityType,
+      entityId: entityId ?? null,
+      details: { customer_id: session.customer.id, ...(details ?? {}) },
+    });
+  } catch {
+    /* auditfout mag de mutatie niet blokkeren */
+  }
 }
 
 /** sessionStorage-sleutel voor per-tab admin-impersonatie (zie verifyCustomer). */

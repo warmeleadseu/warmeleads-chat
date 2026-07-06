@@ -44,7 +44,7 @@ export type CustomerScope =
   | { scoped: false }
   | { scoped: true; customerIds: string[] };
 
-export async function getCustomerScope(admin: AdminInfo): Promise<CustomerScope> {
+export async function getCustomerScope(admin: Pick<AdminInfo, 'id' | 'role'>): Promise<CustomerScope> {
   if (admin.role !== 'accountmanager') return { scoped: false };
 
   const supabase = createServerClient();
@@ -54,4 +54,28 @@ export async function getCustomerScope(admin: AdminInfo): Promise<CustomerScope>
     .eq('account_manager_id', admin.id);
 
   return { scoped: true, customerIds: (data || []).map(c => c.id) };
+}
+
+/**
+ * Bepaalt of een admin een specifieke klant mag zien/bewerken. Superadmin en
+ * gewone admin hebben altijd toegang; accountmanagers alleen tot hun eigen
+ * toegewezen klanten. Gebruik dit op alle admin-routes die met één concrete
+ * klant-id werken (PUT/DELETE/reminder e.d.).
+ */
+export async function adminCanAccessCustomer(
+  admin: Pick<AdminInfo, 'id' | 'role'>,
+  customerId: string,
+): Promise<boolean> {
+  if (admin.role !== 'accountmanager') return true;
+  if (!customerId) return false;
+
+  const supabase = createServerClient();
+  const { data } = await supabase
+    .from('customers')
+    .select('id')
+    .eq('id', customerId)
+    .eq('account_manager_id', admin.id)
+    .maybeSingle();
+
+  return !!data;
 }

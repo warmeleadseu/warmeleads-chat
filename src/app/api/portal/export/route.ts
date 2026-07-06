@@ -83,15 +83,28 @@ async function getCustomerLeadData(
   customerId: string,
   leadSource: 'all' | 'fresh' | 'bulk' = 'all',
   demoMode = false,
+  agentFilter: { portalUserId: string; viewAll: boolean } | null = null,
 ): Promise<{ ids: string[]; metaMap: Record<string, AssignmentMeta>; partial: boolean; maxExportRows: number }> {
   const ids = new Set<string>();
   const metaMap: Record<string, AssignmentMeta> = {};
   let partial = false;
-  const selectFields = 'lead_id, assigned_at, status, notities, batch_id, distance_km';
+  const selectFields = 'lead_id, assigned_at, status, notities, batch_id, distance_km, portal_user_id';
+
+  // Agent-scope: net als bij portal/leads mag een agent (zonder LEADS_VIEW_ALL)
+  // alleen leads zien die aan hemzelf of aan niemand zijn toegewezen.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const applyAgentScope = (q: any) => {
+    if (agentFilter && !agentFilter.viewAll) {
+      return q.or(`portal_user_id.eq.${agentFilter.portalUserId},portal_user_id.is.null`);
+    }
+    return q;
+  };
+
+  type AssignRow = { lead_id: string; assigned_at: string; status: string | null; notities: string | null; batch_id: string | null; distance_km: number | null };
 
   if (demoMode) {
-    const demoRes = await paginateQuery<{ lead_id: string; assigned_at: string; status: string | null; notities: string | null; batch_id: string | null; distance_km: number | null }>(
-      supabase.from('lead_assignments').select(selectFields).eq('customer_id', customerId).eq('source', 'demo').order('assigned_at', { ascending: false }),
+    const demoRes = await paginateQuery<AssignRow>(
+      applyAgentScope(supabase.from('lead_assignments').select(selectFields).eq('customer_id', customerId).eq('source', 'demo').order('assigned_at', { ascending: false })),
     );
     partial ||= demoRes.truncated;
     demoRes.rows.forEach(a => {
@@ -103,7 +116,9 @@ async function getCustomerLeadData(
     return { ids: Array.from(ids), metaMap, partial, maxExportRows: EXPORT_PAGINATE_MAX_ROWS };
   }
 
-  if (leadSource !== 'bulk') {
+  // Directe leads (leads.customer_id) worden alleen meegenomen voor owners/managers;
+  // een agent krijgt ze via zijn assignment-scope.
+  if (leadSource !== 'bulk' && (!agentFilter || agentFilter.viewAll)) {
     const directRes = await paginateQuery<{ id: string }>(
       supabase.from('leads').select('id').eq('customer_id', customerId),
     );
@@ -112,8 +127,8 @@ async function getCustomerLeadData(
   }
 
   if (leadSource === 'bulk') {
-    const bulkRes = await paginateQuery<{ lead_id: string; assigned_at: string; status: string | null; notities: string | null; batch_id: string | null; distance_km: number | null }>(
-      supabase.from('lead_assignments').select(selectFields).eq('customer_id', customerId).eq('source', 'bulk_export').order('assigned_at', { ascending: false }),
+    const bulkRes = await paginateQuery<AssignRow>(
+      applyAgentScope(supabase.from('lead_assignments').select(selectFields).eq('customer_id', customerId).eq('source', 'bulk_export').order('assigned_at', { ascending: false })),
     );
     partial ||= bulkRes.truncated;
     bulkRes.rows.forEach(a => {
@@ -130,7 +145,8 @@ async function getCustomerLeadData(
       .neq('source', 'demo')
       .order('assigned_at', { ascending: false });
     if (leadSource === 'fresh') assignQuery = assignQuery.neq('source', 'bulk_export');
-    const assignedRes = await paginateQuery<{ lead_id: string; assigned_at: string; status: string | null; notities: string | null; batch_id: string | null; distance_km: number | null }>(assignQuery);
+    assignQuery = applyAgentScope(assignQuery);
+    const assignedRes = await paginateQuery<AssignRow>(assignQuery);
     partial ||= assignedRes.truncated;
     assignedRes.rows.forEach(a => {
       ids.add(a.lead_id);
@@ -235,7 +251,13 @@ export async function GET(request: NextRequest) {
     hasPaidCustomerBatch,
   });
 
-  const { ids: poolLeadIds, metaMap, partial: exportPartial, maxExportRows } = await getCustomerLeadData(supabase, customer.id, leadSource, demoMode);
+  // Agent-scope net als bij het lead-overzicht: agents zonder LEADS_VIEW_ALL
+  // exporteren alleen hun eigen/niet-toegewezen leads.
+  const agentFilter = session.portalUser && !hasPermission(session, PERMISSIONS.LEADS_VIEW_ALL)
+    ? { portalUserId: session.portalUser.id, viewAll: false }
+    : null;
+
+  const { ids: poolLeadIds, metaMap, partial: exportPartial, maxExportRows } = await getCustomerLeadData(supabase, customer.id, leadSource, demoMode, agentFilter);
 
   const leadIds = requestedLeadIds
     ? requestedLeadIds.filter((id) => poolLeadIds.includes(id))

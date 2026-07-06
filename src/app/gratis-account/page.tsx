@@ -282,9 +282,11 @@ export default function GratisAccountPage() {
         return;
       }
 
+      // De sessie zit in een httpOnly-cookie (door de register-route gezet); we
+      // bewaren alleen het klantobject voor snelle UI-hydratie, geen token.
       localStorage.setItem(
         'warmeleads-portal-auth',
-        JSON.stringify({ customer: data.customer, token: data.token, timestamp: Date.now() }),
+        JSON.stringify({ customer: data.customer, timestamp: Date.now() }),
       );
       router.push('/portal?welcome=true');
     } catch {

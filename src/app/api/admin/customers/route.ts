@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
-import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
+import { verifyAdmin, unauthorized, forbidden } from '@/lib/adminAuth';
+import { adminCanAccessCustomer } from '@/lib/permissions';
 import bcrypt from 'bcryptjs';
 import { logAudit } from '@/lib/audit';
 import { buildPhoneSearchIlikeClauses, sanitizePostgrestIlike } from '@/lib/phoneSearch';
@@ -207,6 +208,9 @@ export async function PUT(request: NextRequest) {
     const { id, password, ...rawUpdates } = await request.json();
     if (!id) return NextResponse.json({ error: 'ID is verplicht' }, { status: 400 });
 
+    // AM-scoping: een accountmanager mag alleen eigen klanten bewerken.
+    if (!(await adminCanAccessCustomer(admin, id))) return forbidden();
+
     // demo_mode kantelt alleen via de Mollie-webhook (eerste betaalde batch) of het registratie-endpoint.
     // Voorkom dat een admin-PUT per ongeluk een demo-portaal ontdoet van zijn demo-status.
     const { demo_mode: _ignoredDemoMode, ...updates } = rawUpdates as Record<string, unknown>;
@@ -342,6 +346,8 @@ export async function PUT(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   const admin = await verifyAdmin(request);
   if (!admin) return unauthorized();
+  // Klanten verwijderen is een onomkeerbare actie: alleen superadmin.
+  if (admin.role !== 'superadmin') return forbidden();
 
   try {
     const { id } = await request.json();
@@ -353,6 +359,7 @@ export async function DELETE(request: NextRequest) {
     if (error) {
       return NextResponse.json({ error: 'Verwijderen mislukt' }, { status: 500 });
     }
+    logAudit({ adminId: admin.id, adminName: admin.name, action: 'delete_customer', entityType: 'customer', entityId: id });
     return NextResponse.json({ success: true });
   } catch {
     return NextResponse.json({ error: 'Ongeldige data' }, { status: 400 });

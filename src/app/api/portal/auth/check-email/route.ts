@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
-import { rateLimit, getClientIp } from '@/lib/rateLimit';
+import { rateLimitShared, getClientIp } from '@/lib/rateLimit';
 import { escapeForIlikeExact, pickEmailRow } from '@/lib/emailDbLookup';
 
 export async function GET(request: NextRequest) {
   const ip = getClientIp(request);
-  const { limited, response } = rateLimit(ip, 'check-email', 20, 60_000);
+  const { limited, response } = await rateLimitShared(ip, 'check-email', 20, 60_000);
   if (limited) return response!;
 
   const email = request.nextUrl.searchParams.get('email')?.toLowerCase().trim();

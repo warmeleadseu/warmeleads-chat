@@ -23,6 +23,25 @@ export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
 
 export const ALL_PERMISSIONS: Permission[] = Object.values(PERMISSIONS);
 
+/**
+ * Filtert een (client-)permissielijst naar alleen bekende permissies uit
+ * ALL_PERMISSIONS. Voorkomt dat willekeurige/onbekende permissie-strings in de
+ * database belanden of dat een teambeheerder onbekende rechten toekent.
+ */
+export function sanitizePermissions(input: unknown): Permission[] {
+  if (!Array.isArray(input)) return [];
+  const allowed = new Set<string>(ALL_PERMISSIONS);
+  const seen = new Set<string>();
+  const out: Permission[] = [];
+  for (const p of input) {
+    if (typeof p === 'string' && allowed.has(p) && !seen.has(p)) {
+      seen.add(p);
+      out.push(p as Permission);
+    }
+  }
+  return out;
+}
+
 export const ROLE_DEFAULTS: Record<string, Permission[]> = {
   owner: [...ALL_PERMISSIONS],
   manager: [
@@ -133,6 +152,8 @@ export interface PortalSession {
   };
   portalUser?: PortalUser;
   isOwner: boolean;
+  /** Gezet wanneer dit een admin-impersonatiesessie is: het admin-id dat "bekijkt als klant". */
+  impersonatedByAdminId?: string;
 }
 
 export function hasPermission(session: PortalSession, permission: Permission | string): boolean {

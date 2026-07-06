@@ -29,7 +29,17 @@ function verifySignature(
   svixSignature: string | null,
 ): boolean {
   const secret = process.env.RESEND_WEBHOOK_SECRET;
-  if (!secret) return true; // verificatie disabled wanneer secret niet gezet is
+  if (!secret) {
+    // Fail closed in productie: zonder secret kunnen we de afzender niet
+    // verifiëren en accepteren we geen webhooks. In dev mag het door voor
+    // lokaal testen.
+    if (process.env.NODE_ENV === 'production') {
+      console.error('[webhook/resend] RESEND_WEBHOOK_SECRET ontbreekt in productie — webhook geweigerd.');
+      return false;
+    }
+    console.warn('[webhook/resend] RESEND_WEBHOOK_SECRET niet gezet; verificatie overgeslagen (niet-productie).');
+    return true;
+  }
   if (!svixId || !svixTimestamp || !svixSignature) return false;
 
   // Tijdsverschil-check: max 5 minuten oud

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { sendEmail } from '@/lib/email';
-import { rateLimit, getClientIp } from '@/lib/rateLimit';
+import { rateLimitShared, getClientIp } from '@/lib/rateLimit';
 import { escapeForIlikeExact, pickEmailRow } from '@/lib/emailDbLookup';
 import crypto from 'crypto';
 
@@ -13,7 +13,7 @@ const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.warmeleads.eu'
 export async function POST(request: NextRequest) {
   try {
     const ip = getClientIp(request);
-    const { limited, response } = rateLimit(ip, 'forgot-password', MAX_ATTEMPTS, WINDOW_MS);
+    const { limited, response } = await rateLimitShared(ip, 'forgot-password', MAX_ATTEMPTS, WINDOW_MS);
     if (limited) return response!;
 
     const { email } = await request.json();

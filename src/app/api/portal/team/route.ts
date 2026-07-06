@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyCustomer, portalUnauthorized } from '@/lib/portalAuth';
 import { createServerClient } from '@/lib/supabase';
-import { hasPermission, forbidden, PERMISSIONS, ROLE_DEFAULTS } from '@/lib/portalPermissions';
+import { hasPermission, forbidden, PERMISSIONS, ROLE_DEFAULTS, sanitizePermissions } from '@/lib/portalPermissions';
 import bcrypt from 'bcryptjs';
 import { sendEmail } from '@/lib/email';
 import { escapeForIlikeExact, pickEmailRow } from '@/lib/emailDbLookup';
@@ -103,8 +103,9 @@ export async function POST(request: NextRequest) {
 
     const passwordHash = await bcrypt.hash(password, 12);
 
+    // Whitelist tegen ALL_PERMISSIONS: onbekende/verzonnen permissie-strings mogen niet.
     const userPermissions = Array.isArray(permissions)
-      ? permissions
+      ? sanitizePermissions(permissions)
       : ROLE_DEFAULTS[userRole] || ROLE_DEFAULTS.agent;
 
     const { data: newUser, error: insertError } = await supabase

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
-import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
+import { verifyAdmin, unauthorized, forbidden } from '@/lib/adminAuth';
+import { adminCanAccessCustomer } from '@/lib/permissions';
 import { dispatchEmail } from '@/lib/email';
 
 export async function POST(request: NextRequest) {
@@ -12,6 +13,9 @@ export async function POST(request: NextRequest) {
     if (!customer_id) {
       return NextResponse.json({ error: 'customer_id is verplicht' }, { status: 400 });
     }
+
+    // AM-scoping: alleen eigen klanten mogen een herinnering ontvangen.
+    if (!(await adminCanAccessCustomer(admin, customer_id))) return forbidden();
 
     const supabase = createServerClient();
     const { data: customer, error } = await supabase

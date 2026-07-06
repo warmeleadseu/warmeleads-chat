@@ -2,10 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import bcrypt from 'bcryptjs';
 import { sendEmail } from '@/lib/email';
-import { rateLimit, getClientIp } from '@/lib/rateLimit';
+import { rateLimitShared, getClientIp } from '@/lib/rateLimit';
 import { syncDemoLeadAssignmentsForCustomer } from '@/lib/demoPortalLeads';
 import { escapeForIlikeExact, pickEmailRow } from '@/lib/emailDbLookup';
 import { formatProvinceTargetLabel, normalizeProvinceTargetTokens } from '@/lib/provinceTargetMatch';
+import {
+  PORTAL_SESSION_COOKIE,
+  portalSessionCookieOptions,
+  signPortalOwnerSession,
+} from '@/lib/portalSession';
 
 const MAX_ATTEMPTS = 5;
 const WINDOW_MS = 60 * 60 * 1000;
@@ -13,7 +18,7 @@ const WINDOW_MS = 60 * 60 * 1000;
 export async function POST(request: NextRequest) {
   try {
     const ip = getClientIp(request);
-    const { limited, response } = rateLimit(ip, 'portal-register', MAX_ATTEMPTS, WINDOW_MS);
+    const { limited, response } = await rateLimitShared(ip, 'portal-register', MAX_ATTEMPTS, WINDOW_MS);
     if (limited) return response!;
 
     const body = await request.json();
@@ -114,11 +119,13 @@ export async function POST(request: NextRequest) {
     sendWelcomeEmail(customer.email, customer.contact_person || customer.name, welcomeExpiry).catch(() => {});
     notifyAdmins(supabase, customer).catch(() => {});
 
-    return NextResponse.json({
+    const portalJwt = await signPortalOwnerSession(customer.id);
+    const res = NextResponse.json({
       success: true,
-      token: customer.id,
       customer,
     });
+    res.cookies.set(PORTAL_SESSION_COOKIE, portalJwt, portalSessionCookieOptions());
+    return res;
   } catch (err) {
     console.error('[register] unexpected error:', err);
     return NextResponse.json({ error: 'Er ging iets mis bij het aanmaken van je account' }, { status: 500 });

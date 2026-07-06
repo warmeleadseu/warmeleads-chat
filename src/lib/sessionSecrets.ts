@@ -4,34 +4,22 @@
  * Voorkeurvolgorde:
  *   1. APP_SESSION_SECRET (≥32 tekens, aanbevolen in productie)
  *   2. ADMIN_SESSION_SECRET (legacy alias)
- *   3. CRON_SECRET (sterke fallback; al gebruikt door cron-jobs)
  *
- * In productie loggen we 1x een waarschuwing als er geen sterke
- * APP_SESSION_SECRET is gevonden of als het secret korter dan 32 tekens is,
- * maar we throwen pas wanneer er helemaal geen secret beschikbaar is.
+ * Bewust LOSGEKOPPELD van CRON_SECRET: sessie-ondertekening en cron-authenticatie
+ * gebruiken niet langer hetzelfde secret. Een gelekt CRON_SECRET mag geen
+ * geldige gebruikerssessies kunnen vervalsen (en omgekeerd). In productie
+ * throwen we als er geen dedicated sessie-secret is gezet.
  */
 
 const DEV_FALLBACK = 'dev-only-insecure-session-secret-min-32-chars!!';
 
 let warnedShortSecret = false;
-let warnedFallbackSecret = false;
 
 function getCandidate(): string | null {
   const app = process.env.APP_SESSION_SECRET?.trim();
   if (app) return app;
   const admin = process.env.ADMIN_SESSION_SECRET?.trim();
   if (admin) return admin;
-  const cron = process.env.CRON_SECRET?.trim();
-  if (cron) {
-    if (process.env.NODE_ENV === 'production' && !warnedFallbackSecret) {
-      console.warn(
-        '[sessionSecrets] APP_SESSION_SECRET niet gezet; valt terug op CRON_SECRET. ' +
-          'Zet APP_SESSION_SECRET (min. 32 tekens) voor toekomstvaste sessies.',
-      );
-      warnedFallbackSecret = true;
-    }
-    return cron;
-  }
   return null;
 }
 
@@ -58,7 +46,8 @@ export function getRawSessionSecret(): string {
   }
 
   throw new Error(
-    'Geen sessie-secret gevonden in productie. Zet APP_SESSION_SECRET (min. 32 tekens) of CRON_SECRET.',
+    'Geen sessie-secret gevonden in productie. Zet APP_SESSION_SECRET (min. 32 tekens). ' +
+      'CRON_SECRET wordt bewust niet meer gebruikt voor sessie-ondertekening.',
   );
 }
 

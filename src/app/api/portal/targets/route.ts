@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyCustomer, portalUnauthorized } from '@/lib/portalAuth';
+import { hasPermission, forbidden, PERMISSIONS } from '@/lib/portalPermissions';
 import { createServerClient } from '@/lib/supabase';
 import { leadMatchesAnyProvinceTarget } from '@/lib/provinceTargetMatch';
 
@@ -17,6 +18,9 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
 export async function GET(request: NextRequest) {
   const session = await verifyCustomer(request);
   if (!session) return portalUnauthorized();
+  // Doelgebieden + lead-aantallen per regio zijn bedrijfsbrede data: agents
+  // zonder statistiek-recht mogen dit niet inzien.
+  if (!hasPermission(session, PERMISSIONS.STATISTICS_VIEW)) return forbidden();
 
   const { customer } = session;
 

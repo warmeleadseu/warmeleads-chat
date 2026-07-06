@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyCustomer, portalUnauthorized } from '@/lib/portalAuth';
+import { verifyCustomer, portalUnauthorized, logImpersonatedWrite } from '@/lib/portalAuth';
 import { createServerClient } from '@/lib/supabase';
 import { hasPermission, forbidden, PERMISSIONS } from '@/lib/portalPermissions';
 import bcrypt from 'bcryptjs';
@@ -168,6 +168,10 @@ export async function PUT(request: NextRequest) {
     });
     const { country: _omitUpdCountry, ...updatedWithoutCountry } = updated;
     void _omitUpdCountry;
+    await logImpersonatedWrite(session, 'account_update', 'customer', customer.id, {
+      changed_password: !!(current_password && new_password),
+      changed_notifications: email_notifications !== undefined || notification_frequency !== undefined,
+    });
     return NextResponse.json({
       customer: {
         ...updatedWithoutCountry,

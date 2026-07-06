@@ -88,16 +88,44 @@ export async function POST(request: NextRequest) {
     if (kind === 'appointment_order') {
       const apptOrderId = rawOrderId;
       if (status === 'paid') {
-        const { data: claimedOrder, error: claimErr } = await supabase
+        // Idempotent + herstelbaar (zie portal-order pad): al 'paid' mét batch → klaar;
+        // 'paid' zónder batch → batch-creatie hervatten.
+        const { data: existingApptOrder } = await supabase
           .from('appointment_orders')
-          .update({ status: 'paid', paid_at: new Date().toISOString() })
-          .eq('id', apptOrderId)
-          .neq('status', 'paid')
           .select('*')
+          .eq('id', apptOrderId)
           .single();
 
-        if (claimErr || !claimedOrder) {
+        if (!existingApptOrder) {
           return NextResponse.json({ ok: true });
+        }
+        if (existingApptOrder.status === 'paid' && existingApptOrder.batch_id) {
+          return NextResponse.json({ ok: true });
+        }
+
+        let claimedOrder = existingApptOrder;
+        if (existingApptOrder.status !== 'paid') {
+          const { data: claimed, error: claimErr } = await supabase
+            .from('appointment_orders')
+            .update({ status: 'paid', paid_at: new Date().toISOString() })
+            .eq('id', apptOrderId)
+            .neq('status', 'paid')
+            .select('*')
+            .single();
+
+          if (claimErr || !claimed) {
+            const { data: refetched } = await supabase
+              .from('appointment_orders')
+              .select('*')
+              .eq('id', apptOrderId)
+              .single();
+            if (!refetched || refetched.batch_id) {
+              return NextResponse.json({ ok: true });
+            }
+            claimedOrder = refetched;
+          } else {
+            claimedOrder = claimed;
+          }
         }
 
         const { data: orderCust } = await supabase
@@ -130,14 +158,15 @@ export async function POST(request: NextRequest) {
           console.error('[mollie-webhook] appointment batch insert FAILED:', batchError);
           sendEmail('info@warmeleads.eu', `[URGENT] Appointment batch aanmaken mislukt voor order ${apptOrderId}`,
             errorEmailHtml('Appointment batch aanmaken mislukt', `
-              <p style="margin:0 0 16px">De Mollie betaling is gelukt maar de afspraken-batch kon niet worden aangemaakt.</p>
+              <p style="margin:0 0 16px">De Mollie betaling is gelukt maar de afspraken-batch kon niet worden aangemaakt. Mollie probeert de webhook opnieuw; de batch wordt dan automatisch alsnog aangemaakt.</p>
               <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;margin-bottom:16px">
                 <tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9;width:120px">Order ID</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;font-weight:600;border-bottom:1px solid #f1f5f9;font-family:monospace">${apptOrderId}</td></tr>
                 <tr><td style="padding:12px 20px;font-size:14px;color:#64748b">Error</td><td style="padding:12px 20px;font-size:14px;color:#dc2626;font-weight:600">${batchError?.message || 'Unknown'}</td></tr>
               </table>`),
             { type: 'mollie_error', metadata: { order_id: apptOrderId, error_type: 'appointment_batch_insert_failed' } },
           ).catch(() => {});
-          return NextResponse.json({ ok: true });
+          // 500 → Mollie retryt; resumable-check hierboven hervat de batch-creatie.
+          return NextResponse.json({ error: 'appointment batch insert failed, will retry' }, { status: 500 });
         }
 
         await supabase
@@ -314,21 +343,50 @@ export async function POST(request: NextRequest) {
     // Portal order payment (from bestellen page)
     const orderId = rawOrderId;
 
-    // Atomic claim: only process if not already paid
     if (status === 'paid') {
-      const { data: claimedOrder, error: claimErr } = await supabase
+      // Idempotent + herstelbaar: als de order al 'paid' is én er hangt al een
+      // batch aan, is de verwerking volledig afgerond → niets meer te doen.
+      // Is de order wél betaald maar zónder batch (bijv. eerdere insert-fout),
+      // dan hervatten we de batch-creatie i.p.v. hem stil te laten hangen.
+      const { data: existingOrder } = await supabase
         .from('batch_orders')
-        .update({ status: 'paid', paid_at: new Date().toISOString() })
-        .eq('id', orderId)
-        .neq('status', 'paid')
         .select('*')
+        .eq('id', orderId)
         .single();
 
-      if (claimErr || !claimedOrder) {
+      if (!existingOrder) {
+        return NextResponse.json({ ok: true });
+      }
+      if (existingOrder.status === 'paid' && existingOrder.batch_id) {
         return NextResponse.json({ ok: true });
       }
 
-      const order = claimedOrder;
+      let order = existingOrder;
+      if (existingOrder.status !== 'paid') {
+        const { data: claimedOrder, error: claimErr } = await supabase
+          .from('batch_orders')
+          .update({ status: 'paid', paid_at: new Date().toISOString() })
+          .eq('id', orderId)
+          .neq('status', 'paid')
+          .select('*')
+          .single();
+
+        if (claimErr || !claimedOrder) {
+          // Gelijktijdige webhook heeft geclaimd: opnieuw ophalen en alleen
+          // doorgaan als de batch nog ontbreekt.
+          const { data: refetched } = await supabase
+            .from('batch_orders')
+            .select('*')
+            .eq('id', orderId)
+            .single();
+          if (!refetched || refetched.batch_id) {
+            return NextResponse.json({ ok: true });
+          }
+          order = refetched;
+        } else {
+          order = claimedOrder;
+        }
+      }
 
       const { data: orderCust } = await supabase.from('customers').select('id, name, email, contact_person, account_manager_id, country, vat_id').eq('id', order.customer_id).single();
 
@@ -427,7 +485,7 @@ export async function POST(request: NextRequest) {
           'info@warmeleads.eu',
           `[URGENT] Batch aanmaken mislukt voor order ${orderId}`,
           errorEmailHtml('Batch aanmaken mislukt', `
-            <p style="margin:0 0 16px">De Mollie betaling is gelukt maar de batch kon niet worden aangemaakt in de database.</p>
+            <p style="margin:0 0 16px">De Mollie betaling is gelukt maar de batch kon niet worden aangemaakt in de database. Mollie probeert de webhook opnieuw; de batch wordt dan automatisch alsnog aangemaakt.</p>
             <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;margin-bottom:16px">
               <tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9;width:120px">Order ID</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;font-weight:600;border-bottom:1px solid #f1f5f9;font-family:monospace">${orderId}</td></tr>
               <tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">Klant ID</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;font-weight:600;border-bottom:1px solid #f1f5f9;font-family:monospace">${order.customer_id}</td></tr>
@@ -435,11 +493,13 @@ export async function POST(request: NextRequest) {
               <tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">Batch size</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;font-weight:600;border-bottom:1px solid #f1f5f9">${order.batch_size}</td></tr>
               <tr><td style="padding:12px 20px;font-size:14px;color:#64748b">Error</td><td style="padding:12px 20px;font-size:14px;color:#dc2626;font-weight:600">${batchError?.message || 'Unknown'}</td></tr>
             </table>
-            <p style="margin:0;font-size:14px;color:#64748b">Maak de batch handmatig aan via de admin.</p>`),
+            <p style="margin:0;font-size:14px;color:#64748b">Als de retries blijven falen: maak de batch handmatig aan via de admin.</p>`),
           { type: 'mollie_error', metadata: { order_id: orderId, error_type: 'batch_insert_failed' } },
         ).catch(() => {});
 
-        return NextResponse.json({ ok: true });
+        // 500 → Mollie retryt de webhook. De order is 'paid' zonder batch_id, dus
+        // de resumable-check bovenaan pakt de batch-creatie bij een retry weer op.
+        return NextResponse.json({ error: 'batch insert failed, will retry' }, { status: 500 });
       }
 
       await supabase
@@ -574,6 +634,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error('[mollie-webhook] error:', err);
-    return NextResponse.json({ ok: true });
+    // 500 → Mollie retryt de webhook. Beter dan een event stil verliezen bij een
+    // (mogelijk tijdelijke) fout; permanente fouten stoppen vanzelf na Mollie's retries.
+    return NextResponse.json({ error: 'processing error, will retry' }, { status: 500 });
   }
 }

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { createServerClient } from '@/lib/supabase';
 import { logAudit } from '@/lib/audit';
-import { rateLimit, getClientIp } from '@/lib/rateLimit';
+import { rateLimitShared, getClientIp } from '@/lib/rateLimit';
 import {
   ADMIN_SESSION_COOKIE,
   adminSessionCookieOptions,
@@ -19,7 +19,7 @@ export const maxDuration = 30;
 export async function POST(request: NextRequest) {
   try {
     const ip = getClientIp(request);
-    const { limited, response } = rateLimit(ip, 'admin-login', MAX_ATTEMPTS, WINDOW_MS);
+    const { limited, response } = await rateLimitShared(ip, 'admin-login', MAX_ATTEMPTS, WINDOW_MS);
     if (limited) {
       if (adminAuthDebugServerEnabled()) {
         adminAuthDebugServer('POST /api/admin/auth/login: rate limited', { ip: ip.slice(0, 12) });

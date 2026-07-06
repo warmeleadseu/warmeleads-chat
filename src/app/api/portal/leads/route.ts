@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyCustomer, portalUnauthorized } from '@/lib/portalAuth';
+import { verifyCustomer, portalUnauthorized, logImpersonatedWrite } from '@/lib/portalAuth';
 import { createServerClient } from '@/lib/supabase';
 import { hasPermission, forbidden, PERMISSIONS } from '@/lib/portalPermissions';
 import { repairDemoAssignmentsIfNeeded } from '@/lib/demoPortalLeads';
@@ -556,6 +556,11 @@ export async function PUT(request: NextRequest) {
 
   const { customer } = session;
 
+  // Agent-scope: een agent (zonder LEADS_VIEW_ALL) mag alleen leads bewerken die
+  // aan hemzelf of aan niemand zijn toegewezen — niet die van collega-agents.
+  const agentScoped = !!session.portalUser && !hasPermission(session, PERMISSIONS.LEADS_VIEW_ALL);
+  const agentUserId = session.portalUser?.id ?? null;
+
   try {
     const { id, status, notities } = await request.json();
 
@@ -571,12 +576,19 @@ export async function PUT(request: NextRequest) {
 
     const { data: assignment } = await supabase
       .from('lead_assignments')
-      .select('id, status')
+      .select('id, status, portal_user_id')
       .eq('lead_id', id)
       .eq('customer_id', customer.id)
       .order('assigned_at', { ascending: false })
       .limit(1)
       .maybeSingle();
+
+    if (assignment && agentScoped) {
+      const assignedTo = (assignment as { portal_user_id?: string | null }).portal_user_id ?? null;
+      if (assignedTo && assignedTo !== agentUserId) {
+        return NextResponse.json({ error: 'Geen toegang tot deze lead' }, { status: 403 });
+      }
+    }
 
     if (!assignment) {
       const { data: directLead } = await supabase
@@ -608,6 +620,7 @@ export async function PUT(request: NextRequest) {
         console.error('[portal/leads PUT] update failed:', error.message, { leadId: id, customerId: customer.id, updates });
         return NextResponse.json({ error: 'Kon lead niet bijwerken' }, { status: 500 });
       }
+      await logImpersonatedWrite(session, 'lead_update', 'lead', id, updates);
       return NextResponse.json({ lead: data });
     }
 
@@ -629,6 +642,8 @@ export async function PUT(request: NextRequest) {
       console.error('[portal/leads PUT] assignment update failed:', assignError.message, { leadId: id, customerId: customer.id, updates });
       return NextResponse.json({ error: 'Kon lead niet bijwerken' }, { status: 500 });
     }
+
+    await logImpersonatedWrite(session, 'lead_update', 'lead', id, { ...updates, previousStatus });
 
     // NB: geen CAPI-event op statuswijzigingen. WarmeLeads optimaliseert op
     // lead-volume + CPL per branche, niet op klant-side conversie.

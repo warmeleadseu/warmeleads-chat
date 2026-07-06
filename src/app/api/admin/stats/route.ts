@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
+import { getCustomerScope } from '@/lib/permissions';
 
 /** Na deploy: Supabase → Query Performance / Reports + Database advisors (o.a. indexes op leads.created_at, lead_assignments.assigned_at). */
 
@@ -136,6 +137,25 @@ export async function GET(request: NextRequest) {
   const allLeads = leadChunk.rows;
   const allAssignments = assignChunk.rows;
 
+  // AM-scoping: accountmanagers mogen geen klant-identificerende data van andere
+  // klanten zien (byCustomer, recentLeads, klantaantal). Branch-/status-metrics
+  // blijven bedrijfsbreed.
+  const scope = await getCustomerScope(admin);
+  let scopedCustomerNames: Set<string> | null = null;
+  let scopedCustomerIds: Set<string> | null = null;
+  if (scope.scoped) {
+    scopedCustomerIds = new Set(scope.customerIds);
+    if (scope.customerIds.length > 0) {
+      const { data: scopedCusts } = await supabase
+        .from('customers')
+        .select('name')
+        .in('id', scope.customerIds);
+      scopedCustomerNames = new Set((scopedCusts || []).map(c => c.name as string));
+    } else {
+      scopedCustomerNames = new Set();
+    }
+  }
+
   const byStatus: Record<string, number> = {};
   const byBranch: Record<string, number> = {};
   const byCustomer: Record<string, number> = {};
@@ -153,7 +173,25 @@ export async function GET(request: NextRequest) {
     if (lead.branch) byBranch[lead.branch] = (byBranch[lead.branch] || 0) + 1;
   }
   const unassigned = allLeads.filter(l => !assignedLeadIds.has(l.id)).length;
-  if (unassigned > 0) byCustomer['Niet toegewezen'] = unassigned;
+  if (unassigned > 0 && !scope.scoped) byCustomer['Niet toegewezen'] = unassigned;
+
+  // Filter byCustomer + recentLeads voor accountmanagers naar hun eigen klanten.
+  let scopedByCustomer = byCustomer;
+  if (scopedCustomerNames) {
+    scopedByCustomer = {};
+    for (const [name, count] of Object.entries(byCustomer)) {
+      if (scopedCustomerNames.has(name)) scopedByCustomer[name] = count;
+    }
+  }
+
+  const recentLeadsRaw = (recentRes.data || []) as Array<{ customers?: { id?: string } | { id?: string }[] | null }>;
+  const recentLeads = scopedCustomerIds
+    ? recentLeadsRaw.filter((l) => {
+        const c = l.customers;
+        const cid = Array.isArray(c) ? c[0]?.id : c?.id;
+        return cid ? scopedCustomerIds!.has(cid) : false;
+      })
+    : recentLeadsRaw;
 
   const periods = ['day', 'week', 'month', 'quarter', 'year'] as const;
   const periodStats: Record<string, { leads: number; prevLeads: number; assigned: number; prevAssigned: number }> = {};
@@ -198,11 +236,11 @@ export async function GET(request: NextRequest) {
     total: totalRes.count || 0,
     thisWeek: weekRes.count || 0,
     thisMonth: monthRes.count || 0,
-    customerCount: customersRes.count || 0,
+    customerCount: scope.scoped ? scope.customerIds.length : (customersRes.count || 0),
     byStatus,
     byBranch,
-    byCustomer,
-    recentLeads: recentRes.data || [],
+    byCustomer: scopedByCustomer,
+    recentLeads,
     periodStats,
     _statsScope: {
       lookbackDays: STATS_LOOKBACK_DAYS,

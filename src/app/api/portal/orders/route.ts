@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyCustomer, portalUnauthorized } from '@/lib/portalAuth';
+import { verifyCustomer, portalUnauthorized, logImpersonatedWrite } from '@/lib/portalAuth';
 import { createServerClient } from '@/lib/supabase';
 import { hasPermission, forbidden, PERMISSIONS } from '@/lib/portalPermissions';
 import { createBatchPayment } from '@/lib/mollie';
@@ -46,6 +46,13 @@ export async function POST(request: NextRequest) {
       niche_title: rawNicheTitle,
       lead_branch_slug: rawLeadBranchSlug,
     } = body;
+
+    // Bestellen namens een klant via impersonatie: leg vast in de auditlog.
+    await logImpersonatedWrite(session, 'order_create', 'order', null, {
+      batch_size: rawBatchSize,
+      batch_kind: rawBatchKind,
+      source_batch_id: source_batch_id ?? null,
+    });
 
     const batchKind =
       rawBatchKind === 'niche_research' ? 'niche_research' : 'leads';

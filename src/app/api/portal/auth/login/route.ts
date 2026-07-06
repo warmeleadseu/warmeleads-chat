@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import bcrypt from 'bcryptjs';
-import { rateLimit, getClientIp } from '@/lib/rateLimit';
+import { rateLimitShared, getClientIp } from '@/lib/rateLimit';
 import { repairDemoAssignmentsIfNeeded } from '@/lib/demoPortalLeads';
 import { getHasPaidCustomerBatch, shouldUseDemoPortalExperience } from '@/lib/demoPortalEligibility';
 import { escapeForIlikeExact, pickEmailRow } from '@/lib/emailDbLookup';
@@ -19,7 +19,7 @@ const WINDOW_MS = 15 * 60 * 1000;
 export async function POST(request: NextRequest) {
   try {
     const ip = getClientIp(request);
-    const { limited, response } = rateLimit(ip, 'portal-login', MAX_ATTEMPTS, WINDOW_MS);
+    const { limited, response } = await rateLimitShared(ip, 'portal-login', MAX_ATTEMPTS, WINDOW_MS);
     if (limited) return response!;
 
     const { email, password } = await request.json();

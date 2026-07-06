@@ -6,7 +6,8 @@ import { SignJWT } from 'jose';
 import { getSessionSecretKey } from '@/lib/sessionSecrets';
 
 const ISSUER = 'warmeleads-admin';
-const EXPIRY = '1h';
+// Kort geldig: dit token wordt direct na openen ingewisseld voor een portal-sessie.
+const EXPIRY = '3m';
 
 /**
  * Genereert een korte-levensduur impersonate-token waarmee een admin/AM via

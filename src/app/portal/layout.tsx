@@ -22,6 +22,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { PortalContext, type PortalCustomer, type ClientPortalUser, isDemoPortalExperience } from './portalContext';
 import { portalFetch, PORTAL_IMPERSONATION_KEY } from '@/lib/portalAuth';
+import { IMPERSONATION_HANDOFF_PREFIX, IMPERSONATION_HANDOFF_TTL_MS } from '@/lib/adminOpenPortal';
 import { PERMISSIONS } from '@/lib/portalPermissions';
 import { UsersIcon } from '@heroicons/react/24/outline';
 import { ToastProvider, AnnouncementBar } from './_ui';
@@ -737,7 +738,23 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
     }
 
     const params = new URLSearchParams(window.location.search);
-    const impersonateToken = params.get('impersonate');
+    // Impersonatie-token komt via een eenmalige, same-origin localStorage-overdracht
+    // (imp_ref) i.p.v. in de URL. We lezen de entry en wissen hem meteen (one-time).
+    let impersonateToken: string | null = null;
+    const impRef = params.get('imp_ref');
+    if (impRef) {
+      try {
+        const key = `${IMPERSONATION_HANDOFF_PREFIX}${impRef}`;
+        const raw = localStorage.getItem(key);
+        localStorage.removeItem(key);
+        if (raw) {
+          const parsed = JSON.parse(raw) as { token?: string; ts?: number };
+          if (parsed.token && parsed.ts && Date.now() - parsed.ts < IMPERSONATION_HANDOFF_TTL_MS) {
+            impersonateToken = parsed.token;
+          }
+        }
+      } catch { /* noop */ }
+    }
 
     if (impersonateToken) {
       (async () => {

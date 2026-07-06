@@ -13,9 +13,6 @@ import {
   redactEmail,
 } from '@/lib/adminAuthDebug';
 
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
 export async function verifyAdmin(request: NextRequest) {
   const authHeader = request.headers.get('Authorization');
   let bearer: string | null = null;
@@ -30,7 +27,6 @@ export async function verifyAdmin(request: NextRequest) {
       path: request.nextUrl?.pathname ?? '(onbekend)',
       hasAuthHeader: !!authHeader,
       hasBearerJwtShape: !!(bearer && looksLikeJwt(bearer)),
-      hasBearerUuidShape: !!(bearer && UUID_RE.test(bearer)),
       hasSessionCookie: !!cookieToken,
       cookieTokenLength: cookieToken?.length ?? 0,
     });
@@ -38,6 +34,8 @@ export async function verifyAdmin(request: NextRequest) {
 
   let adminId: string | null = null;
 
+  // Alleen een echte JWT wordt geaccepteerd: de httpOnly sessie-cookie of een
+  // Bearer-JWT. De legacy "UUID-als-Bearer"-route is bewust verwijderd.
   const jwtCandidate =
     cookieToken ||
     (bearer && looksLikeJwt(bearer) ? bearer : null);
@@ -48,15 +46,6 @@ export async function verifyAdmin(request: NextRequest) {
       adminAuthDebugServer('verifyAdmin: JWT geverifieerd', {
         ok: !!adminId,
         subPrefix: adminId ? `${adminId.slice(0, 8)}…` : null,
-      });
-    }
-  }
-
-  if (!adminId && bearer && UUID_RE.test(bearer)) {
-    adminId = bearer;
-    if (adminAuthDebugServerEnabled()) {
-      adminAuthDebugServer('verifyAdmin: bearer UUID als admin-id gebruikt', {
-        idPrefix: `${bearer.slice(0, 8)}…`,
       });
     }
   }

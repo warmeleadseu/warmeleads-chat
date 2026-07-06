@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyCustomer, portalUnauthorized } from '@/lib/portalAuth';
+import { hasPermission, forbidden, PERMISSIONS } from '@/lib/portalPermissions';
 import { createServerClient } from '@/lib/supabase';
 
 export async function GET(request: NextRequest) {
@@ -32,6 +33,8 @@ export async function GET(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   const session = await verifyCustomer(request);
   if (!session) return portalUnauthorized();
+  // Notificatie-voorkeuren zijn account-breed: alleen owners / ACCOUNT_EDIT mogen wijzigen.
+  if (!hasPermission(session, PERMISSIONS.ACCOUNT_EDIT)) return forbidden();
 
   const { customer } = session;
 
