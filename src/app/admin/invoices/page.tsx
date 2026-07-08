@@ -84,6 +84,7 @@ export default function AdminInvoicesPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [actionBusy, setActionBusy] = useState<string | null>(null);
+  const [zipBusy, setZipBusy] = useState(false);
 
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [periodFilter, setPeriodFilter] = useState<PeriodFilter>('all');
@@ -388,6 +389,47 @@ export default function AdminInvoicesPage() {
     showToast(`${sorted.length} facturen geëxporteerd`);
   }, [sorted, countryById, invoiceNumberById, showToast]);
 
+  const ZIP_MAX = 200;
+  const downloadZip = useCallback(async () => {
+    if (sorted.length === 0 || zipBusy) return;
+    if (sorted.length > ZIP_MAX) {
+      showToast(`Te veel facturen (${sorted.length}). Verfijn de filters — max ${ZIP_MAX} per download.`);
+      return;
+    }
+    setZipBusy(true);
+    showToast(`PDF's genereren (${sorted.length})…`);
+    try {
+      const res = await fetch('/api/admin/invoices/export-zip', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...adminHeaders() },
+        body: JSON.stringify({ ids: sorted.map(i => i.id) }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        showToast(d.error || 'Zip-download mislukt.');
+        return;
+      }
+      const added = res.headers.get('X-Invoices-Added');
+      const failed = Number(res.headers.get('X-Invoices-Failed') || '0');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `facturen-${new Date().toISOString().split('T')[0]}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast(
+        failed > 0
+          ? `${added} PDF's gedownload (${failed} mislukt)`
+          : `${added || sorted.length} PDF's gedownload als .zip`,
+      );
+    } catch {
+      showToast('Netwerkfout bij zip-download.');
+    } finally {
+      setZipBusy(false);
+    }
+  }, [sorted, zipBusy, showToast]);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -409,6 +451,12 @@ export default function AdminInvoicesPage() {
           <button onClick={exportCsv} disabled={sorted.length === 0}
             className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-50">
             <TableCellsIcon className="h-4 w-4" /> Exporteer CSV
+          </button>
+          <button onClick={downloadZip} disabled={sorted.length === 0 || zipBusy}
+            title={sorted.length > ZIP_MAX ? `Verfijn de filters — max ${ZIP_MAX} facturen per download` : 'Download alle facturen in selectie als .zip met PDF\u2019s'}
+            className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-50">
+            {zipBusy ? <ArrowPathIcon className="h-4 w-4 animate-spin" /> : <ArrowDownTrayIcon className="h-4 w-4" />}
+            PDF&apos;s (.zip)
           </button>
           <button onClick={fetchInvoices} disabled={loading}
             className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-50">

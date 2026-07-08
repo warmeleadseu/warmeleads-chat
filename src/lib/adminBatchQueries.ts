@@ -27,4 +27,16 @@ export const adminCustomerLiveUnpaidEmbed = `customers(
   customer_targets(id, label, lat, lng, radius_km, is_active, target_type, provinces)
 )`;
 
-export const adminBatchListSelect = `*,${ADMIN_CUSTOMER_WITH_TARGETS}`;
+/** Per-batch target-override (`batch_targets`) embed voor batch-overzichten. */
+export const BATCH_TARGETS_EMBED = `batch_targets(id, label, lat, lng, radius_km, is_active, target_type, provinces, country)`;
+
+/** Zonder batch_targets — fallback wanneer migratie 144 nog niet is toegepast. */
+export const adminBatchListSelectNoBatchTargets = `*,${ADMIN_CUSTOMER_WITH_TARGETS}`;
+
+export const adminBatchListSelect = `*,${ADMIN_CUSTOMER_WITH_TARGETS},${BATCH_TARGETS_EMBED}`;
+
+/** True wanneer een PostgREST-fout duidt op een ontbrekende `batch_targets`-relatie. */
+export function isMissingBatchTargetsError(message: string | null | undefined): boolean {
+  if (!message) return false;
+  return /batch_targets/i.test(message) && /(does not exist|not find|relationship|schema cache)/i.test(message);
+}

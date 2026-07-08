@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
   /** Safety caps voor debug-tool. Voorkomt dat een per-ongeluk-geklikte refresh de DB plat trekt. */
   const DEBUG_LIMIT = 2000;
 
-  const [leadsRes, assignRes, batchRes, targetRes, custRes] = await Promise.all([
+  const [leadsRes, assignRes, batchRes, targetRes, custRes, batchTargetRes] = await Promise.all([
     supabase
       .from('leads')
       .select('id, naam_klant, email, branch, postcode, plaatsnaam, lat, lng, land, provincie, created_at')
@@ -46,6 +46,11 @@ export async function GET(request: NextRequest) {
       .from('customers')
       .select('id, name, is_active, portal_active')
       .limit(DEBUG_LIMIT),
+    supabase
+      .from('batch_targets')
+      .select('id, batch_id, label, lat, lng, radius_km, is_active, target_type, provinces')
+      .eq('is_active', true)
+      .limit(DEBUG_LIMIT),
   ]);
 
   const leads = leadsRes.data || [];
@@ -53,6 +58,14 @@ export async function GET(request: NextRequest) {
   const batches = batchRes.data || [];
   const targets = targetRes.data || [];
   const customers = custRes.data || [];
+  // batch_targets kan ontbreken vóór migratie 144 → dan gewoon lege lijst.
+  const batchTargets = batchTargetRes.error ? [] : (batchTargetRes.data || []);
+
+  const batchTargetsByBatch: Record<string, typeof batchTargets> = {};
+  for (const t of batchTargets) {
+    if (!batchTargetsByBatch[t.batch_id]) batchTargetsByBatch[t.batch_id] = [];
+    batchTargetsByBatch[t.batch_id].push(t);
+  }
 
   const _debugScope = {
     limitPerTable: DEBUG_LIMIT,
@@ -171,7 +184,11 @@ export async function GET(request: NextRequest) {
         continue;
       }
 
-      const custTargets = (targetsByCustomer[custId] || []).filter(t => t.is_active);
+      // Batch-target-override: eigen targetgebieden van de batch overrulen de klant.
+      const overrideTargets = (batchTargetsByBatch[custBatch.id] || []).filter(t => t.is_active !== false);
+      const custTargets = overrideTargets.length > 0
+        ? overrideTargets
+        : (targetsByCustomer[custId] || []).filter(t => t.is_active);
       if (custTargets.length === 0) {
         potentialMatches.push({
           customer_id: custId,

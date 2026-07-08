@@ -36,6 +36,7 @@ import {
 import { adminFetch } from '@/lib/adminAuth';
 import { openCustomerPortalAsAdmin } from '@/lib/adminOpenPortal';
 import SearchableSelect from '@/components/ui/SearchableSelect';
+import BatchTargetsEditor from '@/components/admin/BatchTargetsEditor';
 import { useAdmin } from '../adminContext';
 import { mergeCustomTiers } from '@/lib/pricing';
 import { isMetaCampaignSyncBatchKind, isPipelineBatchKind } from '@/lib/batchKind';
@@ -91,6 +92,7 @@ interface Batch {
   meta_sync_last_success_at?: string | null;
   meta_sync_last_error?: string | null;
   distribution_priority?: boolean | null;
+  batch_targets?: CustomerTargetRow[] | null;
   customers?: {
     id?: string;
     name: string;
@@ -523,7 +525,7 @@ export default function BatchesPage() {
                         <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${c.light} ${c.text}`}>{br.name}</span>
                       </td>
                       <td className="max-w-[14rem] px-4 py-3 align-top">
-                        <BatchTargetAreaBadges customers={b.customers} variant="compact" />
+                        <BatchTargetAreaBadges customers={b.customers} batchTargets={b.batch_targets} variant="compact" />
                       </td>
                       <td className="px-4 py-3">
                         <div>
@@ -664,7 +666,7 @@ export default function BatchesPage() {
                     </div>
                   </div>
                   <div className="mb-2">
-                    <BatchTargetAreaBadges customers={b.customers} variant="compact" />
+                    <BatchTargetAreaBadges customers={b.customers} batchTargets={b.batch_targets} variant="compact" />
                   </div>
                   <div className="mb-2">
                     <BatchProgressDisplay {...batchProgressProps(b)} size="md" />
@@ -1239,7 +1241,7 @@ function BatchDetailPanel({ batchId, branches, onClose, onEdit, onListRefresh }:
                 <BatchDetailMetaBlock batch={batch} onReload={reloadDetailBatch} onListRefresh={onListRefresh} />
 
                 <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3.5">
-                  <BatchTargetAreaBadges customers={batch.customers} showHeading />
+                  <BatchTargetAreaBadges customers={batch.customers} batchTargets={batch.batch_targets} showHeading />
                 </div>
 
                 <div className="text-xs text-slate-400">
@@ -2297,6 +2299,9 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
               branchFields={branchFields}
             />
           </div>
+
+          {/* Batch-specifieke targetgebieden (overrulen klant-targetgebieden) */}
+          <BatchTargetsEditor batchId={batch.id} />
         </div>
 
         <div className="shrink-0 border-t border-slate-100 px-5 py-4">

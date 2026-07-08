@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { verifyAdmin } from '@/lib/adminAuth';
 import { verifyCustomer } from '@/lib/portalAuth';
-import { renderToBuffer } from '@react-pdf/renderer';
-import { InvoicePdf, type InvoiceData } from '@/lib/invoicePdf';
+import { loadCompanySettings, getInvoicePdfBytes } from '@/lib/invoicePdfRender';
 
 export async function GET(
   request: NextRequest,
@@ -28,84 +27,10 @@ export async function GET(
     return NextResponse.json({ error: 'Factuur niet gevonden' }, { status: 404 });
   }
 
-  // Serve uploaded PDF if available
-  if (invoice.uploaded_pdf_path) {
-    const { data: fileData, error: dlErr } = await supabase.storage
-      .from('invoices')
-      .download(invoice.uploaded_pdf_path);
+  const companyMap = await loadCompanySettings(supabase);
+  const uint8 = await getInvoicePdfBytes(supabase, invoice, companyMap);
 
-    if (!dlErr && fileData) {
-      const arrayBuf = await fileData.arrayBuffer();
-      return new NextResponse(new Uint8Array(arrayBuf), {
-        headers: {
-          'Content-Type': 'application/pdf',
-          'Content-Disposition': `inline; filename="${invoice.invoice_number}.pdf"`,
-          'Cache-Control': 'private, max-age=3600',
-        },
-      });
-    }
-  }
-
-  // Get company details
-  const keys = [
-    'company_name', 'company_address', 'company_postcode', 'company_city',
-    'company_kvk', 'company_btw', 'company_iban', 'company_email',
-  ];
-  const { data: settings } = await supabase.from('app_settings').select('key, value').in('key', keys);
-  const map: Record<string, string> = {};
-  (settings || []).forEach(r => { map[r.key] = r.value || ''; });
-
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.warmeleads.eu';
-
-  const creditNoteOf = (invoice as { credit_note_of?: string | null }).credit_note_of ?? null;
-  const isCreditNote = invoice.status === 'credit_note' || !!creditNoteOf;
-  let creditedInvoiceNumber: string | null = null;
-  if (creditNoteOf) {
-    const { data: orig } = await supabase
-      .from('invoices')
-      .select('invoice_number')
-      .eq('id', creditNoteOf)
-      .maybeSingle();
-    creditedInvoiceNumber = orig?.invoice_number ?? null;
-  }
-
-  const invoiceData: InvoiceData = {
-    invoice_number: invoice.invoice_number,
-    created_at: invoice.created_at,
-    paid_at: invoice.paid_at,
-
-    logo_url: `${siteUrl}/warmeleads-logo-2026.png`,
-    company_name: map.company_name || 'WarmeLeads',
-    company_address: map.company_address || '',
-    company_postcode: map.company_postcode || '',
-    company_city: map.company_city || '',
-    company_kvk: map.company_kvk || '',
-    company_btw: map.company_btw || '',
-    company_iban: map.company_iban || '',
-    company_email: map.company_email || 'info@warmeleads.eu',
-
-    customer_name: invoice.customer_name,
-    customer_email: invoice.customer_email,
-    customer_address: invoice.customer_address,
-    customer_kvk: invoice.customer_kvk || null,
-    customer_vat_id: invoice.customer_vat_id,
-
-    description: invoice.description,
-    line_items: invoice.line_items || [],
-    subtotal: Number(invoice.subtotal),
-    btw_percentage: Number(invoice.btw_percentage),
-    btw_amount: Number(invoice.btw_amount),
-    total_incl_btw: Number(invoice.total_incl_btw),
-    vat_mode: (invoice as { vat_mode?: string }).vat_mode === 'reverse_charge_be' ? 'reverse_charge_be' : 'domestic_nl',
-    mollie_payment_id: invoice.mollie_payment_id,
-    is_credit_note: isCreditNote,
-    credited_invoice_number: creditedInvoiceNumber,
-  };
-
-  const buffer = await renderToBuffer(<InvoicePdf data={invoiceData} />);
-  const uint8 = new Uint8Array(buffer);
-
-  return new NextResponse(uint8, {
+  return new NextResponse(Buffer.from(uint8), {
     headers: {
       'Content-Type': 'application/pdf',
       'Content-Disposition': `inline; filename="${invoice.invoice_number}.pdf"`,

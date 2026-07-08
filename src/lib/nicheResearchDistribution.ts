@@ -162,13 +162,32 @@ export async function tryAssignLeadToNicheResearchBatch(
     targetsByCustomer.set(t.customer_id, arr);
   }
 
+  // Batch-target-override: eigen actieve targetgebieden van de batch overrulen de klant.
+  const { fetchActiveBatchTargetsByBatch } = await import('./batchTargets');
+  const batchTargetsByBatch = await fetchActiveBatchTargetsByBatch(
+    supabase,
+    list.map((b) => b.id),
+  );
+
   const now = new Date();
 
   for (const batch of list) {
     if (assignedCustomerIds.has(batch.customer_id)) continue;
     if (batch.starts_at && new Date(batch.starts_at) > now) continue;
 
-    const custTargets = targetsByCustomer.get(batch.customer_id) || [];
+    const overrideTargets = batchTargetsByBatch.get(batch.id) || [];
+    const custTargets: NicheResearchTarget[] =
+      overrideTargets.length > 0
+        ? overrideTargets.map((t) => ({
+            customer_id: batch.customer_id,
+            target_type: t.target_type ?? null,
+            lat: t.lat ?? null,
+            lng: t.lng ?? null,
+            radius_km: t.radius_km ?? null,
+            provinces: t.provinces ?? null,
+            country: t.country ?? null,
+          }))
+        : targetsByCustomer.get(batch.customer_id) || [];
     if (!nicheLeadMatchesCustomerTargets(lead, custTargets)) continue;
 
     const { data: inserted, error } = await supabase

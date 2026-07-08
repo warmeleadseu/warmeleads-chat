@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
-import { adminBatchListSelect } from '@/lib/adminBatchQueries';
+import { adminBatchListSelect, adminBatchListSelectNoBatchTargets, isMissingBatchTargetsError } from '@/lib/adminBatchQueries';
 
 export async function GET(
   request: NextRequest,
@@ -31,11 +31,24 @@ export async function GET(
       .order('created_at', { ascending: false }),
   ]);
 
-  if (batchRes.error || !batchRes.data) {
+  let batchData = batchRes.data;
+  let batchErr = batchRes.error;
+  // Fallback: `batch_targets` bestaat nog niet (migratie 144 niet toegepast).
+  if (batchErr && isMissingBatchTargetsError(batchErr.message)) {
+    const retry = await supabase
+      .from('customer_batches')
+      .select(adminBatchListSelectNoBatchTargets)
+      .eq('id', id)
+      .single();
+    batchData = retry.data;
+    batchErr = retry.error;
+  }
+
+  if (batchErr || !batchData) {
     return NextResponse.json({ error: 'Batch niet gevonden' }, { status: 404 });
   }
 
-  const batch = batchRes.data;
+  const batch = batchData;
 
   if (admin.role === 'accountmanager') {
     const { data: myCustomers } = await supabase

@@ -16,6 +16,7 @@ import {
   canAssignWithinCap,
 } from './assignmentCap';
 import { mirrorLeadToMasterPortal, MIRROR_ASSIGNMENT_SOURCE } from './masterPortalMirror';
+import { fetchActiveBatchTargetsByBatch, type GeoTargetRow } from './batchTargets';
 
 const MAX_LEAD_AGE_DAYS = 3;
 const COOLDOWN_HOURS = 12;
@@ -398,12 +399,20 @@ export async function distributeLead(
     .in('customer_id', customerIds)
     .eq('is_active', true);
 
-  if (!targets || targets.length === 0) return result;
+  // Batch-specifieke targetgebieden (overrulen de klant-targetgebieden per batch).
+  const batchTargetsByBatch = await fetchActiveBatchTargetsByBatch(
+    supabase,
+    fifoActiveBatches.map(b => b.id),
+  );
 
-  const targetsByCustomer: Record<string, typeof targets> = {};
-  for (const t of targets) {
+  const hasCustomerTargets = !!targets && targets.length > 0;
+  const hasBatchTargets = batchTargetsByBatch.size > 0;
+  if (!hasCustomerTargets && !hasBatchTargets) return result;
+
+  const targetsByCustomer: Record<string, GeoTargetRow[]> = {};
+  for (const t of targets || []) {
     if (!targetsByCustomer[t.customer_id]) targetsByCustomer[t.customer_id] = [];
-    targetsByCustomer[t.customer_id].push(t);
+    targetsByCustomer[t.customer_id].push(t as GeoTargetRow);
   }
 
   // Load exclusion lists for bidirectional lead-exclusion between customers
@@ -464,8 +473,13 @@ export async function distributeLead(
       if (todayCount >= batch.leads_per_day) continue;
     }
 
-    const custTargets = targetsByCustomer[batch.customer_id];
-    if (!custTargets) continue;
+    // Batch-target-override: heeft de batch eigen actieve targetgebieden, dan tellen
+    // uitsluitend die (klant-targetgebieden worden voor deze batch genegeerd).
+    const overrideTargets = batchTargetsByBatch.get(batch.id);
+    const custTargets = (overrideTargets && overrideTargets.length > 0)
+      ? overrideTargets
+      : targetsByCustomer[batch.customer_id];
+    if (!custTargets || custTargets.length === 0) continue;
 
     let bestMatch: { radius: number; distance: number } | null = null;
     for (const t of custTargets) {
@@ -477,7 +491,7 @@ export async function distributeLead(
             bestMatch = { radius: 999, distance: 0 };
           }
         }
-      } else if (hasCoords) {
+      } else if (hasCoords && t.lat != null && t.lng != null && t.radius_km != null) {
         const dist = haversineKm(lead.lat, lead.lng, t.lat, t.lng);
         if (dist <= t.radius_km) {
           if (!bestMatch || t.radius_km < bestMatch.radius) {
@@ -714,13 +728,22 @@ export async function backfillBatch(batchId: string, lookbackDays: number): Prom
     return { assigned: 0 };
   }
 
-  const { data: targets } = await supabase
-    .from('customer_targets')
-    .select('*')
-    .eq('customer_id', batch.customer_id)
-    .eq('is_active', true);
+  // Batch-target-override: eigen actieve targetgebieden van de batch overrulen de klant.
+  const batchTargetsMap = await fetchActiveBatchTargetsByBatch(supabase, [batch.id]);
+  const overrideTargets = batchTargetsMap.get(batch.id) || [];
+  let targets: GeoTargetRow[];
+  if (overrideTargets.length > 0) {
+    targets = overrideTargets;
+  } else {
+    const { data: custTargets } = await supabase
+      .from('customer_targets')
+      .select('*')
+      .eq('customer_id', batch.customer_id)
+      .eq('is_active', true);
+    targets = (custTargets || []) as GeoTargetRow[];
+  }
 
-  if (!targets || targets.length === 0) return { assigned: 0 };
+  if (targets.length === 0) return { assigned: 0 };
 
   // Load exclusion list for this customer (bidirectional)
   const { data: custRow } = await supabase
@@ -873,7 +896,7 @@ export async function backfillBatch(batchId: string, lookbackDays: number): Prom
           inRange = true;
           bestDist = Math.min(bestDist, 0);
         }
-      } else if (lead.lat && lead.lng) {
+      } else if (lead.lat && lead.lng && t.lat != null && t.lng != null && t.radius_km != null) {
         const dist = haversineKm(lead.lat, lead.lng, t.lat, t.lng);
         if (dist <= t.radius_km) { inRange = true; bestDist = Math.min(bestDist, dist); }
       }

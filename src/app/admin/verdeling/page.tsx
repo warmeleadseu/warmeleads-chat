@@ -51,6 +51,7 @@ interface Batch {
   notes: string | null;
   created_at: string;
   completed_at: string | null;
+  batch_targets?: CustomerTargetRow[] | null;
   customers: { name: string; customer_targets?: CustomerTargetRow[] | null } | null;
 }
 
@@ -480,7 +481,7 @@ export default function VerdelingPage() {
                         <span>Nog {b.batch_size - b.leads_delivered} te leveren</span>
                       </div>
                       <div className="mt-2 border-t border-slate-100 pt-2">
-                        <BatchTargetAreaBadges customers={b.customers} variant="compact" />
+                        <BatchTargetAreaBadges customers={b.customers} batchTargets={b.batch_targets} variant="compact" />
                       </div>
                     </div>
                   );
@@ -627,7 +628,7 @@ export default function VerdelingPage() {
                         </div>
 
                         <div className="mt-2">
-                          <BatchTargetAreaBadges customers={b.customers} variant="compact" />
+                          <BatchTargetAreaBadges customers={b.customers} batchTargets={b.batch_targets} variant="compact" />
                         </div>
 
                         {compensatingBatch === b.id && (
@@ -735,7 +736,7 @@ export default function VerdelingPage() {
                                 <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${c.light} ${c.text}`}>{br?.name || b.branch}</span>
                               </td>
                               <td className="max-w-[12rem] px-4 py-3 align-top">
-                                <BatchTargetAreaBadges customers={b.customers} variant="compact" />
+                                <BatchTargetAreaBadges customers={b.customers} batchTargets={b.batch_targets} variant="compact" />
                               </td>
                               <td className="px-4 py-3">
                                 <div className="flex items-center gap-2">

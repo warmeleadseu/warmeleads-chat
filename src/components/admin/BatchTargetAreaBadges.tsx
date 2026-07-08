@@ -39,10 +39,13 @@ const VARIANT_ICON: Record<Variant, string> = {
 /**
  * Toont actieve klant-targets die de distributie gebruikt voor lead-batches.
  * `customers` komt uit PostgREST op `customer_batches` / `appointment_batches`.
+ * `batchTargets` (per-batch override): als er ≥1 actief is, tellen uitsluitend
+ * die en worden de klant-targetgebieden voor deze batch genegeerd.
  */
 export function BatchTargetAreaBadges({
   customers,
   targets,
+  batchTargets,
   presetLabels,
   variant = 'default',
   className = '',
@@ -50,6 +53,8 @@ export function BatchTargetAreaBadges({
 }: {
   customers?: { customer_targets?: unknown } | null;
   targets?: unknown;
+  /** Per-batch override-targets (`batch_targets`); overrulen klant-targetgebieden. */
+  batchTargets?: unknown;
   /** Reeds geformatteerde regels (bijv. live-stats); dan geen `customer_targets` nodig. */
   presetLabels?: string[];
   variant?: Variant;
@@ -60,6 +65,39 @@ export function BatchTargetAreaBadges({
   const chipCls = VARIANT_CHIP[variant];
   const warnCls = VARIANT_WARN[variant];
   const iconCls = VARIANT_ICON[variant];
+
+  // Batch-override heeft voorrang: zodra de batch eigen actieve targetgebieden
+  // heeft, tonen we die (en negeren we de klant-targetgebieden).
+  const overrideActive = activeCustomerTargets(parseCustomerTargets(batchTargets));
+  if (batchTargets !== undefined && overrideActive.length > 0) {
+    const overrideTitle = overrideActive.map(formatCustomerTargetSummary).join(' — ');
+    return (
+      <div className={`flex flex-col gap-1 ${className}`} title={overrideTitle || undefined}>
+        {showHeading && (
+          <p className={`text-[11px] font-semibold uppercase tracking-wider ${variant === 'dark' ? 'text-white/35' : 'text-slate-400'}`}>
+            Targetgebieden batch (eigen)
+          </p>
+        )}
+        <div className="flex flex-wrap items-center gap-1">
+          <MapPinIcon className={`h-3.5 w-3.5 shrink-0 ${iconCls}`} aria-hidden />
+          <span
+            className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-semibold ${VARIANT_WARN[variant]}`}
+            title="Deze batch gebruikt eigen targetgebieden en negeert de klant-targetgebieden"
+          >
+            eigen
+          </span>
+          {overrideActive.map(t => (
+            <span
+              key={String(t.id || formatCustomerTargetSummary(t))}
+              className={`max-w-[min(100%,14rem)] truncate rounded-md border px-1.5 py-0.5 text-[10px] font-medium ${chipCls}`}
+            >
+              {formatCustomerTargetSummary(t)}
+            </span>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   if (presetLabels !== undefined) {
     const title = presetLabels.join(' — ');

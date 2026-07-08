@@ -12,7 +12,7 @@ import {
   sanitizePausedMetaCampaignIds,
   metaDefaultsBranchForBatch,
 } from '@/lib/metaBatchCampaignSync';
-import { adminBatchListSelect } from '@/lib/adminBatchQueries';
+import { adminBatchListSelect, adminBatchListSelectNoBatchTargets, isMissingBatchTargetsError } from '@/lib/adminBatchQueries';
 import { resolveMetaCampaignFieldsForNewLeadBatch, upsertCustomerBranchMetaDefaults } from '@/lib/metaCampaignInheritance';
 import {
   ensureCustomerHasBranch,
@@ -47,23 +47,25 @@ export async function GET(request: NextRequest) {
   const supabase = createServerClient();
   const customerId = request.nextUrl.searchParams.get('customer_id');
 
-  let query = supabase
-    .from('customer_batches')
-    .select(adminBatchListSelect)
-    .order('created_at', { ascending: false });
-
-  if (customerId) {
-    query = query.eq('customer_id', customerId);
-  }
-
+  let amCustomerIds: string[] | null = null;
   if (admin.role === 'accountmanager') {
     const { data: myCustomers } = await supabase.from('customers').select('id').eq('account_manager_id', admin.id);
-    const ids = (myCustomers || []).map(c => c.id);
-    if (ids.length === 0) return NextResponse.json([]);
-    query = query.in('customer_id', ids);
+    amCustomerIds = (myCustomers || []).map(c => c.id);
+    if (amCustomerIds.length === 0) return NextResponse.json([]);
   }
 
-  const { data, error } = await query;
+  const runQuery = (select: string) => {
+    let q = supabase.from('customer_batches').select(select).order('created_at', { ascending: false });
+    if (customerId) q = q.eq('customer_id', customerId);
+    if (amCustomerIds) q = q.in('customer_id', amCustomerIds);
+    return q;
+  };
+
+  let { data, error } = await runQuery(adminBatchListSelect);
+  // Fallback: `batch_targets` bestaat nog niet (migratie 144 niet toegepast).
+  if (error && isMissingBatchTargetsError(error.message)) {
+    ({ data, error } = await runQuery(adminBatchListSelectNoBatchTargets));
+  }
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   return NextResponse.json(data);
