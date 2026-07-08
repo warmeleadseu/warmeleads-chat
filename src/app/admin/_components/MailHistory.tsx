@@ -174,7 +174,7 @@ export function MailHistory({ prospectId, customerId }: Props) {
                 </span>
               </div>
               {(m.cc_emails?.length || m.bcc_emails?.length) ? (
-                <p className="mt-1 text-[11px] text-slate-500 truncate">
+                <p className="mt-1 text-[11px] text-slate-500 line-clamp-2 break-all">
                   {(m.cc_emails?.length ?? 0) > 0 && (
                     <span>
                       <span className="font-semibold uppercase tracking-wide text-[10px] mr-1">Cc</span>
@@ -192,7 +192,7 @@ export function MailHistory({ prospectId, customerId }: Props) {
                   )}
                 </p>
               ) : null}
-              <div className="mt-2 flex items-center gap-3 text-[11px] text-slate-500">
+              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-500">
                 {m.opens_count > 0 && (
                   <span className="inline-flex items-center gap-1 text-emerald-600">
                     <EnvelopeOpenIcon className="h-3.5 w-3.5" />
@@ -209,15 +209,15 @@ export function MailHistory({ prospectId, customerId }: Props) {
                   <span className="text-slate-400">Nog niet geopend</span>
                 )}
                 {m.status === 'failed' && m.error && (
-                  <span className="inline-flex items-center gap-1 text-rose-600 truncate">
-                    <ExclamationTriangleIcon className="h-3.5 w-3.5" />
-                    {m.error}
+                  <span className="inline-flex min-w-0 items-center gap-1 text-rose-600">
+                    <ExclamationTriangleIcon className="h-3.5 w-3.5 shrink-0" />
+                    <span className="min-w-0 truncate">{m.error}</span>
                   </span>
                 )}
                 <button
                   type="button"
                   onClick={() => loadDetail(m.id)}
-                  className="ml-auto inline-flex items-center gap-1 text-slate-500 hover:text-slate-900"
+                  className="ml-auto inline-flex shrink-0 items-center gap-1 text-slate-500 hover:text-slate-900"
                 >
                   <EyeIcon className="h-3.5 w-3.5" /> Bekijk
                 </button>
@@ -269,13 +269,13 @@ function DetailModal({
                   {timeFmt(email.created_at)}
                 </p>
                 {(email.cc_emails?.length ?? 0) > 0 && (
-                  <p className="text-[11px] text-slate-500 mt-1">
+                  <p className="text-[11px] text-slate-500 mt-1 break-all">
                     <span className="font-semibold uppercase tracking-wide text-[10px] mr-1">Cc</span>
                     {email.cc_emails!.join(', ')}
                   </p>
                 )}
                 {(email.bcc_emails?.length ?? 0) > 0 && (
-                  <p className="text-[11px] text-slate-500 mt-1">
+                  <p className="text-[11px] text-slate-500 mt-1 break-all">
                     <span className="font-semibold uppercase tracking-wide text-[10px] mr-1">Bcc</span>
                     {email.bcc_emails!.join(', ')}
                   </p>

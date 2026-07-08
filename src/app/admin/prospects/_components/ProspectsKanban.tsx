@@ -168,10 +168,10 @@ export function ProspectsKanban({ prospects, amNames, branchNames = {}, onMove, 
                                     </span>
                                   ))}
                                 </div>
-                                <div className="mt-2 flex items-center justify-between text-[11px] text-slate-400">
-                                  <span className="inline-flex items-center gap-1 truncate">
+                                <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-slate-400">
+                                  <span className="inline-flex min-w-0 flex-1 items-center gap-1">
                                     <UserIcon className="h-3 w-3 shrink-0" />
-                                    <span className="truncate">
+                                    <span className="min-w-0 truncate">
                                       {p.account_manager_id ? amNames[p.account_manager_id] || '...' : 'Niet toegewezen'}
                                     </span>
                                   </span>

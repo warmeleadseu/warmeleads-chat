@@ -670,8 +670,8 @@ export default function CustomersPage() {
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5">
-                        <p className="truncate font-semibold text-slate-900">{c.name}</p>
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <p className="min-w-0 truncate font-semibold text-slate-900">{c.name}</p>
                         {c.country === 'BE' && (
                           isValidBelgianVatFormat(c.vat_id) ? (
                             <span
@@ -1044,7 +1044,7 @@ function CustomerDetailPanel({
           <div className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
-                <h2 className="truncate text-lg font-bold text-slate-900">{c.name}</h2>
+                <h2 className="min-w-0 max-w-full truncate text-lg font-bold text-slate-900">{c.name}</h2>
                 <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${c.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
                   {c.is_active ? 'Actief' : 'Inactief'}
                 </span>
@@ -1263,12 +1263,12 @@ function CustomerDetailPanel({
 
                 <div className="mb-3 space-y-1.5 text-xs">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-slate-400">URL</span>
-                    <span className="truncate font-mono text-slate-600">{portalUrl.replace('https://', '')}</span>
+                    <span className="shrink-0 text-slate-400">URL</span>
+                    <span className="min-w-0 flex-1 truncate text-right font-mono text-slate-600">{portalUrl.replace('https://', '')}</span>
                   </div>
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-slate-400">E-mail</span>
-                    <span className="truncate font-medium text-slate-600">{c.email || <span className="italic text-amber-500">niet ingesteld</span>}</span>
+                    <span className="shrink-0 text-slate-400">E-mail</span>
+                    <span className="min-w-0 flex-1 truncate text-right font-medium text-slate-600">{c.email || <span className="italic text-amber-500">niet ingesteld</span>}</span>
                   </div>
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-slate-400">Wachtwoord</span>
@@ -2899,9 +2899,9 @@ function TargetsPanel({ customer, onClose, embedded }: { customer: Customer; onC
                 <div key={t.id} className={`rounded-xl border p-4 transition ${t.is_active ? 'border-slate-200 bg-white' : 'border-slate-100 bg-slate-50 opacity-60'}`}>
                   <div className="flex items-start justify-between">
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
+                      <div className="flex min-w-0 items-center gap-2">
                         <MapPinIcon className="h-4 w-4 shrink-0 text-brand-purple" />
-                        <span className="font-semibold text-slate-800 truncate">{t.label}</span>
+                        <span className="min-w-0 truncate font-semibold text-slate-800">{t.label}</span>
                       </div>
                       {(t.target_type || 'radius') === 'province' ? (
                         <div className="mt-1.5 flex flex-wrap gap-1">
@@ -3031,8 +3031,8 @@ function FilterFieldValues({ branchSlug, fieldKey, selected, onChange }: {
         return (
           <label key={opt} className={`flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-1.5 text-xs transition ${checked ? 'bg-brand-purple/10 text-brand-purple font-medium' : 'text-slate-600 hover:bg-slate-50'}`}>
             <input type="checkbox" checked={checked} onChange={() => toggle(opt)}
-              className="h-3.5 w-3.5 rounded border-slate-300 text-brand-purple accent-brand-purple" />
-            <span className="truncate">{opt}</span>
+              className="h-3.5 w-3.5 shrink-0 rounded border-slate-300 text-brand-purple accent-brand-purple" />
+            <span className="min-w-0 flex-1 truncate">{opt}</span>
           </label>
         );
       })}
@@ -4036,7 +4036,7 @@ function LeadManagerPanel({ customer, onClose, embedded }: {
           {selected.size > 0 && (
             <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
               className="shrink-0 overflow-hidden border-b border-red-100 bg-red-50">
-              <div className="flex items-center justify-between px-5 py-2.5">
+              <div className="flex flex-col gap-2 px-5 py-2.5 sm:flex-row sm:items-center sm:justify-between">
                 <span className="text-sm font-medium text-red-700">{selected.size} lead{selected.size !== 1 ? 's' : ''} geselecteerd</span>
                 <div className="flex items-center gap-2">
                   <button onClick={() => setSelected(new Set())}

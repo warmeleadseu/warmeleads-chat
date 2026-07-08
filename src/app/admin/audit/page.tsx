@@ -395,13 +395,13 @@ export default function AuditLogPage() {
                   </div>
 
                   <div className="grid grid-cols-2 gap-2 text-sm">
-                    <div>
+                    <div className="min-w-0">
                       <span className="text-xs text-slate-400">Gebruiker</span>
-                      <p className="text-slate-700 truncate">{log.admin_name || log.admin_email || log.admin_id || '-'}</p>
+                      <p className="truncate text-slate-700">{log.admin_name || log.admin_email || log.admin_id || '-'}</p>
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <span className="text-xs text-slate-400">Entiteit</span>
-                      <p className="text-slate-700">
+                      <p className="break-words text-slate-700">
                         {ENTITY_LABELS[log.entity_type] || log.entity_type}
                         {log.entity_id && (
                           <span className="text-xs text-slate-400 ml-1">({log.entity_id.slice(0, 8)}…)</span>

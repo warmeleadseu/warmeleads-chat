@@ -499,8 +499,8 @@ export default function TestPanelPage() {
                     {am.name.charAt(0).toUpperCase()}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-bold text-slate-900">{am.name}</p>
-                    <p className="text-xs text-slate-500">{am.email}</p>
+                    <p className="truncate text-sm font-bold text-slate-900">{am.name}</p>
+                    <p className="truncate text-xs text-slate-500">{am.email}</p>
                   </div>
                   {hasVideo ? (
                     <div className="flex items-center gap-3 self-start">

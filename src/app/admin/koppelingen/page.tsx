@@ -221,9 +221,9 @@ export default function KoppelingenPage() {
                   </div>
 
                   {/* Stats */}
-                  <div className="mb-4 flex items-center gap-4 text-xs text-slate-400">
+                  <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400">
                     <span className="flex items-center gap-1">
-                      <SignalIcon className="h-3 w-3" />
+                      <SignalIcon className="h-3 w-3 shrink-0" />
                       {k.request_count} leads ontvangen
                     </span>
                     {k.last_used_at && (
@@ -351,7 +351,7 @@ export default function KoppelingenPage() {
         <h2 className="mb-3 text-sm font-semibold text-slate-900">Admin account</h2>
         <div className="grid gap-2 text-sm sm:grid-cols-3">
           <div><span className="text-slate-500">Naam:</span> <span className="font-medium text-slate-800">{user.name}</span></div>
-          <div><span className="text-slate-500">E-mail:</span> <span className="font-medium text-slate-800">{user.email}</span></div>
+          <div className="min-w-0"><span className="text-slate-500">E-mail:</span> <span className="font-medium text-slate-800 break-all">{user.email}</span></div>
           <div><span className="text-slate-500">Rol:</span> <span className="font-medium capitalize text-slate-800">{user.role}</span></div>
         </div>
       </div>
@@ -677,7 +677,7 @@ function MetaAdsSection() {
                   {status.tokenValid ? (
                     <>
                       <p className="font-medium text-emerald-700">Verbonden met Meta</p>
-                      <p className="text-xs text-emerald-600">
+                      <p className="text-xs text-emerald-600 break-all">
                         Account: {status.tokenName || '-'} &middot; Ad Account: {status.adAccountId}
                       </p>
                     </>
@@ -881,7 +881,7 @@ function InstructionsPanel({
             <div className="min-w-0 flex-1">
               <h2 className="text-base font-bold text-slate-900 sm:text-lg">Zapier instellen</h2>
               <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                <span className="font-medium text-slate-700">{webhookKey.label}</span>
+                <span className="min-w-0 max-w-full truncate font-medium text-slate-700">{webhookKey.label}</span>
                 <span className="text-slate-300">&middot;</span>
                 {(() => {
                   const bc = branchesList.find(b => b.slug === webhookKey.branch);
@@ -1414,21 +1414,21 @@ function BackfillPanel({
       >
         <div className="shrink-0 border-b border-slate-100">
           <div className="h-[3px] bg-warmeleads-gradient" />
-          <div className="flex items-center justify-between px-5 py-4">
-            <div className="flex items-center gap-3">
+          <div className="flex items-center justify-between gap-2 px-5 py-4">
+            <div className="flex min-w-0 flex-1 items-center gap-3">
               {canGoBack && (
-                <button onClick={() => { setStep('select'); setResult(null); }} className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
+                <button onClick={() => { setStep('select'); setResult(null); }} className="shrink-0 rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
                 </button>
               )}
-              <div>
+              <div className="min-w-0 flex-1">
                 <h2 className="text-lg font-bold text-slate-900">
                   {step === 'mapping' ? 'Veld mapping' : step === 'importing' ? 'Importeren...' : 'Historische leads ophalen'}
                 </h2>
-                <p className="mt-0.5 text-xs text-slate-500">{webhookKey.label} &middot; {branchName}</p>
+                <p className="mt-0.5 truncate text-xs text-slate-500">{webhookKey.label} &middot; {branchName}</p>
               </div>
             </div>
-            <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
+            <button onClick={onClose} className="shrink-0 rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
               <XMarkIcon className="h-5 w-5" />
             </button>
           </div>
@@ -1496,7 +1496,7 @@ function BackfillPanel({
                       className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-brand-purple focus:ring-1 focus:ring-brand-purple/30" />
                   </div>
                 </div>
-                <div className="mt-2 flex gap-1.5">
+                <div className="mt-2 flex flex-wrap gap-1.5">
                   {[
                     { label: 'Gisteren', fn: () => { const d = new Date(); d.setDate(d.getDate() - 1); const s = d.toISOString().split('T')[0]; setDateFrom(s); setDateTo(s); } },
                     { label: '7 dagen', fn: () => { const d = new Date(); d.setDate(d.getDate() - 7); setDateFrom(d.toISOString().split('T')[0]); setDateTo(new Date().toISOString().split('T')[0]); } },

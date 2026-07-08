@@ -251,12 +251,12 @@ export default function AdminOrdersPage() {
               const Icon = s.icon;
               return (
                 <div key={o.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <div className="mb-2 flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-900">{o.customer_name}</p>
-                      <p className="text-[11px] text-slate-400">{o.customer_email}</p>
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-slate-900">{o.customer_name}</p>
+                      <p className="truncate text-[11px] text-slate-400">{o.customer_email}</p>
                     </div>
-                    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${s.color}`}>
+                    <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${s.color}`}>
                       <Icon className="h-3 w-3" />
                       {s.label}
                     </span>

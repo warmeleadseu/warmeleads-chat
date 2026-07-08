@@ -149,7 +149,7 @@ export default function AdminAppointmentDetail({
                 )}
                 {appointment.contact_email && (
                   <a href={`mailto:${appointment.contact_email}`} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 hover:border-slate-300">
-                    <EnvelopeIcon className="h-4 w-4 text-slate-400" /><span className="flex-1 truncate">{appointment.contact_email}</span>
+                    <EnvelopeIcon className="h-4 w-4 shrink-0 text-slate-400" /><span className="min-w-0 flex-1 truncate">{appointment.contact_email}</span>
                   </a>
                 )}
                 {(appointment.street || appointment.postcode || appointment.city) && (

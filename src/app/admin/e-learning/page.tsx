@@ -570,7 +570,7 @@ export default function ELearningPage() {
                             isActive ? 'bg-brand-purple text-white' : 'bg-slate-100 text-slate-400'
                           }`}>{idx + 1}</span>
                         )}
-                        <span className="truncate">{lesson.title}</span>
+                        <span className="min-w-0 flex-1 truncate">{lesson.title}</span>
                       </button>
                     );
                   })}

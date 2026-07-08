@@ -728,9 +728,9 @@ function UserFormModal({ user, onClose, onSaved }: { user: AdminUser | null; onC
                               return next;
                             });
                           }}
-                          className="rounded border-slate-300 text-brand-purple focus:ring-brand-purple/20"
+                          className="shrink-0 rounded border-slate-300 text-brand-purple focus:ring-brand-purple/20"
                         />
-                        <span className="truncate">{c.name}</span>
+                        <span className="min-w-0 flex-1 truncate">{c.name}</span>
                         {c.account_manager_id && c.account_manager_id !== user?.id && (
                           <span className="ml-auto shrink-0 rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-600">
                             andere AM

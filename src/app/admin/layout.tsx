@@ -624,8 +624,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       <div className="min-h-screen bg-slate-50">
         <Sidebar user={user} onLogout={handleLogout} pendingReclamations={pendingReclamations} pendingTasks={pendingTasks} />
         <MobileHeader user={user} onLogout={handleLogout} pendingReclamations={pendingReclamations} pendingTasks={pendingTasks} />
-        <main className="lg:pl-60">
-          <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+        <main className="min-w-0 lg:pl-60">
+          <div className="mx-auto max-w-7xl overflow-x-clip px-4 py-6 sm:px-6 lg:px-8">
             {routeAllowed ? children : <RouteBlocked />}
           </div>
         </main>

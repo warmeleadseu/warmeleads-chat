@@ -1540,7 +1540,7 @@ export default function LiveDashboard() {
               animate={{ opacity: 1, x: 0, scale: reducedMotion ? 1 : [0.8, 1.05, 1], rotateY: 0 }}
               exit={{ opacity: 0, x: 140, scale: 0.8 }}
               transition={reducedMotion ? { duration: 0.15 } : { type: 'spring', damping: 16, stiffness: 220 }}
-              className="relative min-w-[340px] overflow-hidden rounded-2xl bg-[#1a1d2e]/95 px-5 py-4 backdrop-blur-xl"
+              className="relative w-[calc(100vw-2rem)] max-w-sm overflow-hidden rounded-2xl bg-[#1a1d2e]/95 px-5 py-4 backdrop-blur-xl sm:w-auto sm:min-w-[340px]"
               style={{
                 border: `2px solid ${borderColor}50`,
                 boxShadow: `0 0 25px ${borderColor}30, 0 20px 40px -10px rgba(0,0,0,0.5)`,
@@ -1777,7 +1777,7 @@ export default function LiveDashboard() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.08 }}
-              className="group relative overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.03] p-3 backdrop-blur-sm lg:p-4"
+              className="group relative min-w-0 overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.03] p-3 backdrop-blur-sm lg:p-4"
             >
               <div className={`absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r ${kpi.color}`} />
               <p className="mb-0.5 text-[10px] font-medium text-white/40 lg:text-xs">{kpi.label}</p>
@@ -1789,7 +1789,7 @@ export default function LiveDashboard() {
                 )}
                 {kpi.trend && <TrendArrow current={kpi.trend.leads} previous={kpi.trend.prevLeads} />}
               </div>
-              <p className="mt-1 text-[11px] text-white/25">{kpi.sub}</p>
+              <p className="mt-1 break-words text-[11px] text-white/25">{kpi.sub}</p>
             </motion.div>
           ))}
         </div>
@@ -2272,7 +2272,7 @@ export default function LiveDashboard() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.3 + i * 0.06 }}
-                className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 backdrop-blur-sm"
+                className="min-w-0 rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 backdrop-blur-sm"
               >
                 <p className="mb-1 text-[9px] font-bold uppercase tracking-widest text-white/25 lg:text-[10px]">{label}</p>
                 <div className="flex items-baseline gap-1.5">
@@ -2296,7 +2296,7 @@ export default function LiveDashboard() {
                       </span>
                       <TrendArrow current={stat.profit} previous={stat.prevProfit} />
                     </div>
-                    <div className="mt-0.5 flex items-center gap-1 text-[9px] text-white/20">
+                    <div className="mt-0.5 flex flex-wrap items-center gap-x-1 gap-y-0.5 text-[9px] text-white/20">
                       <span>omzet &euro;{Math.round(stat.revenue).toLocaleString('nl-NL')}</span>
                       <span className="text-white/10">&middot;</span>
                       <span>kosten &euro;{Math.round(stat.adSpend).toLocaleString('nl-NL')}</span>

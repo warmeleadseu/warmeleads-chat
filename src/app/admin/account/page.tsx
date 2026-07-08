@@ -189,18 +189,18 @@ export default function AccountPage() {
 
           <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3">
             {profile?.phone && (
-              <div>
+              <div className="min-w-0">
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Telefoon</p>
-                <p className="mt-0.5 text-sm font-medium text-slate-700">{profile.phone}</p>
+                <p className="mt-0.5 break-words text-sm font-medium text-slate-700">{profile.phone}</p>
               </div>
             )}
             {profile?.title && (
-              <div>
+              <div className="min-w-0">
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Functie</p>
-                <p className="mt-0.5 text-sm font-medium text-slate-700">{profile.title}</p>
+                <p className="mt-0.5 break-words text-sm font-medium text-slate-700">{profile.title}</p>
               </div>
             )}
-            <div>
+            <div className="min-w-0">
               <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Lid sinds</p>
               <p className="mt-0.5 text-sm font-medium text-slate-700">
                 {profile?.created_at

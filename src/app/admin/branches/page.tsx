@@ -183,14 +183,14 @@ export default function BranchesPage() {
             return (
               <div key={b.id} className="rounded-xl border border-slate-200 bg-white shadow-sm transition hover:shadow-md">
                 <div className="p-5">
-                  <div className="mb-3 flex items-start justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${c.light}`}>
+                  <div className="mb-3 flex items-start justify-between gap-2">
+                    <div className="flex min-w-0 flex-1 items-center gap-3">
+                      <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${c.light}`}>
                         <BoltIcon className={`h-5 w-5 ${c.text}`} />
                       </div>
-                      <div>
-                        <h3 className="font-semibold text-slate-900">{b.name}</h3>
-                        <p className="text-xs font-mono text-slate-400">{b.slug}</p>
+                      <div className="min-w-0 flex-1">
+                        <h3 className="truncate font-semibold text-slate-900">{b.name}</h3>
+                        <p className="truncate text-xs font-mono text-slate-400">{b.slug}</p>
                         {b.is_partner_branch && (
                           <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
                             Partner-branche · prospects-pijplijn
@@ -200,7 +200,7 @@ export default function BranchesPage() {
                     </div>
                     <button
                       onClick={() => handleToggleActive(b)}
-                      className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium transition ${
+                      className={`shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-medium transition ${
                         b.is_active ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
                       }`}
                     >
@@ -765,12 +765,12 @@ function FieldsManager({ branch, onClose, onSaved }: { branch: Branch; onClose: 
         className="fixed inset-y-0 right-0 z-[60] flex w-full max-w-lg flex-col bg-white shadow-2xl"
       >
         <div className="shrink-0 border-b border-slate-100 bg-white px-5 py-4">
-          <div className="flex items-center justify-between">
-            <div>
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0 flex-1">
               <h2 className="text-lg font-bold text-slate-900">Velden beheren</h2>
               <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-500">
-                <span className={`inline-block h-2.5 w-2.5 rounded-full ${c.bg}`} />
-                <span className="font-medium">{branch.name}</span>
+                <span className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full ${c.bg}`} />
+                <span className="min-w-0 truncate font-medium">{branch.name}</span>
                 <span className="text-slate-300">&middot;</span>
                 <span>{fields.length} velden</span>
               </div>
@@ -812,8 +812,8 @@ function FieldsManager({ branch, onClose, onSaved }: { branch: Branch; onClose: 
                       <span className="font-medium text-slate-900 text-sm">{f.label}</span>
                       {f.is_required && <span className="rounded bg-red-50 px-1.5 py-0.5 text-[10px] font-medium text-red-500">Verplicht</span>}
                     </div>
-                    <div className="flex items-center gap-2 text-xs text-slate-400">
-                      <code className="font-mono">{f.key}</code>
+                    <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-slate-400">
+                      <code className="min-w-0 break-all font-mono">{f.key}</code>
                       <span>&middot;</span>
                       <span>{FIELD_TYPES.find(t => t.value === f.field_type)?.label || f.field_type}</span>
                       {f.field_type === 'select' && f.options.length > 0 && (

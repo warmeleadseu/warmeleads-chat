@@ -340,7 +340,7 @@ export default function ProspectsPage() {
           <select
             value={statusFilter}
             onChange={e => setStatusFilter(e.target.value)}
-            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand-purple/50"
+            className="w-full min-w-0 max-w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand-purple/50 sm:w-auto"
           >
             <option value="all">Alle statussen</option>
             {PROSPECT_STATUSES.map(s => (
@@ -351,7 +351,7 @@ export default function ProspectsPage() {
             <select
               value={amFilter}
               onChange={e => setAmFilter(e.target.value)}
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand-purple/50"
+              className="w-full min-w-0 max-w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand-purple/50 sm:w-auto"
             >
               <option value="all">Alle AMs</option>
               <option value="unassigned">Niet toegewezen</option>
@@ -364,7 +364,7 @@ export default function ProspectsPage() {
             <select
               value={branchFilter}
               onChange={e => setBranchFilter(e.target.value)}
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand-purple/50"
+              className="w-full min-w-0 max-w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand-purple/50 sm:w-auto"
             >
               <option value="all">Alle branches</option>
               {branches.map(b => (
@@ -757,9 +757,9 @@ function ListView({
                 )}
                 <td className="px-3 py-2.5">
                   <div className="max-w-[240px] truncate font-semibold text-slate-900">{p.company_name}</div>
-                  <div className="flex items-center gap-2 text-[11px] text-slate-400">
-                    {p.kvk_nummer && <span className="font-mono">KVK {p.kvk_nummer}</span>}
-                    {p.city && <span className="truncate">{p.city}</span>}
+                  <div className="flex min-w-0 items-center gap-2 text-[11px] text-slate-400">
+                    {p.kvk_nummer && <span className="shrink-0 font-mono">KVK {p.kvk_nummer}</span>}
+                    {p.city && <span className="min-w-0 truncate">{p.city}</span>}
                   </div>
                 </td>
                 <td className="px-3 py-2.5">

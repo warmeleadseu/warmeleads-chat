@@ -286,9 +286,9 @@ export default function VerdelingPage() {
   return (
     <div>
       {loadError && (
-        <div className="mb-4 flex items-center justify-between rounded-lg border border-red-200 bg-red-50 px-4 py-3">
-          <p className="text-sm text-red-700">{loadError}</p>
-          <button onClick={() => fetchData()} className="rounded-md border border-red-300 bg-white px-3 py-1 text-xs font-semibold text-red-700 hover:bg-red-50">
+        <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+          <p className="min-w-0 flex-1 text-sm text-red-700">{loadError}</p>
+          <button onClick={() => fetchData()} className="shrink-0 rounded-md border border-red-300 bg-white px-3 py-1 text-xs font-semibold text-red-700 hover:bg-red-50">
             Opnieuw
           </button>
         </div>
@@ -430,8 +430,8 @@ export default function VerdelingPage() {
                 <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Per klant</p>
                 <div className="space-y-1.5">
                   {customerBreakdown.slice(0, 8).map(c => (
-                    <div key={c.name} className="flex items-center justify-between">
-                      <span className="truncate text-xs text-slate-600">{c.name}</span>
+                    <div key={c.name} className="flex items-center justify-between gap-2">
+                      <span className="min-w-0 flex-1 truncate text-xs text-slate-600">{c.name}</span>
                       <span className="ml-2 shrink-0 text-xs font-semibold text-slate-800">{c.count}</span>
                     </div>
                   ))}
@@ -678,7 +678,7 @@ export default function VerdelingPage() {
                           <span>Gestart: {created.toLocaleDateString('nl-NL')}</span>
                           {completedAt && <span>Voltooid: {completedAt.toLocaleDateString('nl-NL')}</span>}
                           {durationDays && <span>Duur: {durationDays} {durationDays === 1 ? 'dag' : 'dagen'}</span>}
-                          {b.notes && <span className="italic">{b.notes}</span>}
+                          {b.notes && <span className="min-w-0 break-words italic">{b.notes}</span>}
                         </div>
                       </div>
                     );
@@ -902,12 +902,12 @@ export default function VerdelingPage() {
                                 <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Toegewezen aan</p>
                                 <div className="space-y-1.5">
                                   {lead.assignments.map(a => (
-                                    <div key={a.id} className="flex items-center justify-between rounded-lg bg-emerald-50 px-3 py-2">
-                                      <div className="flex items-center gap-2">
-                                        <CheckCircleIcon className="h-4 w-4 text-emerald-500" />
-                                        <span className="text-sm font-medium text-emerald-800">{a.customer_name}</span>
+                                    <div key={a.id} className="flex items-center justify-between gap-2 rounded-lg bg-emerald-50 px-3 py-2">
+                                      <div className="flex min-w-0 flex-1 items-center gap-2">
+                                        <CheckCircleIcon className="h-4 w-4 shrink-0 text-emerald-500" />
+                                        <span className="min-w-0 truncate text-sm font-medium text-emerald-800">{a.customer_name}</span>
                                       </div>
-                                      <div className="flex items-center gap-3 text-xs text-emerald-600">
+                                      <div className="flex shrink-0 items-center gap-3 text-xs text-emerald-600">
                                         {a.distance_km != null && <span>{a.distance_km} km</span>}
                                         <span>{new Date(a.assigned_at).toLocaleDateString('nl-NL')}</span>
                                       </div>
@@ -924,11 +924,11 @@ export default function VerdelingPage() {
                                 <div className="space-y-1.5">
                                   {unassigned.map(m => (
                                     <div key={m.customer_id} className="flex items-start justify-between rounded-lg bg-white px-3 py-2 ring-1 ring-slate-100">
-                                      <div className="flex items-start gap-2">
+                                      <div className="flex min-w-0 flex-1 items-start gap-2">
                                         <ExclamationCircleIcon className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
-                                        <div>
+                                        <div className="min-w-0 flex-1">
                                           <span className="text-sm font-medium text-slate-700">{m.customer_name}</span>
-                                          <p className="mt-0.5 text-xs text-slate-500">{m.reason_not_assigned}</p>
+                                          <p className="mt-0.5 break-words text-xs text-slate-500">{m.reason_not_assigned}</p>
                                         </div>
                                       </div>
                                       {m.distance_km != null && (

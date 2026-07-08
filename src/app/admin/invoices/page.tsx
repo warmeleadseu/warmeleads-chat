@@ -254,9 +254,9 @@ export default function AdminInvoicesPage() {
             {filtered.map(inv => (
               <div key={inv.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                 <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="rounded bg-brand-purple/10 px-2 py-0.5 text-xs font-bold text-brand-purple">{inv.invoice_number}</span>
-                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <span className="min-w-0 truncate rounded bg-brand-purple/10 px-2 py-0.5 text-xs font-bold text-brand-purple">{inv.invoice_number}</span>
+                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${
                       inv.status === 'open' ? 'bg-red-50 text-red-700' : inv.status === 'credit_note' ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'
                     }`}>
                       {inv.status === 'open' ? 'Open' : inv.status === 'credit_note' ? 'Creditnota' : 'Betaald'}
@@ -463,8 +463,8 @@ function InvoicePanel({ customers, onClose, onSaved }: {
               {pdfFile ? (
                 <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
                   <PaperClipIcon className="h-4 w-4 shrink-0 text-emerald-600" />
-                  <span className="flex-1 truncate text-sm text-emerald-700">{pdfFile.name}</span>
-                  <button onClick={() => setPdfFile(null)} className="text-slate-400 hover:text-red-500">
+                  <span className="min-w-0 flex-1 truncate text-sm text-emerald-700">{pdfFile.name}</span>
+                  <button onClick={() => setPdfFile(null)} className="shrink-0 text-slate-400 hover:text-red-500">
                     <XMarkIcon className="h-4 w-4" />
                   </button>
                 </div>
@@ -705,7 +705,7 @@ function EditInvoicePanel({ invoice, customers, onClose, onSaved }: {
 
           {invoice.mollie_payment_id && (
             <div className="rounded-lg bg-slate-50 p-3">
-              <p className="text-[11px] text-slate-400">Mollie referentie: <span className="font-mono text-slate-500">{invoice.mollie_payment_id}</span></p>
+              <p className="text-[11px] text-slate-400">Mollie referentie: <span className="break-all font-mono text-slate-500">{invoice.mollie_payment_id}</span></p>
             </div>
           )}
 
@@ -737,12 +737,12 @@ function EditInvoicePanel({ invoice, customers, onClose, onSaved }: {
               <div>
                 {newPdf ? (
                   <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <PaperClipIcon className="h-4 w-4 text-amber-600" />
-                        <span className="truncate text-sm text-amber-700">{newPdf.name}</span>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex min-w-0 flex-1 items-center gap-2">
+                        <PaperClipIcon className="h-4 w-4 shrink-0 text-amber-600" />
+                        <span className="min-w-0 flex-1 truncate text-sm text-amber-700">{newPdf.name}</span>
                       </div>
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex shrink-0 items-center gap-1.5">
                         <button onClick={() => uploadPdf(newPdf)} disabled={uploading}
                           className="rounded-lg bg-brand-purple px-2.5 py-1 text-xs font-bold text-white disabled:opacity-50">
                           {uploading ? 'Uploaden...' : 'Uploaden'}

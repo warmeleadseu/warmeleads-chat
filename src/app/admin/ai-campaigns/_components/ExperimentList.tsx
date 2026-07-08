@@ -256,10 +256,10 @@ export default function ExperimentList({ reloadKey }: Props) {
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between p-5">
               <button
                 onClick={() => setExpanded(e => ({ ...e, [exp.id]: !isOpen }))}
-                className="flex flex-1 items-start gap-2 text-left"
+                className="flex min-w-0 flex-1 items-start gap-2 text-left"
               >
-                {isOpen ? <ChevronDownIcon className="mt-0.5 h-4 w-4 text-slate-400" /> : <ChevronRightIcon className="mt-0.5 h-4 w-4 text-slate-400" />}
-                <div className="flex-1">
+                {isOpen ? <ChevronDownIcon className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" /> : <ChevronRightIcon className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />}
+                <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold text-slate-900">
                     {exp.brief?.branch || '?'} · {exp.phase}
                     {exp.brief?.is_test_mode && (
@@ -271,7 +271,7 @@ export default function ExperimentList({ reloadKey }: Props) {
                       </span>
                     )}
                   </p>
-                  <p className="mt-0.5 text-xs text-slate-500">
+                  <p className="mt-0.5 break-words text-xs text-slate-500">
                     Budget €{((exp.brief?.daily_budget_cents || 0) / 100).toFixed(2)}
                     {exp.brief?.target_cpl_cents != null && ` · doel CPL €${(exp.brief.target_cpl_cents / 100).toFixed(2)}`}
                     {' · '}gestart {exp.started_at ? new Date(exp.started_at).toLocaleString() : '—'}
@@ -383,12 +383,12 @@ function CampaignTree({
           <div key={c.id} className="rounded-lg border border-purple-200 bg-white">
             <button
               onClick={() => setExpandedCampaign(prev => ({ ...prev, [c.id]: !isOpen }))}
-              className="flex w-full items-start gap-2 p-3 text-left"
+              className="flex w-full min-w-0 items-start gap-2 p-3 text-left"
             >
-              {isOpen ? <ChevronDownIcon className="mt-0.5 h-4 w-4 text-purple-400" /> : <ChevronRightIcon className="mt-0.5 h-4 w-4 text-purple-400" />}
-              <div className="flex-1">
+              {isOpen ? <ChevronDownIcon className="mt-0.5 h-4 w-4 shrink-0 text-purple-400" /> : <ChevronRightIcon className="mt-0.5 h-4 w-4 shrink-0 text-purple-400" />}
+              <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-sm font-semibold text-purple-900">{c.angle}</span>
+                  <span className="min-w-0 break-words text-sm font-semibold text-purple-900">{c.angle}</span>
                   <span className="rounded-full bg-purple-100 px-2 py-0.5 text-[10px] text-purple-700">
                     {Math.round(c.daily_budget_share * 100)}% · €{(c.daily_budget_cents / 100).toFixed(2)}/d
                   </span>

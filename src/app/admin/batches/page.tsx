@@ -1992,8 +1992,8 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
               {extraLeads > 0 && (
                 <div className="space-y-1.5">
                   <div className="flex items-center gap-2 rounded-md bg-white px-3 py-2">
-                    <CheckCircleIcon className="h-4 w-4 text-brand-purple" />
-                    <p className="text-xs text-slate-600">
+                    <CheckCircleIcon className="h-4 w-4 shrink-0 text-brand-purple" />
+                    <p className="min-w-0 text-xs text-slate-600">
                       Batch grootte wordt <span className="font-semibold text-slate-900">{form.batch_size}</span> → <span className="font-bold text-brand-purple">{effectiveBatchSize}</span> (+{extraLeads} compensatie)
                     </p>
                   </div>

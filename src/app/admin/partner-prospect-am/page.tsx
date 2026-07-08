@@ -174,7 +174,7 @@ export default function PartnerProspectAmPage() {
           <UserGroupIcon className="h-7 w-7 text-brand-purple" />
           Partner-prospects — accountmanagers
         </h1>
-        <p className="mt-1 text-sm text-slate-600">
+        <p className="mt-1 break-words text-sm text-slate-600">
           Nieuwe prospects voor partner-branches ({partnerBranches.map(b => b.slug).join(', ')}) via webhook, import of
           backfill krijgen automatisch een accountmanager volgens onderstaande regels per branch.
         </p>
@@ -242,7 +242,7 @@ export default function PartnerProspectAmPage() {
             <div className="mt-3 space-y-3">
               {assignees.map((row, i) => (
                 <div key={i} className="flex flex-wrap items-end gap-3 rounded-lg border border-slate-100 bg-slate-50/80 p-3">
-                  <div className="min-w-[200px] flex-1">
+                  <div className="w-full min-w-0 flex-1 sm:min-w-[200px]">
                     <span className="text-[11px] font-medium text-slate-500">Accountmanager</span>
                     <select
                       value={row.admin_user_id}

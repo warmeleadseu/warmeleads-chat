@@ -367,10 +367,10 @@ export default function AdminReclamatiesPage() {
             >
               <div className="shrink-0 border-b border-slate-100">
                 <div className="h-[3px] bg-warmeleads-gradient" />
-                <div className="flex items-center justify-between px-5 py-4">
-                  <div>
+                <div className="flex items-center justify-between gap-2 px-5 py-4">
+                  <div className="min-w-0 flex-1">
                     <h2 className="text-lg font-bold text-slate-900">Reclamatie {selected.status === 'pending' ? 'beoordelen' : 'details'}</h2>
-                    <p className="text-xs text-slate-400">{selected.customers?.name}</p>
+                    <p className="truncate text-xs text-slate-400">{selected.customers?.name}</p>
                   </div>
                   <button onClick={() => { setSelected(null); setAdminNotes(''); }} className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-50 hover:text-slate-600">
                     <XMarkIcon className="h-5 w-5" />
@@ -388,18 +388,18 @@ export default function AdminReclamatiesPage() {
                       selected.status === 'approved' ? 'border-emerald-200 bg-emerald-50' :
                       'border-red-200 bg-red-50'
                     }`}>
-                      <sc.icon className={`h-4 w-4 ${
+                      <sc.icon className={`h-4 w-4 shrink-0 ${
                         selected.status === 'pending' ? 'text-amber-600' :
                         selected.status === 'approved' ? 'text-emerald-600' :
                         'text-red-600'
                       }`} />
-                      <span className={`text-sm font-medium ${
+                      <span className={`min-w-0 flex-1 text-sm font-medium ${
                         selected.status === 'pending' ? 'text-amber-700' :
                         selected.status === 'approved' ? 'text-emerald-700' :
                         'text-red-700'
                       }`}>{sc.label}</span>
                       {selected.resolved_at && (
-                        <span className="ml-auto text-xs opacity-60">
+                        <span className="ml-auto shrink-0 whitespace-nowrap text-xs opacity-60">
                           {new Date(selected.resolved_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' })}
                         </span>
                       )}

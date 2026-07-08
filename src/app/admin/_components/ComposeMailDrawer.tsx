@@ -1260,7 +1260,7 @@ function PreviewPanel({
               }
             }}
             placeholder={item?.subject || 'Onderwerp…'}
-            className="flex-1 text-sm font-semibold text-slate-900 bg-transparent border-0 focus:outline-none focus:ring-0 p-0"
+            className="min-w-0 flex-1 text-sm font-semibold text-slate-900 bg-transparent border-0 focus:outline-none focus:ring-0 p-0"
           />
           {isEdited && (
             <span className="inline-flex items-center gap-1 rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-violet-700">
@@ -1555,7 +1555,7 @@ function EditorToolbar({
         <ToolbarButton onClick={() => onCommand('redo')} title="Opnieuw">
           ↷
         </ToolbarButton>
-        <span className="ml-auto text-[10px] italic text-violet-700/80 select-none truncate">
+        <span className="ml-auto min-w-0 basis-full truncate text-[10px] italic text-violet-700/80 select-none sm:basis-auto sm:max-w-[45%]">
           Klik in de mail om tekst aan te passen{recipientLabel ? ` voor ${recipientLabel}` : ''}.
         </span>
       </div>
@@ -2073,10 +2073,10 @@ function RecipientPicker({
             key={`${h.type}-${h.id}`}
             onClick={() => onAdd({ type: h.type, id: h.id, label: h.label })}
             disabled={isAdded(h)}
-            className="w-full text-left px-3 py-2 hover:bg-slate-50 border-b border-slate-100 last:border-b-0 flex items-center gap-2 disabled:opacity-50"
+            className="w-full min-w-0 text-left px-3 py-2 hover:bg-slate-50 border-b border-slate-100 last:border-b-0 flex items-center gap-2 disabled:opacity-50"
           >
             <span
-              className={`text-[10px] uppercase font-bold tracking-wide rounded px-1.5 py-0.5 ${
+              className={`shrink-0 text-[10px] uppercase font-bold tracking-wide rounded px-1.5 py-0.5 ${
                 h.type === 'prospect'
                   ? 'bg-amber-100 text-amber-700'
                   : 'bg-emerald-100 text-emerald-700'
@@ -2084,12 +2084,12 @@ function RecipientPicker({
             >
               {h.type === 'prospect' ? 'Prospect' : 'Klant'}
             </span>
-            <span className="font-medium text-slate-900 text-sm">{h.label}</span>
-            {h.meta && <span className="text-xs text-slate-500 truncate">{h.meta}</span>}
+            <span className="min-w-0 truncate font-medium text-slate-900 text-sm">{h.label}</span>
+            {h.meta && <span className="min-w-0 truncate text-xs text-slate-500">{h.meta}</span>}
             {isAdded(h) ? (
-              <span className="ml-auto text-xs text-slate-400">Toegevoegd</span>
+              <span className="ml-auto shrink-0 text-xs text-slate-400">Toegevoegd</span>
             ) : (
-              <PlusIcon className="ml-auto w-4 h-4 text-slate-400" />
+              <PlusIcon className="ml-auto w-4 h-4 shrink-0 text-slate-400" />
             )}
           </button>
         ))}

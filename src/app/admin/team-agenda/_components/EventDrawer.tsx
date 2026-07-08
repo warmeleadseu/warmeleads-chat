@@ -1041,7 +1041,7 @@ export function EventDrawer({
                         type="button"
                         onClick={() => toggleParticipant(a.id)}
                         disabled={!canMutate}
-                        className={`flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left text-xs font-medium transition-all ${
+                        className={`flex min-w-0 items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left text-xs font-medium transition-all ${
                           active
                             ? 'border-brand-purple bg-brand-purple/5 text-brand-purple'
                             : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
@@ -1060,7 +1060,7 @@ export function EventDrawer({
                             withTitle={false}
                           />
                         )}
-                        <span className="truncate">{a.name}</span>
+                        <span className="min-w-0 flex-1 truncate">{a.name}</span>
                       </button>
                     );
                   })}

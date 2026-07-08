@@ -700,7 +700,7 @@ export default function AdminDashboard() {
       {/* Active Batches Progress + Distribution Summary */}
       <div className="mb-6 grid gap-6 lg:grid-cols-2">
         {/* Active batches */}
-        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="min-w-0 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-4 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <div className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-purple-50">
@@ -725,8 +725,8 @@ export default function AdminDashboard() {
                 const br = getBranch(b.branch);
                 return (
                   <div key={b.id}>
-                    <div className="mb-1 flex items-center justify-between">
-                      <div className="flex items-center gap-2 truncate">
+                    <div className="mb-1 flex items-center justify-between gap-2">
+                      <div className="flex min-w-0 flex-1 items-center gap-2">
                         <span className={`inline-block h-2 w-2 shrink-0 rounded-full ${br.dot}`} />
                         <span className="truncate text-xs font-medium text-slate-700">{b.customers?.name || '-'}</span>
                         <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${br.light} ${br.text}`}>{br.name}</span>
@@ -765,7 +765,7 @@ export default function AdminDashboard() {
         </div>
 
         {/* Distribution KPI */}
-        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="min-w-0 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-4 flex items-center gap-2">
             <div className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50">
               <ChartBarSquareIcon className="h-4 w-4 text-emerald-500" />
@@ -797,7 +797,7 @@ export default function AdminDashboard() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Status breakdown */}
-        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="min-w-0 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="mb-4 text-sm font-semibold text-slate-900">Leads per status</h2>
           <div className="space-y-3">
             {Object.entries(stats.byStatus).map(([status, count]) => (
@@ -816,7 +816,7 @@ export default function AdminDashboard() {
         </div>
 
         {/* Branch + Customer breakdown */}
-        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="min-w-0 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="mb-4 text-sm font-semibold text-slate-900">Leads per branche</h2>
           <div className="space-y-4">
             {Object.entries(stats.byBranch).map(([slug, count]) => {
@@ -837,8 +837,8 @@ export default function AdminDashboard() {
           <h2 className="mb-3 mt-6 border-t border-slate-100 pt-5 text-sm font-semibold text-slate-900">Leads per klant</h2>
           <div className="space-y-2">
             {Object.entries(stats.byCustomer).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([name, count]) => (
-              <div key={name} className="flex items-center justify-between">
-                <span className="truncate text-sm text-slate-600">{name}</span>
+              <div key={name} className="flex items-center justify-between gap-2">
+                <span className="min-w-0 flex-1 truncate text-sm text-slate-600">{name}</span>
                 <span className="ml-2 shrink-0 text-sm font-medium text-slate-900">{count}</span>
               </div>
             ))}

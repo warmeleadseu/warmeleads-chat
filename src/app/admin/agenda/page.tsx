@@ -329,9 +329,9 @@ export default function AgendaPage() {
                     {bookingsOnDate.map(b => (
                       <div key={b.id} className={`flex items-center justify-between rounded-lg border p-2.5 ${b.status === 'geannuleerd' ? 'border-red-100 bg-red-50/50' : 'border-slate-100 bg-slate-50'}`}>
                         <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-bold text-brand-purple">{b.time}</span>
-                            <span className="truncate text-xs font-semibold text-slate-800">{b.name}</span>
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span className="shrink-0 text-xs font-bold text-brand-purple">{b.time}</span>
+                            <span className="min-w-0 truncate text-xs font-semibold text-slate-800">{b.name}</span>
                           </div>
                           {b.company && <p className="text-[10px] text-slate-400">{b.company}</p>}
                           {b.message && <p className="mt-0.5 text-[10px] text-amber-600">{b.message}</p>}

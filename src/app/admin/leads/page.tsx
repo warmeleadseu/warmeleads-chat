@@ -135,7 +135,7 @@ function MultiSelect({
         <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition ${checked ? 'border-brand-purple bg-brand-purple text-white' : 'border-slate-300 bg-white'}`}>
           {checked && <CheckIcon className="h-3 w-3" />}
         </span>
-        <span className="flex-1 truncate text-slate-700">{opt.label}</span>
+        <span className="min-w-0 flex-1 truncate text-slate-700">{opt.label}</span>
         {hasCount && (
           <span className={`tabular-nums text-xs ${zeroCount ? 'text-slate-300' : 'text-slate-400'}`}>{count.toLocaleString('nl-NL')}</span>
         )}
@@ -150,7 +150,7 @@ function MultiSelect({
         onClick={() => setOpen(o => !o)}
         className={`flex w-full items-center justify-between gap-1 rounded-lg border px-3 py-2 text-sm transition ${hasSelection ? 'border-brand-purple/40 bg-brand-purple/5 text-brand-purple font-medium' : 'border-slate-200 bg-white text-slate-700'}`}
       >
-        <span className="truncate">{triggerLabel}</span>
+        <span className="min-w-0 flex-1 truncate text-left">{triggerLabel}</span>
         <ChevronDownIcon className={`h-3.5 w-3.5 shrink-0 transition ${open ? 'rotate-180' : ''} ${hasSelection ? 'text-brand-purple' : 'text-slate-400'}`} />
       </button>
 
@@ -696,9 +696,9 @@ export default function LeadsCRMPage() {
         </div>
       )}
       {loadError && (
-        <div className="mb-4 flex items-center justify-between rounded-lg border border-red-200 bg-red-50 px-4 py-3">
-          <p className="text-sm text-red-700">{loadError}</p>
-          <button onClick={() => fetchLeads()} className="rounded-md border border-red-300 bg-white px-3 py-1 text-xs font-semibold text-red-700 hover:bg-red-50">
+        <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+          <p className="min-w-0 flex-1 text-sm text-red-700">{loadError}</p>
+          <button onClick={() => fetchLeads()} className="shrink-0 rounded-md border border-red-300 bg-white px-3 py-1 text-xs font-semibold text-red-700 hover:bg-red-50">
             Opnieuw
           </button>
         </div>
@@ -746,8 +746,8 @@ export default function LeadsCRMPage() {
       <AnimatePresence>
         {enrichResult && (
           <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
-            <div className="mb-4 flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
-              <p className="text-sm text-emerald-700">
+            <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
+              <p className="min-w-0 flex-1 text-sm text-emerald-700">
                 {enrichResult.enriched > 0 ? (
                   <><strong>{enrichResult.enriched}</strong> van {enrichResult.total} leads verrijkt met plaatsnaam/provincie</>
                 ) : enrichResult.total === 0 ? (
@@ -756,7 +756,7 @@ export default function LeadsCRMPage() {
                   <>Geen adressen gevonden voor {enrichResult.total} leads (onbekende postcodes?)</>
                 )}
               </p>
-              <button onClick={() => setEnrichResult(null)} className="ml-3 text-emerald-400 hover:text-emerald-600"><XMarkIcon className="h-4 w-4" /></button>
+              <button onClick={() => setEnrichResult(null)} className="ml-3 shrink-0 text-emerald-400 hover:text-emerald-600"><XMarkIcon className="h-4 w-4" /></button>
             </div>
           </motion.div>
         )}
@@ -766,19 +766,19 @@ export default function LeadsCRMPage() {
         {bulkAssignFeedback && (
           <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
             {bulkAssignFeedback.kind === 'success' ? (
-              <div className="mb-4 flex items-start justify-between rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
-                <p className="text-sm text-emerald-700">
+              <div className="mb-4 flex items-start justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
+                <p className="min-w-0 flex-1 break-words text-sm text-emerald-700">
                   <strong>{bulkAssignFeedback.assigned.toLocaleString('nl-NL')}</strong> lead{bulkAssignFeedback.assigned === 1 ? '' : 's'} toegewezen aan <strong>{bulkAssignFeedback.customerName}</strong>
                   {bulkAssignFeedback.skipped > 0 && (
                     <> · <span className="text-emerald-600/80">{bulkAssignFeedback.skipped.toLocaleString('nl-NL')} overgeslagen (binnen 30 dagen al toegewezen)</span></>
                   )}
                 </p>
-                <button onClick={() => setBulkAssignFeedback(null)} className="ml-3 text-emerald-400 hover:text-emerald-600"><XMarkIcon className="h-4 w-4" /></button>
+                <button onClick={() => setBulkAssignFeedback(null)} className="ml-3 shrink-0 text-emerald-400 hover:text-emerald-600"><XMarkIcon className="h-4 w-4" /></button>
               </div>
             ) : (
-              <div className="mb-4 flex items-start justify-between rounded-lg border border-red-200 bg-red-50 px-4 py-3">
-                <p className="text-sm text-red-700">{bulkAssignFeedback.message}</p>
-                <button onClick={() => setBulkAssignFeedback(null)} className="ml-3 text-red-400 hover:text-red-600"><XMarkIcon className="h-4 w-4" /></button>
+              <div className="mb-4 flex items-start justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+                <p className="min-w-0 flex-1 break-words text-sm text-red-700">{bulkAssignFeedback.message}</p>
+                <button onClick={() => setBulkAssignFeedback(null)} className="ml-3 shrink-0 text-red-400 hover:text-red-600"><XMarkIcon className="h-4 w-4" /></button>
               </div>
             )}
           </motion.div>
@@ -791,7 +791,7 @@ export default function LeadsCRMPage() {
           <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Zoek op naam, email, telefoon of postcode..."
             className="w-full rounded-lg border border-slate-200 bg-slate-50/50 py-2.5 pl-9 pr-4 text-sm text-slate-700 outline-none focus:border-brand-purple/50 focus:bg-white focus:ring-1 focus:ring-brand-purple/30" />
         </div>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-8">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-8">
           <MultiSelect
             label="branches"
             allLabel="Alle branches"

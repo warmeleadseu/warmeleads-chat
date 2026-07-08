@@ -470,7 +470,7 @@ export default function EmailLogPage() {
                       {/* Card content */}
                       <div className="p-4 space-y-2">
                         <div className="flex items-start justify-between gap-2">
-                          <h3 className="text-sm font-semibold text-slate-800">{tpl.label}</h3>
+                          <h3 className="min-w-0 flex-1 text-sm font-semibold text-slate-800">{tpl.label}</h3>
                           {cat && (
                             <span className={`shrink-0 inline-block text-[10px] font-semibold px-2 py-0.5 rounded-full ${cat.color}`}>
                               {cat.label}
@@ -658,7 +658,7 @@ export default function EmailLogPage() {
                         <p className="text-sm font-medium text-slate-700 line-clamp-1">{em.subject}</p>
                         <p className="text-xs text-slate-500 mt-0.5 break-all">{em.to_email}{em.to_name ? ` (${em.to_name})` : ''}</p>
                         {(em.cc_emails?.length || em.bcc_emails?.length) ? (
-                          <p className="mt-0.5 text-[10px] text-slate-400 truncate">
+                          <p className="mt-0.5 text-[10px] text-slate-400 line-clamp-2 break-all">
                             {(em.cc_emails?.length ?? 0) > 0 && <span><span className="font-semibold mr-0.5">Cc</span>{em.cc_emails!.join(', ')}</span>}
                             {(em.cc_emails?.length ?? 0) > 0 && (em.bcc_emails?.length ?? 0) > 0 && <span className="mx-1">·</span>}
                             {(em.bcc_emails?.length ?? 0) > 0 && <span><span className="font-semibold mr-0.5">Bcc</span>{em.bcc_emails!.join(', ')}</span>}

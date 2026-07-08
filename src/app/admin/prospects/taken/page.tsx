@@ -427,7 +427,7 @@ export default function ProspectTasksOverviewPage() {
                   setTaskStatus(e.target.value as typeof taskStatus);
                   setBucket('all');
                 }}
-                className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                className="w-full min-w-0 max-w-full rounded-lg border border-slate-200 px-3 py-2 text-sm sm:w-auto"
               >
                 <option value="open">Open taken</option>
                 <option value="done">Afgerond</option>
@@ -437,7 +437,7 @@ export default function ProspectTasksOverviewPage() {
             <select
               value={typeFilter}
               onChange={e => setTypeFilter(e.target.value)}
-              className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              className="w-full min-w-0 max-w-full rounded-lg border border-slate-200 px-3 py-2 text-sm sm:w-auto"
             >
               <option value="all">Alle types</option>
               {allowedTypes.map(t => (
@@ -449,7 +449,7 @@ export default function ProspectTasksOverviewPage() {
             <select
               value={prospectStatus}
               onChange={e => setProspectStatus(e.target.value)}
-              className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              className="w-full min-w-0 max-w-full rounded-lg border border-slate-200 px-3 py-2 text-sm sm:w-auto"
             >
               <option value="all">Alle pipeline-statussen</option>
               {PROSPECT_STATUSES.map(s => (

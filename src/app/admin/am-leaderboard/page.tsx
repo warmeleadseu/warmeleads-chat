@@ -282,10 +282,10 @@ export default function AmLeaderboardPage() {
         <h2 className="text-sm font-bold text-slate-800">Handmatige regel toevoegen</h2>
         <p className="mt-0.5 text-xs text-slate-500">Bedrag telt bij de AM; vink aan om ook +1 batch op het leaderboard te tonen.</p>
         <div className="mt-3 flex flex-wrap items-end gap-3">
-          <div>
+          <div className="w-full sm:w-auto">
             <label className="block text-xs font-medium text-slate-500">AM</label>
             <select
-              className="mt-0.5 min-w-[12rem] rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              className="mt-0.5 w-full min-w-0 rounded-lg border border-slate-200 px-3 py-2 text-sm sm:w-auto sm:min-w-[12rem]"
               value={manualAm}
               onChange={e => setManualAm(e.target.value)}
             >
@@ -416,7 +416,7 @@ export default function AmLeaderboardPage() {
                       <ul className="space-y-2">
                         {am.included_batches.map(b => (
                           <li key={b.batch_id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2">
-                            <span>
+                            <span className="min-w-0 flex-1 break-words">
                               <span className="font-medium text-slate-800">{b.customer_name}</span>
                               <span className="text-slate-500"> · {b.branch}</span>
                               {b.batch_kind && b.batch_kind !== 'leads' && (
@@ -444,7 +444,7 @@ export default function AmLeaderboardPage() {
                         <ul className="space-y-2">
                           {am.excluded_batches.map(b => (
                             <li key={b.batch_id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-100 bg-amber-50/60 px-3 py-2">
-                              <span>
+                              <span className="min-w-0 flex-1 break-words">
                                 <span className="font-medium text-slate-800">{b.customer_name}</span>
                                 <span className="text-slate-500"> · {eur(b.total_price)}</span>
                                 {b.exclusion?.reason && <span className="ml-2 text-xs text-slate-500">({b.exclusion.reason})</span>}
@@ -470,8 +470,8 @@ export default function AmLeaderboardPage() {
                         <p className="mb-2 mt-4 text-xs font-bold uppercase tracking-wide text-sky-700">Handmatige regels</p>
                         <ul className="space-y-2">
                           {am.manual_lines.map(m => (
-                            <li key={m.id} className="flex items-center justify-between gap-2 rounded-lg border border-sky-100 bg-sky-50/50 px-3 py-2">
-                              <span>
+                            <li key={m.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-sky-100 bg-sky-50/50 px-3 py-2">
+                              <span className="min-w-0 flex-1 break-words">
                                 <span className="font-medium text-slate-800">{m.label}</span>
                                 <span className="ml-2 font-semibold tabular-nums">{eur(m.amount_euro)}</span>
                                 {m.counts_as_batch === 1 && (
@@ -482,7 +482,7 @@ export default function AmLeaderboardPage() {
                                 type="button"
                                 disabled={busy === `del-man-${m.id}`}
                                 onClick={() => void deleteManual(m.id)}
-                                className="text-rose-600 hover:text-rose-800 disabled:opacity-50"
+                                className="shrink-0 text-rose-600 hover:text-rose-800 disabled:opacity-50"
                                 aria-label="Verwijderen"
                               >
                                 <TrashIcon className="h-4 w-4" />

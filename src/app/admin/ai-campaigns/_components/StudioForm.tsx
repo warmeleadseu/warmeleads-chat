@@ -783,7 +783,7 @@ export default function StudioForm({ masterEnabled, onLaunched }: Props) {
                 value={leadFormId}
                 onChange={e => setLeadFormId(e.target.value)}
                 disabled={formsLoading || forms.length === 0}
-                className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm disabled:opacity-50"
+                className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm disabled:opacity-50"
               >
                 {forms.length === 0 && <option value="">Geen formulieren gevonden</option>}
                 {forms.map(f => (
