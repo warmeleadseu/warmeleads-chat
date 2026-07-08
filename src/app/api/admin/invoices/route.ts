@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
   const supabase = createServerClient();
   const body = await request.json();
 
-  const { customer_id, description, line_items, subtotal, paid_at, status } = body;
+  const { customer_id, description, line_items, subtotal, paid_at, status, due_date } = body;
 
   if (!customer_id || !description || subtotal == null) {
     return NextResponse.json({ error: 'Verplichte velden ontbreken' }, { status: 400 });
@@ -106,6 +106,12 @@ export async function POST(request: NextRequest) {
         ? new Date().toISOString()
         : null;
 
+  // Vervaldatum: standaard factuurdatum + 14 dagen, overschrijfbaar via body.
+  const dueDateValue =
+    due_date != null && due_date !== ''
+      ? new Date(due_date).toISOString()
+      : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
+
   const invoicePayload = await sanitizeInvoiceWritePayload(supabase, {
     invoice_number: invoiceNumber,
     customer_id,
@@ -122,6 +128,7 @@ export async function POST(request: NextRequest) {
     vat_mode: vatMode,
     status: invStatus,
     paid_at: paidAtValue,
+    due_date: dueDateValue,
   });
 
   const { data: invoice, error: insertErr } = await supabase
@@ -202,7 +209,7 @@ export async function PUT(request: NextRequest) {
     'customer_name', 'customer_email', 'customer_address', 'customer_vat_id',
     'description', 'line_items', 'subtotal', 'btw_percentage', 'btw_amount',
     'total_incl_btw', 'vat_mode', 'status', 'paid_at', 'uploaded_pdf_path',
-    'mollie_payment_id',
+    'mollie_payment_id', 'due_date',
   ];
   const safeUpdates: Record<string, unknown> = {};
   for (const key of allowed) {

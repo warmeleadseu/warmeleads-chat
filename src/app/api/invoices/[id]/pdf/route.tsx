@@ -57,6 +57,18 @@ export async function GET(
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.warmeleads.eu';
 
+  const creditNoteOf = (invoice as { credit_note_of?: string | null }).credit_note_of ?? null;
+  const isCreditNote = invoice.status === 'credit_note' || !!creditNoteOf;
+  let creditedInvoiceNumber: string | null = null;
+  if (creditNoteOf) {
+    const { data: orig } = await supabase
+      .from('invoices')
+      .select('invoice_number')
+      .eq('id', creditNoteOf)
+      .maybeSingle();
+    creditedInvoiceNumber = orig?.invoice_number ?? null;
+  }
+
   const invoiceData: InvoiceData = {
     invoice_number: invoice.invoice_number,
     created_at: invoice.created_at,
@@ -86,6 +98,8 @@ export async function GET(
     total_incl_btw: Number(invoice.total_incl_btw),
     vat_mode: (invoice as { vat_mode?: string }).vat_mode === 'reverse_charge_be' ? 'reverse_charge_be' : 'domestic_nl',
     mollie_payment_id: invoice.mollie_payment_id,
+    is_credit_note: isCreditNote,
+    credited_invoice_number: creditedInvoiceNumber,
   };
 
   const buffer = await renderToBuffer(<InvoicePdf data={invoiceData} />);

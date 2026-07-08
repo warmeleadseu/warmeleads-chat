@@ -77,6 +77,9 @@ export interface InvoiceData {
   /** Standaard domestic_nl (bestaande facturen zonder kolom). */
   vat_mode?: InvoiceVatMode;
   mollie_payment_id: string | null;
+  /** Creditnota: toont titel 'CREDITNOTA' en verwijzing naar de originele factuur. */
+  is_credit_note?: boolean;
+  credited_invoice_number?: string | null;
 }
 
 function fmtDate(iso: string): string {
@@ -92,6 +95,7 @@ function eur(n: number): string {
 export function InvoicePdf({ data }: { data: InvoiceData }) {
   const vatMode: InvoiceVatMode = data.vat_mode ?? 'domestic_nl';
   const isReverseBe = vatMode === 'reverse_charge_be';
+  const isCreditNote = data.is_credit_note === true;
   return (
     <Document>
       <Page size="A4" style={s.page}>
@@ -108,8 +112,11 @@ export function InvoicePdf({ data }: { data: InvoiceData }) {
             </Text>
           </View>
           <View>
-            <Text style={s.invoiceTitle}>FACTUUR</Text>
+            <Text style={s.invoiceTitle}>{isCreditNote ? 'CREDITNOTA' : 'FACTUUR'}</Text>
             <Text style={s.invoiceMeta}>{data.invoice_number}</Text>
+            {isCreditNote && data.credited_invoice_number ? (
+              <Text style={s.invoiceMeta}>Creditnota van {data.credited_invoice_number}</Text>
+            ) : null}
           </View>
         </View>
 

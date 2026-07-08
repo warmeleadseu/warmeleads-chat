@@ -39,7 +39,7 @@ interface CreateInvoiceParams {
   send_payment_email?: boolean;
 }
 
-async function getNextInvoiceNumber(supabase: ReturnType<typeof createServerClient>): Promise<string> {
+export async function getNextInvoiceNumber(supabase: ReturnType<typeof createServerClient>): Promise<string> {
   const year = new Date().getFullYear();
   const { data, error } = await supabase.rpc('nextval_invoice');
 
@@ -156,6 +156,9 @@ export async function createInvoice(params: CreateInvoiceParams) {
   const invoiceStatus = params.status || 'paid';
   const isPaid = invoiceStatus === 'paid';
 
+  // Open facturen krijgen een vervaldatum (factuurdatum + 14 dagen) t.b.v. 'te laat'-signalering.
+  const dueDate = isPaid ? null : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
+
   const invoicePayload = await sanitizeInvoiceWritePayload(supabase, {
     invoice_number: invoiceNumber,
     customer_id: params.customer_id,
@@ -177,6 +180,7 @@ export async function createInvoice(params: CreateInvoiceParams) {
     mollie_payment_id: params.mollie_payment_id || null,
     status: invoiceStatus,
     paid_at: isPaid ? (params.paid_at || now) : null,
+    due_date: dueDate,
   });
 
   const { data: invoice, error } = await supabase
@@ -681,6 +685,105 @@ function sendInvoiceEmail(
     `Factuur ${invoice.invoice_number} - WarmeLeads`,
     fullHtml,
     { type: 'invoice_paid', toName: customer.contact_person || customer.name, metadata: { invoice_id: invoice.id, invoice_number: invoice.invoice_number } },
+  );
+}
+
+/** Stuurt de klant een creditnota met verwijzing naar de originele factuur. */
+export async function sendCreditNoteEmail(
+  customer: { name: string; email: string; contact_person?: string },
+  creditNote: {
+    invoice_number: string;
+    total_incl_btw: number;
+    description: string;
+    id: string;
+    subtotal?: number;
+    btw_amount?: number;
+    btw_percentage?: number;
+    vat_mode?: string;
+  },
+  originalInvoiceNumber: string | null,
+): Promise<boolean> {
+  const portalUrl = `${BASE_URL}/portal/account?tab=invoices`;
+  const logoUrl = `${BASE_URL}/warmeleads-logo-2026.png`;
+  const greeting = customer.contact_person || customer.name;
+  const year = new Date().getFullYear();
+  const isReverse = creditNote.vat_mode === 'reverse_charge_be';
+  const sub = Number(creditNote.subtotal ?? creditNote.total_incl_btw);
+  const btw = Number(creditNote.btw_amount ?? 0);
+  const btwPct = Number(creditNote.btw_percentage ?? (isReverse ? 0 : 21));
+  const eur = (n: number) => `&euro;${n.toFixed(2)}`;
+  const totalLabel = isReverse ? 'Totaal' : 'Totaal incl. BTW';
+  const amountRows = isReverse
+    ? `<tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">Subtotaal</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;border-bottom:1px solid #f1f5f9">${eur(sub)}</td></tr>
+       <tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">BTW (verlegd)</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;border-bottom:1px solid #f1f5f9">${eur(0)}</td></tr>`
+    : `<tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">Subtotaal excl. BTW</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;border-bottom:1px solid #f1f5f9">${eur(sub)}</td></tr>
+       <tr><td style="padding:12px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">BTW ${btwPct}%</td><td style="padding:12px 20px;font-size:14px;color:#0f172a;border-bottom:1px solid #f1f5f9">${eur(btw)}</td></tr>`;
+
+  const fullHtml = `<!DOCTYPE html>
+<html lang="nl">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Creditnota ${creditNote.invoice_number}</title></head>
+<body style="margin:0;padding:0;background-color:#f8fafc;font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased">
+  <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background-color:#f8fafc">
+    <tr><td align="center" style="padding:40px 16px">
+      <table width="600" cellpadding="0" cellspacing="0" role="presentation" style="max-width:600px;width:100%">
+        <tr><td style="height:4px;background:linear-gradient(135deg,#3B2F75 0%,#E74C8C 35%,#FF6B35 70%,#FF4757 100%);border-radius:12px 12px 0 0;font-size:0;line-height:0">&nbsp;</td></tr>
+        <tr><td style="background-color:#ffffff;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0">
+          <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+            <tr><td style="padding:32px 40px 24px;border-bottom:1px solid #f1f5f9">
+              <img src="${logoUrl}" alt="WarmeLeads" width="130" style="max-width:130px;height:auto;display:block" />
+            </td></tr>
+          </table>
+          <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+            <tr><td style="padding:32px 40px">
+              <table cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom:24px">
+                <tr><td style="background-color:#fffbeb;border:1px solid #fde68a;border-radius:20px;padding:6px 14px">
+                  <span style="color:#b45309;font-size:12px;font-weight:700;letter-spacing:0.5px">CREDITNOTA</span>
+                </td></tr>
+              </table>
+              <p style="margin:0 0 16px;font-size:16px;font-weight:600;color:#0f172a;line-height:1.4">Hallo ${greeting},</p>
+              <p style="margin:0 0 28px;font-size:15px;color:#475569;line-height:1.7">Hierbij ontvang je creditnota <strong style="color:#0f172a">${creditNote.invoice_number}</strong>${originalInvoiceNumber ? ` als correctie op factuur <strong style="color:#0f172a">${originalInvoiceNumber}</strong>` : ''}.</p>
+              <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom:28px;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
+                <tr><td style="background-color:#f8fafc;padding:14px 20px;border-bottom:1px solid #e2e8f0">
+                  <span style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:1px">Creditnota</span>
+                </td></tr>
+                <tr><td style="padding:0">
+                  <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+                    <tr><td style="padding:14px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9;width:160px">Creditnota-nummer</td><td style="padding:14px 20px;font-size:14px;color:#0f172a;font-weight:600;border-bottom:1px solid #f1f5f9">${creditNote.invoice_number}</td></tr>
+                    ${originalInvoiceNumber ? `<tr><td style="padding:14px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">Correctie op</td><td style="padding:14px 20px;font-size:14px;color:#0f172a;border-bottom:1px solid #f1f5f9">${originalInvoiceNumber}</td></tr>` : ''}
+                    <tr><td style="padding:14px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9">Omschrijving</td><td style="padding:14px 20px;font-size:14px;color:#0f172a;border-bottom:1px solid #f1f5f9">${creditNote.description}</td></tr>
+                    ${amountRows}
+                    <tr><td style="padding:16px 20px;font-size:15px;color:#3B2F75;font-weight:700">${totalLabel}</td><td style="padding:16px 20px;font-size:18px;color:#3B2F75;font-weight:800;text-align:right">${eur(Number(creditNote.total_incl_btw))}</td></tr>
+                  </table>
+                </td></tr>
+              </table>
+              <p style="margin:0 0 24px;font-size:14px;color:#64748b;line-height:1.7">Je kunt de creditnota downloaden als PDF via je persoonlijke portaal:</p>
+              <table cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom:8px">
+                <tr><td style="border-radius:10px;background:linear-gradient(135deg,#FF6B35,#FF4757)">
+                  <a href="${portalUrl}" target="_blank" style="display:inline-block;padding:14px 32px;color:#ffffff;font-size:14px;font-weight:700;text-decoration:none;letter-spacing:0.3px">Creditnota downloaden &rarr;</a>
+                </td></tr>
+              </table>
+            </td></tr>
+          </table>
+        </td></tr>
+        <tr><td style="background-color:#f8fafc;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px;padding:24px 40px">
+          <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+            <tr><td style="border-top:1px solid #e2e8f0;padding-top:20px">
+              <p style="margin:0 0 6px;font-size:13px;color:#94a3b8;line-height:1.5">Vragen over deze creditnota? Neem contact op via <a href="mailto:info@warmeleads.eu" style="color:#3B2F75;text-decoration:none;font-weight:600">info@warmeleads.eu</a> of bel <a href="tel:0850477067" style="color:#3B2F75;text-decoration:none;font-weight:600">085 047 7067</a>.</p>
+              <p style="margin:0;font-size:12px;color:#cbd5e1;line-height:1.5">&copy; ${year} WarmeLeads &middot; <a href="${BASE_URL}" style="color:#cbd5e1;text-decoration:none">warmeleads.eu</a></p>
+            </td></tr>
+          </table>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+  return sendEmail(
+    customer.email,
+    `Creditnota ${creditNote.invoice_number} - WarmeLeads`,
+    fullHtml,
+    { type: 'invoice_credit_note', toName: greeting, metadata: { invoice_id: creditNote.id, invoice_number: creditNote.invoice_number, credit_note_of: originalInvoiceNumber } },
   );
 }
 
