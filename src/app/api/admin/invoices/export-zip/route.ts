@@ -5,7 +5,7 @@ import { createServerClient } from '@/lib/supabase';
 import { loadCompanySettings, getInvoicePdfBytes } from '@/lib/invoicePdfRender';
 
 /** Bovengrens: voorkomt time-outs bij het serverside renderen van te veel PDF's. */
-export const MAX_ZIP_INVOICES = 200;
+const MAX_ZIP_INVOICES = 200;
 
 export const maxDuration = 300;
 
