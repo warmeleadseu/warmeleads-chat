@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
-import { getMetaCredentials, listMetaPages, META_GRAPH_URL } from '@/lib/meta';
+import { getMetaCredentials, listMetaPages, META_GRAPH_URL, normalizeAdAccountId } from '@/lib/meta';
 import { createServerClient } from '@/lib/supabase';
 
 interface LeadGenForm {
@@ -125,7 +125,7 @@ export async function GET(request: NextRequest) {
     // de page_id doorgaans wél.
     if (candidatePageIds.size === 0 && directFormIds.size === 0) {
       let url: string | null =
-        `act_${credentials.adAccountId}/adsets?fields=promoted_object&effective_status=["ACTIVE","PAUSED"]&limit=200`;
+        `${normalizeAdAccountId(credentials.adAccountId)}/adsets?fields=promoted_object&effective_status=["ACTIVE","PAUSED"]&limit=200`;
       let guard = 0;
       while (url && guard < 5) {
         guard++;

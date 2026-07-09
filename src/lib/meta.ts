@@ -21,6 +21,16 @@ interface AdInsight {
   actions?: { action_type: string; value: string }[];
 }
 
+/**
+ * Normaliseert een ad-account-id naar exact één `act_`-prefix, ongeacht of de
+ * geconfigureerde waarde met of zonder `act_` is opgeslagen (bijv. via env of
+ * de Koppelingen-UI). Voorkomt zowel ontbrekende als dubbele (`act_act_`) prefixes.
+ */
+export function normalizeAdAccountId(id: string): string {
+  const bare = (id || '').trim().replace(/^act_/i, '');
+  return `act_${bare}`;
+}
+
 export async function getMetaCredentials(): Promise<MetaCredentials | null> {
   const envToken = process.env.META_ACCESS_TOKEN;
   const envAccount = process.env.META_AD_ACCOUNT_ID;
@@ -49,7 +59,7 @@ export async function fetchAdInsights(
   dateTo: string,
 ): Promise<AdInsight[]> {
   const { accessToken, adAccountId } = credentials;
-  const accountId = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
+  const accountId = normalizeAdAccountId(adAccountId);
 
   const allInsights: AdInsight[] = [];
   const url: string =
