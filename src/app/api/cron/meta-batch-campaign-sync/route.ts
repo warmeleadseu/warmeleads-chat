@@ -1,16 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { reconcileMetaCampaignsForCron } from '@/lib/metaBatchCampaignSync';
+import { verifyCronAuth } from '@/lib/cronAuth';
 
 /**
  * Elke 15 min: zet Meta-campagnes op ACTIVE/PAUSED volgens **actieve** batches
  * (voltooide batches met oude koppelingen worden genegeerd).
  */
 export async function GET(request: NextRequest) {
-  const authHeader = request.headers.get('authorization');
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const cronError = verifyCronAuth(request);
+  if (cronError) return cronError;
 
   const supabase = createServerClient();
   const result = await reconcileMetaCampaignsForCron(supabase, 80);

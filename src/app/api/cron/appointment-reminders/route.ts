@@ -2,16 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { sendAppointmentReminderEmail } from '@/lib/appointmentEmails';
 import { sendAppointmentPush } from '@/lib/pushNotification';
+import { verifyCronAuth } from '@/lib/cronAuth';
 
 /**
  * Runs hourly — sends a reminder for appointments starting 20-28 hours from now
  * (1-day reminder window). Marks reminder_sent_at to prevent duplicates.
  */
 export async function GET(request: NextRequest) {
-  const secret = request.headers.get('authorization')?.replace('Bearer ', '');
-  if (secret !== process.env.CRON_SECRET) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const cronError = verifyCronAuth(request);
+  if (cronError) return cronError;
 
   const supabase = createServerClient();
 

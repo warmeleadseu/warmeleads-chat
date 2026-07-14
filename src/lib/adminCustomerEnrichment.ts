@@ -61,8 +61,10 @@ export async function enrichCustomersWithCounts(
   }
 
   return customers.map(c => {
-    const { password_hash: _ph, ...rest } = c;
+    // password_hash én het (verouderde) plaintext portal_password nooit teruggeven.
+    const { password_hash: _ph, portal_password: _pp, ...rest } = c as CustomerRow & { portal_password?: string | null };
     void _ph;
+    void _pp;
     return {
       ...rest,
       lead_count: leadCounts[c.id] || 0,

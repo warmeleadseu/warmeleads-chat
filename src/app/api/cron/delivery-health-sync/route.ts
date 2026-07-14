@@ -1,15 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
+import { verifyCronAuth } from '@/lib/cronAuth';
 
 /**
  * Ververst batch_delivery_daily (tellingen per batch per kalenderdag Amsterdam).
  * Gepland via Vercel Cron; zelfde auth als andere crons.
  */
 export async function GET(request: NextRequest) {
-  const authHeader = request.headers.get('authorization');
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const cronError = verifyCronAuth(request);
+  if (cronError) return cronError;
 
   const supabase = createServerClient();
   const { error } = await supabase.rpc('refresh_batch_delivery_daily', { p_days: 14 });

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { getPayment } from '@/lib/mollie';
+import { rateLimitShared, getClientIp } from '@/lib/rateLimit';
 import { backfillBatch, distributeUnassignedLeads } from '@/lib/distribution';
 import { sendOrderConfirmationEmail, sendEmail } from '@/lib/email';
 import { sendPushToCustomer } from '@/lib/pushNotification';
@@ -65,6 +66,14 @@ function errorEmailHtml(title: string, details: string): string {
 
 export async function POST(request: NextRequest) {
   try {
+    // Rate limiting tegen misbruik/flood. De echte verificatie is dat we het
+    // betaalobject bij Mollie ophalen (getPayment met onze API-key): alleen
+    // betalingen in óns account worden verwerkt; een willekeurige/valse id
+    // levert niets op.
+    const ip = getClientIp(request);
+    const { limited, response } = await rateLimitShared(ip, 'mollie-webhook', 120, 60_000);
+    if (limited) return response!;
+
     const formData = await request.formData();
     const paymentId = formData.get('id') as string;
 

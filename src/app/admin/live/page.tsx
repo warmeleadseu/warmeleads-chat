@@ -5,7 +5,6 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { adminFetch } from '@/lib/adminAuth';
-import { getSupabaseBrowserClient } from '@/lib/supabaseBrowser';
 import { audioManager } from '@/lib/celebrationSounds';
 import { TvVerticalCarousel } from './TvVerticalCarousel';
 import { AmRacePodium } from './AmRacePodium';
@@ -974,78 +973,54 @@ export default function LiveDashboard() {
     }
   }, [celebrationVideo, celebrationQueue]);
 
-  // Load undisplayed celebrations on mount + subscribe to Realtime
+  // Live-events via admin-API-polling. Realtime via de publieke anon-key is
+  // bewust uitgezet: de RLS op celebration_events/live_test_events is
+  // dichtgezet (service-role only) en de tabellen staan niet meer in de
+  // realtime-publication. We pollen daarom de admin-geauthenticeerde routes.
   useEffect(() => {
     let mounted = true;
+    const processed = new Set<string>();
 
-    // Fetch existing undisplayed celebrations
-    adminFetch('/api/admin/celebrations').then(async res => {
-      if (!res.ok || !mounted) return;
-      const { events } = await res.json();
-      if (events && events.length > 0 && mounted) {
+    const pollCelebrations = async () => {
+      try {
+        const res = await adminFetch('/api/admin/celebrations');
+        if (!res.ok || !mounted) return;
+        const { events } = await res.json();
+        if (!events || events.length === 0) return;
         events.forEach((evt: any, idx: number) => {
+          if (processed.has(evt.id)) return;
+          processed.add(evt.id);
           const ce: CelebrationEvent = { ...evt, source: 'db' };
           setTimeout(() => {
             if (mounted) processCelebration(ce);
           }, idx * 2000);
         });
-      }
-    }).catch(() => {});
+      } catch { /* silent */ }
+    };
 
-    // Subscribe to Realtime for new celebration events
-    let channel: ReturnType<ReturnType<typeof getSupabaseBrowserClient>['channel']> | null = null;
-    let testChannel: ReturnType<ReturnType<typeof getSupabaseBrowserClient>['channel']> | null = null;
-
-    try {
-      const sb = getSupabaseBrowserClient();
-
-      channel = sb.channel('celebration-events')
-        .on('postgres_changes', {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'celebration_events',
-        }, (payload) => {
-          if (!mounted) return;
-          const row = payload.new as any;
-          processCelebration({ id: row.id, event_type: row.event_type, payload: row.payload || {}, created_at: row.created_at, source: 'db' });
-        })
-        .subscribe();
-
-      testChannel = sb.channel('test-events')
-        .on('postgres_changes', {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'live_test_events',
-        }, (payload) => {
-          if (!mounted) return;
-          const row = payload.new as any;
-          if (row.consumed) return;
-          processCelebration({ id: row.id, event_type: row.event_type, payload: row.payload || {}, created_at: row.created_at, source: 'test' });
-          // Mark test event as consumed
-          adminFetch('/api/admin/test-events', { method: 'GET' }).catch(() => {});
-        })
-        .subscribe();
-    } catch { /* Realtime not available, fall back to polling */ }
-
-    // Fallback polling for test events (in case Realtime is not available)
-    const testPollIv = setInterval(async () => {
+    const pollTestEvents = async () => {
       try {
         const res = await adminFetch('/api/admin/test-events');
-        if (!res.ok) return;
+        if (!res.ok || !mounted) return;
         const { events } = await res.json();
         if (!events || events.length === 0) return;
         for (const evt of events) {
-          const ce: CelebrationEvent = { id: evt.id, event_type: evt.event_type, payload: evt.payload || {}, created_at: evt.created_at, source: 'test' };
-          processCelebration(ce);
+          if (processed.has(evt.id)) continue;
+          processed.add(evt.id);
+          processCelebration({ id: evt.id, event_type: evt.event_type, payload: evt.payload || {}, created_at: evt.created_at, source: 'test' });
         }
       } catch { /* silent */ }
-    }, 20_000);
+    };
+
+    void pollCelebrations();
+    void pollTestEvents();
+    const celebIv = setInterval(pollCelebrations, 8_000);
+    const testIv = setInterval(pollTestEvents, 8_000);
 
     return () => {
       mounted = false;
-      clearInterval(testPollIv);
-      if (channel) { try { getSupabaseBrowserClient().removeChannel(channel); } catch {} }
-      if (testChannel) { try { getSupabaseBrowserClient().removeChannel(testChannel); } catch {} }
+      clearInterval(celebIv);
+      clearInterval(testIv);
     };
   }, [processCelebration]);
 

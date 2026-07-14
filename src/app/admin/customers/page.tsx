@@ -54,7 +54,7 @@ import { MailHistory } from '../_components/MailHistory';
 
 interface Customer {
   id: string; name: string; contact_person: string; email: string; phone: string;
-  branches: string[]; is_active: boolean; portal_active: boolean; has_password?: boolean; portal_password?: string | null; notes: string; created_at: string;
+  branches: string[]; is_active: boolean; portal_active: boolean; has_password?: boolean; notes: string; created_at: string;
   lead_count?: number;
   bulk_lead_count?: number;
   bulk_price_per_lead?: number | null;
@@ -873,7 +873,6 @@ function CustomerDetailPanel({
 }) {
   const [tab, setTab] = useState<DetailTab>('overview');
   const [copied, setCopied] = useState(false);
-  const [showPw, setShowPw] = useState(false);
   const [resettingPw, setResettingPw] = useState(false);
   const [newPw, setNewPw] = useState('');
   const [pwSaving, setPwSaving] = useState(false);
@@ -891,7 +890,6 @@ function CustomerDetailPanel({
   useEffect(() => {
     setTab('overview');
     setCopied(false);
-    setShowPw(false);
     setResettingPw(false);
     setNewPw('');
     setBranchEdit(c.branches || []);
@@ -1273,14 +1271,7 @@ function CustomerDetailPanel({
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-slate-400">Wachtwoord</span>
                     {c.has_password ? (
-                      c.portal_password ? (
-                        <button onClick={() => setShowPw(!showPw)} className="inline-flex items-center gap-1 rounded px-1 py-0.5 text-slate-600 transition hover:bg-white hover:text-brand-purple">
-                          <span className="font-medium">{showPw ? c.portal_password : '••••••••'}</span>
-                          <EyeIcon className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-                        </button>
-                      ) : (
-                        <span className="text-[11px] text-slate-400">reset om te zien</span>
-                      )
+                      <span className="font-medium text-emerald-600">Ingesteld</span>
                     ) : (
                       <span className="italic text-amber-500">niet ingesteld</span>
                     )}
@@ -1446,21 +1437,16 @@ function ReminderPreviewModal({ customer, portalUrl, sending, onSend, onClose }:
         <p style="color: #475569; font-size: 15px; line-height: 1.7; margin: 0 0 24px;">
           Je persoonlijke leadportaal staat klaar! Hier vind je al je leads overzichtelijk op een plek, kun je nieuwe batches bestellen en je account beheren.
         </p>
-        ${customer.portal_password ? `
         <div style="background: linear-gradient(135deg, #FFF5F0 0%, #FFF0F5 100%); border: 1px solid #FFE0D0; border-radius: 14px; padding: 24px; margin: 0 0 28px;">
-          <p style="color: #FF6B35; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 16px;">Je inloggegevens</p>
+          <p style="color: #FF6B35; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 16px;">Inloggegevens</p>
           <table style="width: 100%; border-collapse: collapse;">
             <tr>
               <td style="color: #64748b; font-size: 13px; padding: 6px 0; width: 100px;">E-mail</td>
               <td style="color: #1A1A2E; font-size: 14px; font-weight: 600; padding: 6px 0;">${customer.email}</td>
             </tr>
-            <tr>
-              <td style="color: #64748b; font-size: 13px; padding: 6px 0; border-top: 1px solid #FFE0D0;">Wachtwoord</td>
-              <td style="color: #1A1A2E; font-size: 14px; font-weight: 600; padding: 6px 0; border-top: 1px solid #FFE0D0; font-family: monospace;">${customer.portal_password}</td>
-            </tr>
           </table>
+          <p style="color: #64748b; font-size: 13px; margin: 12px 0 0; line-height: 1.6;">De klant ontvangt een veilige link om zelf een wachtwoord in te stellen (7 dagen geldig).</p>
         </div>
-        ` : ''}
         <div style="text-align: center; margin: 0 0 28px;">
           <a href="${portalUrl}" style="display: inline-block; background: linear-gradient(135deg, #FF6B35 0%, #FF4757 100%); color: white; text-decoration: none; padding: 16px 40px; border-radius: 12px; font-weight: 700; font-size: 15px; letter-spacing: 0.3px;">
             Ga naar je portaal &rarr;

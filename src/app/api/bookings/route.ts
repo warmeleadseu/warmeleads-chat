@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { sendEmail } from '@/lib/email';
+import { rateLimitShared, getClientIp } from '@/lib/rateLimit';
 
 /*
   Tables required:
@@ -159,6 +160,11 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
+    // Rate limiting: publieke afspraak-endpoint tegen spam/misbruik.
+    const ip = getClientIp(req);
+    const { limited, response } = await rateLimitShared(ip, 'bookings', 10, 60 * 60 * 1000);
+    if (limited) return response!;
+
     const body = await req.json();
     const { date, time, name, company, email, phone, branch, message } = body;
 

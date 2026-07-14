@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import bcrypt from 'bcryptjs';
 import { rateLimitShared, getClientIp } from '@/lib/rateLimit';
+import { hashResetToken } from '@/lib/passwordReset';
 
 const MAX_ATTEMPTS = 10;
 const WINDOW_MS = 15 * 60 * 1000;
@@ -26,7 +27,7 @@ export async function POST(request: NextRequest) {
     const { data: resetToken } = await supabase
       .from('password_reset_tokens')
       .select('id, customer_id, portal_user_id, expires_at, used_at')
-      .eq('token', token)
+      .eq('token', hashResetToken(token))
       .single();
 
     if (!resetToken) {
@@ -55,7 +56,7 @@ export async function POST(request: NextRequest) {
     } else {
       const { error: updateError } = await supabase
         .from('customers')
-        .update({ password_hash: passwordHash, portal_password: passwordHash })
+        .update({ password_hash: passwordHash })
         .eq('id', resetToken.customer_id);
 
       if (updateError) {

@@ -5,6 +5,7 @@ import { requireIntegrationOwner } from '@/lib/integrations/portalIntegrationAut
 import { getOutboundWebhookConfig } from '@/lib/integrations/outboundWebhook/integrationRepo';
 import { buildSampleWebhookPayload } from '@/lib/integrations/outboundWebhook/payload';
 import { sendWebhookRequest } from '@/lib/integrations/outboundWebhook/transport';
+import { assertPublicHttpUrl } from '@/lib/ssrfGuard';
 
 export async function POST(request: NextRequest) {
   const session = await verifyCustomer(request);
@@ -34,6 +35,12 @@ export async function POST(request: NextRequest) {
       { error: 'De webhook-URL moet beginnen met https://' },
       { status: 400 },
     );
+  }
+
+  // SSRF-guard: blokkeer privé/gereserveerde adressen vóór we iets versturen.
+  const ssrf = await assertPublicHttpUrl(url);
+  if (!ssrf.ok) {
+    return NextResponse.json({ error: `URL geweigerd: ${ssrf.reason}` }, { status: 400 });
   }
 
   // Token is optioneel: endpoints zoals Softr-workflows accepteren geen auth-header.

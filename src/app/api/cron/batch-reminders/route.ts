@@ -2,12 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { sendBatchMilestoneEmail } from '@/lib/email';
 import { sendBatchMilestonePush } from '@/lib/pushNotification';
+import { verifyCronAuth } from '@/lib/cronAuth';
 
 export async function GET(request: NextRequest) {
-  const secret = request.headers.get('authorization')?.replace('Bearer ', '');
-  if (secret !== process.env.CRON_SECRET) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const cronError = verifyCronAuth(request);
+  if (cronError) return cronError;
 
   const supabase = createServerClient();
 

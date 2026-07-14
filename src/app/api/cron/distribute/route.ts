@@ -5,6 +5,7 @@ import { distributeUnassignedLeads, backfillBatch } from '@/lib/distribution';
 import { isPhoneValid } from '@/lib/phoneValidation';
 import { checkLeadProfanity } from '@/lib/profanityFilter';
 import { syncBatchDelivered } from '@/lib/batchSync';
+import { verifyCronAuth } from '@/lib/cronAuth';
 
 const MAX_LEAD_AGE_DAYS = 3;
 
@@ -13,10 +14,8 @@ const MAX_LEAD_AGE_DAYS = 3;
  * Runs every 15 minutes via Vercel Cron (Nano-tier vriendelijk).
  */
 export async function GET(request: NextRequest) {
-  const authHeader = request.headers.get('authorization');
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const cronError = verifyCronAuth(request);
+  if (cronError) return cronError;
 
   const supabase = createServerClient();
   const cutoff = new Date();

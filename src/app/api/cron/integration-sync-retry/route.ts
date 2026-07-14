@@ -10,6 +10,7 @@ import { syncAssignmentToTeamleader } from '@/lib/teamleader/syncAssignment';
 import { TEAMLEADER_PROVIDER } from '@/lib/teamleader/types';
 import { getTeamleaderConnectionState } from '@/lib/teamleader/integrationRepo';
 import { syncAssignmentToOutboundWebhook } from '@/lib/integrations/outboundWebhook/syncAssignment';
+import { verifyCronAuth } from '@/lib/cronAuth';
 import {
   OUTBOUND_WEBHOOK_PROVIDER,
   type OutboundWebhookSettings,
@@ -92,10 +93,8 @@ async function runSyncJob(
 }
 
 export async function GET(request: NextRequest) {
-  const secret = request.headers.get('authorization')?.replace('Bearer ', '');
-  if (secret !== process.env.CRON_SECRET) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const cronError = verifyCronAuth(request);
+  if (cronError) return cronError;
 
   const supabase = createServerClient();
   const jobs: SyncJob[] = [];

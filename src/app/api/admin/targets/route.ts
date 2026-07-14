@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
+import { verifyAdmin, unauthorized, forbidden } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
+import { adminCanAccessCustomer, getCustomerScope } from '@/lib/permissions';
 import { distributeUnassignedLeads } from '@/lib/distribution';
 import { resolveCity } from '@/lib/pdok';
 import {
@@ -102,8 +103,13 @@ export async function GET(request: NextRequest) {
 
   let query = supabase.from('customer_targets').select('*').order('created_at', { ascending: false });
 
+  // AM-scoping: een accountmanager mag alleen targets van eigen klanten zien.
   if (customerId) {
+    if (!(await adminCanAccessCustomer(admin, customerId))) return forbidden();
     query = query.eq('customer_id', customerId);
+  } else if (admin.role === 'accountmanager') {
+    const scope = await getCustomerScope(admin);
+    query = query.in('customer_id', scope.scoped ? scope.customerIds : []);
   }
 
   const { data, error } = await query;
@@ -123,6 +129,9 @@ export async function POST(request: NextRequest) {
   if (!customer_id || !label) {
     return NextResponse.json({ error: 'Vereiste velden ontbreken' }, { status: 400 });
   }
+
+  // AM-scoping: alleen targets voor eigen klanten aanmaken.
+  if (!(await adminCanAccessCustomer(admin, customer_id))) return forbidden();
 
   const type = target_type || 'radius';
   const explicitCountry = 'country' in body ? sanitizeCountry((body as { country?: unknown }).country) : undefined;
@@ -197,6 +206,17 @@ export async function PUT(request: NextRequest) {
 
   if (!id) return NextResponse.json({ error: 'ID ontbreekt' }, { status: 400 });
 
+  // AM-scoping: verifieer dat dit target bij een eigen klant hoort.
+  {
+    const { data: owner } = await supabase
+      .from('customer_targets')
+      .select('customer_id')
+      .eq('id', id)
+      .maybeSingle<{ customer_id: string }>();
+    if (!owner) return NextResponse.json({ error: 'Target niet gevonden' }, { status: 404 });
+    if (!(await adminCanAccessCustomer(admin, owner.customer_id))) return forbidden();
+  }
+
   if ('country' in updates) {
     updates.country = sanitizeCountry(updates.country);
   }
@@ -259,6 +279,17 @@ export async function DELETE(request: NextRequest) {
   const supabase = createServerClient();
   const id = request.nextUrl.searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'ID ontbreekt' }, { status: 400 });
+
+  // AM-scoping: verifieer dat dit target bij een eigen klant hoort.
+  {
+    const { data: owner } = await supabase
+      .from('customer_targets')
+      .select('customer_id')
+      .eq('id', id)
+      .maybeSingle<{ customer_id: string }>();
+    if (!owner) return NextResponse.json({ error: 'Target niet gevonden' }, { status: 404 });
+    if (!(await adminCanAccessCustomer(admin, owner.customer_id))) return forbidden();
+  }
 
   const { error } = await supabase.from('customer_targets').delete().eq('id', id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

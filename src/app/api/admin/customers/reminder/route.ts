@@ -3,6 +3,7 @@ import { createServerClient } from '@/lib/supabase';
 import { verifyAdmin, unauthorized, forbidden } from '@/lib/adminAuth';
 import { adminCanAccessCustomer } from '@/lib/permissions';
 import { dispatchEmail } from '@/lib/email';
+import { createPasswordResetToken, buildResetUrl } from '@/lib/passwordReset';
 
 export async function POST(request: NextRequest) {
   const admin = await verifyAdmin(request);
@@ -20,7 +21,7 @@ export async function POST(request: NextRequest) {
     const supabase = createServerClient();
     const { data: customer, error } = await supabase
       .from('customers')
-      .select('id, name, email, contact_person, portal_active, portal_password')
+      .select('id, name, email, contact_person, portal_active')
       .eq('id', customer_id)
       .single();
 
@@ -41,6 +42,15 @@ export async function POST(request: NextRequest) {
     const logoUrl = `${baseUrl}/warmeleads-logo-2026.png`;
     const greeting = customer.contact_person || customer.name;
     const year = new Date().getFullYear();
+
+    // Geen plaintext wachtwoorden meer in e-mails: we sturen een veilige
+    // set/reset-link (7 dagen geldig) waarmee de klant zelf een wachtwoord kiest.
+    const { rawToken } = await createPasswordResetToken(
+      supabase,
+      { customerId: customer.id },
+      { expiryMs: 7 * 24 * 60 * 60 * 1000 },
+    );
+    const resetUrl = buildResetUrl(rawToken, baseUrl);
 
     const html = `<!DOCTYPE html>
 <html lang="nl">
@@ -65,19 +75,19 @@ export async function POST(request: NextRequest) {
               </table>
               <p style="margin:0 0 16px;font-size:18px;font-weight:700;color:#0f172a;line-height:1.4">Hallo ${greeting},</p>
               <p style="margin:0 0 28px;font-size:15px;color:#475569;line-height:1.7">Je persoonlijke leadportaal staat klaar! Hier vind je al je leads overzichtelijk op een plek, kun je nieuwe batches bestellen en je account beheren.</p>
-              ${customer.portal_password ? `
-              <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom:28px;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
+              <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom:24px;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
                 <tr><td style="background-color:#f8fafc;padding:14px 20px;border-bottom:1px solid #e2e8f0">
-                  <span style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:1px">Je inloggegevens</span>
+                  <span style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:1px">Inloggegevens</span>
                 </td></tr>
-                <tr><td style="padding:0">
-                  <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
-                    <tr><td style="padding:14px 20px;font-size:14px;color:#64748b;border-bottom:1px solid #f1f5f9;width:120px">E-mail</td><td style="padding:14px 20px;font-size:14px;color:#0f172a;font-weight:600;border-bottom:1px solid #f1f5f9">${customer.email}</td></tr>
-                    <tr><td style="padding:14px 20px;font-size:14px;color:#64748b">Wachtwoord</td><td style="padding:14px 20px;font-size:14px;color:#0f172a;font-weight:600;font-family:monospace">${customer.portal_password}</td></tr>
-                  </table>
+                <tr><td style="padding:14px 20px 4px;font-size:14px;color:#64748b;width:120px">E-mail</td></tr>
+                <tr><td style="padding:0 20px 14px;font-size:14px;color:#0f172a;font-weight:600">${customer.email}</td></tr>
+                <tr><td style="padding:0 20px 16px;font-size:13px;color:#64748b;line-height:1.6">Kies zelf een wachtwoord via onderstaande knop. Deze link is 7 dagen geldig.</td></tr>
+              </table>
+              <table cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom:16px">
+                <tr><td style="border-radius:10px;background:linear-gradient(135deg,#3B2F75,#E74C8C)">
+                  <a href="${resetUrl}" target="_blank" style="display:inline-block;padding:14px 32px;color:#ffffff;font-size:14px;font-weight:700;text-decoration:none;letter-spacing:0.3px">Wachtwoord instellen</a>
                 </td></tr>
               </table>
-              ` : ''}
               <table cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom:28px">
                 <tr><td style="border-radius:10px;background:linear-gradient(135deg,#FF6B35,#FF4757)">
                   <a href="${portalUrl}" target="_blank" style="display:inline-block;padding:14px 32px;color:#ffffff;font-size:14px;font-weight:700;text-decoration:none;letter-spacing:0.3px">Ga naar je portaal &rarr;</a>

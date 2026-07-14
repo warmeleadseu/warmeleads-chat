@@ -159,7 +159,6 @@ export async function POST(request: NextRequest) {
 
     if (password) {
       rest.password_hash = await bcrypt.hash(password, 12);
-      rest.portal_password = password;
     }
 
     if (admin.role === 'accountmanager' && !rest.account_manager_id) {
@@ -194,7 +193,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Klant aanmaken mislukt', details: error.message }, { status: 500 });
     }
     logAudit({ adminId: admin.id, adminName: admin.name, action: 'create_customer', entityType: 'customer', entityId: data.id, details: { name: data.name } });
-    return NextResponse.json({ success: true, customer: { ...data, password_hash: undefined } });
+    return NextResponse.json({ success: true, customer: { ...data, password_hash: undefined, portal_password: undefined } });
   } catch {
     return NextResponse.json({ error: 'Ongeldige data' }, { status: 400 });
   }
@@ -218,7 +217,6 @@ export async function PUT(request: NextRequest) {
 
     if (password) {
       updates.password_hash = await bcrypt.hash(password as string, 12);
-      updates.portal_password = password;
     }
 
     if (typeof updates.email === 'string') {
@@ -334,7 +332,7 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      customer: { ...data, password_hash: undefined },
+      customer: { ...data, password_hash: undefined, portal_password: undefined },
       recalced_invoices: recalcedInvoices,
       branch_change: branchChangeMeta,
     });

@@ -1,9 +1,14 @@
+import { assertPublicHttpUrl } from '@/lib/ssrfGuard';
+
 /**
  * Timeout voor het wachten op een antwoord. Bewust ruim: sommige endpoints
  * (bv. Softr-workflows) draaien meerdere stappen vóór ze 2xx teruggeven. Te
  * krap zetten zorgt voor "false failures" → onnodige retry → dubbele levering.
  */
 const WEBHOOK_TIMEOUT_MS = 25_000;
+
+/** Max. aantal bytes dat we uit het antwoord lezen (exfiltratie-cap). */
+const MAX_RESPONSE_BYTES = 1_000_000;
 
 export type WebhookOutcome = 'success' | 'http_error' | 'timeout' | 'network_error';
 
@@ -42,6 +47,19 @@ export async function sendWebhookRequest(
   payload: unknown,
   options?: SendOptions,
 ): Promise<WebhookResponse> {
+  // SSRF-guard: geen requests naar privé/gereserveerde adressen. Dit is een
+  // "http_error" (niet "network_error") zodat het NIET opnieuw geprobeerd wordt.
+  const guard = await assertPublicHttpUrl(url);
+  if (!guard.ok) {
+    return {
+      ok: false,
+      status: 0,
+      bodySnippet: '',
+      outcome: 'http_error',
+      errorMessage: `Webhook-URL geweigerd: ${guard.reason}`,
+    };
+  }
+
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), WEBHOOK_TIMEOUT_MS);
 
@@ -55,11 +73,16 @@ export async function sendWebhookRequest(
       headers,
       body: JSON.stringify(payload),
       signal: controller.signal,
+      // Volg geen redirects: voorkomt public→intern redirect-SSRF.
+      redirect: 'manual',
     });
 
     let bodySnippet = '';
     try {
-      bodySnippet = (await res.text()).slice(0, 500);
+      const lenHeader = Number(res.headers.get('content-length') || '0');
+      if (!Number.isFinite(lenHeader) || lenHeader <= MAX_RESPONSE_BYTES) {
+        bodySnippet = (await res.text()).slice(0, 500);
+      }
     } catch {
       /* body niet leesbaar — niet kritiek */
     }

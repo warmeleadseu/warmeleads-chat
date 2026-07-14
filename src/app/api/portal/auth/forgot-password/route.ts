@@ -3,6 +3,7 @@ import { createServerClient } from '@/lib/supabase';
 import { sendEmail } from '@/lib/email';
 import { rateLimitShared, getClientIp } from '@/lib/rateLimit';
 import { escapeForIlikeExact, pickEmailRow } from '@/lib/emailDbLookup';
+import { hashResetToken } from '@/lib/passwordReset';
 import crypto from 'crypto';
 
 const MAX_ATTEMPTS = 3;
@@ -94,7 +95,8 @@ export async function POST(request: NextRequest) {
     const token = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + TOKEN_EXPIRY_MS).toISOString();
 
-    const insertData: Record<string, string> = { token, expires_at: expiresAt };
+    // Alleen de hash opslaan; het ruwe token gaat uitsluitend in de e-maillink.
+    const insertData: Record<string, string> = { token: hashResetToken(token), expires_at: expiresAt };
     insertData[targetColumn] = targetId;
     await supabase.from('password_reset_tokens').insert(insertData);
 

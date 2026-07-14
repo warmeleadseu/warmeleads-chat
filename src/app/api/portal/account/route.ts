@@ -120,7 +120,7 @@ export async function PUT(request: NextRequest) {
         const hash = await bcrypt.hash(new_password, 12);
         const { error: pwError } = await supabase
           .from('customers')
-          .update({ password_hash: hash, portal_password: hash })
+          .update({ password_hash: hash })
           .eq('id', customer.id);
 
         if (pwError) {

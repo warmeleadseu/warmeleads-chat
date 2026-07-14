@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
+import { verifyAdmin, unauthorized, forbidden } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
+import { adminCanAccessCustomer } from '@/lib/permissions';
 import { syncBatchDelivered } from '@/lib/batchSync';
 
 export async function POST(request: NextRequest) {
@@ -14,6 +15,9 @@ export async function POST(request: NextRequest) {
   if (!customer_id) {
     return NextResponse.json({ error: 'customer_id is verplicht' }, { status: 400 });
   }
+
+  // AM-scoping: alleen toewijzingen van eigen klanten mogen verwijderd worden.
+  if (!(await adminCanAccessCustomer(admin, customer_id))) return forbidden();
 
   let assignmentsToDelete: { id: string; lead_id: string; batch_id: string | null }[] = [];
 

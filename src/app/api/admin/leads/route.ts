@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
-import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
+import { verifyAdmin, unauthorized, forbidden } from '@/lib/adminAuth';
 import { enrichLeadAddress, enrichLeadsAddress } from '@/lib/pdok';
 import { distributeLead, distributeLeads } from '@/lib/distribution';
 import { isPhoneValid } from '@/lib/phoneValidation';
@@ -350,6 +350,22 @@ export async function PUT(request: NextRequest) {
 
     const supabase = createServerClient();
 
+    // AM-scoping: een accountmanager mag alleen leads bewerken die aan een
+    // eigen klant zijn toegewezen, en mag een lead niet naar een klant buiten
+    // zijn scope (her)toewijzen.
+    if (admin.role === 'accountmanager') {
+      const { data: myCustomers } = await supabase
+        .from('customers').select('id').eq('account_manager_id', admin.id);
+      const myIds = (myCustomers || []).map(c => c.id);
+      const { data: leadRow } = await supabase
+        .from('leads').select('assigned_customer_ids').eq('id', id)
+        .maybeSingle<{ assigned_customer_ids: string[] | null }>();
+      if (!leadRow) return NextResponse.json({ error: 'Lead niet gevonden' }, { status: 404 });
+      const assigned = leadRow.assigned_customer_ids || [];
+      if (!myIds.some(cid => assigned.includes(cid))) return forbidden();
+      if (updates.customer_id && !myIds.includes(updates.customer_id)) return forbidden();
+    }
+
     const prevCustomerId = updates.customer_id !== undefined
       ? (await supabase.from('leads').select('customer_id').eq('id', id).single()).data?.customer_id
       : undefined;
@@ -396,6 +412,25 @@ export async function DELETE(request: NextRequest) {
     }
 
     const supabase = createServerClient();
+
+    // AM-scoping: een accountmanager mag alleen leads (hard) verwijderen die
+    // uitsluitend binnen zijn eigen klantenscope vallen. Een globale delete zou
+    // anders leads van andere klanten meenemen.
+    if (admin.role === 'accountmanager') {
+      const { data: myCustomers } = await supabase
+        .from('customers').select('id').eq('account_manager_id', admin.id);
+      const myIds = new Set((myCustomers || []).map(c => c.id));
+      const { data: leadRows } = await supabase
+        .from('leads').select('id, assigned_customer_ids').in('id', ids);
+      const rows = (leadRows || []) as Array<{ id: string; assigned_customer_ids: string[] | null }>;
+      if (rows.length !== ids.length) return forbidden();
+      const allWithinScope = rows.every(r => {
+        const assigned = r.assigned_customer_ids || [];
+        return assigned.length > 0 && assigned.every(cid => myIds.has(cid));
+      });
+      if (!allWithinScope) return forbidden();
+    }
+
     const { error } = await supabase.from('leads').delete().in('id', ids);
 
     if (error) {

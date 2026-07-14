@@ -25,9 +25,24 @@ export async function GET(request: NextRequest) {
 
   const supabase = createServerClient();
 
+  // AM-scoping: een accountmanager ziet alleen facets over leads van eigen
+  // klanten. We forceren `p_customers` naar (het snijvlak met) zijn klant-ids.
+  let effectiveCustomers = customerId ? customerId.split(',').filter(Boolean) : null;
+  if (admin.role === 'accountmanager') {
+    const { data: myCustomers } = await supabase
+      .from('customers').select('id').eq('account_manager_id', admin.id);
+    const myIds = (myCustomers || []).map(c => c.id);
+    effectiveCustomers = effectiveCustomers
+      ? effectiveCustomers.filter(id => myIds.includes(id))
+      : myIds;
+    if (effectiveCustomers.length === 0) {
+      return NextResponse.json({ facets: {} });
+    }
+  }
+
   const { data, error } = await supabase.rpc('get_lead_facets', {
     p_branches: branch ? branch.split(',').filter(Boolean) : null,
-    p_customers: customerId ? customerId.split(',').filter(Boolean) : null,
+    p_customers: effectiveCustomers,
     p_statuses: status ? status.split(',').filter(Boolean) : null,
     p_provinces: province ? province.split(',').filter(Boolean) : null,
     p_sources: source ? source.split(',').filter(Boolean) : null,
