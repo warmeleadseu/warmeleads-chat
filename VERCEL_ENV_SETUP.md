@@ -10,10 +10,15 @@ https://vercel.com/warmeleads-projects/warmeleads-chat/settings/environment-vari
 ### 2. Voeg deze Environment Variables toe:
 
 #### **Supabase (REQUIRED voor login)**
+
+> ⚠️ Zet de echte waarden NOOIT in dit bestand. Haal ze uit het Supabase-
+> dashboard (Project Settings → API) en zet ze in Vercel én in je lokale
+> `.env.local` (die staat in `.gitignore`).
+
 ```
-NEXT_PUBLIC_SUPABASE_URL=https://klnstthwdtszrqsmsljq.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtsbnN0dGh3ZHRzenJxc21zbGpxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIwMDA5NDMsImV4cCI6MjA3NzU3Njk0M30.seqTPNeEjJMsWV2lSOsLJ8uTaZkWNUBlB1vaSNZ2PPA
-SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtsbnN0dGh3ZHRzenJxc21zbGpxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MjAwMDk0MywiZXhwIjoyMDc3NTc2OTQzfQ.4ypmx6ko942VSu-__ZtaRl8psGZfKIBmpQSVivg9Mys
+NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon-key>
+SUPABASE_SERVICE_ROLE_KEY=<service-role-key>
 ```
 
 #### **Stripe (optioneel, maar voorkomt warnings)**

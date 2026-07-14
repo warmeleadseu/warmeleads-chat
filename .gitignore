@@ -36,6 +36,10 @@ yarn-error.log*
 # vercel
 .vercel
 
+# stale build/deploy dumps (never commit build output)
+/warmeleads-upload
+/warmeleads-static
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
