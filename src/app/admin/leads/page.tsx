@@ -1296,7 +1296,9 @@ function ExportModal({
   const [filterDateTo, setFilterDateTo] = useState<string>(filterParams.date_to || '');
   const [filterIncludeUnknownDate, setFilterIncludeUnknownDate] = useState<boolean>(
     filterParams.include_unknown_date !== 'false');
-  const [filtersExpanded, setFiltersExpanded] = useState<boolean>(isBulkBatchFlow);
+  const [filtersExpanded, setFiltersExpanded] = useState<boolean>(
+    isBulkBatchFlow || !(filterParams.branch?.split(',').filter(Boolean).length),
+  );
 
   // Bulk-batch context: opgehaald via /api/admin/batches/[id] zodat we
   // klantnaam, branche en remaining-count weten voor de info-banner en
@@ -1374,8 +1376,15 @@ function ExportModal({
   const [liveCount, setLiveCount] = useState<number | null>(null);
   const [countLoading, setCountLoading] = useState(false);
 
+  const branchRequired = selFilterBranches.length === 0;
+
   useEffect(() => {
     let cancelled = false;
+    if (branchRequired) {
+      setLiveCount(null);
+      setCountLoading(false);
+      return;
+    }
     setCountLoading(true);
     const handle = setTimeout(async () => {
       try {
@@ -1390,9 +1399,9 @@ function ExportModal({
       }
     }, 300);
     return () => { cancelled = true; clearTimeout(handle); };
-  }, [buildFilterBody]);
+  }, [buildFilterBody, branchRequired]);
 
-  const effectiveTotal = liveCount ?? initialTotal;
+  const effectiveTotal = branchRequired ? 0 : (liveCount ?? initialTotal);
   const exportCount = useMemo(() => {
     const cap = maxLeads && Number(maxLeads) > 0 ? Number(maxLeads) : Number.POSITIVE_INFINITY;
     return Math.min(effectiveTotal, cap);
@@ -1416,6 +1425,11 @@ function ExportModal({
   );
 
   const handleExport = async () => {
+    if (branchRequired) {
+      setError('Selecteer minimaal één branche om te exporteren');
+      setFiltersExpanded(true);
+      return;
+    }
     setExporting(true);
     setError('');
     try {
@@ -1479,10 +1493,14 @@ function ExportModal({
             <div>
               <h2 className="text-lg font-bold text-slate-900">Bulk Lead Export</h2>
               <p className="mt-0.5 text-sm text-slate-500">
-                <span className={countLoading ? 'opacity-60' : ''}>
-                  {headerCount.toLocaleString('nl-NL')} leads in huidige filters
-                </span>
-                {countLoading && <span className="ml-2 text-xs text-slate-400">…</span>}
+                {branchRequired ? (
+                  <span className="text-amber-700">Selecteer minimaal één branche in de filters</span>
+                ) : (
+                  <span className={countLoading ? 'opacity-60' : ''}>
+                    {headerCount.toLocaleString('nl-NL')} leads in huidige filters
+                  </span>
+                )}
+                {countLoading && !branchRequired && <span className="ml-2 text-xs text-slate-400">…</span>}
               </p>
             </div>
             <button onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"><XMarkIcon className="h-5 w-5" /></button>
@@ -1572,14 +1590,19 @@ function ExportModal({
                 <div className="space-y-3 border-t border-slate-200 px-4 py-3">
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     {branchOptions.length > 0 && (
-                      <MultiSelect
-                        label="branches"
-                        allLabel="Alle branches"
-                        options={branchOptions}
-                        selected={selFilterBranches}
-                        onChange={setSelFilterBranches}
-                        searchable
-                      />
+                      <div>
+                        <MultiSelect
+                          label="branches (verplicht)"
+                          allLabel="Geen — selecteer minimaal één"
+                          options={branchOptions}
+                          selected={selFilterBranches}
+                          onChange={setSelFilterBranches}
+                          searchable
+                        />
+                        {branchRequired && (
+                          <p className="mt-1 text-xs text-amber-700">Bulk export zonder branche is niet toegestaan.</p>
+                        )}
+                      </div>
                     )}
                     <MultiSelect
                       label="provincies"
@@ -1691,7 +1714,6 @@ function ExportModal({
                       <button
                         type="button"
                         onClick={() => {
-                          setSelFilterBranches([]);
                           setSelFilterStatuses([]);
                           setSelFilterProvinces([]);
                           setSelFilterSources([]);
@@ -1814,7 +1836,7 @@ function ExportModal({
               </button>
               <button
                 onClick={handleExport}
-                disabled={exporting || effectiveTotal === 0}
+                disabled={exporting || branchRequired || effectiveTotal === 0}
                 className="flex-1 rounded-lg bg-button-gradient py-2.5 text-sm font-bold text-white shadow-sm disabled:opacity-60"
               >
                 {exporting ? (

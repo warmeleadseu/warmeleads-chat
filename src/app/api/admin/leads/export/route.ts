@@ -8,6 +8,10 @@ import * as XLSX from 'xlsx';
 import { onLeadAssignedToCustomer } from '@/lib/integrations/onLeadAssigned';
 import { syncBatchDelivered } from '@/lib/batchSync';
 import { buildLeadExportTable } from '@/lib/leadExportTable';
+import {
+  validateExportBranchFilter,
+  validatePortalExportBranches,
+} from '@/lib/exportBranchValidation';
 
 function buildCsv(leads: Record<string, unknown>[]): NextResponse {
   const BOM = '\uFEFF';
@@ -74,17 +78,39 @@ export async function POST(request: NextRequest) {
   // permanent uit datum-range exports vallen.
   const includeUnknownDate = include_unknown_date !== false && include_unknown_date !== 'false';
 
+  const branchValidation = validateExportBranchFilter(branch);
+  if (!branchValidation.ok) {
+    return NextResponse.json({ error: branchValidation.error }, { status: 400 });
+  }
+  const branchFilter = branchValidation.branches;
+
   const supabase = createServerClient();
+
+  if (add_to_portal && target_customer_id) {
+    const custId = String(target_customer_id);
+    const { data: targetCustomer, error: custErr } = await supabase
+      .from('customers')
+      .select('branches')
+      .eq('id', custId)
+      .single();
+    if (custErr || !targetCustomer) {
+      return NextResponse.json({ error: 'Doelklant niet gevonden' }, { status: 400 });
+    }
+    const portalBranchCheck = validatePortalExportBranches(
+      branchFilter,
+      (targetCustomer.branches as string[] | null) || [],
+    );
+    if (!portalBranchCheck.ok) {
+      return NextResponse.json({ error: portalBranchCheck.error }, { status: 400 });
+    }
+  }
 
   let query = supabase
     .from('leads')
     .select('*, customers(id, name)');
 
-  if (branch) {
-    const vals = String(branch).split(',').filter(Boolean);
-    if (vals.length === 1) query = query.eq('branch', vals[0]);
-    else if (vals.length > 1) query = query.in('branch', vals);
-  }
+  if (branchFilter.length === 1) query = query.eq('branch', branchFilter[0]);
+  else if (branchFilter.length > 1) query = query.in('branch', branchFilter);
   if (customer_id) {
     const vals = String(customer_id).split(',').filter(Boolean);
     if (vals.length > 0) query = query.overlaps('assigned_customer_ids', vals);
@@ -293,7 +319,7 @@ export async function POST(request: NextRequest) {
   }
 
   const filterSnapshot: Record<string, unknown> = {};
-  if (branch) filterSnapshot.branch = branch;
+  if (branchFilter.length > 0) filterSnapshot.branch = branchFilter.join(',');
   if (customer_id) filterSnapshot.customer_id = customer_id;
   if (exclude_customer_id) filterSnapshot.exclude_customer_id = exclude_customer_id;
   if (assignment) filterSnapshot.assignment = assignment;
