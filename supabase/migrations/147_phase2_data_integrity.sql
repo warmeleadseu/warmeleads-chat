@@ -10,10 +10,32 @@ CREATE INDEX IF NOT EXISTS idx_customer_batches_active_pipeline
 CREATE INDEX IF NOT EXISTS idx_lead_assignments_customer_assigned_at
   ON lead_assignments (customer_id, assigned_at DESC);
 
--- 2. DB-level 30-day dedup: max one assignment per (lead, customer) in rolling window
-CREATE UNIQUE INDEX IF NOT EXISTS idx_lead_assignments_dedup_30d
-  ON lead_assignments (lead_id, customer_id)
-  WHERE assigned_at > (now() - interval '30 days');
+-- 2. DB-level 30-day dedup via trigger (partial index with now() is not allowed)
+CREATE OR REPLACE FUNCTION prevent_lead_assignment_30d_duplicate()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM lead_assignments la
+    WHERE la.lead_id = NEW.lead_id
+      AND la.customer_id = NEW.customer_id
+      AND la.assigned_at > (now() - interval '30 days')
+      AND la.id IS DISTINCT FROM NEW.id
+  ) THEN
+    RAISE EXCEPTION 'Lead al binnen 30 dagen aan deze klant toegewezen'
+      USING ERRCODE = 'unique_violation';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS lead_assignments_30d_dedup ON lead_assignments;
+CREATE TRIGGER lead_assignments_30d_dedup
+  BEFORE INSERT ON lead_assignments
+  FOR EACH ROW
+  EXECUTE FUNCTION prevent_lead_assignment_30d_duplicate();
 
 -- 3. Distinct lead count per batch (RPC used by batchSync)
 CREATE OR REPLACE FUNCTION count_distinct_leads_for_batch(p_batch_id uuid)
