@@ -3,8 +3,9 @@ import { createServerClient } from './supabase';
 import type { PortalSession } from './portalPermissions';
 import {
   PORTAL_SESSION_COOKIE,
-  verifyPortalSessionJwt,
+  verifyPortalSessionJwtDetailed,
 } from '@/lib/portalSession';
+import { isPortalSessionRevoked } from '@/lib/portalSessionVersion';
 import { looksLikeJwt } from '@/lib/jwtFormat';
 import { qualifiesBelgiumReverseCharge } from '@/lib/invoiceVat';
 import { buildCustomerSelectWithCountry } from '@/lib/customerCountrySupport';
@@ -86,8 +87,11 @@ export async function verifyCustomer(request: NextRequest): Promise<PortalSessio
   const customerSelect = await buildCustomerSelectWithCountry(supabase, CUSTOMER_SELECT_BASE);
 
   if (jwtCandidate) {
-    const claims = await verifyPortalSessionJwt(jwtCandidate);
-    if (!claims) return null;
+    const verified = await verifyPortalSessionJwtDetailed(jwtCandidate);
+    if (!verified) return null;
+    const { claims, iat } = verified;
+
+    if (await isPortalSessionRevoked(supabase, claims, iat)) return null;
 
     if (claims.typ === 'owner') {
       const { data: customer } = await supabase

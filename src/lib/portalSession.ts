@@ -58,6 +58,13 @@ export async function signPortalUserSession(portalUserId: string, customerId: st
 }
 
 export async function verifyPortalSessionJwt(token: string): Promise<PortalJwtClaims | null> {
+  const verified = await verifyPortalSessionJwtDetailed(token);
+  return verified?.claims ?? null;
+}
+
+export async function verifyPortalSessionJwtDetailed(
+  token: string,
+): Promise<{ claims: PortalJwtClaims; iat: number } | null> {
   try {
     const secret = getSessionSecretKey();
     const { payload } = await jwtVerify(token, secret, {
@@ -67,14 +74,15 @@ export async function verifyPortalSessionJwt(token: string): Promise<PortalJwtCl
     const typ = payload.typ;
     const sub = typeof payload.sub === 'string' ? payload.sub : null;
     if (!sub) return null;
+    const iat = typeof payload.iat === 'number' ? payload.iat : 0;
     if (typ === 'owner') {
       const imp = typeof payload.imp === 'string' ? payload.imp : undefined;
-      return { typ: 'owner', sub, ...(imp ? { imp } : {}) };
+      return { claims: { typ: 'owner', sub, ...(imp ? { imp } : {}) }, iat };
     }
     if (typ === 'portal_user') {
       const cid = typeof payload.cid === 'string' ? payload.cid : null;
       if (!cid) return null;
-      return { typ: 'portal_user', sub, cid };
+      return { claims: { typ: 'portal_user', sub, cid }, iat };
     }
     return null;
   } catch {

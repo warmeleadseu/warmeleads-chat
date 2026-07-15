@@ -102,6 +102,7 @@ export const PERMISSION_GROUPS: { label: string; permissions: { key: Permission;
     permissions: [
       { key: PERMISSIONS.RECLAMATIONS_CREATE, label: 'Reclamaties indienen' },
       { key: PERMISSIONS.STATISTICS_VIEW, label: 'Statistieken en insights bekijken' },
+      { key: PERMISSIONS.INTEGRATIONS_VIEW, label: 'Integraties en koppelingen bekijken' },
       { key: PERMISSIONS.INVOICES_VIEW, label: 'Facturen bekijken' },
       { key: PERMISSIONS.ACCOUNT_EDIT, label: 'Accountinstellingen wijzigen' },
       { key: PERMISSIONS.TEAM_MANAGE, label: 'Teamleden beheren' },
