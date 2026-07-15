@@ -13,12 +13,18 @@ export async function syncBatchDelivered(
   supabase: SupabaseClient,
   batchId: string,
 ): Promise<number> {
-  const { count } = await supabase
+  const { count: rowCount } = await supabase
     .from('lead_assignments')
     .select('id', { count: 'exact', head: true })
     .eq('batch_id', batchId);
 
-  const assignmentCount = count || 0;
+  let assignmentCount = rowCount || 0;
+  const { data: distinctCount, error: rpcErr } = await supabase.rpc('count_distinct_leads_for_batch', {
+    p_batch_id: batchId,
+  });
+  if (!rpcErr && typeof distinctCount === 'number') {
+    assignmentCount = distinctCount;
+  }
 
   const { data: batch } = await supabase
     .from('customer_batches')

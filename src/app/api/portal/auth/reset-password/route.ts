@@ -69,7 +69,16 @@ export async function POST(request: NextRequest) {
       .update({ used_at: new Date().toISOString() })
       .eq('id', resetToken.id);
 
-    return NextResponse.json({ success: true, message: 'Wachtwoord is succesvol gewijzigd' });
+    await supabase.rpc('bump_portal_session_version', {
+      p_customer_id: resetToken.portal_user_id ? null : resetToken.customer_id,
+      p_portal_user_id: resetToken.portal_user_id,
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: 'Wachtwoord is succesvol gewijzigd. Log opnieuw in om verder te gaan.',
+      require_relogin: true,
+    });
   } catch {
     return NextResponse.json({ error: 'Er ging iets mis' }, { status: 500 });
   }

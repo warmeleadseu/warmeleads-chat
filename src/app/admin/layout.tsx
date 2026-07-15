@@ -40,6 +40,7 @@ import {
   SparklesIcon,
 } from '@heroicons/react/24/outline';
 import { AdminContext, type AdminUser } from './adminContext';
+import { AdminConfirmProvider } from '@/components/admin/ui/AdminConfirmProvider';
 import { adminFetch } from '@/lib/adminAuth';
 import {
   adminAuthDebugClient,
@@ -613,13 +614,16 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
   if (isLive) {
     return (
+      <AdminConfirmProvider>
       <AdminContext.Provider value={{ user, logout: handleLogout }}>
         {routeAllowed ? children : <RouteBlocked />}
       </AdminContext.Provider>
+      </AdminConfirmProvider>
     );
   }
 
   return (
+    <AdminConfirmProvider>
     <AdminContext.Provider value={{ user, logout: handleLogout }}>
       <div className="min-h-screen bg-slate-50">
         <Sidebar user={user} onLogout={handleLogout} pendingReclamations={pendingReclamations} pendingTasks={pendingTasks} />
@@ -631,5 +635,6 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         </main>
       </div>
     </AdminContext.Provider>
+    </AdminConfirmProvider>
   );
 }

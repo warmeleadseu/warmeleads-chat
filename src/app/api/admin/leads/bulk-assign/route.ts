@@ -3,9 +3,11 @@ import { createServerClient } from '@/lib/supabase';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { logAudit } from '@/lib/audit';
 import { normalizeBatchKind } from '@/lib/batchKind';
-import { onLeadAssignedToCustomer } from '@/lib/integrations/onLeadAssigned';
-import { syncBatchDelivered } from '@/lib/batchSync';
 import { applyAccountManagerScope, applyLeadFilters, type LeadFilterParams } from '@/lib/leadFilters';
+import { assignLeadToBatch } from '@/lib/assignLeadToBatch';
+import { preflightManualAssignments } from '@/lib/manualAssignmentGuardrails';
+import { logLeadActivity } from '@/lib/leadActivities';
+import { validateExportBranchFilter } from '@/lib/exportBranchValidation';
 
 /**
  * POST /api/admin/leads/bulk-assign
@@ -50,7 +52,7 @@ export async function POST(request: NextRequest) {
 
   const { data: customer, error: custError } = await supabase
     .from('customers')
-    .select('id, name, account_manager_id')
+    .select('id, name, account_manager_id, branches')
     .eq('id', customerId)
     .maybeSingle();
   if (custError || !customer) {
@@ -73,6 +75,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'lead_ids is leeg' }, { status: 400 });
     }
   } else {
+    const branchCheck = validateExportBranchFilter(body.branch);
+    if (!branchCheck.ok) {
+      return NextResponse.json({ error: branchCheck.error }, { status: 400 });
+    }
+
     const filters: LeadFilterParams = {
       branch: typeof body.branch === 'string' ? body.branch : null,
       customer_id: typeof body.filter_customer_id === 'string' ? body.filter_customer_id : null,
@@ -129,6 +136,35 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ assigned: 0, skipped_already: 0, total: 0 });
   }
 
+  const overrideGuardrails = body.override_guardrails === true;
+
+  const { data: leadRows } = await supabase
+    .from('leads')
+    .select('id, branch, lat, lng, provincie, land, postcode, naam_klant, plaatsnaam')
+    .in('id', leadIds.slice(0, HARD_LIMIT));
+
+  let eligibleIds = leadIds;
+  let blockedCount = 0;
+
+  if (!overrideGuardrails && leadRows?.length) {
+    const preflight = await preflightManualAssignments(
+      supabase,
+      { id: customer.id, branches: customer.branches as string[] | null },
+      leadRows,
+    );
+    eligibleIds = preflight.allowed;
+    blockedCount = preflight.blocked.length;
+  }
+
+  if (eligibleIds.length === 0) {
+    return NextResponse.json({
+      assigned: 0,
+      skipped_already: 0,
+      blocked_guardrails: blockedCount,
+      total: leadIds.length,
+    });
+  }
+
   // Detecteer een actieve betaalde leads-pipeline-batch om assignments
   // automatisch te koppelen — analoog aan de bulk-export-flow zonder
   // expliciete `bulk_batch_id`.
@@ -151,8 +187,8 @@ export async function POST(request: NextRequest) {
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
   const alreadyAssigned = new Set<string>();
   const CHECK_CHUNK = 500;
-  for (let i = 0; i < leadIds.length; i += CHECK_CHUNK) {
-    const chunk = leadIds.slice(i, i + CHECK_CHUNK);
+  for (let i = 0; i < eligibleIds.length; i += CHECK_CHUNK) {
+    const chunk = eligibleIds.slice(i, i + CHECK_CHUNK);
     const { data: existing } = await supabase
       .from('lead_assignments')
       .select('lead_id')
@@ -161,8 +197,8 @@ export async function POST(request: NextRequest) {
       .gte('assigned_at', thirtyDaysAgo);
     (existing || []).forEach((a: { lead_id: string }) => alreadyAssigned.add(a.lead_id));
   }
-  const newLeadIds = leadIds.filter(id => !alreadyAssigned.has(id));
-  const skippedAlready = leadIds.length - newLeadIds.length;
+  const newLeadIds = eligibleIds.filter(id => !alreadyAssigned.has(id));
+  const skippedAlready = eligibleIds.length - newLeadIds.length;
 
   if (newLeadIds.length === 0) {
     return NextResponse.json({
@@ -173,46 +209,44 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  const assignments = newLeadIds.map(leadId => ({
-    lead_id: leadId,
-    customer_id: customerId,
-    source: 'bulk_assign' as const,
-    ...(pipelineBatchId ? { batch_id: pipelineBatchId } : {}),
-  }));
-
-  let insertedCount = 0;
-  const INSERT_CHUNK = 500;
-  for (let i = 0; i < assignments.length; i += INSERT_CHUNK) {
-    const chunk = assignments.slice(i, i + INSERT_CHUNK);
-    const { data: inserted, error: insErr } = await supabase
-      .from('lead_assignments')
-      .insert(chunk)
-      .select('id, lead_id, customer_id');
-    if (insErr) {
-      console.error('[admin/leads/bulk-assign] insert error', insErr);
-      return NextResponse.json({
-        error: 'Toewijzen mislukt',
-        assigned: insertedCount,
-        skipped_already: skippedAlready,
-        total: leadIds.length,
-      }, { status: 500 });
-    }
-    const rows = inserted || [];
-    insertedCount += rows.length;
-    for (const row of rows) {
-      onLeadAssignedToCustomer({
-        customerId: row.customer_id,
-        leadId: row.lead_id,
-        assignmentId: row.id,
-      });
-    }
+  if (newLeadIds.length === 0) {
+    return NextResponse.json({
+      assigned: 0,
+      skipped_already: skippedAlready,
+      blocked_guardrails: blockedCount,
+      total: leadIds.length,
+      pipeline_batch_id: pipelineBatchId,
+    });
   }
 
-  if (pipelineBatchId) {
-    try {
-      await syncBatchDelivered(supabase, pipelineBatchId);
-    } catch (syncErr) {
-      console.error('[admin/leads/bulk-assign] syncBatchDelivered failed', { pipelineBatchId, syncErr });
+  const leadById = new Map((leadRows || []).map(l => [l.id, l]));
+  let insertedCount = 0;
+  const blockedOnAssign: string[] = [];
+
+  for (const leadId of newLeadIds) {
+    const leadRow = leadById.get(leadId);
+    if (!leadRow) continue;
+    const result = await assignLeadToBatch({
+      supabase,
+      lead: leadRow,
+      customer: { id: customer.id, branches: customer.branches as string[] | null },
+      batchId: pipelineBatchId,
+      source: 'bulk_assign',
+      skipGuardrails: overrideGuardrails,
+    });
+    if (result.ok) {
+      insertedCount++;
+      await logLeadActivity(supabase, {
+        leadId,
+        customerId: customer.id,
+        actorType: 'admin',
+        actorId: admin.id,
+        actorName: admin.name,
+        action: 'bulk_assign',
+        details: { assignment_id: result.assignmentId, batch_id: pipelineBatchId },
+      });
+    } else {
+      blockedOnAssign.push(leadId);
     }
   }
 
@@ -227,6 +261,7 @@ export async function POST(request: NextRequest) {
       scope,
       assigned: insertedCount,
       skipped_already: skippedAlready,
+      blocked_guardrails: blockedCount + blockedOnAssign.length,
       total: leadIds.length,
       pipeline_batch_id: pipelineBatchId,
       max_leads: maxLeadsRaw && Number(maxLeadsRaw) > 0 ? Number(maxLeadsRaw) : undefined,
@@ -236,6 +271,7 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({
     assigned: insertedCount,
     skipped_already: skippedAlready,
+    blocked_guardrails: blockedCount + blockedOnAssign.length,
     total: leadIds.length,
     pipeline_batch_id: pipelineBatchId,
     customer_name: customer.name,

@@ -55,7 +55,14 @@ const nextConfig = {
   
   // Redirects for SEO - old URLs to new structure
   async redirects() {
-    const redirects = [];
+    const redirects = [
+      {
+        source: '/:path*',
+        has: [{ type: 'host', value: 'warmeleads.eu' }],
+        destination: 'https://www.warmeleads.eu/:path*',
+        permanent: true,
+      },
+    ];
     
     // Old city-specific URLs to new structure
     const oldCityUrls = [
@@ -100,6 +107,10 @@ const nextConfig = {
           {
             key: 'Referrer-Policy',
             value: 'strict-origin-when-cross-origin',
+          },
+          {
+            key: 'Content-Security-Policy',
+            value: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://www.google-analytics.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://www.google-analytics.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
           },
           {
             key: 'Permissions-Policy',

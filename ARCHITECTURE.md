@@ -518,3 +518,23 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for development guidelines.
 
 *Last updated: November 1, 2025*
 
+
+---
+
+## Overhaul (2026) — distribution & data integrity
+
+### Lead assignment paths
+- **Automatic:** `src/lib/distribution.ts`
+- **Manual (bulk export/assign):** `src/lib/assignLeadToBatch.ts` with guardrails in `src/lib/manualAssignmentGuardrails.ts`
+- **Geo matching:** `src/lib/matchLeadToTargets.ts`
+
+### DB migrations (147–149)
+- `147_phase2_data_integrity.sql` — indexes, 30-day dedup index, batch sync trigger, booking uniqueness, bron CHECK
+- `148_lead_activities.sql` — CRM timeline table
+- `149_portal_session_versions.sql` — session bump on password reset
+
+### Filter pipeline
+List, count, export and bulk-assign share `applyLeadFilters()` via `src/lib/leadFilters.ts`.
+
+### API framework
+`src/lib/api/handlers.ts` provides `withAdmin`, `withPortal`, `withCron`, `withWebhook` wrappers (rollout ongoing).

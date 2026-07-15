@@ -688,6 +688,11 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
           setPortalUser(data.portal_user ?? null);
           return;
         }
+        if (res.status === 401) {
+          localStorage.removeItem('warmeleads-portal-auth');
+          localStorage.removeItem('warmeleads-portal-customer');
+          return;
+        }
       } catch {
         /* noop */
       }

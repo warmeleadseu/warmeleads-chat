@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { verifyAdmin } from '@/lib/adminAuth';
 import { verifyCustomer } from '@/lib/portalAuth';
+import { hasPermission, forbidden, PERMISSIONS } from '@/lib/portalPermissions';
 import { loadCompanySettings, getInvoicePdfBytes } from '@/lib/invoicePdfRender';
 
 export async function GET(
@@ -17,6 +18,9 @@ export async function GET(
 
   if (!admin && !session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  if (session && !hasPermission(session, PERMISSIONS.INVOICES_VIEW)) {
+    return forbidden();
   }
 
   let query = supabase.from('invoices').select('*').eq('id', id);

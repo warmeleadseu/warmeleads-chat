@@ -12,6 +12,22 @@ npm run dev
 npm run dev:stable
 ```
 
+## 📚 Documentatie
+
+- **Architectuur:** zie [ARCHITECTURE.md](./ARCHITECTURE.md)
+- **Overhaul status:** fases 0–9 (fundament, security, data-integriteit, distributie, API-platform, admin UX, CRM, portal, SEO, engineering)
+- **Migraties:** `supabase/migrations/` — pas nieuwe migraties toe vóór deploy
+
+## 🧪 Tests & CI
+
+```bash
+npm run type-check
+npm run test
+npm run lint
+```
+
+GitHub Actions draait op elke push naar `main`.
+
 ## 📍 Website URL
 - **Lokale ontwikkeling:** http://localhost:3000
 - **Productie:** https://warmeleads.eu

@@ -14,35 +14,11 @@ const CookieConsent = dynamic(
 );
 
 export function DeferredGlobals() {
-  const [ready, setReady] = useState(false);
+  const [ready, setReady] = useState(true);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-
-    let cancelled = false;
-    const mount = () => {
-      if (!cancelled) setReady(true);
-    };
-
-    type IdleWindow = Window & {
-      requestIdleCallback?: (cb: () => void, opts?: { timeout?: number }) => number;
-      cancelIdleCallback?: (id: number) => void;
-    };
-    const w = window as IdleWindow;
-
-    if (typeof w.requestIdleCallback === 'function') {
-      const id = w.requestIdleCallback(mount, { timeout: 2000 });
-      return () => {
-        cancelled = true;
-        w.cancelIdleCallback?.(id);
-      };
-    }
-
-    const timer = window.setTimeout(mount, 1500);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
+    setReady(true);
   }, []);
 
   if (!ready) return null;

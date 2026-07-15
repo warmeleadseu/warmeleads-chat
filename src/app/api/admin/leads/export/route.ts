@@ -3,15 +3,17 @@ import { createServerClient } from '@/lib/supabase';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { logAudit } from '@/lib/audit';
 import { isBulkLeadsBatchKind, normalizeBatchKind } from '@/lib/batchKind';
-import { buildPhoneSearchIlikeClauses, sanitizePostgrestIlike } from '@/lib/phoneSearch';
 import * as XLSX from 'xlsx';
-import { onLeadAssignedToCustomer } from '@/lib/integrations/onLeadAssigned';
 import { syncBatchDelivered } from '@/lib/batchSync';
 import { buildLeadExportTable } from '@/lib/leadExportTable';
 import {
   validateExportBranchFilter,
   validatePortalExportBranches,
 } from '@/lib/exportBranchValidation';
+import { applyAccountManagerScope, applyLeadFilters } from '@/lib/leadFilters';
+import { bodyToLeadFilterParams } from '@/lib/leadExportFilters';
+import { assignLeadToBatch } from '@/lib/assignLeadToBatch';
+import { logLeadActivity } from '@/lib/leadActivities';
 
 function buildCsv(leads: Record<string, unknown>[]): NextResponse {
   const BOM = '\uFEFF';
@@ -109,69 +111,13 @@ export async function POST(request: NextRequest) {
     .from('leads')
     .select('*, customers(id, name)');
 
-  if (branchFilter.length === 1) query = query.eq('branch', branchFilter[0]);
-  else if (branchFilter.length > 1) query = query.in('branch', branchFilter);
-  if (customer_id) {
-    const vals = String(customer_id).split(',').filter(Boolean);
-    if (vals.length > 0) query = query.overlaps('assigned_customer_ids', vals);
-  }
-  if (exclude_customer_id) {
-    const vals = String(exclude_customer_id).split(',').filter(Boolean);
-    if (vals.length > 0) {
-      query = query.not('assigned_customer_ids', 'ov', `{${vals.join(',')}}`);
-    }
-  }
-  if (assignment === 'assigned') query = query.eq('is_assigned', true);
-  else if (assignment === 'unassigned') query = query.eq('is_assigned', false);
-  if (status) {
-    const vals = String(status).split(',').filter(Boolean);
-    if (vals.length === 1) query = query.eq('status', vals[0]);
-    else if (vals.length > 1) query = query.in('status', vals);
-  }
-  if (province) {
-    const vals = String(province).split(',').filter(Boolean);
-    if (vals.length === 1) query = query.eq('provincie', vals[0]);
-    else if (vals.length > 1) query = query.in('provincie', vals);
-  }
-  if (source) {
-    const vals = String(source).split(',').filter(Boolean);
-    if (vals.length === 1) query = query.eq('bron', vals[0]);
-    else if (vals.length > 1) query = query.in('bron', vals);
-  }
-  if (phone_valid === 'false' || phone_valid === false) query = query.eq('phone_valid', false);
-  if (phone_valid === 'true' || phone_valid === true) query = query.eq('phone_valid', true);
-  if (date_from || date_to) {
-    if (includeUnknownDate) {
-      const conds: string[] = [];
-      if (date_from && date_to) conds.push(`and(wervingsdatum.gte.${String(date_from)},wervingsdatum.lte.${String(date_to)})`);
-      else if (date_from) conds.push(`wervingsdatum.gte.${String(date_from)}`);
-      else if (date_to) conds.push(`wervingsdatum.lte.${String(date_to)}`);
-      conds.push('wervingsdatum_unknown.eq.true');
-      query = query.or(conds.join(','));
-    } else {
-      if (date_from) query = query.gte('wervingsdatum', String(date_from));
-      if (date_to) query = query.lte('wervingsdatum', String(date_to));
-    }
-  }
-  if (search) {
-    const s = sanitizePostgrestIlike(String(search));
-    const parts = [
-      `naam_klant.ilike.%${s}%`,
-      `email.ilike.%${s}%`,
-      ...buildPhoneSearchIlikeClauses('telefoonnummer', String(search)),
-      `postcode.ilike.%${s}%`,
-    ];
-    query = query.or(parts.join(','));
-  }
-  if (bulk_status === 'never') query = query.eq('bulk_export_count', 0);
-  else if (bulk_status === 'once') query = query.eq('bulk_export_count', 1);
-  else if (bulk_status === 'multiple') query = query.gte('bulk_export_count', 2);
+  const filterParams = bodyToLeadFilterParams({ ...body, branch: branchFilter.join(',') });
+  query = applyLeadFilters(query, filterParams);
 
   if (admin.role === 'accountmanager') {
-    const { data: myCustomers } = await supabase.from('customers').select('id').eq('account_manager_id', admin.id);
-    const ids = (myCustomers || []).map((c: { id: string }) => c.id);
-    if (ids.length === 0) return buildCsv([]);
-    query = query.overlaps('assigned_customer_ids', ids);
+    const scoped = await applyAccountManagerScope(supabase, query, admin.id);
+    if (!scoped.allowed) return format === 'xlsx' ? buildXlsx([]) : buildCsv([]);
+    query = scoped.query;
   }
 
   const shouldPrioritize = prioritize_least_exported !== false;
@@ -272,37 +218,46 @@ export async function POST(request: NextRequest) {
       (existing || []).forEach(a => alreadyAssigned.add(a.lead_id));
     }
 
-    const newLeadIds = leadIds.filter(id => !alreadyAssigned.has(id));
-    const assignments = newLeadIds.map(leadId => ({
-      lead_id: leadId,
-      customer_id: custId,
-      source: 'bulk_export' as const,
-      ...(portalBatchId ? { batch_id: portalBatchId } : {}),
-    }));
+    const { data: targetCustomerFull } = await supabase
+      .from('customers')
+      .select('id, branches')
+      .eq('id', custId)
+      .single();
 
-    const CHUNK = 500;
-    for (let i = 0; i < assignments.length; i += CHUNK) {
-      const chunk = assignments.slice(i, i + CHUNK);
-      const { data: inserted } = await supabase
-        .from('lead_assignments')
-        .insert(chunk)
-        .select('id, lead_id, customer_id');
-      const rows = inserted || [];
-      const SYNC_BATCH = 5;
-      for (let j = 0; j < rows.length; j += SYNC_BATCH) {
-        for (const row of rows.slice(j, j + SYNC_BATCH)) {
-          onLeadAssignedToCustomer({
-            customerId: row.customer_id,
-            leadId: row.lead_id,
-            assignmentId: row.id,
-          });
-        }
+    const newLeadIds = leadIds.filter(id => !alreadyAssigned.has(id));
+    for (const leadId of newLeadIds) {
+      const leadRow = exportedLeads.find(l => l.id === leadId) as Record<string, unknown> | undefined;
+      if (!leadRow || !targetCustomerFull) continue;
+      const result = await assignLeadToBatch({
+        supabase,
+        lead: {
+          id: leadId,
+          branch: leadRow.branch as string | null,
+          lat: leadRow.lat as number | null,
+          lng: leadRow.lng as number | null,
+          provincie: leadRow.provincie as string | null,
+          land: leadRow.land as string | null,
+          postcode: leadRow.postcode as string | null,
+          naam_klant: leadRow.naam_klant as string | null,
+          plaatsnaam: leadRow.plaatsnaam as string | null,
+        },
+        customer: { id: custId, branches: targetCustomerFull.branches as string[] | null },
+        batchId: portalBatchId,
+        source: 'bulk_export',
+      });
+      if (result.ok) {
+        await logLeadActivity(supabase, {
+          leadId,
+          customerId: custId,
+          actorType: 'admin',
+          actorId: admin.id,
+          actorName: admin.name,
+          action: 'bulk_export_portal',
+          details: { assignment_id: result.assignmentId, batch_id: portalBatchId },
+        });
       }
     }
 
-    // Houd `customer_batches.leads_delivered` in sync zodat de progressbar op
-    // de batch-detail-pagina direct na een bulk-export klopt. Op basis van het
-    // werkelijke aantal `lead_assignments`-rijen voor deze batch.
     if (portalBatchId) {
       try {
         await syncBatchDelivered(supabase, portalBatchId);
