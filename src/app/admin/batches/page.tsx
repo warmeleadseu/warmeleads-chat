@@ -37,6 +37,7 @@ import { adminFetch } from '@/lib/adminAuth';
 import { openCustomerPortalAsAdmin } from '@/lib/adminOpenPortal';
 import SearchableSelect from '@/components/ui/SearchableSelect';
 import BatchTargetsEditor from '@/components/admin/BatchTargetsEditor';
+import BatchTargetsDraftEditor, { type BatchTargetDraft } from '@/components/admin/BatchTargetsDraftEditor';
 import { useAdmin } from '../adminContext';
 import { mergeCustomTiers } from '@/lib/pricing';
 import { isMetaCampaignSyncBatchKind, isPipelineBatchKind } from '@/lib/batchKind';
@@ -1805,13 +1806,8 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
         trigger_backfill: batchSizeGrew,
         starts_at: startsAtISO,
       };
-      // Lookback is alleen aanpasbaar zolang de batch nog niet betaald is
-      // én het een pijplijn-batch is (bulk/appointments/research kennen geen lookback).
-      if (
-        batch.is_paid !== true &&
-        isPipelineBatchKind(batch.batch_kind) &&
-        !isNicheResearch
-      ) {
+      // Lookback: aanpasbaar voor pijplijn-batches (ook na betaling → retroactieve backfill).
+      if (isPipelineBatchKind(batch.batch_kind) && !isNicheResearch) {
         const parsed = parseInt(form.lookback_days, 10);
         const clamped = Number.isFinite(parsed) ? Math.max(0, Math.min(30, parsed)) : 0;
         payload.lookback_days = clamped;
@@ -2143,11 +2139,10 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
             </>
           )}
 
-          {/* Lookback — aanpasbaar zolang batch niet betaald is (alleen pijplijn-batches). */}
+          {/* Lookback — aanpasbaar voor pijplijn-batches; wijziging triggert retroactieve backfill. */}
           {batch.lookback_days !== null && batch.lookback_days !== undefined && (
             (() => {
               const lookbackEditable =
-                batch.is_paid !== true &&
                 isPipelineBatchKind(batch.batch_kind) &&
                 !isNicheResearch;
               if (!lookbackEditable) {
@@ -2174,8 +2169,10 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
                       <p className="text-sm font-medium text-slate-700">Lookback dagen</p>
                       <p className="text-[11px] text-slate-400">
                         {form.lookback_days === '0' || form.lookback_days === ''
-                          ? 'Geen backfill, alleen nieuwe leads bij betaling'
-                          : `Bij betaling: bestaande leads van de afgelopen ${form.lookback_days} dag(en) toewijzen`}
+                          ? 'Geen backfill, alleen nieuwe leads'
+                          : batch.is_paid
+                            ? `Wijziging triggert met terugwerkende kracht backfill (${form.lookback_days} dag(en))`
+                            : `Bij betaling: bestaande leads van de afgelopen ${form.lookback_days} dag(en) toewijzen`}
                       </p>
                     </div>
                     <input
@@ -2204,7 +2201,9 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
                     ))}
                   </div>
                   <p className="mt-2 text-[11px] text-slate-400">
-                    Alleen aanpasbaar zolang de batch nog niet betaald is. Backfill draait automatisch zodra de batch betaald wordt.
+                    {batch.is_paid
+                      ? 'Na opslaan worden extra leads uit het verlengde venster met terugwerkende kracht toegewezen.'
+                      : 'Backfill draait automatisch zodra de batch betaald wordt.'}
                   </p>
                 </div>
               );
@@ -2359,6 +2358,7 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
   // overschrijven te voorkomen wanneer de admin handmatig picks aanpast.
   const [metaDefaultLoadedKey, setMetaDefaultLoadedKey] = useState('');
   const [metaDefaultLoadedFromDb, setMetaDefaultLoadedFromDb] = useState(false);
+  const [draftTargets, setDraftTargets] = useState<BatchTargetDraft[]>([]);
 
   useEffect(() => {
     if (form.batch_delivery !== 'pipeline') setDistributionPriority(false);
@@ -2666,6 +2666,11 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
             ? {
                 ...metaPayload,
                 distribution_priority: distributionPriority,
+                ...(draftTargets.length > 0
+                  ? {
+                      batch_targets: draftTargets.map(({ _key, ...t }) => t),
+                    }
+                  : {}),
               }
             : {}),
         }),
@@ -3013,6 +3018,10 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
             <div className="rounded-lg border border-fuchsia-200 bg-fuchsia-50/40 p-3 text-[11px] text-fuchsia-950">
               Lookback en automatische lead-toewijzing gelden niet voor onderzoeksbatches. Eenmalig pakket à €1.000 excl. btw (zelfde als portaal).
             </div>
+          )}
+
+          {form.batch_product === 'leads' && form.batch_delivery === 'pipeline' && (
+            <BatchTargetsDraftEditor targets={draftTargets} onChange={setDraftTargets} />
           )}
 
           {!isAppointments && (form.batch_delivery === 'pipeline' || form.batch_delivery === 'niche_research') && (

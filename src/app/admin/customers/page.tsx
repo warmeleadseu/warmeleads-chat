@@ -36,6 +36,7 @@ import {
 import { adminFetch } from '@/lib/adminAuth';
 import { openCustomerPortalAsAdmin } from '@/lib/adminOpenPortal';
 import { BatchTargetAreaBadges } from '@/components/admin/BatchTargetAreaBadges';
+import BatchTargetsDraftEditor, { type BatchTargetDraft } from '@/components/admin/BatchTargetsDraftEditor';
 import type { CustomerTargetRow } from '@/lib/batchTargetAreas';
 import {
   belgianKboDigitsToVatId,
@@ -3139,11 +3140,14 @@ function BatchesPanel({ customer, branchOptions, onClose, embedded }: { customer
   const [showAdd, setShowAdd] = useState(false);
   const [newBatchKind, setNewBatchKind] = useState<'leads' | 'appointments'>('leads');
   const [form, setForm] = useState<{ branch: string; batch_size: number; price_per_lead: string; leads_per_day: string; leads_per_week: string; lookback_days: string; notes: string; lead_filters: LeadFilter[]; is_paid: boolean; send_payment_email: boolean }>({ branch: '', batch_size: 100, price_per_lead: '', leads_per_day: '', leads_per_week: '', lookback_days: '3', notes: '', lead_filters: [], is_paid: false, send_payment_email: true });
+  const [draftTargets, setDraftTargets] = useState<BatchTargetDraft[]>([]);
   const [apptForm, setApptForm] = useState<{ branch: string; batch_size: number; price_per_appointment: string; appointments_per_day: string; appointments_per_week: string; notes: string; lead_filters: LeadFilter[]; is_paid: boolean; send_payment_email: boolean }>({ branch: '', batch_size: 10, price_per_appointment: '', appointments_per_day: '', appointments_per_week: '', notes: '', lead_filters: [], is_paid: false, send_payment_email: true });
   const [saving, setSaving] = useState(false);
 
-  const resetLeadForm = () =>
+  const resetLeadForm = () => {
     setForm({ branch: '', batch_size: 100, price_per_lead: '', leads_per_day: '', leads_per_week: '', lookback_days: '3', notes: '', lead_filters: [], is_paid: false, send_payment_email: true });
+    setDraftTargets([]);
+  };
   const resetApptForm = () =>
     setApptForm({ branch: '', batch_size: 10, price_per_appointment: '', appointments_per_day: '', appointments_per_week: '', notes: '', lead_filters: [], is_paid: false, send_payment_email: true });
 
@@ -3216,6 +3220,9 @@ function BatchesPanel({ customer, branchOptions, onClose, embedded }: { customer
           lead_filters: form.lead_filters.filter(f => f.field && (f.values?.length || 0) > 0),
           is_paid: form.is_paid,
           ...(form.is_paid ? {} : { send_payment_email: form.send_payment_email }),
+          ...(draftTargets.length > 0
+            ? { batch_targets: draftTargets.map(({ _key, ...t }) => t) }
+            : {}),
         }),
       });
       if (!res.ok) {
@@ -3401,6 +3408,9 @@ function BatchesPanel({ customer, branchOptions, onClose, embedded }: { customer
                 <p className="mt-1 text-[10px] text-slate-400">
                   {form.lookback_days === '0' ? 'Alleen nieuwe leads' : `Bestaande leads van ${form.lookback_days || 3} dag(en) toewijzen`}
                 </p>
+              </div>
+              <div className="mb-3">
+                <BatchTargetsDraftEditor targets={draftTargets} onChange={setDraftTargets} />
               </div>
               <div className="mb-3">
                 <label className="mb-1 block text-xs font-medium text-slate-500">Notities</label>

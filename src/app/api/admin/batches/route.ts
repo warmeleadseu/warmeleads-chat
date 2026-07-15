@@ -19,6 +19,7 @@ import {
   validateLeadBranchSlug,
 } from '@/lib/nicheResearch';
 import { deliveryModelForNewBatch, isCappedDeliveryModel } from '@/lib/batchDeliveryModel';
+import { insertBatchTargets, type BatchTargetInsertInput } from '@/lib/batchTargetInsert';
 import { logAudit } from '@/lib/audit';
 
 function sanitizeMetaCampaignIdsInput(raw: unknown): string[] | undefined {
@@ -318,6 +319,29 @@ export async function POST(request: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+  // Optionele batch-target-overrides direct bij aanmaak (vóór backfill).
+  const rawBatchTargets = body.batch_targets;
+  if (Array.isArray(rawBatchTargets) && rawBatchTargets.length > 0) {
+    const targets: BatchTargetInsertInput[] = rawBatchTargets
+      .filter((t: unknown) => t && typeof t === 'object' && typeof (t as { label?: unknown }).label === 'string')
+      .map((t: BatchTargetInsertInput) => ({
+        label: String(t.label).trim(),
+        target_type: (t.target_type === 'province' ? 'province' : 'radius') as 'radius' | 'province',
+        lat: t.lat ?? null,
+        lng: t.lng ?? null,
+        radius_km: t.radius_km ?? null,
+        provinces: Array.isArray(t.provinces) ? t.provinces : null,
+        country: t.country ?? null,
+      }))
+      .filter(t => t.label.length > 0);
+    if (targets.length > 0) {
+      const ins = await insertBatchTargets(supabase, data.id, customer_id, targets);
+      if (!ins.ok) {
+        return NextResponse.json({ error: `Batch aangemaakt maar targets mislukt: ${ins.error}` }, { status: 500 });
+      }
+    }
+  }
+
   // Targeted backfill: only if starts_at is NULL or in the past
   const startsInFuture = startsAtValue && new Date(startsAtValue) > new Date();
   if (lookback > 0 && !startsInFuture && batchIsPaid && isPipelineBatchKind(batch_kind)) {
@@ -612,8 +636,27 @@ export async function PUT(request: NextRequest) {
   // When batch_size grew and backfill requested, fill the extra slots
   const batchGrew = trigger_backfill && updates.batch_size && updates.batch_size > existing.batch_size;
   if (batchGrew && isPipelineBatchKind(batchKindAfterUpdate) && data.is_paid === true) {
-    const lookback = existing.lookback_days ?? 3;
-    try { backfillBatch(id, Math.max(lookback, 3)); } catch { /* non-blocking */ }
+    const lookback = (data as { lookback_days?: number | null }).lookback_days ?? existing.lookback_days ?? 3;
+    try { backfillBatch(id, Math.max(lookback, 0)); } catch { /* non-blocking */ }
+  }
+
+  // Lookback gewijzigd → met terugwerkende kracht opnieuw backfillen (alleen extra
+  // leads in het verlengde venster; bestaande toewijzingen blijven staan).
+  const prevLookback = existing.lookback_days ?? 3;
+  const nextLookback =
+    safeUpdates.lookback_days !== undefined ? Number(safeUpdates.lookback_days) : prevLookback;
+  const lookbackChanged =
+    safeUpdates.lookback_days !== undefined && nextLookback !== prevLookback;
+  if (
+    lookbackChanged &&
+    isPipelineBatchKind(batchKindAfterUpdate) &&
+    data.is_paid === true &&
+    data.status === 'active' &&
+    nextLookback > 0 &&
+    !batchGrew
+  ) {
+    try { backfillBatch(id, nextLookback); } catch { /* non-blocking */ }
+    try { distributeUnassignedLeads(); } catch { /* non-blocking */ }
   }
 
   // When admin manually marks batch as paid, update any open invoice
