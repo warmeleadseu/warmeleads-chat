@@ -51,6 +51,19 @@ export function checkGeoGuardrail(
   if (targets.length === 0) return null;
   const result = matchLeadToTargets(lead, targets);
   if (!result.matches) {
+    const hasCoords =
+      lead.lat != null &&
+      lead.lng != null &&
+      !Number.isNaN(Number(lead.lat)) &&
+      !Number.isNaN(Number(lead.lng));
+    const onlyRadius = targets.every(t => (t.target_type || 'radius') === 'radius');
+    if (!hasCoords && onlyRadius) {
+      return {
+        code: 'geo_mismatch',
+        message:
+          'Lead heeft geen coördinaten; klant heeft alleen een radius-doelgebied (vul adres aan of negeer guardrails)',
+      };
+    }
     return {
       code: 'geo_mismatch',
       message: `Lead valt buiten de doelgebieden van de klant${lead.plaatsnaam ? ` (${lead.plaatsnaam})` : ''}`,

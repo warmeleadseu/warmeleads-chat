@@ -55,4 +55,13 @@ describe('manualAssignmentGuardrails', () => {
     );
     expect(issue?.code).toBe('geo_mismatch');
   });
+
+  it('explains missing coordinates against radius targets', () => {
+    const issue = checkGeoGuardrail(
+      { id: '1', lat: null, lng: null },
+      [{ target_type: 'radius', lat: 53.2, lng: 5.8, radius_km: 40 }],
+    );
+    expect(issue?.code).toBe('geo_mismatch');
+    expect(issue?.message).toMatch(/geen coördinaten/i);
+  });
 });

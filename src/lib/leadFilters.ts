@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { buildPhoneSearchIlikeClauses, sanitizePostgrestIlike } from '@/lib/phoneSearch';
 import { PARTNER_PROSPECT_BRANCH_SLUGS } from '@/lib/partnerProspectConstants';
+import { buildPostcodeRangeOrFilter, parsePostcodeRanges } from '@/lib/postcodeRanges';
 
 /**
  * Beschrijft de set filters die zowel `GET /api/admin/leads`,
@@ -22,6 +23,8 @@ export type LeadFilterParams = {
   include_unknown_date?: string | boolean | null;
   search?: string | null;
   bulk_status?: string | null;
+  /** PC4 ranges, e.g. "7500-7599, 2000" */
+  postcode_ranges?: string | null;
 };
 
 export function readLeadFilterParams(url: URLSearchParams): LeadFilterParams {
@@ -39,6 +42,7 @@ export function readLeadFilterParams(url: URLSearchParams): LeadFilterParams {
     include_unknown_date: url.get('include_unknown_date'),
     search: url.get('search'),
     bulk_status: url.get('bulk_status'),
+    postcode_ranges: url.get('postcode_ranges'),
   };
 }
 
@@ -154,6 +158,10 @@ export function applyLeadFilters<T>(
   if (filters.bulk_status === 'never') q = q.eq('bulk_export_count', 0);
   else if (filters.bulk_status === 'once') q = q.eq('bulk_export_count', 1);
   else if (filters.bulk_status === 'multiple') q = q.gte('bulk_export_count', 2);
+
+  const pcRanges = parsePostcodeRanges(filters.postcode_ranges);
+  const pcOr = buildPostcodeRangeOrFilter(pcRanges);
+  if (pcOr) q = q.or(pcOr);
 
   return q as unknown as T;
 }

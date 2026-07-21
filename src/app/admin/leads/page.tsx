@@ -411,6 +411,7 @@ export default function LeadsCRMPage() {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
   const [bulkFilter, setBulkFilter] = useState('all');
+  const [postcodeRanges, setPostcodeRanges] = useState('');
 
   const [facets, setFacets] = useState<Record<string, Record<string, number>>>({});
 
@@ -430,7 +431,7 @@ export default function LeadsCRMPage() {
   const [bulkAssignModalKey, setBulkAssignModalKey] = useState(0);
   const [bulkAssignInitialScope, setBulkAssignInitialScope] = useState<'selected' | 'all_filtered'>('selected');
   const [bulkAssignFeedback, setBulkAssignFeedback] = useState<
-    | { kind: 'success'; assigned: number; skipped: number; total: number; customerName: string }
+    | { kind: 'success'; assigned: number; skipped: number; blocked: number; total: number; customerName: string }
     | { kind: 'error'; message: string }
     | null
   >(null);
@@ -459,6 +460,7 @@ export default function LeadsCRMPage() {
     if (dateTo) p.set('date_to', dateTo);
     if ((dateFrom || dateTo) && !includeUnknownDate) p.set('include_unknown_date', 'false');
     if (search) p.set('search', search);
+    if (postcodeRanges.trim()) p.set('postcode_ranges', postcodeRanges.trim());
     p.set('page', String(page));
     p.set('per_page', String(perPage));
     p.set('sort_by', sortBy);
@@ -479,7 +481,7 @@ export default function LeadsCRMPage() {
     } finally {
       setLoading(false);
     }
-  }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, includeUnknownDate, search, page, perPage, sortBy, sortDir]);
+  }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, includeUnknownDate, search, postcodeRanges, page, perPage, sortBy, sortDir]);
 
   const fetchFacets = useCallback(async () => {
     const p = new URLSearchParams();
@@ -495,9 +497,10 @@ export default function LeadsCRMPage() {
     if (dateTo) p.set('date_to', dateTo);
     if ((dateFrom || dateTo) && !includeUnknownDate) p.set('include_unknown_date', 'false');
     if (search) p.set('search', search);
+    if (postcodeRanges.trim()) p.set('postcode_ranges', postcodeRanges.trim());
     const res = await adminFetch(`/api/admin/leads/facets?${p}`);
     if (res.ok) { const d = await res.json(); setFacets(d.facets || {}); }
-  }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, includeUnknownDate, search]);
+  }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, includeUnknownDate, search, postcodeRanges]);
 
   const fetchExportHistory = useCallback(async () => {
     const res = await adminFetch('/api/admin/leads/export');
@@ -524,7 +527,7 @@ export default function LeadsCRMPage() {
   useEffect(() => { fetchMeta(); fetchExportHistory(); }, [fetchMeta, fetchExportHistory]);
   useEffect(() => { fetchLeads(); }, [fetchLeads]);
   useEffect(() => { fetchFacets(); }, [fetchFacets]);
-  useEffect(() => { setPage(1); }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, includeUnknownDate, search, perPage]);
+  useEffect(() => { setPage(1); }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, includeUnknownDate, search, postcodeRanges, perPage]);
 
   useEffect(() => {
     const c = searchParams.get('customer');
@@ -626,8 +629,9 @@ export default function LeadsCRMPage() {
     if (dateTo) p.date_to = dateTo;
     if ((dateFrom || dateTo) && !includeUnknownDate) p.include_unknown_date = 'false';
     if (search) p.search = search;
+    if (postcodeRanges.trim()) p.postcode_ranges = postcodeRanges.trim();
     return p;
-  }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, includeUnknownDate, search]);
+  }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, includeUnknownDate, search, postcodeRanges]);
 
   const handleQuickStatus = async (id: string, newStatus: string) => {
     const prevStatus = leads.find(l => l.id === id)?.status;
@@ -766,14 +770,17 @@ export default function LeadsCRMPage() {
         {bulkAssignFeedback && (
           <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
             {bulkAssignFeedback.kind === 'success' ? (
-              <div className="mb-4 flex items-start justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
-                <p className="min-w-0 flex-1 break-words text-sm text-emerald-700">
+              <div className={`mb-4 flex items-start justify-between gap-3 rounded-lg border px-4 py-3 ${bulkAssignFeedback.assigned > 0 ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
+                <p className={`min-w-0 flex-1 break-words text-sm ${bulkAssignFeedback.assigned > 0 ? 'text-emerald-700' : 'text-amber-800'}`}>
                   <strong>{bulkAssignFeedback.assigned.toLocaleString('nl-NL')}</strong> lead{bulkAssignFeedback.assigned === 1 ? '' : 's'} toegewezen aan <strong>{bulkAssignFeedback.customerName}</strong>
                   {bulkAssignFeedback.skipped > 0 && (
-                    <> · <span className="text-emerald-600/80">{bulkAssignFeedback.skipped.toLocaleString('nl-NL')} overgeslagen (binnen 30 dagen al toegewezen)</span></>
+                    <> · <span className="opacity-80">{bulkAssignFeedback.skipped.toLocaleString('nl-NL')} overgeslagen (binnen 30 dagen al toegewezen)</span></>
+                  )}
+                  {bulkAssignFeedback.blocked > 0 && (
+                    <> · <span className="opacity-80">{bulkAssignFeedback.blocked.toLocaleString('nl-NL')} geblokkeerd door guardrails</span></>
                   )}
                 </p>
-                <button onClick={() => setBulkAssignFeedback(null)} className="ml-3 shrink-0 text-emerald-400 hover:text-emerald-600"><XMarkIcon className="h-4 w-4" /></button>
+                <button onClick={() => setBulkAssignFeedback(null)} className={`ml-3 shrink-0 ${bulkAssignFeedback.assigned > 0 ? 'text-emerald-400 hover:text-emerald-600' : 'text-amber-400 hover:text-amber-600'}`}><XMarkIcon className="h-4 w-4" /></button>
               </div>
             ) : (
               <div className="mb-4 flex items-start justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
@@ -864,6 +871,14 @@ export default function LeadsCRMPage() {
             <span className="text-xs text-slate-400">t/m</span>
             <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="w-full max-w-[9.5rem] rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 sm:w-auto" />
           </div>
+          <input
+            type="text"
+            value={postcodeRanges}
+            onChange={e => setPostcodeRanges(e.target.value)}
+            placeholder="Postcodegebied (bijv. 7500-7599, 2000)"
+            title="Filter op PC4-gebieden: 7500-7599 of meerdere ranges gescheiden door komma"
+            className={`min-w-[14rem] flex-1 rounded-lg border px-3 py-2 text-sm outline-none focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/30 sm:max-w-xs ${postcodeRanges.trim() ? 'border-sky-300 bg-sky-50 text-sky-900' : 'border-slate-200 bg-white text-slate-700'}`}
+          />
           {(dateFrom || dateTo) && (
             <label className="flex cursor-pointer select-none items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
               <input
@@ -1226,16 +1241,17 @@ export default function LeadsCRMPage() {
                 kind: 'success',
                 assigned: result.assigned,
                 skipped: result.skipped_already,
+                blocked: result.blocked_guardrails ?? 0,
                 total: result.total,
                 customerName: result.customer_name,
               });
               setSelected(new Set());
               fetchLeads();
-              setTimeout(() => setBulkAssignFeedback(null), 7000);
+              setTimeout(() => setBulkAssignFeedback(null), 9000);
             }}
             onError={(message) => {
               setBulkAssignFeedback({ kind: 'error', message });
-              setTimeout(() => setBulkAssignFeedback(null), 7000);
+              setTimeout(() => setBulkAssignFeedback(null), 9000);
             }}
           />
         )}
@@ -1296,6 +1312,7 @@ function ExportModal({
   const [filterDateTo, setFilterDateTo] = useState<string>(filterParams.date_to || '');
   const [filterIncludeUnknownDate, setFilterIncludeUnknownDate] = useState<boolean>(
     filterParams.include_unknown_date !== 'false');
+  const filterPostcodeRanges = filterParams.postcode_ranges || '';
   const [filtersExpanded, setFiltersExpanded] = useState<boolean>(
     isBulkBatchFlow || !(filterParams.branch?.split(',').filter(Boolean).length),
   );
@@ -1361,6 +1378,7 @@ function ExportModal({
     if (filterDateFrom) body.date_from = filterDateFrom;
     if (filterDateTo) body.date_to = filterDateTo;
     if ((filterDateFrom || filterDateTo) && !filterIncludeUnknownDate) body.include_unknown_date = 'false';
+    if (filterPostcodeRanges.trim()) body.postcode_ranges = filterPostcodeRanges.trim();
     if (excludeCustomers.length > 0) body.exclude_customer_id = excludeCustomers.join(',');
     // De "Sluit reeds uitgedeelde leads uit"-checkbox is in de bulk-batch
     // flow verborgen; daar regelt klant-exclude (`exclude_customer_id`) dat
@@ -1370,7 +1388,7 @@ function ExportModal({
   }, [
     selFilterBranches, selFilterStatuses, selFilterProvinces, selFilterSources,
     filterPhone, filterBulkStatus, filterDateFrom, filterDateTo, filterIncludeUnknownDate,
-    excludeCustomers, excludeAlreadyAssigned, isBulkBatchFlow,
+    filterPostcodeRanges, excludeCustomers, excludeAlreadyAssigned, isBulkBatchFlow,
   ]);
 
   const [liveCount, setLiveCount] = useState<number | null>(null);
@@ -1864,6 +1882,7 @@ function ExportModal({
 type BulkAssignResult = {
   assigned: number;
   skipped_already: number;
+  blocked_guardrails?: number;
   total: number;
   customer_name: string;
 };
@@ -1893,6 +1912,7 @@ function BulkAssignModal({
   const [customerId, setCustomerId] = useState('');
   const [scope, setScope] = useState<'selected' | 'all_filtered'>(initial);
   const [maxLeads, setMaxLeads] = useState('');
+  const [overrideGuardrails, setOverrideGuardrails] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [filterCount, setFilterCount] = useState<number | null>(totalInFilter > 0 ? totalInFilter : null);
@@ -1939,11 +1959,19 @@ function BulkAssignModal({
       const body: Record<string, unknown> = {
         customer_id: customerId,
         scope,
+        override_guardrails: overrideGuardrails,
       };
       if (scope === 'selected') {
         body.lead_ids = selectedLeadIds;
       } else {
-        Object.assign(body, filterParams);
+        // Map page filter `customer_id` → `filter_customer_id` zodat we de
+        // toewijzings-klant niet overschrijven.
+        const {
+          customer_id: filterCustomerId,
+          ...restFilters
+        } = filterParams;
+        Object.assign(body, restFilters);
+        if (filterCustomerId) body.filter_customer_id = filterCustomerId;
         if (maxLeads && Number(maxLeads) > 0) body.max_leads = Number(maxLeads);
       }
       const res = await adminFetch('/api/admin/leads/bulk-assign', {
@@ -1955,11 +1983,35 @@ function BulkAssignModal({
         const msg = d?.error || 'Toewijzen mislukt';
         throw new Error(msg);
       }
+
+      const assigned = typeof d.assigned === 'number' ? d.assigned : 0;
+      const blocked = typeof d.blocked_guardrails === 'number' ? d.blocked_guardrails : 0;
+      const skipped = typeof d.skipped_already === 'number' ? d.skipped_already : 0;
+      const total = typeof d.total === 'number' ? d.total : targetCount;
+      const name = typeof d.customer_name === 'string' ? d.customer_name : customerName;
+
+      if (assigned === 0 && blocked > 0) {
+        const sampleReasons: string[] = Array.isArray(d.blocked_sample)
+          ? (d.blocked_sample as Array<{ reasons?: string[] }>)
+              .flatMap(s => s.reasons || [])
+              .filter((r, i, arr) => arr.indexOf(r) === i)
+              .slice(0, 3)
+          : [];
+        const detail = sampleReasons.length > 0 ? ` ${sampleReasons.join(' · ')}` : '';
+        const msg =
+          (typeof d.error === 'string' && d.error) ||
+          `${blocked} lead${blocked === 1 ? '' : 's'} geblokkeerd door guardrails.${detail} Vink hieronder "Guardrails negeren" aan om toch toe te wijzen.`;
+        setError(msg);
+        onError(msg);
+        return;
+      }
+
       onAssigned({
-        assigned: typeof d.assigned === 'number' ? d.assigned : 0,
-        skipped_already: typeof d.skipped_already === 'number' ? d.skipped_already : 0,
-        total: typeof d.total === 'number' ? d.total : targetCount,
-        customer_name: typeof d.customer_name === 'string' ? d.customer_name : customerName,
+        assigned,
+        skipped_already: skipped,
+        blocked_guardrails: blocked,
+        total,
+        customer_name: name,
       });
       onClose();
     } catch (err: unknown) {
@@ -2068,10 +2120,26 @@ function BulkAssignModal({
               </div>
             )}
 
+            <label className={`flex cursor-pointer items-start gap-3 rounded-lg border px-4 py-3 text-sm transition ${overrideGuardrails ? 'border-amber-300 bg-amber-50' : 'border-slate-200 bg-white hover:bg-slate-50'}`}>
+              <input
+                type="checkbox"
+                checked={overrideGuardrails}
+                onChange={e => setOverrideGuardrails(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500/30"
+              />
+              <div>
+                <span className="font-medium text-slate-700">Guardrails negeren</span>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  Wijs ook toe als branche of doelgebied niet matcht, of als de lead geen coördinaten heeft.
+                </p>
+              </div>
+            </label>
+
             <div className="rounded-lg border border-violet-200 bg-violet-50/60 px-4 py-3 text-xs text-violet-900">
               <p className="font-semibold">Wat gebeurt er bij toewijzen?</p>
               <ul className="mt-1 space-y-0.5 text-violet-800/90">
                 <li>• Leads die binnen de afgelopen 30 dagen al aan deze klant zijn toegewezen worden overgeslagen.</li>
+                <li>• Standaard checken we branche + doelgebied van de klant.</li>
                 <li>• Heeft de klant een actieve betaalde leads-batch? Dan komen de toewijzingen daarin (progress klopt direct).</li>
                 <li>• Bestaande Teamleader/Google Sheets integraties worden automatisch gesynced.</li>
               </ul>

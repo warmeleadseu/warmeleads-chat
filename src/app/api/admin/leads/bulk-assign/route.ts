@@ -95,6 +95,7 @@ export async function POST(request: NextRequest) {
         ? (body.include_unknown_date as string | boolean) : null,
       search: typeof body.search === 'string' ? body.search : null,
       bulk_status: typeof body.bulk_status === 'string' ? body.bulk_status : null,
+      postcode_ranges: typeof body.postcode_ranges === 'string' ? body.postcode_ranges : null,
     };
 
     const cap = maxLeadsRaw && Number(maxLeadsRaw) > 0
@@ -145,6 +146,7 @@ export async function POST(request: NextRequest) {
 
   let eligibleIds = leadIds;
   let blockedCount = 0;
+  let blockedSample: Array<{ lead_id: string; reasons: string[] }> = [];
 
   if (!overrideGuardrails && leadRows?.length) {
     const preflight = await preflightManualAssignments(
@@ -154,6 +156,10 @@ export async function POST(request: NextRequest) {
     );
     eligibleIds = preflight.allowed;
     blockedCount = preflight.blocked.length;
+    blockedSample = preflight.blocked.slice(0, 5).map(b => ({
+      lead_id: b.lead_id,
+      reasons: b.issues.map(i => i.message),
+    }));
   }
 
   if (eligibleIds.length === 0) {
@@ -161,26 +167,32 @@ export async function POST(request: NextRequest) {
       assigned: 0,
       skipped_already: 0,
       blocked_guardrails: blockedCount,
+      blocked_sample: blockedSample,
       total: leadIds.length,
+      customer_name: customer.name,
+      error:
+        blockedCount > 0
+          ? `${blockedCount} lead${blockedCount === 1 ? '' : 's'} geblokkeerd door guardrails (branche/geo/recente toewijzing). Vink "Guardrails negeren" aan om toch toe te wijzen.`
+          : undefined,
     });
   }
 
-  // Detecteer een actieve betaalde leads-pipeline-batch om assignments
-  // automatisch te koppelen — analoog aan de bulk-export-flow zonder
-  // expliciete `bulk_batch_id`.
-  let pipelineBatchId: string | null = null;
-  const { data: pipelineBatch } = await supabase
+  // Actieve betaalde leads-pipeline-batches per branche, zodat dakrenovatie-
+  // leads niet per ongeluk op een airco-batch landen.
+  const batchByBranch = new Map<string, string>();
+  const { data: pipelineBatches } = await supabase
     .from('customer_batches')
-    .select('id, batch_kind')
+    .select('id, batch_kind, branch')
     .eq('customer_id', customerId)
     .eq('status', 'active')
     .eq('batch_kind', 'leads')
-    .neq('is_paid', false)
-    .limit(1)
-    .maybeSingle();
-  if (pipelineBatch && normalizeBatchKind(pipelineBatch.batch_kind) === 'leads') {
-    pipelineBatchId = pipelineBatch.id;
+    .neq('is_paid', false);
+  for (const b of pipelineBatches || []) {
+    if (normalizeBatchKind(b.batch_kind) !== 'leads') continue;
+    const branch = typeof b.branch === 'string' ? b.branch : '';
+    if (branch && !batchByBranch.has(branch)) batchByBranch.set(branch, b.id);
   }
+  const fallbackBatchId = batchByBranch.values().next().value ?? null;
 
   // 30-dagen dedup: leads die al recent aan deze klant zijn toegewezen,
   // worden overgeslagen. Identiek aan de export-flow.
@@ -204,28 +216,26 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       assigned: 0,
       skipped_already: skippedAlready,
-      total: leadIds.length,
-      pipeline_batch_id: pipelineBatchId,
-    });
-  }
-
-  if (newLeadIds.length === 0) {
-    return NextResponse.json({
-      assigned: 0,
-      skipped_already: skippedAlready,
       blocked_guardrails: blockedCount,
+      blocked_sample: blockedSample,
       total: leadIds.length,
-      pipeline_batch_id: pipelineBatchId,
+      pipeline_batch_id: fallbackBatchId,
+      customer_name: customer.name,
     });
   }
 
   const leadById = new Map((leadRows || []).map(l => [l.id, l]));
   let insertedCount = 0;
   const blockedOnAssign: string[] = [];
+  const usedBatchIds = new Set<string>();
 
   for (const leadId of newLeadIds) {
     const leadRow = leadById.get(leadId);
     if (!leadRow) continue;
+    const leadBranch = typeof leadRow.branch === 'string' ? leadRow.branch : '';
+    const pipelineBatchId =
+      (leadBranch && batchByBranch.get(leadBranch)) || fallbackBatchId;
+    if (pipelineBatchId) usedBatchIds.add(pipelineBatchId);
     const result = await assignLeadToBatch({
       supabase,
       lead: leadRow,
@@ -263,7 +273,7 @@ export async function POST(request: NextRequest) {
       skipped_already: skippedAlready,
       blocked_guardrails: blockedCount + blockedOnAssign.length,
       total: leadIds.length,
-      pipeline_batch_id: pipelineBatchId,
+      pipeline_batch_ids: Array.from(usedBatchIds),
       max_leads: maxLeadsRaw && Number(maxLeadsRaw) > 0 ? Number(maxLeadsRaw) : undefined,
     },
   });
@@ -272,8 +282,9 @@ export async function POST(request: NextRequest) {
     assigned: insertedCount,
     skipped_already: skippedAlready,
     blocked_guardrails: blockedCount + blockedOnAssign.length,
+    blocked_sample: blockedSample,
     total: leadIds.length,
-    pipeline_batch_id: pipelineBatchId,
+    pipeline_batch_id: fallbackBatchId,
     customer_name: customer.name,
   });
 }

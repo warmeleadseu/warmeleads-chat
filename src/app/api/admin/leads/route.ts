@@ -18,6 +18,7 @@ import {
   PARTNER_PROSPECT_BRANCH_SLUGS,
 } from '@/lib/partnerProspectConstants';
 import { buildPhoneSearchIlikeClauses, sanitizePostgrestIlike } from '@/lib/phoneSearch';
+import { buildPostcodeRangeOrFilter, parsePostcodeRanges } from '@/lib/postcodeRanges';
 
 export async function GET(request: NextRequest) {
   const admin = await verifyAdmin(request);
@@ -129,6 +130,9 @@ export async function GET(request: NextRequest) {
   if (bulkStatus === 'never') query = query.eq('bulk_export_count', 0);
   else if (bulkStatus === 'once') query = query.eq('bulk_export_count', 1);
   else if (bulkStatus === 'multiple') query = query.gte('bulk_export_count', 2);
+
+  const pcOr = buildPostcodeRangeOrFilter(parsePostcodeRanges(url.get('postcode_ranges')));
+  if (pcOr) query = query.or(pcOr);
 
   const allowedSorts = [
     'created_at', 'naam_klant', 'email', 'status', 'wervingsdatum', 'plaatsnaam', 'provincie', 'branch', 'bulk_export_count',

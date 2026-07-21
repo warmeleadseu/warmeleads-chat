@@ -22,5 +22,6 @@ export function bodyToLeadFilterParams(body: Record<string, unknown>): LeadFilte
         : null,
     search: typeof body.search === 'string' ? body.search : null,
     bulk_status: typeof body.bulk_status === 'string' ? body.bulk_status : null,
+    postcode_ranges: typeof body.postcode_ranges === 'string' ? body.postcode_ranges : null,
   };
 }
