@@ -129,10 +129,15 @@ export async function GET(request: NextRequest) {
 
   const leadBronById = new Map(allLeads.map(l => [l.id, l.bron]));
 
-  /** Bulk-export en demo/test: buiten Meta-CPL en buiten ad-kostentoewijzing. */
+  /**
+   * Bulk en demo/test: buiten Meta-CPL en buiten ad-kostentoewijzing.
+   * `bulk_assign` telt alleen mee als de toewijzing aan een betaalde batch
+   * hangt (echte levering); losse bulk_assigns zijn bulkverkoop.
+   */
   function isCplPoolAssignment(a: AssignRow): boolean {
     const src = a.source || 'distribution';
     if (src === 'bulk_export' || src === 'demo') return false;
+    if (src === 'bulk_assign' && !a.batch_id) return false;
     const bron = leadBronById.get(a.lead_id);
     if (bron === 'demo') return false;
     return true;

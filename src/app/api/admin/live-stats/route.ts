@@ -10,7 +10,10 @@ import {
 } from '@/lib/amLeaderboardServer';
 import { adminCustomerLiveUnpaidEmbed, adminCustomerTargetsOnly } from '@/lib/adminBatchQueries';
 import { activeTargetSummariesFromUnknown } from '@/lib/batchTargetAreas';
-import { getApprovedReclamationStats } from '@/lib/reclamationStats';
+import {
+  countApprovedReclamationsForAssignments,
+  getApprovedReclamationStats,
+} from '@/lib/reclamationStats';
 
 const BREAKDOWN_LOOKBACK_DAYS = 90;
 /** Max rijen voor provincie/tak in JS-aggregatie (voorkomt full-table reads). */
@@ -22,7 +25,7 @@ const BATCHES_LIST_LIMIT = 1_500;
 const BULK_ASSIGNMENTS_MAX_PAGES = 80;
 
 const LIVE_STATS_CACHE_TTL_MS = 45_000;
-const LIVE_STATS_CACHE_KEY = 'live-stats-v7';
+const LIVE_STATS_CACHE_KEY = 'live-stats-v8';
 const UNPAID_BATCH_FEED_LIMIT = 18;
 
 interface AiSpendSummary {
@@ -338,7 +341,13 @@ export async function GET(request: NextRequest) {
   const relevantCampaignIds = [...campaignBranch.keys()];
   const totalOurLeads = relevantAdsData.length;
 
+  // `monthAdSpend` = spend sinds de eerste batch per branche (voor winst).
+  // `cplWindowSpend` = spend binnen het CPL-venster (laatste
+  // META_CAMPAIGN_LOOKBACK_DAYS dagen), zodat teller en noemer van de
+  // CPL-metrics over dezelfde periode gaan als de lead-pool.
+  const metaSinceDateStr = metaSinceIso.split('T')[0];
   let monthAdSpend = 0;
+  let cplWindowSpend = 0;
   if (relevantCampaignIds.length > 0) {
     const { data: spendRows } = await supabase
       .from('meta_ad_spend')
@@ -349,28 +358,86 @@ export async function GET(request: NextRequest) {
       const branch = campaignBranch.get(r.campaign_id);
       const startDate = branch ? branchStart.get(branch) : globalStart;
       if (startDate && r.date < startDate) continue;
-      monthAdSpend += parseFloat(r.spend) || 0;
+      const spend = parseFloat(r.spend) || 0;
+      monthAdSpend += spend;
+      if (r.date >= metaSinceDateStr) cplWindowSpend += spend;
     }
   }
 
-  const brutoCpl = totalOurLeads > 0 ? monthAdSpend / totalOurLeads : 0;
+  const brutoCpl = totalOurLeads > 0 ? cplWindowSpend / totalOurLeads : 0;
 
-  /** Zelfde logica als admin kosten: distributie-toewijzingen / Meta-leads in venster. */
-  const distributionAssignTotal = Number(revenueStats.total_assignments) || 0;
+  // ── Eff. CPL: spend voor verse Meta-leads ÷ uitdelingen van díé leads ──
+  //
+  // Definitie: "wat heeft een geleverde lead ons gemiddeld gekost". Alles in
+  // hetzelfde venster als de lead-pool (laatste 180 dagen):
+  //   • teller   = Meta-spend in het venster (cplWindowSpend)
+  //   • noemer   = alle toewijzingen van leads die in het venster zijn
+  //                gegenereerd met Meta-attributie — ongeacht wanneer de
+  //                toewijzing plaatsvond — minus goedgekeurde reclamaties.
+  //   • bulk telt niet mee: source 'bulk_export' nooit, 'bulk_assign' alleen
+  //     als de toewijzing aan een betaalde batch hangt (batch_id != null);
+  //     losse bulk_assigns zijn bulkverkoop en horen bij bulk_revenue.
+  //
+  // Null-safe source-filter: oude assignments hebben source NULL
+  // (= 'distribution' in de RPC's), die horen in de pool.
+  const CPL_ASSIGN_SELECT_FILTERS = <T,>(q: T): T => {
+    type Chainable = {
+      gte(col: string, val: string): Chainable;
+      not(col: string, op: string, val: unknown): Chainable;
+      neq(col: string, val: string): Chainable;
+      or(filter: string): Chainable;
+    };
+    let c = q as unknown as Chainable;
+    c = c
+      .gte('leads.created_at', metaSinceIso)
+      .not('leads.meta_campaign_id', 'is', null)
+      .neq('leads.bron', 'excel_import')
+      .neq('leads.bron', 'demo')
+      .or('source.is.null,source.not.in.("bulk_export","demo")')
+      .or('source.is.null,source.neq.bulk_assign,batch_id.not.is.null');
+    return c as unknown as T;
+  };
+
+  const { count: cplAssignCount } = await CPL_ASSIGN_SELECT_FILTERS(
+    supabase
+      .from('lead_assignments')
+      .select('id, leads!inner(id)', { count: 'exact', head: true }),
+  );
+  const distributionAssignTotal = cplAssignCount || 0;
 
   // ── Goedgekeurde reclamaties: aftrek voor netto-leveringen ──
-  // We tellen reclamaties op leads die binnen het CPL-lookback-venster zijn
-  // binnengekomen (zelfde scope als monthAdSpend / totalOurLeads). Bron-
-  // filter sluit demo/excel-leads uit, zodat de noemer-scopes consistent zijn
-  // met de rest van het live dashboard.
+  // Alleen reclamaties waarvan de (lead, klant)-toewijzing daadwerkelijk in
+  // de noemer-pool zit; een reclamatie op een bulk-verkochte of oudere lead
+  // mag de distributie-noemer niet verlagen.
   const approvedRecs = await getApprovedReclamationStats(
     {
-      leadCreatedSinceIso: metaSince.toISOString(),
+      leadCreatedSinceIso: metaSinceIso,
       excludeBulkAndDemo: true,
     },
     supabase,
   );
-  const approvedReclamationsInWindow = approvedRecs.total;
+
+  let approvedReclamationsInWindow = 0;
+  if (approvedRecs.total > 0) {
+    type PoolAssignRow = { lead_id: string; customer_id: string; source: string | null; batch_id: string | null };
+    const recLeadIds = [...approvedRecs.leadIds];
+    const poolAssignRows: PoolAssignRow[] = [];
+    const REC_CHUNK = 500;
+    for (let i = 0; i < recLeadIds.length; i += REC_CHUNK) {
+      const chunk = recLeadIds.slice(i, i + REC_CHUNK);
+      const { data } = await CPL_ASSIGN_SELECT_FILTERS(
+        supabase
+          .from('lead_assignments')
+          .select('lead_id, customer_id, source, batch_id, leads!inner(id)'),
+      ).in('lead_id', chunk);
+      poolAssignRows.push(...((data || []) as unknown as PoolAssignRow[]));
+    }
+    approvedReclamationsInWindow = countApprovedReclamationsForAssignments(
+      poolAssignRows,
+      approvedRecs.approvedPairs,
+    ).total;
+  }
+
   const netDistributionAssignTotal = Math.max(0, distributionAssignTotal - approvedReclamationsInWindow);
 
   const avgAssignments =
@@ -379,7 +446,7 @@ export async function GET(request: NextRequest) {
       : 0;
   const effectieveCpl =
     netDistributionAssignTotal > 0
-      ? Math.round((monthAdSpend / netDistributionAssignTotal) * 100) / 100
+      ? Math.round((cplWindowSpend / netDistributionAssignTotal) * 100) / 100
       : 0;
 
   const batchRevenue = Number(revenueStats.batch_revenue) || 0;
@@ -644,6 +711,7 @@ export async function GET(request: NextRequest) {
     phoneQuality: { total: phoneTodayTotal, invalid: phoneInvalidToday, validPct: phoneValidPct },
     costMetrics: {
       monthAdSpend: Math.round(monthAdSpend * 100) / 100,
+      cplWindowSpend: Math.round(cplWindowSpend * 100) / 100,
       brutoCpl: Math.round(brutoCpl * 100) / 100,
       effectieveCpl,
       avgAssignments,
@@ -666,6 +734,7 @@ export async function GET(request: NextRequest) {
       branchSampleRows: branchSampleSize,
       provinceBranchCapped,
       metaCampaignLookbackDays: META_CAMPAIGN_LOOKBACK_DAYS,
+      cplWindowDays: META_CAMPAIGN_LOOKBACK_DAYS,
       metaCampaignPagesFetched,
       metaCampaignTruncated,
       batchesListLimit: BATCHES_LIST_LIMIT,
