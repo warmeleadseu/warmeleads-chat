@@ -36,7 +36,9 @@ export async function GET(request: NextRequest) {
 
   let baseQuery = supabase
     .from('lead_assignments')
-    .select('*, customers(name), leads(naam_klant, email, branch, postcode, plaatsnaam)')
+    .select(
+      '*, customers(name), leads(naam_klant, email, telefoonnummer, branch, postcode, huisnummer, plaatsnaam, provincie, land, wervingsdatum, bron, phone_valid)',
+    )
     .order('assigned_at', { ascending: false });
 
   if (isAM && !customerId) baseQuery = baseQuery.in('customer_id', amCustomerIds);
@@ -67,7 +69,7 @@ export async function GET(request: NextRequest) {
       const dlOffset = p * PAGE_SIZE;
       const { data: dlBatch } = await supabase
         .from('leads')
-        .select('id, naam_klant, email, branch, postcode, plaatsnaam, created_at')
+        .select('id, naam_klant, email, telefoonnummer, branch, postcode, huisnummer, plaatsnaam, provincie, land, wervingsdatum, bron, phone_valid, created_at')
         .eq('customer_id', customerId)
         .range(dlOffset, dlOffset + PAGE_SIZE - 1);
       if (!dlBatch || dlBatch.length === 0) break;
@@ -93,12 +95,20 @@ export async function GET(request: NextRequest) {
           distance_km: null,
           assigned_at: l.created_at,
           customers: null,
+          status: 'nieuw',
           leads: {
             naam_klant: l.naam_klant,
             email: l.email,
+            telefoonnummer: l.telefoonnummer,
             branch: l.branch,
             postcode: l.postcode,
+            huisnummer: l.huisnummer,
             plaatsnaam: l.plaatsnaam,
+            provincie: l.provincie,
+            land: l.land,
+            wervingsdatum: l.wervingsdatum,
+            bron: l.bron,
+            phone_valid: l.phone_valid,
           },
         });
       }

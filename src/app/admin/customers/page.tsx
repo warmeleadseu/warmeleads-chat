@@ -32,6 +32,8 @@ import {
   ChevronUpDownIcon,
   CalendarDaysIcon,
   ArrowTopRightOnSquareIcon,
+  ArrowDownTrayIcon,
+  ArrowsRightLeftIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
 import { openCustomerPortalAsAdmin } from '@/lib/adminOpenPortal';
@@ -52,6 +54,7 @@ import { PROVINCE_OPTIONS_BE, PROVINCE_OPTIONS_NL } from '@/data/provinces';
 import { formatProvinceTargetLabel } from '@/lib/provinceTargetMatch';
 import { ComposeMailDrawer } from '../_components/ComposeMailDrawer';
 import { MailHistory } from '../_components/MailHistory';
+import { LEAD_STATUS_LABELS, LEAD_STATUS_VALUES } from '@/lib/leadStatuses';
 
 interface Customer {
   id: string; name: string; contact_person: string; email: string; phone: string;
@@ -3794,14 +3797,30 @@ interface AssignedLead {
   id: string;
   naam_klant: string;
   email: string;
+  telefoonnummer: string;
   branch: string;
   postcode: string;
   plaatsnaam: string;
+  provincie: string;
   status: string;
-  created_at: string;
+  source: string;
   assignment_id: string;
   batch_id: string | null;
   assigned_at: string;
+}
+
+const ASSIGNMENT_STATUS_COLORS: Record<string, string> = {
+  nieuw: 'bg-sky-100 text-sky-700',
+  gecontacteerd: 'bg-violet-100 text-violet-700',
+  geen_gehoor: 'bg-amber-100 text-amber-700',
+  offerte: 'bg-indigo-100 text-indigo-700',
+  afspraak: 'bg-cyan-100 text-cyan-700',
+  verkocht: 'bg-emerald-100 text-emerald-700',
+  afgewezen: 'bg-rose-100 text-rose-700',
+};
+
+function assignmentStatusLabel(s: string) {
+  return LEAD_STATUS_LABELS[s as keyof typeof LEAD_STATUS_LABELS] || s || 'Nieuw';
 }
 
 function LeadManagerPanel({ customer, onClose, embedded }: {
@@ -3811,18 +3830,22 @@ function LeadManagerPanel({ customer, onClose, embedded }: {
 }) {
   const [leads, setLeads] = useState<AssignedLead[]>([]);
   const [batches, setBatches] = useState<{ id: string; branch: string; batch_size: number; leads_delivered: number }[]>([]);
+  const [allCustomers, setAllCustomers] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [branchFilter, setBranchFilter] = useState('all');
   const [batchFilter, setBatchFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [deleting, setDeleting] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+  const [showReassign, setShowReassign] = useState(false);
+  const [reassignScope, setReassignScope] = useState<'selected' | 'filtered'>('selected');
   const lastChecked = useRef<number | null>(null);
 
   const showToast = useCallback((msg: string, type: 'success' | 'error' = 'success') => {
     setToast({ msg, type });
-    setTimeout(() => setToast(null), 4000);
+    setTimeout(() => setToast(null), 5000);
   }, []);
 
   const fetchLeads = useCallback(async () => {
@@ -3831,19 +3854,24 @@ function LeadManagerPanel({ customer, onClose, embedded }: {
       const res = await adminFetch(`/api/admin/assignments?customer_id=${customer.id}`);
       if (res.ok) {
         const data = await res.json();
-        const mapped: AssignedLead[] = (data || []).map((a: any) => ({
-          id: a.lead_id,
-          naam_klant: a.leads?.naam_klant || '',
-          email: a.leads?.email || '',
-          branch: a.leads?.branch || '',
-          postcode: a.leads?.postcode || '',
-          plaatsnaam: a.leads?.plaatsnaam || '',
-          status: '',
-          created_at: '',
-          assignment_id: a.id,
-          batch_id: a.batch_id,
-          assigned_at: a.assigned_at,
-        }));
+        const mapped: AssignedLead[] = (data || []).map((a: Record<string, unknown>) => {
+          const lead = (a.leads || {}) as Record<string, unknown>;
+          return {
+            id: String(a.lead_id || ''),
+            naam_klant: String(lead.naam_klant || ''),
+            email: String(lead.email || ''),
+            telefoonnummer: String(lead.telefoonnummer || ''),
+            branch: String(lead.branch || ''),
+            postcode: String(lead.postcode || ''),
+            plaatsnaam: String(lead.plaatsnaam || ''),
+            provincie: String(lead.provincie || ''),
+            status: String(a.status || 'nieuw'),
+            source: String(a.source || 'distribution'),
+            assignment_id: String(a.id || ''),
+            batch_id: (a.batch_id as string | null) || null,
+            assigned_at: String(a.assigned_at || ''),
+          };
+        });
         setLeads(mapped);
       }
     } catch { /* ignore */ }
@@ -3855,35 +3883,69 @@ function LeadManagerPanel({ customer, onClose, embedded }: {
       const res = await adminFetch(`/api/admin/batches?customer_id=${customer.id}`);
       if (res.ok) {
         const data = await res.json();
-        setBatches((data || []).map((b: any) => ({
-          id: b.id,
-          branch: b.branch,
-          batch_size: b.batch_size,
-          leads_delivered: b.leads_delivered,
+        setBatches((data || []).map((b: Record<string, unknown>) => ({
+          id: String(b.id),
+          branch: String(b.branch || ''),
+          batch_size: Number(b.batch_size) || 0,
+          leads_delivered: Number(b.leads_delivered) || 0,
         })));
       }
     } catch { /* ignore */ }
   }, [customer.id]);
 
-  useEffect(() => { fetchLeads(); fetchBatches(); }, [fetchLeads, fetchBatches]);
+  const fetchCustomers = useCallback(async () => {
+    try {
+      const res = await adminFetch('/api/admin/customers/options?active=1');
+      if (res.ok) {
+        const d = await res.json();
+        setAllCustomers(
+          ((d.customers || []) as { id: string; name: string }[])
+            .filter(c => c.id !== customer.id)
+            .map(c => ({ id: c.id, name: c.name })),
+        );
+      }
+    } catch { /* ignore */ }
+  }, [customer.id]);
+
+  useEffect(() => { fetchLeads(); fetchBatches(); fetchCustomers(); }, [fetchLeads, fetchBatches, fetchCustomers]);
 
   const filtered = useMemo(() => {
     let list = leads;
     if (branchFilter !== 'all') list = list.filter(l => l.branch === branchFilter);
     if (batchFilter !== 'all') list = list.filter(l => l.batch_id === batchFilter);
+    if (statusFilter.length > 0) list = list.filter(l => statusFilter.includes(l.status || 'nieuw'));
     if (search) {
       const s = search.toLowerCase();
       list = list.filter(l =>
-        l.naam_klant.toLowerCase().includes(s) ||
-        l.email.toLowerCase().includes(s) ||
-        l.postcode.toLowerCase().includes(s) ||
-        l.plaatsnaam.toLowerCase().includes(s)
+        l.naam_klant.toLowerCase().includes(s)
+        || l.email.toLowerCase().includes(s)
+        || l.telefoonnummer.toLowerCase().includes(s)
+        || l.postcode.toLowerCase().includes(s)
+        || l.plaatsnaam.toLowerCase().includes(s)
+        || l.provincie.toLowerCase().includes(s),
       );
     }
     return list;
-  }, [leads, branchFilter, batchFilter, search]);
+  }, [leads, branchFilter, batchFilter, statusFilter, search]);
 
-  const uniqueBranches = useMemo(() => [...new Set(leads.map(l => l.branch))].filter(Boolean), [leads]);
+  const activeFilters = useMemo(() => {
+    const f: Record<string, string> = {};
+    if (branchFilter !== 'all') f.branch = branchFilter;
+    if (batchFilter !== 'all') f.batch_id = batchFilter;
+    if (statusFilter.length > 0) f.status = statusFilter.join(',');
+    if (search) f.search = search;
+    return f;
+  }, [branchFilter, batchFilter, statusFilter, search]);
+
+  const uniqueBranches = useMemo(() => [...new Set(leads.map(l => l.branch))].filter(Boolean).sort(), [leads]);
+  const statusCounts = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const l of leads) {
+      const s = l.status || 'nieuw';
+      m[s] = (m[s] || 0) + 1;
+    }
+    return m;
+  }, [leads]);
   const allFilteredSelected = filtered.length > 0 && filtered.every(l => selected.has(l.id));
 
   const toggleAll = () => {
@@ -3916,71 +3978,37 @@ function LeadManagerPanel({ customer, onClose, embedded }: {
     lastChecked.current = index;
   };
 
+  const toggleStatusFilter = (status: string) => {
+    setStatusFilter(prev => {
+      if (prev.includes(status)) return prev.filter(s => s !== status);
+      const next = [...prev, status];
+      // Selecting all statuses = no filter
+      if (next.length === LEAD_STATUS_VALUES.length) return [];
+      return next;
+    });
+  };
+
+  const confirmDestructive = (count: number, actionLabel: string): boolean => {
+    if (count > 50) {
+      const input = prompt(
+        `Je staat op het punt ${count} leads te ${actionLabel} voor ${customer.name}. Typ "BEVESTIG" om door te gaan.`,
+      );
+      return input === 'BEVESTIG';
+    }
+    return confirm(`${count} lead${count > 1 ? 's' : ''} ${actionLabel} voor ${customer.name}?`);
+  };
+
   const bulkUnassign = async () => {
     const count = selected.size;
     if (count === 0) return;
+    if (!confirmDestructive(count, 'loskoppelen van')) return;
 
-    const threshold = 50;
-    const msg = count > threshold
-      ? `Je staat op het punt ${count} leads los te koppelen van ${customer.name}. Dit kan niet ongedaan worden gemaakt. Typ "BEVESTIG" om door te gaan.`
-      : `${count} lead${count > 1 ? 's' : ''} loskoppelen van ${customer.name}?`;
-
-    if (count > threshold) {
-      const input = prompt(msg);
-      if (input !== 'BEVESTIG') return;
-    } else {
-      if (!confirm(msg)) return;
-    }
-
-    setDeleting(true);
+    setBusy(true);
     try {
       const res = await adminFetch('/api/admin/assignments/bulk-delete', {
         method: 'POST',
-        body: JSON.stringify({
-          customer_id: customer.id,
-          lead_ids: Array.from(selected),
-        }),
+        body: JSON.stringify({ customer_id: customer.id, lead_ids: Array.from(selected) }),
       });
-
-      if (res.ok) {
-        const data = await res.json();
-        showToast(`${data.deleted} lead${data.deleted !== 1 ? 's' : ''} losgekoppeld, ${data.batches_synced} batch${data.batches_synced !== 1 ? 'es' : ''} bijgewerkt`);
-        setSelected(new Set());
-        fetchLeads();
-        fetchBatches();
-      } else {
-        const d = await res.json().catch(() => ({}));
-        showToast(d.error || 'Loskoppelen mislukt', 'error');
-      }
-    } catch {
-      showToast('Er ging iets mis', 'error');
-    }
-    setDeleting(false);
-  };
-
-  const unassignAll = async () => {
-    if (filtered.length === 0) return;
-
-    const count = filtered.length;
-    const input = prompt(
-      `ALLE ${count} zichtbare leads loskoppelen van ${customer.name}? Dit kan niet ongedaan worden gemaakt.\n\nTyp "BEVESTIG" om door te gaan.`
-    );
-    if (input !== 'BEVESTIG') return;
-
-    setDeleting(true);
-    try {
-      const body: Record<string, unknown> = { customer_id: customer.id, all: true };
-      const filters: Record<string, string> = {};
-      if (branchFilter !== 'all') filters.branch = branchFilter;
-      if (batchFilter !== 'all') filters.batch_id = batchFilter;
-      if (search) filters.search = search;
-      if (Object.keys(filters).length > 0) body.filters = filters;
-
-      const res = await adminFetch('/api/admin/assignments/bulk-delete', {
-        method: 'POST',
-        body: JSON.stringify(body),
-      });
-
       if (res.ok) {
         const data = await res.json();
         showToast(`${data.deleted} lead${data.deleted !== 1 ? 's' : ''} losgekoppeld`);
@@ -3994,144 +4022,387 @@ function LeadManagerPanel({ customer, onClose, embedded }: {
     } catch {
       showToast('Er ging iets mis', 'error');
     }
-    setDeleting(false);
+    setBusy(false);
+  };
+
+  const unassignAllFiltered = async () => {
+    if (filtered.length === 0) return;
+    const input = prompt(
+      `ALLE ${filtered.length} zichtbare leads loskoppelen van ${customer.name}?\n\nTyp "BEVESTIG" om door te gaan.`,
+    );
+    if (input !== 'BEVESTIG') return;
+
+    setBusy(true);
+    try {
+      const res = await adminFetch('/api/admin/assignments/bulk-delete', {
+        method: 'POST',
+        body: JSON.stringify({
+          customer_id: customer.id,
+          all: true,
+          filters: Object.keys(activeFilters).length > 0 ? activeFilters : undefined,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        showToast(`${data.deleted} lead${data.deleted !== 1 ? 's' : ''} losgekoppeld`);
+        setSelected(new Set());
+        fetchLeads();
+        fetchBatches();
+      } else {
+        const d = await res.json().catch(() => ({}));
+        showToast(d.error || 'Loskoppelen mislukt', 'error');
+      }
+    } catch {
+      showToast('Er ging iets mis', 'error');
+    }
+    setBusy(false);
+  };
+
+  const downloadBlob = async (res: Response, fallbackName: string) => {
+    const blob = await res.blob();
+    const cd = res.headers.get('Content-Disposition') || '';
+    const match = cd.match(/filename="?([^"]+)"?/);
+    const filename = match?.[1] || fallbackName;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportLeads = async (scope: 'selected' | 'filtered') => {
+    const count = scope === 'selected' ? selected.size : filtered.length;
+    if (count === 0) {
+      showToast('Geen leads om te exporteren', 'error');
+      return;
+    }
+    setBusy(true);
+    try {
+      const body: Record<string, unknown> = {
+        customer_id: customer.id,
+        format: 'xlsx',
+      };
+      if (scope === 'selected') {
+        body.lead_ids = Array.from(selected);
+      } else {
+        body.all_filtered = true;
+        if (Object.keys(activeFilters).length > 0) body.filters = activeFilters;
+      }
+      const res = await adminFetch('/api/admin/assignments/export', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        showToast(d.error || 'Export mislukt', 'error');
+        return;
+      }
+      await downloadBlob(res, `leads-${customer.name}.xlsx`);
+      showToast(`${count} lead${count !== 1 ? 's' : ''} geëxporteerd als Excel`);
+    } catch {
+      showToast('Export mislukt', 'error');
+    }
+    setBusy(false);
+  };
+
+  const openReassign = (scope: 'selected' | 'filtered') => {
+    if (scope === 'selected' && selected.size === 0) return;
+    if (scope === 'filtered' && filtered.length === 0) return;
+    setReassignScope(scope);
+    setShowReassign(true);
   };
 
   const leadContentJSX = (
-    <div className={embedded ? '' : 'flex flex-1 flex-col overflow-hidden'}>
-        {/* Filters */}
-        <div className={`${embedded ? '' : 'shrink-0 border-b border-slate-100'} px-5 py-3 space-y-2`}>
-          <div className="relative">
-            <MagnifyingGlassIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Zoek op naam, e-mail, postcode, plaats..."
-              className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-sm text-slate-900 outline-none focus:border-brand-purple/50 focus:bg-white" />
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <select value={branchFilter} onChange={e => setBranchFilter(e.target.value)}
-              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 outline-none">
-              <option value="all">Alle branches</option>
-              {uniqueBranches.map(b => <option key={b} value={b}>{b}</option>)}
-            </select>
-            <select value={batchFilter} onChange={e => setBatchFilter(e.target.value)}
-              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 outline-none">
-              <option value="all">Alle batches</option>
-              {batches.map(b => (
-                <option key={b.id} value={b.id}>{b.branch} ({b.leads_delivered}/{b.batch_size})</option>
-              ))}
-            </select>
-            <button onClick={fetchLeads} disabled={loading}
-              className="ml-auto rounded-lg border border-slate-200 p-1.5 text-slate-400 hover:bg-slate-50 disabled:opacity-50">
-              <ArrowPathIcon className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            </button>
-          </div>
+    <div className={embedded ? 'relative' : 'flex flex-1 flex-col overflow-hidden'}>
+      {/* Filters */}
+      <div className={`${embedded ? '' : 'shrink-0 border-b border-slate-100'} space-y-2 px-5 py-3`}>
+        <div className="relative">
+          <MagnifyingGlassIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Zoek op naam, e-mail, telefoon, postcode, plaats..."
+            className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-sm text-slate-900 outline-none focus:border-brand-purple/50 focus:bg-white"
+          />
         </div>
+        <div className="flex flex-wrap gap-2">
+          <select
+            value={branchFilter}
+            onChange={e => setBranchFilter(e.target.value)}
+            className={`rounded-lg border px-3 py-1.5 text-xs outline-none ${branchFilter !== 'all' ? 'border-purple-300 bg-purple-50 text-purple-700' : 'border-slate-200 bg-white text-slate-700'}`}
+          >
+            <option value="all">Alle branches</option>
+            {uniqueBranches.map(b => <option key={b} value={b}>{b}</option>)}
+          </select>
+          <select
+            value={batchFilter}
+            onChange={e => setBatchFilter(e.target.value)}
+            className={`rounded-lg border px-3 py-1.5 text-xs outline-none ${batchFilter !== 'all' ? 'border-indigo-300 bg-indigo-50 text-indigo-700' : 'border-slate-200 bg-white text-slate-700'}`}
+          >
+            <option value="all">Alle batches</option>
+            {batches.map(b => (
+              <option key={b.id} value={b.id}>{b.branch} ({b.leads_delivered}/{b.batch_size})</option>
+            ))}
+          </select>
+          <button
+            onClick={() => exportLeads(selected.size > 0 ? 'selected' : 'filtered')}
+            disabled={busy || (selected.size === 0 && filtered.length === 0)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            title={selected.size > 0 ? 'Exporteer selectie als Excel' : 'Exporteer zichtbare leads als Excel'}
+          >
+            <ArrowDownTrayIcon className="h-3.5 w-3.5" />
+            Excel{selected.size > 0 ? ` (${selected.size})` : filtered.length > 0 ? ` (${filtered.length})` : ''}
+          </button>
+          <button
+            onClick={fetchLeads}
+            disabled={loading}
+            className="ml-auto rounded-lg border border-slate-200 p-1.5 text-slate-400 hover:bg-slate-50 disabled:opacity-50"
+          >
+            <ArrowPathIcon className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          <button
+            type="button"
+            onClick={() => setStatusFilter([])}
+            className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition ${
+              statusFilter.length === 0
+                ? 'bg-slate-800 text-white'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            Alle statussen
+          </button>
+          {LEAD_STATUS_VALUES.map(s => {
+            const active = statusFilter.includes(s);
+            const count = statusCounts[s] || 0;
+            return (
+              <button
+                key={s}
+                type="button"
+                onClick={() => toggleStatusFilter(s)}
+                className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition ${
+                  active
+                    ? ASSIGNMENT_STATUS_COLORS[s] + ' ring-1 ring-inset ring-black/10'
+                    : 'bg-slate-50 text-slate-500 hover:bg-slate-100'
+                }`}
+              >
+                {assignmentStatusLabel(s)}
+                {count > 0 && <span className="ml-1 opacity-70">{count}</span>}
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
-        {/* Selection bar */}
-        <AnimatePresence>
-          {selected.size > 0 && (
-            <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
-              className="shrink-0 overflow-hidden border-b border-red-100 bg-red-50">
-              <div className="flex flex-col gap-2 px-5 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-                <span className="text-sm font-medium text-red-700">{selected.size} lead{selected.size !== 1 ? 's' : ''} geselecteerd</span>
-                <div className="flex items-center gap-2">
-                  <button onClick={() => setSelected(new Set())}
-                    className="rounded-lg px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-white">
-                    Deselecteren
-                  </button>
-                  <button onClick={bulkUnassign} disabled={deleting}
-                    className="flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-red-700 disabled:opacity-50">
-                    {deleting ? <ArrowPathIcon className="h-3.5 w-3.5 animate-spin" /> : <LinkSlashIcon className="h-3.5 w-3.5" />}
-                    Loskoppelen
-                  </button>
-                </div>
+      {/* Selection / actions bar */}
+      <AnimatePresence>
+        {selected.size > 0 && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="shrink-0 overflow-hidden border-b border-brand-purple/20 bg-brand-purple/5"
+          >
+            <div className="flex flex-col gap-2 px-5 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+              <span className="text-sm font-medium text-brand-purple">
+                {selected.size} lead{selected.size !== 1 ? 's' : ''} geselecteerd
+              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={() => setSelected(new Set())}
+                  className="rounded-lg px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-white"
+                >
+                  Deselecteren
+                </button>
+                <button
+                  onClick={() => exportLeads('selected')}
+                  disabled={busy}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                >
+                  <ArrowDownTrayIcon className="h-3.5 w-3.5" />
+                  Excel
+                </button>
+                <button
+                  onClick={() => openReassign('selected')}
+                  disabled={busy}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  <ArrowsRightLeftIcon className="h-3.5 w-3.5" />
+                  Naar andere klant
+                </button>
+                <button
+                  onClick={bulkUnassign}
+                  disabled={busy}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-700 disabled:opacity-50"
+                >
+                  {busy ? <ArrowPathIcon className="h-3.5 w-3.5 animate-spin" /> : <LinkSlashIcon className="h-3.5 w-3.5" />}
+                  Loskoppelen
+                </button>
               </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-        {/* Lead list */}
-        <div className="flex-1 overflow-y-auto">
-          {loading && leads.length === 0 ? (
-            <div className="flex items-center justify-center py-20 text-slate-400">
-              <ArrowPathIcon className="mr-2 h-5 w-5 animate-spin" /> Laden...
-            </div>
-          ) : filtered.length === 0 ? (
-            <div className="py-16 text-center text-sm text-slate-400">
-              {leads.length === 0 ? 'Geen leads gekoppeld aan deze klant' : 'Geen leads gevonden met deze filters'}
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
+      {/* Lead list */}
+      <div className="flex-1 overflow-y-auto">
+        {loading && leads.length === 0 ? (
+          <div className="flex items-center justify-center py-20 text-slate-400">
+            <ArrowPathIcon className="mr-2 h-5 w-5 animate-spin" /> Laden...
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="py-16 text-center text-sm text-slate-400">
+            {leads.length === 0 ? 'Geen leads gekoppeld aan deze klant' : 'Geen leads gevonden met deze filters'}
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="sticky top-0 z-10 bg-slate-50/95 backdrop-blur-sm">
                 <tr className="border-b border-slate-100 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
-                  <th className="px-4 py-2.5 w-10">
-                    <input type="checkbox" checked={allFilteredSelected} onChange={toggleAll}
-                      className="h-4 w-4 rounded border-slate-300 text-brand-purple focus:ring-brand-purple/30 sm:h-3.5 sm:w-3.5" />
+                  <th className="w-10 px-4 py-2.5">
+                    <input
+                      type="checkbox"
+                      checked={allFilteredSelected}
+                      onChange={toggleAll}
+                      className="h-4 w-4 rounded border-slate-300 text-brand-purple focus:ring-brand-purple/30 sm:h-3.5 sm:w-3.5"
+                    />
                   </th>
                   <th className="px-3 py-2.5">Naam</th>
                   <th className="hidden px-3 py-2.5 sm:table-cell">E-mail</th>
                   <th className="px-3 py-2.5">Branche</th>
-                  <th className="hidden px-3 py-2.5 sm:table-cell">Plaats</th>
+                  <th className="px-3 py-2.5">Status</th>
+                  <th className="hidden px-3 py-2.5 md:table-cell">Plaats</th>
                   <th className="px-3 py-2.5">Toegewezen</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
                 {filtered.map((lead, idx) => (
-                  <tr key={lead.assignment_id}
-                    className={`transition ${selected.has(lead.id) ? 'bg-red-50/50' : 'hover:bg-slate-50/50'}`}>
+                  <tr
+                    key={lead.assignment_id}
+                    className={`transition ${selected.has(lead.id) ? 'bg-brand-purple/5' : 'hover:bg-slate-50/50'}`}
+                  >
                     <td className="px-4 py-2.5">
-                      <input type="checkbox" checked={selected.has(lead.id)}
+                      <input
+                        type="checkbox"
+                        checked={selected.has(lead.id)}
                         onChange={(e) => toggleOne(lead.id, idx, (e.nativeEvent as MouseEvent).shiftKey)}
-                        className="h-4 w-4 rounded border-slate-300 text-brand-purple focus:ring-brand-purple/30 sm:h-3.5 sm:w-3.5" />
+                        className="h-4 w-4 rounded border-slate-300 text-brand-purple focus:ring-brand-purple/30 sm:h-3.5 sm:w-3.5"
+                      />
                     </td>
                     <td className="px-3 py-2.5">
-                      <p className="font-medium text-slate-900 truncate max-w-[140px]">{lead.naam_klant || '-'}</p>
+                      <p className="max-w-[140px] truncate font-medium text-slate-900">{lead.naam_klant || '-'}</p>
+                      {lead.telefoonnummer && (
+                        <p className="max-w-[140px] truncate text-[11px] text-slate-400 sm:hidden">{lead.telefoonnummer}</p>
+                      )}
                     </td>
                     <td className="hidden px-3 py-2.5 sm:table-cell">
-                      <span className="text-xs text-slate-500 truncate max-w-[160px] block">{lead.email || '-'}</span>
+                      <span className="block max-w-[160px] truncate text-xs text-slate-500">{lead.email || '-'}</span>
                     </td>
                     <td className="px-3 py-2.5">
-                      <span className="rounded-full bg-brand-purple/10 px-2 py-0.5 text-[10px] font-medium text-brand-purple">{lead.branch || '-'}</span>
+                      <span className="rounded-full bg-brand-purple/10 px-2 py-0.5 text-[10px] font-medium text-brand-purple">
+                        {lead.branch || '-'}
+                      </span>
                     </td>
-                    <td className="hidden px-3 py-2.5 sm:table-cell text-xs text-slate-500">{lead.plaatsnaam || '-'}</td>
+                    <td className="px-3 py-2.5">
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${ASSIGNMENT_STATUS_COLORS[lead.status] || 'bg-slate-100 text-slate-600'}`}>
+                        {assignmentStatusLabel(lead.status)}
+                      </span>
+                    </td>
+                    <td className="hidden px-3 py-2.5 text-xs text-slate-500 md:table-cell">{lead.plaatsnaam || '-'}</td>
                     <td className="px-3 py-2.5 text-xs text-slate-400">
-                      {new Date(lead.assigned_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}
+                      {lead.assigned_at
+                        ? new Date(lead.assigned_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })
+                        : '-'}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            </div>
-          )}
-        </div>
+          </div>
+        )}
+      </div>
 
-        {/* Footer */}
-        <div className="shrink-0 border-t border-slate-100 px-5 py-3">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-xs text-slate-400">
-              {filtered.length} van {leads.length} leads zichtbaar
-            </p>
+      {/* Footer */}
+      <div className="shrink-0 border-t border-slate-100 px-5 py-3">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs text-slate-400">
+            {filtered.length} van {leads.length} leads zichtbaar
+            {statusFilter.length > 0 && ` · statusfilter actief`}
+          </p>
+          <div className="flex flex-wrap gap-2">
             {filtered.length > 0 && (
-              <button onClick={unassignAll} disabled={deleting}
-                className="flex min-h-10 w-full items-center justify-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600 transition hover:bg-red-100 disabled:opacity-50 sm:w-auto sm:justify-start">
-                <ExclamationTriangleIcon className="h-3.5 w-3.5" />
-                Alle zichtbare loskoppelen ({filtered.length})
-              </button>
+              <>
+                <button
+                  onClick={() => exportLeads('filtered')}
+                  disabled={busy}
+                  className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                >
+                  <ArrowDownTrayIcon className="h-3.5 w-3.5" />
+                  Exporteer zichtbaar ({filtered.length})
+                </button>
+                <button
+                  onClick={() => openReassign('filtered')}
+                  disabled={busy}
+                  className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+                >
+                  <ArrowsRightLeftIcon className="h-3.5 w-3.5" />
+                  Verplaats zichtbaar
+                </button>
+                <button
+                  onClick={unassignAllFiltered}
+                  disabled={busy}
+                  className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-100 disabled:opacity-50"
+                >
+                  <ExclamationTriangleIcon className="h-3.5 w-3.5" />
+                  Loskoppel zichtbaar
+                </button>
+              </>
             )}
           </div>
         </div>
+      </div>
 
-      {/* Toast */}
       <AnimatePresence>
         {toast && (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }}
-            className={`${embedded ? 'absolute' : 'fixed'} bottom-6 right-6 z-[100] flex items-center gap-2 rounded-xl px-5 py-3 text-sm font-medium text-white shadow-lg ${
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            className={`${embedded ? 'absolute' : 'fixed'} bottom-6 right-6 z-[100] flex max-w-sm items-center gap-2 rounded-xl px-5 py-3 text-sm font-medium text-white shadow-lg ${
               toast.type === 'error' ? 'bg-red-600' : 'bg-slate-900'
-            }`}>
-            {toast.type === 'error' ? <ExclamationTriangleIcon className="h-4 w-4 text-red-200" /> : <CheckCircleIcon className="h-4 w-4 text-emerald-400" />}
-            {toast.msg}
+            }`}
+          >
+            {toast.type === 'error'
+              ? <ExclamationTriangleIcon className="h-4 w-4 shrink-0 text-red-200" />
+              : <CheckCircleIcon className="h-4 w-4 shrink-0 text-emerald-400" />}
+            <span className="break-words">{toast.msg}</span>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showReassign && (
+          <ReassignLeadsModal
+            customer={customer}
+            customers={allCustomers}
+            leadCount={reassignScope === 'selected' ? selected.size : filtered.length}
+            scope={reassignScope}
+            leadIds={reassignScope === 'selected' ? Array.from(selected) : []}
+            filters={activeFilters}
+            onClose={() => setShowReassign(false)}
+            onDone={(msg) => {
+              setShowReassign(false);
+              setSelected(new Set());
+              showToast(msg);
+              fetchLeads();
+              fetchBatches();
+            }}
+            onError={(msg) => showToast(msg, 'error')}
+          />
         )}
       </AnimatePresence>
     </div>
@@ -4141,11 +4412,20 @@ function LeadManagerPanel({ customer, onClose, embedded }: {
 
   return (
     <>
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-        className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm" onClick={onClose} />
-      <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm"
+        onClick={onClose}
+      />
+      <motion.div
+        initial={{ x: '100%' }}
+        animate={{ x: 0 }}
+        exit={{ x: '100%' }}
         transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-        className="fixed inset-y-0 right-0 z-[60] flex w-full max-w-2xl flex-col bg-white shadow-2xl">
+        className="fixed inset-y-0 right-0 z-[60] flex w-full max-w-3xl flex-col bg-white shadow-2xl"
+      >
         <div className="shrink-0 border-b border-slate-100">
           <div className="h-[3px] bg-gradient-to-r from-red-500 to-amber-500" />
           <div className="flex items-center justify-between px-5 py-4">
@@ -4159,6 +4439,243 @@ function LeadManagerPanel({ customer, onClose, embedded }: {
           </div>
         </div>
         {leadContentJSX}
+      </motion.div>
+    </>
+  );
+}
+
+function ReassignLeadsModal({
+  customer,
+  customers,
+  leadCount,
+  scope,
+  leadIds,
+  filters,
+  onClose,
+  onDone,
+  onError,
+}: {
+  customer: Customer;
+  customers: { id: string; name: string }[];
+  leadCount: number;
+  scope: 'selected' | 'filtered';
+  leadIds: string[];
+  filters: Record<string, string>;
+  onClose: () => void;
+  onDone: (msg: string) => void;
+  onError: (msg: string) => void;
+}) {
+  const [targetIds, setTargetIds] = useState<string[]>([]);
+  const [targetSearch, setTargetSearch] = useState('');
+  const [keepOnSource, setKeepOnSource] = useState(false);
+  const [overrideGuardrails, setOverrideGuardrails] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  const filteredCustomers = useMemo(() => {
+    const s = targetSearch.trim().toLowerCase();
+    if (!s) return customers;
+    return customers.filter(c => c.name.toLowerCase().includes(s));
+  }, [customers, targetSearch]);
+
+  const toggleTarget = (id: string) => {
+    setTargetIds(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]));
+  };
+
+  const handleSubmit = async () => {
+    if (targetIds.length === 0) {
+      setError('Kies minimaal één doelklant');
+      return;
+    }
+    if (leadCount > 50) {
+      const input = prompt(
+        `${leadCount} leads ${keepOnSource ? 'kopiëren naar' : 'verplaatsen naar'} ${targetIds.length} klant(en)? Typ "BEVESTIG".`,
+      );
+      if (input !== 'BEVESTIG') return;
+    }
+
+    setSubmitting(true);
+    setError('');
+    try {
+      const body: Record<string, unknown> = {
+        from_customer_id: customer.id,
+        to_customer_ids: targetIds,
+        keep_on_source: keepOnSource,
+        override_guardrails: overrideGuardrails,
+      };
+      if (scope === 'selected') {
+        body.lead_ids = leadIds;
+      } else {
+        body.all_filtered = true;
+        if (Object.keys(filters).length > 0) body.filters = filters;
+      }
+
+      const res = await adminFetch('/api/admin/assignments/reassign', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(d.error || 'Verplaatsen mislukt');
+      }
+
+      const names = Array.isArray(d.to_customers)
+        ? (d.to_customers as { name: string }[]).map(c => c.name).join(', ')
+        : 'doelklant(en)';
+      const parts = [
+        `${d.assigned || 0} toewijzing${(d.assigned || 0) === 1 ? '' : 'en'} naar ${names}`,
+      ];
+      if (d.removed_from_source > 0) parts.push(`${d.removed_from_source} losgekoppeld van ${customer.name}`);
+      if (d.skipped_already > 0) parts.push(`${d.skipped_already} al aanwezig`);
+      if (d.blocked > 0) parts.push(`${d.blocked} geblokkeerd`);
+      if (Array.isArray(d.blocked_reasons) && d.blocked_reasons.length > 0 && d.assigned === 0) {
+        onError(`${parts.join(' · ')}. ${d.blocked_reasons[0]}`);
+        setError(String(d.blocked_reasons[0]));
+        return;
+      }
+      onDone(parts.join(' · '));
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Er ging iets mis';
+      setError(msg);
+      onError(msg);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-[80] bg-black/40 backdrop-blur-sm"
+        onClick={onClose}
+      />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.96 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.96 }}
+        className="fixed inset-0 z-[90] flex items-start justify-center overflow-y-auto p-4 sm:items-center"
+      >
+        <div
+          className="my-8 w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl"
+          onClick={e => e.stopPropagation()}
+        >
+          <div className="flex items-start justify-between border-b border-slate-100 px-5 py-4">
+            <div>
+              <h3 className="text-lg font-bold text-slate-900">Leads naar andere klant</h3>
+              <p className="mt-0.5 text-sm text-slate-500">
+                {leadCount} lead{leadCount !== 1 ? 's' : ''} van <strong>{customer.name}</strong>
+                {scope === 'filtered' ? ' (huidige filters)' : ''}
+              </p>
+            </div>
+            <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100">
+              <XMarkIcon className="h-5 w-5" />
+            </button>
+          </div>
+
+          <div className="space-y-4 p-5">
+            {error && (
+              <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>
+            )}
+
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-slate-500">Doelklant(en)</label>
+              <div className="mb-2">
+                <input
+                  value={targetSearch}
+                  onChange={e => setTargetSearch(e.target.value)}
+                  placeholder="Zoek klant…"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-brand-purple/50"
+                />
+              </div>
+              <div className="max-h-52 overflow-y-auto rounded-lg border border-slate-200">
+                {filteredCustomers.length === 0 ? (
+                  <p className="px-3 py-4 text-center text-xs text-slate-400">Geen klanten gevonden</p>
+                ) : (
+                  filteredCustomers.map(c => (
+                    <label
+                      key={c.id}
+                      className={`flex cursor-pointer items-center gap-3 border-b border-slate-50 px-3 py-2.5 text-sm last:border-0 hover:bg-slate-50 ${
+                        targetIds.includes(c.id) ? 'bg-emerald-50/60' : ''
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={targetIds.includes(c.id)}
+                        onChange={() => toggleTarget(c.id)}
+                        className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500/30"
+                      />
+                      <span className="font-medium text-slate-800">{c.name}</span>
+                    </label>
+                  ))
+                )}
+              </div>
+              {targetIds.length > 0 && (
+                <p className="mt-1.5 text-xs text-emerald-700">
+                  {targetIds.length} klant{targetIds.length !== 1 ? 'en' : ''} geselecteerd
+                  {targetIds.length > 1 ? ' — elke lead gaat naar álle geselecteerde klanten' : ''}
+                </p>
+              )}
+            </div>
+
+            <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-200 px-4 py-3 text-sm hover:bg-slate-50">
+              <input
+                type="checkbox"
+                checked={keepOnSource}
+                onChange={e => setKeepOnSource(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-purple focus:ring-brand-purple/30"
+              />
+              <div>
+                <span className="font-medium text-slate-700">Ook bij {customer.name} laten staan</span>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  Standaard worden leads uit dit portaal gehaald (verplaatsen). Aanvinken = kopiëren.
+                </p>
+              </div>
+            </label>
+
+            <label className={`flex cursor-pointer items-start gap-3 rounded-lg border px-4 py-3 text-sm ${overrideGuardrails ? 'border-amber-300 bg-amber-50' : 'border-slate-200 hover:bg-slate-50'}`}>
+              <input
+                type="checkbox"
+                checked={overrideGuardrails}
+                onChange={e => setOverrideGuardrails(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500/30"
+              />
+              <div>
+                <span className="font-medium text-slate-700">Guardrails negeren</span>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  Ook toewijzen als branche of doelgebied van de doelklant niet matcht.
+                </p>
+              </div>
+            </label>
+          </div>
+
+          <div className="flex gap-3 border-t border-slate-100 px-5 py-4">
+            <button
+              onClick={onClose}
+              className="flex-1 rounded-lg border border-slate-200 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
+            >
+              Annuleren
+            </button>
+            <button
+              onClick={handleSubmit}
+              disabled={submitting || targetIds.length === 0}
+              className="flex-1 rounded-lg bg-emerald-600 py-2.5 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-60"
+            >
+              {submitting ? (
+                <span className="inline-flex items-center gap-2">
+                  <ArrowPathIcon className="h-4 w-4 animate-spin" /> Bezig…
+                </span>
+              ) : (
+                <span className="inline-flex items-center justify-center gap-1.5">
+                  <ArrowsRightLeftIcon className="h-4 w-4" />
+                  {keepOnSource ? 'Kopiëren' : 'Verplaatsen'} ({leadCount})
+                </span>
+              )}
+            </button>
+          </div>
+        </div>
       </motion.div>
     </>
   );
