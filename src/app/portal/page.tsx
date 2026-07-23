@@ -55,6 +55,8 @@ import {
 import { PERMISSIONS } from '@/lib/portalPermissions';
 import { PageHeader, useToast, ChoicePill } from './_ui';
 import { STATUS_COLORS, STATUS_OPTIONS } from './_constants/leadStatus';
+import { PROVINCES_NL, PROVINCES_BE } from '@/data/provinces';
+import { DISTANCE_PRESETS_KM } from '@/lib/portalLeadGeoFilters';
 import { getBatchProgressView, isCappedDeliveryModel } from '@/lib/batchDeliveryModel';
 import {
   collectPortalBatchesAwaitingPayment,
@@ -340,6 +342,12 @@ export default function PortalPage() {
   const [order, setOrder] = useState<'asc' | 'desc'>('desc');
   const [leadSource, setLeadSource] = useState<'all' | 'fresh' | 'bulk'>('all');
   const [assignedToFilter, setAssignedToFilter] = useState('all');
+  const [selectedProvinces, setSelectedProvinces] = useState<string[]>([]);
+  const [plaatsFilter, setPlaatsFilter] = useState('');
+  const [debouncedPlaats, setDebouncedPlaats] = useState('');
+  const [postcodeArea, setPostcodeArea] = useState('');
+  const [debouncedPostcodeArea, setDebouncedPostcodeArea] = useState('');
+  const [maxDistanceKm, setMaxDistanceKm] = useState<number | null>(null);
   const [bulkCount, setBulkCount] = useState(0);
   const [leadsScopePartial, setLeadsScopePartial] = useState(false);
   const [leadsScopeMaxRows, setLeadsScopeMaxRows] = useState<number | null>(null);
@@ -449,8 +457,31 @@ export default function PortalPage() {
   }, [search]);
 
   useEffect(() => {
+    const t = setTimeout(() => setDebouncedPlaats(plaatsFilter.trim()), 350);
+    return () => clearTimeout(t);
+  }, [plaatsFilter]);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedPostcodeArea(postcodeArea.trim()), 350);
+    return () => clearTimeout(t);
+  }, [postcodeArea]);
+
+  useEffect(() => {
     clearSelection();
-  }, [statusFilter, activeBranchTab, dateFrom, dateTo, leadSource, assignedToFilter, debouncedSearch, clearSelection]);
+  }, [
+    statusFilter,
+    activeBranchTab,
+    dateFrom,
+    dateTo,
+    leadSource,
+    assignedToFilter,
+    selectedProvinces,
+    debouncedPlaats,
+    debouncedPostcodeArea,
+    maxDistanceKm,
+    debouncedSearch,
+    clearSelection,
+  ]);
 
   const openExportWizard = useCallback((selection: ExportSelection | null, count: number) => {
     setExportSelection(selection);
@@ -559,6 +590,10 @@ export default function PortalPage() {
     if (canFilterAssignee && assignedToFilter !== 'all') {
       params.set('assigned_to', assignedToFilter);
     }
+    if (selectedProvinces.length > 0) params.set('provincie', selectedProvinces.join(','));
+    if (debouncedPlaats) params.set('plaats', debouncedPlaats);
+    if (debouncedPostcodeArea) params.set('postcode_area', debouncedPostcodeArea);
+    if (maxDistanceKm != null) params.set('max_distance_km', String(maxDistanceKm));
 
     try {
       const res = await portalFetch(`/api/portal/leads?${params}`);
@@ -582,7 +617,25 @@ export default function PortalPage() {
       showToast('Leads konden niet geladen worden', 'error');
     }
     setLoading(false);
-  }, [page, pageSize, sort, order, statusFilter, activeBranchTab, debouncedSearch, dateFrom, dateTo, leadSource, assignedToFilter, canFilterAssignee, showToast]);
+  }, [
+    page,
+    pageSize,
+    sort,
+    order,
+    statusFilter,
+    activeBranchTab,
+    debouncedSearch,
+    dateFrom,
+    dateTo,
+    leadSource,
+    assignedToFilter,
+    canFilterAssignee,
+    selectedProvinces,
+    debouncedPlaats,
+    debouncedPostcodeArea,
+    maxDistanceKm,
+    showToast,
+  ]);
 
   const fetchBranches = useCallback(async () => {
     try {
@@ -827,6 +880,10 @@ export default function PortalPage() {
     if (canFilterAssignee && assignedToFilter !== 'all') {
       params.set('assigned_to', assignedToFilter);
     }
+    if (selectedProvinces.length > 0) params.set('provincie', selectedProvinces.join(','));
+    if (debouncedPlaats) params.set('plaats', debouncedPlaats);
+    if (debouncedPostcodeArea) params.set('postcode_area', debouncedPostcodeArea);
+    if (maxDistanceKm != null) params.set('max_distance_km', String(maxDistanceKm));
     const res = await portalFetch(`/api/portal/leads?${params}`);
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -845,6 +902,10 @@ export default function PortalPage() {
     debouncedSearch,
     canFilterAssignee,
     assignedToFilter,
+    selectedProvinces,
+    debouncedPlaats,
+    debouncedPostcodeArea,
+    maxDistanceKm,
     showToast,
   ]);
 
@@ -919,7 +980,30 @@ export default function PortalPage() {
     leadSource,
     search: debouncedSearch,
     assignedTo: assignedToFilter,
-  }), [statusFilter, activeBranchTab, dateFrom, dateTo, leadSource, debouncedSearch, assignedToFilter]);
+    provinces: selectedProvinces.length > 0 ? selectedProvinces.join(',') : undefined,
+    plaats: debouncedPlaats || undefined,
+    postcodeArea: debouncedPostcodeArea || undefined,
+    maxDistanceKm: maxDistanceKm != null ? String(maxDistanceKm) : undefined,
+  }), [
+    statusFilter,
+    activeBranchTab,
+    dateFrom,
+    dateTo,
+    leadSource,
+    debouncedSearch,
+    assignedToFilter,
+    selectedProvinces,
+    debouncedPlaats,
+    debouncedPostcodeArea,
+    maxDistanceKm,
+  ]);
+
+  const toggleProvince = useCallback((province: string) => {
+    setSelectedProvinces((prev) => (
+      prev.includes(province) ? prev.filter((p) => p !== province) : [...prev, province]
+    ));
+    setPage(1);
+  }, []);
 
   const handleCrmBackfill = (forceResend: boolean) => {
     if (!crmLabel) return;
@@ -963,14 +1047,34 @@ export default function PortalPage() {
     if (dateFrom) count++;
     if (dateTo) count++;
     if (canFilterAssignee && assignedToFilter !== 'all') count++;
+    if (selectedProvinces.length > 0) count++;
+    if (debouncedPlaats) count++;
+    if (debouncedPostcodeArea) count++;
+    if (maxDistanceKm != null) count++;
     return count;
-  }, [statusFilter, dateFrom, dateTo, canFilterAssignee, assignedToFilter]);
+  }, [
+    statusFilter,
+    dateFrom,
+    dateTo,
+    canFilterAssignee,
+    assignedToFilter,
+    selectedProvinces,
+    debouncedPlaats,
+    debouncedPostcodeArea,
+    maxDistanceKm,
+  ]);
 
   const resetFilters = () => {
     setStatusFilter('all');
     setDateFrom('');
     setDateTo('');
     setAssignedToFilter('all');
+    setSelectedProvinces([]);
+    setPlaatsFilter('');
+    setDebouncedPlaats('');
+    setPostcodeArea('');
+    setDebouncedPostcodeArea('');
+    setMaxDistanceKm(null);
     setPage(1);
   };
 
@@ -1349,61 +1453,156 @@ export default function PortalPage() {
             exit={{ height: 0, opacity: 0 }}
             className="overflow-hidden"
           >
-            <div className="flex flex-wrap gap-3 rounded-xl border border-slate-200 bg-white p-4">
-              <div>
-                <label className="mb-1 block text-xs font-medium text-slate-500">Status</label>
-                <select
-                  value={statusFilter}
-                  onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
-                  className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-700 outline-none focus:border-brand-purple/50"
-                >
-                  {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-medium text-slate-500">Datum vanaf</label>
-                <input
-                  type="date"
-                  value={dateFrom}
-                  onChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
-                  className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-700 outline-none focus:border-brand-purple/50"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-medium text-slate-500">Datum tot</label>
-                <input
-                  type="date"
-                  value={dateTo}
-                  onChange={(e) => { setDateTo(e.target.value); setPage(1); }}
-                  className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-700 outline-none focus:border-brand-purple/50"
-                />
-              </div>
-              {canFilterAssignee && (
+            <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-4">
+              <div className="flex flex-wrap items-end gap-3">
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-slate-500">Toegewezen aan</label>
+                  <label className="mb-1 block text-xs font-medium text-slate-500">Status</label>
                   <select
-                    value={assignedToFilter}
-                    onChange={(e) => { setAssignedToFilter(e.target.value); setPage(1); }}
+                    value={statusFilter}
+                    onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
                     className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-700 outline-none focus:border-brand-purple/50"
                   >
-                    <option value="all">Iedereen</option>
-                    <option value="unassigned">Niet toegewezen</option>
-                    {assignTeam.map(m => (
-                      <option key={m.id} value={m.id}>{m.name}</option>
-                    ))}
+                    {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                   </select>
                 </div>
-              )}
-              {activeFilters > 0 && (
-                <div className="flex items-end">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-500">Datum vanaf</label>
+                  <input
+                    type="date"
+                    value={dateFrom}
+                    onChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
+                    className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-700 outline-none focus:border-brand-purple/50"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-500">Datum tot</label>
+                  <input
+                    type="date"
+                    value={dateTo}
+                    onChange={(e) => { setDateTo(e.target.value); setPage(1); }}
+                    className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-700 outline-none focus:border-brand-purple/50"
+                  />
+                </div>
+                {canFilterAssignee && (
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-500">Toegewezen aan</label>
+                    <select
+                      value={assignedToFilter}
+                      onChange={(e) => { setAssignedToFilter(e.target.value); setPage(1); }}
+                      className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-700 outline-none focus:border-brand-purple/50"
+                    >
+                      <option value="all">Iedereen</option>
+                      <option value="unassigned">Niet toegewezen</option>
+                      {assignTeam.map(m => (
+                        <option key={m.id} value={m.id}>{m.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                {activeFilters > 0 && (
                   <button
                     onClick={resetFilters}
                     className="rounded-lg px-3 py-1.5 text-xs font-medium text-red-500 hover:bg-red-50"
                   >
                     Wis filters
                   </button>
+                )}
+              </div>
+
+              <div className="border-t border-slate-100 pt-3">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Gebied</p>
+                <div className="mb-2 flex flex-wrap gap-2">
+                  <ChoicePill
+                    selected={maxDistanceKm == null}
+                    onClick={() => { setMaxDistanceKm(null); setPage(1); }}
+                    className="!min-h-9 !px-3 !py-1.5 !text-xs"
+                  >
+                    Alle afstanden
+                  </ChoicePill>
+                  {DISTANCE_PRESETS_KM.map((km) => (
+                    <ChoicePill
+                      key={km}
+                      selected={maxDistanceKm === km}
+                      onClick={() => { setMaxDistanceKm(km); setPage(1); }}
+                      className="!min-h-9 !px-3 !py-1.5 !text-xs"
+                    >
+                      ≤ {km} km
+                    </ChoicePill>
+                  ))}
                 </div>
-              )}
+                <p className="mb-3 text-[11px] text-slate-400">
+                  Straal t.o.v. jouw vestiging / doelgebied. Leads zonder afstand vallen buiten deze filter.
+                </p>
+                <div className="flex flex-wrap gap-3">
+                  <div className="min-w-[10rem] flex-1">
+                    <label className="mb-1 block text-xs font-medium text-slate-500">Postcodegebied</label>
+                    <input
+                      type="text"
+                      value={postcodeArea}
+                      onChange={(e) => { setPostcodeArea(e.target.value); setPage(1); }}
+                      placeholder="bijv. 75, 7500 of 7500-7599"
+                      className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-700 outline-none focus:border-brand-purple/50"
+                    />
+                  </div>
+                  <div className="min-w-[10rem] flex-1">
+                    <label className="mb-1 block text-xs font-medium text-slate-500">Plaats</label>
+                    <input
+                      type="text"
+                      value={plaatsFilter}
+                      onChange={(e) => { setPlaatsFilter(e.target.value); setPage(1); }}
+                      placeholder="bijv. Enschede"
+                      className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-700 outline-none focus:border-brand-purple/50"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t border-slate-100 pt-3">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Provincie</p>
+                  {selectedProvinces.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => { setSelectedProvinces([]); setPage(1); }}
+                      className="text-[11px] font-medium text-slate-400 hover:text-slate-600"
+                    >
+                      Wis provincies
+                    </button>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {PROVINCES_NL.map((p) => (
+                    <ChoicePill
+                      key={p}
+                      selected={selectedProvinces.includes(p)}
+                      onClick={() => toggleProvince(p)}
+                      className="!min-h-8 !rounded-lg !px-2.5 !py-1 !text-[11px]"
+                    >
+                      {p}
+                    </ChoicePill>
+                  ))}
+                </div>
+                <details className="mt-2">
+                  <summary className="cursor-pointer text-[11px] font-medium text-slate-400 hover:text-slate-600">
+                    Belgische provincies
+                  </summary>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {PROVINCES_BE.map((p) => {
+                      const value = p === 'Limburg' ? 'Limburg (BE)' : p;
+                      return (
+                        <ChoicePill
+                          key={value}
+                          selected={selectedProvinces.includes(value)}
+                          onClick={() => toggleProvince(value)}
+                          className="!min-h-8 !rounded-lg !px-2.5 !py-1 !text-[11px]"
+                        >
+                          {p === 'Limburg' ? 'Limburg (BE)' : p}
+                        </ChoicePill>
+                      );
+                    })}
+                  </div>
+                </details>
+              </div>
             </div>
           </motion.div>
         )}

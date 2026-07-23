@@ -3,6 +3,12 @@ import { verifyCustomer, portalUnauthorized } from '@/lib/portalAuth';
 import { createServerClient } from '@/lib/supabase';
 import { hasPermission, forbidden, PERMISSIONS } from '@/lib/portalPermissions';
 import { getHasPaidCustomerBatch, shouldUseDemoPortalExperience } from '@/lib/demoPortalEligibility';
+import {
+  matchesPostcodeArea,
+  parseMaxDistanceKm,
+  parsePostcodeArea,
+  parseProvinceList,
+} from '@/lib/portalLeadGeoFilters';
 import * as XLSX from 'xlsx';
 
 /* ─── column registry ─── */
@@ -234,6 +240,10 @@ export async function GET(request: NextRequest) {
   const leadSource = (url.searchParams.get('lead_source') || 'all') as 'all' | 'fresh' | 'bulk';
   const searchParam = url.searchParams.get('search')?.trim().toLowerCase() || '';
   const assignedToParam = url.searchParams.get('assigned_to');
+  const provinces = parseProvinceList(url.searchParams.get('provincie'));
+  const plaatsFilter = url.searchParams.get('plaats')?.trim().toLowerCase() || '';
+  const postcodeArea = parsePostcodeArea(url.searchParams.get('postcode_area'));
+  const maxDistanceKm = parseMaxDistanceKm(url.searchParams.get('max_distance_km'));
   const separator = url.searchParams.get('separator') || ';';
   const dateFormat = url.searchParams.get('date_format') || 'nl';
   const includeHeaders = url.searchParams.get('include_headers') !== 'false';
@@ -367,6 +377,25 @@ export async function GET(request: NextRequest) {
       const hay = [l.naam_klant, l.email, l.telefoonnummer, l.postcode, l.plaatsnaam]
         .filter(Boolean).join(' ').toLowerCase();
       return hay.includes(searchParam);
+    });
+  }
+
+  if (!requestedLeadIds && provinces.length > 0) {
+    const set = new Set(provinces);
+    filtered = filtered.filter((l) => typeof l.provincie === 'string' && set.has(l.provincie));
+  }
+  if (!requestedLeadIds && plaatsFilter) {
+    filtered = filtered.filter((l) =>
+      typeof l.plaatsnaam === 'string' && l.plaatsnaam.toLowerCase().includes(plaatsFilter),
+    );
+  }
+  if (!requestedLeadIds && postcodeArea) {
+    filtered = filtered.filter((l) => matchesPostcodeArea(l.postcode, postcodeArea));
+  }
+  if (!requestedLeadIds && maxDistanceKm != null) {
+    filtered = filtered.filter((l) => {
+      const d = l.distance_km;
+      return typeof d === 'number' && d >= 0 && d <= maxDistanceKm;
     });
   }
 

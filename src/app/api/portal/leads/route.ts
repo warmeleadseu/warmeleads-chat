@@ -7,6 +7,12 @@ import { getHasPaidCustomerBatch, shouldUseDemoPortalExperience } from '@/lib/de
 import { buildPhoneSearchIlikeClauses, sanitizePostgrestIlike } from '@/lib/phoneSearch';
 import { normalizeProvincie } from '@/lib/pdok';
 import { isValidLeadStatus } from '@/lib/leadStatuses';
+import {
+  matchesPostcodeArea,
+  parseMaxDistanceKm,
+  parsePostcodeArea,
+  parseProvinceList,
+} from '@/lib/portalLeadGeoFilters';
 
 const PAGE_SIZE = 1000;
 const IN_CHUNK = 500;
@@ -296,6 +302,13 @@ export async function GET(request: NextRequest) {
   const branch = url.searchParams.get('branch');
   const leadSource = (url.searchParams.get('lead_source') || 'all') as 'all' | 'fresh' | 'bulk';
   const idsOnly = url.searchParams.get('ids_only') === '1';
+  const provinces = parseProvinceList(url.searchParams.get('provincie'));
+  const plaatsFilter = url.searchParams.get('plaats')?.trim() || '';
+  const postcodeArea = parsePostcodeArea(url.searchParams.get('postcode_area'));
+  const maxDistanceKm = parseMaxDistanceKm(url.searchParams.get('max_distance_km'));
+  const needsMemGeoFilter =
+    maxDistanceKm != null
+    || (postcodeArea?.kind === 'range');
 
   const { demoMode, branches: customerBranches } = await getCustomerDemoInfo(supabase, customer.id);
 
@@ -406,6 +419,14 @@ export async function GET(request: NextRequest) {
       ];
       q = q.or(parts.join(','));
     }
+    if (provinces.length === 1) q = q.eq('provincie', provinces[0]);
+    else if (provinces.length > 1) q = q.in('provincie', provinces);
+    if (plaatsFilter) {
+      q = q.ilike('plaatsnaam', `%${sanitizePostgrestIlike(plaatsFilter)}%`);
+    }
+    if (postcodeArea?.kind === 'prefix') {
+      q = q.ilike('postcode', `${sanitizePostgrestIlike(postcodeArea.prefix)}%`);
+    }
     // Demo template dates can fall outside a user's date filter; hiding all demos is confusing
     if (!demoMode) {
       if (from) q = q.gte('wervingsdatum', from);
@@ -414,8 +435,22 @@ export async function GET(request: NextRequest) {
     return q;
   }
 
+  function applyMemGeoFilters(rows: Record<string, unknown>[]): Record<string, unknown>[] {
+    let out = rows;
+    if (postcodeArea?.kind === 'range') {
+      out = out.filter((l) => matchesPostcodeArea(l.postcode, postcodeArea));
+    }
+    if (maxDistanceKm != null) {
+      out = out.filter((l) => {
+        const d = l.distance_km;
+        return typeof d === 'number' && d >= 0 && d <= maxDistanceKm;
+      });
+    }
+    return out;
+  }
+
   // Fast path: single chunk allows DB-level sort + pagination
-  if (filteredLeadIds.length <= IN_CHUNK && dbSortable) {
+  if (filteredLeadIds.length <= IN_CHUNK && dbSortable && !needsMemGeoFilter) {
     let countQ = supabase.from('leads').select('id', { count: 'exact', head: true }).in('id', filteredLeadIds);
     countQ = applyFilters(countQ);
     const { count: totalCount } = await countQ;
@@ -503,8 +538,9 @@ export async function GET(request: NextRequest) {
   });
 
   enrichPortalLeadDistances(enrichedAll, activeTargets);
+  const geoFiltered = applyMemGeoFilters(enrichedAll);
 
-  enrichedAll.sort((a, b) => {
+  geoFiltered.sort((a, b) => {
     if (col === 'distance_km') {
       const va = (a.distance_km as number | null) ?? Infinity;
       const vb = (b.distance_km as number | null) ?? Infinity;
@@ -523,14 +559,14 @@ export async function GET(request: NextRequest) {
     return asc ? cmp : -cmp;
   });
 
-  const totalCount = enrichedAll.length;
+  const totalCount = geoFiltered.length;
   const startIdx = (page - 1) * limit;
-  const enrichedLeads = enrichedAll.slice(startIdx, startIdx + limit);
+  const enrichedLeads = geoFiltered.slice(startIdx, startIdx + limit);
 
   await attachReclamationFieldsToLeads(supabase, customer.id, enrichedLeads as Record<string, unknown>[]);
 
   if (idsOnly) {
-    const allIds = enrichedAll.map((l) => (l as Record<string, unknown>).id as string);
+    const allIds = geoFiltered.map((l) => (l as Record<string, unknown>).id as string);
     console.info('[portal/leads]', { computeMs: Date.now() - t0, partial: leadDataPartial, poolSize: filteredLeadIds.length, path: 'ids_only_mem_sort' });
     return NextResponse.json({
       ids: allIds,

@@ -21,6 +21,14 @@ export type AssignLeadToBatchInput = {
   /** Skip branch/geo guardrails (distribution cron only). */
   skipGuardrails?: boolean;
   distance_km?: number | null;
+  /**
+   * Behoud de oorspronkelijke ontvangstdatum bij verplaatsen tussen klanten.
+   * Zonder deze waarde gebruikt de DB `now()` als `assigned_at`.
+   */
+  assignedAt?: string | null;
+  status?: string | null;
+  notities?: string | null;
+  portalUserId?: string | null;
 };
 
 export type AssignLeadToBatchResult =
@@ -83,15 +91,21 @@ export async function assignLeadToBatch(
     distance_km = geo.distance_km;
   }
 
+  const insertRow: Record<string, unknown> = {
+    lead_id: lead.id,
+    customer_id: customer.id,
+    batch_id: batchId || null,
+    source,
+    distance_km,
+  };
+  if (input.assignedAt) insertRow.assigned_at = input.assignedAt;
+  if (input.status != null) insertRow.status = input.status;
+  if (input.notities != null) insertRow.notities = input.notities;
+  if (input.portalUserId !== undefined) insertRow.portal_user_id = input.portalUserId;
+
   const { data: inserted, error } = await supabase
     .from('lead_assignments')
-    .insert({
-      lead_id: lead.id,
-      customer_id: customer.id,
-      batch_id: batchId || null,
-      source,
-      distance_km,
-    })
+    .insert(insertRow)
     .select('id')
     .single();
 

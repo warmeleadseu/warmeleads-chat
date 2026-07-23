@@ -37,6 +37,11 @@ export interface ExportFilters {
   search: string;
   /** 'all' | 'unassigned' | portal_user uuid */
   assignedTo?: string;
+  /** Comma-separated provincie names */
+  provinces?: string;
+  plaats?: string;
+  postcodeArea?: string;
+  maxDistanceKm?: string;
 }
 
 export interface ExportPreset {
@@ -316,6 +321,10 @@ export default function ExportWizard({
       if (filters.assignedTo && filters.assignedTo !== 'all') {
         params.set('assigned_to', filters.assignedTo);
       }
+      if (filters.provinces) params.set('provincie', filters.provinces);
+      if (filters.plaats) params.set('plaats', filters.plaats);
+      if (filters.postcodeArea) params.set('postcode_area', filters.postcodeArea);
+      if (filters.maxDistanceKm) params.set('max_distance_km', filters.maxDistanceKm);
     }
     return params;
   }, [format, selectedCols, separator, dateFormat, includeHeaders, feedbackFilter, filters, exportSelection]);

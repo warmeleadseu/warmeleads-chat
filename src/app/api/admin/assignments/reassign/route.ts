@@ -13,6 +13,8 @@ type AssignmentRow = {
   lead_id: string;
   batch_id: string | null;
   status: string | null;
+  assigned_at: string | null;
+  notities: string | null;
 };
 
 type LeadRow = {
@@ -96,7 +98,7 @@ export async function POST(request: NextRequest) {
   if (allFiltered) {
     let query = supabase
       .from('lead_assignments')
-      .select('id, lead_id, batch_id, status, leads!inner(naam_klant, email, branch, postcode, plaatsnaam)')
+      .select('id, lead_id, batch_id, status, assigned_at, notities, leads!inner(naam_klant, email, branch, postcode, plaatsnaam)')
       .eq('customer_id', fromCustomerId);
 
     if (filters.branch) query = query.eq('leads.branch', filters.branch);
@@ -120,6 +122,8 @@ export async function POST(request: NextRequest) {
       lead_id: a.lead_id,
       batch_id: a.batch_id,
       status: a.status,
+      assigned_at: a.assigned_at ?? null,
+      notities: a.notities ?? null,
     }));
   } else {
     const leadIds = Array.isArray(body.lead_ids)
@@ -130,11 +134,46 @@ export async function POST(request: NextRequest) {
     }
     const { data, error } = await supabase
       .from('lead_assignments')
-      .select('id, lead_id, batch_id, status')
+      .select('id, lead_id, batch_id, status, assigned_at, notities')
       .eq('customer_id', fromCustomerId)
       .in('lead_id', leadIds);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    sourceAssignments = data || [];
+    sourceAssignments = (data || []).map(a => ({
+      id: a.id,
+      lead_id: a.lead_id,
+      batch_id: a.batch_id,
+      status: a.status,
+      assigned_at: a.assigned_at ?? null,
+      notities: a.notities ?? null,
+    }));
+  }
+
+  // Per lead: oudste bron-assigned_at + status/notities behouden bij verplaatsen
+  const sourceMetaByLead = new Map<string, {
+    assigned_at: string | null;
+    status: string | null;
+    notities: string | null;
+  }>();
+  for (const a of sourceAssignments) {
+    const prev = sourceMetaByLead.get(a.lead_id);
+    if (!prev) {
+      sourceMetaByLead.set(a.lead_id, {
+        assigned_at: a.assigned_at,
+        status: a.status,
+        notities: a.notities,
+      });
+      continue;
+    }
+    if (
+      a.assigned_at
+      && (!prev.assigned_at || a.assigned_at < prev.assigned_at)
+    ) {
+      sourceMetaByLead.set(a.lead_id, {
+        assigned_at: a.assigned_at,
+        status: a.status ?? prev.status,
+        notities: a.notities ?? prev.notities,
+      });
+    }
   }
 
   if (sourceAssignments.length === 0) {
@@ -192,6 +231,7 @@ export async function POST(request: NextRequest) {
       const batchId = batchByCustomerBranch.get(`${cust.id}::${branch}`) || null;
       if (batchId) usedBatchIds.add(batchId);
 
+      const sourceMeta = sourceMetaByLead.get(leadId);
       const result = await assignLeadToBatch({
         supabase,
         lead,
@@ -199,6 +239,10 @@ export async function POST(request: NextRequest) {
         batchId,
         source: 'bulk_assign',
         skipGuardrails: overrideGuardrails,
+        // Behoud portaal-"Datum" (received_at ← assigned_at), niet de verplaatsdag
+        assignedAt: sourceMeta?.assigned_at ?? null,
+        status: sourceMeta?.status ?? null,
+        notities: sourceMeta?.notities ?? null,
       });
 
       if (result.ok) {
@@ -215,6 +259,7 @@ export async function POST(request: NextRequest) {
             from_customer_id: fromCustomerId,
             assignment_id: result.assignmentId,
             batch_id: batchId,
+            preserved_assigned_at: sourceMeta?.assigned_at ?? null,
           },
         });
       } else if (
