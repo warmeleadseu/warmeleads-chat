@@ -8,6 +8,7 @@ import { assignLeadToBatch } from '@/lib/assignLeadToBatch';
 import { preflightManualAssignments } from '@/lib/manualAssignmentGuardrails';
 import { logLeadActivity } from '@/lib/leadActivities';
 import { validateExportBranchFilter } from '@/lib/exportBranchValidation';
+import { customerVisibleToAm } from '@/lib/permissions';
 
 /**
  * POST /api/admin/leads/bulk-assign
@@ -52,13 +53,13 @@ export async function POST(request: NextRequest) {
 
   const { data: customer, error: custError } = await supabase
     .from('customers')
-    .select('id, name, account_manager_id, branches')
+    .select('id, name, account_manager_id, shared_with_all_ams, branches')
     .eq('id', customerId)
     .maybeSingle();
   if (custError || !customer) {
     return NextResponse.json({ error: 'Klant niet gevonden' }, { status: 404 });
   }
-  if (admin.role === 'accountmanager' && customer.account_manager_id !== admin.id) {
+  if (admin.role === 'accountmanager' && !customerVisibleToAm(customer, admin.id)) {
     return NextResponse.json({ error: 'Geen toegang tot deze klant' }, { status: 403 });
   }
 

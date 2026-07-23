@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { verifyAdmin, unauthorized, forbidden } from '@/lib/adminAuth';
-import { adminCanAccessCustomer } from '@/lib/permissions';
+import {
+  adminCanAccessCustomer,
+  amCustomerAccessOrFilter,
+  normalizeCustomerAmAssignment,
+} from '@/lib/permissions';
 import bcrypt from 'bcryptjs';
 import { logAudit } from '@/lib/audit';
 import { buildPhoneSearchIlikeClauses, sanitizePostgrestIlike } from '@/lib/phoneSearch';
@@ -41,8 +45,8 @@ export async function GET(request: NextRequest) {
   let dataQuery = supabase.from('customers').select('*');
 
   if (admin.role === 'accountmanager') {
-    countQuery = countQuery.eq('account_manager_id', admin.id);
-    dataQuery = dataQuery.eq('account_manager_id', admin.id);
+    countQuery = countQuery.or(amCustomerAccessOrFilter(admin.id));
+    dataQuery = dataQuery.or(amCustomerAccessOrFilter(admin.id));
   }
 
   if (search) {
@@ -103,7 +107,7 @@ export async function GET(request: NextRequest) {
   if (page === 1) {
     let kpiBase = supabase.from('customers').select('id, portal_active, password_hash, last_login_at, last_seen_at, login_count, is_active', { count: 'exact' });
     if (admin.role === 'accountmanager') {
-      kpiBase = kpiBase.eq('account_manager_id', admin.id);
+      kpiBase = kpiBase.or(amCustomerAccessOrFilter(admin.id));
     }
     const { data: allForKpi } = await kpiBase;
     if (allForKpi) {
@@ -161,9 +165,14 @@ export async function POST(request: NextRequest) {
       rest.password_hash = await bcrypt.hash(password, 12);
     }
 
-    if (admin.role === 'accountmanager' && !rest.account_manager_id) {
-      rest.account_manager_id = admin.id;
+    // Alleen admin/superadmin mag “alle AMs” zetten; AMs krijgen zichzelf als vaste AM.
+    if (admin.role === 'accountmanager') {
+      delete (rest as Record<string, unknown>).shared_with_all_ams;
+      if (!rest.account_manager_id || rest.account_manager_id === '__all__') {
+        rest.account_manager_id = admin.id;
+      }
     }
+    normalizeCustomerAmAssignment(rest as Record<string, unknown>);
 
     const supabase = createServerClient();
 
@@ -214,6 +223,12 @@ export async function PUT(request: NextRequest) {
     // Voorkom dat een admin-PUT per ongeluk een demo-portaal ontdoet van zijn demo-status.
     const { demo_mode: _ignoredDemoMode, ...updates } = rawUpdates as Record<string, unknown>;
     void _ignoredDemoMode;
+    if (admin.role === 'accountmanager') {
+      // AMs mogen AM-toewijzing / shared-flag niet wijzigen.
+      delete updates.account_manager_id;
+      delete updates.shared_with_all_ams;
+    }
+    normalizeCustomerAmAssignment(updates);
 
     if (password) {
       updates.password_hash = await bcrypt.hash(password as string, 12);

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
 import { enrichCustomersWithCounts } from '@/lib/adminCustomerEnrichment';
+import { amCustomerAccessOrFilter } from '@/lib/permissions';
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -22,7 +23,7 @@ export async function GET(
 
   let q = supabase.from('customers').select('*').eq('id', id);
   if (admin.role === 'accountmanager') {
-    q = q.eq('account_manager_id', admin.id);
+    q = q.or(amCustomerAccessOrFilter(admin.id));
   }
 
   const { data: row, error } = await q.maybeSingle();

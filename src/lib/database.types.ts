@@ -2210,6 +2210,7 @@ export type Database = {
           portal_password: string | null
           postcode: string | null
           preferred_crm_provider: string | null
+          shared_with_all_ams: boolean
           signup_source: string | null
           street: string | null
           updated_at: string | null
@@ -2246,6 +2247,7 @@ export type Database = {
           portal_password?: string | null
           postcode?: string | null
           preferred_crm_provider?: string | null
+          shared_with_all_ams?: boolean
           signup_source?: string | null
           street?: string | null
           updated_at?: string | null
@@ -2282,6 +2284,7 @@ export type Database = {
           portal_password?: string | null
           postcode?: string | null
           preferred_crm_provider?: string | null
+          shared_with_all_ams?: boolean
           signup_source?: string | null
           street?: string | null
           updated_at?: string | null

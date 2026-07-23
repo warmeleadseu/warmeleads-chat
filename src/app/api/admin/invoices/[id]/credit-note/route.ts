@@ -3,6 +3,7 @@ import { verifyAdmin, unauthorized, forbidden } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
 import { getNextInvoiceNumber, sendCreditNoteEmail } from '@/lib/invoice';
 import { sanitizeInvoiceWritePayload, invoicesHaveCreditNoteOfColumn } from '@/lib/customerCountrySupport';
+import { amCustomerAccessOrFilter } from '@/lib/permissions';
 
 type LineItem = { description: string; quantity: number; unit_price: number; total: number };
 
@@ -34,7 +35,7 @@ export async function POST(
       .from('customers')
       .select('id')
       .eq('id', original.customer_id)
-      .eq('account_manager_id', admin.id)
+      .or(amCustomerAccessOrFilter(admin.id))
       .single();
     if (!myCust) return forbidden();
   }

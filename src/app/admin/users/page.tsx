@@ -364,7 +364,12 @@ export default function UsersPage() {
   );
 }
 
-interface CustomerOption { id: string; name: string; account_manager_id?: string | null; }
+interface CustomerOption {
+  id: string;
+  name: string;
+  account_manager_id?: string | null;
+  shared_with_all_ams?: boolean;
+}
 
 function UserFormModal({ user, onClose, onSaved }: { user: AdminUser | null; onClose: () => void; onSaved: () => void }) {
   const isEdit = !!user;
@@ -731,11 +736,15 @@ function UserFormModal({ user, onClose, onSaved }: { user: AdminUser | null; onC
                           className="shrink-0 rounded border-slate-300 text-brand-purple focus:ring-brand-purple/20"
                         />
                         <span className="min-w-0 flex-1 truncate">{c.name}</span>
-                        {c.account_manager_id && c.account_manager_id !== user?.id && (
+                        {c.shared_with_all_ams ? (
+                          <span className="ml-auto shrink-0 rounded-full bg-brand-purple/10 px-1.5 py-0.5 text-[10px] text-brand-purple">
+                            alle AMs
+                          </span>
+                        ) : c.account_manager_id && c.account_manager_id !== user?.id ? (
                           <span className="ml-auto shrink-0 rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-600">
                             andere AM
                           </span>
-                        )}
+                        ) : null}
                       </label>
                     ))}
                   </div>

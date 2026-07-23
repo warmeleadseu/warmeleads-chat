@@ -4,6 +4,7 @@ import { createServerClient } from '@/lib/supabase';
 import { buildOpenInvoiceEmailContent } from '@/lib/invoice';
 import { ensureInvoiceMollieCheckout } from '@/lib/invoiceCheckout';
 import { computeInvoiceVat } from '@/lib/invoiceVat';
+import { amCustomerAccessOrFilter } from '@/lib/permissions';
 
 /**
  * Preview-variant van `POST /api/admin/batches/[id]/send-invoice`.
@@ -46,7 +47,7 @@ export async function GET(
       .from('customers')
       .select('id')
       .eq('id', batch.customer_id)
-      .eq('account_manager_id', admin.id)
+      .or(amCustomerAccessOrFilter(admin.id))
       .single();
     if (!ok) {
       return NextResponse.json({ error: 'Geen toegang tot deze klant' }, { status: 403 });

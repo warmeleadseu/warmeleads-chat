@@ -3,6 +3,7 @@ import { createServerClient } from '@/lib/supabase';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { sanitizePostgrestIlike } from '@/lib/phoneSearch';
 import { customersHaveCountryColumn } from '@/lib/customerCountrySupport';
+import { amCustomerAccessOrFilter } from '@/lib/permissions';
 
 /**
  * GET /api/admin/customers/options
@@ -57,7 +58,7 @@ export async function GET(request: NextRequest) {
     .limit(ABSOLUTE_MAX);
 
   if (admin.role === 'accountmanager') {
-    query = query.eq('account_manager_id', admin.id);
+    query = query.or(amCustomerAccessOrFilter(admin.id));
   }
   if (activeOnly) {
     query = query.eq('is_active', true);

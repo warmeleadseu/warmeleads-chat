@@ -3,6 +3,7 @@ import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
 import { backfillBatch, distributeUnassignedLeads } from '@/lib/distribution';
 import { resolveCity } from '@/lib/pdok';
+import { amCustomerAccessOrFilter } from '@/lib/permissions';
 import {
   formatProvinceTargetLabel,
   normalizeProvinceTargetTokens,
@@ -78,8 +79,7 @@ async function loadBatchForAdmin(
   if (admin.role === 'accountmanager') {
     const { data: myCust } = await supabase
       .from('customers')
-      .select('id')
-      .eq('account_manager_id', admin.id)
+      .select('id').or(amCustomerAccessOrFilter(admin.id))
       .eq('id', batch.customer_id)
       .single();
     if (!myCust) {

@@ -44,6 +44,58 @@ export type CustomerScope =
   | { scoped: false }
   | { scoped: true; customerIds: string[] };
 
+/** Sentinel in admin-UI/API: klant delen met alle accountmanagers. */
+export const ALL_ACCOUNT_MANAGERS = '__all__';
+
+/**
+ * PostgREST `.or(...)` filter: eigen toegewezen klanten óf gedeeld met alle AMs.
+ * Gebruik op queries tegen `customers`.
+ */
+export function amCustomerAccessOrFilter(adminId: string): string {
+  return `account_manager_id.eq.${adminId},shared_with_all_ams.eq.true`;
+}
+
+type OrFilterable = { or: (filter: string) => OrFilterable };
+
+/** Scope een customers-query voor een accountmanager. */
+export function applyAmCustomerFilter<T extends OrFilterable>(query: T, adminId: string): T {
+  return query.or(amCustomerAccessOrFilter(adminId)) as T;
+}
+
+/** In-memory check: AM mag deze klant zien (eigen of gedeeld). */
+export function customerVisibleToAm(
+  customer: { account_manager_id?: string | null; shared_with_all_ams?: boolean | null },
+  adminId: string,
+): boolean {
+  if (customer.shared_with_all_ams) return true;
+  return customer.account_manager_id === adminId;
+}
+
+/**
+ * Normaliseer AM-toewijzing bij create/update:
+ * - `__all__` / shared_with_all_ams=true → gedeeld, geen vaste AM
+ * - expliciete AM / leeg → shared uit
+ */
+export function normalizeCustomerAmAssignment(updates: Record<string, unknown>): void {
+  if (updates.account_manager_id === ALL_ACCOUNT_MANAGERS) {
+    updates.account_manager_id = null;
+    updates.shared_with_all_ams = true;
+    return;
+  }
+  if (updates.shared_with_all_ams === true) {
+    updates.account_manager_id = null;
+    updates.shared_with_all_ams = true;
+    return;
+  }
+  if ('account_manager_id' in updates) {
+    const id = updates.account_manager_id;
+    updates.account_manager_id = typeof id === 'string' && id.length > 0 ? id : null;
+    if (!('shared_with_all_ams' in updates)) {
+      updates.shared_with_all_ams = false;
+    }
+  }
+}
+
 export async function getCustomerScope(admin: Pick<AdminInfo, 'id' | 'role'>): Promise<CustomerScope> {
   if (admin.role !== 'accountmanager') return { scoped: false };
 
@@ -51,16 +103,15 @@ export async function getCustomerScope(admin: Pick<AdminInfo, 'id' | 'role'>): P
   const { data } = await supabase
     .from('customers')
     .select('id')
-    .eq('account_manager_id', admin.id);
+    .or(amCustomerAccessOrFilter(admin.id));
 
   return { scoped: true, customerIds: (data || []).map(c => c.id) };
 }
 
 /**
  * Bepaalt of een admin een specifieke klant mag zien/bewerken. Superadmin en
- * gewone admin hebben altijd toegang; accountmanagers alleen tot hun eigen
- * toegewezen klanten. Gebruik dit op alle admin-routes die met één concrete
- * klant-id werken (PUT/DELETE/reminder e.d.).
+ * gewone admin hebben altijd toegang; accountmanagers tot hun eigen toegewezen
+ * klanten én klanten die met alle AMs gedeeld zijn.
  */
 export async function adminCanAccessCustomer(
   admin: Pick<AdminInfo, 'id' | 'role'>,
@@ -74,7 +125,7 @@ export async function adminCanAccessCustomer(
     .from('customers')
     .select('id')
     .eq('id', customerId)
-    .eq('account_manager_id', admin.id)
+    .or(amCustomerAccessOrFilter(admin.id))
     .maybeSingle();
 
   return !!data;

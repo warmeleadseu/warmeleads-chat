@@ -3,6 +3,7 @@ import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
 import { buildUnpaidBatchReminderEmailContent } from '@/lib/email';
 import { ensureInvoiceMollieCheckout } from '@/lib/invoiceCheckout';
+import { amCustomerAccessOrFilter } from '@/lib/permissions';
 
 /**
  * Preview-variant van `POST /api/admin/batches/[id]/payment-reminder`.
@@ -39,8 +40,7 @@ export async function GET(
   if (admin.role === 'accountmanager') {
     const { data: myCustomer } = await supabase
       .from('customers')
-      .select('id')
-      .eq('account_manager_id', admin.id)
+      .select('id').or(amCustomerAccessOrFilter(admin.id))
       .eq('id', batch.customer_id)
       .single();
     if (!myCustomer) {

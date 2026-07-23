@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
 import { markInvoicePaidByAppointmentBatch } from '@/lib/invoice';
+import { amCustomerAccessOrFilter } from '@/lib/permissions';
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const admin = await verifyAdmin(request);
@@ -23,8 +24,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   if (admin.role === 'accountmanager') {
     const { data: myCust } = await supabase
       .from('customers')
-      .select('id')
-      .eq('account_manager_id', admin.id)
+      .select('id').or(amCustomerAccessOrFilter(admin.id))
       .eq('id', existing.customer_id)
       .single();
     if (!myCust) return NextResponse.json({ error: 'Geen toegang tot deze batch' }, { status: 403 });
@@ -86,8 +86,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   if (admin.role === 'accountmanager') {
     const { data: myCust } = await supabase
       .from('customers')
-      .select('id')
-      .eq('account_manager_id', admin.id)
+      .select('id').or(amCustomerAccessOrFilter(admin.id))
       .eq('id', existing.customer_id)
       .single();
     if (!myCust) return NextResponse.json({ error: 'Geen toegang tot deze batch' }, { status: 403 });

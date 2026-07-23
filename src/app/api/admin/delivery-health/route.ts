@@ -3,6 +3,7 @@ import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
 import { isPipelineBatchKind } from '@/lib/batchKind';
 import { beoordeelBatchLevering, fifoHeadBatchIdsVoorLevering, mergeEarliestPaidAtByBatchId } from '@/lib/deliveryHealth';
+import { amCustomerAccessOrFilter } from '@/lib/permissions';
 
 export async function GET(request: NextRequest) {
   const admin = await verifyAdmin(request);
@@ -48,7 +49,7 @@ export async function GET(request: NextRequest) {
     .neq('is_paid', false);
 
   if (admin.role === 'accountmanager') {
-    const { data: myCustomers } = await supabase.from('customers').select('id').eq('account_manager_id', admin.id);
+    const { data: myCustomers } = await supabase.from('customers').select('id').or(amCustomerAccessOrFilter(admin.id));
     const ids = (myCustomers || []).map(c => c.id);
     if (ids.length === 0) {
       return NextResponse.json({

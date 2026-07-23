@@ -4,6 +4,7 @@ import { createServerClient } from '@/lib/supabase';
 import { createInvoice, sendNewBatchAdminEmail } from '@/lib/invoice';
 import { initialAppointmentBatchStatus } from '@/lib/customerBatchStatus';
 import { insertCelebrationEvent } from '@/lib/celebrationInsert';
+import { amCustomerAccessOrFilter } from '@/lib/permissions';
 
 export async function GET(request: NextRequest) {
   const admin = await verifyAdmin(request);
@@ -28,7 +29,7 @@ export async function GET(request: NextRequest) {
   if (branch) q = q.eq('branch', branch);
 
   if (admin.role === 'accountmanager') {
-    const { data: myCustomers } = await supabase.from('customers').select('id').eq('account_manager_id', admin.id);
+    const { data: myCustomers } = await supabase.from('customers').select('id').or(amCustomerAccessOrFilter(admin.id));
     const ids = (myCustomers || []).map(c => c.id);
     if (ids.length === 0) return NextResponse.json([]);
     q = q.in('customer_id', ids);
@@ -76,8 +77,7 @@ export async function POST(request: NextRequest) {
   if (admin.role === 'accountmanager') {
     const { data: myCust } = await supabase
       .from('customers')
-      .select('id')
-      .eq('account_manager_id', admin.id)
+      .select('id').or(amCustomerAccessOrFilter(admin.id))
       .eq('id', customer_id)
       .single();
     if (!myCust) return NextResponse.json({ error: 'Geen toegang tot deze klant' }, { status: 403 });
