@@ -367,6 +367,10 @@ export default function PortalPage() {
   const [postcodeArea, setPostcodeArea] = useState('');
   const [debouncedPostcodeArea, setDebouncedPostcodeArea] = useState('');
   const [maxDistanceKm, setMaxDistanceKm] = useState<number | null>(null);
+  const [distanceOriginPlace, setDistanceOriginPlace] = useState('');
+  const [debouncedDistanceOriginPlace, setDebouncedDistanceOriginPlace] = useState('');
+  const [distanceOriginProvinces, setDistanceOriginProvinces] = useState<string[]>([]);
+  const [distanceOriginLabel, setDistanceOriginLabel] = useState<string | null>(null);
   const [bulkCount, setBulkCount] = useState(0);
   const [leadsScopePartial, setLeadsScopePartial] = useState(false);
   const [leadsScopeMaxRows, setLeadsScopeMaxRows] = useState<number | null>(null);
@@ -487,6 +491,11 @@ export default function PortalPage() {
   }, [postcodeArea]);
 
   useEffect(() => {
+    const t = setTimeout(() => setDebouncedDistanceOriginPlace(distanceOriginPlace.trim()), 350);
+    return () => clearTimeout(t);
+  }, [distanceOriginPlace]);
+
+  useEffect(() => {
     clearSelection();
   }, [
     statusFilter,
@@ -499,6 +508,8 @@ export default function PortalPage() {
     debouncedPlaats,
     debouncedPostcodeArea,
     maxDistanceKm,
+    debouncedDistanceOriginPlace,
+    distanceOriginProvinces,
     debouncedSearch,
     clearSelection,
   ]);
@@ -614,11 +625,17 @@ export default function PortalPage() {
     if (debouncedPlaats) params.set('plaats', debouncedPlaats);
     if (debouncedPostcodeArea) params.set('postcode_area', debouncedPostcodeArea);
     if (maxDistanceKm != null) params.set('max_distance_km', String(maxDistanceKm));
+    if (debouncedDistanceOriginPlace) {
+      params.set('distance_origin_place', debouncedDistanceOriginPlace);
+    }
+    if (distanceOriginProvinces.length > 0) {
+      params.set('distance_origin_province', distanceOriginProvinces.join(','));
+    }
 
     try {
       const res = await portalFetch(`/api/portal/leads?${params}`);
+      const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        const data = await res.json();
         setLeads(data.leads || []);
         setTotal(data.total || 0);
         setTotalPages(data.totalPages || 1);
@@ -626,14 +643,19 @@ export default function PortalPage() {
         const partial = !!data.partial;
         setLeadsScopePartial(partial);
         setLeadsScopeMaxRows(partial && typeof data.maxPaginateRows === 'number' ? data.maxPaginateRows : null);
+        setDistanceOriginLabel(
+          typeof data.distance_origin_label === 'string' ? data.distance_origin_label : null,
+        );
       } else {
         setLeadsScopePartial(false);
         setLeadsScopeMaxRows(null);
-        showToast('Leads konden niet geladen worden', 'error');
+        setDistanceOriginLabel(null);
+        showToast(data.error || 'Leads konden niet geladen worden', 'error');
       }
     } catch {
       setLeadsScopePartial(false);
       setLeadsScopeMaxRows(null);
+      setDistanceOriginLabel(null);
       showToast('Leads konden niet geladen worden', 'error');
     }
     setLoading(false);
@@ -654,6 +676,8 @@ export default function PortalPage() {
     debouncedPlaats,
     debouncedPostcodeArea,
     maxDistanceKm,
+    debouncedDistanceOriginPlace,
+    distanceOriginProvinces,
     showToast,
   ]);
 
@@ -904,6 +928,12 @@ export default function PortalPage() {
     if (debouncedPlaats) params.set('plaats', debouncedPlaats);
     if (debouncedPostcodeArea) params.set('postcode_area', debouncedPostcodeArea);
     if (maxDistanceKm != null) params.set('max_distance_km', String(maxDistanceKm));
+    if (debouncedDistanceOriginPlace) {
+      params.set('distance_origin_place', debouncedDistanceOriginPlace);
+    }
+    if (distanceOriginProvinces.length > 0) {
+      params.set('distance_origin_province', distanceOriginProvinces.join(','));
+    }
     const res = await portalFetch(`/api/portal/leads?${params}`);
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -926,6 +956,8 @@ export default function PortalPage() {
     debouncedPlaats,
     debouncedPostcodeArea,
     maxDistanceKm,
+    debouncedDistanceOriginPlace,
+    distanceOriginProvinces,
     showToast,
   ]);
 
@@ -1004,6 +1036,10 @@ export default function PortalPage() {
     plaats: debouncedPlaats || undefined,
     postcodeArea: debouncedPostcodeArea || undefined,
     maxDistanceKm: maxDistanceKm != null ? String(maxDistanceKm) : undefined,
+    distanceOriginPlace: debouncedDistanceOriginPlace || undefined,
+    distanceOriginProvince: distanceOriginProvinces.length > 0
+      ? distanceOriginProvinces.join(',')
+      : undefined,
   }), [
     statusFilter,
     activeBranchTab,
@@ -1016,6 +1052,8 @@ export default function PortalPage() {
     debouncedPlaats,
     debouncedPostcodeArea,
     maxDistanceKm,
+    debouncedDistanceOriginPlace,
+    distanceOriginProvinces,
   ]);
 
   const toggleProvince = useCallback((province: string) => {
@@ -1024,6 +1062,26 @@ export default function PortalPage() {
     ));
     setPage(1);
   }, []);
+
+  const toggleDistanceOriginProvince = useCallback((province: string) => {
+    setDistanceOriginPlace('');
+    setDebouncedDistanceOriginPlace('');
+    setDistanceOriginProvinces((prev) => (
+      prev.includes(province) ? prev.filter((p) => p !== province) : [...prev, province]
+    ));
+    setPage(1);
+  }, []);
+
+  const clearDistanceOrigin = useCallback(() => {
+    setDistanceOriginPlace('');
+    setDebouncedDistanceOriginPlace('');
+    setDistanceOriginProvinces([]);
+    setDistanceOriginLabel(null);
+    setPage(1);
+  }, []);
+
+  const hasCustomDistanceOrigin =
+    !!debouncedDistanceOriginPlace || distanceOriginProvinces.length > 0;
 
   const handleCrmBackfill = (forceResend: boolean) => {
     if (!crmLabel) return;
@@ -1071,6 +1129,7 @@ export default function PortalPage() {
     if (debouncedPlaats) count++;
     if (debouncedPostcodeArea) count++;
     if (maxDistanceKm != null) count++;
+    if (hasCustomDistanceOrigin) count++;
     return count;
   }, [
     statusFilter,
@@ -1082,6 +1141,7 @@ export default function PortalPage() {
     debouncedPlaats,
     debouncedPostcodeArea,
     maxDistanceKm,
+    hasCustomDistanceOrigin,
   ]);
 
   const resetFilters = () => {
@@ -1095,6 +1155,10 @@ export default function PortalPage() {
     setPostcodeArea('');
     setDebouncedPostcodeArea('');
     setMaxDistanceKm(null);
+    setDistanceOriginPlace('');
+    setDebouncedDistanceOriginPlace('');
+    setDistanceOriginProvinces([]);
+    setDistanceOriginLabel(null);
     setPage(1);
   };
 
@@ -1238,6 +1302,18 @@ export default function PortalPage() {
         clear: () => { setMaxDistanceKm(null); setPage(1); },
       });
     }
+    if (hasCustomDistanceOrigin) {
+      const originPart = distanceOriginLabel
+        || debouncedDistanceOriginPlace
+        || (distanceOriginProvinces.length === 1
+          ? distanceOriginProvinces[0]
+          : `${distanceOriginProvinces.length} provincies`);
+      chips.push({
+        key: 'distance_origin',
+        label: `Vanaf ${originPart}`,
+        clear: clearDistanceOrigin,
+      });
+    }
     if (debouncedPostcodeArea) {
       chips.push({
         key: 'pc',
@@ -1270,6 +1346,11 @@ export default function PortalPage() {
     assignedToFilter,
     assignTeam,
     maxDistanceKm,
+    distanceOriginLabel,
+    debouncedDistanceOriginPlace,
+    distanceOriginProvinces,
+    hasCustomDistanceOrigin,
+    clearDistanceOrigin,
     debouncedPostcodeArea,
     debouncedPlaats,
     selectedProvinces,
@@ -1690,8 +1771,74 @@ export default function PortalPage() {
                   ))}
                 </div>
                 <p className="mb-3 text-[11px] text-slate-400">
-                  Straal t.o.v. jouw vestiging / doelgebied. Leads zonder afstand vallen buiten deze filter.
+                  {hasCustomDistanceOrigin
+                    ? `Straal t.o.v. ${distanceOriginLabel || debouncedDistanceOriginPlace || (distanceOriginProvinces.length === 1 ? distanceOriginProvinces[0] : `${distanceOriginProvinces.length} provincies`)}. Leads zonder coördinaten vallen buiten deze filter.`
+                    : 'Straal t.o.v. jouw vestiging / doelgebied. Leads zonder afstand vallen buiten deze filter.'}
                 </p>
+
+                <div className="mb-3 rounded-lg border border-slate-100 bg-slate-50/80 p-3">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <label className="text-xs font-medium text-slate-600">
+                      Afwijkende referentie (optioneel)
+                    </label>
+                    {hasCustomDistanceOrigin && (
+                      <button
+                        type="button"
+                        onClick={clearDistanceOrigin}
+                        className="text-[11px] font-medium text-slate-400 hover:text-slate-600"
+                      >
+                        Wis referentie
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    type="text"
+                    value={distanceOriginPlace}
+                    onChange={(e) => {
+                      setDistanceOriginPlace(e.target.value);
+                      if (e.target.value.trim()) setDistanceOriginProvinces([]);
+                      setPage(1);
+                    }}
+                    placeholder="bijv. Utrecht of Antwerpen"
+                    className="mb-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 outline-none focus:border-brand-purple/50"
+                  />
+                  <p className="mb-2 text-[11px] text-slate-400">
+                    Of kies provincie(s) als middelpunt — plaats gaat voor als beide zijn ingevuld.
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {PROVINCES_NL.map((p) => (
+                      <ChoicePill
+                        key={`origin-${p}`}
+                        selected={distanceOriginProvinces.includes(p)}
+                        onClick={() => toggleDistanceOriginProvince(p)}
+                        className="!min-h-8 !rounded-lg !px-2.5 !py-1 !text-[11px]"
+                      >
+                        {p}
+                      </ChoicePill>
+                    ))}
+                  </div>
+                  <details className="mt-2">
+                    <summary className="cursor-pointer text-[11px] font-medium text-slate-400 hover:text-slate-600">
+                      Belgische provincies als referentie
+                    </summary>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {PROVINCES_BE.map((p) => {
+                        const value = p === 'Limburg' ? 'Limburg (BE)' : p;
+                        return (
+                          <ChoicePill
+                            key={`origin-${value}`}
+                            selected={distanceOriginProvinces.includes(value)}
+                            onClick={() => toggleDistanceOriginProvince(value)}
+                            className="!min-h-8 !rounded-lg !px-2.5 !py-1 !text-[11px]"
+                          >
+                            {p === 'Limburg' ? 'Limburg (BE)' : p}
+                          </ChoicePill>
+                        );
+                      })}
+                    </div>
+                  </details>
+                </div>
+
                 <div className="flex flex-wrap gap-3">
                   <div className="min-w-[10rem] flex-1">
                     <label className="mb-1 block text-xs font-medium text-slate-500">Postcodegebied</label>
@@ -1855,7 +2002,13 @@ export default function PortalPage() {
       <p className="text-xs text-slate-500">
         {total} {total === 1 ? 'lead' : 'leads'} gevonden
         {maxDistanceKm != null && (
-          <span className="text-slate-400"> · straalfilter sluit leads zonder afstand uit</span>
+          <span className="text-slate-400">
+            {' '}· straal
+            {hasCustomDistanceOrigin
+              ? ` vanaf ${distanceOriginLabel || debouncedDistanceOriginPlace || 'gekozen referentie'}`
+              : ' t.o.v. vestiging'}
+            {' '}sluit leads zonder afstand uit
+          </span>
         )}
       </p>
 
@@ -2303,6 +2456,7 @@ export default function PortalPage() {
                   ? `${selectedLeadIndex + 1} / ${leads.length}`
                   : undefined
               }
+              distanceOriginLabel={distanceOriginLabel}
               showToast={showToast}
             />
           )}
@@ -2395,6 +2549,7 @@ function LeadDetailPanel({
   onPrev,
   onNext,
   positionLabel,
+  distanceOriginLabel,
   showToast,
 }: {
   lead: Lead;
@@ -2412,6 +2567,7 @@ function LeadDetailPanel({
   onPrev?: () => void;
   onNext?: () => void;
   positionLabel?: string;
+  distanceOriginLabel?: string | null;
   showToast: (msg: string) => void;
 }) {
   const [notes, setNotes] = useState(lead.notities || '');
@@ -2686,7 +2842,9 @@ function LeadDetailPanel({
                       <div className="min-w-0 flex-1">
                         <span className="block truncate text-sm text-slate-700">{adres}</span>
                         <span className="text-xs text-slate-400">
-                          {dist ? `${dist} van je targetplaats` : 'Afstand onbekend'}
+                          {dist
+                            ? `${dist} van ${distanceOriginLabel || 'je targetplaats'}`
+                            : 'Afstand onbekend'}
                         </span>
                       </div>
                       <div className="flex shrink-0 items-center gap-1">

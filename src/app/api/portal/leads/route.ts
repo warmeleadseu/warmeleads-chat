@@ -13,6 +13,10 @@ import {
   parsePostcodeArea,
   parseProvinceList,
 } from '@/lib/portalLeadGeoFilters';
+import {
+  applyCustomDistanceOrigin,
+  resolveDistanceOrigin,
+} from '@/lib/portalDistanceOrigin';
 
 const PAGE_SIZE = 1000;
 const IN_CHUNK = 500;
@@ -306,12 +310,27 @@ export async function GET(request: NextRequest) {
   const plaatsFilter = url.searchParams.get('plaats')?.trim() || '';
   const postcodeArea = parsePostcodeArea(url.searchParams.get('postcode_area'));
   const maxDistanceKm = parseMaxDistanceKm(url.searchParams.get('max_distance_km'));
+  const distanceOriginPlace = url.searchParams.get('distance_origin_place')?.trim() || '';
+  const distanceOriginProvinces = parseProvinceList(url.searchParams.get('distance_origin_province'));
 
   const { demoMode, branches: customerBranches } = await getCustomerDemoInfo(supabase, customer.id);
 
-  // Datumfilter op ontvangstdatum (assigned_at) vereist memory-pad na enrichment
+  const customDistanceOrigin = await resolveDistanceOrigin({
+    place: distanceOriginPlace,
+    provinces: distanceOriginProvinces,
+  });
+  if ((distanceOriginPlace || distanceOriginProvinces.length > 0) && !customDistanceOrigin) {
+    return NextResponse.json({
+      error: distanceOriginPlace
+        ? `Plaats “${distanceOriginPlace}” niet gevonden. Probeer een andere spelling.`
+        : 'Geen geldige provincie voor afstandreferentie',
+    }, { status: 400 });
+  }
+
+  // Datumfilter op ontvangstdatum (assigned_at) / custom straal → memory-pad
   const needsMemFilter =
     maxDistanceKm != null
+    || !!customDistanceOrigin
     || (postcodeArea?.kind === 'range')
     || (!demoMode && !!(from || to));
 
@@ -493,7 +512,11 @@ export async function GET(request: NextRequest) {
     });
 
     await attachReclamationFieldsToLeads(supabase, customer.id, enrichedLeads as Record<string, unknown>[]);
-    enrichPortalLeadDistances(enrichedLeads as Record<string, unknown>[], activeTargets);
+    if (customDistanceOrigin) {
+      applyCustomDistanceOrigin(enrichedLeads as Record<string, unknown>[], customDistanceOrigin);
+    } else {
+      enrichPortalLeadDistances(enrichedLeads as Record<string, unknown>[], activeTargets);
+    }
 
     if (idsOnly) {
       const allIds = enrichedLeads.map((l) => (l as Record<string, unknown>).id as string);
@@ -503,6 +526,8 @@ export async function GET(request: NextRequest) {
         total: allIds.length,
         partial: leadDataPartial,
         maxPaginateRows,
+        // Custom origin forceert altijd het memory-pad; hier dus altijd null.
+        distance_origin_label: null,
       });
     }
 
@@ -515,6 +540,7 @@ export async function GET(request: NextRequest) {
       bulkCount,
       partial: leadDataPartial,
       maxPaginateRows,
+      distance_origin_label: null,
     });
   }
 
@@ -546,7 +572,11 @@ export async function GET(request: NextRequest) {
     };
   });
 
-  enrichPortalLeadDistances(enrichedAll, activeTargets);
+  if (customDistanceOrigin) {
+    applyCustomDistanceOrigin(enrichedAll, customDistanceOrigin);
+  } else {
+    enrichPortalLeadDistances(enrichedAll, activeTargets);
+  }
   const geoFiltered = applyMemFilters(enrichedAll);
 
   geoFiltered.sort((a, b) => {
@@ -582,6 +612,7 @@ export async function GET(request: NextRequest) {
       total: totalCount,
       partial: leadDataPartial,
       maxPaginateRows,
+      distance_origin_label: customDistanceOrigin?.label ?? null,
     });
   }
 
@@ -593,6 +624,7 @@ export async function GET(request: NextRequest) {
     totalPages: Math.ceil(totalCount / limit),
     bulkCount,
     partial: leadDataPartial,
+    distance_origin_label: customDistanceOrigin?.label ?? null,
     maxPaginateRows,
   });
 }

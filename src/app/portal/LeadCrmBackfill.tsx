@@ -261,6 +261,12 @@ function buildLeadsQueryParams(filters: ExportFilters, extra?: Record<string, st
   if (filters.plaats) params.set('plaats', filters.plaats);
   if (filters.postcodeArea) params.set('postcode_area', filters.postcodeArea);
   if (filters.maxDistanceKm) params.set('max_distance_km', filters.maxDistanceKm);
+  if (filters.distanceOriginPlace) {
+    params.set('distance_origin_place', filters.distanceOriginPlace);
+  }
+  if (filters.distanceOriginProvince) {
+    params.set('distance_origin_province', filters.distanceOriginProvince);
+  }
   if (extra) {
     for (const [key, value] of Object.entries(extra)) {
       params.set(key, value);

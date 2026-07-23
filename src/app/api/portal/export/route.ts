@@ -9,6 +9,10 @@ import {
   parsePostcodeArea,
   parseProvinceList,
 } from '@/lib/portalLeadGeoFilters';
+import {
+  applyCustomDistanceOrigin,
+  resolveDistanceOrigin,
+} from '@/lib/portalDistanceOrigin';
 import * as XLSX from 'xlsx';
 
 /* ─── column registry ─── */
@@ -244,6 +248,8 @@ export async function GET(request: NextRequest) {
   const plaatsFilter = url.searchParams.get('plaats')?.trim().toLowerCase() || '';
   const postcodeArea = parsePostcodeArea(url.searchParams.get('postcode_area'));
   const maxDistanceKm = parseMaxDistanceKm(url.searchParams.get('max_distance_km'));
+  const distanceOriginPlace = url.searchParams.get('distance_origin_place')?.trim() || '';
+  const distanceOriginProvinces = parseProvinceList(url.searchParams.get('distance_origin_province'));
   const separator = url.searchParams.get('separator') || ';';
   const dateFormat = url.searchParams.get('date_format') || 'nl';
   const includeHeaders = url.searchParams.get('include_headers') !== 'false';
@@ -365,6 +371,21 @@ export async function GET(request: NextRequest) {
       _batch_id: meta?.batch_id || null,
     };
   });
+
+  const customDistanceOrigin = await resolveDistanceOrigin({
+    place: distanceOriginPlace,
+    provinces: distanceOriginProvinces,
+  });
+  if ((distanceOriginPlace || distanceOriginProvinces.length > 0) && !customDistanceOrigin) {
+    return NextResponse.json({
+      error: distanceOriginPlace
+        ? `Plaats “${distanceOriginPlace}” niet gevonden. Probeer een andere spelling.`
+        : 'Geen geldige provincie voor afstandreferentie',
+    }, { status: 400 });
+  }
+  if (customDistanceOrigin) {
+    applyCustomDistanceOrigin(leads, customDistanceOrigin);
+  }
 
   let filtered = requestedLeadIds
     ? leads
