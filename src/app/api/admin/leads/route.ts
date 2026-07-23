@@ -19,7 +19,6 @@ import {
 } from '@/lib/partnerProspectConstants';
 import { buildPhoneSearchIlikeClauses, sanitizePostgrestIlike } from '@/lib/phoneSearch';
 import { buildPostcodeRangeOrFilter, parsePostcodeRanges } from '@/lib/postcodeRanges';
-import { amCustomerAccessOrFilter } from '@/lib/permissions';
 
 export async function GET(request: NextRequest) {
   const admin = await verifyAdmin(request);
@@ -121,7 +120,7 @@ export async function GET(request: NextRequest) {
   }
 
   if (admin.role === 'accountmanager') {
-    const { data: myCustomers } = await supabase.from('customers').select('id').or(amCustomerAccessOrFilter(admin.id));
+    const { data: myCustomers } = await supabase.from('customers').select('id').eq('account_manager_id', admin.id);
     const ids = (myCustomers || []).map(c => c.id);
     if (ids.length === 0) return NextResponse.json({ leads: [], total: 0, page, perPage });
     query = query.overlaps('assigned_customer_ids', ids);
@@ -360,7 +359,7 @@ export async function PUT(request: NextRequest) {
     // zijn scope (her)toewijzen.
     if (admin.role === 'accountmanager') {
       const { data: myCustomers } = await supabase
-        .from('customers').select('id').or(amCustomerAccessOrFilter(admin.id));
+        .from('customers').select('id').eq('account_manager_id', admin.id);
       const myIds = (myCustomers || []).map(c => c.id);
       const { data: leadRow } = await supabase
         .from('leads').select('assigned_customer_ids').eq('id', id)
@@ -423,7 +422,7 @@ export async function DELETE(request: NextRequest) {
     // anders leads van andere klanten meenemen.
     if (admin.role === 'accountmanager') {
       const { data: myCustomers } = await supabase
-        .from('customers').select('id').or(amCustomerAccessOrFilter(admin.id));
+        .from('customers').select('id').eq('account_manager_id', admin.id);
       const myIds = new Set((myCustomers || []).map(c => c.id));
       const { data: leadRows } = await supabase
         .from('leads').select('id, assigned_customer_ids').in('id', ids);

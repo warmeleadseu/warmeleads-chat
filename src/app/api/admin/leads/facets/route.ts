@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
-import { amCustomerAccessOrFilter } from '@/lib/permissions';
 
 export async function GET(request: NextRequest) {
   const admin = await verifyAdmin(request);
@@ -31,7 +30,7 @@ export async function GET(request: NextRequest) {
   let effectiveCustomers = customerId ? customerId.split(',').filter(Boolean) : null;
   if (admin.role === 'accountmanager') {
     const { data: myCustomers } = await supabase
-      .from('customers').select('id').or(amCustomerAccessOrFilter(admin.id));
+      .from('customers').select('id').eq('account_manager_id', admin.id);
     const myIds = (myCustomers || []).map(c => c.id);
     effectiveCustomers = effectiveCustomers
       ? effectiveCustomers.filter(id => myIds.includes(id))

@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin, unauthorized, forbidden } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
 import { resendOpenInvoiceWithPaymentLinks } from '@/lib/invoice';
-import { amCustomerAccessOrFilter } from '@/lib/permissions';
 
 /** Stuurt (opnieuw) de open-factuurmail met verse Mollie-betaallink naar de klant. */
 export async function POST(
@@ -28,7 +27,7 @@ export async function POST(
       .from('customers')
       .select('id')
       .eq('id', invoice.customer_id)
-      .or(amCustomerAccessOrFilter(admin.id))
+      .eq('account_manager_id', admin.id)
       .single();
     if (!myCust) return forbidden();
   }

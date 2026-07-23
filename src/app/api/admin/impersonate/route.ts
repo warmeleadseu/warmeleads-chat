@@ -4,7 +4,6 @@ import { createServerClient } from '@/lib/supabase';
 import { logAudit } from '@/lib/audit';
 import { SignJWT } from 'jose';
 import { getSessionSecretKey } from '@/lib/sessionSecrets';
-import { customerVisibleToAm } from '@/lib/permissions';
 
 const ISSUER = 'warmeleads-admin';
 // Kort geldig: dit token wordt direct na openen ingewisseld voor een portal-sessie.
@@ -16,7 +15,7 @@ const EXPIRY = '3m';
  *
  * Toegang:
  *  - superadmin / admin → elke klant
- *  - accountmanager      → eigen klanten + gedeelde (shared_with_all_ams)
+ *  - accountmanager      → alleen klanten waar account_manager_id = jij
  */
 export async function POST(request: NextRequest) {
   const admin = await verifyAdmin(request);
@@ -30,7 +29,7 @@ export async function POST(request: NextRequest) {
   const supabase = createServerClient();
   const { data: customer, error: custError } = await supabase
     .from('customers')
-    .select('id, name, email, contact_person, branches, portal_active, account_manager_id, shared_with_all_ams')
+    .select('id, name, email, contact_person, branches, portal_active, account_manager_id')
     .eq('id', customer_id)
     .single();
 
@@ -38,7 +37,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Klant niet gevonden' }, { status: 404 });
   }
 
-  if (admin.role === 'accountmanager' && !customerVisibleToAm(customer, admin.id)) {
+  if (admin.role === 'accountmanager' && customer.account_manager_id !== admin.id) {
     return forbidden();
   }
 

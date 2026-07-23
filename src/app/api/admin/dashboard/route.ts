@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { getPeriodStart, getPrevPeriodStart } from '@/lib/adminDashboardPeriod';
-import { amCustomerAccessOrFilter } from '@/lib/permissions';
 
 async function fetchAllLight<T>(
   supabase: ReturnType<typeof createServerClient>,
@@ -50,7 +49,7 @@ export async function GET(request: NextRequest) {
   const isAM = admin.role === 'accountmanager';
   let amCustomerIds: string[] = [];
   if (isAM) {
-    const { data: myCusts } = await supabase.from('customers').select('id').or(amCustomerAccessOrFilter(admin.id));
+    const { data: myCusts } = await supabase.from('customers').select('id').eq('account_manager_id', admin.id);
     amCustomerIds = (myCusts || []).map(c => c.id);
     if (amCustomerIds.length === 0) {
       const { data: brData } = await supabase

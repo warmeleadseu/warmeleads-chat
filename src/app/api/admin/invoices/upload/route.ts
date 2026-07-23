@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin, unauthorized, forbidden } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
-import { amCustomerAccessOrFilter } from '@/lib/permissions';
 
 export async function POST(request: NextRequest) {
   const admin = await verifyAdmin(request);
@@ -36,7 +35,7 @@ export async function POST(request: NextRequest) {
   }
 
   if (admin.role === 'accountmanager' && invoice.customer_id) {
-    const { data: cust } = await supabase.from('customers').select('id').eq('id', invoice.customer_id).or(amCustomerAccessOrFilter(admin.id)).single();
+    const { data: cust } = await supabase.from('customers').select('id').eq('id', invoice.customer_id).eq('account_manager_id', admin.id).single();
     if (!cust) return forbidden();
   }
 
@@ -94,7 +93,7 @@ export async function DELETE(request: NextRequest) {
   }
 
   if (admin.role === 'accountmanager' && invoice.customer_id) {
-    const { data: cust } = await supabase.from('customers').select('id').eq('id', invoice.customer_id).or(amCustomerAccessOrFilter(admin.id)).single();
+    const { data: cust } = await supabase.from('customers').select('id').eq('id', invoice.customer_id).eq('account_manager_id', admin.id).single();
     if (!cust) return forbidden();
   }
 

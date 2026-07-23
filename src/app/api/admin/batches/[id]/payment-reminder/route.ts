@@ -3,7 +3,6 @@ import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
 import { sendUnpaidBatchReminderEmail } from '@/lib/email';
 import { ensureInvoiceMollieCheckout } from '@/lib/invoiceCheckout';
-import { amCustomerAccessOrFilter } from '@/lib/permissions';
 
 export async function POST(
   request: NextRequest,
@@ -28,7 +27,8 @@ export async function POST(
   if (admin.role === 'accountmanager') {
     const { data: myCustomer } = await supabase
       .from('customers')
-      .select('id').or(amCustomerAccessOrFilter(admin.id))
+      .select('id')
+      .eq('account_manager_id', admin.id)
       .eq('id', batch.customer_id)
       .single();
 

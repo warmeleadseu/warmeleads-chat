@@ -4,7 +4,6 @@ import { createServerClient } from '@/lib/supabase';
 import { metaDefaultsBranchForBatch } from '@/lib/metaBatchCampaignSync';
 import { isNicheResearchBatchKind } from '@/lib/batchKind';
 import { coerceCustomerBatchMetaCampaignIds } from '@/lib/metaCampaignIds';
-import { amCustomerAccessOrFilter } from '@/lib/permissions';
 
 /**
  * Lees de actieve `customer_branch_meta_defaults` voor een klant+branche.
@@ -39,7 +38,7 @@ export async function GET(request: NextRequest) {
       .from('customers')
       .select('id')
       .eq('id', customerId)
-      .or(amCustomerAccessOrFilter(admin.id))
+      .eq('account_manager_id', admin.id)
       .maybeSingle();
     if (!cust) return NextResponse.json({ error: 'Geen toegang' }, { status: 403 });
   }

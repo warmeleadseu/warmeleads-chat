@@ -3,7 +3,6 @@ import JSZip from 'jszip';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
 import { loadCompanySettings, getInvoicePdfBytes } from '@/lib/invoicePdfRender';
-import { amCustomerAccessOrFilter } from '@/lib/permissions';
 
 /** Bovengrens: voorkomt time-outs bij het serverside renderen van te veel PDF's. */
 const MAX_ZIP_INVOICES = 200;
@@ -35,7 +34,7 @@ export async function POST(request: NextRequest) {
 
   let query = supabase.from('invoices').select('*').in('id', ids);
   if (admin.role === 'accountmanager') {
-    const { data: myCustomers } = await supabase.from('customers').select('id').or(amCustomerAccessOrFilter(admin.id));
+    const { data: myCustomers } = await supabase.from('customers').select('id').eq('account_manager_id', admin.id);
     const custIds = (myCustomers || []).map(c => c.id);
     if (custIds.length === 0) return NextResponse.json({ error: 'Geen toegang tot deze facturen.' }, { status: 403 });
     query = query.in('customer_id', custIds);

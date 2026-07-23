@@ -67,8 +67,6 @@ interface Customer {
   login_count?: number;
   exclude_customers?: string[];
   account_manager_id?: string | null;
-  /** true = alle accountmanagers mogen deze klant inzien/beheren */
-  shared_with_all_ams?: boolean;
   kvk_nummer?: string | null;
   address?: string | null;
   street?: string | null;
@@ -552,7 +550,6 @@ export default function CustomersPage() {
                   {customers.map(c => {
                     const activity = getActivityStatus(c);
                     const am = accountManagers.find(a => a.id === c.account_manager_id);
-                    const amLabel = c.shared_with_all_ams ? 'Alle AMs' : (am?.name || null);
                     return (
                       <tr
                         key={c.id}
@@ -624,10 +621,8 @@ export default function CustomersPage() {
                           <span className="text-xs font-semibold text-slate-700">{c.active_batch_count || 0}</span>
                         </td>
                         <td className="px-4 py-3">
-                          {amLabel ? (
-                            <span className={`truncate text-xs font-medium ${c.shared_with_all_ams ? 'text-brand-purple' : 'text-slate-600'}`}>
-                              {amLabel}
-                            </span>
+                          {am ? (
+                            <span className="truncate text-xs font-medium text-slate-600">{am.name}</span>
                           ) : (
                             <span className="text-xs text-slate-300">—</span>
                           )}
@@ -909,7 +904,6 @@ function CustomerDetailPanel({
   const activity = getActivityStatus(c);
   const neverLogged = c.portal_active && c.has_password && (!c.last_login_at || !c.login_count);
   const am = accountManagers.find(a => a.id === c.account_manager_id);
-  const amLabel = c.shared_with_all_ams ? 'Alle accountmanagers' : (am?.name || null);
 
   useEffect(() => {
     adminFetch(`/api/admin/batches?customer_id=${c.id}`).then(r => r.ok ? r.json() : []).then(d => setAllBatches(d || [])).catch(() => {});
@@ -1081,11 +1075,7 @@ function CustomerDetailPanel({
               <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
                 {c.contact_person && <span>{c.contact_person}</span>}
                 {c.email && <span className="max-w-full truncate break-all">{c.email}</span>}
-                {amLabel && (
-                  <span className={`font-medium ${c.shared_with_all_ams ? 'text-brand-purple' : 'text-amber-600'}`}>
-                    AM: {amLabel}
-                  </span>
-                )}
+                {am && <span className="font-medium text-amber-600">AM: {am.name}</span>}
               </div>
             </div>
             <div className="flex w-full flex-wrap gap-2 sm:ml-3 sm:w-auto">
@@ -1579,9 +1569,7 @@ function CustomerForm({ customer, branchOptions, allCustomers, accountManagers, 
     notes: customer?.notes || '',
     password: '',
     exclude_customers: customer?.exclude_customers || [] as string[],
-    account_manager_id: customer?.shared_with_all_ams
-      ? '__all__'
-      : (customer?.account_manager_id || ''),
+    account_manager_id: customer?.account_manager_id || '',
     bulk_price_per_lead: customer?.bulk_price_per_lead != null ? String(customer.bulk_price_per_lead) : '',
     kvk_nummer: customer?.kvk_nummer || '',
     street: customer?.street || '',
@@ -1752,16 +1740,9 @@ function CustomerForm({ customer, branchOptions, allCustomers, accountManagers, 
     setSaving(true);
     setError('');
     try {
-      const { password, bulk_price_per_lead: bulkStr, kvk_nummer, street, house_number, postcode, city, vat_id: vat, country: billingCountry, account_manager_id: amValue, ...rest } = form;
+      const { password, bulk_price_per_lead: bulkStr, kvk_nummer, street, house_number, postcode, city, vat_id: vat, country: billingCountry, ...rest } = form;
       const payload: Record<string, unknown> = { ...rest };
       if (password) payload.password = password;
-      if (amValue === '__all__') {
-        payload.account_manager_id = null;
-        payload.shared_with_all_ams = true;
-      } else {
-        payload.account_manager_id = amValue || null;
-        payload.shared_with_all_ams = false;
-      }
       payload.bulk_price_per_lead = bulkStr ? parseFloat(bulkStr) : null;
       if (billingCountry === 'BE' && kvk_nummer) {
         const kbo = normalizeBelgianKboDigits(kvk_nummer);
@@ -2063,14 +2044,10 @@ function CustomerForm({ customer, branchOptions, allCustomers, accountManagers, 
                 className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50"
               >
                 <option value="">Geen accountmanager</option>
-                <option value="__all__">Alle accountmanagers</option>
                 {accountManagers.map(am => (
                   <option key={am.id} value={am.id}>{am.name}</option>
                 ))}
               </select>
-              <p className="mt-1 text-[11px] text-slate-400">
-                “Alle accountmanagers” maakt deze klant zichtbaar en beheerbaar voor elke AM.
-              </p>
             </div>
           )}
           <PasswordField

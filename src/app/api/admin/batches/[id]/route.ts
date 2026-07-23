@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
 import { adminBatchListSelect, adminBatchListSelectNoBatchTargets, isMissingBatchTargetsError } from '@/lib/adminBatchQueries';
-import { amCustomerAccessOrFilter } from '@/lib/permissions';
 
 export async function GET(
   request: NextRequest,
@@ -54,7 +53,8 @@ export async function GET(
   if (admin.role === 'accountmanager') {
     const { data: myCustomers } = await supabase
       .from('customers')
-      .select('id').or(amCustomerAccessOrFilter(admin.id));
+      .select('id')
+      .eq('account_manager_id', admin.id);
     const ids = (myCustomers || []).map(c => c.id);
     if (!ids.includes(batch.customer_id)) {
       return NextResponse.json({ error: 'Geen toegang' }, { status: 403 });

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
-import { amCustomerAccessOrFilter } from '@/lib/permissions';
 
 export async function GET(request: NextRequest) {
   const admin = await verifyAdmin(request);
@@ -15,7 +14,7 @@ export async function GET(request: NextRequest) {
     .order('created_at', { ascending: false });
 
   if (admin.role === 'accountmanager') {
-    const { data: myCustomers } = await supabase.from('customers').select('id').or(amCustomerAccessOrFilter(admin.id));
+    const { data: myCustomers } = await supabase.from('customers').select('id').eq('account_manager_id', admin.id);
     const ids = (myCustomers || []).map(c => c.id);
     if (ids.length === 0) return NextResponse.json([]);
     orderQuery = orderQuery.in('customer_id', ids);
@@ -64,7 +63,7 @@ export async function DELETE(request: NextRequest) {
       .single();
 
     if (admin.role === 'accountmanager' && order) {
-      const { data: myCust } = await supabase.from('customers').select('id').or(amCustomerAccessOrFilter(admin.id)).eq('id', order.customer_id).single();
+      const { data: myCust } = await supabase.from('customers').select('id').eq('account_manager_id', admin.id).eq('id', order.customer_id).single();
       if (!myCust) return NextResponse.json({ error: 'Geen toegang tot deze bestelling' }, { status: 403 });
     }
 

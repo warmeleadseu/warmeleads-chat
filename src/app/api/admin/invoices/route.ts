@@ -4,7 +4,6 @@ import { createServerClient } from '@/lib/supabase';
 import { resendOpenInvoiceWithPaymentLinks } from '@/lib/invoice';
 import { computeInvoiceVat } from '@/lib/invoiceVat';
 import { sanitizeInvoiceWritePayload } from '@/lib/customerCountrySupport';
-import { amCustomerAccessOrFilter, customerVisibleToAm } from '@/lib/permissions';
 
 export async function GET(request: NextRequest) {
   const admin = await verifyAdmin(request);
@@ -18,7 +17,7 @@ export async function GET(request: NextRequest) {
     .order('created_at', { ascending: false });
 
   if (admin.role === 'accountmanager') {
-    const { data: myCustomers } = await supabase.from('customers').select('id').or(amCustomerAccessOrFilter(admin.id));
+    const { data: myCustomers } = await supabase.from('customers').select('id').eq('account_manager_id', admin.id);
     const ids = (myCustomers || []).map(c => c.id);
     if (ids.length === 0) return NextResponse.json([]);
     query = query.in('customer_id', ids);
@@ -46,7 +45,7 @@ export async function POST(request: NextRequest) {
 
   const { data: customer } = await supabase
     .from('customers')
-    .select('id, name, email, street, house_number, postcode, city, country, vat_id, account_manager_id, shared_with_all_ams')
+    .select('id, name, email, street, house_number, postcode, city, country, vat_id, account_manager_id')
     .eq('id', customer_id)
     .single();
 
@@ -57,7 +56,7 @@ export async function POST(request: NextRequest) {
     [customer.postcode, customer.city].filter(Boolean).join('  '),
   ].filter(Boolean).join('\n') || null;
 
-  if (admin.role === 'accountmanager' && !customerVisibleToAm(customer, admin.id)) {
+  if (admin.role === 'accountmanager' && customer.account_manager_id !== admin.id) {
     return NextResponse.json({ error: 'Geen toegang tot deze klant' }, { status: 403 });
   }
 
@@ -164,7 +163,7 @@ export async function PUT(request: NextRequest) {
   if (admin.role === 'accountmanager') {
     const { data: inv } = await supabase.from('invoices').select('customer_id').eq('id', id).single();
     if (inv) {
-      const { data: myCust } = await supabase.from('customers').select('id').eq('id', inv.customer_id).or(amCustomerAccessOrFilter(admin.id)).single();
+      const { data: myCust } = await supabase.from('customers').select('id').eq('id', inv.customer_id).eq('account_manager_id', admin.id).single();
       if (!myCust) return NextResponse.json({ error: 'Geen toegang tot deze factuur' }, { status: 403 });
     }
   }

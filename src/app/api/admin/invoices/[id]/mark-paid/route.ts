@@ -4,7 +4,6 @@ import { createServerClient } from '@/lib/supabase';
 import { notifyCustomerInvoicePaid } from '@/lib/invoice';
 import { finalizePaidLeadBatch, finalizePaidBulkLeadBatch } from '@/lib/finalizePaidLeadBatch';
 import { isBulkLeadsBatchKind } from '@/lib/batchKind';
-import { amCustomerAccessOrFilter } from '@/lib/permissions';
 
 /**
  * Markeert een open factuur handmatig als betaald (bijv. bankoverschrijving).
@@ -34,7 +33,7 @@ export async function POST(
       .from('customers')
       .select('id')
       .eq('id', invoice.customer_id)
-      .or(amCustomerAccessOrFilter(admin.id))
+      .eq('account_manager_id', admin.id)
       .single();
     if (!myCust) return forbidden();
   }

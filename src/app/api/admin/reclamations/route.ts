@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
 import { digitsOnlyPhone, phoneSearchDigitVariants } from '@/lib/phoneSearch';
-import { amCustomerAccessOrFilter } from '@/lib/permissions';
 
 export async function GET(request: NextRequest) {
   const admin = await verifyAdmin(request);
@@ -22,7 +21,7 @@ export async function GET(request: NextRequest) {
       .eq('status', 'pending');
 
     if (admin.role === 'accountmanager') {
-      const { data: myCustomers } = await supabase.from('customers').select('id').or(amCustomerAccessOrFilter(admin.id));
+      const { data: myCustomers } = await supabase.from('customers').select('id').eq('account_manager_id', admin.id);
       const ids = (myCustomers || []).map(c => c.id);
       if (ids.length === 0) return NextResponse.json({ pending_count: 0 });
       countQuery = countQuery.in('customer_id', ids);
@@ -52,7 +51,7 @@ export async function GET(request: NextRequest) {
   }
 
   if (admin.role === 'accountmanager') {
-    const { data: myCustomers } = await supabase.from('customers').select('id').or(amCustomerAccessOrFilter(admin.id));
+    const { data: myCustomers } = await supabase.from('customers').select('id').eq('account_manager_id', admin.id);
     const ids = (myCustomers || []).map(c => c.id);
     if (ids.length === 0) return NextResponse.json([]);
     query = query.in('customer_id', ids);

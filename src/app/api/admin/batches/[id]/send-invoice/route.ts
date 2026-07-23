@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
 import { createInvoice, resendOpenInvoiceWithPaymentLinks } from '@/lib/invoice';
-import { amCustomerAccessOrFilter } from '@/lib/permissions';
 
 /**
  * Stuurt (of verstuurt opnieuw) een open factuur met Mollie-betaallink + e-mail.
@@ -37,7 +36,7 @@ export async function POST(
       .from('customers')
       .select('id')
       .eq('id', batch.customer_id)
-      .or(amCustomerAccessOrFilter(admin.id))
+      .eq('account_manager_id', admin.id)
       .single();
     if (!ok) {
       return NextResponse.json({ error: 'Geen toegang tot deze klant' }, { status: 403 });

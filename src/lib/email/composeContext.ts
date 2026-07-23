@@ -1,7 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { mergeCustomTiers, type PricingTier } from '@/lib/pricing';
 import { isAccountManagerScope } from '@/lib/prospects';
-import { customerVisibleToAm } from '@/lib/permissions';
 import { renderTemplate } from './templates';
 import { resolveSignature } from './templates/_signature';
 import { EMAIL_BASE_URL } from '@/lib/email';
@@ -62,7 +61,6 @@ interface CustomerRow {
   name: string | null;
   branches: string[] | null;
   account_manager_id: string | null;
-  shared_with_all_ams?: boolean | null;
 }
 
 interface BranchRow {
@@ -140,7 +138,7 @@ export async function resolveRecipients(
     customerIds.length > 0
       ? supabase
           .from('customers')
-          .select('id, email, contact_person, name, branches, account_manager_id, shared_with_all_ams')
+          .select('id, email, contact_person, name, branches, account_manager_id')
           .in('id', customerIds)
       : Promise.resolve({ data: [] as CustomerRow[], error: null }),
     supabase.from('branches').select('slug, name'),
@@ -198,7 +196,7 @@ export async function resolveRecipients(
       invalid.push(r);
       continue;
     }
-    if (isAccountManagerScope(admin) && !customerVisibleToAm(c, admin.id)) {
+    if (isAccountManagerScope(admin) && c.account_manager_id !== admin.id) {
       forbidden.push(r);
       continue;
     }

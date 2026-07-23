@@ -21,7 +21,6 @@ import {
 import { deliveryModelForNewBatch, isCappedDeliveryModel } from '@/lib/batchDeliveryModel';
 import { insertBatchTargets, type BatchTargetInsertInput } from '@/lib/batchTargetInsert';
 import { logAudit } from '@/lib/audit';
-import { amCustomerAccessOrFilter } from '@/lib/permissions';
 
 function sanitizeMetaCampaignIdsInput(raw: unknown): string[] | undefined {
   if (raw === undefined) return undefined;
@@ -51,7 +50,7 @@ export async function GET(request: NextRequest) {
 
   let amCustomerIds: string[] | null = null;
   if (admin.role === 'accountmanager') {
-    const { data: myCustomers } = await supabase.from('customers').select('id').or(amCustomerAccessOrFilter(admin.id));
+    const { data: myCustomers } = await supabase.from('customers').select('id').eq('account_manager_id', admin.id);
     amCustomerIds = (myCustomers || []).map(c => c.id);
     if (amCustomerIds.length === 0) return NextResponse.json([]);
   }
@@ -93,7 +92,7 @@ export async function POST(request: NextRequest) {
   const sendPaymentEmail = body.send_payment_email !== false;
 
   if (admin.role === 'accountmanager' && customer_id) {
-    const { data: myCust } = await supabase.from('customers').select('id').or(amCustomerAccessOrFilter(admin.id)).eq('id', customer_id).single();
+    const { data: myCust } = await supabase.from('customers').select('id').eq('account_manager_id', admin.id).eq('id', customer_id).single();
     if (!myCust) return NextResponse.json({ error: 'Geen toegang tot deze klant' }, { status: 403 });
   }
 
@@ -458,7 +457,7 @@ export async function PUT(request: NextRequest) {
   const removedMetaCampaignIds = oldLinkedMetaIds.filter(id => !newLinkedMetaIds.includes(id));
 
   if (admin.role === 'accountmanager') {
-    const { data: myCust } = await supabase.from('customers').select('id').or(amCustomerAccessOrFilter(admin.id)).eq('id', existing.customer_id).single();
+    const { data: myCust } = await supabase.from('customers').select('id').eq('account_manager_id', admin.id).eq('id', existing.customer_id).single();
     if (!myCust) return NextResponse.json({ error: 'Geen toegang tot deze batch' }, { status: 403 });
   }
 
@@ -732,7 +731,7 @@ export async function DELETE(request: NextRequest) {
   if (admin.role === 'accountmanager') {
     const { data: batch } = await supabase.from('customer_batches').select('customer_id').eq('id', id).single();
     if (batch) {
-      const { data: myCust } = await supabase.from('customers').select('id').or(amCustomerAccessOrFilter(admin.id)).eq('id', batch.customer_id).single();
+      const { data: myCust } = await supabase.from('customers').select('id').eq('account_manager_id', admin.id).eq('id', batch.customer_id).single();
       if (!myCust) return NextResponse.json({ error: 'Geen toegang tot deze batch' }, { status: 403 });
     }
   }

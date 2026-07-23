@@ -2,7 +2,6 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { buildPhoneSearchIlikeClauses, sanitizePostgrestIlike } from '@/lib/phoneSearch';
 import { PARTNER_PROSPECT_BRANCH_SLUGS } from '@/lib/partnerProspectConstants';
 import { buildPostcodeRangeOrFilter, parsePostcodeRanges } from '@/lib/postcodeRanges';
-import { amCustomerAccessOrFilter } from '@/lib/permissions';
 
 /**
  * Beschrijft de set filters die zowel `GET /api/admin/leads`,
@@ -179,7 +178,7 @@ export async function applyAccountManagerScope<T>(
   const { data: myCustomers } = await supabase
     .from('customers')
     .select('id')
-    .or(amCustomerAccessOrFilter(accountManagerId));
+    .eq('account_manager_id', accountManagerId);
   const ids = (myCustomers || []).map((c: { id: string }) => c.id);
   if (ids.length === 0) return { query, allowed: false };
   const overlapped = (query as unknown as ChainableFilter).overlaps('assigned_customer_ids', ids);
