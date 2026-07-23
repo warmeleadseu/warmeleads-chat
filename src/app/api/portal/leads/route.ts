@@ -306,11 +306,14 @@ export async function GET(request: NextRequest) {
   const plaatsFilter = url.searchParams.get('plaats')?.trim() || '';
   const postcodeArea = parsePostcodeArea(url.searchParams.get('postcode_area'));
   const maxDistanceKm = parseMaxDistanceKm(url.searchParams.get('max_distance_km'));
-  const needsMemGeoFilter =
-    maxDistanceKm != null
-    || (postcodeArea?.kind === 'range');
 
   const { demoMode, branches: customerBranches } = await getCustomerDemoInfo(supabase, customer.id);
+
+  // Datumfilter op ontvangstdatum (assigned_at) vereist memory-pad na enrichment
+  const needsMemFilter =
+    maxDistanceKm != null
+    || (postcodeArea?.kind === 'range')
+    || (!demoMode && !!(from || to));
 
   // Agent-scoped filtering
   const agentFilter = session.portalUser && !hasPermission(session, PERMISSIONS.LEADS_VIEW_ALL)
@@ -427,15 +430,11 @@ export async function GET(request: NextRequest) {
     if (postcodeArea?.kind === 'prefix') {
       q = q.ilike('postcode', `${sanitizePostgrestIlike(postcodeArea.prefix)}%`);
     }
-    // Demo template dates can fall outside a user's date filter; hiding all demos is confusing
-    if (!demoMode) {
-      if (from) q = q.gte('wervingsdatum', from);
-      if (to) q = q.lte('wervingsdatum', to);
-    }
+    // Datumfilter gebeurt in memory op received_at (zie applyMemFilters)
     return q;
   }
 
-  function applyMemGeoFilters(rows: Record<string, unknown>[]): Record<string, unknown>[] {
+  function applyMemFilters(rows: Record<string, unknown>[]): Record<string, unknown>[] {
     let out = rows;
     if (postcodeArea?.kind === 'range') {
       out = out.filter((l) => matchesPostcodeArea(l.postcode, postcodeArea));
@@ -446,11 +445,21 @@ export async function GET(request: NextRequest) {
         return typeof d === 'number' && d >= 0 && d <= maxDistanceKm;
       });
     }
+    if (!demoMode && (from || to)) {
+      out = out.filter((l) => {
+        const raw = String(l.received_at || l.created_at || l.wervingsdatum || '');
+        if (!raw) return false;
+        const day = raw.slice(0, 10);
+        if (from && day < from) return false;
+        if (to && day > to) return false;
+        return true;
+      });
+    }
     return out;
   }
 
   // Fast path: single chunk allows DB-level sort + pagination
-  if (filteredLeadIds.length <= IN_CHUNK && dbSortable && !needsMemGeoFilter) {
+  if (filteredLeadIds.length <= IN_CHUNK && dbSortable && !needsMemFilter) {
     let countQ = supabase.from('leads').select('id', { count: 'exact', head: true }).in('id', filteredLeadIds);
     countQ = applyFilters(countQ);
     const { count: totalCount } = await countQ;
@@ -538,7 +547,7 @@ export async function GET(request: NextRequest) {
   });
 
   enrichPortalLeadDistances(enrichedAll, activeTargets);
-  const geoFiltered = applyMemGeoFilters(enrichedAll);
+  const geoFiltered = applyMemFilters(enrichedAll);
 
   geoFiltered.sort((a, b) => {
     if (col === 'distance_km') {

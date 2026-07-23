@@ -108,28 +108,36 @@ export function LeadSelectionBar({
   crmLabel,
   canExport,
   canAssign,
+  canEditStatus,
   teamMembers,
+  statusOptions,
   onClear,
   onSync,
   onExport,
   onAssign,
+  onBulkStatus,
   syncing,
   assigning,
+  statusUpdating,
 }: {
   selectedCount: number;
   crmLabel?: string | null;
   canExport: boolean;
   canAssign?: boolean;
+  canEditStatus?: boolean;
   teamMembers?: { id: string; name: string }[];
+  statusOptions?: { value: string; label: string }[];
   onClear: () => void;
   onSync?: (forceResend: boolean) => void;
   onExport?: () => void;
   onAssign?: (portalUserId: string | null) => void;
+  onBulkStatus?: (status: string) => void;
   syncing: boolean;
   assigning?: boolean;
+  statusUpdating?: boolean;
 }) {
   const [forceResend, setForceResend] = useState(false);
-  const busy = syncing || !!assigning;
+  const busy = syncing || !!assigning || !!statusUpdating;
 
   if (selectedCount === 0) return null;
 
@@ -148,6 +156,27 @@ export function LeadSelectionBar({
           >
             Deselecteer
           </button>
+          {canEditStatus && onBulkStatus && statusOptions && statusOptions.length > 0 && (
+            <select
+              defaultValue=""
+              disabled={busy}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (!v) return;
+                onBulkStatus(v);
+                e.target.value = '';
+              }}
+              className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-semibold text-slate-700 outline-none focus:border-brand-purple/50 disabled:opacity-50"
+              aria-label="Wijzig status van selectie"
+            >
+              <option value="" disabled>
+                {statusUpdating ? 'Status bijwerken…' : 'Status wijzigen…'}
+              </option>
+              {statusOptions.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          )}
           {canAssign && onAssign && (
             <select
               defaultValue=""

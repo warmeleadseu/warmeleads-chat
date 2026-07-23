@@ -57,6 +57,13 @@ import { PageHeader, useToast, ChoicePill } from './_ui';
 import { STATUS_COLORS, STATUS_OPTIONS } from './_constants/leadStatus';
 import { PROVINCES_NL, PROVINCES_BE } from '@/data/provinces';
 import { DISTANCE_PRESETS_KM } from '@/lib/portalLeadGeoFilters';
+import {
+  daysAgoAmsterdam,
+  formatRelativeLeadDate,
+  mapsUrlForLead,
+  todayAmsterdam,
+} from '@/lib/portalLeadDates';
+import { LEAD_STATUS_LABELS } from '@/lib/leadStatuses';
 import { getBatchProgressView, isCappedDeliveryModel } from '@/lib/batchDeliveryModel';
 import {
   collectPortalBatchesAwaitingPayment,
@@ -221,15 +228,26 @@ function TableSkeleton() {
 }
 
 function formatDistance(km: number | null | undefined): string {
-  if (km == null || km <= 0) return '';
+  if (km == null || km < 0) return '';
+  if (km === 0) return '0 km';
   return km < 10
     ? `${km.toLocaleString('nl-NL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} km`
     : `${Math.round(km)} km`;
 }
 
+function formatDistanceLabel(km: number | null | undefined): string {
+  const d = formatDistance(km);
+  return d || 'Onbekend';
+}
+
 function formatDate(d: string) {
   if (!d) return '-';
   return new Date(d).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function formatLeadDateCell(iso: string | null | undefined): { relative: string; absolute: string } {
+  const absolute = iso ? formatDate(iso) : '-';
+  return { relative: formatRelativeLeadDate(iso), absolute };
 }
 
 function formatDateLong(d: string) {
@@ -287,6 +305,7 @@ export default function PortalPage() {
   const { customer, isOwner, hasPermission, portalUser } = usePortal();
   const showDemoPortal = isDemoPortalExperience(customer);
   const canExport = isOwner || hasPermission(PERMISSIONS.LEADS_EXPORT);
+  const canEditStatus = isOwner || hasPermission(PERMISSIONS.LEADS_EDIT);
   const canAssign =
     isOwner
     || hasPermission(PERMISSIONS.LEADS_ASSIGN)
@@ -358,6 +377,7 @@ export default function PortalPage() {
   const [agendaTeam, setAgendaTeam] = useState<{ id: string; name: string; role: string }[]>([]);
   const [assignTeam, setAssignTeam] = useState<{ id: string; name: string; role: string }[]>([]);
   const [assigning, setAssigning] = useState(false);
+  const [statusUpdating, setStatusUpdating] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showExportWizard, setShowExportWizard] = useState(false);
@@ -497,7 +517,7 @@ export default function PortalPage() {
     openExportWizard({ mode: 'lead_ids', leadIds: [...selectedIds] }, selectedIds.size);
   };
 
-  const showLeadSelection = !showDemoPortal && ((isOwner && crmReady) || canExport || canAssign);
+  const showLeadSelection = !showDemoPortal && ((isOwner && crmReady) || canExport || canAssign || canEditStatus);
   const showBranchTabs = customer.branches.length > 1;
   const conversionRate = stats.totalLeads > 0
     ? Math.round((stats.sold / stats.totalLeads) * 100)
@@ -1114,9 +1134,148 @@ export default function PortalPage() {
 
   const viewNewLeads = () => {
     setStatusFilter('nieuw');
+    setDateFrom(daysAgoAmsterdam(7));
+    setDateTo(todayAmsterdam());
     setPage(1);
     setShowFilters(false);
+    setShowOverviewPanel(false);
   };
+
+  const STATUS_QUICK_PILLS = [
+    { value: 'all', label: 'Alles' },
+    { value: 'nieuw', label: 'Nieuw' },
+    { value: 'gecontacteerd', label: 'Gecontacteerd' },
+    { value: 'geen_gehoor', label: 'Geen gehoor' },
+    { value: 'offerte', label: 'Offerte' },
+  ] as const;
+
+  const handleBulkStatus = useCallback(async (status: string) => {
+    const leadIds = await resolveSelectedLeadIds();
+    if (!leadIds) return;
+    if (leadIds.length === 0) {
+      showToast('Geen leads om bij te werken', 'error');
+      return;
+    }
+    const label = LEAD_STATUS_LABELS[status as keyof typeof LEAD_STATUS_LABELS] || status;
+    if (!confirm(`${leadIds.length} lead${leadIds.length === 1 ? '' : 's'} op status “${label}” zetten?`)) {
+      return;
+    }
+    setStatusUpdating(true);
+    try {
+      let updatedTotal = 0;
+      const CHUNK = 500;
+      for (let i = 0; i < leadIds.length; i += CHUNK) {
+        const chunk = leadIds.slice(i, i + CHUNK);
+        const res = await portalFetch('/api/portal/leads/bulk-status', {
+          method: 'POST',
+          body: JSON.stringify({ lead_ids: chunk, status }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Status bijwerken mislukt');
+        updatedTotal += typeof data.updated === 'number' ? data.updated : chunk.length;
+        setLeads((prev) => prev.map((l) => (chunk.includes(l.id) ? { ...l, status } : l)));
+        setSelectedLead((prev) => (prev && chunk.includes(prev.id) ? { ...prev, status } : prev));
+      }
+      showToast(`${updatedTotal} lead${updatedTotal === 1 ? '' : 's'} → ${label}`);
+      clearSelection();
+      fetchStats(true);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Status bijwerken mislukt', 'error');
+      void fetchLeads();
+    } finally {
+      setStatusUpdating(false);
+    }
+  }, [resolveSelectedLeadIds, showToast, clearSelection, fetchStats, fetchLeads]);
+
+  const selectedLeadIndex = selectedLead
+    ? leads.findIndex((l) => l.id === selectedLead.id)
+    : -1;
+
+  const goToAdjacentLead = useCallback((dir: -1 | 1) => {
+    if (!selectedLead) return;
+    const idx = leads.findIndex((l) => l.id === selectedLead.id);
+    const next = leads[idx + dir];
+    if (next) setSelectedLead(next);
+  }, [selectedLead, leads]);
+
+  const activeFilterChips = useMemo(() => {
+    const chips: { key: string; label: string; clear: () => void }[] = [];
+    if (statusFilter !== 'all') {
+      chips.push({
+        key: 'status',
+        label: `Status: ${LEAD_STATUS_LABELS[statusFilter as keyof typeof LEAD_STATUS_LABELS] || statusFilter}`,
+        clear: () => { setStatusFilter('all'); setPage(1); },
+      });
+    }
+    if (dateFrom) {
+      chips.push({
+        key: 'from',
+        label: `Vanaf ${dateFrom}`,
+        clear: () => { setDateFrom(''); setPage(1); },
+      });
+    }
+    if (dateTo) {
+      chips.push({
+        key: 'to',
+        label: `Tot ${dateTo}`,
+        clear: () => { setDateTo(''); setPage(1); },
+      });
+    }
+    if (canFilterAssignee && assignedToFilter !== 'all') {
+      const name = assignedToFilter === 'unassigned'
+        ? 'Niet toegewezen'
+        : (assignTeam.find((m) => m.id === assignedToFilter)?.name || 'Teamlid');
+      chips.push({
+        key: 'assignee',
+        label: `Toegewezen: ${name}`,
+        clear: () => { setAssignedToFilter('all'); setPage(1); },
+      });
+    }
+    if (maxDistanceKm != null) {
+      chips.push({
+        key: 'distance',
+        label: `≤ ${maxDistanceKm} km`,
+        clear: () => { setMaxDistanceKm(null); setPage(1); },
+      });
+    }
+    if (debouncedPostcodeArea) {
+      chips.push({
+        key: 'pc',
+        label: `Postcode ${debouncedPostcodeArea}`,
+        clear: () => { setPostcodeArea(''); setDebouncedPostcodeArea(''); setPage(1); },
+      });
+    }
+    if (debouncedPlaats) {
+      chips.push({
+        key: 'plaats',
+        label: `Plaats: ${debouncedPlaats}`,
+        clear: () => { setPlaatsFilter(''); setDebouncedPlaats(''); setPage(1); },
+      });
+    }
+    if (selectedProvinces.length > 0) {
+      chips.push({
+        key: 'prov',
+        label: selectedProvinces.length === 1
+          ? selectedProvinces[0]
+          : `${selectedProvinces.length} provincies`,
+        clear: () => { setSelectedProvinces([]); setPage(1); },
+      });
+    }
+    return chips;
+  }, [
+    statusFilter,
+    dateFrom,
+    dateTo,
+    canFilterAssignee,
+    assignedToFilter,
+    assignTeam,
+    maxDistanceKm,
+    debouncedPostcodeArea,
+    debouncedPlaats,
+    selectedProvinces,
+  ]);
+
+  const hasActiveListFilters = activeFilterChips.length > 0 || !!debouncedSearch;
 
   return (
     <div className="space-y-6">
@@ -1646,9 +1805,58 @@ export default function PortalPage() {
         </div>
       )}
 
+      {/* Quick status triage */}
+      <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5">
+        {STATUS_QUICK_PILLS.map((pill) => {
+          const count = pill.value === 'all'
+            ? undefined
+            : stats.statusBreakdown?.[pill.value];
+          return (
+            <ChoicePill
+              key={pill.value}
+              selected={statusFilter === pill.value}
+              onClick={() => { setStatusFilter(pill.value); setPage(1); }}
+              className="!min-h-9 !px-3 !py-1.5 !text-xs"
+            >
+              {pill.label}
+              {typeof count === 'number' && (
+                <span className="ml-1 tabular-nums opacity-70">{count}</span>
+              )}
+            </ChoicePill>
+          );
+        })}
+      </div>
+
+      {/* Active filter chips */}
+      {activeFilterChips.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {activeFilterChips.map((chip) => (
+            <button
+              key={chip.key}
+              type="button"
+              onClick={chip.clear}
+              className="inline-flex items-center gap-1 rounded-full border border-brand-purple/20 bg-brand-purple/5 px-2.5 py-1 text-[11px] font-medium text-brand-purple transition hover:bg-brand-purple/10"
+            >
+              {chip.label}
+              <XMarkIcon className="h-3 w-3 opacity-70" />
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={resetFilters}
+            className="text-[11px] font-medium text-slate-400 hover:text-slate-600"
+          >
+            Wis alles
+          </button>
+        </div>
+      )}
+
       {/* Results count */}
       <p className="text-xs text-slate-500">
         {total} {total === 1 ? 'lead' : 'leads'} gevonden
+        {maxDistanceKm != null && (
+          <span className="text-slate-400"> · straalfilter sluit leads zonder afstand uit</span>
+        )}
       </p>
 
       {/* Data */}
@@ -1657,8 +1865,24 @@ export default function PortalPage() {
       ) : leads.length === 0 ? (
         <div className="rounded-xl border border-slate-200 bg-white py-16 text-center shadow-sm">
           <InboxIcon className="mx-auto mb-3 h-12 w-12 text-slate-300" />
-          <p className="font-medium text-slate-600">Nog geen leads</p>
-          <p className="mt-1 text-sm text-slate-400">Zodra er leads voor u worden gegenereerd, verschijnen ze hier.</p>
+          {hasActiveListFilters ? (
+            <>
+              <p className="font-medium text-slate-600">Geen leads met deze filters</p>
+              <p className="mt-1 text-sm text-slate-400">Pas je filters aan of wis ze om meer leads te zien.</p>
+              <button
+                type="button"
+                onClick={() => { resetFilters(); setSearch(''); setDebouncedSearch(''); }}
+                className="mt-4 inline-flex items-center rounded-lg bg-brand-purple px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-purple/90"
+              >
+                Wis filters
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="font-medium text-slate-600">Nog geen leads</p>
+              <p className="mt-1 text-sm text-slate-400">Zodra er leads voor u worden gegenereerd, verschijnen ze hier.</p>
+            </>
+          )}
         </div>
       ) : (
         <>
@@ -1752,7 +1976,7 @@ export default function PortalPage() {
                       <td className="px-4 py-3 tabular-nums">
                         {formatDistance(lead.distance_km)
                           ? <span className="text-slate-500">{formatDistance(lead.distance_km)}</span>
-                          : <span className="text-slate-300">&ndash;</span>}
+                          : <span className="text-slate-400" title="Geen coördinaten of doelgebied">Onbekend</span>}
                       </td>
                       <td className="px-4 py-3">
                         {(() => { const b = getBranch(lead.branch); return (
@@ -1771,7 +1995,20 @@ export default function PortalPage() {
                           ))}
                         </select>
                       </td>
-                      <td className="px-4 py-3 text-slate-500">{formatDate(lead.received_at || lead.wervingsdatum)}</td>
+                      <td className="px-4 py-3 text-slate-500">
+                        {(() => {
+                          const d = formatLeadDateCell(
+                            (typeof lead.received_at === 'string' && lead.received_at)
+                              || lead.wervingsdatum
+                              || null,
+                          );
+                          return (
+                            <span title={d.absolute} className="whitespace-nowrap">
+                              {d.relative}
+                            </span>
+                          );
+                        })()}
+                      </td>
                       {canAssign && (
                         <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                           <select
@@ -1906,17 +2143,31 @@ export default function PortalPage() {
                   {(() => { const b = getBranch(lead.branch); return (
                     <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${b.light} ${b.text}`}>{b.name}</span>
                   ); })()}
-                  <span className="flex items-center gap-1">
+                  <span className="flex items-center gap-1" title={formatDate(lead.received_at || lead.wervingsdatum)}>
                     <CalendarDaysIcon className="h-3 w-3" />
-                    {formatDate(lead.received_at || lead.wervingsdatum)}
+                    {formatRelativeLeadDate(lead.received_at || lead.wervingsdatum)}
                   </span>
                   {canAssign && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">
-                      <UserGroupIcon className="h-3 w-3" />
-                      {typeof lead.portal_user_name === 'string' && lead.portal_user_name
-                        ? lead.portal_user_name
-                        : 'Niet toegewezen'}
-                    </span>
+                    <select
+                      value={typeof lead.portal_user_id === 'string' ? lead.portal_user_id : ''}
+                      disabled={assigning}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        void handleSingleAssign(lead, v === '' ? null : v);
+                      }}
+                      className="max-w-[9rem] truncate rounded-full border-0 bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600 outline-none disabled:opacity-50"
+                      aria-label={`Wijs ${lead.naam_klant || 'lead'} toe`}
+                    >
+                      <option value="">Niet toegewezen</option>
+                      {assigneeSelectOptions(
+                        assignTeam,
+                        typeof lead.portal_user_id === 'string' ? lead.portal_user_id : null,
+                        typeof lead.portal_user_name === 'string' ? lead.portal_user_name : null,
+                      ).map(m => (
+                        <option key={m.id} value={m.id}>{m.name}</option>
+                      ))}
+                    </select>
                   )}
                 </div>
                 <div className="flex gap-2">
@@ -2003,19 +2254,26 @@ export default function PortalPage() {
             </div>
           )}
 
-          {(selectedCount > 0 && (canExport || canAssign || (isOwner && crmReady && crmLabel))) && (
+          {(selectedCount > 0 && (canExport || canAssign || canEditStatus || (isOwner && crmReady && crmLabel))) && (
             <LeadSelectionBar
               selectedCount={selectedCount}
               crmLabel={isOwner && crmReady ? crmLabel : null}
               canExport={canExport}
               canAssign={canAssign}
+              canEditStatus={canEditStatus}
               teamMembers={assignTeam}
+              statusOptions={STATUS_OPTIONS.filter((o) => o.value !== 'all').map((o) => ({
+                value: o.value,
+                label: o.label,
+              }))}
               onClear={clearSelection}
               onSync={isOwner && crmReady && crmLabel ? handleCrmBackfill : undefined}
               onExport={canExport ? handleExportFromSelection : undefined}
               onAssign={canAssign ? handleBulkAssign : undefined}
+              onBulkStatus={canEditStatus ? handleBulkStatus : undefined}
               syncing={crmBackfillSyncing}
               assigning={assigning}
+              statusUpdating={statusUpdating}
             />
           )}
         </>
@@ -2036,6 +2294,15 @@ export default function PortalPage() {
               teamMembers={assignTeam}
               assigning={assigning}
               onAssign={(portalUserId) => handleSingleAssign(selectedLead, portalUserId)}
+              canGoPrev={selectedLeadIndex > 0}
+              canGoNext={selectedLeadIndex >= 0 && selectedLeadIndex < leads.length - 1}
+              onPrev={() => goToAdjacentLead(-1)}
+              onNext={() => goToAdjacentLead(1)}
+              positionLabel={
+                selectedLeadIndex >= 0
+                  ? `${selectedLeadIndex + 1} / ${leads.length}`
+                  : undefined
+              }
               showToast={showToast}
             />
           )}
@@ -2123,6 +2390,11 @@ function LeadDetailPanel({
   teamMembers,
   assigning,
   onAssign,
+  canGoPrev,
+  canGoNext,
+  onPrev,
+  onNext,
+  positionLabel,
   showToast,
 }: {
   lead: Lead;
@@ -2135,6 +2407,11 @@ function LeadDetailPanel({
   teamMembers?: { id: string; name: string }[];
   assigning?: boolean;
   onAssign?: (portalUserId: string | null) => void;
+  canGoPrev?: boolean;
+  canGoNext?: boolean;
+  onPrev?: () => void;
+  onNext?: () => void;
+  positionLabel?: string;
   showToast: (msg: string) => void;
 }) {
   const [notes, setNotes] = useState(lead.notities || '');
@@ -2149,6 +2426,44 @@ function LeadDetailPanel({
     onNotesChange(notes);
     setNotesDirty(false);
   };
+
+  const requestClose = () => {
+    if (notesDirty) {
+      const discard = confirm('Je hebt niet-opgeslagen notities. Toch sluiten zonder op te slaan?');
+      if (!discard) return;
+    }
+    onClose();
+  };
+
+  const navigate = (dir: 'prev' | 'next') => {
+    if (notesDirty) {
+      const ok = confirm('Je hebt niet-opgeslagen notities. Doorgaan zonder op te slaan?');
+      if (!ok) return;
+      setNotesDirty(false);
+    }
+    if (dir === 'prev') onPrev?.();
+    else onNext?.();
+  };
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        requestClose();
+      }
+      if (e.key === 'ArrowLeft' && canGoPrev) {
+        e.preventDefault();
+        navigate('prev');
+      }
+      if (e.key === 'ArrowRight' && canGoNext) {
+        e.preventDefault();
+        navigate('next');
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only rebind on nav/dirty flags
+  }, [notesDirty, canGoPrev, canGoNext]);
 
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
@@ -2174,6 +2489,16 @@ function LeadDetailPanel({
     const val = lead.custom_fields?.[f.key] || (lead as Record<string, unknown>)[f.key] as string || '';
     return { label: f.label, value: val };
   });
+  const mapsUrl = mapsUrlForLead({
+    postcode: lead.postcode,
+    huisnummer: lead.huisnummer,
+    plaatsnaam: lead.plaatsnaam,
+    provincie: lead.provincie,
+    land: typeof lead.land === 'string' ? lead.land : null,
+  });
+  const receivedLabel = formatLeadDateCell(
+    (typeof lead.received_at === 'string' && lead.received_at) || lead.wervingsdatum || null,
+  );
 
   return (
     <>
@@ -2182,7 +2507,7 @@ function LeadDetailPanel({
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm"
-        onClick={onClose}
+        onClick={requestClose}
       />
       <motion.div
         initial={{ x: '100%' }}
@@ -2194,7 +2519,7 @@ function LeadDetailPanel({
         dragElastic={{ left: 0, right: 0.5 }}
         dragDirectionLock
         onDragEnd={(_, info) => {
-          if (info.offset.x > 80 || info.velocity.x > 300) onClose();
+          if (info.offset.x > 80 || info.velocity.x > 300) requestClose();
         }}
         className="fixed inset-y-0 right-0 z-[60] flex w-full max-w-md flex-col bg-white shadow-2xl"
       >
@@ -2209,8 +2534,9 @@ function LeadDetailPanel({
           <div className="flex items-center justify-between gap-3 px-5 py-4">
             <div className="min-w-0">
               <h2 className="text-lg font-bold text-slate-900">{lead.naam_klant || 'Lead details'}</h2>
-              <p className="text-xs text-slate-500">
-                {bInfo.name} &middot; {formatDateLong(lead.received_at || lead.wervingsdatum)}
+              <p className="text-xs text-slate-500" title={receivedLabel.absolute}>
+                {bInfo.name} &middot; {receivedLabel.relative}
+                {receivedLabel.absolute !== '-' ? ` (${receivedLabel.absolute})` : ''}
               </p>
               {lead.reclamation_status ? (
                 <div className="mt-2">
@@ -2218,9 +2544,36 @@ function LeadDetailPanel({
                 </div>
               ) : null}
             </div>
-            <button onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100">
-              <XMarkIcon className="h-5 w-5" />
-            </button>
+            <div className="flex shrink-0 items-center gap-1">
+              <button
+                type="button"
+                onClick={() => navigate('prev')}
+                disabled={!canGoPrev}
+                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 disabled:opacity-30"
+                title="Vorige lead"
+                aria-label="Vorige lead"
+              >
+                <ChevronLeftIcon className="h-5 w-5" />
+              </button>
+              {positionLabel && (
+                <span className="min-w-[3rem] text-center text-[11px] tabular-nums text-slate-400">
+                  {positionLabel}
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={() => navigate('next')}
+                disabled={!canGoNext}
+                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 disabled:opacity-30"
+                title="Volgende lead"
+                aria-label="Volgende lead"
+              >
+                <ChevronRightIcon className="h-5 w-5" />
+              </button>
+              <button onClick={requestClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100">
+                <XMarkIcon className="h-5 w-5" />
+              </button>
+            </div>
           </div>
         </div>
 
@@ -2332,13 +2685,28 @@ function LeadDetailPanel({
                       <MapPinIcon className="h-4 w-4 shrink-0 text-slate-400" />
                       <div className="min-w-0 flex-1">
                         <span className="block truncate text-sm text-slate-700">{adres}</span>
-                        {dist && <span className="text-xs text-slate-400">{dist} van je targetplaats</span>}
+                        <span className="text-xs text-slate-400">
+                          {dist ? `${dist} van je targetplaats` : 'Afstand onbekend'}
+                        </span>
                       </div>
-                      <button onClick={() => copyField(adres, 'adres')}
-                        className={`shrink-0 rounded-md p-2 transition ${copiedField === 'adres' ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600'}`}
-                        title="Kopieer adres">
-                        {copiedField === 'adres' ? <ClipboardDocumentCheckIcon className="h-4 w-4" /> : <ClipboardDocumentIcon className="h-4 w-4" />}
-                      </button>
+                      <div className="flex shrink-0 items-center gap-1">
+                        {mapsUrl && (
+                          <a
+                            href={mapsUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="rounded-md bg-sky-50 p-2 text-sky-600 transition hover:bg-sky-100"
+                            title="Open in Google Maps"
+                          >
+                            <MapPinIcon className="h-4 w-4" />
+                          </a>
+                        )}
+                        <button onClick={() => copyField(adres, 'adres')}
+                          className={`rounded-md p-2 transition ${copiedField === 'adres' ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600'}`}
+                          title="Kopieer adres">
+                          {copiedField === 'adres' ? <ClipboardDocumentCheckIcon className="h-4 w-4" /> : <ClipboardDocumentIcon className="h-4 w-4" />}
+                        </button>
+                      </div>
                     </div>
                   );
                 })()}
