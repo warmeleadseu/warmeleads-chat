@@ -349,10 +349,13 @@ export async function GET(request: NextRequest) {
       if (m.portal_user_id) m.portal_user_name = portalUserNameMap[m.portal_user_id] || null;
     });
   }
-  // Owner/manager can filter by assigned_to agent
+  // Owner/manager (view-all of assign) can filter by assigned_to agent
   const assignedToParam = url.searchParams.get('assigned_to');
   let filteredLeadIds = leadIds;
-  if (assignedToParam && hasPermission(session, PERMISSIONS.LEADS_VIEW_ALL)) {
+  const canFilterAssignee =
+    hasPermission(session, PERMISSIONS.LEADS_VIEW_ALL)
+    || hasPermission(session, PERMISSIONS.LEADS_ASSIGN);
+  if (assignedToParam && assignedToParam !== 'all' && canFilterAssignee) {
     if (assignedToParam === 'unassigned') {
       filteredLeadIds = leadIds.filter(id => !metaMap[id]?.portal_user_id);
     } else {

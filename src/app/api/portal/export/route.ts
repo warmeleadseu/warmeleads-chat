@@ -76,6 +76,7 @@ interface AssignmentMeta {
   notities: string | null;
   batch_id: string | null;
   distance_km: number | null;
+  portal_user_id: string | null;
 }
 
 async function getCustomerLeadData(
@@ -100,19 +101,36 @@ async function getCustomerLeadData(
     return q;
   };
 
-  type AssignRow = { lead_id: string; assigned_at: string; status: string | null; notities: string | null; batch_id: string | null; distance_km: number | null };
+  type AssignRow = {
+    lead_id: string;
+    assigned_at: string;
+    status: string | null;
+    notities: string | null;
+    batch_id: string | null;
+    distance_km: number | null;
+    portal_user_id: string | null;
+  };
+
+  const storeMeta = (a: AssignRow) => {
+    ids.add(a.lead_id);
+    if (!metaMap[a.lead_id]) {
+      metaMap[a.lead_id] = {
+        assigned_at: a.assigned_at,
+        status: a.status,
+        notities: a.notities,
+        batch_id: a.batch_id,
+        distance_km: a.distance_km,
+        portal_user_id: a.portal_user_id ?? null,
+      };
+    }
+  };
 
   if (demoMode) {
     const demoRes = await paginateQuery<AssignRow>(
       applyAgentScope(supabase.from('lead_assignments').select(selectFields).eq('customer_id', customerId).eq('source', 'demo').order('assigned_at', { ascending: false })),
     );
     partial ||= demoRes.truncated;
-    demoRes.rows.forEach(a => {
-      ids.add(a.lead_id);
-      if (!metaMap[a.lead_id]) {
-        metaMap[a.lead_id] = { assigned_at: a.assigned_at, status: a.status, notities: a.notities, batch_id: a.batch_id, distance_km: a.distance_km };
-      }
-    });
+    demoRes.rows.forEach(storeMeta);
     return { ids: Array.from(ids), metaMap, partial, maxExportRows: EXPORT_PAGINATE_MAX_ROWS };
   }
 
@@ -131,12 +149,7 @@ async function getCustomerLeadData(
       applyAgentScope(supabase.from('lead_assignments').select(selectFields).eq('customer_id', customerId).eq('source', 'bulk_export').order('assigned_at', { ascending: false })),
     );
     partial ||= bulkRes.truncated;
-    bulkRes.rows.forEach(a => {
-      ids.add(a.lead_id);
-      if (!metaMap[a.lead_id]) {
-        metaMap[a.lead_id] = { assigned_at: a.assigned_at, status: a.status, notities: a.notities, batch_id: a.batch_id, distance_km: a.distance_km };
-      }
-    });
+    bulkRes.rows.forEach(storeMeta);
   } else {
     let assignQuery = supabase
       .from('lead_assignments')
@@ -148,12 +161,7 @@ async function getCustomerLeadData(
     assignQuery = applyAgentScope(assignQuery);
     const assignedRes = await paginateQuery<AssignRow>(assignQuery);
     partial ||= assignedRes.truncated;
-    assignedRes.rows.forEach(a => {
-      ids.add(a.lead_id);
-      if (!metaMap[a.lead_id]) {
-        metaMap[a.lead_id] = { assigned_at: a.assigned_at, status: a.status, notities: a.notities, batch_id: a.batch_id, distance_km: a.distance_km };
-      }
-    });
+    assignedRes.rows.forEach(storeMeta);
   }
 
   return { ids: Array.from(ids), metaMap, partial, maxExportRows: EXPORT_PAGINATE_MAX_ROWS };
@@ -225,6 +233,7 @@ export async function GET(request: NextRequest) {
   const to = url.searchParams.get('to');
   const leadSource = (url.searchParams.get('lead_source') || 'all') as 'all' | 'fresh' | 'bulk';
   const searchParam = url.searchParams.get('search')?.trim().toLowerCase() || '';
+  const assignedToParam = url.searchParams.get('assigned_to');
   const separator = url.searchParams.get('separator') || ';';
   const dateFormat = url.searchParams.get('date_format') || 'nl';
   const includeHeaders = url.searchParams.get('include_headers') !== 'false';
@@ -259,9 +268,26 @@ export async function GET(request: NextRequest) {
 
   const { ids: poolLeadIds, metaMap, partial: exportPartial, maxExportRows } = await getCustomerLeadData(supabase, customer.id, leadSource, demoMode, agentFilter);
 
+  const canFilterAssignee =
+    hasPermission(session, PERMISSIONS.LEADS_VIEW_ALL)
+    || hasPermission(session, PERMISSIONS.LEADS_ASSIGN);
+  let scopedPoolIds = poolLeadIds;
+  if (
+    !requestedLeadIds
+    && assignedToParam
+    && assignedToParam !== 'all'
+    && canFilterAssignee
+  ) {
+    if (assignedToParam === 'unassigned') {
+      scopedPoolIds = poolLeadIds.filter((id) => !metaMap[id]?.portal_user_id);
+    } else {
+      scopedPoolIds = poolLeadIds.filter((id) => metaMap[id]?.portal_user_id === assignedToParam);
+    }
+  }
+
   const leadIds = requestedLeadIds
     ? requestedLeadIds.filter((id) => poolLeadIds.includes(id))
-    : poolLeadIds;
+    : scopedPoolIds;
 
   if (requestedLeadIds && requestedLeadIds.length > 0 && leadIds.length === 0) {
     return NextResponse.json({ error: 'Geen geldige leads geselecteerd voor export' }, { status: 400 });

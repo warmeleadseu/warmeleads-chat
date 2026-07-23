@@ -548,7 +548,7 @@ function AssignmentRulesEditor({
 
         {mode === 'manual' && (
           <p className="text-xs text-slate-400">
-            Deze gebruiker ontvangt geen automatische leads. Leads kunnen handmatig worden toegewezen.
+            Deze gebruiker ontvangt geen automatische leads. Wijs leads handmatig toe via de leadsoverzichten (selecteer leads of open een lead).
           </p>
         )}
       </div>
@@ -564,7 +564,7 @@ function AssignmentRulesSummary({ rules }: { rules: Record<string, unknown> }) {
 
   if (mode === 'manual' || !r.mode) {
     return (
-      <p className="text-sm text-slate-500">Handmatig: ontvangt geen automatische leads</p>
+      <p className="text-sm text-slate-500">Handmatig: alleen via leadsoverzichten toewijzen</p>
     );
   }
 

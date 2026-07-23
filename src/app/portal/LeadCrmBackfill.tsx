@@ -107,20 +107,29 @@ export function LeadSelectionBar({
   selectedCount,
   crmLabel,
   canExport,
+  canAssign,
+  teamMembers,
   onClear,
   onSync,
   onExport,
+  onAssign,
   syncing,
+  assigning,
 }: {
   selectedCount: number;
   crmLabel?: string | null;
   canExport: boolean;
+  canAssign?: boolean;
+  teamMembers?: { id: string; name: string }[];
   onClear: () => void;
   onSync?: (forceResend: boolean) => void;
-  onExport: () => void;
+  onExport?: () => void;
+  onAssign?: (portalUserId: string | null) => void;
   syncing: boolean;
+  assigning?: boolean;
 }) {
   const [forceResend, setForceResend] = useState(false);
+  const busy = syncing || !!assigning;
 
   if (selectedCount === 0) return null;
 
@@ -134,16 +143,38 @@ export function LeadSelectionBar({
           <button
             type="button"
             onClick={onClear}
-            disabled={syncing}
+            disabled={busy}
             className="rounded-lg px-3 py-1.5 text-xs font-medium text-slate-500 hover:bg-slate-50"
           >
             Deselecteer
           </button>
-          {canExport && (
+          {canAssign && onAssign && (
+            <select
+              defaultValue=""
+              disabled={busy || !teamMembers?.length}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (!v) return;
+                onAssign(v === '__unassign__' ? null : v);
+                e.target.value = '';
+              }}
+              className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-semibold text-slate-700 outline-none focus:border-brand-purple/50 disabled:opacity-50"
+              aria-label="Wijs geselecteerde leads toe"
+            >
+              <option value="" disabled>
+                {assigning ? 'Toewijzen…' : 'Toewijzen aan…'}
+              </option>
+              <option value="__unassign__">Niet toegewezen</option>
+              {(teamMembers || []).map((m) => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))}
+            </select>
+          )}
+          {canExport && onExport && (
             <button
               type="button"
               onClick={onExport}
-              disabled={syncing}
+              disabled={busy}
               className="inline-flex items-center gap-1.5 rounded-lg border border-brand-purple/30 bg-brand-purple/5 px-3 py-2 text-xs font-semibold text-brand-purple transition hover:bg-brand-purple/10 disabled:opacity-50"
             >
               <ArrowDownTrayIcon className="h-4 w-4" />
@@ -154,7 +185,7 @@ export function LeadSelectionBar({
             <button
               type="button"
               onClick={() => onSync(forceResend)}
-              disabled={syncing}
+              disabled={busy}
               className="inline-flex items-center gap-1.5 rounded-lg bg-brand-purple px-3 py-2 text-xs font-semibold text-white transition hover:bg-brand-purple/90 disabled:opacity-50"
             >
               {syncing ? (
@@ -173,7 +204,7 @@ export function LeadSelectionBar({
             type="checkbox"
             checked={forceResend}
             onChange={(e) => setForceResend(e.target.checked)}
-            disabled={syncing}
+            disabled={busy}
             className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-purple focus:ring-brand-purple/30"
           />
           <span>
@@ -194,6 +225,9 @@ function buildLeadsQueryParams(filters: ExportFilters, extra?: Record<string, st
   if (filters.dateTo) params.set('to', filters.dateTo);
   if (filters.leadSource !== 'all') params.set('lead_source', filters.leadSource);
   if (filters.search) params.set('search', filters.search);
+  if (filters.assignedTo && filters.assignedTo !== 'all') {
+    params.set('assigned_to', filters.assignedTo);
+  }
   if (extra) {
     for (const [key, value] of Object.entries(extra)) {
       params.set(key, value);

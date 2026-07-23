@@ -244,6 +244,15 @@ function formatCurrencyEUR(amount: number) {
   }).format(amount);
 }
 
+function assigneeSelectOptions(
+  team: { id: string; name: string }[],
+  currentId: string | null | undefined,
+  currentName?: string | null,
+) {
+  if (!currentId || team.some((m) => m.id === currentId)) return team;
+  return [{ id: currentId, name: currentName || 'Onbekend teamlid' }, ...team];
+}
+
 const RECLAMATION_REASONS = [
   { value: 'foutief_telefoonnummer', label: 'Foutief telefoonnummer' },
   { value: 'dubbele_lead', label: 'Dubbele lead binnen 30 dagen' },
@@ -276,6 +285,11 @@ export default function PortalPage() {
   const { customer, isOwner, hasPermission, portalUser } = usePortal();
   const showDemoPortal = isDemoPortalExperience(customer);
   const canExport = isOwner || hasPermission(PERMISSIONS.LEADS_EXPORT);
+  const canAssign =
+    isOwner
+    || hasPermission(PERMISSIONS.LEADS_ASSIGN)
+    || hasPermission(PERMISSIONS.LEADS_VIEW_ALL);
+  const canFilterAssignee = canAssign;
   const canScheduleAppointments = hasPermission(PERMISSIONS.APPOINTMENTS_EDIT);
   const canViewAllAppointments = hasPermission(PERMISSIONS.APPOINTMENTS_VIEW_ALL);
   const searchParams = useSearchParams();
@@ -325,6 +339,7 @@ export default function PortalPage() {
   const [sort, setSort] = useState('received_at');
   const [order, setOrder] = useState<'asc' | 'desc'>('desc');
   const [leadSource, setLeadSource] = useState<'all' | 'fresh' | 'bulk'>('all');
+  const [assignedToFilter, setAssignedToFilter] = useState('all');
   const [bulkCount, setBulkCount] = useState(0);
   const [leadsScopePartial, setLeadsScopePartial] = useState(false);
   const [leadsScopeMaxRows, setLeadsScopeMaxRows] = useState<number | null>(null);
@@ -333,6 +348,8 @@ export default function PortalPage() {
   const [schedulePromptLead, setSchedulePromptLead] = useState<Lead | null>(null);
   const [showBookFromLead, setShowBookFromLead] = useState(false);
   const [agendaTeam, setAgendaTeam] = useState<{ id: string; name: string; role: string }[]>([]);
+  const [assignTeam, setAssignTeam] = useState<{ id: string; name: string; role: string }[]>([]);
+  const [assigning, setAssigning] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showExportWizard, setShowExportWizard] = useState(false);
@@ -433,7 +450,7 @@ export default function PortalPage() {
 
   useEffect(() => {
     clearSelection();
-  }, [statusFilter, activeBranchTab, dateFrom, dateTo, leadSource, debouncedSearch, clearSelection]);
+  }, [statusFilter, activeBranchTab, dateFrom, dateTo, leadSource, assignedToFilter, debouncedSearch, clearSelection]);
 
   const openExportWizard = useCallback((selection: ExportSelection | null, count: number) => {
     setExportSelection(selection);
@@ -449,7 +466,7 @@ export default function PortalPage() {
     openExportWizard({ mode: 'lead_ids', leadIds: [...selectedIds] }, selectedIds.size);
   };
 
-  const showLeadSelection = !showDemoPortal && ((isOwner && crmReady) || canExport);
+  const showLeadSelection = !showDemoPortal && ((isOwner && crmReady) || canExport || canAssign);
   const showBranchTabs = customer.branches.length > 1;
   const conversionRate = stats.totalLeads > 0
     ? Math.round((stats.sold / stats.totalLeads) * 100)
@@ -539,6 +556,9 @@ export default function PortalPage() {
     if (dateFrom) params.set('from', dateFrom);
     if (dateTo) params.set('to', dateTo);
     if (leadSource !== 'all') params.set('lead_source', leadSource);
+    if (canFilterAssignee && assignedToFilter !== 'all') {
+      params.set('assigned_to', assignedToFilter);
+    }
 
     try {
       const res = await portalFetch(`/api/portal/leads?${params}`);
@@ -562,7 +582,7 @@ export default function PortalPage() {
       showToast('Leads konden niet geladen worden', 'error');
     }
     setLoading(false);
-  }, [page, pageSize, sort, order, statusFilter, activeBranchTab, debouncedSearch, dateFrom, dateTo, leadSource, showToast]);
+  }, [page, pageSize, sort, order, statusFilter, activeBranchTab, debouncedSearch, dateFrom, dateTo, leadSource, assignedToFilter, canFilterAssignee, showToast]);
 
   const fetchBranches = useCallback(async () => {
     try {
@@ -665,6 +685,24 @@ export default function PortalPage() {
       .catch(() => {});
   }, [schedulePromptLead, showBookFromLead]);
 
+  useEffect(() => {
+    if (!canAssign) return;
+    portalFetch('/api/portal/team-list')
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => {
+        if (data?.members) {
+          setAssignTeam(
+            data.members.map((m: { id: string; name: string; role: string }) => ({
+              id: m.id,
+              name: m.name,
+              role: m.role,
+            })),
+          );
+        }
+      })
+      .catch(() => {});
+  }, [canAssign]);
+
   const branchMap = useMemo(() => {
     const m: Record<string, BranchConfig> = {};
     branchConfigs.forEach(b => { m[b.slug] = b; });
@@ -758,6 +796,121 @@ export default function PortalPage() {
     }
   };
 
+  const applyAssigneeLocally = useCallback((
+    leadIds: string[],
+    portalUserId: string | null,
+    portalUserName: string | null,
+  ) => {
+    const idSet = new Set(leadIds);
+    setLeads(prev => prev.map(l => (
+      idSet.has(l.id)
+        ? { ...l, portal_user_id: portalUserId, portal_user_name: portalUserName }
+        : l
+    )));
+    setSelectedLead(prev => (
+      prev && idSet.has(prev.id)
+        ? { ...prev, portal_user_id: portalUserId, portal_user_name: portalUserName }
+        : prev
+    ));
+  }, []);
+
+  const resolveSelectedLeadIds = useCallback(async (): Promise<string[] | null> => {
+    if (!selectAllFiltered) return [...selectedIds];
+    const params = new URLSearchParams();
+    params.set('ids_only', '1');
+    if (statusFilter !== 'all') params.set('status', statusFilter);
+    if (activeBranchTab !== 'all') params.set('branch', activeBranchTab);
+    if (dateFrom) params.set('from', dateFrom);
+    if (dateTo) params.set('to', dateTo);
+    if (leadSource !== 'all') params.set('lead_source', leadSource);
+    if (debouncedSearch) params.set('search', debouncedSearch);
+    if (canFilterAssignee && assignedToFilter !== 'all') {
+      params.set('assigned_to', assignedToFilter);
+    }
+    const res = await portalFetch(`/api/portal/leads?${params}`);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      showToast(data.error || 'Leads ophalen mislukt', 'error');
+      return null;
+    }
+    return Array.isArray(data.ids) ? data.ids : [];
+  }, [
+    selectAllFiltered,
+    selectedIds,
+    statusFilter,
+    activeBranchTab,
+    dateFrom,
+    dateTo,
+    leadSource,
+    debouncedSearch,
+    canFilterAssignee,
+    assignedToFilter,
+    showToast,
+  ]);
+
+  const handleAssignLeads = useCallback(async (
+    leadIds: string[],
+    portalUserId: string | null,
+  ) => {
+    if (leadIds.length === 0) return;
+    const assigneeName = portalUserId
+      ? (assignTeam.find(m => m.id === portalUserId)?.name ?? null)
+      : null;
+    setAssigning(true);
+    try {
+      let updatedTotal = 0;
+      const CHUNK = 500;
+      for (let i = 0; i < leadIds.length; i += CHUNK) {
+        const chunk = leadIds.slice(i, i + CHUNK);
+        const res = await portalFetch('/api/portal/leads/assign', {
+          method: 'POST',
+          body: JSON.stringify({ lead_ids: chunk, portal_user_id: portalUserId }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(data.error || 'Toewijzen mislukt');
+        }
+        updatedTotal += typeof data.updated === 'number' ? data.updated : chunk.length;
+        applyAssigneeLocally(
+          chunk,
+          data.portal_user_id ?? portalUserId,
+          data.portal_user_name ?? assigneeName,
+        );
+      }
+      showToast(
+        portalUserId
+          ? `${updatedTotal} lead${updatedTotal === 1 ? '' : 's'} toegewezen aan ${assigneeName || 'teamlid'}`
+          : `${updatedTotal} lead${updatedTotal === 1 ? '' : 's'} ontkoppeld`,
+      );
+      if (selectAllFiltered || leadIds.length > 1) clearSelection();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Toewijzen mislukt', 'error');
+      void fetchLeads();
+    } finally {
+      setAssigning(false);
+    }
+  }, [assignTeam, applyAssigneeLocally, showToast, selectAllFiltered, clearSelection, fetchLeads]);
+
+  const handleBulkAssign = useCallback(async (portalUserId: string | null) => {
+    const leadIds = await resolveSelectedLeadIds();
+    if (!leadIds) return;
+    if (leadIds.length === 0) {
+      showToast('Geen leads om toe te wijzen', 'error');
+      return;
+    }
+    const label = portalUserId
+      ? (assignTeam.find(m => m.id === portalUserId)?.name || 'dit teamlid')
+      : 'niemand (niet toegewezen)';
+    if (!confirm(`${leadIds.length} lead${leadIds.length === 1 ? '' : 's'} toewijzen aan ${label}?`)) {
+      return;
+    }
+    await handleAssignLeads(leadIds, portalUserId);
+  }, [resolveSelectedLeadIds, assignTeam, showToast, handleAssignLeads]);
+
+  const handleSingleAssign = useCallback(async (lead: Lead, portalUserId: string | null) => {
+    await handleAssignLeads([lead.id], portalUserId);
+  }, [handleAssignLeads]);
+
   const exportFilters = useMemo<ExportFilters>(() => ({
     statusFilter,
     branchFilter: activeBranchTab,
@@ -765,7 +918,8 @@ export default function PortalPage() {
     dateTo,
     leadSource,
     search: debouncedSearch,
-  }), [statusFilter, activeBranchTab, dateFrom, dateTo, leadSource, debouncedSearch]);
+    assignedTo: assignedToFilter,
+  }), [statusFilter, activeBranchTab, dateFrom, dateTo, leadSource, debouncedSearch, assignedToFilter]);
 
   const handleCrmBackfill = (forceResend: boolean) => {
     if (!crmLabel) return;
@@ -808,13 +962,15 @@ export default function PortalPage() {
     if (statusFilter !== 'all') count++;
     if (dateFrom) count++;
     if (dateTo) count++;
+    if (canFilterAssignee && assignedToFilter !== 'all') count++;
     return count;
-  }, [statusFilter, dateFrom, dateTo]);
+  }, [statusFilter, dateFrom, dateTo, canFilterAssignee, assignedToFilter]);
 
   const resetFilters = () => {
     setStatusFilter('all');
     setDateFrom('');
     setDateTo('');
+    setAssignedToFilter('all');
     setPage(1);
   };
 
@@ -1222,6 +1378,22 @@ export default function PortalPage() {
                   className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-700 outline-none focus:border-brand-purple/50"
                 />
               </div>
+              {canFilterAssignee && (
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-500">Toegewezen aan</label>
+                  <select
+                    value={assignedToFilter}
+                    onChange={(e) => { setAssignedToFilter(e.target.value); setPage(1); }}
+                    className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-700 outline-none focus:border-brand-purple/50"
+                  >
+                    <option value="all">Iedereen</option>
+                    <option value="unassigned">Niet toegewezen</option>
+                    {assignTeam.map(m => (
+                      <option key={m.id} value={m.id}>{m.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
               {activeFilters > 0 && (
                 <div className="flex items-end">
                   <button
@@ -1340,6 +1512,9 @@ export default function PortalPage() {
                         </span>
                       </th>
                     ))}
+                    {canAssign && (
+                      <th className="px-4 py-3 text-left text-xs font-medium text-slate-500">Toegewezen</th>
+                    )}
                     <th className="px-4 py-3 text-left text-xs font-medium text-slate-500">Contact</th>
                   </tr>
                 </thead>
@@ -1398,6 +1573,29 @@ export default function PortalPage() {
                         </select>
                       </td>
                       <td className="px-4 py-3 text-slate-500">{formatDate(lead.received_at || lead.wervingsdatum)}</td>
+                      {canAssign && (
+                        <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                          <select
+                            value={typeof lead.portal_user_id === 'string' ? lead.portal_user_id : ''}
+                            disabled={assigning}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              void handleSingleAssign(lead, v === '' ? null : v);
+                            }}
+                            className="max-w-[9.5rem] truncate rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-brand-purple/50 disabled:opacity-50"
+                            aria-label={`Wijs ${lead.naam_klant || 'lead'} toe`}
+                          >
+                            <option value="">Niet toegewezen</option>
+                            {assigneeSelectOptions(
+                              assignTeam,
+                              typeof lead.portal_user_id === 'string' ? lead.portal_user_id : null,
+                              typeof lead.portal_user_name === 'string' ? lead.portal_user_name : null,
+                            ).map(m => (
+                              <option key={m.id} value={m.id}>{m.name}</option>
+                            ))}
+                          </select>
+                        </td>
+                      )}
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1.5">
                           {lead.telefoonnummer && (
@@ -1505,7 +1703,7 @@ export default function PortalPage() {
                     ))}
                   </select>
                 </div>
-                <div className="mb-3 flex items-center gap-2 text-xs text-slate-500">
+                <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
                   {(() => { const b = getBranch(lead.branch); return (
                     <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${b.light} ${b.text}`}>{b.name}</span>
                   ); })()}
@@ -1513,6 +1711,14 @@ export default function PortalPage() {
                     <CalendarDaysIcon className="h-3 w-3" />
                     {formatDate(lead.received_at || lead.wervingsdatum)}
                   </span>
+                  {canAssign && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">
+                      <UserGroupIcon className="h-3 w-3" />
+                      {typeof lead.portal_user_name === 'string' && lead.portal_user_name
+                        ? lead.portal_user_name
+                        : 'Niet toegewezen'}
+                    </span>
+                  )}
                 </div>
                 <div className="flex gap-2">
                   {lead.telefoonnummer && (
@@ -1598,15 +1804,19 @@ export default function PortalPage() {
             </div>
           )}
 
-          {(selectedCount > 0 && (canExport || (isOwner && crmReady && crmLabel))) && (
+          {(selectedCount > 0 && (canExport || canAssign || (isOwner && crmReady && crmLabel))) && (
             <LeadSelectionBar
               selectedCount={selectedCount}
               crmLabel={isOwner && crmReady ? crmLabel : null}
               canExport={canExport}
+              canAssign={canAssign}
+              teamMembers={assignTeam}
               onClear={clearSelection}
               onSync={isOwner && crmReady && crmLabel ? handleCrmBackfill : undefined}
-              onExport={handleExportFromSelection}
+              onExport={canExport ? handleExportFromSelection : undefined}
+              onAssign={canAssign ? handleBulkAssign : undefined}
               syncing={crmBackfillSyncing}
+              assigning={assigning}
             />
           )}
         </>
@@ -1623,6 +1833,10 @@ export default function PortalPage() {
               onClose={() => setSelectedLead(null)}
               onStatusChange={(s) => handleStatusUpdate(selectedLead, s)}
               onNotesChange={(n) => handleNotesUpdate(selectedLead, n)}
+              canAssign={canAssign}
+              teamMembers={assignTeam}
+              assigning={assigning}
+              onAssign={(portalUserId) => handleSingleAssign(selectedLead, portalUserId)}
               showToast={showToast}
             />
           )}
@@ -1706,6 +1920,10 @@ function LeadDetailPanel({
   onClose,
   onStatusChange,
   onNotesChange,
+  canAssign,
+  teamMembers,
+  assigning,
+  onAssign,
   showToast,
 }: {
   lead: Lead;
@@ -1714,6 +1932,10 @@ function LeadDetailPanel({
   onClose: () => void;
   onStatusChange: (s: string) => void;
   onNotesChange: (n: string) => void;
+  canAssign?: boolean;
+  teamMembers?: { id: string; name: string }[];
+  assigning?: boolean;
+  onAssign?: (portalUserId: string | null) => void;
   showToast: (msg: string) => void;
 }) {
   const [notes, setNotes] = useState(lead.notities || '');
@@ -1819,6 +2041,33 @@ function LeadDetailPanel({
                 ))}
               </select>
             </div>
+
+            {canAssign && onAssign && (
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-slate-500">Toegewezen aan</label>
+                <select
+                  value={typeof lead.portal_user_id === 'string' ? lead.portal_user_id : ''}
+                  disabled={assigning}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    onAssign(v === '' ? null : v);
+                  }}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 outline-none focus:border-brand-purple/50 disabled:opacity-50"
+                >
+                  <option value="">Niet toegewezen (beschikbaar voor iedereen)</option>
+                  {assigneeSelectOptions(
+                    teamMembers || [],
+                    typeof lead.portal_user_id === 'string' ? lead.portal_user_id : null,
+                    typeof lead.portal_user_name === 'string' ? lead.portal_user_name : null,
+                  ).map(m => (
+                    <option key={m.id} value={m.id}>{m.name}</option>
+                  ))}
+                </select>
+                <p className="mt-1 text-[11px] text-slate-400">
+                  Agents in handmatige modus ontvangen alleen leads die je hier toewijst.
+                </p>
+              </div>
+            )}
 
             {/* Contact info */}
             <div>

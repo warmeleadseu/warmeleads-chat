@@ -35,6 +35,8 @@ export interface ExportFilters {
   dateTo: string;
   leadSource: string;
   search: string;
+  /** 'all' | 'unassigned' | portal_user uuid */
+  assignedTo?: string;
 }
 
 export interface ExportPreset {
@@ -311,6 +313,9 @@ export default function ExportWizard({
       if (filters.dateTo) params.set('to', filters.dateTo);
       if (filters.leadSource !== 'all') params.set('lead_source', filters.leadSource);
       if (filters.search) params.set('search', filters.search);
+      if (filters.assignedTo && filters.assignedTo !== 'all') {
+        params.set('assigned_to', filters.assignedTo);
+      }
     }
     return params;
   }, [format, selectedCols, separator, dateFormat, includeHeaders, feedbackFilter, filters, exportSelection]);

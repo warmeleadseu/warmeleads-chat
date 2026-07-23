@@ -16,7 +16,8 @@ export async function GET(request: NextRequest) {
     hasPermission(session, PERMISSIONS.APPOINTMENTS_VIEW_ALL) ||
     hasPermission(session, PERMISSIONS.APPOINTMENTS_EDIT) ||
     hasPermission(session, PERMISSIONS.TEAM_MANAGE) ||
-    hasPermission(session, PERMISSIONS.LEADS_VIEW_ALL);
+    hasPermission(session, PERMISSIONS.LEADS_VIEW_ALL) ||
+    hasPermission(session, PERMISSIONS.LEADS_ASSIGN);
 
   if (!canAccess) return forbidden();
 
