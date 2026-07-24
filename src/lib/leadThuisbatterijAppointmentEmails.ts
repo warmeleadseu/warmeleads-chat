@@ -1,5 +1,5 @@
 import { createServerClient } from '@/lib/supabase';
-import { sendGmailEmail, isGmailAppointmentConfigured } from '@/lib/gmailSmtp';
+import { sendGmailEmail } from '@/lib/gmailSmtp';
 
 export interface LeadAppointmentMailPayload {
   id: string;
@@ -176,12 +176,8 @@ export async function maybeSendLeadThuisbatterijConfirmation(
     console.warn('[lead-thuisbatterij-mail] no contact_email, skip confirmation', appt.id);
     return false;
   }
-  if (!isGmailAppointmentConfigured()) {
-    console.warn('[lead-thuisbatterij-mail] Gmail not configured, skip confirmation', appt.id);
-    return false;
-  }
-
   const { html, text, subject } = confirmationBody(appt);
+  // sendGmailEmail logs a failed email_log row if credentials are missing
   const result = await sendGmailEmail(to, subject, html, {
     type: 'lead_appointment_confirmation',
     toName: appt.contact_name,

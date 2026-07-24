@@ -157,36 +157,37 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Aanmaken mislukt' }, { status: 500 });
   }
 
-  (async () => {
-    try {
-      const [custRes, branchRes, assigneeRes] = await Promise.all([
-        supabase.from('customers').select('name, email, contact_person').eq('id', customer_id).maybeSingle(),
-        supabase.from('branches').select('name').eq('slug', branch).maybeSingle(),
-        resolvedPortalUserId
-          ? supabase.from('portal_users').select('name, email').eq('id', resolvedPortalUserId).maybeSingle()
-          : Promise.resolve({ data: null }),
-      ]);
-      const cust = custRes.data as { name?: string; email?: string; contact_person?: string } | null;
-      const branchName = (branchRes.data as { name?: string } | null)?.name;
-      const assignee = (assigneeRes.data as { name?: string; email?: string } | null) || null;
-      if (cust?.email) {
-        await sendAppointmentCreatedEmail(
-          { name: cust.name || '', email: cust.email, contact_person: cust.contact_person },
-          { ...data, branchName, portal_user_name: assignee?.name || null },
-          assignee?.email ? { name: assignee.name || '', email: assignee.email } : undefined,
-        );
-      }
-      await maybeSendLeadThuisbatterijConfirmation(data);
-      const whenLabel = new Date(data.starts_at).toLocaleString('nl-NL', { timeZone: 'Europe/Amsterdam', weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-      await sendAppointmentPush(customer_id, 'created', {
-        contactName: data.contact_name,
-        whenLabel,
-        appointmentId: data.id,
-      });
-    } catch (e) {
-      console.error('[admin/appointments post-notify]', e);
+  // Await notifications: Vercel freezes the lambda after the response, so
+  // fire-and-forget often never reaches the lead Gmail send.
+  try {
+    await maybeSendLeadThuisbatterijConfirmation(data);
+
+    const [custRes, branchRes, assigneeRes] = await Promise.all([
+      supabase.from('customers').select('name, email, contact_person').eq('id', customer_id).maybeSingle(),
+      supabase.from('branches').select('name').eq('slug', branch).maybeSingle(),
+      resolvedPortalUserId
+        ? supabase.from('portal_users').select('name, email').eq('id', resolvedPortalUserId).maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]);
+    const cust = custRes.data as { name?: string; email?: string; contact_person?: string } | null;
+    const branchName = (branchRes.data as { name?: string } | null)?.name;
+    const assignee = (assigneeRes.data as { name?: string; email?: string } | null) || null;
+    if (cust?.email) {
+      await sendAppointmentCreatedEmail(
+        { name: cust.name || '', email: cust.email, contact_person: cust.contact_person },
+        { ...data, branchName, portal_user_name: assignee?.name || null },
+        assignee?.email ? { name: assignee.name || '', email: assignee.email } : undefined,
+      );
     }
-  })().catch(() => {});
+    const whenLabel = new Date(data.starts_at).toLocaleString('nl-NL', { timeZone: 'Europe/Amsterdam', weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    await sendAppointmentPush(customer_id, 'created', {
+      contactName: data.contact_name,
+      whenLabel,
+      appointmentId: data.id,
+    });
+  } catch (e) {
+    console.error('[admin/appointments post-notify]', e);
+  }
 
   return NextResponse.json(data);
 }

@@ -230,37 +230,37 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Aanmaken mislukt' }, { status: 500 });
   }
 
-  // Fire-and-forget notifications
-  (async () => {
-    try {
-      const [branchRes, assigneeRes] = await Promise.all([
-        supabase.from('branches').select('name').eq('slug', branch).maybeSingle(),
-        effectivePortalUserId
-          ? supabase.from('portal_users').select('name, email').eq('id', effectivePortalUserId).maybeSingle()
-          : Promise.resolve({ data: null }),
-      ]);
-      const branchName = branchRes.data?.name;
-      const assignee = (assigneeRes.data as { name?: string; email?: string } | null) || null;
-      await sendAppointmentCreatedEmail(
-        {
-          name: session.customer.name,
-          email: session.customer.email,
-          contact_person: session.customer.contact_person,
-        },
-        { ...data, branchName, portal_user_name: assignee?.name || null },
-        assignee?.email ? { name: assignee.name || '', email: assignee.email } : undefined,
-      );
-      await maybeSendLeadThuisbatterijConfirmation(data);
-      const whenLabel = new Date(data.starts_at).toLocaleString('nl-NL', { timeZone: 'Europe/Amsterdam', weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-      await sendAppointmentPush(session.customer.id, 'created', {
-        contactName: data.contact_name,
-        whenLabel,
-        appointmentId: data.id,
-      });
-    } catch (e) {
-      console.error('[portal/appointments post-notify]', e);
-    }
-  })().catch(() => {});
+  // Await notifications: Vercel freezes the lambda after the response, so
+  // fire-and-forget often never reaches the lead Gmail send.
+  try {
+    await maybeSendLeadThuisbatterijConfirmation(data);
+
+    const [branchRes, assigneeRes] = await Promise.all([
+      supabase.from('branches').select('name').eq('slug', branch).maybeSingle(),
+      effectivePortalUserId
+        ? supabase.from('portal_users').select('name, email').eq('id', effectivePortalUserId).maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]);
+    const branchName = branchRes.data?.name;
+    const assignee = (assigneeRes.data as { name?: string; email?: string } | null) || null;
+    await sendAppointmentCreatedEmail(
+      {
+        name: session.customer.name,
+        email: session.customer.email,
+        contact_person: session.customer.contact_person,
+      },
+      { ...data, branchName, portal_user_name: assignee?.name || null },
+      assignee?.email ? { name: assignee.name || '', email: assignee.email } : undefined,
+    );
+    const whenLabel = new Date(data.starts_at).toLocaleString('nl-NL', { timeZone: 'Europe/Amsterdam', weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    await sendAppointmentPush(session.customer.id, 'created', {
+      contactName: data.contact_name,
+      whenLabel,
+      appointmentId: data.id,
+    });
+  } catch (e) {
+    console.error('[portal/appointments post-notify]', e);
+  }
 
   return NextResponse.json(data);
 }
