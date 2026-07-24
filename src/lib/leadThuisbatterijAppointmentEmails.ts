@@ -77,10 +77,10 @@ function leadMailLayout(title: string, bodyHtml: string): string {
 function appointmentHighlight(dateLabel: string, timeLabel: string, address: string | null): string {
   return `<table cellpadding="0" cellspacing="0" role="presentation" style="width:100%;margin:20px 0;background:#f0fdfa;border:1px solid #99f6e4;border-radius:10px">
 <tr><td style="padding:18px 20px">
-  <p style="margin:0 0 6px;font-size:12px;text-transform:uppercase;letter-spacing:0.06em;color:#0f766e;font-weight:700">Jouw afspraak</p>
-  <p style="margin:0;font-size:18px;font-weight:700;color:#0f172a">${escapeHtml(dateLabel)}</p>
-  <p style="margin:4px 0 0;font-size:16px;color:#0f172a">om <strong>${escapeHtml(timeLabel)}</strong></p>
-  ${address ? `<p style="margin:10px 0 0;font-size:14px;color:#475569">${escapeHtml(address)}</p>` : ''}
+  <p style="margin:0 0 10px;font-size:12px;text-transform:uppercase;letter-spacing:0.06em;color:#0f766e;font-weight:700">Jouw afspraak</p>
+  <p style="margin:0;font-size:18px;font-weight:700;color:#0f172a">📅 ${escapeHtml(dateLabel)}</p>
+  <p style="margin:8px 0 0;font-size:16px;font-weight:700;color:#0f172a">🕝 ${escapeHtml(timeLabel)} uur</p>
+  ${address ? `<p style="margin:12px 0 0;font-size:14px;color:#475569">${escapeHtml(address)}</p>` : ''}
 </td></tr>
 </table>`;
 }
@@ -93,28 +93,38 @@ function confirmationBody(appt: LeadAppointmentMailPayload): { html: string; tex
 
   const html = leadMailLayout(
     'Je afspraak is bevestigd',
-    `<p style="margin:0 0 14px">Hallo ${escapeHtml(name)},</p>
-     <p style="margin:0 0 14px">Bedankt! Je afspraak voor een thuisbatterij-inventarisatie staat ingepland.</p>
+    `<p style="margin:0 0 14px">Bedankt voor je aanvraag, <strong>${escapeHtml(name)}</strong>!</p>
+     <p style="margin:0 0 14px">Goed nieuws: jouw afspraak voor een <strong>thuisbatterij-inventarisatie</strong> is succesvol ingepland.</p>
      ${appointmentHighlight(dateLabel, timeLabel, address)}
-     <p style="margin:0 0 14px">Een adviseur komt dan bij je langs om je situatie in kaart te brengen. Op basis daarvan maken we een passend aanbod op maat.</p>
-     <p style="margin:0 0 14px">We nemen van tevoren nog even contact met je op.</p>
-     <p style="margin:0">Wil je de afspraak verplaatsen? Reageer dan op deze e-mail — dan kijken we samen naar een nieuw moment.</p>`,
+     <p style="margin:0 0 14px">Een van onze adviseurs komt bij je thuis langs om jouw huidige situatie zorgvuldig in kaart te brengen. Tijdens het bezoek bekijken we onder andere je energieverbruik, de aanwezigheid van zonnepanelen (indien van toepassing), je meterkast en jouw wensen voor de toekomst. Zo kunnen we bepalen welke thuisbatterij het beste bij jouw woning en verbruik past.</p>
+     <p style="margin:0 0 14px">Na de inventarisatie ontvang je een <strong>persoonlijk en vrijblijvend advies</strong>, inclusief een aanbod op maat. Uiteraard is er tijdens de afspraak alle ruimte om vragen te stellen over de werking, besparingen, terugverdientijd en eventuele subsidiemogelijkheden.</p>
+     <p style="margin:0 0 14px"><strong>Goed om te weten:</strong> de afspraak duurt gemiddeld <strong>45 tot 60 minuten</strong>. Het is prettig als degene die over de woning en de energierekening beslist, tijdens het gesprek aanwezig is.</p>
+     <p style="margin:0 0 14px">Enkele dagen vóór de afspraak nemen we nog even contact met je op om de afspraak te bevestigen.</p>
+     <p style="margin:0 0 14px">Komt het geplande moment toch niet uit? Reageer dan eenvoudig op deze e-mail. We plannen graag samen een nieuw moment in dat beter past.</p>
+     <p style="margin:0">We kijken ernaar uit je binnenkort te ontmoeten!</p>`,
   );
 
   const text = [
-    `Hallo ${name},`,
+    `Bedankt voor je aanvraag, ${name}!`,
     '',
-    'Bedankt! Je afspraak voor een thuisbatterij-inventarisatie staat ingepland.',
+    'Goed nieuws: jouw afspraak voor een thuisbatterij-inventarisatie is succesvol ingepland.',
     '',
-    `Datum: ${dateLabel}`,
-    `Tijd: ${timeLabel}`,
-    address ? `Adres: ${address}` : null,
+    'Jouw afspraak',
+    `📅 ${dateLabel}`,
+    `🕝 ${timeLabel} uur`,
+    address ? address : null,
     '',
-    'Een adviseur komt dan bij je langs om je situatie in kaart te brengen. Op basis daarvan maken we een passend aanbod op maat.',
+    'Een van onze adviseurs komt bij je thuis langs om jouw huidige situatie zorgvuldig in kaart te brengen. Tijdens het bezoek bekijken we onder andere je energieverbruik, de aanwezigheid van zonnepanelen (indien van toepassing), je meterkast en jouw wensen voor de toekomst. Zo kunnen we bepalen welke thuisbatterij het beste bij jouw woning en verbruik past.',
     '',
-    'We nemen van tevoren nog even contact met je op.',
+    'Na de inventarisatie ontvang je een persoonlijk en vrijblijvend advies, inclusief een aanbod op maat. Uiteraard is er tijdens de afspraak alle ruimte om vragen te stellen over de werking, besparingen, terugverdientijd en eventuele subsidiemogelijkheden.',
     '',
-    'Wil je de afspraak verplaatsen? Reageer dan op deze e-mail.',
+    'Goed om te weten: de afspraak duurt gemiddeld 45 tot 60 minuten. Het is prettig als degene die over de woning en de energierekening beslist, tijdens het gesprek aanwezig is.',
+    '',
+    'Enkele dagen vóór de afspraak nemen we nog even contact met je op om de afspraak te bevestigen.',
+    '',
+    'Komt het geplande moment toch niet uit? Reageer dan eenvoudig op deze e-mail. We plannen graag samen een nieuw moment in dat beter past.',
+    '',
+    'We kijken ernaar uit je binnenkort te ontmoeten!',
   ].filter(Boolean).join('\n');
 
   return {
