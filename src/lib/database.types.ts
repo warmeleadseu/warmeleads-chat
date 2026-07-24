@@ -1220,7 +1220,9 @@ export type Database = {
           house_number: string | null
           id: string
           lead_assignment_id: string | null
+          lead_confirmation_sent_at: string | null
           lead_id: string | null
+          lead_reminder_sent_at: string | null
           notes: string | null
           portal_user_id: string | null
           postcode: string | null
@@ -1251,7 +1253,9 @@ export type Database = {
           house_number?: string | null
           id?: string
           lead_assignment_id?: string | null
+          lead_confirmation_sent_at?: string | null
           lead_id?: string | null
+          lead_reminder_sent_at?: string | null
           notes?: string | null
           portal_user_id?: string | null
           postcode?: string | null
@@ -1282,7 +1286,9 @@ export type Database = {
           house_number?: string | null
           id?: string
           lead_assignment_id?: string | null
+          lead_confirmation_sent_at?: string | null
           lead_id?: string | null
+          lead_reminder_sent_at?: string | null
           notes?: string | null
           portal_user_id?: string | null
           postcode?: string | null

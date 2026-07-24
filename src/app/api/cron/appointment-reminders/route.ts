@@ -1,20 +1,40 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { sendAppointmentReminderEmail } from '@/lib/appointmentEmails';
+import {
+  isThuisbatterijBranch,
+  sendLeadThuisbatterijReminderEmail,
+} from '@/lib/leadThuisbatterijAppointmentEmails';
 import { sendAppointmentPush } from '@/lib/pushNotification';
 import { verifyCronAuth } from '@/lib/cronAuth';
 
 /**
- * Runs hourly — sends a reminder for appointments starting 20-28 hours from now
- * (1-day reminder window). Marks reminder_sent_at to prevent duplicates.
+ * Runs hourly:
+ * - B2B reminder for appointments starting 20–28h from now (installer/customer)
+ * - Lead reminder for thuisbatterij appointments starting 68–76h from now (~3 days)
  */
 export async function GET(request: NextRequest) {
   const cronError = verifyCronAuth(request);
   if (cronError) return cronError;
 
   const supabase = createServerClient();
-
   const now = new Date();
+
+  const b2bSent = await sendB2bReminders(supabase, now);
+  const leadSent = await sendLeadThuisbatterijReminders(supabase, now);
+
+  return NextResponse.json({
+    message: 'Reminders verstuurd',
+    b2b_count: b2bSent,
+    lead_count: leadSent,
+    count: b2bSent + leadSent,
+  });
+}
+
+async function sendB2bReminders(
+  supabase: ReturnType<typeof createServerClient>,
+  now: Date,
+): Promise<number> {
   const windowStart = new Date(now.getTime() + 20 * 60 * 60 * 1000);
   const windowEnd = new Date(now.getTime() + 28 * 60 * 60 * 1000);
 
@@ -28,13 +48,11 @@ export async function GET(request: NextRequest) {
     .limit(200);
 
   if (error) {
-    console.error('[cron/appointment-reminders]', error);
-    return NextResponse.json({ error: 'Ophalen mislukt' }, { status: 500 });
+    console.error('[cron/appointment-reminders] b2b query', error);
+    return 0;
   }
 
-  if (!appointments || appointments.length === 0) {
-    return NextResponse.json({ message: 'Geen reminders', count: 0 });
-  }
+  if (!appointments || appointments.length === 0) return 0;
 
   const customerIds = [...new Set(appointments.map(a => a.customer_id))];
   const portalUserIds = [...new Set(appointments.map(a => a.portal_user_id).filter(Boolean))] as string[];
@@ -78,9 +96,54 @@ export async function GET(request: NextRequest) {
       await supabase.from('appointments').update({ reminder_sent_at: new Date().toISOString() }).eq('id', a.id);
       sent++;
     } catch (e) {
-      console.error('[cron/appointment-reminders] reminder failed', a.id, e);
+      console.error('[cron/appointment-reminders] b2b reminder failed', a.id, e);
     }
   }
 
-  return NextResponse.json({ message: 'Reminders verstuurd', count: sent });
+  return sent;
+}
+
+async function sendLeadThuisbatterijReminders(
+  supabase: ReturnType<typeof createServerClient>,
+  now: Date,
+): Promise<number> {
+  // ~3 days: 68–76h window (same 8h width as the B2B 20–28h window)
+  const windowStart = new Date(now.getTime() + 68 * 60 * 60 * 1000);
+  const windowEnd = new Date(now.getTime() + 76 * 60 * 60 * 1000);
+
+  const { data: appointments, error } = await supabase
+    .from('appointments')
+    .select('id, branch, starts_at, contact_name, contact_email, street, house_number, postcode, city, lead_reminder_sent_at')
+    .eq('status', 'scheduled')
+    .eq('branch', 'thuisbatterij')
+    .is('lead_reminder_sent_at', null)
+    .not('contact_email', 'is', null)
+    .gte('starts_at', windowStart.toISOString())
+    .lte('starts_at', windowEnd.toISOString())
+    .limit(200);
+
+  if (error) {
+    console.error('[cron/appointment-reminders] lead query', error);
+    return 0;
+  }
+
+  if (!appointments || appointments.length === 0) return 0;
+
+  let sent = 0;
+  for (const a of appointments) {
+    if (!isThuisbatterijBranch(a.branch)) continue;
+    try {
+      const ok = await sendLeadThuisbatterijReminderEmail(a);
+      if (!ok) continue;
+      await supabase
+        .from('appointments')
+        .update({ lead_reminder_sent_at: new Date().toISOString() })
+        .eq('id', a.id);
+      sent++;
+    } catch (e) {
+      console.error('[cron/appointment-reminders] lead reminder failed', a.id, e);
+    }
+  }
+
+  return sent;
 }

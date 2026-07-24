@@ -5,6 +5,7 @@ import { createServerClient } from '@/lib/supabase';
 import { validateSlot } from '@/lib/appointmentSlots';
 import { pickAppointmentAssignee } from '@/lib/appointmentAssignment';
 import { sendAppointmentCreatedEmail } from '@/lib/appointmentEmails';
+import { maybeSendLeadThuisbatterijConfirmation } from '@/lib/leadThuisbatterijAppointmentEmails';
 import { sendAppointmentPush } from '@/lib/pushNotification';
 
 /** Max bereik in dagen (zelfde stijl als appointment-slots). */
@@ -249,6 +250,7 @@ export async function POST(request: NextRequest) {
         { ...data, branchName, portal_user_name: assignee?.name || null },
         assignee?.email ? { name: assignee.name || '', email: assignee.email } : undefined,
       );
+      await maybeSendLeadThuisbatterijConfirmation(data);
       const whenLabel = new Date(data.starts_at).toLocaleString('nl-NL', { timeZone: 'Europe/Amsterdam', weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
       await sendAppointmentPush(session.customer.id, 'created', {
         contactName: data.contact_name,

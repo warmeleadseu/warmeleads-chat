@@ -4,6 +4,7 @@ import { createServerClient } from '@/lib/supabase';
 import { validateSlot } from '@/lib/appointmentSlots';
 import { pickAppointmentAssignee } from '@/lib/appointmentAssignment';
 import { sendAppointmentCreatedEmail } from '@/lib/appointmentEmails';
+import { maybeSendLeadThuisbatterijConfirmation } from '@/lib/leadThuisbatterijAppointmentEmails';
 import { sendAppointmentPush } from '@/lib/pushNotification';
 
 export async function GET(request: NextRequest) {
@@ -166,14 +167,16 @@ export async function POST(request: NextRequest) {
           : Promise.resolve({ data: null }),
       ]);
       const cust = custRes.data as { name?: string; email?: string; contact_person?: string } | null;
-      if (!cust?.email) return;
       const branchName = (branchRes.data as { name?: string } | null)?.name;
       const assignee = (assigneeRes.data as { name?: string; email?: string } | null) || null;
-      await sendAppointmentCreatedEmail(
-        { name: cust.name || '', email: cust.email, contact_person: cust.contact_person },
-        { ...data, branchName, portal_user_name: assignee?.name || null },
-        assignee?.email ? { name: assignee.name || '', email: assignee.email } : undefined,
-      );
+      if (cust?.email) {
+        await sendAppointmentCreatedEmail(
+          { name: cust.name || '', email: cust.email, contact_person: cust.contact_person },
+          { ...data, branchName, portal_user_name: assignee?.name || null },
+          assignee?.email ? { name: assignee.name || '', email: assignee.email } : undefined,
+        );
+      }
+      await maybeSendLeadThuisbatterijConfirmation(data);
       const whenLabel = new Date(data.starts_at).toLocaleString('nl-NL', { timeZone: 'Europe/Amsterdam', weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
       await sendAppointmentPush(customer_id, 'created', {
         contactName: data.contact_name,
