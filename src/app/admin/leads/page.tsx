@@ -26,6 +26,7 @@ import {
   LEAD_PROVINCE_OPTIONS_BE,
 } from '@/data/provinces';
 import SearchableSelect from '@/components/ui/SearchableSelect';
+import { parsePostcodeRanges } from '@/lib/postcodeRanges';
 
 /* ── Multi-select dropdown ─────────────────────────────────── */
 
@@ -412,6 +413,7 @@ export default function LeadsCRMPage() {
 
   const [bulkFilter, setBulkFilter] = useState('all');
   const [postcodeRanges, setPostcodeRanges] = useState('');
+  const [plaatsFilter, setPlaatsFilter] = useState('');
 
   const [facets, setFacets] = useState<Record<string, Record<string, number>>>({});
 
@@ -460,6 +462,7 @@ export default function LeadsCRMPage() {
     if (dateTo) p.set('date_to', dateTo);
     if ((dateFrom || dateTo) && !includeUnknownDate) p.set('include_unknown_date', 'false');
     if (search) p.set('search', search);
+    if (plaatsFilter.trim()) p.set('plaats', plaatsFilter.trim());
     if (postcodeRanges.trim()) p.set('postcode_ranges', postcodeRanges.trim());
     p.set('page', String(page));
     p.set('per_page', String(perPage));
@@ -481,7 +484,7 @@ export default function LeadsCRMPage() {
     } finally {
       setLoading(false);
     }
-  }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, includeUnknownDate, search, postcodeRanges, page, perPage, sortBy, sortDir]);
+  }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, includeUnknownDate, search, plaatsFilter, postcodeRanges, page, perPage, sortBy, sortDir]);
 
   const fetchFacets = useCallback(async () => {
     const p = new URLSearchParams();
@@ -497,10 +500,11 @@ export default function LeadsCRMPage() {
     if (dateTo) p.set('date_to', dateTo);
     if ((dateFrom || dateTo) && !includeUnknownDate) p.set('include_unknown_date', 'false');
     if (search) p.set('search', search);
+    if (plaatsFilter.trim()) p.set('plaats', plaatsFilter.trim());
     if (postcodeRanges.trim()) p.set('postcode_ranges', postcodeRanges.trim());
     const res = await adminFetch(`/api/admin/leads/facets?${p}`);
     if (res.ok) { const d = await res.json(); setFacets(d.facets || {}); }
-  }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, includeUnknownDate, search, postcodeRanges]);
+  }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, includeUnknownDate, search, plaatsFilter, postcodeRanges]);
 
   const fetchExportHistory = useCallback(async () => {
     const res = await adminFetch('/api/admin/leads/export');
@@ -527,7 +531,7 @@ export default function LeadsCRMPage() {
   useEffect(() => { fetchMeta(); fetchExportHistory(); }, [fetchMeta, fetchExportHistory]);
   useEffect(() => { fetchLeads(); }, [fetchLeads]);
   useEffect(() => { fetchFacets(); }, [fetchFacets]);
-  useEffect(() => { setPage(1); }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, includeUnknownDate, search, postcodeRanges, perPage]);
+  useEffect(() => { setPage(1); }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, includeUnknownDate, search, plaatsFilter, postcodeRanges, perPage]);
 
   useEffect(() => {
     const c = searchParams.get('customer');
@@ -629,9 +633,10 @@ export default function LeadsCRMPage() {
     if (dateTo) p.date_to = dateTo;
     if ((dateFrom || dateTo) && !includeUnknownDate) p.include_unknown_date = 'false';
     if (search) p.search = search;
+    if (plaatsFilter.trim()) p.plaats = plaatsFilter.trim();
     if (postcodeRanges.trim()) p.postcode_ranges = postcodeRanges.trim();
     return p;
-  }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, includeUnknownDate, search, postcodeRanges]);
+  }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, includeUnknownDate, search, plaatsFilter, postcodeRanges]);
 
   const handleQuickStatus = async (id: string, newStatus: string) => {
     const prevStatus = leads.find(l => l.id === id)?.status;
@@ -795,7 +800,7 @@ export default function LeadsCRMPage() {
       <div className="mb-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="relative mb-3">
           <MagnifyingGlassIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Zoek op naam, email, telefoon of postcode..."
+          <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Zoek op naam, email, telefoon, postcode of plaats..."
             className="w-full rounded-lg border border-slate-200 bg-slate-50/50 py-2.5 pl-9 pr-4 text-sm text-slate-700 outline-none focus:border-brand-purple/50 focus:bg-white focus:ring-1 focus:ring-brand-purple/30" />
         </div>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-8">
@@ -873,11 +878,19 @@ export default function LeadsCRMPage() {
           </div>
           <input
             type="text"
+            value={plaatsFilter}
+            onChange={e => setPlaatsFilter(e.target.value)}
+            placeholder="Plaatsnaam (NL/BE)"
+            title="Filter op plaatsnaam, bijv. Amsterdam of Antwerpen"
+            className={`min-w-[12rem] flex-1 rounded-lg border px-3 py-2 text-sm outline-none focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/30 sm:max-w-[14rem] ${plaatsFilter.trim() ? 'border-sky-300 bg-sky-50 text-sky-900' : 'border-slate-200 bg-white text-slate-700'}`}
+          />
+          <input
+            type="text"
             value={postcodeRanges}
             onChange={e => setPostcodeRanges(e.target.value)}
-            placeholder="Postcodegebied (bijv. 7500-7599, 2000)"
-            title="Filter op PC4-gebieden: 7500-7599 of meerdere ranges gescheiden door komma"
-            className={`min-w-[14rem] flex-1 rounded-lg border px-3 py-2 text-sm outline-none focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/30 sm:max-w-xs ${postcodeRanges.trim() ? 'border-sky-300 bg-sky-50 text-sky-900' : 'border-slate-200 bg-white text-slate-700'}`}
+            placeholder="Postcodegebied (bijv. 7500-7599, 2000, 7511AB)"
+            title="Filter op PC4-gebieden: 7500-7599, 75, 7511AB of meerdere ranges gescheiden door komma"
+            className={`min-w-[14rem] flex-1 rounded-lg border px-3 py-2 text-sm outline-none focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/30 sm:max-w-xs ${parsePostcodeRanges(postcodeRanges).length > 0 ? 'border-sky-300 bg-sky-50 text-sky-900' : 'border-slate-200 bg-white text-slate-700'}`}
           />
           {(dateFrom || dateTo) && (
             <label className="flex cursor-pointer select-none items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
@@ -1313,6 +1326,8 @@ function ExportModal({
   const [filterIncludeUnknownDate, setFilterIncludeUnknownDate] = useState<boolean>(
     filterParams.include_unknown_date !== 'false');
   const filterPostcodeRanges = filterParams.postcode_ranges || '';
+  const filterPlaats = filterParams.plaats || '';
+  const filterSearch = filterParams.search || '';
   const [filtersExpanded, setFiltersExpanded] = useState<boolean>(
     isBulkBatchFlow || !(filterParams.branch?.split(',').filter(Boolean).length),
   );
@@ -1378,6 +1393,7 @@ function ExportModal({
     if (filterDateFrom) body.date_from = filterDateFrom;
     if (filterDateTo) body.date_to = filterDateTo;
     if ((filterDateFrom || filterDateTo) && !filterIncludeUnknownDate) body.include_unknown_date = 'false';
+    if (filterPlaats.trim()) body.plaats = filterPlaats.trim();
     if (filterPostcodeRanges.trim()) body.postcode_ranges = filterPostcodeRanges.trim();
     if (excludeCustomers.length > 0) body.exclude_customer_id = excludeCustomers.join(',');
     // De "Sluit reeds uitgedeelde leads uit"-checkbox is in de bulk-batch
@@ -1388,7 +1404,7 @@ function ExportModal({
   }, [
     selFilterBranches, selFilterStatuses, selFilterProvinces, selFilterSources,
     filterPhone, filterBulkStatus, filterDateFrom, filterDateTo, filterIncludeUnknownDate,
-    filterPostcodeRanges, excludeCustomers, excludeAlreadyAssigned, isBulkBatchFlow,
+    filterPlaats, filterPostcodeRanges, excludeCustomers, excludeAlreadyAssigned, isBulkBatchFlow,
   ]);
 
   const [liveCount, setLiveCount] = useState<number | null>(null);

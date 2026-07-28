@@ -22,6 +22,7 @@ export async function GET(request: NextRequest) {
   // met onbekende wervingsdatum standaard mee, tenzij expliciet uitgezet.
   const includeUnknownDate = url.get('include_unknown_date') !== 'false';
   const search = url.get('search');
+  const plaats = url.get('plaats');
 
   const supabase = createServerClient();
 
@@ -54,6 +55,7 @@ export async function GET(request: NextRequest) {
     p_exclude_customers: excludeCustomerId ? excludeCustomerId.split(',').filter(Boolean) : null,
     p_bulk_status: bulkStatus === 'never' || bulkStatus === 'once' || bulkStatus === 'multiple' ? bulkStatus : null,
     p_include_unknown_date: includeUnknownDate,
+    p_plaats: plaats && plaats.trim() ? plaats.trim() : null,
   });
 
   if (error) {

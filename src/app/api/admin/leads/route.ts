@@ -115,8 +115,18 @@ export async function GET(request: NextRequest) {
       `email.ilike.%${s}%`,
       ...buildPhoneSearchIlikeClauses('telefoonnummer', search),
       `postcode.ilike.%${s}%`,
+      `plaatsnaam.ilike.%${s}%`,
     ];
+    const compactPc = search.trim().replace(/\s+/g, '');
+    if (compactPc !== search.trim() && compactPc.length >= 4) {
+      parts.push(`postcode.ilike.%${sanitizePostgrestIlike(compactPc)}%`);
+    }
     query = query.or(parts.join(','));
+  }
+
+  const plaats = url.get('plaats');
+  if (plaats && plaats.trim()) {
+    query = query.ilike('plaatsnaam', `%${sanitizePostgrestIlike(plaats.trim())}%`);
   }
 
   if (admin.role === 'accountmanager') {

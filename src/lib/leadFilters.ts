@@ -22,6 +22,8 @@ export type LeadFilterParams = {
   date_to?: string | null;
   include_unknown_date?: string | boolean | null;
   search?: string | null;
+  /** Dedicated plaatsnaam contains-filter (NL + BE) */
+  plaats?: string | null;
   bulk_status?: string | null;
   /** PC4 ranges, e.g. "7500-7599, 2000" */
   postcode_ranges?: string | null;
@@ -41,6 +43,7 @@ export function readLeadFilterParams(url: URLSearchParams): LeadFilterParams {
     date_to: url.get('date_to'),
     include_unknown_date: url.get('include_unknown_date'),
     search: url.get('search'),
+    plaats: url.get('plaats'),
     bulk_status: url.get('bulk_status'),
     postcode_ranges: url.get('postcode_ranges'),
   };
@@ -59,6 +62,7 @@ type ChainableFilter = {
   or(filter: string): ChainableFilter;
   gte(col: string, val: unknown): ChainableFilter;
   lte(col: string, val: unknown): ChainableFilter;
+  ilike(col: string, pattern: string): ChainableFilter;
   overlaps(col: string, vals: readonly unknown[] | string): ChainableFilter;
 };
 
@@ -145,14 +149,26 @@ export function applyLeadFilters<T>(
   }
 
   if (filters.search) {
-    const s = sanitizePostgrestIlike(String(filters.search));
+    const raw = String(filters.search).trim();
+    const s = sanitizePostgrestIlike(raw);
     const parts = [
       `naam_klant.ilike.%${s}%`,
       `email.ilike.%${s}%`,
-      ...buildPhoneSearchIlikeClauses('telefoonnummer', String(filters.search)),
+      ...buildPhoneSearchIlikeClauses('telefoonnummer', raw),
       `postcode.ilike.%${s}%`,
+      `plaatsnaam.ilike.%${s}%`,
     ];
+    // Compact postcode form (NL "7511 AB" → also match stored "7511AB")
+    const compactPc = raw.replace(/\s+/g, '');
+    if (compactPc !== raw && compactPc.length >= 4) {
+      parts.push(`postcode.ilike.%${sanitizePostgrestIlike(compactPc)}%`);
+    }
     q = q.or(parts.join(','));
+  }
+
+  if (filters.plaats && String(filters.plaats).trim()) {
+    const p = sanitizePostgrestIlike(String(filters.plaats).trim());
+    q = q.ilike('plaatsnaam', `%${p}%`);
   }
 
   if (filters.bulk_status === 'never') q = q.eq('bulk_export_count', 0);

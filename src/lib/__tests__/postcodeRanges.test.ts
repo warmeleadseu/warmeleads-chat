@@ -14,9 +14,21 @@ describe('parsePostcodeRanges', () => {
     ]);
   });
 
+  it('accepts NL postcodes with letters/spaces', () => {
+    expect(parsePostcodeRanges('7511AB')).toEqual([{ from: 7511, to: 7511 }]);
+    expect(parsePostcodeRanges('7511 AB')).toEqual([{ from: 7511, to: 7511 }]);
+    expect(parsePostcodeRanges('7511ab-7599zz')).toEqual([{ from: 7511, to: 7599 }]);
+  });
+
+  it('expands short prefixes', () => {
+    expect(parsePostcodeRanges('75')).toEqual([{ from: 7500, to: 7599 }]);
+    expect(parsePostcodeRanges('751')).toEqual([{ from: 7510, to: 7519 }]);
+    expect(parsePostcodeRanges('75-76')).toEqual([{ from: 7500, to: 7699 }]);
+  });
+
   it('swaps inverted bounds and ignores junk', () => {
     expect(parsePostcodeRanges('7599-7500')).toEqual([{ from: 7500, to: 7599 }]);
-    expect(parsePostcodeRanges('abc, 12ab')).toEqual([]);
+    expect(parsePostcodeRanges('abc')).toEqual([]);
     expect(parsePostcodeRanges('')).toEqual([]);
   });
 });

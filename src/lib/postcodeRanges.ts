@@ -5,27 +5,73 @@
  *   "7500-7599"
  *   "2000-2099, 8000"
  *   "7511"
+ *   "7511AB" / "7511 AB"   (letters/spaces ignored; first 4 digits used)
+ *   "75"                   (→ 7500-7599)
+ *   "751"                  (→ 7510-7519)
  *
- * Matching uses string bounds on `leads.postcode` (values like "7511AB" / "2000"),
+ * Matching uses string bounds on `leads.postcode` (values like "7511AB" / "7511 AB" / "2000"),
  * which works for both Dutch (4 digits + letters) and Belgian (4 digits) formats.
  */
 
 export type PostcodeRange = { from: number; to: number };
 
-const TOKEN_RE = /^\s*(\d{1,4})(?:\s*[-–—]\s*(\d{1,4}))?\s*$/;
+/** Extract PC digits from a token; if >4 digits, take the first 4 (NL/BE PC4). */
+function extractPcDigits(token: string): { value: number; len: number } | null {
+  const digits = String(token).replace(/\D/g, '');
+  if (!digits) return null;
+  const sliced = digits.length > 4 ? digits.slice(0, 4) : digits;
+  const value = Number(sliced);
+  if (!Number.isFinite(value) || value < 0 || value > 9999) return null;
+  return { value, len: sliced.length };
+}
+
+/**
+ * Expand short PC prefixes to a full PC4 range:
+ *   2 digits → xx00–xx99
+ *   3 digits → xxx0–xxx9
+ *   4 digits → exact
+ */
+function expandToPc4Range(value: number, len: number): PostcodeRange {
+  if (len <= 2) {
+    const from = value * 100;
+    return { from, to: Math.min(from + 99, 9999) };
+  }
+  if (len === 3) {
+    const from = value * 10;
+    return { from, to: Math.min(from + 9, 9999) };
+  }
+  return { from: value, to: value };
+}
 
 export function parsePostcodeRanges(input: string | null | undefined): PostcodeRange[] {
   if (!input || !String(input).trim()) return [];
   const ranges: PostcodeRange[] = [];
+
   for (const raw of String(input).split(/[,;]+/)) {
-    const m = raw.match(TOKEN_RE);
-    if (!m) continue;
-    const a = Number(m[1]);
-    const b = m[2] != null ? Number(m[2]) : a;
-    if (!Number.isFinite(a) || !Number.isFinite(b)) continue;
-    if (a < 0 || b < 0 || a > 9999 || b > 9999) continue;
-    ranges.push({ from: Math.min(a, b), to: Math.max(a, b) });
+    const token = raw.trim();
+    if (!token) continue;
+
+    // Range separator: hyphen / en-dash / em-dash (not in the middle of "7511-AB")
+    const rangeParts = token.split(/\s*[-–—]\s*/).map((p) => p.trim()).filter(Boolean);
+
+    if (rangeParts.length === 2) {
+      const a = extractPcDigits(rangeParts[0]!);
+      const b = extractPcDigits(rangeParts[1]!);
+      if (!a || !b) continue;
+      // Pad short sides like portal: 75-76 → 7500-7699
+      const from = a.len < 4 ? Number(String(a.value).padEnd(4, '0')) : a.value;
+      const to = b.len < 4 ? Number(String(b.value).padEnd(4, '9')) : b.value;
+      if (from > 9999 || to > 9999) continue;
+      ranges.push({ from: Math.min(from, to), to: Math.max(from, to) });
+      continue;
+    }
+
+    if (rangeParts.length !== 1) continue;
+    const one = extractPcDigits(rangeParts[0]!);
+    if (!one) continue;
+    ranges.push(expandToPc4Range(one.value, one.len));
   }
+
   return ranges;
 }
 

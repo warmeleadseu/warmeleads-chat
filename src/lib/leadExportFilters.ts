@@ -21,6 +21,7 @@ export function bodyToLeadFilterParams(body: Record<string, unknown>): LeadFilte
         ? (body.include_unknown_date as string | boolean)
         : null,
     search: typeof body.search === 'string' ? body.search : null,
+    plaats: typeof body.plaats === 'string' ? body.plaats : null,
     bulk_status: typeof body.bulk_status === 'string' ? body.bulk_status : null,
     postcode_ranges: typeof body.postcode_ranges === 'string' ? body.postcode_ranges : null,
   };
