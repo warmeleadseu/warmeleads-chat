@@ -1393,6 +1393,7 @@ function ExportModal({
     if (filterDateFrom) body.date_from = filterDateFrom;
     if (filterDateTo) body.date_to = filterDateTo;
     if ((filterDateFrom || filterDateTo) && !filterIncludeUnknownDate) body.include_unknown_date = 'false';
+    if (filterSearch.trim()) body.search = filterSearch.trim();
     if (filterPlaats.trim()) body.plaats = filterPlaats.trim();
     if (filterPostcodeRanges.trim()) body.postcode_ranges = filterPostcodeRanges.trim();
     if (excludeCustomers.length > 0) body.exclude_customer_id = excludeCustomers.join(',');
@@ -1404,7 +1405,7 @@ function ExportModal({
   }, [
     selFilterBranches, selFilterStatuses, selFilterProvinces, selFilterSources,
     filterPhone, filterBulkStatus, filterDateFrom, filterDateTo, filterIncludeUnknownDate,
-    filterPlaats, filterPostcodeRanges, excludeCustomers, excludeAlreadyAssigned, isBulkBatchFlow,
+    filterSearch, filterPlaats, filterPostcodeRanges, excludeCustomers, excludeAlreadyAssigned, isBulkBatchFlow,
   ]);
 
   const [liveCount, setLiveCount] = useState<number | null>(null);
