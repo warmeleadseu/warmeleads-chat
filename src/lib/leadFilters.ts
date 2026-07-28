@@ -2,6 +2,11 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { buildPhoneSearchIlikeClauses, sanitizePostgrestIlike } from '@/lib/phoneSearch';
 import { PARTNER_PROSPECT_BRANCH_SLUGS } from '@/lib/partnerProspectConstants';
 import { buildPostcodeRangeOrFilter, parsePostcodeRanges } from '@/lib/postcodeRanges';
+import {
+  applyBoundingBoxFilter,
+  boundingBoxFromRadius,
+  type PlaatsRadiusOrigin,
+} from '@/lib/leadPlaatsRadius';
 
 /**
  * Beschrijft de set filters die zowel `GET /api/admin/leads`,
@@ -24,6 +29,11 @@ export type LeadFilterParams = {
   search?: string | null;
   /** Dedicated plaatsnaam contains-filter (NL + BE) */
   plaats?: string | null;
+  /**
+   * Straal in km rondom `plaats`. Alleen actief samen met plaatsnaam:
+   * dan filteren we op haversine-afstand i.p.v. plaatsnaam-ilike.
+   */
+  plaats_radius_km?: string | null;
   bulk_status?: string | null;
   /** PC4 ranges, e.g. "7500-7599, 2000" */
   postcode_ranges?: string | null;
@@ -44,6 +54,7 @@ export function readLeadFilterParams(url: URLSearchParams): LeadFilterParams {
     include_unknown_date: url.get('include_unknown_date'),
     search: url.get('search'),
     plaats: url.get('plaats'),
+    plaats_radius_km: url.get('plaats_radius_km'),
     bulk_status: url.get('bulk_status'),
     postcode_ranges: url.get('postcode_ranges'),
   };
@@ -73,13 +84,20 @@ type ChainableFilter = {
  * `excludePartnerBranchesWhenNoBranchFilter`: standaard false (voor o.a.
  * export). De admin-lijst zet dit op true om partner-prospect-branches te
  * verbergen als er geen expliciet branche-filter is.
+ *
+ * `plaatsRadius`: als gezet, wordt plaatsnaam-ilike overgeslagen en een
+ * bounding-box op lat/lng toegepast (exacte haversine-filter gebeurt daarna
+ * in memory).
  */
 export function applyLeadFilters<T>(
   query: T,
   filters: LeadFilterParams,
-  options: { excludePartnerBranchesWhenNoBranchFilter?: boolean } = {},
+  options: {
+    excludePartnerBranchesWhenNoBranchFilter?: boolean;
+    plaatsRadius?: PlaatsRadiusOrigin | null;
+  } = {},
 ): T {
-  const { excludePartnerBranchesWhenNoBranchFilter = false } = options;
+  const { excludePartnerBranchesWhenNoBranchFilter = false, plaatsRadius = null } = options;
   let q = query as unknown as ChainableFilter;
 
   if (excludePartnerBranchesWhenNoBranchFilter && !filters.branch) {
@@ -166,7 +184,10 @@ export function applyLeadFilters<T>(
     q = q.or(parts.join(','));
   }
 
-  if (filters.plaats && String(filters.plaats).trim()) {
+  if (plaatsRadius) {
+    const box = boundingBoxFromRadius(plaatsRadius.lat, plaatsRadius.lng, plaatsRadius.radiusKm);
+    q = applyBoundingBoxFilter(q, box) as ChainableFilter;
+  } else if (filters.plaats && String(filters.plaats).trim()) {
     const p = sanitizePostgrestIlike(String(filters.plaats).trim());
     q = q.ilike('plaatsnaam', `%${p}%`);
   }

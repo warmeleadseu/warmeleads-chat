@@ -8,6 +8,10 @@ import { assignLeadToBatch } from '@/lib/assignLeadToBatch';
 import { preflightManualAssignments } from '@/lib/manualAssignmentGuardrails';
 import { logLeadActivity } from '@/lib/leadActivities';
 import { validateExportBranchFilter } from '@/lib/exportBranchValidation';
+import {
+  filterQueryRowsByPlaatsRadius,
+  resolvePlaatsRadiusOrigin,
+} from '@/lib/leadPlaatsRadius';
 
 /**
  * POST /api/admin/leads/bulk-assign
@@ -94,42 +98,93 @@ export async function POST(request: NextRequest) {
       include_unknown_date: typeof body.include_unknown_date === 'string' || typeof body.include_unknown_date === 'boolean'
         ? (body.include_unknown_date as string | boolean) : null,
       search: typeof body.search === 'string' ? body.search : null,
+      plaats: typeof body.plaats === 'string' ? body.plaats : null,
+      plaats_radius_km:
+        typeof body.plaats_radius_km === 'string' || typeof body.plaats_radius_km === 'number'
+          ? String(body.plaats_radius_km)
+          : null,
       bulk_status: typeof body.bulk_status === 'string' ? body.bulk_status : null,
       postcode_ranges: typeof body.postcode_ranges === 'string' ? body.postcode_ranges : null,
     };
+
+    let plaatsRadius = null;
+    try {
+      plaatsRadius = await resolvePlaatsRadiusOrigin(filters);
+    } catch (err) {
+      return NextResponse.json(
+        { error: err instanceof Error ? err.message : 'Plaats niet gevonden' },
+        { status: 400 },
+      );
+    }
 
     const cap = maxLeadsRaw && Number(maxLeadsRaw) > 0
       ? Math.min(Number(maxLeadsRaw), HARD_LIMIT)
       : HARD_LIMIT;
 
-    let query = supabase
-      .from('leads')
-      .select('id')
-      .order('bulk_export_count', { ascending: true })
-      .order('wervingsdatum', { ascending: false });
-    query = applyLeadFilters(query, filters, { excludePartnerBranchesWhenNoBranchFilter: true });
+    if (plaatsRadius) {
+      let query = supabase
+        .from('leads')
+        .select('id, lat, lng')
+        .order('bulk_export_count', { ascending: true })
+        .order('wervingsdatum', { ascending: false });
+      query = applyLeadFilters(query, filters, {
+        excludePartnerBranchesWhenNoBranchFilter: true,
+        plaatsRadius,
+      });
 
-    if (admin.role === 'accountmanager') {
-      const scoped = await applyAccountManagerScope(supabase, query, admin.id);
-      if (!scoped.allowed) {
-        return NextResponse.json({ assigned: 0, skipped_already: 0, total: 0 });
+      if (admin.role === 'accountmanager') {
+        const scoped = await applyAccountManagerScope(supabase, query, admin.id);
+        if (!scoped.allowed) {
+          return NextResponse.json({ assigned: 0, skipped_already: 0, total: 0 });
+        }
+        query = scoped.query;
       }
-      query = scoped.query;
-    }
 
-    const PAGE_SIZE = 1000;
-    let offset = 0;
-    while (leadIds.length < cap) {
-      const batchSize = Math.min(PAGE_SIZE, cap - leadIds.length);
-      const { data: batch, error: fetchErr } = await query.range(offset, offset + batchSize - 1);
-      if (fetchErr) {
-        console.error('[admin/leads/bulk-assign] fetch error', fetchErr);
+      const { rows, error: scanError } = await filterQueryRowsByPlaatsRadius(
+        async (from, to) => {
+          const { data, error } = await query.range(from, to);
+          return { data, error };
+        },
+        plaatsRadius,
+        cap,
+      );
+      if (scanError) {
+        console.error('[admin/leads/bulk-assign] radius fetch error', scanError);
         return NextResponse.json({ error: 'Leads ophalen mislukt' }, { status: 500 });
       }
-      if (!batch || batch.length === 0) break;
-      leadIds.push(...batch.map((r: { id: string }) => r.id));
-      if (batch.length < batchSize) break;
-      offset += batch.length;
+      leadIds = rows.map((r) => r.id);
+    } else {
+      let query = supabase
+        .from('leads')
+        .select('id')
+        .order('bulk_export_count', { ascending: true })
+        .order('wervingsdatum', { ascending: false });
+      query = applyLeadFilters(query, filters, {
+        excludePartnerBranchesWhenNoBranchFilter: true,
+      });
+
+      if (admin.role === 'accountmanager') {
+        const scoped = await applyAccountManagerScope(supabase, query, admin.id);
+        if (!scoped.allowed) {
+          return NextResponse.json({ assigned: 0, skipped_already: 0, total: 0 });
+        }
+        query = scoped.query;
+      }
+
+      const PAGE_SIZE = 1000;
+      let offset = 0;
+      while (leadIds.length < cap) {
+        const batchSize = Math.min(PAGE_SIZE, cap - leadIds.length);
+        const { data: batch, error: fetchErr } = await query.range(offset, offset + batchSize - 1);
+        if (fetchErr) {
+          console.error('[admin/leads/bulk-assign] fetch error', fetchErr);
+          return NextResponse.json({ error: 'Leads ophalen mislukt' }, { status: 500 });
+        }
+        if (!batch || batch.length === 0) break;
+        leadIds.push(...batch.map((r: { id: string }) => r.id));
+        if (batch.length < batchSize) break;
+        offset += batch.length;
+      }
     }
   }
 

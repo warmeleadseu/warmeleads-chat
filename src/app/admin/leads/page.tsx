@@ -27,6 +27,7 @@ import {
 } from '@/data/provinces';
 import SearchableSelect from '@/components/ui/SearchableSelect';
 import { parsePostcodeRanges } from '@/lib/postcodeRanges';
+import { DISTANCE_PRESETS_KM } from '@/lib/portalLeadGeoFilters';
 
 /* ── Multi-select dropdown ─────────────────────────────────── */
 
@@ -414,6 +415,9 @@ export default function LeadsCRMPage() {
   const [bulkFilter, setBulkFilter] = useState('all');
   const [postcodeRanges, setPostcodeRanges] = useState('');
   const [plaatsFilter, setPlaatsFilter] = useState('');
+  /** Straal in km rondom plaatsnaam; leeg = alleen plaatsnaam-match */
+  const [plaatsRadiusKm, setPlaatsRadiusKm] = useState<number | null>(null);
+  const [plaatsRadiusLabel, setPlaatsRadiusLabel] = useState<string | null>(null);
 
   const [facets, setFacets] = useState<Record<string, Record<string, number>>>({});
 
@@ -463,6 +467,7 @@ export default function LeadsCRMPage() {
     if ((dateFrom || dateTo) && !includeUnknownDate) p.set('include_unknown_date', 'false');
     if (search) p.set('search', search);
     if (plaatsFilter.trim()) p.set('plaats', plaatsFilter.trim());
+    if (plaatsFilter.trim() && plaatsRadiusKm != null) p.set('plaats_radius_km', String(plaatsRadiusKm));
     if (postcodeRanges.trim()) p.set('postcode_ranges', postcodeRanges.trim());
     p.set('page', String(page));
     p.set('per_page', String(perPage));
@@ -474,17 +479,20 @@ export default function LeadsCRMPage() {
         const d = await res.json();
         setLeads(d.leads || []);
         setTotal(d.total || 0);
+        setPlaatsRadiusLabel(typeof d.plaats_radius_label === 'string' ? d.plaats_radius_label : null);
         setLoadError('');
       } else {
         const d = await res.json().catch(() => ({}));
+        setPlaatsRadiusLabel(null);
         setLoadError(d.error || 'Leads laden mislukt. Probeer het opnieuw.');
       }
     } catch {
+      setPlaatsRadiusLabel(null);
       setLoadError('Netwerkfout bij het laden van leads.');
     } finally {
       setLoading(false);
     }
-  }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, includeUnknownDate, search, plaatsFilter, postcodeRanges, page, perPage, sortBy, sortDir]);
+  }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, includeUnknownDate, search, plaatsFilter, plaatsRadiusKm, postcodeRanges, page, perPage, sortBy, sortDir]);
 
   const fetchFacets = useCallback(async () => {
     const p = new URLSearchParams();
@@ -500,11 +508,13 @@ export default function LeadsCRMPage() {
     if (dateTo) p.set('date_to', dateTo);
     if ((dateFrom || dateTo) && !includeUnknownDate) p.set('include_unknown_date', 'false');
     if (search) p.set('search', search);
-    if (plaatsFilter.trim()) p.set('plaats', plaatsFilter.trim());
+    // Facets RPC heeft geen straal-geo; bij straal alleen plaatsnaam weglaten
+    // zodat facet-counts niet vals beperkt worden tot exacte plaatsnaam.
+    if (plaatsFilter.trim() && plaatsRadiusKm == null) p.set('plaats', plaatsFilter.trim());
     if (postcodeRanges.trim()) p.set('postcode_ranges', postcodeRanges.trim());
     const res = await adminFetch(`/api/admin/leads/facets?${p}`);
     if (res.ok) { const d = await res.json(); setFacets(d.facets || {}); }
-  }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, includeUnknownDate, search, plaatsFilter, postcodeRanges]);
+  }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, includeUnknownDate, search, plaatsFilter, plaatsRadiusKm, postcodeRanges]);
 
   const fetchExportHistory = useCallback(async () => {
     const res = await adminFetch('/api/admin/leads/export');
@@ -531,7 +541,7 @@ export default function LeadsCRMPage() {
   useEffect(() => { fetchMeta(); fetchExportHistory(); }, [fetchMeta, fetchExportHistory]);
   useEffect(() => { fetchLeads(); }, [fetchLeads]);
   useEffect(() => { fetchFacets(); }, [fetchFacets]);
-  useEffect(() => { setPage(1); }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, includeUnknownDate, search, plaatsFilter, postcodeRanges, perPage]);
+  useEffect(() => { setPage(1); }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, includeUnknownDate, search, plaatsFilter, plaatsRadiusKm, postcodeRanges, perPage]);
 
   useEffect(() => {
     const c = searchParams.get('customer');
@@ -634,9 +644,10 @@ export default function LeadsCRMPage() {
     if ((dateFrom || dateTo) && !includeUnknownDate) p.include_unknown_date = 'false';
     if (search) p.search = search;
     if (plaatsFilter.trim()) p.plaats = plaatsFilter.trim();
+    if (plaatsFilter.trim() && plaatsRadiusKm != null) p.plaats_radius_km = String(plaatsRadiusKm);
     if (postcodeRanges.trim()) p.postcode_ranges = postcodeRanges.trim();
     return p;
-  }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, includeUnknownDate, search, plaatsFilter, postcodeRanges]);
+  }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, includeUnknownDate, search, plaatsFilter, plaatsRadiusKm, postcodeRanges]);
 
   const handleQuickStatus = async (id: string, newStatus: string) => {
     const prevStatus = leads.find(l => l.id === id)?.status;
@@ -881,9 +892,30 @@ export default function LeadsCRMPage() {
             value={plaatsFilter}
             onChange={e => setPlaatsFilter(e.target.value)}
             placeholder="Plaatsnaam (NL/BE)"
-            title="Filter op plaatsnaam, bijv. Amsterdam of Antwerpen"
+            title={plaatsRadiusKm != null
+              ? 'Middelpunt voor straalfilter (geocode NL/BE), bijv. Amsterdam of Antwerpen'
+              : 'Filter op plaatsnaam, bijv. Amsterdam of Antwerpen'}
             className={`min-w-[12rem] flex-1 rounded-lg border px-3 py-2 text-sm outline-none focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/30 sm:max-w-[14rem] ${plaatsFilter.trim() ? 'border-sky-300 bg-sky-50 text-sky-900' : 'border-slate-200 bg-white text-slate-700'}`}
           />
+          <select
+            value={plaatsRadiusKm == null ? '' : String(plaatsRadiusKm)}
+            onChange={e => {
+              const v = e.target.value;
+              setPlaatsRadiusKm(v ? Number(v) : null);
+            }}
+            title="Straal rondom de ingevulde plaatsnaam. Zonder straal: exacte plaatsnaam-match."
+            className={`rounded-lg border px-3 py-2 text-sm ${plaatsRadiusKm != null ? 'border-sky-300 bg-sky-50 text-sky-900' : 'border-slate-200 bg-white text-slate-700'}`}
+          >
+            <option value="">Geen straal</option>
+            {DISTANCE_PRESETS_KM.map((km) => (
+              <option key={km} value={km}>{km} km</option>
+            ))}
+          </select>
+          {plaatsRadiusKm != null && plaatsFilter.trim() && plaatsRadiusLabel && (
+            <span className="text-xs text-sky-700" title="Geocodeerd middelpunt">
+              ≤{plaatsRadiusKm} km van {plaatsRadiusLabel}
+            </span>
+          )}
           <input
             type="text"
             value={postcodeRanges}
@@ -1127,6 +1159,11 @@ export default function LeadsCRMPage() {
                           <span className={`text-xs font-medium ${lead.lead_cost ? 'text-slate-700' : 'text-slate-300'}`}>
                             {lead.lead_cost ? `€${Number(lead.lead_cost).toFixed(2)}` : '-'}
                           </span>
+                        ) : col === 'plaatsnaam' && typeof lead.distance_km === 'number' ? (
+                          <span className="block max-w-[180px] truncate" title={`${lead.plaatsnaam || '-'} · ${lead.distance_km} km`}>
+                            {lead.plaatsnaam || '-'}
+                            <span className="ml-1 text-[11px] text-sky-600">{lead.distance_km} km</span>
+                          </span>
                         ) : (
                           <span className="block max-w-[160px] truncate">{getLeadFieldValue(lead, col) || '-'}</span>
                         )}
@@ -1177,7 +1214,14 @@ export default function LeadsCRMPage() {
                   const color = cnt === 0 ? 'bg-emerald-100 text-emerald-700' : cnt === 1 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700';
                   return <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium tabular-nums ${color}`}>{cnt}x bulk</span>;
                 })()}
-                {lead.plaatsnaam && <span>{lead.plaatsnaam}</span>}
+                {lead.plaatsnaam && (
+                  <span>
+                    {lead.plaatsnaam}
+                    {typeof lead.distance_km === 'number' && (
+                      <span className="ml-1 text-sky-600">{lead.distance_km} km</span>
+                    )}
+                  </span>
+                )}
                 {lead.telefoonnummer && (
                   <span className="flex min-w-0 items-center gap-0.5">
                     <span className="truncate break-all">{lead.telefoonnummer}</span>
@@ -1327,6 +1371,7 @@ function ExportModal({
     filterParams.include_unknown_date !== 'false');
   const filterPostcodeRanges = filterParams.postcode_ranges || '';
   const filterPlaats = filterParams.plaats || '';
+  const filterPlaatsRadiusKm = filterParams.plaats_radius_km || '';
   const filterSearch = filterParams.search || '';
   const [filtersExpanded, setFiltersExpanded] = useState<boolean>(
     isBulkBatchFlow || !(filterParams.branch?.split(',').filter(Boolean).length),
@@ -1395,6 +1440,9 @@ function ExportModal({
     if ((filterDateFrom || filterDateTo) && !filterIncludeUnknownDate) body.include_unknown_date = 'false';
     if (filterSearch.trim()) body.search = filterSearch.trim();
     if (filterPlaats.trim()) body.plaats = filterPlaats.trim();
+    if (filterPlaats.trim() && filterPlaatsRadiusKm.trim()) {
+      body.plaats_radius_km = filterPlaatsRadiusKm.trim();
+    }
     if (filterPostcodeRanges.trim()) body.postcode_ranges = filterPostcodeRanges.trim();
     if (excludeCustomers.length > 0) body.exclude_customer_id = excludeCustomers.join(',');
     // De "Sluit reeds uitgedeelde leads uit"-checkbox is in de bulk-batch
@@ -1405,7 +1453,7 @@ function ExportModal({
   }, [
     selFilterBranches, selFilterStatuses, selFilterProvinces, selFilterSources,
     filterPhone, filterBulkStatus, filterDateFrom, filterDateTo, filterIncludeUnknownDate,
-    filterSearch, filterPlaats, filterPostcodeRanges, excludeCustomers, excludeAlreadyAssigned, isBulkBatchFlow,
+    filterSearch, filterPlaats, filterPlaatsRadiusKm, filterPostcodeRanges, excludeCustomers, excludeAlreadyAssigned, isBulkBatchFlow,
   ]);
 
   const [liveCount, setLiveCount] = useState<number | null>(null);

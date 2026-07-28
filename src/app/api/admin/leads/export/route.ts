@@ -14,6 +14,10 @@ import { applyAccountManagerScope, applyLeadFilters } from '@/lib/leadFilters';
 import { bodyToLeadFilterParams } from '@/lib/leadExportFilters';
 import { assignLeadToBatch } from '@/lib/assignLeadToBatch';
 import { logLeadActivity } from '@/lib/leadActivities';
+import {
+  filterQueryRowsByPlaatsRadius,
+  resolvePlaatsRadiusOrigin,
+} from '@/lib/leadPlaatsRadius';
 
 function buildCsv(leads: Record<string, unknown>[]): NextResponse {
   const BOM = '\uFEFF';
@@ -112,7 +116,18 @@ export async function POST(request: NextRequest) {
     .select('*, customers(id, name)');
 
   const filterParams = bodyToLeadFilterParams({ ...body, branch: branchFilter.join(',') });
-  query = applyLeadFilters(query, filterParams);
+
+  let plaatsRadius = null;
+  try {
+    plaatsRadius = await resolvePlaatsRadiusOrigin(filterParams);
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : 'Plaats niet gevonden' },
+      { status: 400 },
+    );
+  }
+
+  query = applyLeadFilters(query, filterParams, { plaatsRadius });
 
   if (admin.role === 'accountmanager') {
     const scoped = await applyAccountManagerScope(supabase, query, admin.id);
@@ -133,23 +148,43 @@ export async function POST(request: NextRequest) {
   const hardLimit = requestedLimit;
   const PAGE_SIZE = 1000;
   const exportedLeads: Record<string, unknown>[] = [];
-  let offset = 0;
   let cappedByLimit = false;
 
-  while (exportedLeads.length < hardLimit) {
-    const batchSize = Math.min(PAGE_SIZE, hardLimit - exportedLeads.length);
-    const { data: batch, error: batchError } = await query.range(offset, offset + batchSize - 1);
-    if (batchError) {
-      console.error('Export fetch error:', batchError);
+  if (plaatsRadius) {
+    const { rows, capped, error: scanError } = await filterQueryRowsByPlaatsRadius(
+      async (from, to) => {
+        const { data, error } = await query.range(from, to);
+        return {
+          data: (data || null) as Array<{ id: string; lat: number | null; lng: number | null }> | null,
+          error,
+        };
+      },
+      plaatsRadius,
+      hardLimit,
+    );
+    if (scanError) {
+      console.error('Export radius fetch error:', scanError);
       return NextResponse.json({ error: 'Leads ophalen mislukt' }, { status: 500 });
     }
-    if (!batch || batch.length === 0) break;
-    exportedLeads.push(...(batch as Record<string, unknown>[]));
-    if (batch.length < batchSize) break;
-    offset += batch.length;
-    if (exportedLeads.length >= hardLimit) {
-      cappedByLimit = true;
-      break;
+    exportedLeads.push(...(rows as Record<string, unknown>[]));
+    cappedByLimit = capped;
+  } else {
+    let offset = 0;
+    while (exportedLeads.length < hardLimit) {
+      const batchSize = Math.min(PAGE_SIZE, hardLimit - exportedLeads.length);
+      const { data: batch, error: batchError } = await query.range(offset, offset + batchSize - 1);
+      if (batchError) {
+        console.error('Export fetch error:', batchError);
+        return NextResponse.json({ error: 'Leads ophalen mislukt' }, { status: 500 });
+      }
+      if (!batch || batch.length === 0) break;
+      exportedLeads.push(...(batch as Record<string, unknown>[]));
+      if (batch.length < batchSize) break;
+      offset += batch.length;
+      if (exportedLeads.length >= hardLimit) {
+        cappedByLimit = true;
+        break;
+      }
     }
   }
 

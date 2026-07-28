@@ -22,6 +22,10 @@ export function bodyToLeadFilterParams(body: Record<string, unknown>): LeadFilte
         : null,
     search: typeof body.search === 'string' ? body.search : null,
     plaats: typeof body.plaats === 'string' ? body.plaats : null,
+    plaats_radius_km:
+      typeof body.plaats_radius_km === 'string' || typeof body.plaats_radius_km === 'number'
+        ? String(body.plaats_radius_km)
+        : null,
     bulk_status: typeof body.bulk_status === 'string' ? body.bulk_status : null,
     postcode_ranges: typeof body.postcode_ranges === 'string' ? body.postcode_ranges : null,
   };

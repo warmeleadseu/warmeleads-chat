@@ -15,141 +15,161 @@ import {
 } from '@/lib/partnerProspectIngest';
 import {
   normalizePartnerProspectBranchSlug,
-  PARTNER_PROSPECT_BRANCH_SLUGS,
 } from '@/lib/partnerProspectConstants';
-import { buildPhoneSearchIlikeClauses, sanitizePostgrestIlike } from '@/lib/phoneSearch';
-import { buildPostcodeRangeOrFilter, parsePostcodeRanges } from '@/lib/postcodeRanges';
+import {
+  applyAccountManagerScope,
+  applyLeadFilters,
+  readLeadFilterParams,
+} from '@/lib/leadFilters';
+import {
+  distanceKmToOrigin,
+  filterQueryRowsByPlaatsRadius,
+  resolvePlaatsRadiusOrigin,
+} from '@/lib/leadPlaatsRadius';
+
+async function attachAssignmentMeta(
+  supabase: ReturnType<typeof createServerClient>,
+  leads: Array<Record<string, unknown>>,
+) {
+  if (leads.length === 0) return;
+  const leadIds = leads.map((l) => l.id as string);
+  const { data: assignments } = await supabase
+    .from('lead_assignments')
+    .select('lead_id, customer_id, customers(name), distance_km')
+    .in('lead_id', leadIds);
+
+  const assignMap: Record<string, { count: number; customers: string[] }> = {};
+  (assignments || []).forEach((a: {
+    lead_id: string;
+    customers?: { name?: string } | { name?: string }[] | null;
+  }) => {
+    if (!assignMap[a.lead_id]) assignMap[a.lead_id] = { count: 0, customers: [] };
+    assignMap[a.lead_id].count++;
+    const cust = Array.isArray(a.customers) ? a.customers[0] : a.customers;
+    if (cust?.name) assignMap[a.lead_id].customers.push(cust.name);
+  });
+
+  leads.forEach((l) => {
+    const id = l.id as string;
+    l.assignment_count = assignMap[id]?.count || 0;
+    l.assigned_customers = assignMap[id]?.customers || [];
+  });
+}
 
 export async function GET(request: NextRequest) {
   const admin = await verifyAdmin(request);
   if (!admin) return unauthorized();
 
   const url = request.nextUrl.searchParams;
-  const branch = url.get('branch');
-  const customerId = url.get('customer_id');
-  const excludeCustomerId = url.get('exclude_customer_id');
-  const assignment = url.get('assignment');
-  const status = url.get('status');
-  const province = url.get('province');
-  const source = url.get('source');
-  const dateFrom = url.get('date_from');
-  const dateTo = url.get('date_to');
-  // Bij datum-range filters: als true/onbeperkt (default), neem ook leads
-  // mee waarvan de wervingsdatum onbekend is (bv. via een import zonder
-  // datum-kolom). Voorkomt dat ze onzichtbaar worden in date-range views.
-  const includeUnknownDate = url.get('include_unknown_date') !== 'false';
-  const search = url.get('search');
-  const phoneValid = url.get('phone_valid');
   const page = parseInt(url.get('page') || '1');
   const perPage = Math.min(parseInt(url.get('per_page') || '25'), 200);
   const sortBy = url.get('sort_by') || 'created_at';
-  const sortDir = url.get('sort_dir') === 'asc' ? true : false;
+  const sortDirAsc = url.get('sort_dir') === 'asc';
 
-  const supabase = createServerClient();
-  let query = supabase
-    .from('leads')
-    .select('*, customers(id, name)', { count: 'exact' });
-
-  if (!branch) {
-    query = query.not(
-      'branch',
-      'in',
-      `(${PARTNER_PROSPECT_BRANCH_SLUGS.map(s => `"${s}"`).join(',')})`,
+  const filters = readLeadFilterParams(url);
+  let plaatsRadius = null;
+  try {
+    plaatsRadius = await resolvePlaatsRadiusOrigin(filters);
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : 'Plaats niet gevonden' },
+      { status: 400 },
     );
   }
 
-  if (branch) {
-    const vals = branch.split(',').filter(Boolean);
-    if (vals.length === 1) query = query.eq('branch', vals[0]);
-    else if (vals.length > 1) query = query.in('branch', vals);
-  }
-  if (customerId) {
-    // assigned_customer_ids wordt door trigger uit lead_assignments gevuld en
-    // bevat dus zowel directe owner als alle uitgedeelde toewijzingen.
-    const vals = customerId.split(',').filter(Boolean);
-    if (vals.length > 0) query = query.overlaps('assigned_customer_ids', vals);
-  }
-  if (excludeCustomerId) {
-    const vals = excludeCustomerId.split(',').filter(Boolean);
-    if (vals.length > 0) {
-      query = query.not('assigned_customer_ids', 'ov', `{${vals.join(',')}}`);
-    }
-  }
-  if (assignment === 'assigned') query = query.eq('is_assigned', true);
-  else if (assignment === 'unassigned') query = query.eq('is_assigned', false);
-  if (status) {
-    const vals = status.split(',').filter(Boolean);
-    if (vals.length === 1) query = query.eq('status', vals[0]);
-    else if (vals.length > 1) query = query.in('status', vals);
-  }
-  if (province) {
-    const vals = province.split(',').filter(Boolean);
-    if (vals.length === 1) query = query.eq('provincie', vals[0]);
-    else if (vals.length > 1) query = query.in('provincie', vals);
-  }
-  if (source) {
-    const vals = source.split(',').filter(Boolean);
-    if (vals.length === 1) query = query.eq('bron', vals[0]);
-    else if (vals.length > 1) query = query.in('bron', vals);
-  }
-  if (phoneValid === 'false') query = query.eq('phone_valid', false);
-  if (phoneValid === 'true') query = query.eq('phone_valid', true);
-  if (dateFrom || dateTo) {
-    if (includeUnknownDate) {
-      // OR-clause: binnen de range OF wervingsdatum_unknown=true.
-      const conds: string[] = [];
-      if (dateFrom && dateTo) conds.push(`and(wervingsdatum.gte.${dateFrom},wervingsdatum.lte.${dateTo})`);
-      else if (dateFrom) conds.push(`wervingsdatum.gte.${dateFrom}`);
-      else if (dateTo) conds.push(`wervingsdatum.lte.${dateTo}`);
-      conds.push('wervingsdatum_unknown.eq.true');
-      query = query.or(conds.join(','));
-    } else {
-      if (dateFrom) query = query.gte('wervingsdatum', dateFrom);
-      if (dateTo) query = query.lte('wervingsdatum', dateTo);
-    }
-  }
-  if (search) {
-    const s = sanitizePostgrestIlike(search);
-    const parts = [
-      `naam_klant.ilike.%${s}%`,
-      `email.ilike.%${s}%`,
-      ...buildPhoneSearchIlikeClauses('telefoonnummer', search),
-      `postcode.ilike.%${s}%`,
-      `plaatsnaam.ilike.%${s}%`,
-    ];
-    const compactPc = search.trim().replace(/\s+/g, '');
-    if (compactPc !== search.trim() && compactPc.length >= 4) {
-      parts.push(`postcode.ilike.%${sanitizePostgrestIlike(compactPc)}%`);
-    }
-    query = query.or(parts.join(','));
-  }
-
-  const plaats = url.get('plaats');
-  if (plaats && plaats.trim()) {
-    query = query.ilike('plaatsnaam', `%${sanitizePostgrestIlike(plaats.trim())}%`);
-  }
-
-  if (admin.role === 'accountmanager') {
-    const { data: myCustomers } = await supabase.from('customers').select('id').eq('account_manager_id', admin.id);
-    const ids = (myCustomers || []).map(c => c.id);
-    if (ids.length === 0) return NextResponse.json({ leads: [], total: 0, page, perPage });
-    query = query.overlaps('assigned_customer_ids', ids);
-  }
-
-  const bulkStatus = url.get('bulk_status');
-  if (bulkStatus === 'never') query = query.eq('bulk_export_count', 0);
-  else if (bulkStatus === 'once') query = query.eq('bulk_export_count', 1);
-  else if (bulkStatus === 'multiple') query = query.gte('bulk_export_count', 2);
-
-  const pcOr = buildPostcodeRangeOrFilter(parsePostcodeRanges(url.get('postcode_ranges')));
-  if (pcOr) query = query.or(pcOr);
-
+  const supabase = createServerClient();
   const allowedSorts = [
     'created_at', 'naam_klant', 'email', 'status', 'wervingsdatum', 'plaatsnaam', 'provincie', 'branch', 'bulk_export_count',
   ];
   const col = allowedSorts.includes(sortBy) ? sortBy : 'created_at';
-  query = query.order(col, { ascending: sortDir });
 
+  // Radius-modus: bounding-box in PostgREST + exacte haversine in memory,
+  // daarna sorteren/pagineren (zelfde semantiek als count/export).
+  if (plaatsRadius) {
+    let query = supabase.from('leads').select('*, customers(id, name)');
+    query = applyLeadFilters(query, filters, {
+      excludePartnerBranchesWhenNoBranchFilter: true,
+      plaatsRadius,
+    });
+    if (admin.role === 'accountmanager') {
+      const scoped = await applyAccountManagerScope(supabase, query, admin.id);
+      if (!scoped.allowed) {
+        return NextResponse.json({
+          leads: [],
+          total: 0,
+          page,
+          perPage,
+          plaats_radius_label: plaatsRadius.label,
+          plaats_radius_km: plaatsRadius.radiusKm,
+        });
+      }
+      query = scoped.query;
+    }
+    query = query.order(col, { ascending: sortDirAsc });
+
+    const { rows, error: scanError } = await filterQueryRowsByPlaatsRadius(
+      async (from, to) => {
+        const { data, error } = await query.range(from, to);
+        return { data: (data || null) as Array<{ id: string; lat: number | null; lng: number | null }> | null, error };
+      },
+      plaatsRadius,
+    );
+    if (scanError) {
+      console.error('Leads radius scan error:', scanError);
+      return NextResponse.json({ error: 'Leads ophalen mislukt' }, { status: 500 });
+    }
+
+    rows.sort((a, b) => {
+      const rowA = a as Record<string, unknown>;
+      const rowB = b as Record<string, unknown>;
+      if (col === 'created_at' || col === 'wervingsdatum') {
+        const ta = new Date(String(rowA[col] || 0)).getTime();
+        const tb = new Date(String(rowB[col] || 0)).getTime();
+        return sortDirAsc ? ta - tb : tb - ta;
+      }
+      if (col === 'bulk_export_count') {
+        const va = Number(rowA[col] ?? 0);
+        const vb = Number(rowB[col] ?? 0);
+        return sortDirAsc ? va - vb : vb - va;
+      }
+      const va = String(rowA[col] ?? '');
+      const vb = String(rowB[col] ?? '');
+      const cmp = va < vb ? -1 : va > vb ? 1 : 0;
+      return sortDirAsc ? cmp : -cmp;
+    });
+
+    const total = rows.length;
+    const from = (page - 1) * perPage;
+    const pageRows = rows.slice(from, from + perPage) as Array<Record<string, unknown>>;
+    for (const l of pageRows) {
+      l.distance_km = distanceKmToOrigin(
+        { lat: l.lat as number | null, lng: l.lng as number | null },
+        plaatsRadius,
+      );
+    }
+    await attachAssignmentMeta(supabase, pageRows);
+    return NextResponse.json({
+      leads: pageRows,
+      total,
+      page,
+      perPage,
+      plaats_radius_label: plaatsRadius.label,
+      plaats_radius_km: plaatsRadius.radiusKm,
+    });
+  }
+
+  let query = supabase
+    .from('leads')
+    .select('*, customers(id, name)', { count: 'exact' });
+  query = applyLeadFilters(query, filters, { excludePartnerBranchesWhenNoBranchFilter: true });
+
+  if (admin.role === 'accountmanager') {
+    const scoped = await applyAccountManagerScope(supabase, query, admin.id);
+    if (!scoped.allowed) return NextResponse.json({ leads: [], total: 0, page, perPage });
+    query = scoped.query;
+  }
+
+  query = query.order(col, { ascending: sortDirAsc });
   const from = (page - 1) * perPage;
   query = query.range(from, from + perPage - 1);
 
@@ -160,26 +180,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Leads ophalen mislukt' }, { status: 500 });
   }
 
-  const leads = data || [];
-  if (leads.length > 0) {
-    const leadIds = leads.map((l: { id: string }) => l.id);
-    const { data: assignments } = await supabase
-      .from('lead_assignments')
-      .select('lead_id, customer_id, customers(name), distance_km')
-      .in('lead_id', leadIds);
-
-    const assignMap: Record<string, { count: number; customers: string[] }> = {};
-    (assignments || []).forEach((a: any) => {
-      if (!assignMap[a.lead_id]) assignMap[a.lead_id] = { count: 0, customers: [] };
-      assignMap[a.lead_id].count++;
-      if (a.customers?.name) assignMap[a.lead_id].customers.push(a.customers.name);
-    });
-
-    leads.forEach((l: any) => {
-      l.assignment_count = assignMap[l.id]?.count || 0;
-      l.assigned_customers = assignMap[l.id]?.customers || [];
-    });
-  }
+  const leads = (data || []) as Array<Record<string, unknown>>;
+  await attachAssignmentMeta(supabase, leads);
 
   return NextResponse.json({ leads, total: count || 0, page, perPage });
 }
