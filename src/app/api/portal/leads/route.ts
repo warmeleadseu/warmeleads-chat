@@ -11,7 +11,6 @@ import {
 import { repairDemoAssignmentsIfNeeded } from '@/lib/demoPortalLeads';
 import { getHasPaidCustomerBatch, shouldUseDemoPortalExperience } from '@/lib/demoPortalEligibility';
 import { buildPhoneSearchIlikeClauses, sanitizePostgrestIlike } from '@/lib/phoneSearch';
-import { normalizeProvincie } from '@/lib/pdok';
 import { isValidLeadStatus } from '@/lib/leadStatuses';
 import {
   matchesPostcodeArea,
@@ -21,7 +20,9 @@ import {
 } from '@/lib/portalLeadGeoFilters';
 import {
   applyCustomDistanceOrigin,
-  resolveDistanceOrigin,
+  enrichPortalLeadDistances,
+  resolvePortalGeoFilterContext,
+  type PortalRadiusTarget,
 } from '@/lib/portalDistanceOrigin';
 
 const PAGE_SIZE = 1000;
@@ -75,83 +76,6 @@ async function attachReclamationFieldsToLeads(
       lead.reclamation_status = r.status;
       lead.reclamation_reason = r.reason;
     }
-  }
-}
-
-/** Ruwe provincie-centra (NL) voor afstand als er geen radius-target (vestiging) is. */
-const NL_PROVINCE_CENTROIDS: Record<string, { lat: number; lng: number }> = {
-  Drenthe: { lat: 52.947, lng: 6.623 },
-  Flevoland: { lat: 52.518, lng: 5.471 },
-  Friesland: { lat: 53.164, lng: 5.781 },
-  Gelderland: { lat: 52.057, lng: 5.872 },
-  Groningen: { lat: 53.219, lng: 6.566 },
-  Limburg: { lat: 51.442, lng: 6.06 },
-  'Limburg (BE)': { lat: 50.879, lng: 5.471 },
-  'Noord-Brabant': { lat: 51.571, lng: 5.067 },
-  'Noord-Holland': { lat: 52.389, lng: 4.854 },
-  Overijssel: { lat: 52.514, lng: 6.095 },
-  Utrecht: { lat: 52.09, lng: 5.121 },
-  Zeeland: { lat: 51.494, lng: 3.849 },
-  'Zuid-Holland': { lat: 52.02, lng: 4.65 },
-};
-
-function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 6371;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLng = ((lng2 - lng1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-type TargetRow = {
-  target_type?: string | null;
-  lat?: number | null;
-  lng?: number | null;
-  radius_km?: number | null;
-  created_at?: string | null;
-};
-
-/** Vestigingspunt: actieve radius-target met kleinste straal (meestal hoofdlocatie), anders null. */
-function pickVestigingRefFromTargets(targets: TargetRow[]): { lat: number; lng: number } | null {
-  const radius = targets.filter(t => {
-    const ty = t.target_type || 'radius';
-    return ty === 'radius' && t.lat != null && t.lng != null && Number(t.radius_km ?? 0) > 0;
-  });
-  if (radius.length === 0) return null;
-  radius.sort((a, b) => {
-    const ra = Number(a.radius_km ?? 999);
-    const rb = Number(b.radius_km ?? 999);
-    if (ra !== rb) return ra - rb;
-    return new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime();
-  });
-  return { lat: radius[0].lat as number, lng: radius[0].lng as number };
-}
-
-/**
- * Vult `distance_km` voor portal als assignment 0/null heeft (o.a. provincie-match):
- * eerst afstand tot radius-target (vestiging), anders tot provincie-centroid.
- */
-function enrichPortalLeadDistances(leads: Record<string, unknown>[], activeTargets: TargetRow[]) {
-  const vestiging = pickVestigingRefFromTargets(activeTargets);
-  for (const lead of leads) {
-    const raw = lead.distance_km as number | null | undefined;
-    if (raw != null && raw > 0) continue;
-
-    const plat = lead.lat as number | null | undefined;
-    const plng = lead.lng as number | null | undefined;
-    if (plat == null || plng == null || Number.isNaN(plat) || Number.isNaN(plng)) continue;
-
-    let ref = vestiging;
-    if (!ref) {
-      const prov = normalizeProvincie(String(lead.provincie || '').trim());
-      if (prov) ref = NL_PROVINCE_CENTROIDS[prov] ?? null;
-    }
-    if (!ref) continue;
-
-    const d = Math.round(haversineKm(plat, plng, ref.lat, ref.lng) * 10) / 10;
-    if (d > 0) lead.distance_km = d;
   }
 }
 
@@ -307,7 +231,6 @@ export async function GET(request: NextRequest) {
   const leadSource = (url.searchParams.get('lead_source') || 'all') as 'all' | 'fresh' | 'bulk';
   const idsOnly = url.searchParams.get('ids_only') === '1';
   const provinces = parseProvinceList(url.searchParams.get('provincie'));
-  const plaatsFilter = url.searchParams.get('plaats')?.trim() || '';
   const postcodeArea = parsePostcodeArea(url.searchParams.get('postcode_area'));
   const maxDistanceKm = parseMaxDistanceKm(url.searchParams.get('max_distance_km'));
   const distanceOriginPlace = url.searchParams.get('distance_origin_place')?.trim() || '';
@@ -315,17 +238,16 @@ export async function GET(request: NextRequest) {
 
   const { demoMode, branches: customerBranches } = await getCustomerDemoInfo(supabase, customer.id);
 
-  const customDistanceOrigin = await resolveDistanceOrigin({
-    place: distanceOriginPlace,
-    provinces: distanceOriginProvinces,
+  const geoResolved = await resolvePortalGeoFilterContext({
+    plaats: url.searchParams.get('plaats'),
+    maxDistanceKm,
+    distanceOriginPlace,
+    distanceOriginProvinces,
   });
-  if ((distanceOriginPlace || distanceOriginProvinces.length > 0) && !customDistanceOrigin) {
-    return NextResponse.json({
-      error: distanceOriginPlace
-        ? `Plaats “${distanceOriginPlace}” niet gevonden. Probeer een andere spelling.`
-        : 'Geen geldige provincie voor afstandreferentie',
-    }, { status: 400 });
+  if (!geoResolved.ok) {
+    return NextResponse.json({ error: geoResolved.error }, { status: 400 });
   }
+  const { plaatsFilter, distanceOrigin: customDistanceOrigin } = geoResolved.ctx;
 
   // Datumfilter op ontvangstdatum (assigned_at) / custom straal → memory-pad
   const needsMemFilter =
@@ -421,7 +343,7 @@ export async function GET(request: NextRequest) {
     .select('target_type, lat, lng, radius_km, created_at')
     .eq('customer_id', customer.id)
     .eq('is_active', true);
-  const activeTargets = (activeTargetsRows || []) as TargetRow[];
+  const activeTargets = (activeTargetsRows || []) as PortalRadiusTarget[];
 
   const allowedSorts = ['received_at', 'created_at', 'naam_klant', 'email', 'status', 'wervingsdatum', 'plaatsnaam', 'provincie', 'branch', 'distance_km'];
   const col = allowedSorts.includes(sort) ? sort : 'received_at';

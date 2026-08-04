@@ -56,7 +56,7 @@ import { PERMISSIONS } from '@/lib/portalPermissions';
 import { PageHeader, useToast, ChoicePill } from './_ui';
 import { STATUS_COLORS, STATUS_OPTIONS } from './_constants/leadStatus';
 import { PROVINCES_NL, PROVINCES_BE } from '@/data/provinces';
-import { DISTANCE_PRESETS_KM } from '@/lib/portalLeadGeoFilters';
+import { DISTANCE_PRESETS_KM, parsePostcodeArea } from '@/lib/portalLeadGeoFilters';
 import {
   daysAgoAmsterdam,
   formatRelativeLeadDate,
@@ -1126,10 +1126,11 @@ export default function PortalPage() {
     if (dateTo) count++;
     if (canFilterAssignee && assignedToFilter !== 'all') count++;
     if (selectedProvinces.length > 0) count++;
-    if (debouncedPlaats) count++;
+    // Plaats + straal zonder aparte referentie = één geo-filter (plaats is middelpunt)
+    if (debouncedPlaats && !(maxDistanceKm != null && !hasCustomDistanceOrigin)) count++;
     if (debouncedPostcodeArea) count++;
     if (maxDistanceKm != null) count++;
-    if (hasCustomDistanceOrigin) count++;
+    if (hasCustomDistanceOrigin && maxDistanceKm != null) count++;
     return count;
   }, [
     statusFilter,
@@ -1296,23 +1297,34 @@ export default function PortalPage() {
       });
     }
     if (maxDistanceKm != null) {
+      const plaatsAsOrigin = !!debouncedPlaats && !hasCustomDistanceOrigin;
+      const customOriginPart = hasCustomDistanceOrigin
+        ? (distanceOriginLabel
+          || debouncedDistanceOriginPlace
+          || (distanceOriginProvinces.length === 1
+            ? distanceOriginProvinces[0]
+            : `${distanceOriginProvinces.length} provincies`))
+        : null;
+      const originPart = customOriginPart || (plaatsAsOrigin ? debouncedPlaats : null);
       chips.push({
         key: 'distance',
-        label: `≤ ${maxDistanceKm} km`,
-        clear: () => { setMaxDistanceKm(null); setPage(1); },
+        label: originPart ? `≤ ${maxDistanceKm} km van ${originPart}` : `≤ ${maxDistanceKm} km`,
+        clear: () => {
+          setMaxDistanceKm(null);
+          if (plaatsAsOrigin) {
+            setPlaatsFilter('');
+            setDebouncedPlaats('');
+          }
+          setPage(1);
+        },
       });
-    }
-    if (hasCustomDistanceOrigin) {
-      const originPart = distanceOriginLabel
-        || debouncedDistanceOriginPlace
-        || (distanceOriginProvinces.length === 1
-          ? distanceOriginProvinces[0]
-          : `${distanceOriginProvinces.length} provincies`);
-      chips.push({
-        key: 'distance_origin',
-        label: `Vanaf ${originPart}`,
-        clear: clearDistanceOrigin,
-      });
+      if (hasCustomDistanceOrigin) {
+        chips.push({
+          key: 'distance_origin',
+          label: 'Afwijkende referentie',
+          clear: clearDistanceOrigin,
+        });
+      }
     }
     if (debouncedPostcodeArea) {
       chips.push({
@@ -1321,7 +1333,7 @@ export default function PortalPage() {
         clear: () => { setPostcodeArea(''); setDebouncedPostcodeArea(''); setPage(1); },
       });
     }
-    if (debouncedPlaats) {
+    if (debouncedPlaats && !(maxDistanceKm != null && !hasCustomDistanceOrigin)) {
       chips.push({
         key: 'plaats',
         label: `Plaats: ${debouncedPlaats}`,
@@ -1751,7 +1763,7 @@ export default function PortalPage() {
 
               <div className="border-t border-slate-100 pt-3">
                 <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Gebied</p>
-                <div className="mb-2 flex flex-wrap gap-2">
+                <div className="mb-2 flex flex-wrap items-center gap-2">
                   <ChoicePill
                     selected={maxDistanceKm == null}
                     onClick={() => { setMaxDistanceKm(null); setPage(1); }}
@@ -1769,11 +1781,49 @@ export default function PortalPage() {
                       ≤ {km} km
                     </ChoicePill>
                   ))}
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min={1}
+                      max={500}
+                      step={1}
+                      list="portal-leads-radius-presets"
+                      value={maxDistanceKm == null ? '' : String(maxDistanceKm)}
+                      onChange={(e) => {
+                        const raw = e.target.value.trim();
+                        if (!raw) {
+                          setMaxDistanceKm(null);
+                          setPage(1);
+                          return;
+                        }
+                        const n = Number(raw);
+                        if (!Number.isFinite(n) || n <= 0) {
+                          setMaxDistanceKm(null);
+                          setPage(1);
+                          return;
+                        }
+                        setMaxDistanceKm(Math.min(Math.round(n), 500));
+                        setPage(1);
+                      }}
+                      placeholder="km"
+                      title="Straal in km (1–500). Kies een preset of typ zelf."
+                      className={`w-[4.5rem] rounded-lg border px-2 py-1.5 text-xs tabular-nums outline-none focus:border-brand-purple/50 ${maxDistanceKm != null && !(DISTANCE_PRESETS_KM as readonly number[]).includes(maxDistanceKm) ? 'border-sky-300 bg-sky-50 text-sky-900' : 'border-slate-200 bg-white text-slate-700'}`}
+                    />
+                    <datalist id="portal-leads-radius-presets">
+                      {DISTANCE_PRESETS_KM.map((km) => (
+                        <option key={km} value={km} />
+                      ))}
+                    </datalist>
+                    <span className="text-[11px] text-slate-400">km</span>
+                  </div>
                 </div>
                 <p className="mb-3 text-[11px] text-slate-400">
                   {hasCustomDistanceOrigin
                     ? `Straal t.o.v. ${distanceOriginLabel || debouncedDistanceOriginPlace || (distanceOriginProvinces.length === 1 ? distanceOriginProvinces[0] : `${distanceOriginProvinces.length} provincies`)}. Leads zonder coördinaten vallen buiten deze filter.`
-                    : 'Straal t.o.v. jouw vestiging / doelgebied. Leads zonder afstand vallen buiten deze filter.'}
+                    : debouncedPlaats && maxDistanceKm != null
+                      ? `Straal rondom ${debouncedPlaats} (geocode). Leads zonder coördinaten vallen buiten deze filter.`
+                      : 'Straal t.o.v. jouw vestiging / doelgebied. Vul eventueel een plaats in als middelpunt. Leads zonder afstand vallen buiten deze filter.'}
                 </p>
 
                 <div className="mb-3 rounded-lg border border-slate-100 bg-slate-50/80 p-3">
@@ -1847,8 +1897,13 @@ export default function PortalPage() {
                       value={postcodeArea}
                       onChange={(e) => { setPostcodeArea(e.target.value); setPage(1); }}
                       placeholder="bijv. 75, 7500 of 7500-7599"
-                      className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-700 outline-none focus:border-brand-purple/50"
+                      className={`w-full rounded-lg border px-3 py-1.5 text-sm text-slate-700 outline-none focus:border-brand-purple/50 ${postcodeArea.trim() && !parsePostcodeArea(postcodeArea) ? 'border-amber-300 bg-amber-50' : 'border-slate-200'}`}
                     />
+                    {postcodeArea.trim() && !parsePostcodeArea(postcodeArea) && (
+                      <p className="mt-1 text-[11px] text-amber-600">
+                        Ongeldig formaat — gebruik bijv. 75, 7500 of 7500-7599
+                      </p>
+                    )}
                   </div>
                   <div className="min-w-[10rem] flex-1">
                     <label className="mb-1 block text-xs font-medium text-slate-500">Plaats</label>
@@ -1856,9 +1911,17 @@ export default function PortalPage() {
                       type="text"
                       value={plaatsFilter}
                       onChange={(e) => { setPlaatsFilter(e.target.value); setPage(1); }}
-                      placeholder="bijv. Enschede"
-                      className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-700 outline-none focus:border-brand-purple/50"
+                      placeholder={maxDistanceKm != null && !hasCustomDistanceOrigin ? 'Middelpunt, bijv. Enschede' : 'bijv. Enschede'}
+                      title={maxDistanceKm != null && !hasCustomDistanceOrigin
+                        ? 'Met straal: middelpunt voor zoeken rondom deze plaats (NL/BE)'
+                        : 'Filter op plaatsnaam'}
+                      className={`w-full rounded-lg border px-3 py-1.5 text-sm outline-none focus:border-brand-purple/50 ${plaatsFilter.trim() && maxDistanceKm != null && !hasCustomDistanceOrigin ? 'border-sky-300 bg-sky-50 text-sky-900' : 'border-slate-200 text-slate-700'}`}
                     />
+                    {maxDistanceKm != null && !hasCustomDistanceOrigin && (
+                      <p className="mt-1 text-[11px] text-slate-400">
+                        Met straal is dit het middelpunt, geen naammatch.
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -2006,7 +2069,9 @@ export default function PortalPage() {
             {' '}· straal
             {hasCustomDistanceOrigin
               ? ` vanaf ${distanceOriginLabel || debouncedDistanceOriginPlace || 'gekozen referentie'}`
-              : ' t.o.v. vestiging'}
+              : debouncedPlaats
+                ? ` rondom ${distanceOriginLabel || debouncedPlaats}`
+                : ' t.o.v. vestiging'}
             {' '}sluit leads zonder afstand uit
           </span>
         )}

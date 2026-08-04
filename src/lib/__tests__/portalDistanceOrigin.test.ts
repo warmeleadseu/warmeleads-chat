@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   applyCustomDistanceOrigin,
+  enrichPortalLeadDistances,
   haversineKm,
   minDistanceKm,
   resolveDistanceOrigin,
+  resolvePortalGeoFilterContext,
 } from '../portalDistanceOrigin';
 
 vi.mock('@/lib/pdok', () => ({
@@ -74,5 +76,74 @@ describe('applyCustomDistanceOrigin', () => {
     });
     expect(leads[0].distance_km).toBe(0);
     expect(leads[1].distance_km).toBeNull();
+  });
+});
+
+describe('enrichPortalLeadDistances', () => {
+  const vestiging = [{
+    target_type: 'radius',
+    lat: 52.09,
+    lng: 5.121,
+    radius_km: 25,
+    created_at: '2024-01-01',
+  }];
+
+  it('computes distance vs vestiging for zero/null assignment distance', () => {
+    const leads = [
+      { lat: 52.3676, lng: 4.9041, distance_km: 0 },
+      { lat: 52.09, lng: 5.121, distance_km: null },
+    ];
+    enrichPortalLeadDistances(leads, vestiging);
+    expect(leads[0].distance_km).toBeGreaterThan(30);
+    expect(leads[1].distance_km).toBe(0);
+  });
+
+  it('keeps real assignment distances', () => {
+    const leads = [{ lat: 52.3676, lng: 4.9041, distance_km: 42 }];
+    enrichPortalLeadDistances(leads, vestiging);
+    expect(leads[0].distance_km).toBe(42);
+  });
+
+  it('nulls fake zero without vestiging or coords', () => {
+    const leads = [
+      { lat: null, lng: null, distance_km: 0 },
+      { lat: 52.09, lng: 5.121, distance_km: 0 },
+    ];
+    enrichPortalLeadDistances(leads, []);
+    expect(leads[0].distance_km).toBeNull();
+    expect(leads[1].distance_km).toBeNull();
+  });
+});
+
+describe('resolvePortalGeoFilterContext', () => {
+  it('uses plaats as origin when straal is set without explicit origin', async () => {
+    const res = await resolvePortalGeoFilterContext({
+      plaats: 'Utrecht',
+      maxDistanceKm: 25,
+    });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.ctx.plaatsFilter).toBe('');
+    expect(res.ctx.distanceOrigin?.label).toBe('Utrecht');
+  });
+
+  it('keeps plaats name filter without straal', async () => {
+    const res = await resolvePortalGeoFilterContext({ plaats: 'Enschede' });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.ctx.plaatsFilter).toBe('Enschede');
+    expect(res.ctx.distanceOrigin).toBeNull();
+  });
+
+  it('explicit origin wins over plaats', async () => {
+    const res = await resolvePortalGeoFilterContext({
+      plaats: 'Enschede',
+      maxDistanceKm: 50,
+      distanceOriginPlace: 'Utrecht',
+    });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.ctx.plaatsFilter).toBe('Enschede');
+    expect(res.ctx.distanceOrigin?.label).toBe('Utrecht');
   });
 });

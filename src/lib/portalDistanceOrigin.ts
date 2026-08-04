@@ -115,3 +115,110 @@ export function applyCustomDistanceOrigin(
     lead.distance_km = minDistanceKm({ lat: plat, lng: plng }, origin.refs);
   }
 }
+
+export type PortalRadiusTarget = {
+  target_type?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  radius_km?: number | null;
+  created_at?: string | null;
+};
+
+/** Vestigingspunt: actieve radius-target met kleinste straal, anders null. */
+export function pickVestigingRefFromTargets(targets: PortalRadiusTarget[]): LatLng | null {
+  const radius = targets.filter((t) => {
+    const ty = t.target_type || 'radius';
+    return ty === 'radius' && t.lat != null && t.lng != null && Number(t.radius_km ?? 0) > 0;
+  });
+  if (radius.length === 0) return null;
+  radius.sort((a, b) => {
+    const ra = Number(a.radius_km ?? 999);
+    const rb = Number(b.radius_km ?? 999);
+    if (ra !== rb) return ra - rb;
+    return new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime();
+  });
+  return { lat: radius[0].lat as number, lng: radius[0].lng as number };
+}
+
+/**
+ * Vult `distance_km` voor portal t.o.v. vestiging (radius-target).
+ * Geen provincie-centroid fallback: zonder vestiging/coords blijft afstand null
+ * zodat straalfilters die leads uitsluiten i.p.v. vals te laten slagen.
+ */
+export function enrichPortalLeadDistances(
+  leads: Record<string, unknown>[],
+  activeTargets: PortalRadiusTarget[],
+): void {
+  const vestiging = pickVestigingRefFromTargets(activeTargets);
+  for (const lead of leads) {
+    const raw = lead.distance_km as number | null | undefined;
+    if (raw != null && raw > 0) continue;
+
+    const plat = lead.lat as number | null | undefined;
+    const plng = lead.lng as number | null | undefined;
+    if (plat == null || plng == null || Number.isNaN(plat) || Number.isNaN(plng)) {
+      if (raw === 0) lead.distance_km = null;
+      continue;
+    }
+
+    if (!vestiging) {
+      if (raw == null || raw === 0) lead.distance_km = null;
+      continue;
+    }
+
+    lead.distance_km =
+      Math.round(haversineKm(plat, plng, vestiging.lat, vestiging.lng) * 10) / 10;
+  }
+}
+
+export type PortalGeoFilterContext = {
+  /** Plaatsnaam-filter (leeg als plaats als straal-middelpunt wordt gebruikt). */
+  plaatsFilter: string;
+  distanceOrigin: DistanceOrigin | null;
+};
+
+/**
+ * Portal geo-context: expliciete referentie wint; anders plaats+straal → geocode als middelpunt
+ * (zelfde semantiek als admin Lead CRM).
+ */
+export async function resolvePortalGeoFilterContext(input: {
+  plaats?: string | null;
+  maxDistanceKm?: number | null;
+  distanceOriginPlace?: string | null;
+  distanceOriginProvinces?: string[];
+}): Promise<
+  | { ok: true; ctx: PortalGeoFilterContext }
+  | { ok: false; error: string }
+> {
+  const plaats = input.plaats?.trim() || '';
+  const originPlace = input.distanceOriginPlace?.trim() || '';
+  const originProvinces = (input.distanceOriginProvinces || []).map((p) => p.trim()).filter(Boolean);
+  const maxKm = input.maxDistanceKm ?? null;
+
+  let distanceOrigin = await resolveDistanceOrigin({
+    place: originPlace,
+    provinces: originProvinces,
+  });
+  if ((originPlace || originProvinces.length > 0) && !distanceOrigin) {
+    return {
+      ok: false,
+      error: originPlace
+        ? `Plaats “${originPlace}” niet gevonden. Probeer een andere spelling.`
+        : 'Geen geldige provincie voor afstandreferentie',
+    };
+  }
+
+  let plaatsFilter = plaats;
+  if (plaats && maxKm != null && !distanceOrigin) {
+    distanceOrigin = await resolveDistanceOrigin({ place: plaats });
+    if (!distanceOrigin) {
+      return {
+        ok: false,
+        error: `Plaats “${plaats}” niet gevonden. Probeer een andere spelling.`,
+      };
+    }
+    plaatsFilter = '';
+  }
+
+  return { ok: true, ctx: { plaatsFilter, distanceOrigin } };
+}

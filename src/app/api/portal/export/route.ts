@@ -16,7 +16,9 @@ import {
 } from '@/lib/portalLeadGeoFilters';
 import {
   applyCustomDistanceOrigin,
-  resolveDistanceOrigin,
+  enrichPortalLeadDistances,
+  resolvePortalGeoFilterContext,
+  type PortalRadiusTarget,
 } from '@/lib/portalDistanceOrigin';
 import * as XLSX from 'xlsx';
 
@@ -243,11 +245,21 @@ export async function GET(request: NextRequest) {
   const searchParam = url.searchParams.get('search')?.trim().toLowerCase() || '';
   const assignedToParam = url.searchParams.get('assigned_to');
   const provinces = parseProvinceList(url.searchParams.get('provincie'));
-  const plaatsFilter = url.searchParams.get('plaats')?.trim().toLowerCase() || '';
   const postcodeArea = parsePostcodeArea(url.searchParams.get('postcode_area'));
   const maxDistanceKm = parseMaxDistanceKm(url.searchParams.get('max_distance_km'));
   const distanceOriginPlace = url.searchParams.get('distance_origin_place')?.trim() || '';
   const distanceOriginProvinces = parseProvinceList(url.searchParams.get('distance_origin_province'));
+  const geoResolved = await resolvePortalGeoFilterContext({
+    plaats: url.searchParams.get('plaats'),
+    maxDistanceKm,
+    distanceOriginPlace,
+    distanceOriginProvinces,
+  });
+  if (!geoResolved.ok) {
+    return NextResponse.json({ error: geoResolved.error }, { status: 400 });
+  }
+  const { plaatsFilter, distanceOrigin: customDistanceOrigin } = geoResolved.ctx;
+  const plaatsFilterLower = plaatsFilter.toLowerCase();
   const separator = url.searchParams.get('separator') || ';';
   const dateFormat = url.searchParams.get('date_format') || 'nl';
   const includeHeaders = url.searchParams.get('include_headers') !== 'false';
@@ -370,19 +382,15 @@ export async function GET(request: NextRequest) {
     };
   });
 
-  const customDistanceOrigin = await resolveDistanceOrigin({
-    place: distanceOriginPlace,
-    provinces: distanceOriginProvinces,
-  });
-  if ((distanceOriginPlace || distanceOriginProvinces.length > 0) && !customDistanceOrigin) {
-    return NextResponse.json({
-      error: distanceOriginPlace
-        ? `Plaats “${distanceOriginPlace}” niet gevonden. Probeer een andere spelling.`
-        : 'Geen geldige provincie voor afstandreferentie',
-    }, { status: 400 });
-  }
   if (customDistanceOrigin) {
     applyCustomDistanceOrigin(leads, customDistanceOrigin);
+  } else if (maxDistanceKm != null) {
+    const { data: activeTargetsRows } = await supabase
+      .from('customer_targets')
+      .select('target_type, lat, lng, radius_km, created_at')
+      .eq('customer_id', customer.id)
+      .eq('is_active', true);
+    enrichPortalLeadDistances(leads, (activeTargetsRows || []) as PortalRadiusTarget[]);
   }
 
   let filtered = requestedLeadIds
@@ -403,9 +411,9 @@ export async function GET(request: NextRequest) {
     const set = new Set(provinces);
     filtered = filtered.filter((l) => typeof l.provincie === 'string' && set.has(l.provincie));
   }
-  if (!requestedLeadIds && plaatsFilter) {
+  if (!requestedLeadIds && plaatsFilterLower) {
     filtered = filtered.filter((l) =>
-      typeof l.plaatsnaam === 'string' && l.plaatsnaam.toLowerCase().includes(plaatsFilter),
+      typeof l.plaatsnaam === 'string' && l.plaatsnaam.toLowerCase().includes(plaatsFilterLower),
     );
   }
   if (!requestedLeadIds && postcodeArea) {

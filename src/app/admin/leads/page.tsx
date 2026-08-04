@@ -897,20 +897,39 @@ export default function LeadsCRMPage() {
               : 'Filter op plaatsnaam, bijv. Amsterdam of Antwerpen'}
             className={`min-w-[12rem] flex-1 rounded-lg border px-3 py-2 text-sm outline-none focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/30 sm:max-w-[14rem] ${plaatsFilter.trim() ? 'border-sky-300 bg-sky-50 text-sky-900' : 'border-slate-200 bg-white text-slate-700'}`}
           />
-          <select
-            value={plaatsRadiusKm == null ? '' : String(plaatsRadiusKm)}
-            onChange={e => {
-              const v = e.target.value;
-              setPlaatsRadiusKm(v ? Number(v) : null);
-            }}
-            title="Straal rondom de ingevulde plaatsnaam. Zonder straal: exacte plaatsnaam-match."
-            className={`rounded-lg border px-3 py-2 text-sm ${plaatsRadiusKm != null ? 'border-sky-300 bg-sky-50 text-sky-900' : 'border-slate-200 bg-white text-slate-700'}`}
-          >
-            <option value="">Geen straal</option>
-            {DISTANCE_PRESETS_KM.map((km) => (
-              <option key={km} value={km}>{km} km</option>
-            ))}
-          </select>
+          <div className="flex items-center gap-1.5">
+            <input
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={500}
+              step={1}
+              list="admin-leads-radius-presets"
+              value={plaatsRadiusKm == null ? '' : String(plaatsRadiusKm)}
+              onChange={e => {
+                const raw = e.target.value.trim();
+                if (!raw) {
+                  setPlaatsRadiusKm(null);
+                  return;
+                }
+                const n = Number(raw);
+                if (!Number.isFinite(n) || n <= 0) {
+                  setPlaatsRadiusKm(null);
+                  return;
+                }
+                setPlaatsRadiusKm(Math.min(Math.round(n), 500));
+              }}
+              placeholder="Straal"
+              title="Straal in km rondom de plaatsnaam (1–500). Leeg = alleen plaatsnaam-match. Kies een preset of typ zelf."
+              className={`w-[5.5rem] rounded-lg border px-2.5 py-2 text-sm tabular-nums outline-none focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/30 ${plaatsRadiusKm != null ? 'border-sky-300 bg-sky-50 text-sky-900' : 'border-slate-200 bg-white text-slate-700'}`}
+            />
+            <datalist id="admin-leads-radius-presets">
+              {DISTANCE_PRESETS_KM.map((km) => (
+                <option key={km} value={km} />
+              ))}
+            </datalist>
+            <span className="text-xs text-slate-400">km</span>
+          </div>
           {plaatsRadiusKm != null && plaatsFilter.trim() && plaatsRadiusLabel && (
             <span className="text-xs text-sky-700" title="Geocodeerd middelpunt">
               ≤{plaatsRadiusKm} km van {plaatsRadiusLabel}
