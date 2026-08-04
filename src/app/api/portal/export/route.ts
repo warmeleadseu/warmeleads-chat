@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyCustomer, portalUnauthorized } from '@/lib/portalAuth';
 import { createServerClient } from '@/lib/supabase';
 import { hasPermission, forbidden, PERMISSIONS } from '@/lib/portalPermissions';
+import {
+  applyPortalAgentAssignmentScope,
+  buildPortalAgentLeadScope,
+  type PortalAgentLeadScope,
+} from '@/lib/portalAgentLeadScope';
 import { getHasPaidCustomerBatch, shouldUseDemoPortalExperience } from '@/lib/demoPortalEligibility';
 import {
   matchesPostcodeArea,
@@ -94,22 +99,15 @@ async function getCustomerLeadData(
   customerId: string,
   leadSource: 'all' | 'fresh' | 'bulk' = 'all',
   demoMode = false,
-  agentFilter: { portalUserId: string; viewAll: boolean } | null = null,
+  agentFilter: PortalAgentLeadScope | null = null,
 ): Promise<{ ids: string[]; metaMap: Record<string, AssignmentMeta>; partial: boolean; maxExportRows: number }> {
   const ids = new Set<string>();
   const metaMap: Record<string, AssignmentMeta> = {};
   let partial = false;
   const selectFields = 'lead_id, assigned_at, status, notities, batch_id, distance_km, portal_user_id';
 
-  // Agent-scope: net als bij portal/leads mag een agent (zonder LEADS_VIEW_ALL)
-  // alleen leads zien die aan hemzelf of aan niemand zijn toegewezen.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const applyAgentScope = (q: any) => {
-    if (agentFilter && !agentFilter.viewAll) {
-      return q.or(`portal_user_id.eq.${agentFilter.portalUserId},portal_user_id.is.null`);
-    }
-    return q;
-  };
+  const applyAgentScope = (q: any) => applyPortalAgentAssignmentScope(q, agentFilter);
 
   type AssignRow = {
     lead_id: string;
@@ -276,11 +274,11 @@ export async function GET(request: NextRequest) {
     hasPaidCustomerBatch,
   });
 
-  // Agent-scope net als bij het lead-overzicht: agents zonder LEADS_VIEW_ALL
-  // exporteren alleen hun eigen/niet-toegewezen leads.
-  const agentFilter = session.portalUser && !hasPermission(session, PERMISSIONS.LEADS_VIEW_ALL)
-    ? { portalUserId: session.portalUser.id, viewAll: false }
-    : null;
+  const agentFilter = buildPortalAgentLeadScope({
+    portalUserId: session.portalUser?.id,
+    viewAll: !session.portalUser || hasPermission(session, PERMISSIONS.LEADS_VIEW_ALL),
+    agentsSeeUnassignedLeads: customer.agents_see_unassigned_leads,
+  });
 
   const { ids: poolLeadIds, metaMap, partial: exportPartial, maxExportRows } = await getCustomerLeadData(supabase, customer.id, leadSource, demoMode, agentFilter);
 

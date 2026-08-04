@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyCustomer, portalUnauthorized, logImpersonatedWrite } from '@/lib/portalAuth';
 import { createServerClient } from '@/lib/supabase';
 import { hasPermission, forbidden, PERMISSIONS } from '@/lib/portalPermissions';
+import {
+  agentMayAccessAssignment,
+  applyPortalAgentAssignmentScope,
+  buildPortalAgentLeadScope,
+  type PortalAgentLeadScope,
+} from '@/lib/portalAgentLeadScope';
 import { repairDemoAssignmentsIfNeeded } from '@/lib/demoPortalLeads';
 import { getHasPaidCustomerBatch, shouldUseDemoPortalExperience } from '@/lib/demoPortalEligibility';
 import { buildPhoneSearchIlikeClauses, sanitizePostgrestIlike } from '@/lib/phoneSearch';
@@ -183,7 +189,7 @@ async function getCustomerLeadData(
   leadSource: 'all' | 'fresh' | 'bulk' = 'all',
   demoMode = false,
   statusFilter?: string | null,
-  agentFilter?: { portalUserId: string; viewAll: boolean } | null,
+  agentFilter?: PortalAgentLeadScope | null,
   customerBranches: string[] = [],
 ): Promise<{ ids: string[]; metaMap: Record<string, AssignmentMeta>; bulkCount: number; partial: boolean; maxPaginateRows: number }> {
   const ids = new Set<string>();
@@ -215,14 +221,8 @@ async function getCustomerLeadData(
     }
   };
 
-  // Agent scope filter: only their leads + unassigned
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const applyAgentScope = (q: any) => {
-    if (agentFilter && !agentFilter.viewAll) {
-      return q.or(`portal_user_id.eq.${agentFilter.portalUserId},portal_user_id.is.null`);
-    }
-    return q;
-  };
+  const applyAgentScope = (q: any) => applyPortalAgentAssignmentScope(q, agentFilter);
 
   if (demoMode) {
     let q = supabase.from('lead_assignments').select(selectFields).eq('customer_id', customerId).eq('source', 'demo').order('assigned_at', { ascending: false });
@@ -334,10 +334,12 @@ export async function GET(request: NextRequest) {
     || (postcodeArea?.kind === 'range')
     || (!demoMode && !!(from || to));
 
-  // Agent-scoped filtering
-  const agentFilter = session.portalUser && !hasPermission(session, PERMISSIONS.LEADS_VIEW_ALL)
-    ? { portalUserId: session.portalUser.id, viewAll: false }
-    : null;
+  // Agent-scoped filtering (respecteert customers.agents_see_unassigned_leads)
+  const agentFilter = buildPortalAgentLeadScope({
+    portalUserId: session.portalUser?.id,
+    viewAll: !session.portalUser || hasPermission(session, PERMISSIONS.LEADS_VIEW_ALL),
+    agentsSeeUnassignedLeads: customer.agents_see_unassigned_leads,
+  });
 
   let { ids: leadIds, metaMap, bulkCount, partial: leadDataPartial, maxPaginateRows } = await getCustomerLeadData(
     supabase,
@@ -636,10 +638,12 @@ export async function PUT(request: NextRequest) {
 
   const { customer } = session;
 
-  // Agent-scope: een agent (zonder LEADS_VIEW_ALL) mag alleen leads bewerken die
-  // aan hemzelf of aan niemand zijn toegewezen — niet die van collega-agents.
-  const agentScoped = !!session.portalUser && !hasPermission(session, PERMISSIONS.LEADS_VIEW_ALL);
-  const agentUserId = session.portalUser?.id ?? null;
+  // Agent-scope: zonder leads.view_all alleen eigen (+ optioneel niet-toegewezen) leads.
+  const agentScope = buildPortalAgentLeadScope({
+    portalUserId: session.portalUser?.id,
+    viewAll: !session.portalUser || hasPermission(session, PERMISSIONS.LEADS_VIEW_ALL),
+    agentsSeeUnassignedLeads: customer.agents_see_unassigned_leads,
+  });
 
   try {
     const { id, status, notities } = await request.json();
@@ -663,11 +667,8 @@ export async function PUT(request: NextRequest) {
       .limit(1)
       .maybeSingle();
 
-    if (assignment && agentScoped) {
-      const assignedTo = (assignment as { portal_user_id?: string | null }).portal_user_id ?? null;
-      if (assignedTo && assignedTo !== agentUserId) {
-        return NextResponse.json({ error: 'Geen toegang tot deze lead' }, { status: 403 });
-      }
+    if (assignment && !agentMayAccessAssignment(assignment, agentScope)) {
+      return NextResponse.json({ error: 'Geen toegang tot deze lead' }, { status: 403 });
     }
 
     if (!assignment) {

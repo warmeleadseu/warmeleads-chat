@@ -2214,6 +2214,7 @@ export type Database = {
           phone: string | null
           portal_active: boolean | null
           portal_password: string | null
+          agents_see_unassigned_leads: boolean
           postcode: string | null
           preferred_crm_provider: string | null
           signup_source: string | null
@@ -2250,6 +2251,7 @@ export type Database = {
           phone?: string | null
           portal_active?: boolean | null
           portal_password?: string | null
+          agents_see_unassigned_leads?: boolean
           postcode?: string | null
           preferred_crm_provider?: string | null
           signup_source?: string | null
@@ -2286,6 +2288,7 @@ export type Database = {
           phone?: string | null
           portal_active?: boolean | null
           portal_password?: string | null
+          agents_see_unassigned_leads?: boolean
           postcode?: string | null
           preferred_crm_provider?: string | null
           signup_source?: string | null

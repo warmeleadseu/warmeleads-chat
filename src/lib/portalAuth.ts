@@ -18,7 +18,7 @@ export type { PortalSession };
  * migratie 100 (waar de kolom nog niet bestaat).
  */
 const CUSTOMER_SELECT_BASE =
-  'id, name, email, contact_person, branches, portal_active, demo_mode, signup_source, is_active, vat_id';
+  'id, name, email, contact_person, branches, portal_active, demo_mode, signup_source, is_active, vat_id, agents_see_unassigned_leads';
 
 const PORTAL_USER_SELECT =
   'id, customer_id, name, email, role, is_active, permissions, assignment_rules, last_login_at, last_seen_at, login_count, phone, created_at';
@@ -34,6 +34,7 @@ type SessionCustomerRow = {
   signup_source?: string | null;
   country?: string | null;
   vat_id?: string | null;
+  agents_see_unassigned_leads?: boolean | null;
 };
 
 function mapSessionCustomer(row: SessionCustomerRow): PortalSession['customer'] {
@@ -53,6 +54,7 @@ function mapSessionCustomer(row: SessionCustomerRow): PortalSession['customer'] 
     country: row.country ?? 'NL',
     vat_id: row.vat_id ?? undefined,
     reverse_charge,
+    agents_see_unassigned_leads: row.agents_see_unassigned_leads !== false,
   };
 }
 

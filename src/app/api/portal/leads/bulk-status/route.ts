@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyCustomer, portalUnauthorized, logImpersonatedWrite } from '@/lib/portalAuth';
 import { createServerClient } from '@/lib/supabase';
 import { hasPermission, PERMISSIONS, forbidden } from '@/lib/portalPermissions';
+import {
+  agentMayAccessAssignment,
+  buildPortalAgentLeadScope,
+} from '@/lib/portalAgentLeadScope';
 import { isValidLeadStatus } from '@/lib/leadStatuses';
 import { logLeadActivity } from '@/lib/leadActivities';
 
@@ -40,8 +44,11 @@ export async function POST(request: NextRequest) {
 
   const supabase = createServerClient();
   const customerId = session.customer.id;
-  const agentScoped = !!session.portalUser && !hasPermission(session, PERMISSIONS.LEADS_VIEW_ALL);
-  const agentUserId = session.portalUser?.id ?? null;
+  const agentScope = buildPortalAgentLeadScope({
+    portalUserId: session.portalUser?.id,
+    viewAll: !session.portalUser || hasPermission(session, PERMISSIONS.LEADS_VIEW_ALL),
+    agentsSeeUnassignedLeads: session.customer.agents_see_unassigned_leads,
+  });
 
   const CHUNK = 500;
   let updated = 0;
@@ -61,9 +68,9 @@ export async function POST(request: NextRequest) {
     }
 
     let allowedIds = (assignments || []).map((a) => a.id);
-    if (agentScoped) {
+    if (agentScope) {
       allowedIds = (assignments || [])
-        .filter((a) => !a.portal_user_id || a.portal_user_id === agentUserId)
+        .filter((a) => agentMayAccessAssignment(a, agentScope))
         .map((a) => a.id);
       skipped += (assignments || []).length - allowedIds.length;
     }

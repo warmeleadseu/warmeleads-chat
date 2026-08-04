@@ -58,7 +58,10 @@ import { LEAD_STATUS_LABELS, LEAD_STATUS_VALUES } from '@/lib/leadStatuses';
 
 interface Customer {
   id: string; name: string; contact_person: string; email: string; phone: string;
-  branches: string[]; is_active: boolean; portal_active: boolean; has_password?: boolean; notes: string; created_at: string;
+  branches: string[]; is_active: boolean; portal_active: boolean;
+  /** Default true: agents zien ook niet-toegewezen leads. False = alleen eigen toegewezen leads. */
+  agents_see_unassigned_leads?: boolean;
+  has_password?: boolean; notes: string; created_at: string;
   lead_count?: number;
   bulk_lead_count?: number;
   bulk_price_per_lead?: number | null;
@@ -1566,6 +1569,7 @@ function CustomerForm({ customer, branchOptions, allCustomers, accountManagers, 
     branches: customer?.branches || [],
     is_active: customer?.is_active ?? true,
     portal_active: customer?.portal_active ?? true,
+    agents_see_unassigned_leads: customer?.agents_see_unassigned_leads !== false,
     notes: customer?.notes || '',
     password: '',
     exclude_customers: customer?.exclude_customers || [] as string[],
@@ -2064,6 +2068,23 @@ function CustomerForm({ customer, branchOptions, allCustomers, accountManagers, 
             <div className="flex items-center gap-2">
               <input type="checkbox" id="portal" checked={form.portal_active} onChange={e => setForm(f => ({ ...f, portal_active: e.target.checked }))} className="rounded border-slate-300" />
               <label htmlFor="portal" className="text-sm text-slate-700">Portaal actief</label>
+            </div>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-3">
+            <div className="flex items-start gap-2">
+              <input
+                type="checkbox"
+                id="agents_see_unassigned"
+                checked={form.agents_see_unassigned_leads}
+                onChange={e => setForm(f => ({ ...f, agents_see_unassigned_leads: e.target.checked }))}
+                className="mt-0.5 rounded border-slate-300"
+              />
+              <label htmlFor="agents_see_unassigned" className="text-sm text-slate-700">
+                <span className="font-medium">Agents zien niet-toegewezen leads</span>
+                <span className="mt-0.5 block text-[11px] text-slate-500">
+                  Uit = agents zien alleen leads die expliciet aan hen zijn toegewezen (geen open batch-pool). Owner/manager blijven alles zien.
+                </span>
+              </label>
             </div>
           </div>
           {/* Lead exclusies */}

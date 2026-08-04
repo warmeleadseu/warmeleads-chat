@@ -136,7 +136,7 @@ export async function POST(request: NextRequest) {
     // Verify parent customer is still active
     const { data: parentCustomer } = await supabase
       .from('customers')
-      .select('id, name, email, contact_person, branches, is_active, portal_active, demo_mode, signup_source, country, vat_id')
+      .select('id, name, email, contact_person, branches, is_active, portal_active, demo_mode, signup_source, country, vat_id, agents_see_unassigned_leads')
       .eq('id', portalUser.customer_id)
       .eq('is_active', true)
       .eq('portal_active', true)

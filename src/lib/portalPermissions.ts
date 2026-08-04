@@ -156,6 +156,11 @@ export interface PortalSession {
     vat_id?: string | null;
     /** BE + geldig BE-BTW-nummer: intracommunautair, geen NL-BTW op factuur. */
     reverse_charge?: boolean;
+    /**
+     * Als false: agents zonder leads.view_all zien alleen leads die aan hen
+     * zijn toegewezen (niet de open pool). Default true.
+     */
+    agents_see_unassigned_leads?: boolean;
   };
   portalUser?: PortalUser;
   isOwner: boolean;
