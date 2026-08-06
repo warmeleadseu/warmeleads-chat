@@ -21,7 +21,9 @@ export async function GET(request: NextRequest) {
 
   if (targetUserId) query = query.eq('portal_user_id', targetUserId);
   else if (session.portalUser && session.portalUser.role === 'agent') {
-    query = query.eq('portal_user_id', session.portalUser.id);
+    query = query.or(`portal_user_id.eq.${session.portalUser.id},portal_user_id.is.null`);
+  } else {
+    query = query.is('portal_user_id', null);
   }
 
   if (from) query = query.gte('date', from);

@@ -31,7 +31,11 @@ export async function GET(request: NextRequest) {
   if (targetUserId) {
     query = query.eq('portal_user_id', targetUserId);
   } else if (session.portalUser && session.portalUser.role === 'agent') {
-    query = query.eq('portal_user_id', session.portalUser.id);
+    // Agent zonder expliciete id: eigen rijen + bedrijfsniveau (zelfde inheritance als slots)
+    query = query.or(`portal_user_id.eq.${session.portalUser.id},portal_user_id.is.null`);
+  } else {
+    // Owner/beheerder zonder id: alleen bedrijfsniveau (voorkomt mix met agent-rijen in de editor)
+    query = query.is('portal_user_id', null);
   }
 
   const { data, error } = await query;
@@ -87,12 +91,15 @@ export async function PUT(request: NextRequest) {
       }
     }
 
-    const { data: fresh } = await supabase
+    let freshQuery = supabase
       .from('adviser_availability')
       .select('*')
       .eq('customer_id', session.customer.id)
-      .eq('portal_user_id', portalUserId)
       .order('day_of_week', { ascending: true });
+    freshQuery = portalUserId
+      ? freshQuery.eq('portal_user_id', portalUserId)
+      : freshQuery.is('portal_user_id', null);
+    const { data: fresh } = await freshQuery;
 
     return NextResponse.json({ success: true, availability: fresh || [] });
   } catch {

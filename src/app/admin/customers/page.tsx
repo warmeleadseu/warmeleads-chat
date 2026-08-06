@@ -300,7 +300,12 @@ export default function CustomersPage() {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const selectedCustomerIdRef = useRef<string | null>(null);
   const portalUrl = typeof window !== 'undefined' ? `${window.location.origin}/portal` : 'https://www.warmeleads.eu/portal';
+
+  useEffect(() => {
+    selectedCustomerIdRef.current = selectedCustomer?.id ?? null;
+  }, [selectedCustomer?.id]);
 
   const onDeepLinkDone = useCallback((payload: { customer: CustomerWithExtra | null; error: string | null }) => {
     if (payload.customer) setSelectedCustomer(payload.customer);
@@ -343,6 +348,19 @@ export default function CustomersPage() {
           if (fromPage) return fromPage;
           return prev;
         });
+        // Als de open klant niet op de huidige pagina staat, haal verse tellingen op
+        // zodat handmatige toewijzingen niet met een stale lead_count blijven staan.
+        const openId = selectedCustomerIdRef.current;
+        if (openId && !newCustomers.some(c => c.id === openId)) {
+          void adminFetch(`/api/admin/customers/${openId}`)
+            .then(r => (r.ok ? r.json() : null))
+            .then(d => {
+              if (d?.customer) {
+                setSelectedCustomer(prev => (prev?.id === openId ? d.customer : prev));
+              }
+            })
+            .catch(() => {});
+        }
       }
     } catch { /* ignore */ }
     setLoading(false);
@@ -876,7 +894,7 @@ function CustomerDetailPanel({
   onEdit: (c: Customer) => void;
   onDelete: (id: string, name: string) => void;
   onReminder: (c: Customer) => void;
-  onRefresh: () => void;
+  onRefresh: () => void | Promise<void>;
 }) {
   const [tab, setTab] = useState<DetailTab>('overview');
   const [copied, setCopied] = useState(false);
@@ -891,8 +909,13 @@ function CustomerDetailPanel({
   const [editingBranches, setEditingBranches] = useState(false);
   const [savingBranches, setSavingBranches] = useState(false);
   const [branchSaveError, setBranchSaveError] = useState('');
+  const [liveCustomer, setLiveCustomer] = useState<CustomerWithExtra>(customer);
 
-  const c = customer;
+  const c = liveCustomer;
+
+  useEffect(() => {
+    setLiveCustomer(customer);
+  }, [customer]);
 
   useEffect(() => {
     setTab('overview');
@@ -908,9 +931,26 @@ function CustomerDetailPanel({
   const neverLogged = c.portal_active && c.has_password && (!c.last_login_at || !c.login_count);
   const am = accountManagers.find(a => a.id === c.account_manager_id);
 
+  const refreshDetailStats = useCallback(async () => {
+    try {
+      const [custRes, batchRes] = await Promise.all([
+        adminFetch(`/api/admin/customers/${customer.id}`),
+        adminFetch(`/api/admin/batches?customer_id=${customer.id}`),
+      ]);
+      if (custRes.ok) {
+        const d = await custRes.json();
+        if (d.customer) setLiveCustomer(d.customer as CustomerWithExtra);
+      }
+      if (batchRes.ok) {
+        const batches = await batchRes.json();
+        setAllBatches(batches || []);
+      }
+    } catch { /* ignore */ }
+  }, [customer.id]);
+
   useEffect(() => {
-    adminFetch(`/api/admin/batches?customer_id=${c.id}`).then(r => r.ok ? r.json() : []).then(d => setAllBatches(d || [])).catch(() => {});
-  }, [c.id]);
+    void refreshDetailStats();
+  }, [refreshDetailStats]);
 
   const copyCredentials = () => {
     navigator.clipboard.writeText(`Portaal login voor ${c.name}:\nURL: ${portalUrl}\nE-mail: ${c.email}\n\n(Wachtwoord is eerder door jullie gedeeld)`);
@@ -1407,7 +1447,7 @@ function CustomerDetailPanel({
             <CustomerPricingPanelContent customer={c} branchOptions={branchOptions} />
           )}
           {tab === 'leads' && (
-            <LeadManagerPanelContent customer={c} />
+            <LeadManagerPanelContent customer={c} onCountsChanged={refreshDetailStats} />
           )}
           {tab === 'mail' && (
             <div className="p-5">
@@ -2328,8 +2368,21 @@ function BatchesPanelContent({ customer, branchOptions }: { customer: Customer; 
   return <BatchesPanel customer={customer} branchOptions={branchOptions} onClose={() => {}} embedded />;
 }
 
-function LeadManagerPanelContent({ customer }: { customer: Customer }) {
-  return <LeadManagerPanel customer={customer} onClose={() => {}} embedded />;
+function LeadManagerPanelContent({
+  customer,
+  onCountsChanged,
+}: {
+  customer: Customer;
+  onCountsChanged?: () => void | Promise<void>;
+}) {
+  return (
+    <LeadManagerPanel
+      customer={customer}
+      onClose={() => {}}
+      embedded
+      onCountsChanged={onCountsChanged}
+    />
+  );
 }
 
 function CustomerPricingPanelContent({ customer, branchOptions }: { customer: Customer; branchOptions: BranchOption[] }) {
@@ -3844,10 +3897,11 @@ function assignmentStatusLabel(s: string) {
   return LEAD_STATUS_LABELS[s as keyof typeof LEAD_STATUS_LABELS] || s || 'Nieuw';
 }
 
-function LeadManagerPanel({ customer, onClose, embedded }: {
+function LeadManagerPanel({ customer, onClose, embedded, onCountsChanged }: {
   customer: Customer;
   onClose: () => void;
   embedded?: boolean;
+  onCountsChanged?: () => void | Promise<void>;
 }) {
   const [leads, setLeads] = useState<AssignedLead[]>([]);
   const [batches, setBatches] = useState<{ id: string; branch: string; batch_size: number; leads_delivered: number }[]>([]);
@@ -3894,10 +3948,12 @@ function LeadManagerPanel({ customer, onClose, embedded }: {
           };
         });
         setLeads(mapped);
+        // assignments-route kan orphans syncen → overview-telling vernieuwen
+        void onCountsChanged?.();
       }
     } catch { /* ignore */ }
     setLoading(false);
-  }, [customer.id]);
+  }, [customer.id, onCountsChanged]);
 
   const fetchBatches = useCallback(async () => {
     try {

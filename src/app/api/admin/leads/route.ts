@@ -26,6 +26,7 @@ import {
   filterQueryRowsByPlaatsRadius,
   resolvePlaatsRadiusOrigin,
 } from '@/lib/leadPlaatsRadius';
+import { assignLeadToBatch } from '@/lib/assignLeadToBatch';
 
 async function attachAssignmentMeta(
   supabase: ReturnType<typeof createServerClient>,
@@ -341,7 +342,23 @@ export async function POST(request: NextRequest) {
       console.error('Insert error:', error);
       return NextResponse.json({ error: 'Lead aanmaken mislukt', details: error.message }, { status: 500 });
     }
-    if (data.lat && data.lng) {
+    // Handmatige klantkeuze bij aanmaken → direct assignment (anders mist de klantkaart-telling).
+    if (data.customer_id) {
+      const { data: cust } = await supabase
+        .from('customers')
+        .select('id, branches')
+        .eq('id', data.customer_id)
+        .maybeSingle();
+      if (cust) {
+        await assignLeadToBatch({
+          supabase,
+          lead: data,
+          customer: { id: cust.id, branches: cust.branches as string[] | null },
+          source: 'bulk_assign',
+          skipGuardrails: true,
+        });
+      }
+    } else if (data.lat && data.lng) {
       try { await distributeLead({ id: data.id, branch: data.branch, lat: data.lat, lng: data.lng }); } catch { /* non-blocking */ }
     }
     fireLeadCapi(data.id);

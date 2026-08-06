@@ -41,23 +41,99 @@ interface AppointmentRow {
   status: string;
 }
 
-function parseTimeOnDate(date: Date, timeStr: string): Date {
-  const [h, m] = timeStr.split(':').map(Number);
-  const d = new Date(date);
-  d.setHours(h || 0, m || 0, 0, 0);
-  return d;
-}
-
-function dateYMD(d: Date): string {
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd}`;
-}
-
 interface Interval {
   start: Date;
   end: Date;
+}
+
+const AMSTERDAM_TZ = 'Europe/Amsterdam';
+
+const WEEKDAY_MAP: Record<string, number> = {
+  Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6,
+};
+
+/** YYYY-MM-DD in Europe/Amsterdam. */
+export function amsterdamYmd(d: Date): string {
+  return d.toLocaleDateString('sv-SE', { timeZone: AMSTERDAM_TZ });
+}
+
+/** 0=zondag … 6=zaterdag in Europe/Amsterdam. */
+export function amsterdamDayOfWeek(d: Date): number {
+  const wd = new Intl.DateTimeFormat('en-US', {
+    timeZone: AMSTERDAM_TZ,
+    weekday: 'short',
+  }).format(d);
+  return WEEKDAY_MAP[wd] ?? 0;
+}
+
+/**
+ * Interpreteert een lokale wandkloktijd (HH:MM[:SS]) op een Amsterdam-kalenderdag
+ * als UTC Date — correct bij CET/CEST.
+ */
+export function amsterdamWallTimeToUtc(ymd: string, timeStr: string): Date {
+  const [ys, ms, ds] = ymd.split('-');
+  const year = Number(ys);
+  const month = Number(ms);
+  const day = Number(ds);
+  const [hRaw, mRaw, sRaw] = timeStr.split(':').map(Number);
+  const hour = hRaw || 0;
+  const minute = mRaw || 0;
+  const second = sRaw || 0;
+
+  // Start met UTC-guess op dezelfde wandklokcijfers, corrigeer daarna met zone-offset.
+  const utcGuess = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: AMSTERDAM_TZ,
+    hour12: false,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+  const parts = fmt.formatToParts(utcGuess);
+  const get = (t: string) => Number(parts.find((p) => p.type === t)?.value ?? '0');
+  let zh = get('hour');
+  if (zh === 24) zh = 0;
+  const asZoneMs = Date.UTC(get('year'), get('month') - 1, get('day'), zh, get('minute'), get('second'));
+  const offset = asZoneMs - utcGuess.getTime();
+  return new Date(utcGuess.getTime() - offset);
+}
+
+/** Civil-date arithmetic on YYYY-MM-DD (timezone-agnostic). */
+export function addCivilDays(ymd: string, days: number): string {
+  const [y, m, d] = ymd.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d + days, 12, 0, 0));
+  return dt.toISOString().slice(0, 10);
+}
+
+/**
+ * Availability/overrides filter:
+ * - undefined → iedereen (union)
+ * - null → alleen klant-/bedrijfsniveau
+ * - uuid → eigen rijen + bedrijfsniveau (inheritance)
+ */
+export function filterAvailabilityRows<T extends { portal_user_id: string | null }>(
+  arr: T[],
+  portalUserId: string | null | undefined,
+): T[] {
+  if (portalUserId === undefined) return arr;
+  if (portalUserId === null) return arr.filter((r) => r.portal_user_id === null);
+  return arr.filter((r) => r.portal_user_id === portalUserId || r.portal_user_id === null);
+}
+
+/**
+ * Busy appointments: eigen + unassigned (null). Andere adviseurs blokkeren niet.
+ * undefined → alle appointments.
+ */
+export function filterBusyAppointments<T extends { portal_user_id: string | null }>(
+  arr: T[],
+  portalUserId: string | null | undefined,
+): T[] {
+  if (portalUserId === undefined) return arr;
+  if (portalUserId === null) return arr.filter((r) => r.portal_user_id === null);
+  return arr.filter((r) => r.portal_user_id === portalUserId || r.portal_user_id === null);
 }
 
 function mergeIntervals(intervals: Interval[]): Interval[] {
@@ -78,7 +154,7 @@ function mergeIntervals(intervals: Interval[]): Interval[] {
 
 function subtractIntervals(base: Interval[], subtract: Interval[]): Interval[] {
   if (subtract.length === 0) return base;
-  let current = base.map(i => ({ ...i }));
+  let current = base.map((i) => ({ ...i }));
   for (const s of subtract) {
     const next: Interval[] = [];
     for (const c of current) {
@@ -96,8 +172,9 @@ function subtractIntervals(base: Interval[], subtract: Interval[]): Interval[] {
 
 /**
  * Compute available appointment slots for a customer (optionally filtered by portal_user_id).
- * If portalUserId is null, computes slots from customer-level availability (portal_user_id IS NULL).
- * If portalUserId is undefined, merges all advisers' availability (union).
+ * - portalUserId undefined: union van alle adviseurs
+ * - portalUserId null: alleen bedrijfsniveau (portal_user_id IS NULL)
+ * - portalUserId uuid: eigen beschikbaarheid + bedrijfsniveau (inheritance)
  */
 export async function computeAvailableSlots(params: ComputeSlotsParams): Promise<AvailableSlot[]> {
   const {
@@ -113,7 +190,9 @@ export async function computeAvailableSlots(params: ComputeSlotsParams): Promise
 
   const supabase = createServerClient();
 
-  // Fetch availability + overrides + existing appointments
+  const fromYmd = amsterdamYmd(from);
+  const toYmd = amsterdamYmd(to);
+
   const [availRes, ovRes, apptRes] = await Promise.all([
     supabase
       .from('adviser_availability')
@@ -124,8 +203,8 @@ export async function computeAvailableSlots(params: ComputeSlotsParams): Promise
       .from('availability_overrides')
       .select('portal_user_id, date, start_time, end_time, type')
       .eq('customer_id', customerId)
-      .gte('date', dateYMD(from))
-      .lte('date', dateYMD(to)),
+      .gte('date', fromYmd)
+      .lte('date', toYmd),
     supabase
       .from('appointments')
       .select('id, portal_user_id, starts_at, duration_minutes, travel_buffer_minutes, status')
@@ -135,78 +214,66 @@ export async function computeAvailableSlots(params: ComputeSlotsParams): Promise
       .lte('starts_at', to.toISOString()),
   ]);
 
-  const filterByUser = <T extends { portal_user_id: string | null }>(arr: T[]): T[] => {
-    if (portalUserId === undefined) return arr;
-    return arr.filter(r => r.portal_user_id === portalUserId);
-  };
-
-  const weekly: WeeklyRow[] = filterByUser((availRes.data as WeeklyRow[]) || []);
-  const overrides: OverrideRow[] = filterByUser((ovRes.data as OverrideRow[]) || []);
-  const appointments: AppointmentRow[] = filterByUser(((apptRes.data as AppointmentRow[]) || []).filter(a => a.id !== excludeAppointmentId));
+  const weekly: WeeklyRow[] = filterAvailabilityRows((availRes.data as WeeklyRow[]) || [], portalUserId);
+  const overrides: OverrideRow[] = filterAvailabilityRows((ovRes.data as OverrideRow[]) || [], portalUserId);
+  const appointments: AppointmentRow[] = filterBusyAppointments(
+    ((apptRes.data as AppointmentRow[]) || []).filter((a) => a.id !== excludeAppointmentId),
+    portalUserId,
+  );
 
   const slots: AvailableSlot[] = [];
   const now = new Date();
 
-  const cursor = new Date(from);
-  cursor.setHours(0, 0, 0, 0);
-  const endDay = new Date(to);
-  endDay.setHours(23, 59, 59, 999);
+  let ymd = fromYmd;
+  while (ymd <= toYmd) {
+    // Noon UTC on the civil day → stable Amsterdam weekday/date
+    const [y, m, d] = ymd.split('-').map(Number);
+    const noonUtc = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+    const dayOfWeek = amsterdamDayOfWeek(noonUtc);
 
-  while (cursor <= endDay) {
-    const dayOfWeek = cursor.getDay();
-    const ymd = dateYMD(cursor);
-
-    // Check if day is fully blocked (type=blocked without time range)
-    const dayOverrides = overrides.filter(o => o.date === ymd);
-    const fullyBlocked = dayOverrides.some(o => o.type === 'blocked' && !o.start_time && !o.end_time);
+    const dayOverrides = overrides.filter((o) => o.date === ymd);
+    const fullyBlocked = dayOverrides.some((o) => o.type === 'blocked' && !o.start_time && !o.end_time);
 
     if (!fullyBlocked) {
-      // Base intervals from weekly schedule for this day
       const baseWeekly: Interval[] = weekly
-        .filter(w => w.day_of_week === dayOfWeek)
-        .map(w => ({
-          start: parseTimeOnDate(cursor, w.start_time),
-          end: parseTimeOnDate(cursor, w.end_time),
+        .filter((w) => w.day_of_week === dayOfWeek)
+        .map((w) => ({
+          start: amsterdamWallTimeToUtc(ymd, w.start_time),
+          end: amsterdamWallTimeToUtc(ymd, w.end_time),
         }));
 
-      // Add extra overrides
       const extraIntervals: Interval[] = dayOverrides
-        .filter(o => o.type === 'extra' && o.start_time && o.end_time)
-        .map(o => ({
-          start: parseTimeOnDate(cursor, o.start_time!),
-          end: parseTimeOnDate(cursor, o.end_time!),
+        .filter((o) => o.type === 'extra' && o.start_time && o.end_time)
+        .map((o) => ({
+          start: amsterdamWallTimeToUtc(ymd, o.start_time!),
+          end: amsterdamWallTimeToUtc(ymd, o.end_time!),
         }));
 
       let dayIntervals = mergeIntervals([...baseWeekly, ...extraIntervals]);
 
-      // Subtract time-range blocked overrides
       const blockedIntervals: Interval[] = dayOverrides
-        .filter(o => o.type === 'blocked' && o.start_time && o.end_time)
-        .map(o => ({
-          start: parseTimeOnDate(cursor, o.start_time!),
-          end: parseTimeOnDate(cursor, o.end_time!),
+        .filter((o) => o.type === 'blocked' && o.start_time && o.end_time)
+        .map((o) => ({
+          start: amsterdamWallTimeToUtc(ymd, o.start_time!),
+          end: amsterdamWallTimeToUtc(ymd, o.end_time!),
         }));
       dayIntervals = subtractIntervals(dayIntervals, blockedIntervals);
 
-      // Subtract existing appointments (including travel buffer)
       const apptIntervals: Interval[] = appointments
-        .filter(a => {
-          const d = new Date(a.starts_at);
-          return dateYMD(d) === ymd;
-        })
-        .map(a => {
+        .filter((a) => amsterdamYmd(new Date(a.starts_at)) === ymd)
+        .map((a) => {
           const s = new Date(a.starts_at);
           const buffer = a.travel_buffer_minutes || 0;
-          const startWithBuffer = new Date(s.getTime() - buffer * 60_000);
-          const endWithBuffer = new Date(s.getTime() + (a.duration_minutes + buffer) * 60_000);
-          return { start: startWithBuffer, end: endWithBuffer };
+          return {
+            start: new Date(s.getTime() - buffer * 60_000),
+            end: new Date(s.getTime() + (a.duration_minutes + buffer) * 60_000),
+          };
         });
 
       dayIntervals = subtractIntervals(dayIntervals, apptIntervals);
 
-      // Generate candidate slots at `step` granularity
       for (const iv of dayIntervals) {
-        const slotDurationMs = (durationMinutes + (bufferMinutes * 2)) * 60_000;
+        const slotDurationMs = (durationMinutes + bufferMinutes * 2) * 60_000;
         const ivStartMs = iv.start.getTime();
         const ivEndMs = iv.end.getTime();
 
@@ -220,8 +287,7 @@ export async function computeAvailableSlots(params: ComputeSlotsParams): Promise
       }
     }
 
-    cursor.setDate(cursor.getDate() + 1);
-    cursor.setHours(0, 0, 0, 0);
+    ymd = addCivilDays(ymd, 1);
   }
 
   return slots;
@@ -244,10 +310,9 @@ export async function validateSlot(params: {
     return { valid: false, reason: 'Slot ligt in het verleden' };
   }
 
-  const dayStart = new Date(startsAt);
-  dayStart.setHours(0, 0, 0, 0);
-  const dayEnd = new Date(dayStart);
-  dayEnd.setHours(23, 59, 59, 999);
+  const ymd = amsterdamYmd(startsAt);
+  const dayStart = amsterdamWallTimeToUtc(ymd, '00:00:00');
+  const dayEnd = amsterdamWallTimeToUtc(ymd, '23:59:59');
 
   const slots = await computeAvailableSlots({
     customerId,
@@ -261,7 +326,7 @@ export async function validateSlot(params: {
   });
 
   const target = startsAt.getTime();
-  const match = slots.some(s => new Date(s.start).getTime() === target);
+  const match = slots.some((s) => new Date(s.start).getTime() === target);
   return match
     ? { valid: true }
     : { valid: false, reason: 'Dit tijdslot is niet beschikbaar' };

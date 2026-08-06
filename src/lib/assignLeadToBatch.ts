@@ -113,6 +113,19 @@ export async function assignLeadToBatch(
     return { ok: false, reason: error?.message || 'Insert mislukt', code: 'insert_failed' };
   }
 
+  // Houd legacy leads.customer_id in sync zodat klantkaart-tellingen / admin-filters kloppen.
+  const { error: leadLinkErr } = await supabase
+    .from('leads')
+    .update({ customer_id: customer.id })
+    .eq('id', lead.id);
+  if (leadLinkErr) {
+    console.error('[assignLeadToBatch] leads.customer_id sync failed', {
+      leadId: lead.id,
+      customerId: customer.id,
+      leadLinkErr,
+    });
+  }
+
   onLeadAssignedToCustomer({
     customerId: customer.id,
     leadId: lead.id,

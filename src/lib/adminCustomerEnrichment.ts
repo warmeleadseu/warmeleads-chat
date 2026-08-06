@@ -6,6 +6,7 @@ type CustomerRow = Record<string, unknown> & { id: string; password_hash?: strin
 
 /**
  * Zelfde tellingen als GET /api/admin/customers (lijst): leads, bulk, actieve batches.
+ * Lead-totaal = lead_assignments ∪ leads.customer_id (orphans zonder assignment).
  */
 export async function enrichCustomersWithCounts(
   supabase: Supabase,
@@ -35,20 +36,41 @@ export async function enrichCustomersWithCounts(
         .eq('status', 'active'),
     ]);
 
+    if (assignRes.error) {
+      console.error('[enrichCustomersWithCounts] RPC error', assignRes.error);
+    }
+
     if (assignRes.data) {
       for (const row of assignRes.data as { customer_id: string; total_count?: number; bulk_count?: number }[]) {
-        leadCounts[row.customer_id] = row.total_count || 0;
-        bulkCounts[row.customer_id] = row.bulk_count || 0;
+        leadCounts[row.customer_id] = Number(row.total_count) || 0;
+        bulkCounts[row.customer_id] = Number(row.bulk_count) || 0;
       }
     } else {
+      // Fallback: assignments + orphan leads.customer_id
+      const assignmentLeadKeys = new Set<string>();
       const { data: assignments } = await supabase
         .from('lead_assignments')
-        .select('customer_id, batch_id')
+        .select('customer_id, batch_id, lead_id')
         .in('customer_id', customerIds);
       if (assignments) {
         for (const a of assignments) {
+          assignmentLeadKeys.add(`${a.customer_id}:${a.lead_id}`);
           leadCounts[a.customer_id] = (leadCounts[a.customer_id] || 0) + 1;
           if (!a.batch_id) bulkCounts[a.customer_id] = (bulkCounts[a.customer_id] || 0) + 1;
+        }
+      }
+
+      const { data: directLeads } = await supabase
+        .from('leads')
+        .select('id, customer_id')
+        .in('customer_id', customerIds);
+      if (directLeads) {
+        for (const l of directLeads) {
+          if (!l.customer_id) continue;
+          const key = `${l.customer_id}:${l.id}`;
+          if (assignmentLeadKeys.has(key)) continue;
+          leadCounts[l.customer_id] = (leadCounts[l.customer_id] || 0) + 1;
+          bulkCounts[l.customer_id] = (bulkCounts[l.customer_id] || 0) + 1;
         }
       }
     }
