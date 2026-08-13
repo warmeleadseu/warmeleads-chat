@@ -1,6 +1,44 @@
 import { resolveCategorieen } from './categoryMap';
-import { CUSTOM_FIELD_PREFIX, defaultFieldMappings } from './fields';
+import {
+  CUSTOM_FIELD_PREFIX,
+  buildSourceFieldCatalog,
+  defaultFieldMappings,
+  resolveFieldMappings,
+} from './fields';
 import type { LeadForWebhook, OutboundWebhookFieldMapping } from './types';
+
+/** Realistische voorbeeld-custom_fields per branche (zelfde set als Teamleader-test). */
+const BRANCH_SAMPLE_CUSTOM_FIELDS: Record<string, Record<string, string>> = {
+  thuisbatterij: {
+    zonnepanelen: 'Ja, 12 panelen sinds 2022',
+    dynamisch_contract: 'Ja',
+    stroomverbruik: '4500 kWh/jaar',
+    budget: '€8.000 - €12.000',
+    reden_thuisbatterij: 'Zelfconsumptie verhogen en dynamisch tarief benutten',
+  },
+  airco: {
+    type_airco: 'Split-unit',
+    koelen_verwarmen: 'Koelen en verwarmen',
+    hoeveel_ruimtes: '3 ruimtes',
+    zakelijk: 'Nee, particulier',
+    koop_of_huur: 'Koop',
+    boorwerkzaamheden_toegestaan: 'Ja',
+  },
+  zonnepanelen: {
+    daktype: 'Schuin dak, pannen',
+    stroomverbruik: '5200 kWh/jaar',
+    budget: '€6.500 - €9.000',
+  },
+  warmtepomp: {
+    woningtype: 'Tussenwoning',
+    bouwjaar: '1998',
+    huidige_verwarming: 'CV-ketel op gas',
+  },
+  isolatie: {
+    interesse: '(Spouw) muur',
+    kennis_subsidies: 'Ja',
+  },
+};
 
 function nullable(value: unknown): string | null {
   if (value === null || value === undefined) return null;
@@ -89,14 +127,34 @@ export function buildWebhookPayload(
   return applyFieldMappings(values, effective);
 }
 
-function sampleSourceValues(): Record<string, unknown> {
-  return {
-    categorie: 'Spouwmuurisolatie',
-    categorieen: ['Spouwmuurisolatie'],
+/**
+ * Kiest een branche voor de test-payload: expliciete keuze wint, anders
+ * eerste gefilterde webhook-branche, anders eerste klantbranche.
+ */
+export function pickWebhookSampleBranch(input?: {
+  preferred?: string | null;
+  webhookBranches?: string[] | null;
+  customerBranches?: string[] | null;
+}): string {
+  const preferred = input?.preferred?.trim();
+  if (preferred) return preferred;
+  const fromWebhook = (input?.webhookBranches || []).filter(Boolean);
+  if (fromWebhook.length > 0) return fromWebhook[0];
+  const fromCustomer = (input?.customerBranches || []).filter(Boolean);
+  if (fromCustomer.length > 0) return fromCustomer[0];
+  return 'warmtepomp';
+}
+
+function sampleSourceValues(branch: string): Record<string, unknown> {
+  const custom = BRANCH_SAMPLE_CUSTOM_FIELDS[branch] ?? {};
+  const categorieen = resolveCategorieen(branch, custom);
+  const values: Record<string, unknown> = {
+    categorie: categorieen[0] ?? null,
+    categorieen,
     aanhef: null,
-    naam: 'Test Lead',
-    email: 'test@voorbeeld.nl',
-    telefoonnummer: '0612345678',
+    naam: 'Warme Leads Test',
+    email: 'test+webhook@warmeleads.test',
+    telefoonnummer: '+31612345678',
     adres: 'Dorpsstraat 10',
     straat: 'Dorpsstraat',
     huisnummer: '10',
@@ -104,25 +162,43 @@ function sampleSourceValues(): Record<string, unknown> {
     plaats: 'Amsterdam',
     provincie: 'Noord-Holland',
     land: 'NL',
-    branch: 'isolatie',
-    lead_id: '00000000-0000-0000-0000-000000000000',
-    assignment_id: '00000000-0000-0000-0000-000000000000',
+    branch,
+    lead_id: '00000000-0000-4000-8000-000000000001',
+    assignment_id: '00000000-0000-4000-8000-000000000002',
     aangemaakt_op: new Date().toISOString(),
-    // Voorbeeldwaarden voor branche-specifieke velden (custom_fields).
-    [`${CUSTOM_FIELD_PREFIX}zonnepanelen`]: 'Ja',
-    [`${CUSTOM_FIELD_PREFIX}dynamisch_contract`]: 'Ja',
-    [`${CUSTOM_FIELD_PREFIX}stroomverbruik`]: '10000',
-    [`${CUSTOM_FIELD_PREFIX}budget`]: 'Tussen de €2500,- en €5000,-',
-    [`${CUSTOM_FIELD_PREFIX}reden_thuisbatterij`]: 'Verduurzamen',
-    [`${CUSTOM_FIELD_PREFIX}interesse`]: '(Spouw) muur',
-    [`${CUSTOM_FIELD_PREFIX}kennis_subsidies`]: 'Ja',
   };
+  for (const [k, v] of Object.entries(custom)) {
+    values[`${CUSTOM_FIELD_PREFIX}${k}`] = v;
+  }
+  return values;
 }
 
-/** Voorbeeld-payload voor de "test"-knop, volgens dezelfde mapping. */
+export type BuildSampleWebhookPayloadOptions = {
+  /** Branche voor voorbeelddata (custom fields + categorie). Default: warmtepomp. */
+  branch?: string | null;
+};
+
+/**
+ * Voorbeeld-payload voor de "test"-knop.
+ * Zonder opgeslagen mapping: basisvelden + branche-custom fields (alles aan).
+ * Met opgeslagen mapping: die mapping t.o.v. dezelfde catalogus.
+ */
 export function buildSampleWebhookPayload(
   mappings?: OutboundWebhookFieldMapping[] | null,
+  options?: BuildSampleWebhookPayloadOptions,
 ): Record<string, unknown> {
-  const effective = mappings && mappings.length > 0 ? mappings : defaultFieldMappings();
-  return applyFieldMappings(sampleSourceValues(), effective);
+  const branch = pickWebhookSampleBranch({ preferred: options?.branch });
+  const values = sampleSourceValues(branch);
+  const dynamic = Object.keys(values)
+    .filter((k) => k.startsWith(CUSTOM_FIELD_PREFIX))
+    .map((k) => {
+      const key = k.slice(CUSTOM_FIELD_PREFIX.length);
+      return { key, label: key };
+    });
+  const catalog = buildSourceFieldCatalog(dynamic);
+  const effective =
+    mappings && mappings.length > 0
+      ? resolveFieldMappings(mappings, catalog)
+      : defaultFieldMappings(catalog);
+  return applyFieldMappings(values, effective);
 }

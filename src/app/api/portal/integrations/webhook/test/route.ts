@@ -3,7 +3,10 @@ import { verifyCustomer, portalUnauthorized } from '@/lib/portalAuth';
 import { createServerClient } from '@/lib/supabase';
 import { requireIntegrationOwner } from '@/lib/integrations/portalIntegrationAuth';
 import { getOutboundWebhookConfig } from '@/lib/integrations/outboundWebhook/integrationRepo';
-import { buildSampleWebhookPayload } from '@/lib/integrations/outboundWebhook/payload';
+import {
+  buildSampleWebhookPayload,
+  pickWebhookSampleBranch,
+} from '@/lib/integrations/outboundWebhook/payload';
 import { sendWebhookRequest } from '@/lib/integrations/outboundWebhook/transport';
 import { assertPublicHttpUrl } from '@/lib/ssrfGuard';
 
@@ -16,6 +19,7 @@ export async function POST(request: NextRequest) {
   const body = (await request.json().catch(() => ({}))) as {
     url?: string | null;
     token?: string | null;
+    branch?: string | null;
   };
 
   const supabase = createServerClient();
@@ -43,10 +47,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: `URL geweigerd: ${ssrf.reason}` }, { status: 400 });
   }
 
+  const branch = pickWebhookSampleBranch({
+    preferred: typeof body.branch === 'string' ? body.branch : null,
+    webhookBranches: config?.settings.branches,
+    customerBranches: session.customer.branches,
+  });
+
   // Token is optioneel: endpoints zoals Softr-workflows accepteren geen auth-header.
-  // Voorbeeld-payload volgens de door de klant ingestelde veld-mapping.
+  // Voorbeeld-payload volgens de door de klant ingestelde veld-mapping + branche.
   const payload = {
-    ...buildSampleWebhookPayload(config?.settings.field_mappings),
+    ...buildSampleWebhookPayload(config?.settings.field_mappings, { branch }),
     test: true,
   };
 
@@ -57,6 +67,7 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({
     ok: delivered,
     status: res.status,
+    branch,
     body_snippet: res.bodySnippet,
     ...(delivered ? {} : { error: res.errorMessage }),
     ...(res.outcome === 'timeout' ? { note: res.errorMessage } : {}),

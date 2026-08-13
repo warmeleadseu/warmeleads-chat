@@ -228,6 +228,10 @@ export function WebhookIntegration({
       const body: Record<string, unknown> = {};
       if (url.trim()) body.url = url.trim();
       if (token.trim()) body.token = token.trim();
+      // Gebruik eerste geselecteerde branche zodat de test-payload matching custom fields heeft
+      // (bv. warmtepomp → woningtype/bouwjaar i.p.v. generieke isolatie-data).
+      if (branches.length > 0) body.branch = branches[0];
+      else if (config?.available_branches?.length) body.branch = config.available_branches[0];
       const res = await portalFetch('/api/portal/integrations/webhook/test', {
         method: 'POST',
         body: JSON.stringify(body),
@@ -235,10 +239,12 @@ export function WebhookIntegration({
       const d = (await res.json().catch(() => ({}))) as {
         ok?: boolean;
         status?: number;
+        branch?: string;
         error?: string;
       };
       if (res.ok && d.ok) {
-        showToast(`Test geslaagd (HTTP ${d.status})`);
+        const branchHint = d.branch ? ` · ${branchLabel(d.branch)}` : '';
+        showToast(`Test geslaagd (HTTP ${d.status}${branchHint})`);
       } else {
         showToast(d.error || `Test mislukt${d.status ? ` (HTTP ${d.status})` : ''}`, 'error');
       }
