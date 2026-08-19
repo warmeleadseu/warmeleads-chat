@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import BlogPageClient from "@/components/BlogPageClient";
+import { blogArticles, toBlogListItems } from "@/data/blogArticles";
 
 export const metadata: Metadata = {
   title: "Leadgeneratie Blog Nederland | 65+ Expert Artikelen | WarmeLeads",
@@ -29,5 +30,7 @@ export const metadata: Metadata = {
 };
 
 export default function BlogPage() {
-  return <BlogPageClient />;
+  /* Alleen de lijstvelden doorgeven; de artikelteksten blijven serverkant en
+     worden pas op /blog/[slug] geladen. */
+  return <BlogPageClient articles={toBlogListItems(blogArticles)} />;
 }

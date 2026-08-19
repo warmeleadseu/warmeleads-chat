@@ -26,9 +26,9 @@ import {
   WrenchScrewdriverIcon,
   AdjustmentsVerticalIcon,
   ServerStackIcon,
+  TruckIcon,
 } from '@heroicons/react/24/outline';
 import { CheckCircleIcon as CheckCircleSolid } from '@heroicons/react/24/solid';
-import { Car } from '@phosphor-icons/react';
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
 import { SoftGlow } from '@/components/ui/SoftGlow';
@@ -60,7 +60,7 @@ const BRANCH_ICONS: Record<string, React.ComponentType<{ className?: string }>> 
   zonnepanelen: SunIcon,
   airco: AdjustmentsVerticalIcon,
   warmtepomp: FireIcon,
-  financial_lease: Car,
+  financial_lease: TruckIcon,
   maatwerk: WrenchScrewdriverIcon,
 };
 

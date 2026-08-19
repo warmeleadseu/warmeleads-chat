@@ -12,12 +12,11 @@ import {
   SparklesIcon,
   ArrowRightIcon,
   ArrowLeftIcon,
-  EnvelopeIcon,
   ChevronLeftIcon,
 } from '@heroicons/react/24/outline';
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
-import { blogArticles } from '@/data/blogArticles';
+import type { BlogListItem } from '@/data/blogArticles';
 
 const mainCategories = ['SEO', 'Marketing', 'AI', 'B2B', 'Conversie', 'Analytics'];
 
@@ -105,7 +104,7 @@ const categoryAccent: Record<string, string> = {
   'Analytics': 'bg-brand-navy',
 };
 
-export default function BlogPageClient() {
+export default function BlogPageClient({ articles }: { articles: BlogListItem[] }) {
   const [searchQuery, setSearchQuery] = useState('');
   const deferredSearch = useDeferredValue(searchQuery);
   const [selectedCategory, setSelectedCategory] = useState<string>('Alle');
@@ -118,7 +117,7 @@ export default function BlogPageClient() {
 
   const filteredArticles = useMemo(() => {
     const q = deferredSearch.toLowerCase();
-    return blogArticles.filter(article => {
+    return articles.filter(article => {
       const matchesSearch =
         q.length === 0 ||
         article.title.toLowerCase().includes(q) ||
@@ -130,24 +129,24 @@ export default function BlogPageClient() {
 
       return matchesSearch && matchesCategory;
     });
-  }, [deferredSearch, selectedCategory]);
+  }, [articles, deferredSearch, selectedCategory]);
 
   const totalPages = Math.ceil(filteredArticles.length / articlesPerPage);
   const startIndex = (currentPage - 1) * articlesPerPage;
   const paginatedArticles = filteredArticles.slice(startIndex, startIndex + articlesPerPage);
 
-  const featuredArticle = blogArticles[0];
+  const featuredArticle = articles[0];
 
   const categoryCounts = useMemo(() => {
-    const counts: Record<string, number> = { 'Alle': blogArticles.length };
+    const counts: Record<string, number> = { 'Alle': articles.length };
 
-    blogArticles.forEach(article => {
+    articles.forEach(article => {
       const mappedCategory = categoryMapping[article.category] || article.category;
       counts[mappedCategory] = (counts[mappedCategory] || 0) + 1;
     });
 
     return counts;
-  }, []);
+  }, [articles]);
 
   const handleCategoryChange = (category: string) => {
     setSelectedCategory(category);
@@ -182,7 +181,7 @@ export default function BlogPageClient() {
               <div className="flex items-center justify-center gap-6 text-white/70 text-sm">
                 <div className="flex items-center gap-2">
                   <BookOpenIcon className="h-4 w-4 text-brand-orange" />
-                  <span>{blogArticles.length} artikelen</span>
+                  <span>{articles.length} artikelen</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <TagIcon className="h-4 w-4 text-brand-orange" />

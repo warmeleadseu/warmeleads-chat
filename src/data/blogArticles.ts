@@ -17,6 +17,29 @@ export interface BlogArticle {
   content?: string;
 }
 
+/**
+ * Velden die de blog-index nodig heeft. Bewust zonder `content`: de
+ * overzichtspagina rendert alleen titels, samenvattingen en filters, en
+ * anders reist de volledige tekst van elk artikel mee naar de browser.
+ */
+export type BlogListItem = Omit<BlogArticle, 'content'>;
+
+export function toBlogListItems(articles: BlogArticle[]): BlogListItem[] {
+  return articles.map(
+    ({ slug, title, excerpt, date, category, readTime, image, keywords, author }) => ({
+      slug,
+      title,
+      excerpt,
+      date,
+      category,
+      readTime,
+      image,
+      keywords,
+      author,
+    }),
+  );
+}
+
 export const blogArticles: BlogArticle[] = [
   // April 2026 - Actueel (Q2 2026, tot en met 22 april 2026)
   {
