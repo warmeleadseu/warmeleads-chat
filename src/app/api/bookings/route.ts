@@ -194,8 +194,11 @@ export async function POST(req: Request) {
 
     if (error) throw error;
 
-    const dateObj = new Date(date + 'T00:00:00');
-    const fmtDate = dateObj.toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    /* Anker op 12:00 UTC en formatteer expliciet in UTC. Zo levert dezelfde
+       datumstring altijd dezelfde dagnaam op, ongeacht de tijdzone waarin de
+       server toevallig draait. */
+    const dateObj = new Date(date + 'T12:00:00Z');
+    const fmtDate = dateObj.toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
 
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.warmeleads.eu';
     const logoUrl = `${siteUrl}/warmeleads-logo-2026.png`;

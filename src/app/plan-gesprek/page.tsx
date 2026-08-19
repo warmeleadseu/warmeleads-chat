@@ -20,6 +20,7 @@ import {
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
 import { SoftGlow } from '@/components/ui/SoftGlow';
+import { toDateKey } from '@/lib/calendarDate';
 import { validatePhone } from '@/lib/phoneValidation';
 
 const DAYS_NL = ['Ma', 'Di', 'Wo', 'Do', 'Vr', 'Za', 'Zo'];
@@ -75,7 +76,7 @@ export default function PlanGesprekPage() {
     if (!selectedDate) return;
     setSlotsLoading(true);
     setSlots([]);
-    fetch(`/api/bookings?date=${selectedDate.toISOString().split('T')[0]}`)
+    fetch(`/api/bookings?date=${toDateKey(selectedDate)}`)
       .then(r => r.json())
       .then(d => setSlots(d.slots || []))
       .catch(() => setSlots([]))
@@ -110,7 +111,7 @@ export default function PlanGesprekPage() {
       const res = await fetch('/api/bookings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ date: selectedDate.toISOString().split('T')[0], time: selectedTime, ...form }),
+        body: JSON.stringify({ date: toDateKey(selectedDate), time: selectedTime, ...form }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Er is iets misgegaan');
