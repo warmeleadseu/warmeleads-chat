@@ -5,7 +5,7 @@ const nextConfig = {
     NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
   },
   experimental: {
-    optimizePackageImports: ['framer-motion', '@heroicons/react', 'lucide-react', 'date-fns'],
+    optimizePackageImports: ['framer-motion', '@heroicons/react', 'date-fns'],
   },
   images: {
     formats: ['image/avif', 'image/webp'],
