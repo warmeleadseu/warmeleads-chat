@@ -52,3 +52,6 @@ supabase/.temp/
 assets/meta-app-review/*.mp4
 assets/meta-app-review/*.webm
 assets/meta-app-review/_tmp/
+
+# Runtime-state van scripts/stagger-greenteam-load.ts (per run, hoort niet in git)
+scripts/.stagger-state/
