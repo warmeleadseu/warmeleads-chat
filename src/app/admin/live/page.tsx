@@ -9,9 +9,27 @@ import { audioManager } from '@/lib/celebrationSounds';
 import { TvVerticalCarousel } from './TvVerticalCarousel';
 import { AmRacePodium } from './AmRacePodium';
 import { BatchTargetAreaBadges } from '@/components/admin/BatchTargetAreaBadges';
+import { ExclamationTriangleIcon, SignalSlashIcon } from '@heroicons/react/24/outline';
 
 /** Langzamer pollen = minder Supabase-load bij open Live-tab (Pro of niet). */
 const REFRESH_INTERVAL = 90_000;
+
+/**
+ * Typeschaal voor een wallboard dat op circa vier meter afstand wordt gelezen.
+ * Vuistregel: leesbare hoogte is ongeveer kijkafstand gedeeld door 250, wat op
+ * vier meter neerkomt op zo'n 16mm en dus ruwweg 45px. Alles onder TYPE.meta
+ * hoort niet op dit scherm; wie het moet lezen, staat te dichtbij.
+ */
+const TYPE = {
+  hero: 'text-[64px] leading-[0.95] xl:text-[88px] 2xl:text-[104px]',
+  primary: 'text-[40px] leading-[1] xl:text-[52px] 2xl:text-[60px]',
+  secondary: 'text-[28px] leading-[1.1] xl:text-[34px]',
+  label: 'text-[22px] leading-[1.2] xl:text-[26px]',
+  meta: 'text-[18px] leading-[1.3]',
+} as const;
+
+/** Hoe oud data mag zijn voordat het scherm dat toegeeft. */
+const STALE_AFTER_MS = REFRESH_INTERVAL * 2.5;
 
 interface CelebrationEvent {
   id: string;
@@ -669,11 +687,11 @@ function CountUpAmount({ value, className = '', style }: { value: number; classN
 
 function TrendArrow({ current, previous }: { current: number; previous: number }) {
   if (previous === 0 && current === 0) return null;
-  if (previous === 0) return <span className="text-xs font-bold text-emerald-400">nieuw</span>;
+  if (previous === 0) return <span className="text-[22px] font-bold text-emerald-400">nieuw</span>;
   const pct = Math.round(((current - previous) / previous) * 100);
   const up = pct >= 0;
   return (
-    <span className={`inline-flex items-center gap-0.5 text-xs font-bold ${up ? 'text-emerald-400' : 'text-red-400'}`}>
+    <span className={`inline-flex items-center gap-0.5 text-[22px] font-bold ${up ? 'text-emerald-400' : 'text-red-400'}`}>
       <svg className="h-3 w-3" viewBox="0 0 12 12" fill="none">
         <path d={up ? 'M6 2L10 7H2L6 2Z' : 'M6 10L2 5H10L6 10Z'} fill="currentColor" />
       </svg>
@@ -761,8 +779,8 @@ function ProvinceMap({ data }: { data: Record<string, number> }) {
             exit={{ opacity: 0 }}
             className="absolute left-1/2 top-0 z-20 -translate-x-1/2 rounded-lg border border-white/10 bg-[#1a1d2e] px-3 py-1.5 text-center shadow-xl"
           >
-            <p className="text-[11px] font-bold text-white/80">{hovered.label}</p>
-            <p className="text-[10px] tabular-nums text-white/40">{(data[hovered.key] || 0).toLocaleString('nl-NL')} leads</p>
+            <p className="text-[18px] font-bold text-white/80">{hovered.label}</p>
+            <p className="text-[18px] tabular-nums text-white/40">{(data[hovered.key] || 0).toLocaleString('nl-NL')} leads</p>
           </motion.div>
         )}
       </AnimatePresence>
@@ -798,6 +816,11 @@ export default function LiveDashboard() {
   const [data, setData] = useState<LiveData | null>(null);
   const [clock, setClock] = useState(new Date());
   const [refreshIn, setRefreshIn] = useState(REFRESH_INTERVAL / 1000);
+  /* Wanneer kwam er voor het laatst geldige data binnen, en hoeveel pogingen
+     zijn er sindsdien mislukt. Zonder dit is een bevroren scherm niet te
+     onderscheiden van een werkend scherm. */
+  const [lastOkAt, setLastOkAt] = useState<number | null>(null);
+  const [failedAttempts, setFailedAttempts] = useState(0);
   const [newUnpaidBatchIds, setNewUnpaidBatchIds] = useState<Set<string>>(new Set());
   const [celebratingBatch, setCelebratingBatch] = useState<{ id: string; customer?: string; branch?: string; batchSize?: number } | null>(null);
   const [amTargets, setAmTargets] = useState<AMTargetLive[]>([]);
@@ -850,8 +873,16 @@ export default function LiveDashboard() {
 
           return d;
         });
+        setLastOkAt(Date.now());
+        setFailedAttempts(0);
+      } else {
+        setFailedAttempts(n => n + 1);
       }
-    } catch { /* silent */ }
+    } catch {
+      /* Netwerkfout: cijfers op het scherm blijven staan, maar het scherm
+         geeft voortaan zelf aan dat ze niet meer vers zijn. */
+      setFailedAttempts(n => n + 1);
+    }
     setRefreshIn(REFRESH_INTERVAL / 1000);
   }, []);
 
@@ -1077,15 +1108,43 @@ export default function LiveDashboard() {
   useEffect(() => { const iv = setInterval(() => { setClock(new Date()); setRefreshIn(r => Math.max(0, r - 1)); }, 1000); return () => clearInterval(iv); }, []);
 
   if (!data) {
+    /* Blijft de eerste ophaling mislukken, dan zegt het scherm dat ook. Een
+       spinner die eindeloos doordraait ziet er hetzelfde uit als een scherm
+       dat gewoon traag is, en dat is precies het verschil dat je wilt zien. */
+    const stuck = failedAttempts >= 2;
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#0B0E1A]">
+      <div className="flex min-h-screen items-center justify-center bg-[#0B0E1A] px-12">
         <div className="text-center">
-          <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-[3px] border-white/10 border-t-brand-purple" />
-          <p className="text-sm text-white/30">Live dashboard laden...</p>
+          {stuck ? (
+            <>
+              <ExclamationTriangleIcon className="mx-auto mb-6 h-20 w-20 text-red-400" />
+              <p className={`${TYPE.primary} font-black text-white`}>Geen verbinding</p>
+              <p className={`${TYPE.label} mt-4 text-white/60`}>
+                Het dashboard kan de cijfers niet ophalen. Nieuwe poging elke{' '}
+                {REFRESH_INTERVAL / 1000} seconden.
+              </p>
+              <p className={`${TYPE.meta} mt-2 tabular-nums text-white/35`}>
+                {failedAttempts} mislukte pogingen
+              </p>
+            </>
+          ) : (
+            <>
+              <div
+                className={`mx-auto mb-6 h-16 w-16 rounded-full border-[4px] border-white/10 border-t-brand-purple ${
+                  reducedMotion ? '' : 'animate-spin'
+                }`}
+              />
+              <p className={`${TYPE.label} text-white/60`}>Live dashboard laden</p>
+            </>
+          )}
         </div>
       </div>
     );
   }
+
+  /* Leeftijd van de cijfers, voor de statusbalk bovenin. */
+  const dataAgeMs = lastOkAt ? clock.getTime() - lastOkAt : null;
+  const isStale = failedAttempts > 0 || (dataAgeMs !== null && dataAgeMs > STALE_AFTER_MS);
 
   const ps = data.periodStats;
   const batchDelivered = data.activeBatches.reduce((s, b) => s + b.delivered, 0);
@@ -1125,13 +1184,6 @@ export default function LiveDashboard() {
     <div className="min-h-screen bg-[#0B0E1A] text-white">
       <canvas ref={canvasRef} className="pointer-events-none fixed inset-0 z-[100]" />
 
-      {/* Ambient glow effects */}
-      <div className="pointer-events-none fixed inset-0 overflow-hidden">
-        <div className="absolute -left-64 -top-64 h-[600px] w-[600px] rounded-full bg-brand-purple/[0.07] blur-[180px]" />
-        <div className="absolute -bottom-64 -right-64 h-[600px] w-[600px] rounded-full bg-brand-pink/[0.05] blur-[180px]" />
-        <div className="absolute left-1/2 top-1/2 h-[400px] w-[400px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-emerald-500/[0.03] blur-[150px]" />
-      </div>
-
       {/* Batch completion overlay - Cinematic */}
       <AnimatePresence>
         {celebratingBatch && (
@@ -1143,13 +1195,13 @@ export default function LiveDashboard() {
           >
             {/* Multi-layer pulsing aurora */}
             <motion.div
-              animate={{ scale: [1, 1.2, 1], opacity: [0.2, 0.5, 0.2] }}
-              transition={{ repeat: Infinity, duration: 2, ease: 'easeInOut' }}
+              animate={reducedMotion ? undefined : { scale: [1, 1.2, 1], opacity: [0.2, 0.5, 0.2] }}
+              transition={reducedMotion ? undefined : { repeat: Infinity, duration: 2, ease: 'easeInOut' }}
               className="absolute h-[700px] w-[700px] rounded-full bg-emerald-500/20 blur-[150px]"
             />
             <motion.div
-              animate={{ scale: [1.1, 0.9, 1.1], opacity: [0.15, 0.35, 0.15] }}
-              transition={{ repeat: Infinity, duration: 3, ease: 'easeInOut' }}
+              animate={reducedMotion ? undefined : { scale: [1.1, 0.9, 1.1], opacity: [0.15, 0.35, 0.15] }}
+              transition={reducedMotion ? undefined : { repeat: Infinity, duration: 3, ease: 'easeInOut' }}
               className="absolute h-[500px] w-[500px] rounded-full bg-teal-400/15 blur-[120px]"
             />
             <div className="relative flex flex-col items-center">
@@ -1167,16 +1219,16 @@ export default function LiveDashboard() {
                 ))}
                 {/* Rotating particle ring */}
                 <motion.div
-                  animate={{ rotate: 360 }}
-                  transition={{ repeat: Infinity, duration: 8, ease: 'linear' }}
+                  animate={reducedMotion ? undefined : { rotate: 360 }}
+                  transition={reducedMotion ? undefined : { repeat: Infinity, duration: 8, ease: 'linear' }}
                   className="absolute"
                   style={{ width: 200, height: 200 }}
                 >
                   {Array.from({ length: 12 }).map((_, si) => (
                     <motion.div
                       key={si}
-                      animate={{ opacity: [0.3, 1, 0.3], scale: [0.5, 1.2, 0.5] }}
-                      transition={{ repeat: Infinity, duration: 1.5, delay: si * 0.12 }}
+                      animate={reducedMotion ? undefined : { opacity: [0.3, 1, 0.3], scale: [0.5, 1.2, 0.5] }}
+                      transition={reducedMotion ? undefined : { repeat: Infinity, duration: 1.5, delay: si * 0.12 }}
                       className="absolute h-2 w-2 rounded-full bg-emerald-400"
                       style={{
                         left: 100 + Math.cos((si / 12) * Math.PI * 2) * 90,
@@ -1225,16 +1277,16 @@ export default function LiveDashboard() {
                       initial={{ scale: 0 }}
                       animate={{ scale: 1 }}
                       transition={{ delay: 1.1, type: 'spring', damping: 12 }}
-                      className={`rounded-full px-4 py-1.5 text-sm font-bold ${(BRANCH_COLORS[celebratingBatch.branch] || DEFAULT_BRANCH).badge}`}
+                      className={`rounded-full px-4 py-1.5 text-[22px] font-bold ${(BRANCH_COLORS[celebratingBatch.branch] || DEFAULT_BRANCH).badge}`}
                       style={{ boxShadow: `0 0 20px ${(BRANCH_COLORS[celebratingBatch.branch] || DEFAULT_BRANCH).fill}30` }}
                     >
                       {celebratingBatch.branch}
                     </motion.span>
                   )}
-                  {celebratingBatch.batchSize && <p className="mt-1 text-base text-white/40">{celebratingBatch.batchSize} leads succesvol uitgeleverd</p>}
+                  {celebratingBatch.batchSize && <p className="mt-1 text-[26px] text-white/40">{celebratingBatch.batchSize} leads succesvol uitgeleverd</p>}
                 </motion.div>
               ) : (
-                <motion.p initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.9 }} className="mt-4 text-lg font-medium text-white/50">
+                <motion.p initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.9 }} className="mt-4 text-[26px] font-medium text-white/50">
                   Alle leads zijn succesvol uitgeleverd
                 </motion.p>
               )}
@@ -1255,8 +1307,8 @@ export default function LiveDashboard() {
           >
             {/* Rotating spotlight rays */}
             <motion.div
-              animate={{ rotate: 360 }}
-              transition={{ repeat: Infinity, duration: 20, ease: 'linear' }}
+              animate={reducedMotion ? undefined : { rotate: 360 }}
+              transition={reducedMotion ? undefined : { repeat: Infinity, duration: 20, ease: 'linear' }}
               className="pointer-events-none absolute inset-0 opacity-[0.07]"
               style={{
                 background: 'conic-gradient(from 0deg, transparent, rgba(251,191,36,0.4), transparent, rgba(251,191,36,0.4), transparent, rgba(251,191,36,0.4), transparent)',
@@ -1289,9 +1341,9 @@ export default function LiveDashboard() {
                   transition={{ delay: 0.4 }}
                   className="mt-2 flex flex-wrap items-center justify-center gap-3"
                 >
-                  <span className="text-lg font-bold text-white/80">{celebrationVideo.customer}</span>
+                  <span className="text-[26px] font-bold text-white/80">{celebrationVideo.customer}</span>
                   {celebrationVideo.amName && (
-                    <span className="rounded-full bg-amber-500/20 px-4 py-1 text-sm font-bold text-amber-300 shadow-lg shadow-amber-500/10">
+                    <span className="rounded-full bg-amber-500/20 px-4 py-1 text-[22px] font-bold text-amber-300 shadow-lg shadow-amber-500/10">
                       {celebrationVideo.amName}
                     </span>
                   )}
@@ -1325,7 +1377,7 @@ export default function LiveDashboard() {
                 animate={{ opacity: 1 }}
                 transition={{ delay: 1 }}
                 onClick={() => setCelebrationVideo(null)}
-                className="mx-auto mt-4 block rounded-full bg-white/10 px-8 py-2.5 text-sm font-bold text-white/50 transition hover:bg-white/20 hover:text-white"
+                className="mx-auto mt-4 block rounded-full bg-white/10 px-8 py-2.5 text-[22px] font-bold text-white/50 transition hover:bg-white/20 hover:text-white"
               >
                 Sluiten
               </motion.button>
@@ -1359,8 +1411,8 @@ export default function LiveDashboard() {
             {/* Rotating light rays */}
             {!reducedMotion && (
               <motion.div
-                animate={{ rotate: 360 }}
-                transition={{ repeat: Infinity, duration: 15, ease: 'linear' }}
+                animate={reducedMotion ? undefined : { rotate: 360 }}
+                transition={reducedMotion ? undefined : { repeat: Infinity, duration: 15, ease: 'linear' }}
                 className="pointer-events-none absolute opacity-[0.06]"
                 style={{
                   width: 800, height: 800,
@@ -1384,16 +1436,16 @@ export default function LiveDashboard() {
                 {/* Orbiting stars */}
                 {!reducedMotion && (
                   <motion.div
-                    animate={{ rotate: -360 }}
-                    transition={{ repeat: Infinity, duration: 6, ease: 'linear' }}
+                    animate={reducedMotion ? undefined : { rotate: -360 }}
+                    transition={reducedMotion ? undefined : { repeat: Infinity, duration: 6, ease: 'linear' }}
                     className="absolute"
                     style={{ width: 220, height: 220 }}
                   >
                     {Array.from({ length: 8 }).map((_, si) => (
                       <motion.div
                         key={si}
-                        animate={{ opacity: [0.4, 1, 0.4], scale: [0.8, 1.4, 0.8] }}
-                        transition={{ repeat: Infinity, duration: 1.2, delay: si * 0.15 }}
+                        animate={reducedMotion ? undefined : { opacity: [0.4, 1, 0.4], scale: [0.8, 1.4, 0.8] }}
+                        transition={reducedMotion ? undefined : { repeat: Infinity, duration: 1.2, delay: si * 0.15 }}
                         className="absolute text-amber-300"
                         style={{
                           left: 110 + Math.cos((si / 8) * Math.PI * 2) * 100 - 6,
@@ -1433,13 +1485,13 @@ export default function LiveDashboard() {
               </motion.h2>
               <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.9, type: 'spring' }} className="mt-4 flex flex-col items-center gap-2">
                 <p className="text-xl font-bold text-white/80">{targetHitOverlay.payload.amName}</p>
-                <p className="text-base text-white/50">{targetHitOverlay.payload.targetLabel}</p>
+                <p className="text-[26px] text-white/50">{targetHitOverlay.payload.targetLabel}</p>
                 <div className="mt-2 flex items-center gap-4">
                   <motion.span
                     initial={{ scale: 0 }}
                     animate={{ scale: 1 }}
                     transition={{ delay: 1.1, type: 'spring', damping: 12 }}
-                    className="rounded-full bg-amber-500/20 px-4 py-1.5 text-sm font-bold text-amber-300"
+                    className="rounded-full bg-amber-500/20 px-4 py-1.5 text-[22px] font-bold text-amber-300"
                     style={{ boxShadow: '0 0 15px rgba(251,191,36,0.2)' }}
                   >
                     {targetHitOverlay.payload.targetType}: {targetHitOverlay.payload.targetValue?.toLocaleString('nl-NL')}
@@ -1449,7 +1501,7 @@ export default function LiveDashboard() {
                       initial={{ scale: 0 }}
                       animate={{ scale: 1 }}
                       transition={{ delay: 1.3, type: 'spring', damping: 12 }}
-                      className="rounded-full bg-emerald-500/20 px-4 py-1.5 text-sm font-bold text-emerald-300"
+                      className="rounded-full bg-emerald-500/20 px-4 py-1.5 text-[22px] font-bold text-emerald-300"
                       style={{ boxShadow: '0 0 15px rgba(52,211,153,0.2)' }}
                     >
                       +&euro;{targetHitOverlay.payload.bonusAmount.toLocaleString('nl-NL')} bonus
@@ -1477,8 +1529,8 @@ export default function LiveDashboard() {
             >
               {!reducedMotion && (
                 <motion.div
-                  animate={{ boxShadow: ['0 0 15px rgba(168,85,247,0.15)', '0 0 35px rgba(168,85,247,0.35)', '0 0 15px rgba(168,85,247,0.15)'] }}
-                  transition={{ repeat: Infinity, duration: 1.5 }}
+                  animate={reducedMotion ? undefined : { boxShadow: ['0 0 15px rgba(168,85,247,0.15)', '0 0 35px rgba(168,85,247,0.35)', '0 0 15px rgba(168,85,247,0.15)'] }}
+                  transition={reducedMotion ? undefined : { repeat: Infinity, duration: 1.5 }}
                   className="pointer-events-none absolute inset-0 rounded-2xl"
                 />
               )}
@@ -1490,11 +1542,11 @@ export default function LiveDashboard() {
                 🏆
               </motion.span>
               <div>
-                <p className="text-lg font-black text-brand-purple" style={{ textShadow: '0 0 20px rgba(168,85,247,0.4)' }}>
+                <p className="text-[26px] font-black text-brand-purple" style={{ textShadow: '0 0 20px rgba(168,85,247,0.4)' }}>
                   {milestoneToast.payload.milestoneText || 'Milestone!'}
                 </p>
                 {milestoneToast.payload.count && (
-                  <p className="text-sm text-white/50">{milestoneToast.payload.count} verkopen vandaag</p>
+                  <p className="text-[22px] text-white/50">{milestoneToast.payload.count} verkopen vandaag</p>
                 )}
               </div>
             </div>
@@ -1524,14 +1576,14 @@ export default function LiveDashboard() {
               {!reducedMotion && (
               <>
                 <motion.div
-                  animate={{
+                  animate={reducedMotion ? undefined : {
                     boxShadow: [
                       `0 0 10px ${borderColor}15, inset 0 0 10px ${borderColor}00`,
                       `0 0 30px ${borderColor}40, inset 0 0 20px ${borderColor}0a`,
                       `0 0 10px ${borderColor}15, inset 0 0 10px ${borderColor}00`,
                     ],
                   }}
-                  transition={{ repeat: Infinity, duration: 1.8 }}
+                  transition={reducedMotion ? undefined : { repeat: Infinity, duration: 1.8 }}
                   className="pointer-events-none absolute inset-0 rounded-2xl"
                 />
                 {/* Shine sweep */}
@@ -1554,8 +1606,8 @@ export default function LiveDashboard() {
                   >
                     <Image src={toast.amAvatarUrl} alt={toast.amName || ''} width={48} height={48} className="h-12 w-12 rounded-full object-cover shadow-lg" style={{ boxShadow: `0 0 15px ${borderColor}40` }} />
                     <motion.div
-                      animate={{ scale: [1, 1.3, 1], opacity: [0.4, 0, 0.4] }}
-                      transition={{ repeat: Infinity, duration: 2 }}
+                      animate={reducedMotion ? undefined : { scale: [1, 1.3, 1], opacity: [0.4, 0, 0.4] }}
+                      transition={reducedMotion ? undefined : { repeat: Infinity, duration: 2 }}
                       className="absolute inset-0 rounded-full"
                       style={{ border: `2px solid ${borderColor}60` }}
                     />
@@ -1569,7 +1621,7 @@ export default function LiveDashboard() {
                   style={{ boxShadow: `0 0 20px ${borderColor}40` }}
                 >
                   {toast.amName ? (
-                    <span className="text-lg font-black text-white">{toast.amName.charAt(0).toUpperCase()}</span>
+                    <span className="text-[26px] font-black text-white">{toast.amName.charAt(0).toUpperCase()}</span>
                   ) : (
                   <svg className="h-6 w-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M6 8a6 6 0 0112 0c0 7 3 9 3 9H3s3-2 3-9" />
@@ -1583,15 +1635,15 @@ export default function LiveDashboard() {
                     <motion.p
                       animate={reducedMotion ? undefined : { scale: [1, 1.08, 1] }}
                       transition={{ repeat: 2, duration: 0.4, delay: 0.4 }}
-                      className="text-base font-black tracking-wide text-amber-400"
+                      className="text-[26px] font-black tracking-wide text-amber-400"
                       style={{ textShadow: `0 0 12px ${borderColor}60` }}
                     >
                       Ka-Ching!
                     </motion.p>
-                    <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold ${bc.badge}`}>{toast.branch}</span>
+                    <span className={`rounded-full px-2 py-0.5 text-[18px] font-bold ${bc.badge}`}>{toast.branch}</span>
                   </div>
-                  <p className="mt-0.5 truncate text-sm font-medium text-white/70">{toast.customer}</p>
-                  {toast.amName && <p className="text-xs text-white/40">door {toast.amName}</p>}
+                  <p className="mt-0.5 truncate text-[22px] font-medium text-white/70">{toast.customer}</p>
+                  {toast.amName && <p className="text-[22px] text-white/40">door {toast.amName}</p>}
                 </div>
                 {toast.amount > 0 && (
                   <motion.div
@@ -1621,26 +1673,26 @@ export default function LiveDashboard() {
         <div className="mb-3 flex shrink-0 items-center justify-between lg:mb-2">
           <Link href="/admin" className="group flex items-center gap-3">
             <Image src="/logo-wit.png" alt="WarmeLeads" width={140} height={42} className="h-8 w-auto opacity-80 transition group-hover:opacity-100" />
-            <span className="rounded-full bg-white/[0.06] px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-white/30">Live</span>
+            <span className="rounded-full bg-white/[0.06] px-2.5 py-1 text-[18px] font-bold uppercase tracking-widest text-white/30">Live</span>
           </Link>
           <div className="flex items-center gap-3 sm:gap-5">
             {/* Speed metrics */}
             <div className="hidden items-center gap-4 lg:flex">
               <div className="text-right">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-white/25">Openstaand</p>
-                <p className="text-sm font-black tabular-nums text-amber-300/90">
+                <p className="text-[18px] font-bold uppercase tracking-wider text-white/25">Openstaand</p>
+                <p className="text-[22px] font-black tabular-nums text-amber-300/90">
                   {unpaidList.length} batch{unpaidList.length === 1 ? '' : 'es'}
                 </p>
               </div>
               <div className="h-6 w-px bg-white/[0.06]" />
               <div className="text-right">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-white/25">Laatste (onbetaald)</p>
-                <p className="text-sm font-black tabular-nums text-white/70">{lastUnpaidAgo === '-' ? '—' : `${lastUnpaidAgo} geleden`}</p>
+                <p className="text-[18px] font-bold uppercase tracking-wider text-white/25">Laatste (onbetaald)</p>
+                <p className="text-[22px] font-black tabular-nums text-white/70">{lastUnpaidAgo === '-' ? '—' : `${lastUnpaidAgo} geleden`}</p>
               </div>
               <div className="h-6 w-px bg-white/[0.06]" />
               <div className="text-right">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-white/25">Tempo vandaag</p>
-                <p className="text-sm font-black tabular-nums text-white/70">{avgUnpaidInterval === '-' ? '—' : `elke ${avgUnpaidInterval}`}</p>
+                <p className="text-[18px] font-bold uppercase tracking-wider text-white/25">Tempo vandaag</p>
+                <p className="text-[22px] font-black tabular-nums text-white/70">{avgUnpaidInterval === '-' ? '—' : `elke ${avgUnpaidInterval}`}</p>
               </div>
               <div className="h-6 w-px bg-white/[0.06]" />
               {/* Phone quality ring */}
@@ -1657,12 +1709,12 @@ export default function LiveDashboard() {
                     />
                   </svg>
                   <div className="absolute inset-0 flex items-center justify-center">
-                    <span className={`text-[9px] font-black ${phoneColor}`}>{phoneQuality.validPct}%</span>
+                    <span className={`text-[18px] font-black ${phoneColor}`}>{phoneQuality.validPct}%</span>
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-white/25">Tel. kwaliteit</p>
-                  <p className={`text-[11px] font-bold ${phoneColor}`}>
+                  <p className="text-[18px] font-bold uppercase tracking-wider text-white/25">Tel. kwaliteit</p>
+                  <p className={`text-[18px] font-bold ${phoneColor}`}>
                     {phoneQuality.invalid > 0 ? `${phoneQuality.invalid} verdacht` : 'Alles geldig'}
                   </p>
                 </div>
@@ -1696,77 +1748,128 @@ export default function LiveDashboard() {
               )}
             </button>
 
-            {/* Refresh indicator */}
-            <div className="flex items-center gap-2">
-              <div className="relative h-5 w-5">
-                <svg className="h-5 w-5 -rotate-90" viewBox="0 0 20 20">
-                  <circle cx="10" cy="10" r="8" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="2" />
-                  <circle cx="10" cy="10" r="8" fill="none" stroke="rgba(139,92,246,0.5)" strokeWidth="2"
-                    strokeDasharray={`${(1 - refreshIn / (REFRESH_INTERVAL / 1000)) * 50.3} 50.3`}
-                    strokeLinecap="round" className="transition-all duration-1000" />
-                </svg>
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
+            {/* Verbindingsstatus: leesbaar vanaf de andere kant van de ruimte */}
+            <div className="flex items-center gap-3">
+              {isStale ? (
+                <div className="flex items-center gap-3 rounded-2xl bg-red-500/15 px-5 py-2.5 ring-2 ring-red-500/40">
+                  <SignalSlashIcon className="h-8 w-8 shrink-0 text-red-400" />
+                  <div className="leading-tight">
+                    <p className={`${TYPE.label} font-bold text-red-300`}>Cijfers niet vers</p>
+                    <p className={`${TYPE.meta} tabular-nums text-red-300/70`}>
+                      {dataAgeMs !== null ? `${Math.round(dataAgeMs / 60000)} min oud` : 'verbinding kwijt'}
+                    </p>
+                  </div>
                 </div>
-              </div>
-              <span className="text-[11px] tabular-nums text-white/25">{refreshIn}s</span>
+              ) : (
+                <div className="flex items-center gap-3">
+                  <span
+                    className={`h-3.5 w-3.5 shrink-0 rounded-full bg-emerald-400 ${
+                      reducedMotion ? '' : 'animate-pulse'
+                    }`}
+                  />
+                  <p className={`${TYPE.meta} tabular-nums text-white/45`}>
+                    live · {refreshIn}s
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Clock */}
             <div className="text-right">
-              <p className="text-lg font-bold tabular-nums text-white/80">
+              <p className="text-[26px] font-bold tabular-nums text-white/80">
                 {clock.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
               </p>
-              <p className="hidden text-[11px] text-white/25 sm:block">
+              <p className="hidden text-[18px] text-white/25 sm:block">
                 {clock.toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
               </p>
-              <p className="text-[11px] text-white/25 sm:hidden">
+              <p className="text-[18px] text-white/25 sm:hidden">
                 {clock.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}
               </p>
             </div>
           </div>
         </div>
 
-        {/* Hero KPIs */}
-        <div className="mb-3 grid shrink-0 grid-cols-2 gap-2 lg:mb-2 lg:grid-cols-5">
-          {[
-            { label: 'Leads vandaag', value: ps.day?.leads || 0, sub: `${ps.day?.assigned || 0} uitgedeeld`, color: 'from-brand-purple to-brand-pink' },
-            { label: 'Leads deze week', value: ps.week?.leads || 0, sub: `${ps.week?.assigned || 0} uitgedeeld`, color: 'from-emerald-500 to-emerald-600', trend: ps.week },
-            { label: 'Omzet', value: Math.round(data.totalRevenue), sub: `winst: €${(data.costMetrics?.totalProfit || 0).toLocaleString('nl-NL', { maximumFractionDigits: 0 })}${data.costMetrics?.bulkRevenue ? ` · bulk: €${data.costMetrics.bulkRevenue.toLocaleString('nl-NL', { maximumFractionDigits: 0 })}` : ''}`, color: 'from-amber-500 to-orange-500', prefix: '€' },
-            {
-              label: 'Eff. CPL',
-              value: data.costMetrics?.effectieveCpl || 0,
-              sub: `${data.costMetrics?.avgAssignments || 0}x uitgedeeld · bruto €${(data.costMetrics?.brutoCpl || 0).toFixed(2)}${
-                data.costMetrics?.approvedReclamationsInWindow && data.costMetrics.approvedReclamationsInWindow > 0
-                  ? ` · −${data.costMetrics.approvedReclamationsInWindow} reclam.`
-                  : ''
-              }`,
-              color: 'from-teal-400 to-emerald-500',
-              prefix: '€',
-              decimals: 2,
-            },
-            { label: 'Totaal leads', value: data.totalLeads, sub: `${data.activeCustomers} klanten actief`, color: 'from-sky-500 to-blue-600' },
-          ].map((kpi, i) => (
-            <motion.div
-              key={kpi.label}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.08 }}
-              className="group relative min-w-0 overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.03] p-3 backdrop-blur-sm lg:p-4"
-            >
-              <div className={`absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r ${kpi.color}`} />
-              <p className="mb-0.5 text-[10px] font-medium text-white/40 lg:text-xs">{kpi.label}</p>
-              <div className="flex items-baseline gap-2">
-                {(kpi as any).decimals ? (
-                  <span className="text-2xl font-black tracking-tight text-white lg:text-3xl">{kpi.prefix}{kpi.value.toFixed((kpi as any).decimals)}</span>
-                ) : (
-                  <AnimatedNumber value={kpi.value} prefix={kpi.prefix} className="text-2xl font-black tracking-tight text-white lg:text-3xl" />
-                )}
-                {kpi.trend && <TrendArrow current={kpi.trend.leads} previous={kpi.trend.prevLeads} />}
-              </div>
-              <p className="mt-1 break-words text-[11px] text-white/25">{kpi.sub}</p>
-            </motion.div>
-          ))}
+        {/* Hero: één cijfer dat je vanaf de deur leest, met vier ondersteunende
+            waarden eromheen. Vijf gelijkwaardige kaarten vroegen allemaal
+            evenveel aandacht en gaven daarmee geen enkele richting. */}
+        <div className="mb-4 grid shrink-0 grid-cols-1 gap-3 lg:grid-cols-12">
+          <motion.div
+            initial={reducedMotion ? false : { opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="relative overflow-hidden rounded-3xl border border-white/[0.08] bg-gradient-to-br from-brand-purple/25 to-brand-pink/10 p-6 lg:col-span-5 lg:p-8"
+          >
+            <p className={`${TYPE.label} font-semibold uppercase tracking-wider text-white/55`}>
+              Omzet laatste 24 uur
+            </p>
+            <div className="mt-2 flex items-end gap-4">
+              <AnimatedNumber
+                value={Math.round(ps.day?.revenue || 0)}
+                prefix="€"
+                className={`${TYPE.hero} font-black tracking-tight tabular-nums text-white`}
+              />
+              {ps.day && <TrendArrow current={ps.day.revenue} previous={ps.day.prevRevenue} />}
+            </div>
+            <p className={`${TYPE.meta} mt-3 tabular-nums text-white/50`}>
+              vorige 24 uur: €{Math.round(ps.day?.prevRevenue || 0).toLocaleString('nl-NL')}
+            </p>
+          </motion.div>
+
+          <div className="grid grid-cols-2 gap-3 lg:col-span-7">
+            {[
+              {
+                label: 'Leads laatste 24 uur',
+                value: ps.day?.leads || 0,
+                sub: `${ps.day?.assigned || 0} uitgedeeld`,
+                trend: ps.day,
+              },
+              {
+                label: 'Winst',
+                value: Math.round(data.costMetrics?.totalProfit || 0),
+                prefix: '€',
+                sub: `omzet totaal €${Math.round(data.totalRevenue).toLocaleString('nl-NL')}`,
+              },
+              {
+                label: 'Effectieve CPL',
+                value: data.costMetrics?.effectieveCpl || 0,
+                prefix: '€',
+                decimals: 2,
+                sub: `${data.costMetrics?.avgAssignments || 0}x uitgedeeld`,
+              },
+              {
+                label: 'Leads totaal',
+                value: data.totalLeads,
+                sub: `${data.activeCustomers} klanten actief`,
+              },
+            ].map((kpi, i) => (
+              <motion.div
+                key={kpi.label}
+                initial={reducedMotion ? false : { opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: reducedMotion ? 0 : 0.05 + i * 0.05 }}
+                className="min-w-0 rounded-2xl border border-white/[0.06] bg-white/[0.03] p-4 lg:p-5"
+              >
+                <p className={`${TYPE.meta} font-medium uppercase tracking-wide text-white/45`}>
+                  {kpi.label}
+                </p>
+                <div className="mt-1 flex items-baseline gap-3">
+                  {kpi.decimals ? (
+                    <span className={`${TYPE.primary} font-black tabular-nums tracking-tight text-white`}>
+                      {kpi.prefix}
+                      {kpi.value.toFixed(kpi.decimals)}
+                    </span>
+                  ) : (
+                    <AnimatedNumber
+                      value={kpi.value}
+                      prefix={kpi.prefix}
+                      className={`${TYPE.primary} font-black tabular-nums tracking-tight text-white`}
+                    />
+                  )}
+                  {kpi.trend && <TrendArrow current={kpi.trend.leads} previous={kpi.trend.prevLeads} />}
+                </div>
+                <p className={`${TYPE.meta} mt-1 truncate tabular-nums text-white/40`}>{kpi.sub}</p>
+              </motion.div>
+            ))}
+          </div>
         </div>
 
         {/* AM Race + Podium — full-width hero op de TV */}
@@ -1784,10 +1887,10 @@ export default function LiveDashboard() {
           <div className="flex min-h-0 max-h-[min(560px,calc(100svh-9.5rem))] flex-col overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 backdrop-blur-sm sm:max-h-[min(600px,calc(100svh-10rem))] lg:col-span-3 lg:max-h-none lg:h-full">
             <div className="mb-2 flex shrink-0 items-center justify-between">
               <div className="flex items-center gap-2">
-                <div className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
-                <h2 className="text-sm font-bold text-white/70">Actieve batches</h2>
+                <div className={`h-2.5 w-2.5 rounded-full bg-emerald-400 ${reducedMotion ? '' : 'animate-pulse'}`} />
+                <h2 className="text-[22px] font-bold text-white/70">Actieve batches</h2>
               </div>
-              <div className="flex items-center gap-3 text-[11px] text-white/25">
+              <div className="flex items-center gap-3 text-[18px] text-white/25">
                 <span>{data.activeBatches.length} actief</span>
                 <span>{data.completedBatchCount} voltooid</span>
               </div>
@@ -1795,7 +1898,7 @@ export default function LiveDashboard() {
 
             {data.activeBatches.length === 0 ? (
               <div className="flex flex-1 items-center justify-center py-6">
-                <p className="text-sm text-white/20">Geen actieve batches</p>
+                <p className="text-[22px] text-white/20">Geen actieve batches</p>
               </div>
             ) : (
               <TvVerticalCarousel
@@ -1823,13 +1926,13 @@ export default function LiveDashboard() {
                         >
                           <div className="mb-2 flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              <span className="text-sm font-semibold text-white/80">{b.customer}</span>
-                              <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${bc.badge}`}>{b.branch}</span>
-                              {isCelebrating && sk === 'a' && <span className="text-sm">🎉</span>}
+                              <span className="text-[22px] font-semibold text-white/80">{b.customer}</span>
+                              <span className={`rounded-full px-2 py-0.5 text-[18px] font-bold ${bc.badge}`}>{b.branch}</span>
+                              {isCelebrating && sk === 'a' && <span className="text-[22px]">🎉</span>}
                             </div>
                             <div className="flex items-baseline gap-1.5">
-                              <span className="text-lg font-black tabular-nums text-white/90">{b.delivered}</span>
-                              <span className="text-xs text-white/25">/ {b.batchSize}</span>
+                              <span className="text-[26px] font-black tabular-nums text-white/90">{b.delivered}</span>
+                              <span className="text-[22px] text-white/25">/ {b.batchSize}</span>
                             </div>
                           </div>
                           <div className="relative h-3 overflow-hidden rounded-full bg-white/[0.06]">
@@ -1840,7 +1943,7 @@ export default function LiveDashboard() {
                               className={`absolute inset-y-0 left-0 rounded-full bg-gradient-to-r ${bc.bar} shadow-lg ${bc.glow}`}
                             />
                           </div>
-                          <div className="mt-1.5 flex items-center justify-between text-[11px] text-white/25">
+                          <div className="mt-1.5 flex items-center justify-between text-[18px] text-white/25">
                             <div className="flex gap-3">
                               {b.pricePerLead && <span>€{b.pricePerLead}/lead</span>}
                               {b.leadsPerWeek && <span>{b.leadsPerWeek}/week</span>}
@@ -1858,7 +1961,7 @@ export default function LiveDashboard() {
                       key={sk ? `${sk}-totaal` : 'totaal'}
                       className="mt-1 shrink-0 rounded-xl border border-white/[0.04] bg-white/[0.02] p-2"
                     >
-                      <div className="mb-1 flex items-center justify-between text-xs">
+                      <div className="mb-1 flex items-center justify-between text-[22px]">
                         <span className="font-medium text-white/40">Totaal voortgang</span>
                         <span className="font-bold tabular-nums text-white/60">{batchDelivered} / {batchTotal} ({overallPct}%)</span>
                       </div>
@@ -1882,18 +1985,18 @@ export default function LiveDashboard() {
             <div className="mb-2 flex shrink-0 items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <div className="relative">
-                  <div className="h-2 w-2 rounded-full bg-amber-400" />
-                  <div className="absolute inset-0 h-2 w-2 animate-ping rounded-full bg-amber-400/50" />
+                  <div className="h-2.5 w-2.5 rounded-full bg-amber-400" />
+                  <div className={`absolute inset-0 h-2.5 w-2.5 rounded-full bg-amber-400/50 ${reducedMotion ? '' : 'animate-ping'}`} />
                 </div>
-                <h2 className="text-sm font-bold text-white/70">Wacht op betaling</h2>
+                <h2 className="text-[22px] font-bold text-white/70">Wacht op betaling</h2>
               </div>
-              <span className="text-[10px] font-semibold tabular-nums text-amber-200/80">{unpaidList.length}</span>
+              <span className="text-[18px] font-semibold tabular-nums text-amber-200/80">{unpaidList.length}</span>
             </div>
 
             {unpaidList.length === 0 ? (
               <div className="flex min-h-[10rem] flex-1 flex-col items-center justify-center py-8 text-center">
-                <p className="text-sm text-white/25">Geen openstaande batches</p>
-                <p className="mt-1 text-[11px] text-white/15">Leads en afspraken met open factuur verschijnen hier</p>
+                <p className="text-[22px] text-white/25">Geen openstaande batches</p>
+                <p className="mt-1 text-[18px] text-white/15">Leads en afspraken met open factuur verschijnen hier</p>
               </div>
             ) : (
               <TvVerticalCarousel
@@ -1936,38 +2039,38 @@ export default function LiveDashboard() {
                                   <motion.span
                                     initial={{ scale: 0 }}
                                     animate={{ scale: 1 }}
-                                    className="shrink-0 rounded bg-amber-500 px-1.5 py-0.5 text-[9px] font-black uppercase text-slate-900"
+                                    className="shrink-0 rounded bg-amber-500 px-1.5 py-0.5 text-[18px] font-black uppercase text-slate-900"
                                   >
                                     Nieuw
                                   </motion.span>
                                 )}
-                                <p className="truncate text-sm font-semibold text-white/90">{row.customer}</p>
+                                <p className="truncate text-[22px] font-semibold text-white/90">{row.customer}</p>
                               </div>
                               {row.accountManagerName && (
-                                <p className="mt-0.5 truncate text-[10px] font-medium text-white/28" title={`Accountmanager: ${row.accountManagerName}`}>
+                                <p className="mt-0.5 truncate text-[18px] font-medium text-white/28" title={`Accountmanager: ${row.accountManagerName}`}>
                                   AM · {row.accountManagerName}
                                 </p>
                               )}
-                              <p className="mt-1 text-[11px] text-white/35">
+                              <p className="mt-1 text-[18px] text-white/35">
                                 {row.batchSize} × {productLabel.toLowerCase()}
                                 {row.unitPrice != null && (
                                   <> · €{row.unitPrice.toLocaleString('nl-NL', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}/{unitLabel}</>
                                 )}
                               </p>
-                              <p className="mt-0.5 text-[11px] font-medium text-amber-200/70">{statusNl}</p>
+                              <p className="mt-0.5 text-[18px] font-medium text-amber-200/70">{statusNl}</p>
                               <div className="mt-1.5">
                                 <BatchTargetAreaBadges presetLabels={row.targetAreaLabels ?? []} variant="dark" />
                               </div>
                             </div>
                             <div className="ml-1 flex shrink-0 flex-col items-end gap-1.5 text-right">
-                              <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${bc.badge}`}>{row.branch}</span>
-                              <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${row.product === 'appointments' ? 'bg-teal-500/25 text-teal-200' : 'bg-brand-purple/25 text-purple-200'}`}>
+                              <span className={`rounded px-1.5 py-0.5 text-[18px] font-bold ${bc.badge}`}>{row.branch}</span>
+                              <span className={`rounded px-1.5 py-0.5 text-[18px] font-bold ${row.product === 'appointments' ? 'bg-teal-500/25 text-teal-200' : 'bg-brand-purple/25 text-purple-200'}`}>
                                 {productLabel}
                               </span>
-                              <span className="text-[11px] font-bold tabular-nums text-white/50">
+                              <span className="text-[18px] font-bold tabular-nums text-white/50">
                                 €{row.totalPrice.toLocaleString('nl-NL', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} excl.
                               </span>
-                              <span className="text-[10px] tabular-nums text-white/20">{timeAgo(row.createdAt)}</span>
+                              <span className="text-[18px] tabular-nums text-white/20">{timeAgo(row.createdAt)}</span>
                             </div>
                           </div>
                         </motion.div>
@@ -1986,7 +2089,7 @@ export default function LiveDashboard() {
             <div className="min-h-0 flex-1 overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.02] p-3 backdrop-blur-sm">
               <div className="mb-1 flex items-center gap-2">
                 <svg className="h-4 w-4 text-white/40" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd"/></svg>
-                <h2 className="text-sm font-bold text-white/70">Leads per provincie</h2>
+                <h2 className="text-[22px] font-bold text-white/70">Leads per provincie</h2>
               </div>
               <ProvinceMap data={data.provinceBreakdown} />
             </div>
@@ -1994,20 +2097,20 @@ export default function LiveDashboard() {
             {/* Mobile: openstaande batches + telefoonkwaliteit */}
             <div className="grid grid-cols-2 gap-3 lg:hidden">
               <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 backdrop-blur-sm">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-white/25">Openstaand</p>
-                <p className="mt-1 text-lg font-black tabular-nums text-amber-300/90">{unpaidList.length}</p>
-                <p className="text-[10px] text-white/25">onbetaalde batches</p>
+                <p className="text-[18px] font-bold uppercase tracking-wider text-white/25">Openstaand</p>
+                <p className="mt-1 text-[26px] font-black tabular-nums text-amber-300/90">{unpaidList.length}</p>
+                <p className="text-[18px] text-white/25">onbetaalde batches</p>
               </div>
               <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 backdrop-blur-sm">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-white/25">Laatste</p>
-                <p className="mt-1 text-lg font-black tabular-nums text-white/80">{lastUnpaidAgo === '-' ? '—' : lastUnpaidAgo}</p>
-                <p className="text-[10px] text-white/25">{avgUnpaidInterval === '-' ? '—' : `~${avgUnpaidInterval} vandaag`}</p>
+                <p className="text-[18px] font-bold uppercase tracking-wider text-white/25">Laatste</p>
+                <p className="mt-1 text-[26px] font-black tabular-nums text-white/80">{lastUnpaidAgo === '-' ? '—' : lastUnpaidAgo}</p>
+                <p className="text-[18px] text-white/25">{avgUnpaidInterval === '-' ? '—' : `~${avgUnpaidInterval} vandaag`}</p>
               </div>
             </div>
             <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 backdrop-blur-sm lg:hidden">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-white/25">Tel. kwaliteit (vandaag)</p>
-              <p className={`mt-1 text-lg font-black ${phoneColor}`}>{phoneQuality.validPct}%</p>
-              <p className="text-[10px] text-white/25">{phoneQuality.invalid} verdacht</p>
+              <p className="text-[18px] font-bold uppercase tracking-wider text-white/25">Tel. kwaliteit (vandaag)</p>
+              <p className={`mt-1 text-[26px] font-black ${phoneColor}`}>{phoneQuality.validPct}%</p>
+              <p className="text-[18px] text-white/25">{phoneQuality.invalid} verdacht</p>
             </div>
           </div>
         </div>
@@ -2022,17 +2125,17 @@ export default function LiveDashboard() {
           >
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-6">
               <div className="px-2">
-                <p className="text-[9px] font-bold uppercase tracking-widest text-emerald-400/50">Ad spend</p>
-                <p className="mt-0.5 text-lg font-black tabular-nums text-white/80">&euro;{data.costMetrics.monthAdSpend.toLocaleString('nl-NL', { maximumFractionDigits: 0 })}</p>
+                <p className="text-[18px] font-bold uppercase tracking-widest text-emerald-400/50">Ad spend</p>
+                <p className="mt-0.5 text-[26px] font-black tabular-nums text-white/80">&euro;{data.costMetrics.monthAdSpend.toLocaleString('nl-NL', { maximumFractionDigits: 0 })}</p>
               </div>
               <div className="px-2">
-                <p className="text-[9px] font-bold uppercase tracking-widest text-emerald-400/50">Bruto CPL</p>
-                <p className="mt-0.5 text-lg font-black tabular-nums text-white/80">&euro;{data.costMetrics.brutoCpl.toFixed(2)}</p>
+                <p className="text-[18px] font-bold uppercase tracking-widest text-emerald-400/50">Bruto CPL</p>
+                <p className="mt-0.5 text-[26px] font-black tabular-nums text-white/80">&euro;{data.costMetrics.brutoCpl.toFixed(2)}</p>
               </div>
               <div className="px-2" title="Effectieve CPL: spend gedeeld door netto-toewijzingen (goedgekeurde reclamaties tellen niet als levering, kosten blijven volledig staan).">
-                <p className="text-[9px] font-bold uppercase tracking-widest text-emerald-400/50">Eff. CPL</p>
-                <p className="mt-0.5 text-lg font-black tabular-nums text-emerald-400">&euro;{data.costMetrics.effectieveCpl.toFixed(2)}</p>
-                <p className="text-[9px] text-white/25">
+                <p className="text-[18px] font-bold uppercase tracking-widest text-emerald-400/50">Eff. CPL</p>
+                <p className="mt-0.5 text-[26px] font-black tabular-nums text-emerald-400">&euro;{data.costMetrics.effectieveCpl.toFixed(2)}</p>
+                <p className="text-[18px] text-white/25">
                   {data.costMetrics.avgAssignments}x uitgedeeld
                   {data.costMetrics.approvedReclamationsInWindow && data.costMetrics.approvedReclamationsInWindow > 0
                     ? ` · −${data.costMetrics.approvedReclamationsInWindow} reclam.`
@@ -2040,24 +2143,24 @@ export default function LiveDashboard() {
                 </p>
               </div>
               <div className="px-2">
-                <p className="text-[9px] font-bold uppercase tracking-widest text-emerald-400/50">Omzet</p>
-                <p className="mt-0.5 text-lg font-black tabular-nums text-white/80">&euro;{data.totalRevenue.toLocaleString('nl-NL', { maximumFractionDigits: 0 })}</p>
+                <p className="text-[18px] font-bold uppercase tracking-widest text-emerald-400/50">Omzet</p>
+                <p className="mt-0.5 text-[26px] font-black tabular-nums text-white/80">&euro;{data.totalRevenue.toLocaleString('nl-NL', { maximumFractionDigits: 0 })}</p>
                 {data.costMetrics.bulkRevenue > 0 && (
-                  <p className="text-[9px] text-white/25">&euro;{data.costMetrics.batchRevenue.toLocaleString('nl-NL', { maximumFractionDigits: 0 })} batch + &euro;{data.costMetrics.bulkRevenue.toLocaleString('nl-NL', { maximumFractionDigits: 0 })} bulk</p>
+                  <p className="text-[18px] text-white/25">&euro;{data.costMetrics.batchRevenue.toLocaleString('nl-NL', { maximumFractionDigits: 0 })} batch + &euro;{data.costMetrics.bulkRevenue.toLocaleString('nl-NL', { maximumFractionDigits: 0 })} bulk</p>
                 )}
               </div>
               <div className="px-2">
-                <p className="text-[9px] font-bold uppercase tracking-widest text-emerald-400/50">Winst</p>
-                <p className={`mt-0.5 text-lg font-black tabular-nums ${data.costMetrics.totalProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                <p className="text-[18px] font-bold uppercase tracking-widest text-emerald-400/50">Winst</p>
+                <p className={`mt-0.5 text-[26px] font-black tabular-nums ${data.costMetrics.totalProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                   {data.costMetrics.totalProfit >= 0 ? '+' : ''}&euro;{data.costMetrics.totalProfit.toLocaleString('nl-NL', { maximumFractionDigits: 0 })}
                 </p>
               </div>
               <div className="px-2">
-                <p className="text-[9px] font-bold uppercase tracking-widest text-purple-300/60">AI spend</p>
-                <p className={`mt-0.5 text-lg font-black tabular-nums ${data.aiSpend?.enabled ? 'text-purple-300' : 'text-white/30'}`}>
+                <p className="text-[18px] font-bold uppercase tracking-widest text-purple-300/60">AI spend</p>
+                <p className={`mt-0.5 text-[26px] font-black tabular-nums ${data.aiSpend?.enabled ? 'text-purple-300' : 'text-white/30'}`}>
                   &euro;{((data.aiSpend?.todayCents || 0) / 100).toLocaleString('nl-NL', { maximumFractionDigits: 2 })}
                 </p>
-                <p className="text-[9px] text-white/25">
+                <p className="text-[18px] text-white/25">
                   {data.aiSpend?.enabled ? `${data.aiSpend.activeExperiments} live · maand €${((data.aiSpend.monthCents || 0)/100).toLocaleString('nl-NL', { maximumFractionDigits: 0 })}` : 'AI uit'}
                 </p>
               </div>
@@ -2075,7 +2178,7 @@ export default function LiveDashboard() {
           >
             <div className="mb-2 flex items-center gap-2">
               <svg className="h-4 w-4 text-amber-400/60" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5 2a1 1 0 011 1v1h1a1 1 0 010 2H6v1a1 1 0 01-2 0V6H3a1 1 0 010-2h1V3a1 1 0 011-1zm0 10a1 1 0 011 1v1h1a1 1 0 110 2H6v1a1 1 0 11-2 0v-1H3a1 1 0 110-2h1v-1a1 1 0 011-1zM12 2a1 1 0 01.967.744L14.146 7.2 17.5 9.134a1 1 0 010 1.732l-3.354 1.935-1.18 4.455a1 1 0 01-1.933 0L9.854 12.8 6.5 10.866a1 1 0 010-1.732l3.354-1.935 1.18-4.455A1 1 0 0112 2z" clipRule="evenodd"/></svg>
-              <h2 className="text-sm font-bold text-white/70">AM Performance</h2>
+              <h2 className="text-[22px] font-bold text-white/70">AM Performance</h2>
             </div>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
               {amTargets.map(t => {
@@ -2091,8 +2194,10 @@ export default function LiveDashboard() {
                 return (
                   <motion.div
                     key={t.id}
-                    animate={isClose ? { boxShadow: ['0 0 0px rgba(251,191,36,0)', '0 0 12px rgba(251,191,36,0.15)', '0 0 0px rgba(251,191,36,0)'] } : undefined}
-                    transition={isClose ? { repeat: Infinity, duration: 2.5 } : undefined}
+                    /* Was een eeuwig pulserende schaduw. Een blijvende toestand
+                       hoort in kleur en vorm te zitten, niet in beweging die de
+                       hele dag doorloopt op een scherm waar mensen naast werken. */
+                    style={isClose ? { boxShadow: '0 0 0 2px rgba(251,191,36,0.45)' } : undefined}
                     className={`rounded-xl border p-3 ${
                       isComplete
                         ? 'border-emerald-500/20 bg-emerald-500/[0.06]'
@@ -2122,18 +2227,18 @@ export default function LiveDashboard() {
                           {t.am_avatar_url ? (
                             <Image src={t.am_avatar_url} alt={t.am_name} width={28} height={28} className="h-7 w-7 rounded-full object-cover" />
                           ) : isComplete ? (
-                            <span className="text-xs">🎉</span>
+                            <span className="text-[22px]">🎉</span>
                           ) : (
-                            <span className="text-[9px] font-black text-white/70">{t.progress_pct}%</span>
+                            <span className="text-[18px] font-black text-white/70">{t.progress_pct}%</span>
                           )}
                         </div>
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-[11px] font-bold text-white/70">{t.am_name}</p>
-                        <p className="truncate text-[9px] text-white/30">{t.label}</p>
+                        <p className="truncate text-[18px] font-bold text-white/70">{t.am_name}</p>
+                        <p className="truncate text-[18px] text-white/30">{t.label}</p>
                       </div>
                     </div>
-                    <div className="flex items-baseline justify-between text-[10px]">
+                    <div className="flex items-baseline justify-between text-[18px]">
                       <span className="font-bold tabular-nums text-white/60">
                         {t.target_type === 'revenue'
                           ? `€${t.current_value.toLocaleString('nl-NL', { maximumFractionDigits: 0 })}`
@@ -2146,11 +2251,11 @@ export default function LiveDashboard() {
                       </span>
                     </div>
                     {!isComplete && remaining > 0 && (
-                      <p className="mt-0.5 text-[9px] text-white/25">
+                      <p className="mt-0.5 text-[18px] text-white/25">
                         Nog {t.target_type === 'revenue' ? `€${remaining.toLocaleString('nl-NL', { maximumFractionDigits: 0 })}` : remaining} · {daysLeft}d over
                       </p>
                     )}
-                    <div className="mt-1 flex items-center justify-between text-[9px] text-white/20">
+                    <div className="mt-1 flex items-center justify-between text-[18px] text-white/20">
                       <span>{TARGET_TYPE_LABELS[t.target_type] || t.target_type}</span>
                       {t.bonus_amount > 0 && (
                         <span className={isComplete ? 'font-bold text-emerald-400/70' : 'text-amber-400/60'}>
@@ -2175,8 +2280,8 @@ export default function LiveDashboard() {
           >
             <div className="mb-2 flex items-center gap-2">
               <svg className="h-4 w-4 text-brand-purple/60" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" /></svg>
-              <h2 className="text-sm font-bold text-white/70">AM Leaderboard</h2>
-              <span className="ml-auto text-[10px] text-white/25">
+              <h2 className="text-[22px] font-bold text-white/70">AM Leaderboard</h2>
+              <span className="ml-auto text-[18px] text-white/25">
                 {new Date().toLocaleDateString('nl-NL', { month: 'long', year: 'numeric' })}
               </span>
             </div>
@@ -2201,21 +2306,21 @@ export default function LiveDashboard() {
                       {am.avatarUrl ? (
                         <Image src={am.avatarUrl} alt={am.name} width={32} height={32} className="h-8 w-8 rounded-full object-cover" />
                       ) : (
-                        <div className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-black ${
+                        <div className={`flex h-8 w-8 items-center justify-center rounded-full text-[22px] font-black ${
                           rank < 3 ? `bg-gradient-to-br ${medalBg} text-white shadow-md` : 'bg-white/[0.06] text-white/30'
                         }`}>
                           {am.name.charAt(0).toUpperCase()}
                         </div>
                       )}
-                      <span className={`absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-black ${
+                      <span className={`absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full text-[18px] font-black ${
                         rank < 3 ? `bg-gradient-to-br ${medalBg} text-white` : 'bg-white/10 text-white/40'
                       }`}>
                         {rank + 1}
                       </span>
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className={`truncate text-sm font-bold ${isFirst ? 'text-amber-300' : 'text-white/70'}`}>{am.name}</p>
-                      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px]">
+                      <p className={`truncate text-[22px] font-bold ${isFirst ? 'text-amber-300' : 'text-white/70'}`}>{am.name}</p>
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[18px]">
                         <span className="font-bold tabular-nums text-emerald-400">€{(am.revenue + am.bulkRevenue).toLocaleString('nl-NL', { maximumFractionDigits: 0 })}</span>
                         <span className="text-white/20">·</span>
                         <span className="text-white/30">{am.batches} {am.batches === 1 ? 'batch' : 'batches'}</span>
@@ -2226,7 +2331,7 @@ export default function LiveDashboard() {
                       </div>
                     </div>
                     {isFirst && (
-                      <span className="text-lg">👑</span>
+                      <span className="text-[26px]">👑</span>
                     )}
                   </motion.div>
                 );
@@ -2249,15 +2354,15 @@ export default function LiveDashboard() {
                 transition={{ delay: 0.3 + i * 0.06 }}
                 className="min-w-0 rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 backdrop-blur-sm"
               >
-                <p className="mb-1 text-[9px] font-bold uppercase tracking-widest text-white/25 lg:text-[10px]">{label}</p>
+                <p className="mb-1 text-[18px] font-bold uppercase tracking-widest text-white/25 lg:text-[18px]">{label}</p>
                 <div className="flex items-baseline gap-1.5">
-                  <AnimatedNumber value={stat.leads} className="text-lg font-black tabular-nums text-white/90 lg:text-xl" />
+                  <AnimatedNumber value={stat.leads} className="text-[26px] font-black tabular-nums text-white/90 lg:text-xl" />
                   <TrendArrow current={stat.leads} previous={stat.prevLeads} />
                 </div>
-                <div className="mt-1 flex items-center gap-1.5 text-[10px] text-white/25">
+                <div className="mt-1 flex items-center gap-1.5 text-[18px] text-white/25">
                   <span>{stat.assigned} uitgedeeld</span>
                   {stat.leads > 0 && (
-                    <span className="rounded bg-white/[0.06] px-1 py-0.5 text-[9px] font-bold text-white/30">
+                    <span className="rounded bg-white/[0.06] px-1 py-0.5 text-[18px] font-bold text-white/30">
                       {Math.round((stat.assigned / stat.leads) * 100)}%
                     </span>
                   )}
@@ -2266,12 +2371,12 @@ export default function LiveDashboard() {
                 {(stat.revenue > 0 || stat.adSpend > 0) && (
                   <div className="mt-2 border-t border-white/[0.04] pt-2">
                     <div className="flex items-baseline gap-1.5">
-                      <span className={`text-sm font-black tabular-nums ${profitPositive ? 'text-emerald-400/90' : 'text-red-400/90'}`}>
+                      <span className={`text-[22px] font-black tabular-nums ${profitPositive ? 'text-emerald-400/90' : 'text-red-400/90'}`}>
                         {profitPositive ? '+' : ''}&euro;{Math.round(stat.profit).toLocaleString('nl-NL')}
                       </span>
                       <TrendArrow current={stat.profit} previous={stat.prevProfit} />
                     </div>
-                    <div className="mt-0.5 flex flex-wrap items-center gap-x-1 gap-y-0.5 text-[9px] text-white/20">
+                    <div className="mt-0.5 flex flex-wrap items-center gap-x-1 gap-y-0.5 text-[18px] text-white/20">
                       <span>omzet &euro;{Math.round(stat.revenue).toLocaleString('nl-NL')}</span>
                       <span className="text-white/10">&middot;</span>
                       <span>kosten &euro;{Math.round(stat.adSpend).toLocaleString('nl-NL')}</span>
@@ -2285,7 +2390,7 @@ export default function LiveDashboard() {
         </div>{/* end main content column */}
 
         {/* AM Sidebar — xl only */}
-        <div className="hidden xl:flex xl:w-[340px] xl:shrink-0 xl:flex-col xl:gap-3 xl:overflow-y-auto">
+        <div className="hidden xl:flex xl:w-[420px] xl:shrink-0 xl:flex-col xl:gap-3 xl:overflow-y-auto 2xl:w-[500px]">
           {/* AM Performance */}
           {amTargets.length > 0 && (
             <motion.div
@@ -2296,10 +2401,10 @@ export default function LiveDashboard() {
             >
               <div className="mb-3 flex items-center gap-2">
                 <svg className="h-4 w-4 text-amber-400/60" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5 2a1 1 0 011 1v1h1a1 1 0 010 2H6v1a1 1 0 01-2 0V6H3a1 1 0 010-2h1V3a1 1 0 011-1zm0 10a1 1 0 011 1v1h1a1 1 0 110 2H6v1a1 1 0 11-2 0v-1H3a1 1 0 110-2h1v-1a1 1 0 011-1zM12 2a1 1 0 01.967.744L14.146 7.2 17.5 9.134a1 1 0 010 1.732l-3.354 1.935-1.18 4.455a1 1 0 01-1.933 0L9.854 12.8 6.5 10.866a1 1 0 010-1.732l3.354-1.935 1.18-4.455A1 1 0 0112 2z" clipRule="evenodd"/></svg>
-                <h2 className="text-sm font-bold text-white/70">AM Targets</h2>
+                <h2 className="text-[22px] font-bold text-white/70">AM Targets</h2>
               </div>
               <div className="space-y-2.5">
-                {[...amTargets].sort((a, b) => b.progress_pct - a.progress_pct).map((t, idx) => {
+                {[...amTargets].sort((a, b) => b.progress_pct - a.progress_pct).slice(0, 5).map((t, idx) => {
                   const r = 22;
                   const circ = 2 * Math.PI * r;
                   const filled = Math.min(t.progress_pct, 100);
@@ -2347,19 +2452,19 @@ export default function LiveDashboard() {
                             {t.am_avatar_url ? (
                               <Image src={t.am_avatar_url} alt={t.am_name} width={40} height={40} className="h-10 w-10 rounded-full object-cover" />
                             ) : isComplete ? (
-                              <span className="text-base">🎉</span>
+                              <span className="text-[26px]">🎉</span>
                             ) : (
-                              <span className="text-[10px] font-black text-white/70">{t.progress_pct}%</span>
+                              <span className="text-[18px] font-black text-white/70">{t.progress_pct}%</span>
                             )}
                           </div>
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1.5">
-                            {isTop && !isComplete && <span className="text-sm">👑</span>}
-                            <p className={`truncate text-[13px] font-bold ${isTop && !isComplete ? 'text-amber-300' : 'text-white/70'}`}>{t.am_name}</p>
+                            {isTop && !isComplete && <span className="text-[22px]">👑</span>}
+                            <p className={`truncate text-[22px] font-bold ${isTop && !isComplete ? 'text-amber-300' : 'text-white/70'}`}>{t.am_name}</p>
                           </div>
-                          <p className="truncate text-[11px] text-white/30">{t.label}</p>
-                          <div className="mt-1 flex items-baseline justify-between text-[11px]">
+                          <p className="truncate text-[18px] text-white/30">{t.label}</p>
+                          <div className="mt-1 flex items-baseline justify-between text-[18px]">
                             <span className="font-bold tabular-nums text-white/60">
                               {t.target_type === 'revenue'
                                 ? `€${t.current_value.toLocaleString('nl-NL', { maximumFractionDigits: 0 })}`
@@ -2374,11 +2479,11 @@ export default function LiveDashboard() {
                         </div>
                       </div>
                       {!isComplete && remaining > 0 && (
-                        <p className="mt-2 text-[10px] text-white/25">
+                        <p className="mt-2 text-[18px] text-white/25">
                           Nog {t.target_type === 'revenue' ? `€${remaining.toLocaleString('nl-NL', { maximumFractionDigits: 0 })}` : remaining} · {daysLeft}d over
                         </p>
                       )}
-                      <div className="mt-1 flex items-center justify-between text-[10px] text-white/20">
+                      <div className="mt-1 flex items-center justify-between text-[18px] text-white/20">
                         <span>{TARGET_TYPE_LABELS[t.target_type] || t.target_type}</span>
                         {t.bonus_amount > 0 && (
                           <span className={isComplete ? 'font-bold text-emerald-400/70' : 'text-amber-400/60'}>
@@ -2389,6 +2494,11 @@ export default function LiveDashboard() {
                     </motion.div>
                   );
                 })}
+                {amTargets.length > 5 && (
+                  <p className={`${TYPE.meta} pt-1 text-center tabular-nums text-white/35`}>
+                    +{amTargets.length - 5} niet getoond
+                  </p>
+                )}
               </div>
             </motion.div>
           )}
@@ -2403,13 +2513,13 @@ export default function LiveDashboard() {
             >
               <div className="mb-3 flex items-center gap-2">
                 <svg className="h-4 w-4 text-brand-purple/60" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" /></svg>
-                <h2 className="text-sm font-bold text-white/70">Leaderboard</h2>
-                <span className="ml-auto text-[10px] text-white/20">
+                <h2 className="text-[22px] font-bold text-white/70">Leaderboard</h2>
+                <span className="ml-auto text-[18px] text-white/20">
                   {new Date().toLocaleDateString('nl-NL', { month: 'short', year: 'numeric' })}
                 </span>
               </div>
               <div className="space-y-2.5">
-                {data.amLeaderboard.map((am, rank) => {
+                {data.amLeaderboard.slice(0, 6).map((am, rank) => {
                   const isFirst = rank === 0;
                   const medalColors = ['from-amber-400 to-amber-600', 'from-slate-300 to-slate-400', 'from-amber-600 to-amber-800'];
                   const medalBg = rank < 3 ? medalColors[rank] : '';
@@ -2429,21 +2539,21 @@ export default function LiveDashboard() {
                         {am.avatarUrl ? (
                           <Image src={am.avatarUrl} alt={am.name} width={36} height={36} className="h-9 w-9 rounded-full object-cover" />
                         ) : (
-                          <div className={`flex h-9 w-9 items-center justify-center rounded-full text-xs font-black ${
+                          <div className={`flex h-9 w-9 items-center justify-center rounded-full text-[22px] font-black ${
                             rank < 3 ? `bg-gradient-to-br ${medalBg} text-white shadow-md` : 'bg-white/[0.06] text-white/30'
                           }`}>
                             {am.name.charAt(0).toUpperCase()}
                           </div>
                         )}
-                        <span className={`absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-black ${
+                        <span className={`absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full text-[18px] font-black ${
                           rank < 3 ? `bg-gradient-to-br ${medalBg} text-white` : 'bg-white/10 text-white/40'
                         }`}>
                           {rank + 1}
                         </span>
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className={`truncate text-[13px] font-bold ${isFirst ? 'text-amber-300' : 'text-white/70'}`}>{am.name}</p>
-                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px]">
+                        <p className={`truncate text-[22px] font-bold ${isFirst ? 'text-amber-300' : 'text-white/70'}`}>{am.name}</p>
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[18px]">
                           <span className="font-bold tabular-nums text-emerald-400">€{(am.revenue + am.bulkRevenue).toLocaleString('nl-NL', { maximumFractionDigits: 0 })}</span>
                           <span className="text-white/20">·</span>
                           <span className="text-white/30">{am.batches} {am.batches === 1 ? 'batch' : 'batches'}</span>
@@ -2453,10 +2563,15 @@ export default function LiveDashboard() {
                           </>)}
                         </div>
                       </div>
-                      {isFirst && <span className="text-base">👑</span>}
+                      {isFirst && <span className="text-[26px]">👑</span>}
                     </motion.div>
                   );
                 })}
+                {data.amLeaderboard.length > 6 && (
+                  <p className={`${TYPE.meta} pt-1 text-center tabular-nums text-white/35`}>
+                    +{data.amLeaderboard.length - 6} niet getoond
+                  </p>
+                )}
               </div>
             </motion.div>
           )}
