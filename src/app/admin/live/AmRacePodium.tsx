@@ -87,7 +87,7 @@ function Podium({ entries }: { entries: AmRaceEntry[] }) {
   const top = entries.slice(0, 3);
   // Klassieke podiumvolgorde: 2 - 1 - 3
   const order = [top[1], top[0], top[2]].filter(Boolean) as AmRaceEntry[];
-  const standH: Record<number, number> = { 0: 62, 1: 44, 2: 30 };
+  const standH: Record<number, number> = { 0: 48, 1: 34, 2: 24 };
   const avatarSize: Record<number, number> = { 0: 56, 1: 46, 2: 44 };
 
   return (
@@ -354,7 +354,7 @@ export function AmRacePodium({
   }
 
   return (
-    <div className={`${SHELL} h-[264px]`}>
+    <div className={`${SHELL} h-[260px]`}>
       <ShellBackground />
       {/* view-indicator */}
       <div className="absolute right-4 top-4 z-10 flex gap-1.5">

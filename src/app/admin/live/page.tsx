@@ -15,16 +15,37 @@ import { ExclamationTriangleIcon, SignalSlashIcon } from '@heroicons/react/24/ou
 const REFRESH_INTERVAL = 90_000;
 
 /**
+ * Het wallboard wordt op één vaste ontwerpmaat gebouwd en daarna als geheel
+ * geschaald naar het scherm. Zo ziet een 4K-TV precies hetzelfde als een
+ * Full HD-scherm, alleen groter, in plaats van dezelfde pixels op een dubbel
+ * zo grote resolutie waardoor alles half zo groot oogt.
+ */
+const DESIGN_W = 1920;
+const DESIGN_H = 1080;
+
+function useStageScale() {
+  const [scale, setScale] = useState(1);
+  useEffect(() => {
+    const bereken = () =>
+      setScale(Math.min(window.innerWidth / DESIGN_W, window.innerHeight / DESIGN_H));
+    bereken();
+    window.addEventListener('resize', bereken);
+    return () => window.removeEventListener('resize', bereken);
+  }, []);
+  return scale;
+}
+
+/**
  * Typeschaal voor een wallboard dat op circa vier meter afstand wordt gelezen.
  * Vuistregel: leesbare hoogte is ongeveer kijkafstand gedeeld door 250, wat op
  * vier meter neerkomt op zo'n 16mm en dus ruwweg 45px. Alles onder TYPE.meta
  * hoort niet op dit scherm; wie het moet lezen, staat te dichtbij.
  */
 const TYPE = {
-  hero: 'text-[64px] leading-[0.95] xl:text-[88px] 2xl:text-[104px]',
-  primary: 'text-[40px] leading-[1] xl:text-[52px] 2xl:text-[60px]',
-  secondary: 'text-[28px] leading-[1.1] xl:text-[34px]',
-  label: 'text-[22px] leading-[1.2] xl:text-[26px]',
+  hero: 'text-[100px] leading-[0.95]',
+  primary: 'text-[44px] leading-[1]',
+  secondary: 'text-[30px] leading-[1.1]',
+  label: 'text-[22px] leading-[1.2]',
   meta: 'text-[18px] leading-[1.3]',
 } as const;
 
@@ -833,6 +854,7 @@ export default function LiveDashboard() {
   const [milestoneToast, setMilestoneToast] = useState<CelebrationEvent | null>(null);
 
   const reducedMotion = useReducedMotion();
+  const stageScale = useStageScale();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const celebrationIframeRef = useRef<HTMLIFrameElement>(null);
   const prevBatchPcts = useRef<Record<string, number>>({});
@@ -1181,8 +1203,17 @@ export default function LiveDashboard() {
   const phoneRingPct = phoneQuality.validPct;
 
   return (
-    <div className="min-h-screen bg-[#0B0E1A] text-white">
-      <canvas ref={canvasRef} className="pointer-events-none fixed inset-0 z-[100]" />
+    <div className="fixed inset-0 flex items-center justify-center overflow-hidden bg-[#0B0E1A] text-white">
+      <div
+        style={{
+          width: DESIGN_W,
+          height: DESIGN_H,
+          transform: `scale(${stageScale})`,
+          transformOrigin: 'center center',
+        }}
+        className="relative shrink-0"
+      >
+      <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 z-[100]" />
 
       {/* Batch completion overlay - Cinematic */}
       <AnimatePresence>
@@ -1668,7 +1699,7 @@ export default function LiveDashboard() {
         </AnimatePresence>
       </div>
 
-      <div className="relative z-10 flex h-screen flex-col overflow-hidden p-4 sm:p-6 lg:p-5">
+      <div className="relative z-10 flex h-full flex-col overflow-hidden p-5">
         {/* Top bar */}
         <div className="mb-3 flex shrink-0 items-center justify-between lg:mb-2">
           <Link href="/admin" className="group flex items-center gap-3">
@@ -1792,11 +1823,11 @@ export default function LiveDashboard() {
         {/* Hero: één cijfer dat je vanaf de deur leest, met vier ondersteunende
             waarden eromheen. Vijf gelijkwaardige kaarten vroegen allemaal
             evenveel aandacht en gaven daarmee geen enkele richting. */}
-        <div className="mb-4 grid shrink-0 grid-cols-1 gap-3 lg:grid-cols-12">
+        <div className="mb-3 grid h-[268px] shrink-0 grid-cols-1 gap-3 lg:grid-cols-12">
           <motion.div
             initial={reducedMotion ? false : { opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
-            className="relative overflow-hidden rounded-3xl border border-white/[0.08] bg-gradient-to-br from-brand-purple/25 to-brand-pink/10 p-6 lg:col-span-5 lg:p-8"
+            className="relative flex h-full flex-col justify-center overflow-hidden rounded-3xl border border-white/[0.08] bg-gradient-to-br from-brand-purple/25 to-brand-pink/10 px-7 py-4 lg:col-span-5"
           >
             <p className={`${TYPE.label} font-semibold uppercase tracking-wider text-white/55`}>
               Omzet laatste 24 uur
@@ -1814,7 +1845,7 @@ export default function LiveDashboard() {
             </p>
           </motion.div>
 
-          <div className="grid grid-cols-2 gap-3 lg:col-span-7">
+          <div className="grid h-full grid-cols-2 gap-3 lg:col-span-7">
             {[
               {
                 label: 'Leads laatste 24 uur',
@@ -1846,7 +1877,7 @@ export default function LiveDashboard() {
                 initial={reducedMotion ? false : { opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: reducedMotion ? 0 : 0.05 + i * 0.05 }}
-                className="min-w-0 rounded-2xl border border-white/[0.06] bg-white/[0.03] p-4 lg:p-5"
+                className="flex min-w-0 flex-col justify-center rounded-2xl border border-white/[0.06] bg-white/[0.03] px-5 py-3"
               >
                 <p className={`${TYPE.meta} font-medium uppercase tracking-wide text-white/45`}>
                   {kpi.label}
@@ -1880,11 +1911,11 @@ export default function LiveDashboard() {
         {/* Main content + AM sidebar wrapper */}
         <div className="flex min-h-0 flex-1 gap-3">
         {/* Main content column */}
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-x-hidden overflow-y-auto lg:min-h-0 lg:overflow-y-auto">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden lg:min-h-0 lg:overflow-hidden">
         {/* Middle section: actieve batches + wacht op betaling + kaart — één max-h op lg zodat kolommen gelijk blijven en niets onder/achter elkaar doorloopt */}
-        <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-7 lg:grid-rows-1 lg:items-stretch lg:gap-3 lg:overflow-hidden lg:min-h-0 lg:max-h-[min(440px,calc(100svh-29.5rem))]">
+        <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-7 lg:grid-rows-1 lg:items-stretch lg:gap-3 lg:overflow-hidden lg:min-h-0">
           {/* Active batches - 3 cols */}
-          <div className="flex min-h-0 max-h-[min(560px,calc(100svh-9.5rem))] flex-col overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 backdrop-blur-sm sm:max-h-[min(600px,calc(100svh-10rem))] lg:col-span-3 lg:max-h-none lg:h-full">
+          <div className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 backdrop-blur-sm sm: lg:col-span-3 lg:h-full">
             <div className="mb-2 flex shrink-0 items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className={`h-2.5 w-2.5 rounded-full bg-emerald-400 ${reducedMotion ? '' : 'animate-pulse'}`} />
@@ -1981,7 +2012,7 @@ export default function LiveDashboard() {
           </div>
 
           {/* Onbetaalde batches - 2 cols (zelfde flex-structuur als actieve batches zodat carousel een echte viewport-hoogte krijgt) */}
-          <div className="flex min-h-0 max-h-[min(560px,calc(100svh-9.5rem))] flex-col overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 backdrop-blur-sm sm:max-h-[min(600px,calc(100svh-10rem))] lg:col-span-2 lg:max-h-none lg:h-full">
+          <div className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 backdrop-blur-sm sm: lg:col-span-2 lg:h-full">
             <div className="mb-2 flex shrink-0 items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <div className="relative">
@@ -2084,7 +2115,7 @@ export default function LiveDashboard() {
           </div>
 
           {/* Right sidebar: Map + Branch donut - 2 cols */}
-          <div className="flex min-h-0 max-h-[min(560px,calc(100svh-9.5rem))] flex-col gap-3 overflow-hidden sm:max-h-[min(600px,calc(100svh-10rem))] lg:col-span-2 lg:max-h-none lg:h-full">
+          <div className="flex min-h-0 flex-col gap-3 overflow-hidden sm: lg:col-span-2 lg:h-full">
             {/* Province heatmap */}
             <div className="min-h-0 flex-1 overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.02] p-3 backdrop-blur-sm">
               <div className="mb-1 flex items-center gap-2">
@@ -2121,7 +2152,7 @@ export default function LiveDashboard() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
-            className="shrink-0 rounded-2xl border border-emerald-500/10 bg-emerald-500/[0.04] p-3 backdrop-blur-sm"
+            className="h-[88px] shrink-0 rounded-2xl border border-emerald-500/10 bg-emerald-500/[0.04] p-3 backdrop-blur-sm"
           >
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-6">
               <div className="px-2">
@@ -2340,163 +2371,63 @@ export default function LiveDashboard() {
           </motion.div>
         )}
 
-        {/* Period comparison — two rows: leads + profit */}
-        <div className="grid shrink-0 grid-cols-3 gap-2 lg:grid-cols-6">
-          {Object.entries(PERIOD_LABELS).map(([key, label], i) => {
-            const stat = ps[key];
-            if (!stat) return null;
-            const profitPositive = stat.profit >= 0;
-            return (
-              <motion.div
-                key={key}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 + i * 0.06 }}
-                className="min-w-0 rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 backdrop-blur-sm"
-              >
-                <p className="mb-1 text-[18px] font-bold uppercase tracking-widest text-white/25 lg:text-[18px]">{label}</p>
-                <div className="flex items-baseline gap-1.5">
-                  <AnimatedNumber value={stat.leads} className="text-[26px] font-black tabular-nums text-white/90 lg:text-xl" />
-                  <TrendArrow current={stat.leads} previous={stat.prevLeads} />
-                </div>
-                <div className="mt-1 flex items-center gap-1.5 text-[18px] text-white/25">
-                  <span>{stat.assigned} uitgedeeld</span>
-                  {stat.leads > 0 && (
-                    <span className="rounded bg-white/[0.06] px-1 py-0.5 text-[18px] font-bold text-white/30">
-                      {Math.round((stat.assigned / stat.leads) * 100)}%
-                    </span>
-                  )}
-                </div>
-                {/* Profit line — only show when there is revenue or spend */}
-                {(stat.revenue > 0 || stat.adSpend > 0) && (
-                  <div className="mt-2 border-t border-white/[0.04] pt-2">
-                    <div className="flex items-baseline gap-1.5">
-                      <span className={`text-[22px] font-black tabular-nums ${profitPositive ? 'text-emerald-400/90' : 'text-red-400/90'}`}>
-                        {profitPositive ? '+' : ''}&euro;{Math.round(stat.profit).toLocaleString('nl-NL')}
-                      </span>
-                      <TrendArrow current={stat.profit} previous={stat.prevProfit} />
-                    </div>
-                    <div className="mt-0.5 flex flex-wrap items-center gap-x-1 gap-y-0.5 text-[18px] text-white/20">
-                      <span>omzet &euro;{Math.round(stat.revenue).toLocaleString('nl-NL')}</span>
-                      <span className="text-white/10">&middot;</span>
-                      <span>kosten &euro;{Math.round(stat.adSpend).toLocaleString('nl-NL')}</span>
-                    </div>
-                  </div>
-                )}
-              </motion.div>
-            );
-          })}
-        </div>
         </div>{/* end main content column */}
 
         {/* AM Sidebar — xl only */}
-        <div className="hidden xl:flex xl:w-[420px] xl:shrink-0 xl:flex-col xl:gap-3 xl:overflow-y-auto 2xl:w-[500px]">
+        <div className="hidden min-h-0 xl:flex xl:w-[420px] xl:shrink-0 xl:flex-col xl:gap-3 xl:overflow-hidden 2xl:w-[460px]">
           {/* AM Performance */}
           {amTargets.length > 0 && (
             <motion.div
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.2 }}
-              className="rounded-2xl border border-amber-500/10 bg-amber-500/[0.04] p-4 backdrop-blur-sm"
+              className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-amber-500/10 bg-amber-500/[0.04] p-3 backdrop-blur-sm"
             >
               <div className="mb-3 flex items-center gap-2">
                 <svg className="h-4 w-4 text-amber-400/60" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5 2a1 1 0 011 1v1h1a1 1 0 010 2H6v1a1 1 0 01-2 0V6H3a1 1 0 010-2h1V3a1 1 0 011-1zm0 10a1 1 0 011 1v1h1a1 1 0 110 2H6v1a1 1 0 11-2 0v-1H3a1 1 0 110-2h1v-1a1 1 0 011-1zM12 2a1 1 0 01.967.744L14.146 7.2 17.5 9.134a1 1 0 010 1.732l-3.354 1.935-1.18 4.455a1 1 0 01-1.933 0L9.854 12.8 6.5 10.866a1 1 0 010-1.732l3.354-1.935 1.18-4.455A1 1 0 0112 2z" clipRule="evenodd"/></svg>
                 <h2 className="text-[22px] font-bold text-white/70">AM Targets</h2>
               </div>
               <div className="space-y-2.5">
-                {[...amTargets].sort((a, b) => b.progress_pct - a.progress_pct).slice(0, 5).map((t, idx) => {
-                  const r = 22;
-                  const circ = 2 * Math.PI * r;
-                  const filled = Math.min(t.progress_pct, 100);
+                {[...amTargets].sort((a, b) => b.progress_pct - a.progress_pct).slice(0, 2).map((t) => {
+                  const pct = Math.min(t.progress_pct, 100);
                   const isComplete = t.progress_pct >= 100;
-                  const isClose = t.progress_pct >= 75 && !isComplete;
-                  const ringColor = isComplete ? '#34d399' : t.progress_pct >= 75 ? '#fbbf24' : t.progress_pct >= 50 ? '#f97316' : '#f87171';
-                  const remaining = Math.max(0, t.target_value - (t as any).current_value || 0);
-                  const daysLeft = Math.max(0, Math.ceil((new Date(t.period_end + 'T23:59:59').getTime() - Date.now()) / 86400000));
-                  const isTop = idx === 0 && amTargets.length > 1;
-
+                  /* Compacte regel: naam, voortgang als balk, en de twee getallen
+                     die ertoe doen. De ring, de bonus en het aantal resterende
+                     dagen zijn detail die vanaf afstand toch wegvallen. */
+                  const kleur = isComplete
+                    ? 'bg-emerald-400'
+                    : t.progress_pct >= 75
+                      ? 'bg-amber-400'
+                      : t.progress_pct >= 50
+                        ? 'bg-orange-400'
+                        : 'bg-red-400';
                   return (
-                    <motion.div
+                    <div
                       key={t.id}
-                      initial={{ opacity: 0, x: 10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.25 + idx * 0.05 }}
-                      className={`rounded-xl border p-3.5 ${
+                      className={`rounded-xl border px-3 py-2 ${
                         isComplete
-                          ? 'border-emerald-500/20 bg-emerald-500/[0.06]'
-                          : isTop
-                          ? 'border-amber-500/20 bg-amber-500/[0.06]'
-                          : isClose
-                          ? 'border-amber-500/15 bg-amber-500/[0.04]'
-                          : 'border-white/[0.04] bg-white/[0.02]'
+                          ? 'border-emerald-500/25 bg-emerald-500/[0.07]'
+                          : 'border-white/[0.05] bg-white/[0.02]'
                       }`}
                     >
-                      <div className="flex items-center gap-3.5">
-                        <div className="relative h-14 w-14 shrink-0">
-                          {(isClose || isComplete) && (
-                            <div className={`absolute inset-0 rounded-full blur-sm ${isComplete ? 'bg-emerald-400/20' : 'bg-amber-400/15'}`} />
-                          )}
-                          <svg className="-rotate-90 relative h-14 w-14" viewBox="0 0 56 56">
-                            <circle cx="28" cy="28" r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="3" />
-                            <circle cx="28" cy="28" r={r} fill="none"
-                              stroke={ringColor}
-                              strokeWidth="3"
-                              strokeLinecap="round"
-                              strokeDasharray={circ}
-                              strokeDashoffset={circ - (filled / 100) * circ}
-                              className="transition-all duration-1000"
-                              style={isClose ? { filter: `drop-shadow(0 0 3px ${ringColor})` } : undefined}
-                            />
-                          </svg>
-                          <div className="absolute inset-0 flex items-center justify-center">
-                            {t.am_avatar_url ? (
-                              <Image src={t.am_avatar_url} alt={t.am_name} width={40} height={40} className="h-10 w-10 rounded-full object-cover" />
-                            ) : isComplete ? (
-                              <span className="text-[26px]">🎉</span>
-                            ) : (
-                              <span className="text-[18px] font-black text-white/70">{t.progress_pct}%</span>
-                            )}
-                          </div>
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-1.5">
-                            {isTop && !isComplete && <span className="text-[22px]">👑</span>}
-                            <p className={`truncate text-[22px] font-bold ${isTop && !isComplete ? 'text-amber-300' : 'text-white/70'}`}>{t.am_name}</p>
-                          </div>
-                          <p className="truncate text-[18px] text-white/30">{t.label}</p>
-                          <div className="mt-1 flex items-baseline justify-between text-[18px]">
-                            <span className="font-bold tabular-nums text-white/60">
-                              {t.target_type === 'revenue'
-                                ? `€${t.current_value.toLocaleString('nl-NL', { maximumFractionDigits: 0 })}`
-                                : t.current_value.toLocaleString('nl-NL')}
-                            </span>
-                            <span className="text-white/20">
-                              / {t.target_type === 'revenue'
-                                ? `€${t.target_value.toLocaleString('nl-NL', { maximumFractionDigits: 0 })}`
-                                : t.target_value.toLocaleString('nl-NL')}
-                            </span>
-                          </div>
-                        </div>
+                      <div className="flex items-baseline justify-between gap-3">
+                        <p className="min-w-0 flex-1 truncate text-[22px] font-bold text-white/80">{t.am_name}</p>
+                        <span className="shrink-0 text-[22px] font-black tabular-nums text-white">
+                          {Math.round(t.progress_pct)}%
+                        </span>
                       </div>
-                      {!isComplete && remaining > 0 && (
-                        <p className="mt-2 text-[18px] text-white/25">
-                          Nog {t.target_type === 'revenue' ? `€${remaining.toLocaleString('nl-NL', { maximumFractionDigits: 0 })}` : remaining} · {daysLeft}d over
-                        </p>
-                      )}
-                      <div className="mt-1 flex items-center justify-between text-[18px] text-white/20">
-                        <span>{TARGET_TYPE_LABELS[t.target_type] || t.target_type}</span>
-                        {t.bonus_amount > 0 && (
-                          <span className={isComplete ? 'font-bold text-emerald-400/70' : 'text-amber-400/60'}>
-                            {isComplete ? '✓ ' : ''}€{t.bonus_amount.toLocaleString('nl-NL', { maximumFractionDigits: 0 })} bonus
-                          </span>
-                        )}
+                      <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-white/[0.07]">
+                        <div className={`h-full rounded-full ${kleur}`} style={{ width: `${pct}%` }} />
                       </div>
-                    </motion.div>
+                      <p className="mt-1 text-[18px] tabular-nums text-white/40">
+                        {t.current_value.toLocaleString('nl-NL')} van {t.target_value.toLocaleString('nl-NL')}
+                      </p>
+                    </div>
                   );
                 })}
-                {amTargets.length > 5 && (
+                {amTargets.length > 2 && (
                   <p className={`${TYPE.meta} pt-1 text-center tabular-nums text-white/35`}>
-                    +{amTargets.length - 5} niet getoond
+                    +{amTargets.length - 2} niet getoond
                   </p>
                 )}
               </div>
@@ -2509,7 +2440,7 @@ export default function LiveDashboard() {
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.3 }}
-              className="rounded-2xl border border-brand-purple/10 bg-brand-purple/[0.04] p-4 backdrop-blur-sm"
+              className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-brand-purple/10 bg-brand-purple/[0.04] p-3 backdrop-blur-sm"
             >
               <div className="mb-3 flex items-center gap-2">
                 <svg className="h-4 w-4 text-brand-purple/60" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" /></svg>
@@ -2519,57 +2450,38 @@ export default function LiveDashboard() {
                 </span>
               </div>
               <div className="space-y-2.5">
-                {data.amLeaderboard.slice(0, 6).map((am, rank) => {
+                {data.amLeaderboard.slice(0, 3).map((am, rank) => {
                   const isFirst = rank === 0;
-                  const medalColors = ['from-amber-400 to-amber-600', 'from-slate-300 to-slate-400', 'from-amber-600 to-amber-800'];
-                  const medalBg = rank < 3 ? medalColors[rank] : '';
+                  const medal = ['from-amber-400 to-amber-600', 'from-slate-300 to-slate-400', 'from-amber-600 to-amber-800'][rank] || '';
+                  /* Eén compacte regel per persoon. Batches en bulk zijn detail
+                     die je vanaf vier meter toch niet leest, en die de rij zo
+                     hoog maakten dat er nog maar anderhalve in beeld paste. */
                   return (
-                    <motion.div
+                    <div
                       key={am.id}
-                      initial={{ opacity: 0, x: 10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.35 + rank * 0.05 }}
-                      className={`flex items-center gap-3.5 rounded-xl border p-3 ${
-                        isFirst
-                          ? 'border-amber-500/20 bg-amber-500/[0.06]'
-                          : 'border-white/[0.04] bg-white/[0.02]'
+                      className={`flex items-center gap-2.5 rounded-xl border px-3 py-1 ${
+                        isFirst ? 'border-amber-500/20 bg-amber-500/[0.06]' : 'border-white/[0.04] bg-white/[0.02]'
                       }`}
                     >
-                      <div className="relative h-9 w-9 shrink-0">
-                        {am.avatarUrl ? (
-                          <Image src={am.avatarUrl} alt={am.name} width={36} height={36} className="h-9 w-9 rounded-full object-cover" />
-                        ) : (
-                          <div className={`flex h-9 w-9 items-center justify-center rounded-full text-[22px] font-black ${
-                            rank < 3 ? `bg-gradient-to-br ${medalBg} text-white shadow-md` : 'bg-white/[0.06] text-white/30'
-                          }`}>
-                            {am.name.charAt(0).toUpperCase()}
-                          </div>
-                        )}
-                        <span className={`absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full text-[18px] font-black ${
-                          rank < 3 ? `bg-gradient-to-br ${medalBg} text-white` : 'bg-white/10 text-white/40'
-                        }`}>
-                          {rank + 1}
-                        </span>
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className={`truncate text-[22px] font-bold ${isFirst ? 'text-amber-300' : 'text-white/70'}`}>{am.name}</p>
-                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[18px]">
-                          <span className="font-bold tabular-nums text-emerald-400">€{(am.revenue + am.bulkRevenue).toLocaleString('nl-NL', { maximumFractionDigits: 0 })}</span>
-                          <span className="text-white/20">·</span>
-                          <span className="text-white/30">{am.batches} {am.batches === 1 ? 'batch' : 'batches'}</span>
-                          {am.bulkRevenue > 0 && (<>
-                            <span className="text-white/20">·</span>
-                            <span className="text-sky-400/70">€{am.bulkRevenue.toLocaleString('nl-NL', { maximumFractionDigits: 0 })} bulk</span>
-                          </>)}
-                        </div>
-                      </div>
-                      {isFirst && <span className="text-[26px]">👑</span>}
-                    </motion.div>
+                      <span
+                        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[20px] font-black ${
+                          rank < 3 ? `bg-gradient-to-br ${medal} text-white` : 'bg-white/[0.06] text-white/40'
+                        }`}
+                      >
+                        {rank + 1}
+                      </span>
+                      <p className={`min-w-0 flex-1 truncate text-[22px] font-bold ${isFirst ? 'text-amber-300' : 'text-white/75'}`}>
+                        {am.name}
+                      </p>
+                      <span className="shrink-0 text-[22px] font-black tabular-nums text-emerald-400">
+                        €{(am.revenue + am.bulkRevenue).toLocaleString('nl-NL', { maximumFractionDigits: 0 })}
+                      </span>
+                    </div>
                   );
                 })}
-                {data.amLeaderboard.length > 6 && (
+                {data.amLeaderboard.length > 3 && (
                   <p className={`${TYPE.meta} pt-1 text-center tabular-nums text-white/35`}>
-                    +{data.amLeaderboard.length - 6} niet getoond
+                    +{data.amLeaderboard.length - 3} niet getoond
                   </p>
                 )}
               </div>
@@ -2578,6 +2490,7 @@ export default function LiveDashboard() {
         </div>{/* end AM sidebar */}
         </div>{/* end main + sidebar wrapper */}
       </div>
+      </div>{/* end vaste ontwerpmaat */}
     </div>
   );
 }
