@@ -60,15 +60,6 @@ interface CelebrationEvent {
   source?: 'db' | 'test';
 }
 
-const PERIOD_LABELS: Record<string, string> = {
-  day: '24 uur',
-  '3days': '3 dagen',
-  week: 'Week',
-  month: 'Maand',
-  quarter: 'Kwartaal',
-  year: 'Jaar',
-};
-
 const BRANCH_COLORS: Record<string, { bar: string; glow: string; badge: string; fill: string }> = {
   thuisbatterij: { bar: 'from-emerald-400 to-emerald-500', glow: 'shadow-emerald-500/30', badge: 'bg-emerald-500/20 text-emerald-300', fill: '#34d399' },
   airco: { bar: 'from-sky-400 to-sky-500', glow: 'shadow-sky-500/30', badge: 'bg-sky-500/20 text-sky-300', fill: '#38bdf8' },
@@ -1726,27 +1717,32 @@ export default function LiveDashboard() {
                 <p className="text-[22px] font-black tabular-nums text-white/70">{avgUnpaidInterval === '-' ? '—' : `elke ${avgUnpaidInterval}`}</p>
               </div>
               <div className="h-6 w-px bg-white/[0.06]" />
-              {/* Phone quality ring */}
-              <div className="flex items-center gap-2">
-                <div className="relative h-9 w-9">
-                  <svg className="h-9 w-9 -rotate-90" viewBox="0 0 36 36">
-                    <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="3" />
-                    <circle cx="18" cy="18" r="14" fill="none"
-                      stroke={phoneQuality.validPct >= 90 ? '#34d399' : phoneQuality.validPct >= 70 ? '#fbbf24' : '#f87171'}
-                      strokeWidth="3"
-                      strokeDasharray={`${(phoneRingPct / 100) * 88} 88`}
-                      strokeLinecap="round"
-                      className="transition-all duration-1000"
-                    />
-                  </svg>
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <span className={`text-[18px] font-black ${phoneColor}`}>{phoneQuality.validPct}%</span>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-[18px] font-bold uppercase tracking-wider text-white/25">Tel. kwaliteit</p>
-                  <p className={`text-[18px] font-bold ${phoneColor}`}>
-                    {phoneQuality.invalid > 0 ? `${phoneQuality.invalid} verdacht` : 'Alles geldig'}
+              {/* Telefoonkwaliteit. Het percentage stond eerst IN de ring van
+                  36px; "100%" op 18px is breder dan die cirkel en liep er dus
+                  overheen. De ring is nu puur de indicator, het getal staat
+                  ernaast waar het ruimte heeft. */}
+              <div className="flex items-center gap-2.5">
+                <svg className="h-10 w-10 shrink-0 -rotate-90" viewBox="0 0 36 36">
+                  <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth="4" />
+                  <circle
+                    cx="18"
+                    cy="18"
+                    r="14"
+                    fill="none"
+                    stroke={phoneQuality.validPct >= 90 ? '#34d399' : phoneQuality.validPct >= 70 ? '#fbbf24' : '#f87171'}
+                    strokeWidth="4"
+                    strokeDasharray={`${(phoneRingPct / 100) * 88} 88`}
+                    strokeLinecap="round"
+                    className="transition-all duration-1000"
+                  />
+                </svg>
+                <div className="leading-tight">
+                  <p className="text-[18px] font-bold uppercase tracking-wider text-white/30">Tel. kwaliteit</p>
+                  <p className={`text-[22px] font-black tabular-nums ${phoneColor}`}>
+                    {phoneQuality.validPct}%
+                    <span className="ml-2 text-[18px] font-semibold text-white/35">
+                      {phoneQuality.invalid > 0 ? `${phoneQuality.invalid} verdacht` : 'alles geldig'}
+                    </span>
                   </p>
                 </div>
               </div>

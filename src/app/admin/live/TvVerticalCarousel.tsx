@@ -114,7 +114,7 @@ export function TvVerticalCarousel({
 
   if (reducedMotion) {
     return (
-      <div className={`min-h-0 flex-1 overflow-y-auto overscroll-y-contain ${className}`}>
+      <div className={`hide-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-y-contain ${className}`}>
         <div className={`flex flex-col ${gapClassName}`}>{children('')}</div>
       </div>
     );
@@ -125,7 +125,7 @@ export function TvVerticalCarousel({
       <div
         ref={scrollRef}
         tabIndex={0}
-        className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain pr-0.5 outline-none focus-visible:ring-1 focus-visible:ring-white/20"
+        className="hide-scrollbar min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain pr-0.5 outline-none focus-visible:ring-1 focus-visible:ring-white/20"
         style={{ scrollbarGutter: 'stable' }}
       >
         <div ref={firstRef} className={`flex flex-col ${gapClassName}`}>

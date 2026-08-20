@@ -1,8 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import Image from 'next/image';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 
 export interface AmRaceEntry {
   id: string;
@@ -14,9 +13,7 @@ export interface AmRaceEntry {
 }
 
 /** Hoeveel banen we maximaal op de racebaan tonen (boven dit aantal wordt het te druk op de TV). */
-const MAX_LANES = 5;
-/** Tempo waarmee podium <-> race afwisselt. */
-const ROTATE_MS = 11_000;
+const MAX_LANES = 3;
 
 type Medal = { ring: string; chip: string; stand: string; text: string; glow: string };
 const MEDALS: Medal[] = [
@@ -87,13 +84,17 @@ function Podium({ entries }: { entries: AmRaceEntry[] }) {
   const top = entries.slice(0, 3);
   // Klassieke podiumvolgorde: 2 - 1 - 3
   const order = [top[1], top[0], top[2]].filter(Boolean) as AmRaceEntry[];
-  const standH: Record<number, number> = { 0: 48, 1: 34, 2: 24 };
-  const avatarSize: Record<number, number> = { 0: 56, 1: 46, 2: 44 };
+  const standH: Record<number, number> = { 0: 44, 1: 36, 2: 30 };
+  const avatarSize: Record<number, number> = { 0: 50, 1: 42, 2: 40 };
 
   return (
     <div className="flex h-full flex-col">
       <Header icon="🏆" title="Podium" subtitle="top 3 deze maand" />
       <div className="relative flex flex-1 items-end justify-center gap-3 sm:gap-7">
+        {/* Vloer onder het podium. Zonder deze lijn houden de voetstukken
+            gewoon op met een platte onderkant, wat op het scherm leest als
+            afgekapt in plaats van als een podium dat ergens op staat. */}
+        <div className="pointer-events-none absolute inset-x-6 bottom-0 h-px bg-gradient-to-r from-transparent via-white/25 to-transparent" />
         {/* spotlight achter #1 */}
         <div
           className="pointer-events-none absolute bottom-0 left-1/2 h-[120%] w-[42%] -translate-x-1/2"
@@ -171,7 +172,7 @@ function Podium({ entries }: { entries: AmRaceEntry[] }) {
                 <div className={`absolute inset-0 bg-gradient-to-b ${m.stand}`} />
                 <div className="absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/25 to-transparent" />
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <span className="text-3xl font-black text-black/30">{rank + 1}</span>
+                  <span className="text-[22px] font-black leading-none text-black/30">{rank + 1}</span>
                 </div>
               </div>
             </motion.div>
@@ -199,7 +200,6 @@ function RaceTrack({ entries }: { entries: AmRaceEntry[] }) {
           // veld loopt van 5% tot 88%; de finishvlag staat rechts daarvan.
           const pos = leaderTotal > 0 ? Math.min(88, Math.max(5, ratio * 88)) : 5;
           const isLeader = i === 0;
-          const gap = leaderTotal - t;
           return (
             <div key={e.id} className="flex items-center gap-2.5">
               <span
@@ -268,20 +268,13 @@ function RaceTrack({ entries }: { entries: AmRaceEntry[] }) {
                 </motion.div>
               </div>
 
-              <div className="w-[5.5rem] shrink-0 text-right sm:w-24">
-                <p className={`truncate text-[22px] font-bold ${isLeader ? 'text-amber-300' : 'text-white/70'}`}>
+              <div className="w-[10rem] shrink-0 text-right">
+                <p className={`truncate text-[20px] font-bold ${isLeader ? 'text-amber-300' : 'text-white/70'}`}>
                   {firstName(e.name)}
                 </p>
                 <p className="text-[18px] font-black tabular-nums text-emerald-400/90">{euroShort(t)}</p>
               </div>
 
-              <div className="w-12 shrink-0 text-right">
-                {isLeader ? (
-                  <span className="text-[18px] font-black uppercase tracking-wider text-amber-400/80">Leider</span>
-                ) : (
-                  <span className="text-[18px] font-bold tabular-nums text-white/30">−{euroShort(gap)}</span>
-                )}
-              </div>
             </div>
           );
         })}
@@ -325,18 +318,9 @@ export function AmRacePodium({
   entries: AmRaceEntry[];
   reducedMotion: boolean;
 }) {
-  const [view, setView] = useState<'podium' | 'race'>('podium');
-  const canRotate = !reducedMotion && entries.length >= 2;
-
-  useEffect(() => {
-    if (!canRotate) return;
-    const iv = setInterval(() => setView((v) => (v === 'podium' ? 'race' : 'podium')), ROTATE_MS);
-    return () => clearInterval(iv);
-  }, [canRotate]);
-
   if (!entries || entries.length === 0) return null;
 
-  // reduced-motion: alles statisch naast elkaar (geen crossfade-rotatie).
+  // Oudere variant, bewaard zodat de reduced-motion-tak expliciet blijft.
   if (reducedMotion) {
     return (
       <div className={SHELL}>
@@ -353,32 +337,20 @@ export function AmRacePodium({
     );
   }
 
+  /* Podium en race staan naast elkaar in plaats van elkaar af te wisselen.
+     Het paneel is op de TV bijna 1900px breed; met alleen het podium bleef de
+     rechterhelft leeg, en de wisseling zelf voegde niets toe aan de leesbaarheid. */
   return (
     <div className={`${SHELL} h-[260px]`}>
       <ShellBackground />
-      {/* view-indicator */}
-      <div className="absolute right-4 top-4 z-10 flex gap-1.5">
-        {(['podium', 'race'] as const).map((v) => (
-          <span
-            key={v}
-            className={`h-1.5 rounded-full transition-all duration-500 ${
-              view === v ? 'w-5 bg-white/70' : 'w-1.5 bg-white/20'
-            }`}
-          />
-        ))}
+      <div className="relative grid h-full grid-cols-2 gap-6">
+        <div className="h-full min-w-0">
+          <Podium entries={entries} />
+        </div>
+        <div className="h-full min-w-0 border-l border-white/[0.06] pl-6">
+          <RaceTrack entries={entries} />
+        </div>
       </div>
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={view}
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -12 }}
-          transition={{ duration: 0.45, ease: 'easeOut' }}
-          className="relative h-full"
-        >
-          {view === 'podium' ? <Podium entries={entries} /> : <RaceTrack entries={entries} />}
-        </motion.div>
-      </AnimatePresence>
     </div>
   );
 }
