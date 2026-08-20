@@ -156,10 +156,10 @@ function Podium({ entries }: { entries: AmRaceEntry[] }) {
                 </div>
               </div>
 
-              <p className={`mt-1.5 max-w-full truncate text-sm font-extrabold ${m.text}`}>
+              <p className={`mt-1.5 max-w-full truncate text-[22px] font-extrabold ${m.text}`}>
                 {firstName(e.name)}
               </p>
-              <p className="-mt-0.5 text-sm font-black tabular-nums text-emerald-400 drop-shadow-[0_1px_4px_rgba(16,185,129,0.35)]">
+              <p className="-mt-0.5 text-[22px] font-black tabular-nums text-emerald-400 drop-shadow-[0_1px_4px_rgba(16,185,129,0.35)]">
                 {euro(total(e))}
               </p>
 
@@ -203,7 +203,7 @@ function RaceTrack({ entries }: { entries: AmRaceEntry[] }) {
           return (
             <div key={e.id} className="flex items-center gap-2.5">
               <span
-                className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-black tabular-nums ${
+                className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[18px] font-black tabular-nums ${
                   isLeader ? 'bg-amber-400 text-black' : 'bg-white/10 text-white/40'
                 }`}
               >
@@ -248,7 +248,7 @@ function RaceTrack({ entries }: { entries: AmRaceEntry[] }) {
                 >
                   {isLeader && (
                     <motion.span
-                      className="absolute -left-4 text-sm"
+                      className="absolute -left-4 text-[22px]"
                       animate={{ x: [0, -2, 0], opacity: [0.7, 1, 0.7] }}
                       transition={{ duration: 0.8, repeat: Infinity }}
                     >
@@ -269,17 +269,17 @@ function RaceTrack({ entries }: { entries: AmRaceEntry[] }) {
               </div>
 
               <div className="w-[5.5rem] shrink-0 text-right sm:w-24">
-                <p className={`truncate text-xs font-bold ${isLeader ? 'text-amber-300' : 'text-white/70'}`}>
+                <p className={`truncate text-[22px] font-bold ${isLeader ? 'text-amber-300' : 'text-white/70'}`}>
                   {firstName(e.name)}
                 </p>
-                <p className="text-[11px] font-black tabular-nums text-emerald-400/90">{euroShort(t)}</p>
+                <p className="text-[18px] font-black tabular-nums text-emerald-400/90">{euroShort(t)}</p>
               </div>
 
               <div className="w-12 shrink-0 text-right">
                 {isLeader ? (
-                  <span className="text-[9px] font-black uppercase tracking-wider text-amber-400/80">Leider</span>
+                  <span className="text-[18px] font-black uppercase tracking-wider text-amber-400/80">Leider</span>
                 ) : (
-                  <span className="text-[10px] font-bold tabular-nums text-white/30">−{euroShort(gap)}</span>
+                  <span className="text-[18px] font-bold tabular-nums text-white/30">−{euroShort(gap)}</span>
                 )}
               </div>
             </div>
@@ -293,9 +293,9 @@ function RaceTrack({ entries }: { entries: AmRaceEntry[] }) {
 function Header({ icon, title, subtitle }: { icon: string; title: string; subtitle: string }) {
   return (
     <div className="mb-2 flex items-center gap-2">
-      <span className="text-lg leading-none">{icon}</span>
-      <h2 className="text-sm font-black uppercase tracking-wide text-white/80">{title}</h2>
-      <span className="text-[10px] text-white/30">· {subtitle}</span>
+      <span className="text-[26px] leading-none">{icon}</span>
+      <h2 className="text-[22px] font-black uppercase tracking-wide text-white/80">{title}</h2>
+      <span className="text-[18px] text-white/30">· {subtitle}</span>
     </div>
   );
 }
