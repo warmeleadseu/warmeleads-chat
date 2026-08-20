@@ -694,8 +694,8 @@ export const blogArticles: BlogArticle[] = [
   // November 2026 - Week 1 (NIEUWE ARTIKELEN Q4 2026)
   {
     slug: "warmtepomp-installateurs-winter-2025",
-    title: "Warmtepomp Installateurs: Waarom Winter 2026 Jouw Beste Kwartaal Wordt",
-    excerpt: "De vraag naar warmtepompen explodeert deze winter. Ontdek waarom november-januari 2026 het perfecte moment is om te groeien en hoe je klaar bent voor de stormloop.",
+    title: "Warmtepomp Installateurs: Waarom Winter 2025 Jouw Beste Kwartaal Wordt",
+    excerpt: "De vraag naar warmtepompen explodeert deze winter. Ontdek waarom november-januari 2025 het perfecte moment is om te groeien en hoe je klaar bent voor de stormloop.",
     date: "2 november 2025",
     category: "Markttrends",
     readTime: "10 min",
@@ -706,7 +706,7 @@ export const blogArticles: BlogArticle[] = [
   },
   {
     slug: "thuisbatterij-subsidie-november-2025",
-    title: "Thuisbatterij Subsidie 2026: Laatste Kans Voor €3.000+ Korting",
+    title: "Thuisbatterij Subsidie 2025: Laatste Kans Voor €3.000+ Korting",
     excerpt: "ISDE subsidie voor thuisbatterijen sluit binnenkort! Alles wat installateurs en klanten nu moeten weten over aanvragen, voorwaarden en deadlines.",
     date: "1 november 2025",
     category: "Subsidies",
@@ -718,8 +718,8 @@ export const blogArticles: BlogArticle[] = [
   },
   {
     slug: "zonnepanelen-terugverdientijd-2025",
-    title: "Zonnepanelen Terugverdientijd 2026: Realistisch Rekenvoorbeeld",
-    excerpt: "Hoelang duurt het voordat zonnepanelen zich terugverdienen in 2026? Complete berekening met huidige energieprijzen, salderingsregeling en BTW-voordeel.",
+    title: "Zonnepanelen Terugverdientijd 2025: Realistisch Rekenvoorbeeld",
+    excerpt: "Hoelang duurt het voordat zonnepanelen zich terugverdienen in 2025? Complete berekening met huidige energieprijzen, salderingsregeling en BTW-voordeel.",
     date: "31 oktober 2025",
     category: "ROI & Rendement",
     readTime: "12 min",
@@ -754,7 +754,7 @@ export const blogArticles: BlogArticle[] = [
   },
   {
     slug: "btw-teruggave-zonnepanelen-2025",
-    title: "BTW Teruggave Zonnepanelen 2026: €2.000+ Terug in 3 Stappen",
+    title: "BTW Teruggave Zonnepanelen 2025: €2.000+ Terug in 3 Stappen",
     excerpt: "Krijg als particulier de volledige BTW terug op je zonnepanelen. Complete handleiding met voorbeelden, formulieren en veelgemaakte fouten.",
     date: "28 oktober 2025",
     category: "Belasting & Regelgeving",
@@ -766,7 +766,7 @@ export const blogArticles: BlogArticle[] = [
   },
   {
     slug: "beste-thuisbatterij-merken-2025",
-    title: "Beste Thuisbatterij Merken 2026: Top 7 Vergeleken",
+    title: "Beste Thuisbatterij Merken 2025: Top 7 Vergeleken",
     excerpt: "Welke thuisbatterij is het beste? Vergelijking van Tesla Powerwall, Enphase, BYD, LG en meer op prijs, capaciteit, garantie en klantreviews.",
     date: "27 oktober 2025",
     category: "Product Reviews",
@@ -826,7 +826,7 @@ export const blogArticles: BlogArticle[] = [
   },
   {
     slug: "offerte-software-installateurs-2025",
-    title: "Beste Offerte Software Voor Installateurs 2026",
+    title: "Beste Offerte Software Voor Installateurs 2025",
     excerpt: "Professionele offertes maken in 5 minuten. Vergelijking van de beste offerte tools met prijzen, features en gebruikerservaringen.",
     date: "22 oktober 2025",
     category: "Software & Tools",
@@ -838,7 +838,7 @@ export const blogArticles: BlogArticle[] = [
   },
   {
     slug: "installatiekosten-warmtepomp-2025",
-    title: "Installatiekosten Warmtepomp 2026: Complete Prijsopbouw",
+    title: "Installatiekosten Warmtepomp 2025: Complete Prijsopbouw",
     excerpt: "Wat kost een warmtepomp nu echt? Transparante prijsopbouw inclusief installatie, subsidie en besparing op jaarbasis.",
     date: "21 oktober 2025",
     category: "Prijzen & Kosten",
@@ -924,7 +924,7 @@ export const blogArticles: BlogArticle[] = [
   },
   {
     slug: "klanten-werven-duurzame-energie-2025",
-    title: "Klanten Werven in Duurzame Energie: Complete Gids 2026",
+    title: "Klanten Werven in Duurzame Energie: Complete Gids 2025",
     excerpt: "Hoe krijg je meer klanten in de duurzame energie sector? Praktische strategieën en tips voor zonnepanelen, warmtepompen en thuisbatterij installateurs.",
     date: "14 oktober 2025",
     category: "Klantacquisitie",
@@ -948,7 +948,7 @@ export const blogArticles: BlogArticle[] = [
   },
   {
     slug: "ai-chatbots-leadgeneratie-2025",
-    title: "AI Chatbots voor Leadgeneratie: Complete Gids 2026",
+    title: "AI Chatbots voor Leadgeneratie: Complete Gids 2025",
     excerpt: "Ontdek hoe AI chatbots je leadgeneratie kunnen revolutioneren. Van implementatie tot conversie-optimalisatie, alles wat je moet weten.",
     date: "13 oktober 2025",
     category: "AI & Technologie",
@@ -972,7 +972,7 @@ export const blogArticles: BlogArticle[] = [
   },
   {
     slug: "email-marketing-leads-2025",
-    title: "Email Marketing voor Leadgeneratie: Best Practices 2026",
+    title: "Email Marketing voor Leadgeneratie: Best Practices 2025",
     excerpt: "Email blijft koning in leadgeneratie. Ontdek de nieuwste technieken en strategieën voor maximale open rates en conversies.",
     date: "10 oktober 2025",
     category: "Email Marketing",
@@ -1022,7 +1022,7 @@ export const blogArticles: BlogArticle[] = [
   },
   {
     slug: "crm-systemen-leadbeheer-2025",
-    title: "Beste CRM Systemen voor Leadbeheer in 2026",
+    title: "Beste CRM Systemen voor Leadbeheer in 2025",
     excerpt: "De juiste CRM software maakt het verschil. Vergelijk de beste CRM systemen en kies wat past bij je bedrijf.",
     date: "2 oktober 2025",
     category: "Tools & Software",
@@ -1036,7 +1036,7 @@ export const blogArticles: BlogArticle[] = [
   // September 2026 - Week 4 & 5 (EXTRA KLANTACQUISITIE ARTIKELEN)
   {
     slug: "klantacquisitie-installateur-complete-gids",
-    title: "Klantacquisitie voor Installateurs: De Complete Gids 2026",
+    title: "Klantacquisitie voor Installateurs: De Complete Gids 2025",
     excerpt: "Alles wat je moet weten over klantacquisitie als installateur. Van offline tot online: proven methoden om meer klanten te krijgen in duurzame energie.",
     date: "1 oktober 2025",
     category: "Klantacquisitie",
@@ -1084,8 +1084,8 @@ export const blogArticles: BlogArticle[] = [
   },
   {
     slug: "ai-test-thuisbatterij-trends-oktober-2025",
-    title: "Thuisbatterij Trends Oktober 2026: AI Marktanalyse",
-    excerpt: "AI-gegenereerde marktanalyse van actuele thuisbatterij trends. Subsidie updates, prijsontwikkelingen en concrete kansen voor installateurs in oktober 2026.",
+    title: "Thuisbatterij Trends Oktober 2025: AI Marktanalyse",
+    excerpt: "AI-gegenereerde marktanalyse van actuele thuisbatterij trends. Subsidie updates, prijsontwikkelingen en concrete kansen voor installateurs in oktober 2025.",
     date: "26 september 2025",
     category: "AI Gegenereerd",
     readTime: "6 min",
@@ -1096,7 +1096,7 @@ export const blogArticles: BlogArticle[] = [
   },
   {
     slug: "thuisbatterij-markt-2025",
-    title: "Thuisbatterij Markt Nederland 2026: Kansen voor Installateurs",
+    title: "Thuisbatterij Markt Nederland 2025: Kansen voor Installateurs",
     excerpt: "De thuisbatterij markt groeit explosief. Ontdek hoe installateurs kunnen profiteren van deze trend en welke leadgeneratie strategieën het beste werken.",
     date: "25 september 2025",
     category: "Marktanalyse",
@@ -1120,7 +1120,7 @@ export const blogArticles: BlogArticle[] = [
   },
   {
     slug: "warmtepomp-subsidies-2025",
-    title: "Warmtepomp Subsidies 2026: Impact op Leadgeneratie",
+    title: "Warmtepomp Subsidies 2025: Impact op Leadgeneratie",
     excerpt: "Nieuwe subsidies maken warmtepompen aantrekkelijker. Ontdek hoe dit de leadgeneratie beïnvloedt en hoe je hierop kunt inspelen.",
     date: "23 september 2025",
     category: "Trends",
@@ -1144,7 +1144,7 @@ export const blogArticles: BlogArticle[] = [
   },
   {
     slug: "financial-lease-trends",
-    title: "Financial Lease Trends: Nieuwe Kansen in 2026",
+    title: "Financial Lease Trends: Nieuwe Kansen in 2025",
     excerpt: "De financial lease markt evolueert snel. Ontdek nieuwe trends en hoe je jouw leadgeneratie kunt aanpassen voor maximaal succes.",
     date: "21 september 2025",
     category: "B2B",
@@ -1170,7 +1170,7 @@ export const blogArticles: BlogArticle[] = [
   // September 2026 - Week 3
   {
     slug: "social-media-advertising-leads",
-    title: "Social Media Advertising voor Leadgeneratie 2026",
+    title: "Social Media Advertising voor Leadgeneratie 2025",
     excerpt: "Meta, LinkedIn, TikTok - welk platform werkt het beste voor jouw leads? Complete vergelijking en strategieën.",
     date: "18 september 2025",
     category: "Social Media",
@@ -1183,7 +1183,7 @@ export const blogArticles: BlogArticle[] = [
   {
     slug: "marketing-automation-leadgeneratie",
     title: "Marketing Automation voor Efficiënte Leadgeneratie",
-    excerpt: "Automatiseer je leadgeneratie en focus op wat echt belangrijk is. De beste tools en workflows voor 2026.",
+    excerpt: "Automatiseer je leadgeneratie en focus op wat echt belangrijk is. De beste tools en workflows voor 2025.",
     date: "16 september 2025",
     category: "Automatisering",
     readTime: "11 min",
@@ -1494,8 +1494,8 @@ export const blogArticles: BlogArticle[] = [
   },
   {
     slug: "cold-outreach-b2b-leads",
-    title: "Cold Outreach in 2026: B2B Leads via Email & LinkedIn",
-    excerpt: "Cold outreach werkt nog steeds, als je het goed doet. Leer de technieken die in 2026 werken.",
+    title: "Cold Outreach in 2025: B2B Leads via Email & LinkedIn",
+    excerpt: "Cold outreach werkt nog steeds, als je het goed doet. Leer de technieken die in 2025 werken.",
     date: "28 juli 2025",
     category: "Outbound Sales",
     readTime: "11 min",
