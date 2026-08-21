@@ -15,6 +15,7 @@ import {
   validateCustomerBranchSlugs,
 } from '@/lib/customerBranches';
 import { validateVatIdForCountry } from '@/lib/invoiceVat';
+import { brancheKeuringNodig, btwKeuringNodig } from '@/lib/customerUpdateValidation';
 
 const DEFAULT_LIMIT = 25;
 const MAX_LIMIT = 100;
@@ -233,34 +234,78 @@ export async function PUT(request: NextRequest) {
       .eq('id', id)
       .maybeSingle<{ country?: string | null; vat_id?: string | null; branches?: string[] | null }>();
 
+    /**
+     * Valideer alleen wat de bewerker daadwerkelijk verandert.
+     *
+     * Het bewerkformulier stuurt altijd het complete klantobject mee, ook de
+     * velden die niemand heeft aangeraakt. Zonder deze vergelijking wordt
+     * bestaande, historisch foute data bij elke opslag opnieuw gekeurd, en
+     * blokkeert die dus ook het wijzigen van een e-mailadres of telefoonnummer.
+     * Een klant met een oude partner-branche of met rommel in vat_id was
+     * daardoor helemaal niet meer te bewerken.
+     *
+     * Wie de waarde wél wijzigt, krijgt onverkort dezelfde controle.
+     */
     if ('branches' in updates) {
-      const validated = await validateCustomerBranchSlugs(
-        supabase,
-        normalizeCustomerBranchSlugs(updates.branches),
-      );
-      if (!validated.ok) {
-        return NextResponse.json({ error: validated.error }, { status: 400 });
+      const ingediend = normalizeCustomerBranchSlugs(updates.branches);
+      const opgeslagen = normalizeCustomerBranchSlugs(before?.branches);
+      if (brancheKeuringNodig(opgeslagen, ingediend)) {
+        const validated = await validateCustomerBranchSlugs(supabase, ingediend);
+        if (!validated.ok) {
+          return NextResponse.json({ error: validated.error }, { status: 400 });
+        }
+        updates.branches = validated.slugs;
+      } else {
+        // Ongewijzigd: laat staan zoals het in de database staat.
+        updates.branches = opgeslagen;
       }
-      updates.branches = validated.slugs;
     }
 
     if ('vat_id' in updates) {
       const nextCountry = 'country' in updates
         ? (updates.country as string | null | undefined)
         : (before?.country ?? null);
-      const v = validateVatIdForCountry(
-        nextCountry,
-        updates.vat_id as string | null | undefined,
-      );
-      if (!v.ok) return NextResponse.json({ error: v.error }, { status: 400 });
-      updates.vat_id = v.vat_id;
+      const moetKeuren = btwKeuringNodig({
+        vatOpgeslagen: before?.vat_id ?? null,
+        vatIngediend: updates.vat_id as string | null | undefined,
+        landOpgeslagen: before?.country ?? null,
+        landIngediend: updates.country as string | null | undefined,
+        landMeegestuurd: 'country' in updates,
+      });
+
+      if (moetKeuren) {
+        const v = validateVatIdForCountry(
+          nextCountry,
+          updates.vat_id as string | null | undefined,
+        );
+        if (!v.ok) return NextResponse.json({ error: v.error }, { status: 400 });
+        updates.vat_id = v.vat_id;
+      } else {
+        updates.vat_id = before?.vat_id ?? null;
+      }
     }
 
     const updatePayload = await sanitizeCustomerWritePayload(supabase, updates);
     const { data, error } = await supabase.from('customers').update(updatePayload).eq('id', id).select().single();
 
     if (error) {
-      return NextResponse.json({ error: 'Bijwerken mislukt' }, { status: 500 });
+      /* De oorzaak werd hier weggegooid, waardoor "Bijwerken mislukt" jarenlang
+         niet te herleiden was. Log hem met context en geef de melding van
+         Postgres mee; die is voor een beheerder bruikbaar en bevat geen
+         gegevens van derden. */
+      console.error('[admin/customers PUT] update mislukt', {
+        customerId: id,
+        adminId: admin.id,
+        velden: Object.keys(updatePayload),
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+      });
+      return NextResponse.json(
+        { error: `Bijwerken mislukt: ${error.message}` },
+        { status: 500 },
+      );
     }
 
     let branchChangeMeta: Awaited<ReturnType<typeof applyCustomerBranchesChange>> | null = null;
@@ -336,8 +381,11 @@ export async function PUT(request: NextRequest) {
       recalced_invoices: recalcedInvoices,
       branch_change: branchChangeMeta,
     });
-  } catch {
-    return NextResponse.json({ error: 'Ongeldige data' }, { status: 400 });
+  } catch (e) {
+    /* Ving eerder elke uitzondering af als "Ongeldige data" zonder spoor. */
+    console.error('[admin/customers PUT] onverwachte fout', e);
+    const message = e instanceof Error ? e.message : 'Ongeldige data';
+    return NextResponse.json({ error: `Opslaan mislukt: ${message}` }, { status: 400 });
   }
 }
 

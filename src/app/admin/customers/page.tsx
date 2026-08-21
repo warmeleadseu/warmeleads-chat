@@ -1780,7 +1780,16 @@ function CustomerForm({ customer, branchOptions, allCustomers, accountManagers, 
   const save = async () => {
     if (!form.name) { setError('Bedrijfsnaam is verplicht'); return; }
     if (!isEdit && !form.password) { setError('Stel een portaalwachtwoord in voor de klant'); return; }
-    if (form.branches.length === 0) { setError('Selecteer minimaal één branche'); return; }
+    /* Alleen eisen bij nieuwe klanten of wanneer iemand de branches aanpast.
+       Twee bestaande klanten staan zonder branche in de database; die konden
+       hierdoor zelfs hun e-mailadres niet meer laten wijzigen. */
+    const brancheLijstGewijzigd =
+      !isEdit ||
+      JSON.stringify([...form.branches].sort()) !== JSON.stringify([...(customer?.branches || [])].sort());
+    if (brancheLijstGewijzigd && form.branches.length === 0) {
+      setError('Selecteer minimaal één branche');
+      return;
+    }
     setSaving(true);
     setError('');
     try {
