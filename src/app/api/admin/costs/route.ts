@@ -1,4 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
+import {
+  META_SPEND_START_DATE,
+  META_SPEND_START_ISO,
+  fetchSpendRowsSince,
+  splitSpend,
+  clampToSpendStart,
+} from '@/lib/metaCpl';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
 import { getPeriodStart, parseDashboardPeriod } from '@/lib/adminDashboardPeriod';
@@ -28,10 +35,13 @@ export async function GET(request: NextRequest) {
   const COSTS_ASSIGN_MAX_PAGES = 80;
   const PAGE = 1000;
 
+  /* Alles vóór de boekhoudstart (1 mei 2026) telt nergens in mee, dus ophalen
+     hoeft ook niet verder terug. De latere van de twee datums wint. */
   const costsSinceIso = (() => {
     const d = new Date();
     d.setDate(d.getDate() - COSTS_LOOKBACK_DAYS);
-    return d.toISOString();
+    const iso = d.toISOString();
+    return iso > META_SPEND_START_ISO ? iso : META_SPEND_START_ISO;
   })();
 
   interface LeadRow {
@@ -122,8 +132,12 @@ export async function GET(request: NextRequest) {
 
   const period = parseDashboardPeriod(request.nextUrl.searchParams.get('period'));
   const periodStart = getPeriodStart(period);
-  const periodStartIso = periodStart.toISOString();
-  const periodStartDateStr = periodStartIso.split('T')[0];
+  /* Boekhouding begint op 1 mei 2026: een jaar- of kwartaalvenster dat eerder
+     begint, telt pas vanaf die datum. Geldt voor spend, leads én uitdelingen,
+     zodat teller en noemer altijd over hetzelfde venster gaan. */
+  const periodStartIso =
+    periodStart.toISOString() < META_SPEND_START_ISO ? META_SPEND_START_ISO : periodStart.toISOString();
+  const periodStartDateStr = clampToSpendStart(periodStartIso);
 
   const assignmentsInPeriod = allAssignments.filter(a => a.assigned_at >= periodStartIso);
 
@@ -134,20 +148,33 @@ export async function GET(request: NextRequest) {
    * `bulk_assign` telt alleen mee als de toewijzing aan een betaalde batch
    * hangt (echte levering); losse bulk_assigns zijn bulkverkoop.
    */
+  const leadCampaignById = new Map(allLeads.map(l => [l.id, l.meta_campaign_id]));
+
   function isCplPoolAssignment(a: AssignRow): boolean {
     const src = a.source || 'distribution';
     if (src === 'bulk_export' || src === 'demo') return false;
     if (src === 'bulk_assign' && !a.batch_id) return false;
     const bron = leadBronById.get(a.lead_id);
     if (bron === 'demo') return false;
+    const campagne = leadCampaignById.get(a.lead_id);
+    if (campagne && excludedCampaignIds.has(campagne)) return false;
     return true;
   }
 
   const assignmentsForCpl = assignmentsInPeriod.filter(isCplPoolAssignment);
 
-  const leadsWithMetaInPeriod = allLeads.filter(
-    l => !!l.meta_campaign_id && l.created_at >= periodStartIso && l.bron !== 'demo',
-  ) as (LeadRow & { meta_campaign_id: string })[];
+  /* Noemer voor de CPL: alle echte leads in de periode. Leads zonder
+     campagne-attributie tellen mee (73% van de instroom); leads uit
+     uitgesloten pakketadvies/energie-campagnes niet. allLeads is al
+     gefilterd op bron != excel_import/demo. */
+  const cplLeadsInPeriod = allLeads.filter(
+    l =>
+      l.created_at >= periodStartIso &&
+      (!l.meta_campaign_id || !excludedCampaignIds.has(l.meta_campaign_id)),
+  );
+  const leadsWithMetaInPeriod = cplLeadsInPeriod.filter(
+    (l): l is LeadRow & { meta_campaign_id: string } => !!l.meta_campaign_id,
+  );
 
   const allBatches = batchesRes.data || [];
   const lastSync = lastSyncRes.data;
@@ -183,29 +210,17 @@ export async function GET(request: NextRequest) {
       campaignBranchMap.set(l.meta_campaign_id, l.branch);
     }
   }
-  const campaignIdSet = [...campaignBranchMap.keys()];
-  const totalOurLeads = leadsWithMetaInPeriod.length;
+  const totalOurLeads = cplLeadsInPeriod.length;
 
-  /* ── Wave 2: meta_ad_spend chunks in parallel ── */
+  /* ── Wave 2: alle spend sinds de boekhoudstart, gepagineerd ──
+     Eén definitie voor de hele boekhouding, zie src/lib/metaCpl.ts. De oude
+     aanpak (per 200 campagne-ids een query) kapte elke query stil op 1000
+     rijen af én miste campagnes zonder attributed leads. */
   interface SpendRow { campaign_id: string; date: string; spend: string; leads_count: number }
-  let allSpendRows: SpendRow[] = [];
-  if (campaignIdSet.length > 0) {
-    const chunkSize = 200;
-    const chunks: string[][] = [];
-    for (let i = 0; i < campaignIdSet.length; i += chunkSize) {
-      chunks.push(campaignIdSet.slice(i, i + chunkSize));
-    }
-    const chunkResults = await Promise.all(
-      chunks.map(chunk =>
-        supabase
-          .from('meta_ad_spend')
-          .select('campaign_id, date, spend, leads_count')
-          .in('campaign_id', chunk)
-          .gte('date', globalStartDate),
-      ),
-    );
-    allSpendRows = chunkResults.flatMap(r => (r.data || []) as SpendRow[]);
-  }
+  const spendFetch = await fetchSpendRowsSince(supabase, META_SPEND_START_DATE);
+  const spendTotals = splitSpend(spendFetch.rows);
+  const allSpendRows = spendTotals.rows as unknown as SpendRow[];
+  const excludedCampaignIds = new Set(spendTotals.excludedCampaignIds);
 
   /* ── Compute all aggregates (pure CPU, no more DB calls) ── */
 
@@ -214,9 +229,6 @@ export async function GET(request: NextRequest) {
   const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
   for (const row of allSpendRows) {
-    const branch = campaignBranchMap.get(row.campaign_id);
-    const startDate = branch ? branchStartDate.get(branch) : globalStartDate;
-    if (startDate && row.date < startDate) continue;
     const spend = parseFloat(row.spend) || 0;
     if (row.date >= periodStartDateStr && row.date <= today) {
       totalAdSpend += spend;
@@ -279,9 +291,7 @@ export async function GET(request: NextRequest) {
 
   for (const row of allSpendRows) {
     const branch = campaignBranchMap.get(row.campaign_id);
-    if (!branch) continue;
-    const startDate = branchStartDate.get(branch);
-    if (startDate && row.date < startDate) continue;
+    if (!branch) continue; // spend zonder herleidbare branche telt wel in de totalen, niet in deze tabel
     if (row.date < periodStartDateStr || row.date > today) continue;
     branchSpend.set(branch, (branchSpend.get(branch) || 0) + (parseFloat(row.spend) || 0));
   }
@@ -500,9 +510,6 @@ export async function GET(request: NextRequest) {
   const dailyTrend: Record<string, { spend: number; leads: number }> = {};
   for (const row of allSpendRows) {
     if (row.date < trendCutoff || row.date > today) continue;
-    const branch = campaignBranchMap.get(row.campaign_id);
-    const startDate = branch ? branchStartDate.get(branch) : globalStartDate;
-    if (startDate && row.date < startDate) continue;
     if (row.date < periodStartDateStr) continue;
     if (!dailyTrend[row.date]) dailyTrend[row.date] = { spend: 0, leads: 0 };
     dailyTrend[row.date].spend += parseFloat(row.spend) || 0;

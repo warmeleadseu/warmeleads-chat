@@ -1,4 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
+import {
+  META_SPEND_START_ISO,
+  fetchSpendRowsSince,
+  splitSpend,
+  leadExclusionOrFilter,
+} from '@/lib/metaCpl';
 import { createServerClient } from '@/lib/supabase';
 import { requireSuperAdmin } from '@/lib/adminAuth';
 import { leaderboardYearMonthFromDate, leaderboardMonthStartIsoFromYearMonth, type ManualLineRow, type MonthlyPaidBatchRow } from '@/lib/amLeaderboardRules';
@@ -18,9 +24,6 @@ import {
 const BREAKDOWN_LOOKBACK_DAYS = 90;
 /** Max rijen voor provincie/tak in JS-aggregatie (voorkomt full-table reads). */
 const BREAKDOWN_MAX_ROWS = 12_000;
-const META_CAMPAIGN_LOOKBACK_DAYS = 180;
-const META_CAMPAIGN_PAGE = 1000;
-const META_CAMPAIGN_MAX_PAGES = 50;
 const BATCHES_LIST_LIMIT = 1_500;
 const BULK_ASSIGNMENTS_MAX_PAGES = 80;
 
@@ -272,44 +275,11 @@ export async function GET(request: NextRequest) {
     accountManagerName: accountManagerId ? amNameById[accountManagerId] ?? null : null,
   }));
 
-  const [revenueStatsRes, batchStartRes] = await Promise.all([
-    supabase.rpc('live_revenue_stats'),
-    supabase
-      .from('customer_batches')
-      .select('branch, created_at')
-      .in('status', ['active', 'completed'])
-      .limit(3000),
-  ]);
-
-  const metaSince = new Date();
-  metaSince.setDate(metaSince.getDate() - META_CAMPAIGN_LOOKBACK_DAYS);
-  const metaSinceIso = metaSince.toISOString();
-
-  let relevantAdsData: { meta_campaign_id: string; branch: string }[] = [];
-  let metaCampaignPagesFetched = 0;
-  let metaCampaignTruncated = false;
-  {
-    let offset = 0;
-    for (let page = 0; page < META_CAMPAIGN_MAX_PAGES; page++) {
-      const { data } = await supabase
-        .from('leads')
-        .select('meta_campaign_id, branch')
-        .neq('bron', 'excel_import')
-        .neq('bron', 'demo')
-        .not('meta_campaign_id', 'is', null)
-        .gte('created_at', metaSinceIso)
-        .range(offset, offset + META_CAMPAIGN_PAGE - 1);
-      metaCampaignPagesFetched++;
-      if (!data || data.length === 0) break;
-      relevantAdsData = relevantAdsData.concat(data as { meta_campaign_id: string; branch: string }[]);
-      if (data.length < META_CAMPAIGN_PAGE) break;
-      offset += META_CAMPAIGN_PAGE;
-      if (page === META_CAMPAIGN_MAX_PAGES - 1) {
-        metaCampaignTruncated = true;
-      }
-    }
-  }
-
+  /* Omzet over hetzelfde venster als de kosten (sinds 1 mei 2026), zodat de
+     winst teller en noemer over dezelfde periode heeft. */
+  const revenueStatsRes = await supabase.rpc('live_revenue_stats_since', {
+    p_since: META_SPEND_START_ISO,
+  });
   const revenueStats =
     (revenueStatsRes.data as {
       batch_revenue: number;
@@ -325,44 +295,31 @@ export async function GET(request: NextRequest) {
       bulk_assignment_count: 0,
     };
 
-  const branchStart = new Map<string, string>();
-  for (const b of batchStartRes.data || []) {
-    const d = b.created_at ? b.created_at.split('T')[0] : new Date().toISOString().split('T')[0];
-    const existing = branchStart.get(b.branch);
-    if (!existing || d < existing) branchStart.set(b.branch, d);
-  }
-  const globalStart =
-    branchStart.size > 0 ? [...branchStart.values()].sort()[0] : new Date().toISOString().split('T')[0];
+  /* ── Advertentiekosten: één definitie, zie src/lib/metaCpl.ts ──
+     Alle spend vanaf 1 mei 2026 telt mee, behalve campagnes met het woord
+     pakketadvies of energie in de titel. Gepagineerd opgehaald: één losse
+     query wordt door Supabase stil op 1000 rijen afgekapt, en precies dat
+     maakte de bruto CPL hier maandenlang ~60% te laag (6,64 om 16,70). */
+  const spendFetch = await fetchSpendRowsSince(supabase);
+  const spendTotals = splitSpend(spendFetch.rows);
+  const monthAdSpend = spendTotals.includedTotal;
+  const cplWindowSpend = spendTotals.includedTotal;
+  const metaCampaignPagesFetched = Math.ceil((spendFetch.rows.length || 1) / 1000);
+  const metaCampaignTruncated = spendFetch.truncated;
 
-  const campaignBranch = new Map<string, string>();
-  for (const l of relevantAdsData) {
-    if (l.meta_campaign_id && l.branch) campaignBranch.set(l.meta_campaign_id, l.branch);
-  }
-  const relevantCampaignIds = [...campaignBranch.keys()];
-  const totalOurLeads = relevantAdsData.length;
-
-  // `monthAdSpend` = spend sinds de eerste batch per branche (voor winst).
-  // `cplWindowSpend` = spend binnen het CPL-venster (laatste
-  // META_CAMPAIGN_LOOKBACK_DAYS dagen), zodat teller en noemer van de
-  // CPL-metrics over dezelfde periode gaan als de lead-pool.
-  const metaSinceDateStr = metaSinceIso.split('T')[0];
-  let monthAdSpend = 0;
-  let cplWindowSpend = 0;
-  if (relevantCampaignIds.length > 0) {
-    const { data: spendRows } = await supabase
-      .from('meta_ad_spend')
-      .select('campaign_id, date, spend')
-      .in('campaign_id', relevantCampaignIds)
-      .gte('date', globalStart);
-    for (const r of spendRows || []) {
-      const branch = campaignBranch.get(r.campaign_id);
-      const startDate = branch ? branchStart.get(branch) : globalStart;
-      if (startDate && r.date < startDate) continue;
-      const spend = parseFloat(r.spend) || 0;
-      monthAdSpend += spend;
-      if (r.date >= metaSinceDateStr) cplWindowSpend += spend;
-    }
-  }
+  /* Noemer: alle echte leads sinds de boekhoudstart. Leads zonder
+     campagne-attributie tellen mee (73% van de instroom komt via Zapier
+     zonder campagne-id binnen); leads uit uitgesloten campagnes niet. */
+  let leadsCountQuery = supabase
+    .from('leads')
+    .select('id', { count: 'exact', head: true })
+    .neq('bron', 'excel_import')
+    .neq('bron', 'demo')
+    .gte('created_at', META_SPEND_START_ISO);
+  const leadExclusion = leadExclusionOrFilter(spendTotals.excludedCampaignIds);
+  if (leadExclusion) leadsCountQuery = leadsCountQuery.or(leadExclusion);
+  const { count: ourLeadsCount } = await leadsCountQuery;
+  const totalOurLeads = ourLeadsCount || 0;
 
   const brutoCpl = totalOurLeads > 0 ? cplWindowSpend / totalOurLeads : 0;
 
@@ -389,12 +346,17 @@ export async function GET(request: NextRequest) {
     };
     let c = q as unknown as Chainable;
     c = c
-      .gte('leads.created_at', metaSinceIso)
-      .not('leads.meta_campaign_id', 'is', null)
+      .gte('leads.created_at', META_SPEND_START_ISO)
       .neq('leads.bron', 'excel_import')
       .neq('leads.bron', 'demo')
       .or('source.is.null,source.not.in.("bulk_export","demo")')
       .or('source.is.null,source.neq.bulk_assign,batch_id.not.is.null');
+    if (leadExclusion) {
+      c = (c as unknown as { or(f: string, o: { foreignTable: string }): unknown }).or(
+        leadExclusion,
+        { foreignTable: 'leads' },
+      ) as unknown as Chainable;
+    }
     return c as unknown as T;
   };
 
@@ -411,7 +373,7 @@ export async function GET(request: NextRequest) {
   // mag de distributie-noemer niet verlagen.
   const approvedRecs = await getApprovedReclamationStats(
     {
-      leadCreatedSinceIso: metaSinceIso,
+      leadCreatedSinceIso: META_SPEND_START_ISO,
       excludeBulkAndDemo: true,
     },
     supabase,
@@ -733,8 +695,7 @@ export async function GET(request: NextRequest) {
       provinceSampleRows: provinceSampleSize,
       branchSampleRows: branchSampleSize,
       provinceBranchCapped,
-      metaCampaignLookbackDays: META_CAMPAIGN_LOOKBACK_DAYS,
-      cplWindowDays: META_CAMPAIGN_LOOKBACK_DAYS,
+      spendStartDate: '2026-05-01',
       metaCampaignPagesFetched,
       metaCampaignTruncated,
       batchesListLimit: BATCHES_LIST_LIMIT,
