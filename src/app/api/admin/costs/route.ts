@@ -139,6 +139,16 @@ export async function GET(request: NextRequest) {
     periodStart.toISOString() < META_SPEND_START_ISO ? META_SPEND_START_ISO : periodStart.toISOString();
   const periodStartDateStr = clampToSpendStart(periodStartIso);
 
+  /* ── Wave 2: alle spend sinds de boekhoudstart, gepagineerd ──
+     Eén definitie voor de hele boekhouding, zie src/lib/metaCpl.ts. De oude
+     aanpak (per 200 campagne-ids een query) kapte elke query stil op 1000
+     rijen af én miste campagnes zonder attributed leads. */
+  interface SpendRow { campaign_id: string; date: string; spend: string; leads_count: number }
+  const spendFetch = await fetchSpendRowsSince(supabase, META_SPEND_START_DATE);
+  const spendTotals = splitSpend(spendFetch.rows);
+  const allSpendRows = spendTotals.rows as unknown as SpendRow[];
+  const excludedCampaignIds = new Set(spendTotals.excludedCampaignIds);
+
   const assignmentsInPeriod = allAssignments.filter(a => a.assigned_at >= periodStartIso);
 
   const leadBronById = new Map(allLeads.map(l => [l.id, l.bron]));
@@ -212,15 +222,6 @@ export async function GET(request: NextRequest) {
   }
   const totalOurLeads = cplLeadsInPeriod.length;
 
-  /* ── Wave 2: alle spend sinds de boekhoudstart, gepagineerd ──
-     Eén definitie voor de hele boekhouding, zie src/lib/metaCpl.ts. De oude
-     aanpak (per 200 campagne-ids een query) kapte elke query stil op 1000
-     rijen af én miste campagnes zonder attributed leads. */
-  interface SpendRow { campaign_id: string; date: string; spend: string; leads_count: number }
-  const spendFetch = await fetchSpendRowsSince(supabase, META_SPEND_START_DATE);
-  const spendTotals = splitSpend(spendFetch.rows);
-  const allSpendRows = spendTotals.rows as unknown as SpendRow[];
-  const excludedCampaignIds = new Set(spendTotals.excludedCampaignIds);
 
   /* ── Compute all aggregates (pure CPU, no more DB calls) ── */
 
