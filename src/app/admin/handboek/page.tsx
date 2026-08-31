@@ -124,6 +124,20 @@ function Blok({ blok }: { blok: HandboekBlok }) {
         </pre>
       );
 
+    case 'afbeelding':
+      return (
+        <figure className="overflow-hidden rounded-xl border border-slate-200">
+          {/* Bewust een gewone img: dit zijn statische schermafdrukken in
+              /public en het handboek is een intern scherm, geen publieke
+              pagina waar beeldoptimalisatie iets oplevert. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={blok.src} alt={blok.onderschrift} className="w-full" loading="lazy" />
+          <figcaption className="border-t border-slate-200 bg-slate-50 px-4 py-2 text-[13px] text-slate-500">
+            {blok.onderschrift}
+          </figcaption>
+        </figure>
+      );
+
     case 'link':
       return (
         <a
@@ -275,6 +289,15 @@ function Sectie({
         </p>
         <h1 className="text-2xl font-bold text-slate-900">{sectie.titel}</h1>
         <p className="mt-1 text-[15px] text-slate-500">{sectie.samenvatting}</p>
+        {sectie.scherm && (
+          <a
+            href={sectie.scherm.href}
+            className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-brand-purple/10 px-3 py-1.5 text-sm font-semibold text-brand-purple transition hover:bg-brand-purple/15"
+          >
+            {sectie.scherm.label}
+            <span aria-hidden>→</span>
+          </a>
+        )}
       </header>
 
       {sectie.blokken.map((blok, i) => (
@@ -354,6 +377,8 @@ export default function HandboekPagina() {
           if (b.soort === 'stappen' || b.soort === 'lijst') return b.items;
           if (b.soort === 'tabel') return [...b.kop, ...b.rijen.flat()];
           if (b.soort === 'code') return [b.body];
+          if (b.soort === 'afbeelding') return [b.onderschrift];
+          if (b.soort === 'link') return [b.label];
           return [];
         }),
         notities[s.id]?.body ?? '',

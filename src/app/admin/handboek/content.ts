@@ -20,12 +20,20 @@ export type HandboekBlok =
   | { soort: 'tabel'; kop: string[]; rijen: string[][] }
   | { soort: 'code'; body: string }
   | { soort: 'link'; href: string; label: string; extern?: boolean }
-  | { soort: 'invullen'; body: string };
+  | { soort: 'invullen'; body: string }
+  /** Screenshot van een scherm waar mensen vastlopen. Bestand staat in /public/handboek. */
+  | { soort: 'afbeelding'; src: string; onderschrift: string };
 
 export type HandboekSectie = {
   id: string;
   titel: string;
   samenvatting: string;
+  /**
+   * Directe link naar het scherm in het CRM waar dit onderdeel over gaat.
+   * Bewust een link en geen screenshot: een link wijst altijd naar de actuele
+   * versie, een afbeelding veroudert zodra het scherm verandert.
+   */
+  scherm?: { href: string; label: string };
   /** Onderdeel van de inwerkcursus, in deze volgorde. */
   cursus?: boolean;
   /** Geschatte leestijd in minuten, voor de cursusmodus. */
@@ -257,6 +265,7 @@ export const HANDBOEK: HandboekHoofdstuk[] = [
         id: 'runbook.import',
         titel: 'Leads importeren uit een spreadsheet',
         samenvatting: 'Veruit de meest uitgevoerde beheertaak. Inclusief terugdraaien.',
+        scherm: { href: '/admin/import', label: 'Open Importeren' },
         cursus: true,
         minuten: 7,
         blokken: [
@@ -279,6 +288,11 @@ export const HANDBOEK: HandboekHoofdstuk[] = [
             body: 'Een verkeerde import is terug te draaien via de undo-functie op het importoverzicht. Doe dat zo snel mogelijk: hoe langer je wacht, hoe groter de kans dat er al leads uit die import zijn verdeeld naar klanten.',
           },
           {
+            soort: 'afbeelding',
+            src: '/handboek/importeren.png',
+            onderschrift: 'Het importscherm. De kolomkoppeling is de plek waar het vaakst iets misgaat.',
+          },
+          {
             soort: 'tip',
             body: 'In augustus 2026 bleek dat twaalf klantrecords een e-mailadres in het btw-nummerveld hadden staan. Dat kwam vrijwel zeker door een verkeerd gekoppelde kolom bij een import. Controleer die koppeling dus echt, ook als het bestand er bekend uitziet.',
           },
@@ -288,6 +302,7 @@ export const HANDBOEK: HandboekHoofdstuk[] = [
         id: 'runbook.impersonatie',
         titel: 'Inloggen als klant om iets te controleren',
         samenvatting: 'Support geven door zelf in het portaal van de klant te kijken.',
+        scherm: { href: '/admin/customers', label: 'Open Klanten' },
         cursus: true,
         minuten: 3,
         blokken: [
@@ -313,6 +328,7 @@ export const HANDBOEK: HandboekHoofdstuk[] = [
         id: 'runbook.toewijzen',
         titel: 'Leads handmatig toewijzen of opnieuw toewijzen',
         samenvatting: 'Bulk toewijzen, guardrails en wanneer je ze mag negeren.',
+        scherm: { href: '/admin/leads', label: 'Open Leads CRM' },
         cursus: true,
         minuten: 6,
         blokken: [
@@ -337,6 +353,11 @@ export const HANDBOEK: HandboekHoofdstuk[] = [
             body: 'Wordt er iets geblokkeerd, dan krijg je te zien hoeveel en waarom. Met het vinkje **Guardrails negeren** wijs je toch toe. Doe dat bewust: je omzeilt dan de afspraak met de klant over zijn werkgebied.',
           },
           {
+            soort: 'afbeelding',
+            src: '/handboek/guardrails.png',
+            onderschrift: 'Bulk toewijzen. Onderin staat het vinkje Guardrails negeren, waarmee je de gebiedscontrole bewust passeert.',
+          },
+          {
             soort: 'tip',
             body: 'Toegewezen leads landen automatisch op de juiste actieve batch van die klant, verschijnen in zijn portaal, en gaan door naar zijn eigen CRM als er een koppeling actief is.',
           },
@@ -346,6 +367,7 @@ export const HANDBOEK: HandboekHoofdstuk[] = [
         id: 'runbook.klant',
         titel: 'Klant aanmaken en beheren',
         samenvatting: 'Nieuwe klant, branches, werkgebied en portaaltoegang.',
+        scherm: { href: '/admin/customers', label: 'Open Klanten' },
         cursus: true,
         minuten: 5,
         blokken: [
@@ -372,6 +394,7 @@ export const HANDBOEK: HandboekHoofdstuk[] = [
         id: 'runbook.batch',
         titel: 'Batches beheren',
         samenvatting: 'Aanmaken, pauzeren, vergroten en waarom een batch niet doorloopt.',
+        scherm: { href: '/admin/batch-levering', label: 'Open Levering batches' },
         cursus: true,
         minuten: 6,
         blokken: [
@@ -394,7 +417,20 @@ export const HANDBOEK: HandboekHoofdstuk[] = [
           },
           {
             soort: 'let-op',
-            body: 'Een batch kan aan een specifieke Meta-campagne gekoppeld zijn. Dan tellen alleen leads uit díe campagne mee. Draait die campagne landelijk terwijl de klant een klein werkgebied heeft, dan vult de batch traag en blijft de rest onbedeeld liggen.',
+            body: 'Een campagnekoppeling op een batch **reserveert geen leads**. Die koppeling dient alleen om de campagne bij Meta te pauzeren zodra de batch vol is. Leads uit "zijn" campagne zijn gewoon algemene voorraad voor die branche en kunnen bij een andere klant landen.',
+          },
+          {
+            soort: 'tekst',
+            body: 'Elke lead gaat naar precies één klant: die met de **oudste openstaande batch** die op branche en gebied matcht. Een nieuwe klant staat dus achteraan de rij en krijgt pas leads als de batches vóór hem vol zitten of hun dagmaximum hebben bereikt.',
+          },
+          {
+            soort: 'tip',
+            body: 'In augustus 2026 leek een nieuwe klant niets te krijgen uit zijn eigen campagne. Er was niets kapot: vier van de negen leads gingen naar klanten die langer in de rij stonden, drie vielen buiten ieders werkgebied, en de twee in zijn provincie werden opgeeist door twee oudere batches. Kijk bij zo\'n melding dus eerst naar de volgorde van openstaande batches in die branche.',
+          },
+          {
+            soort: 'afbeelding',
+            src: '/handboek/levering.png',
+            onderschrift: 'Levering batches: hier zie je in één blik welke batches doorlopen en welke stilstaan.',
           },
           {
             soort: 'tekst',
@@ -406,6 +442,7 @@ export const HANDBOEK: HandboekHoofdstuk[] = [
         id: 'runbook.export',
         titel: 'Leads exporteren',
         samenvatting: 'Export naar bestand, en de valkuil van de duizend rijen.',
+        scherm: { href: '/admin/leads', label: 'Open Leads CRM' },
         blokken: [
           {
             soort: 'tekst',
@@ -421,6 +458,7 @@ export const HANDBOEK: HandboekHoofdstuk[] = [
         id: 'runbook.koppeling',
         titel: 'Een koppeling met het CRM van een klant',
         samenvatting: 'Webhook instellen zodat leads doorstromen naar hun eigen systeem.',
+        scherm: { href: '/admin/customers', label: 'Open Klanten' },
         blokken: [
           {
             soort: 'tekst',
@@ -439,6 +477,228 @@ export const HANDBOEK: HandboekHoofdstuk[] = [
           {
             soort: 'let-op',
             body: 'De testknop controleert alleen of de URL bereikbaar is, niet of de koppeling aanstaat. Een geslaagde test betekent dus niet dat er leads worden verstuurd. Controleer altijd of de schakelaar echt aan staat.',
+          },
+        ],
+      },
+      {
+        id: 'runbook.reclamaties',
+        titel: 'Reclamaties afhandelen',
+        samenvatting: 'Een klant klaagt een lead aan. Beoordelen, goedkeuren en wat dat kost.',
+        scherm: { href: '/admin/reclamaties', label: 'Open Reclamaties' },
+        cursus: true,
+        minuten: 5,
+        blokken: [
+          {
+            soort: 'tekst',
+            body: 'Een klant kan een geleverde lead aanvechten, bijvoorbeeld omdat het nummer niet klopt of de persoon nergens van weet. Dat heet een reclamatie. Je ziet openstaande reclamaties aan het rode getal naast **Reclamaties** in het menu.',
+          },
+          {
+            soort: 'stappen',
+            items: [
+              'Open de reclamatie en lees de reden van de klant.',
+              'Controleer de lead zelf: klopt het telefoonnummer, is de lead recent, staat er iets in de notities.',
+              'Keur goed of af. Keur je goed, dan telt die levering niet meer mee als omzet en lever je in feite een gratis vervanglead.',
+              'Laat de klant weten wat je hebt besloten, zeker bij een afwijzing.',
+            ],
+          },
+          {
+            soort: 'let-op',
+            body: 'Een goedgekeurde reclamatie verlaagt de netto-leveringen en verhoogt daarmee de **effectieve CPL** op het dashboard. Dat is bedoeld: de advertentiekosten voor die lead zijn wél gemaakt, de levering telt alleen niet.',
+          },
+          {
+            soort: 'afbeelding',
+            src: '/handboek/reclamaties.png',
+            onderschrift: 'Het reclamatiescherm met de openstaande aanvragen.',
+          },
+          {
+            soort: 'tip',
+            body: 'Loop reclamaties dagelijks na. Ze blijven anders staan, de klant hoort niets, en je cijfers blijven ondertussen te rooskleurig omdat de aftrek nog niet is verwerkt.',
+          },
+        ],
+      },
+      {
+        id: 'runbook.prospects',
+        titel: 'De prospects-pijplijn',
+        samenvatting: 'Nieuwe klanten werven: importeren, toewijzen, opvolgen en omzetten.',
+        scherm: { href: '/admin/prospects', label: 'Open Prospects' },
+        cursus: true,
+        minuten: 5,
+        blokken: [
+          {
+            soort: 'tekst',
+            body: 'Prospects zijn potentiële klanten, dus bedrijven die nog geen klant zijn. Het is een aparte pijplijn naast de leads. Accountmanagers werken hier dagelijks in.',
+          },
+          {
+            soort: 'stappen',
+            items: [
+              'Importeer of maak prospects aan onder **Prospects**.',
+              'Wijs ze toe aan een accountmanager, anders pakt niemand ze op.',
+              'De accountmanager werkt zijn taken af via **Mijn taken** en verandert de status naarmate het gesprek vordert.',
+              'Wordt het een klant, dan zet je de prospect om. Er wordt dan een klantrecord aangemaakt.',
+            ],
+          },
+          {
+            soort: 'let-op',
+            body: 'Partner-branches, met het achtervoegsel `_partners`, horen in deze pijplijn thuis en niet bij een gewone klant. Probeer je zo\'n branche aan een klant te koppelen, dan weigert het systeem dat.',
+          },
+        ],
+      },
+      {
+        id: 'runbook.afspraken',
+        titel: 'Afspraken en agenda',
+        samenvatting: 'Klant-afspraken, plan-gesprekken via de website en de gedeelde team-agenda.',
+        scherm: { href: '/admin/appointments', label: 'Open Klant-afspraken' },
+        blokken: [
+          {
+            soort: 'tekst',
+            body: 'Er zijn drie schermen die met agenda te maken hebben, en ze doen alle drie iets anders.',
+          },
+          {
+            soort: 'tabel',
+            kop: ['Scherm', 'Waarvoor'],
+            rijen: [
+              ['Klant-afspraken', 'Afspraken die als product aan klanten geleverd worden, met eigen batches'],
+              ['Plan-gesprekken', 'Strategiegesprekken die bezoekers zelf inplannen via de website'],
+              ['Team-agenda', 'De interne agenda van het team, met videogesprek-uitnodigingen'],
+            ],
+          },
+          {
+            soort: 'tekst',
+            body: 'Herinneringen voor afspraken gaan elk uur automatisch de deur uit. Klaagt een klant dat hij geen herinnering kreeg, kijk dan eerst of die geplande taak wel draait.',
+          },
+          {
+            soort: 'let-op',
+            body: 'Een boeking via de website slaat de gekozen dag op zoals de bezoeker die aanklikte. In augustus 2026 zat daar een fout in waardoor elke boeking een dag te vroeg werd opgeslagen; dat is verholpen. Klopt een datum toch niet, vergelijk dan wat de klant zegt met wat er in de database staat voordat je iets aanpast.',
+          },
+        ],
+      },
+      {
+        id: 'runbook.facturen',
+        titel: 'Facturen en betalingen',
+        samenvatting: 'Hoe geld binnenkomt, en wat je maandelijks controleert.',
+        scherm: { href: '/admin/invoices', label: 'Open Facturen' },
+        cursus: true,
+        minuten: 5,
+        blokken: [
+          {
+            soort: 'tekst',
+            body: 'Klanten betalen hun batch vooraf via Mollie, in het klantportaal. Zodra de betaling binnen is, wordt de batch actief en begint de levering. Dat gebeurt automatisch; je hoeft niets vrij te geven.',
+          },
+          {
+            soort: 'tekst',
+            body: 'Omdat batches vooraf worden betaald, is **omzet gelijk aan betaalde batches**, niet aan geleverde leads. Een batch die je pauzeert blijft dus gewoon omzet.',
+          },
+          {
+            soort: 'stappen',
+            items: [
+              'Controleer maandelijks **Facturen** op openstaande posten.',
+              'Kijk bij **Bestellingen** of er betalingen zijn blijven hangen in `pending_payment`.',
+              'Controleer of de btw-gegevens van de klant kloppen; die staan op de factuur.',
+            ],
+          },
+          {
+            soort: 'let-op',
+            body: 'Er staan nog klanten met een e-mailadres in het btw-nummerveld. Dat veld komt op de factuur terecht. Corrigeer het zodra je zo\'n klant tegenkomt.',
+          },
+          {
+            soort: 'afbeelding',
+            src: '/handboek/batches.png',
+            onderschrift: 'Het batchoverzicht: hier zie je per batch de status en of er betaald is.',
+          },
+        ],
+      },
+      {
+        id: 'runbook.gebruikers',
+        titel: 'Een collega toegang geven',
+        samenvatting: 'Nieuw beheeraccount aanmaken en de juiste rol kiezen.',
+        scherm: { href: '/admin/users', label: 'Open Gebruikers' },
+        cursus: true,
+        minuten: 3,
+        blokken: [
+          {
+            soort: 'stappen',
+            items: [
+              'Ga naar **Gebruikers** en maak een account aan met naam, e-mailadres en een wachtwoord.',
+              'Kies de rol. Zie het onderdeel over rollen als je twijfelt; superadmin geeft toegang tot geld, koppelingen en verdeling.',
+              'Zet de vlag **is_account_manager** aan als de persoon klanten beheert en mee moet tellen op het podium en in de targets.',
+              'Laat de nieuwe collega het wachtwoord meteen zelf wijzigen.',
+            ],
+          },
+          {
+            soort: 'let-op',
+            body: 'Iemand die vertrekt zet je op inactief in plaats van verwijderen. Zijn naam staat namelijk in het activiteitenlog en aan klanten en batches gekoppeld; verwijderen maakt die historie onleesbaar. Controleer wel of zijn klanten en batches aan iemand anders worden toegewezen, anders vallen die zonder accountmanager.',
+          },
+        ],
+      },
+      {
+        id: 'runbook.meta',
+        titel: 'Meta-campagnes beheren',
+        samenvatting: 'Waar de leads vandaan komen, en de valkuil van targeting.',
+        cursus: true,
+        minuten: 5,
+        blokken: [
+          {
+            soort: 'tekst',
+            body: 'Vrijwel alle leads komen uit Meta-campagnes. Die draaien in Meta Business zelf; het CRM leest de kosten en resultaten in en koppelt leads aan campagnes.',
+          },
+          {
+            soort: 'tekst',
+            body: 'Je kunt een campagne aan een batch koppelen. Dat doet één ding: zodra de batch vol is, wordt de campagne bij Meta automatisch gepauzeerd zodat je niet doorbetaalt. **Het reserveert geen leads voor die klant.**',
+          },
+          {
+            soort: 'let-op',
+            body: 'Stem het gebied van de campagne af op het werkgebied van de klant. Draait een campagne landelijk terwijl de klant alleen twee provincies afneemt, dan betaal je voor leads die hij niet mag krijgen en die vaak bij niemand terechtkomen.',
+          },
+          {
+            soort: 'tekst',
+            body: 'In **Leads CRM** kun je filteren op campagne. Zoek daar op de naam van de campagne om te zien welke leads eruit zijn gekomen en waar ze terecht zijn gekomen.',
+          },
+          {
+            soort: 'tip',
+            body: 'Campagnes met het woord "pakketadvies" of "energie" in de titel tellen bewust niet mee in de kosten- en winstberekening. Noem een leadcampagne dus nooit zo, anders verdwijnt hij stilletjes uit je cijfers.',
+          },
+        ],
+      },
+      {
+        id: 'runbook.content',
+        titel: 'Blog en website-content',
+        samenvatting: 'Het wekelijkse contentproces, dat handmatig naar productie gaat.',
+        blokken: [
+          {
+            soort: 'tekst',
+            body: 'De website heeft een blog met ruim honderd artikelen. Er is een generator die een nieuw artikel schrijft, en een commando dat dat artikel meteen publiceert.',
+          },
+          {
+            soort: 'code',
+            body: 'npm run generate-blog     # schrijft een nieuw artikel\nnpm run weekly-content    # genereert, bouwt en zet live',
+          },
+          {
+            soort: 'let-op',
+            body: 'Dit draait **niet** automatisch. Het is een handmatig commando dat je vanaf je eigen computer uitvoert, en `weekly-content` zet de site meteen live. Controleer het artikel dus vóór je dat commando geeft.',
+          },
+          {
+            soort: 'tekst',
+            body: 'Artikelen staan in `src/data/blogArticles.ts`. Elke publicatiedatum hoort in het verleden te liggen. In augustus 2026 stonden er 66 artikelen met een datum in de toekomst door een verkeerde jaarvervanging; controleer dat na een grote contentwijziging.',
+          },
+        ],
+      },
+      {
+        id: 'runbook.overige',
+        titel: 'De overige schermen',
+        samenvatting: 'Bedrijfsgegevens, e-mails, branches, AI-campagnes en het testpanel.',
+        blokken: [
+          {
+            soort: 'tabel',
+            kop: ['Scherm', 'Waarvoor', 'Let op'],
+            rijen: [
+              ['Bedrijfsgegevens', 'Je eigen bedrijfsnaam, adres en btw-nummer', 'Komt op elke factuur; controleer na een wijziging een factuur'],
+              ['E-mails', 'Mailsjablonen en verzonden berichten', 'Test een sjabloon op jezelf voordat je het naar klanten stuurt'],
+              ['Branches', 'De branches die het systeem kent', 'Een branche op inactief zetten blokkeert nieuwe koppelingen bij klanten'],
+              ['AI campagnes', 'Automatische campagne-optimalisatie', 'Draait elke twee uur zelfstandig; kijk hier bij onverwachte budgetwijzigingen'],
+              ['Testpanel', 'Handmatig functies uitproberen', 'Werkt op echte data, dus gebruik een eigen testklant'],
+              ['Activiteitenlog', 'Wie heeft wat gedaan', 'Eerste plek om te kijken bij "wie heeft dit veranderd"'],
+              ['AM Targets en leaderboard', 'Doelen en scores per accountmanager', 'Targets lopen per periode; pas ze maandelijks aan'],
+            ],
           },
         ],
       },
@@ -508,7 +768,7 @@ export const HANDBOEK: HandboekHoofdstuk[] = [
               'Heeft de klant een batch met status `active` voor die branche? Kijk bij **Levering batches**. Een batch op `paused` levert niets.',
               'Staat de branche in het profiel van de klant? Zonder dat komt er niets binnen, ook niet met een actieve batch.',
               'Klopt het werkgebied? Vergelijk de provincies van de klant met de plek waar de leads vandaan komen.',
-              'Is de batch aan een Meta-campagne gekoppeld? Dan tellen alleen leads uit die campagne mee.',
+              'Staan er oudere openstaande batches in dezelfde branche? Die krijgen de leads eerst. Een campagnekoppeling reserveert niets.',
               'Staat de klant in demo-modus? Dan toont zijn portaal alleen demo-leads en verbergt het de echte.',
               'Zijn er überhaupt leads in die branche en dat gebied? Kijk in **Leads CRM** met het filter op niet toegewezen.',
             ],
@@ -566,6 +826,101 @@ export const HANDBOEK: HandboekHoofdstuk[] = [
           {
             soort: 'tekst',
             body: 'Ververs de pagina. Blijft het staan, kijk dan of de site zelf bereikbaar is en of er een storing is bij Vercel of Supabase.',
+          },
+        ],
+      },
+    ],
+  },
+
+  /* ─────────────────────────── Herstel ─────────────────────────── */
+  {
+    id: 'herstel',
+    titel: 'Back-ups en herstel',
+    icoon: '🛟',
+    intro: 'Wat er bewaard wordt, hoe ver je terug kunt, en wat je doet als er iets echt misgaat.',
+    secties: [
+      {
+        id: 'herstel.backups',
+        titel: 'Wat er bewaard wordt',
+        samenvatting: 'De feitelijke situatie van de back-ups, gecontroleerd in augustus 2026.',
+        cursus: true,
+        minuten: 4,
+        blokken: [
+          {
+            soort: 'tabel',
+            kop: ['Onderdeel', 'Bescherming', 'Hoe ver terug'],
+            rijen: [
+              ['Database', 'Dagelijkse fysieke back-up door Supabase, rond 06:15 UTC', 'Circa een week'],
+              ['Database, precies moment', 'Herstel naar een tijdstip (PITR)', 'Binnen het back-upvenster'],
+              ['De code', 'Volledige git-historie op GitHub', 'Alles, sinds het begin'],
+              ['De live site', 'Elke deploy blijft bewaard op Vercel', 'Tientallen versies terug'],
+              ['Bestanden (facturen, avatars)', 'Supabase Storage', 'Controleer dit apart, valt niet vanzelf onder de database-back-up'],
+            ],
+          },
+          {
+            soort: 'let-op',
+            body: 'De back-ups gaan ongeveer een week terug. Een fout die je pas na tien dagen ontdekt, is niet meer via een back-up te herstellen. Controleer na een grote import of massale wijziging dus dezelfde dag of het klopt.',
+          },
+        ],
+      },
+      {
+        id: 'herstel.procedure',
+        titel: 'Als er iets echt misgaat',
+        samenvatting: 'Site plat, verkeerde massale wijziging, of gegevens kwijt.',
+        cursus: true,
+        minuten: 5,
+        blokken: [
+          {
+            soort: 'tekst',
+            body: '**De site is offline of stuk na een wijziging.** Zet de vorige versie terug op Vercel. Dat kan in het Vercel-dashboard bij de deploys, of met het commando hieronder. Dat raakt alleen de code, niet de gegevens.',
+          },
+          {
+            soort: 'code',
+            body: 'vercel rollback          # terug naar de vorige werkende versie',
+          },
+          {
+            soort: 'tekst',
+            body: '**Een massale wijziging of import ging mis.** Kijk eerst of er een undo bestaat: het importscherm heeft die. Anders is de vraag hoeveel er is geraakt. Bij een handvol records corrigeer je met de hand; bij duizenden is een database-herstel de betere route.',
+          },
+          {
+            soort: 'stappen',
+            items: [
+              'Stop met wijzigen zodra je het merkt. Elke minuut extra maakt herstel lastiger.',
+              'Bepaal wanneer het misging, zo precies mogelijk. Het activiteitenlog helpt daarbij.',
+              'Kijk welke back-ups beschikbaar zijn.',
+              'Herstel naar het moment vlak vóór de fout.',
+            ],
+          },
+          {
+            soort: 'code',
+            body: 'supabase backups list --project-ref qwfkcpwxoymhpfdthpqv\nsupabase backups restore --project-ref qwfkcpwxoymhpfdthpqv',
+          },
+          {
+            soort: 'let-op',
+            body: 'Een database-herstel draait de **hele** database terug, niet alleen wat jij fout deed. Alles wat sinds dat moment is gebeurd, zoals nieuwe leads en betalingen, verdwijnt daarmee ook. Weeg dat af en overleg voordat je dit doet.',
+          },
+          {
+            soort: 'invullen',
+            body: 'Noteer hier wie je belt als het echt misgaat buiten kantooruren, en of er afspraken zijn met klanten over hoe lang een storing mag duren.',
+          },
+        ],
+      },
+      {
+        id: 'herstel.scripts',
+        titel: 'De losse scripts',
+        samenvatting: 'Wat er in de scripts-map staat en waarom je er voorzichtig mee moet zijn.',
+        blokken: [
+          {
+            soort: 'tekst',
+            body: 'In de map `scripts/` staan zo\'n veertig losse bestanden. De meeste zijn eenmalig geschreven voor één specifieke klus, bijvoorbeeld het herstellen van leads voor één klant of het terugzetten van een verkeerde import.',
+          },
+          {
+            soort: 'let-op',
+            body: 'Beschouw ze als geschiedenis, niet als gereedschap. Ze zijn geschreven voor een situatie die toen gold, draaien vaak rechtstreeks op de productiedatabase, en zijn zelden getest op de situatie van vandaag. Lees zo\'n script altijd eerst helemaal door voordat je het uitvoert, en laat het zo nodig eerst controleren.',
+          },
+          {
+            soort: 'tekst',
+            body: 'De uitzondering zijn de commando\'s die in `package.json` staan; die zijn bedoeld voor herhaald gebruik. Zie het onderdeel over blog en website-content.',
           },
         ],
       },
