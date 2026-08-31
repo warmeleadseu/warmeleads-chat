@@ -399,6 +399,8 @@ export default function LeadsCRMPage() {
   const [selStatuses, setSelStatuses] = useState<string[]>([]);
   const [selProvinces, setSelProvinces] = useState<string[]>([]);
   const [selSources, setSelSources] = useState<string[]>([]);
+  const [selCampaigns, setSelCampaigns] = useState<string[]>([]);
+  const [campaigns, setCampaigns] = useState<{ id: string; name: string; leads: number }[]>([]);
   const [assignmentFilter, setAssignmentFilter] = useState<'all' | 'assigned' | 'unassigned'>('all');
   const [phoneFilter, setPhoneFilter] = useState('all');
   const [dateFrom, setDateFrom] = useState('');
@@ -449,6 +451,11 @@ export default function LeadsCRMPage() {
     ]);
     if (custRes.ok) { const d = await custRes.json(); setCustomers(d.customers || []); }
     if (branchRes.ok) { const d = await branchRes.json(); setBranches(d.branches || []); }
+    /* Campagnelijst apart: hij is trager en het scherm moet niet op hem wachten. */
+    try {
+      const campRes = await adminFetch('/api/admin/meta-campaign-options');
+      if (campRes.ok) { const d = await campRes.json(); setCampaigns(d.campaigns || []); }
+    } catch { /* filter blijft leeg, de rest van het scherm werkt gewoon */ }
   }, []);
 
   const fetchLeads = useCallback(async () => {
@@ -459,6 +466,7 @@ export default function LeadsCRMPage() {
     if (selStatuses.length > 0) p.set('status', selStatuses.join(','));
     if (selProvinces.length > 0) p.set('province', selProvinces.join(','));
     if (selSources.length > 0) p.set('source', selSources.join(','));
+    if (selCampaigns.length > 0) p.set('meta_campaign_id', selCampaigns.join(','));
     if (assignmentFilter !== 'all') p.set('assignment', assignmentFilter);
     if (phoneFilter !== 'all') p.set('phone_valid', phoneFilter);
     if (bulkFilter !== 'all') p.set('bulk_status', bulkFilter);
@@ -492,7 +500,7 @@ export default function LeadsCRMPage() {
     } finally {
       setLoading(false);
     }
-  }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, includeUnknownDate, search, plaatsFilter, plaatsRadiusKm, postcodeRanges, page, perPage, sortBy, sortDir]);
+  }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, selCampaigns, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, includeUnknownDate, search, plaatsFilter, plaatsRadiusKm, postcodeRanges, page, perPage, sortBy, sortDir]);
 
   const fetchFacets = useCallback(async () => {
     const p = new URLSearchParams();
@@ -501,6 +509,7 @@ export default function LeadsCRMPage() {
     if (selStatuses.length > 0) p.set('status', selStatuses.join(','));
     if (selProvinces.length > 0) p.set('province', selProvinces.join(','));
     if (selSources.length > 0) p.set('source', selSources.join(','));
+    if (selCampaigns.length > 0) p.set('meta_campaign_id', selCampaigns.join(','));
     if (assignmentFilter !== 'all') p.set('assignment', assignmentFilter);
     if (phoneFilter !== 'all') p.set('phone_valid', phoneFilter);
     if (bulkFilter !== 'all') p.set('bulk_status', bulkFilter);
@@ -514,7 +523,7 @@ export default function LeadsCRMPage() {
     if (postcodeRanges.trim()) p.set('postcode_ranges', postcodeRanges.trim());
     const res = await adminFetch(`/api/admin/leads/facets?${p}`);
     if (res.ok) { const d = await res.json(); setFacets(d.facets || {}); }
-  }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, includeUnknownDate, search, plaatsFilter, plaatsRadiusKm, postcodeRanges]);
+  }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, selCampaigns, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, includeUnknownDate, search, plaatsFilter, plaatsRadiusKm, postcodeRanges]);
 
   const fetchExportHistory = useCallback(async () => {
     const res = await adminFetch('/api/admin/leads/export');
@@ -541,7 +550,7 @@ export default function LeadsCRMPage() {
   useEffect(() => { fetchMeta(); fetchExportHistory(); }, [fetchMeta, fetchExportHistory]);
   useEffect(() => { fetchLeads(); }, [fetchLeads]);
   useEffect(() => { fetchFacets(); }, [fetchFacets]);
-  useEffect(() => { setPage(1); }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, includeUnknownDate, search, plaatsFilter, plaatsRadiusKm, postcodeRanges, perPage]);
+  useEffect(() => { setPage(1); }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, selCampaigns, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, includeUnknownDate, search, plaatsFilter, plaatsRadiusKm, postcodeRanges, perPage]);
 
   useEffect(() => {
     const c = searchParams.get('customer');
@@ -636,6 +645,7 @@ export default function LeadsCRMPage() {
     if (selStatuses.length > 0) p.status = selStatuses.join(',');
     if (selProvinces.length > 0) p.province = selProvinces.join(',');
     if (selSources.length > 0) p.source = selSources.join(',');
+    if (selCampaigns.length > 0) p.meta_campaign_id = selCampaigns.join(',');
     if (assignmentFilter !== 'all') p.assignment = assignmentFilter;
     if (phoneFilter !== 'all') p.phone_valid = phoneFilter;
     if (bulkFilter !== 'all') p.bulk_status = bulkFilter;
@@ -647,7 +657,7 @@ export default function LeadsCRMPage() {
     if (plaatsFilter.trim() && plaatsRadiusKm != null) p.plaats_radius_km = String(plaatsRadiusKm);
     if (postcodeRanges.trim()) p.postcode_ranges = postcodeRanges.trim();
     return p;
-  }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, includeUnknownDate, search, plaatsFilter, plaatsRadiusKm, postcodeRanges]);
+  }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, selCampaigns, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, includeUnknownDate, search, plaatsFilter, plaatsRadiusKm, postcodeRanges]);
 
   const handleQuickStatus = async (id: string, newStatus: string) => {
     const prevStatus = leads.find(l => l.id === id)?.status;
@@ -864,6 +874,19 @@ export default function LeadsCRMPage() {
             onChange={setSelSources}
             counts={facets.source}
           />
+          {campaigns.length > 0 && (
+            <MultiSelect
+              label="campagnes"
+              allLabel="Alle campagnes"
+              searchable
+              options={campaigns.map(c => ({
+                value: c.id,
+                label: `${c.name} (${c.leads})`,
+              }))}
+              selected={selCampaigns}
+              onChange={setSelCampaigns}
+            />
+          )}
           <select value={assignmentFilter} onChange={e => setAssignmentFilter(e.target.value as 'all' | 'assigned' | 'unassigned')} className={`rounded-lg border px-3 py-2 text-sm ${assignmentFilter !== 'all' ? 'border-purple-300 bg-purple-50 text-purple-700' : 'border-slate-200 bg-white text-slate-700'}`} title="Toon enkel leads die wel of niet aan een klant zijn uitgedeeld">
             <option value="all">Alle toewijzingen</option>
             <option value="assigned">Wel uitgedeeld</option>

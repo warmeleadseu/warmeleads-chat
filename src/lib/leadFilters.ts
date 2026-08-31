@@ -22,6 +22,12 @@ export type LeadFilterParams = {
   status?: string | null;
   province?: string | null;
   source?: string | null;
+  /**
+   * Meta-campagne(s), als komma-gescheiden campagne-ids. De campagnenaam staat
+   * niet op de lead zelf, alleen op de kostenregels; de interface laat je op
+   * naam zoeken en stuurt de bijbehorende ids mee.
+   */
+  meta_campaign_id?: string | null;
   phone_valid?: string | boolean | null;
   date_from?: string | null;
   date_to?: string | null;
@@ -48,6 +54,7 @@ export function readLeadFilterParams(url: URLSearchParams): LeadFilterParams {
     status: url.get('status'),
     province: url.get('province'),
     source: url.get('source'),
+    meta_campaign_id: url.get('meta_campaign_id'),
     phone_valid: url.get('phone_valid'),
     date_from: url.get('date_from'),
     date_to: url.get('date_to'),
@@ -140,6 +147,11 @@ export function applyLeadFilters<T>(
     const vals = String(filters.source).split(',').filter(Boolean);
     if (vals.length === 1) q = q.eq('bron', vals[0]);
     else if (vals.length > 1) q = q.in('bron', vals);
+  }
+  if (filters.meta_campaign_id) {
+    const vals = String(filters.meta_campaign_id).split(',').filter(Boolean);
+    if (vals.length === 1) q = q.eq('meta_campaign_id', vals[0]);
+    else if (vals.length > 1) q = q.in('meta_campaign_id', vals);
   }
 
   if (filters.phone_valid === 'false' || filters.phone_valid === false) q = q.eq('phone_valid', false);

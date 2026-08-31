@@ -92,6 +92,7 @@ export async function POST(request: NextRequest) {
       status: typeof body.status === 'string' ? body.status : null,
       province: typeof body.province === 'string' ? body.province : null,
       source: typeof body.source === 'string' ? body.source : null,
+      meta_campaign_id: typeof body.meta_campaign_id === 'string' ? body.meta_campaign_id : null,
       phone_valid: typeof body.phone_valid === 'string' || typeof body.phone_valid === 'boolean' ? body.phone_valid as string | boolean : null,
       date_from: typeof body.date_from === 'string' ? body.date_from : null,
       date_to: typeof body.date_to === 'string' ? body.date_to : null,

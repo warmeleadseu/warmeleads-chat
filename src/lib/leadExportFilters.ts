@@ -10,6 +10,7 @@ export function bodyToLeadFilterParams(body: Record<string, unknown>): LeadFilte
     status: typeof body.status === 'string' ? body.status : null,
     province: typeof body.province === 'string' ? body.province : null,
     source: typeof body.source === 'string' ? body.source : null,
+    meta_campaign_id: typeof body.meta_campaign_id === 'string' ? body.meta_campaign_id : null,
     phone_valid:
       typeof body.phone_valid === 'string' || typeof body.phone_valid === 'boolean'
         ? (body.phone_valid as string | boolean)
