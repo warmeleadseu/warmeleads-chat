@@ -606,6 +606,42 @@ export default function LeadsCRMPage() {
     if (failed > 0) showToast(`${failed} van ${ids.length} lead(s) niet bijgewerkt`, 'error');
     else showToast(`${ids.length} lead(s) bijgewerkt`);
   };
+  /* Selectie exporteren. Het CRM kon leads wel aanvinken maar niet uitvoeren:
+     de exportroute werkte uitsluitend op filters, dus een met de hand
+     samengestelde set kwam er niet uit. */
+  const [exportBezig, setExportBezig] = useState(false);
+  const exporteerSelectie = async (formaat: 'csv' | 'xlsx') => {
+    if (selected.size === 0 || exportBezig) return;
+    setExportBezig(true);
+    try {
+      const res = await fetch('/api/admin/leads/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lead_ids: [...selected], format: formaat }),
+      });
+      if (!res.ok) {
+        let melding = 'Export mislukt';
+        try { melding = (await res.json()).error || melding; } catch { /* geen JSON-body */ }
+        setBulkAssignFeedback({ kind: 'error', message: melding });
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const stempel = new Date().toISOString().split('T')[0];
+      a.download = `leads-selectie-${stempel}.${formaat}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setBulkAssignFeedback({ kind: 'error', message: e instanceof Error ? e.message : 'Export mislukt' });
+    } finally {
+      setExportBezig(false);
+    }
+  };
+
   const handleBulkDelete = async () => {
     if (selected.size === 0 || !confirm(`${selected.size} lead(s) verwijderen?`)) return;
     const count = selected.size;
@@ -1113,6 +1149,22 @@ export default function LeadsCRMPage() {
                 className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700"
               >
                 <UserPlusIcon className="h-3.5 w-3.5" /> Toewijzen aan klant
+              </button>
+              <button
+                onClick={() => exporteerSelectie('xlsx')}
+                disabled={exportBezig}
+                title="Exporteer de aangevinkte leads naar Excel"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-slate-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+              >
+                <ArrowDownTrayIcon className="h-3.5 w-3.5" /> {exportBezig ? 'Bezig...' : 'Exporteer selectie'}
+              </button>
+              <button
+                onClick={() => exporteerSelectie('csv')}
+                disabled={exportBezig}
+                title="Exporteer de aangevinkte leads naar CSV"
+                className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              >
+                CSV
               </button>
               <button onClick={handleBulkDelete} className="rounded-lg bg-red-500 px-3 py-1.5 text-sm font-medium text-white">Verwijderen</button>
               <button onClick={() => setSelected(new Set())} className="ml-auto text-sm text-slate-500 hover:text-slate-700">Deselecteren</button>

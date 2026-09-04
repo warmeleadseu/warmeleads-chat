@@ -14,6 +14,7 @@ import {
   countApprovedReclamationsForAssignments,
 } from '@/lib/reclamationStats';
 import { batchRevenueForCosts } from '@/lib/batchRevenue';
+import { MIRROR_ASSIGNMENT_SOURCE } from '@/lib/masterPortalMirror';
 
 /** Na zware wijzigingen: Supabase → Query Performance + advisors (indexes i.c.m. costs-vensters). */
 
@@ -157,6 +158,13 @@ export async function GET(request: NextRequest) {
    * Bulk en demo/test: buiten Meta-CPL en buiten ad-kostentoewijzing.
    * `bulk_assign` telt alleen mee als de toewijzing aan een betaalde batch
    * hangt (echte levering); losse bulk_assigns zijn bulkverkoop.
+   *
+   * Let op het verschil met "Leads uitgedeeld" op het periodeoverzicht: die
+   * tegel meet uitsluitend verse verdeling (zie src/lib/leadMetrics.ts), terwijl
+   * deze pool meet wat er aan betaalde levering tegenover de advertentiekosten
+   * staat. Een handmatige toewijzing aan een betaalde batch is wél omzet, maar
+   * geen verse verdeling. Beide getallen horen dus te verschillen; ze zijn nu
+   * alleen niet langer allebei vervuild met losse bulkverkoop.
    */
   const leadCampaignById = new Map(allLeads.map(l => [l.id, l.meta_campaign_id]));
 
@@ -164,6 +172,10 @@ export async function GET(request: NextRequest) {
     const src = a.source || 'distribution';
     if (src === 'bulk_export' || src === 'demo') return false;
     if (src === 'bulk_assign' && !a.batch_id) return false;
+    /* Masterportaal-kopieën zijn geen levering: ze leveren geen omzet en horen
+       dus ook niet in de noemer van de effectieve CPL, die ze kunstmatig
+       verlaagde. `distribution.ts` negeert ze om dezelfde reden. */
+    if (src === MIRROR_ASSIGNMENT_SOURCE) return false;
     const bron = leadBronById.get(a.lead_id);
     if (bron === 'demo') return false;
     const campagne = leadCampaignById.get(a.lead_id);

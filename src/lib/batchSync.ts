@@ -3,6 +3,7 @@ import { checkBatchMilestones } from './batchNotifications';
 import { isPipelineBatchKind } from './batchKind';
 import { isCappedDeliveryModel } from './batchDeliveryModel';
 import { reconcileBatchMetaCampaigns } from './metaBatchCampaignSync';
+import { countDistinctLeadsForBatch } from './batchDelivered';
 
 /**
  * Count actual lead_assignments for a batch, add external offset,
@@ -13,18 +14,10 @@ export async function syncBatchDelivered(
   supabase: SupabaseClient,
   batchId: string,
 ): Promise<number> {
-  const { count: rowCount } = await supabase
-    .from('lead_assignments')
-    .select('id', { count: 'exact', head: true })
-    .eq('batch_id', batchId);
-
-  let assignmentCount = rowCount || 0;
-  const { data: distinctCount, error: rpcErr } = await supabase.rpc('count_distinct_leads_for_batch', {
-    p_batch_id: batchId,
-  });
-  if (!rpcErr && typeof distinctCount === 'number') {
-    assignmentCount = distinctCount;
-  }
+  /* Dezelfde bron als de capaciteitscheck in `distributeLead`: unieke leads.
+     Twee verschillende tellingen (hier distinct, daar rijen) hielden een volle
+     batch negentien dagen "open" en legden de verdeling in zes provincies stil. */
+  const assignmentCount = await countDistinctLeadsForBatch(supabase, batchId);
 
   const { data: batch } = await supabase
     .from('customer_batches')

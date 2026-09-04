@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { getPeriodStart, getPrevPeriodStart } from '@/lib/adminDashboardPeriod';
+import { verseToewijzingFilter } from '@/lib/leadMetrics';
 
 async function fetchAllLight<T>(
   supabase: ReturnType<typeof createServerClient>,
@@ -72,17 +73,36 @@ export async function GET(request: NextRequest) {
   const scopeLeads = (q: any) => (isAM ? q.in('customer_id', amCustomerIds) : q);
   const scopeAssign = (q: any) => (isAM ? q.in('customer_id', amCustomerIds) : q);
 
-  /** Zelfde scope als kosten/CPL: geen bulk-export, geen demo-portaaltoewijzingen. */
-  const scopeAssignDistributie = (q: any) =>
-    scopeAssign(q).or('source.is.null,source.not.in.(bulk_export,demo)');
+  /**
+   * Alleen verse uitdelingen uit de verdeelpijplijn: geen bulkverkoop,
+   * geen bulk-export, geen demo, geen masterportaal-kopieën.
+   *
+   * Stond hier eerder alleen `bulk_export` en `demo` buiten, dan telde één
+   * bulkverkoop van 55 oude leads gewoon mee in "Leads uitgedeeld" van deze
+   * week. Zie src/lib/leadMetrics.ts voor de gedeelde definitie.
+   */
+  const scopeAssignDistributie = (q: any) => scopeAssign(q).or(verseToewijzingFilter());
 
   const periods = ['day', 'week', 'month', 'quarter', 'year'];
-  const periodBounds = periods.map(p => ({
-    period: p,
-    start: getPeriodStart(p).toISOString(),
-    prevStart: getPrevPeriodStart(p).toISOString(),
-  }));
-
+  /**
+   * De vorige periode wordt afgekapt op hetzelfde aantal verstreken uren als de
+   * huidige. Anders vergelijkt de trendpijl op vrijdag vier dagen met een hele
+   * week, en staat er structureel een misleidende min op het dashboard.
+   */
+  const periodBounds = periods.map(p => {
+    const startDate = getPeriodStart(p);
+    const prevStartDate = getPrevPeriodStart(p);
+    const verstrekenMs = Math.max(0, now.getTime() - startDate.getTime());
+    const prevEindDate = new Date(
+      Math.min(prevStartDate.getTime() + verstrekenMs, startDate.getTime()),
+    );
+    return {
+      period: p,
+      start: startDate.toISOString(),
+      prevStart: prevStartDate.toISOString(),
+      prevEnd: prevEindDate.toISOString(),
+    };
+  });
   /* ── Wave 1: everything in parallel ─────────────────────── */
   const [
     basicCounts,
@@ -117,11 +137,11 @@ export async function GET(request: NextRequest) {
       ),
     ),
     Promise.all(
-      periodBounds.flatMap(({ start, prevStart }) => [
+      periodBounds.flatMap(({ start, prevStart, prevEnd }) => [
         scopeLeads(supabase.from('leads').select('id', { count: 'exact', head: true }).neq('bron', 'excel_import').neq('bron', 'demo').gte('created_at', start)),
-        scopeLeads(supabase.from('leads').select('id', { count: 'exact', head: true }).neq('bron', 'excel_import').neq('bron', 'demo').gte('created_at', prevStart).lt('created_at', start)),
+        scopeLeads(supabase.from('leads').select('id', { count: 'exact', head: true }).neq('bron', 'excel_import').neq('bron', 'demo').gte('created_at', prevStart).lt('created_at', prevEnd)),
         scopeAssignDistributie(supabase.from('lead_assignments').select('id', { count: 'exact', head: true }).gte('assigned_at', start)),
-        scopeAssignDistributie(supabase.from('lead_assignments').select('id', { count: 'exact', head: true }).gte('assigned_at', prevStart).lt('assigned_at', start)),
+        scopeAssignDistributie(supabase.from('lead_assignments').select('id', { count: 'exact', head: true }).gte('assigned_at', prevStart).lt('assigned_at', prevEnd)),
       ]),
     ),
     fetchAllLight<{ lead_id: string; customer_id: string; source: string | null }>(

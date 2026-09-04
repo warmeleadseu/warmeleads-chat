@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { resolveBatchPricing } from '@/lib/batchPricing';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
 import { backfillBatch, distributeUnassignedLeads } from '@/lib/distribution';
@@ -251,7 +252,29 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const total_price = price_per_lead ? price_per_lead * batch_size : null;
+  /* Prijs nooit stilzwijgend op null laten staan: een batch zonder prijs telt
+     voor nul euro mee in de omzettegels, terwijl hij wél betaald is. Ontbreekt
+     het veld, dan leiden we de prijs af uit dezelfde staffels als het
+     klantportaal gebruikt. Zie src/lib/batchPricing.ts. */
+  const prijs = await resolveBatchPricing(supabase, {
+    customerId: customer_id,
+    branch,
+    batchSize: batch_size,
+    opgegevenPrijs: typeof price_per_lead === 'number' ? price_per_lead : null,
+  });
+  if (!prijs && body.is_paid === true) {
+    return NextResponse.json(
+      {
+        error:
+          `Geen prijs per lead bekend voor branche '${branch}'. Vul een prijs in, of stel de ` +
+          `staffel in bij de branche of bij deze klant. Zonder prijs telt de batch voor ` +
+          `nul euro mee in de omzet.`,
+      },
+      { status: 400 },
+    );
+  }
+  const effectievePrijsPerLead = prijs ? prijs.pricePerLead : null;
+  const total_price = prijs ? prijs.totalPrice : null;
   const lookback = typeof lookback_days === 'number' ? Math.max(0, Math.min(30, lookback_days)) : 3;
   const sanitizedFilters = Array.isArray(lead_filters) ? lead_filters.filter(
     (f: { field?: string; operator?: string; value?: string; values?: string[] }) =>
@@ -268,7 +291,7 @@ export async function POST(request: NextRequest) {
     customer_id,
     branch,
     batch_size,
-    price_per_lead,
+    price_per_lead: effectievePrijsPerLead,
     total_price,
     leads_per_week: leads_per_week || null,
     leads_per_day: leads_per_day || null,
@@ -357,7 +380,7 @@ export async function POST(request: NextRequest) {
     branch_name: brName,
     batch_size,
     total_price: total_price || 0,
-    price_per_lead: price_per_lead || 0,
+    price_per_lead: effectievePrijsPerLead || 0,
     is_paid: batchIsPaid,
     source: 'admin',
     batch_kind,
@@ -365,14 +388,17 @@ export async function POST(request: NextRequest) {
     billing_vat_id: custRow?.vat_id,
   }).catch(() => {});
 
-  if (price_per_lead && total_price) {
+  /* Ook factureren wanneer de prijs uit de staffel komt. Voorheen hing dit aan
+     het ingevulde formulierveld, dus een batch zonder ingevulde prijs kreeg
+     stilzwijgend geen factuur. */
+  if (effectievePrijsPerLead && total_price) {
     try {
       await createInvoice({
         customer_id,
         batch_id: data.id,
         branch_name: brName,
         batch_size,
-        price_per_lead,
+        price_per_lead: effectievePrijsPerLead,
         total_price,
         status: batchIsPaid ? 'paid' : 'open',
         ...(batchIsPaid ? { paid_at: new Date().toISOString() } : {}),

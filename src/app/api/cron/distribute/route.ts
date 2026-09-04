@@ -21,6 +21,24 @@ export async function GET(request: NextRequest) {
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - MAX_LEAD_AGE_DAYS);
 
+  /* Phase 0: batchtellers gelijktrekken en volle batches sluiten.
+     Moet vóór de verdeling, want een batch met een afwijkende teller wint de
+     sortering en blokkeert daarna elke lead in zijn werkgebied. Dat legde de
+     verdeling tussen 16 augustus en 4 september 2026 stil in zes provincies
+     zonder dat er ook maar één foutmelding was. Zie migratie 157. */
+  let batchesGecorrigeerd = 0;
+  try {
+    const { data: hersteld, error: reconcileError } = await supabase.rpc('reconcile_batch_delivered');
+    if (reconcileError) {
+      console.error('[cron/distribute] reconcile_batch_delivered mislukt:', reconcileError.message);
+    } else if (Array.isArray(hersteld) && hersteld.length > 0) {
+      batchesGecorrigeerd = hersteld.length;
+      console.warn('[cron/distribute] batches gecorrigeerd', hersteld);
+    }
+  } catch (e) {
+    console.error('[cron/distribute] reconcile onverwacht mislukt:', (e as Error).message);
+  }
+
   // Phase 1: Enrich recent leads missing coordinates (skip spreadsheet imports and demo leads)
   const { data: leads } = await supabase
     .from('leads')
@@ -162,7 +180,21 @@ export async function GET(request: NextRequest) {
   });
 
   // Phase 4: Distribute (uses 3-day limit internally)
+  const distributieT0 = Date.now();
   const distResult = await distributeUnassignedLeads();
+
+  /* Zonder deze regel was er geen enkel spoor van de verdeling in de logs: de
+     cron gaf negentien dagen lang keurig 200 terug terwijl er niets werd
+     uitgedeeld. `undeliveredInWindow` is het signaal om op te alarmeren. */
+  console.info('[cron/distribute:verdeling]', {
+    computeMs: Date.now() - distributieT0,
+    kandidaten: distResult.candidates,
+    zonderToewijzing: distResult.undeliveredInWindow,
+    uitgedeeld: distResult.distributed,
+    toewijzingen: distResult.assignments,
+    gemiddeldPerLead: distResult.avgAssignments,
+    batchesGecorrigeerd,
+  });
 
   // Phase 5: Backfill batches whose starts_at just passed
   let cronBackfilled = 0;
@@ -193,6 +225,9 @@ export async function GET(request: NextRequest) {
     enriched,
     phonesValidated,
     profanityDeleted,
+    batchesGecorrigeerd,
+    candidates: distResult.candidates,
+    undeliveredInWindow: distResult.undeliveredInWindow,
     distributed: distResult.distributed,
     assignments: distResult.assignments,
     avgAssignments: distResult.avgAssignments,

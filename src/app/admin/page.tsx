@@ -407,6 +407,7 @@ export default function AdminDashboard() {
                   <TrendBadge current={ps.leads} previous={ps.prevLeads} />
                 </div>
                 <p className="mt-1 text-xs text-slate-500">Leads geworven</p>
+                <p className="text-[11px] text-slate-400">Verse instroom, excl. import en demo</p>
               </div>
               <div className="rounded-lg bg-slate-50 p-4">
                 <div className="flex items-center justify-between">
@@ -414,12 +415,17 @@ export default function AdminDashboard() {
                   <TrendBadge current={ps.assigned} previous={ps.prevAssigned} />
                 </div>
                 <p className="mt-1 text-xs text-slate-500">Leads uitgedeeld</p>
+                <p className="text-[11px] text-slate-400">Verse verdeling, excl. bulk en demo</p>
               </div>
-              <div className="rounded-lg bg-slate-50 p-4">
+              <div
+                className="rounded-lg bg-slate-50 p-4"
+                title="Aantal verse uitdelingen gedeeld door het aantal verse leads in deze periode. Streven is 2,0x, het plafond is 3,0x."
+              >
                 <p className="text-2xl font-bold text-slate-900">
-                  {ps.leads > 0 ? Math.round((ps.assigned / ps.leads) * 100) : 0}%
+                  {ps.leads > 0 ? (ps.assigned / ps.leads).toFixed(2) : '0.00'}x
                 </p>
-                <p className="mt-1 text-xs text-slate-500">Conversieratio</p>
+                <p className="mt-1 text-xs text-slate-500">Gem. keer uitgedeeld</p>
+                <p className="text-[11px] text-slate-400">Streven 2,0x &middot; max 3,0x</p>
               </div>
             </div>
           )}

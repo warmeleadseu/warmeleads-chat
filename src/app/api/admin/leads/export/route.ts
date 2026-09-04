@@ -79,6 +79,33 @@ export async function POST(request: NextRequest) {
     max_leads, prioritize_least_exported,
     bulk_batch_id,
   } = body as Record<string, string | boolean | number | undefined>;
+
+  /* Handmatige selectie in het leads-CRM. Was er niet: exporteren kon alleen
+     via filters, dus een met de hand aangevinkte set leads viel er buiten.
+     Staat dit veld erin, dan telt uitsluitend die selectie en worden de
+     filtervelden genegeerd. De scope van een accountmanager blijft gelden. */
+  const UUID_PATROON = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const MAX_SELECTIE = 10_000;
+  const ruweSelectie = Array.isArray((body as { lead_ids?: unknown }).lead_ids)
+    ? ((body as { lead_ids: unknown[] }).lead_ids as unknown[])
+    : null;
+  let geselecteerdeIds: string[] | null = null;
+  if (ruweSelectie) {
+    const schoon = [...new Set(ruweSelectie.map(String).filter(id => UUID_PATROON.test(id)))];
+    if (schoon.length === 0) {
+      return NextResponse.json(
+        { error: 'De selectie bevat geen geldige lead-ids.' },
+        { status: 400 },
+      );
+    }
+    if (schoon.length > MAX_SELECTIE) {
+      return NextResponse.json(
+        { error: `Maximaal ${MAX_SELECTIE.toLocaleString('nl-NL')} leads per export; selecteer er minder.` },
+        { status: 400 },
+      );
+    }
+    geselecteerdeIds = schoon;
+  }
   // Bij datum-range exports: standaard ook leads met onbekende wervingsdatum
   // meenemen, zodat (bv. via een import zonder datum-kolom) deze leads niet
   // permanent uit datum-range exports vallen.
@@ -150,7 +177,30 @@ export async function POST(request: NextRequest) {
   const exportedLeads: Record<string, unknown>[] = [];
   let cappedByLimit = false;
 
-  if (plaatsRadius) {
+  if (geselecteerdeIds) {
+    /* Gechunkt op id: PostgREST zet `in` in de URL, en een paar duizend uuid's
+       daarin loopt tegen de lengtelimiet aan. */
+    const ID_CHUNK = 200;
+    for (let i = 0; i < geselecteerdeIds.length; i += ID_CHUNK) {
+      const chunk = geselecteerdeIds.slice(i, i + ID_CHUNK);
+      let chunkQuery = supabase.from('leads').select('*, customers(id, name)').in('id', chunk);
+      if (admin.role === 'accountmanager') {
+        const scoped = await applyAccountManagerScope(supabase, chunkQuery, admin.id);
+        if (!scoped.allowed) { chunkQuery = null as never; break; }
+        chunkQuery = scoped.query;
+      }
+      const { data: chunkRows, error: chunkError } = await chunkQuery;
+      if (chunkError) {
+        console.error('Export selectie ophalen mislukt:', chunkError);
+        return NextResponse.json({ error: 'Leads ophalen mislukt' }, { status: 500 });
+      }
+      exportedLeads.push(...((chunkRows || []) as Record<string, unknown>[]));
+    }
+    /* Zelfde volgorde als de gebruiker ze aanvinkte, niet de volgorde waarin
+       de database ze toevallig teruggeeft. */
+    const positie = new Map(geselecteerdeIds.map((id, i) => [id, i]));
+    exportedLeads.sort((a, b) => (positie.get(a.id as string) ?? 0) - (positie.get(b.id as string) ?? 0));
+  } else if (plaatsRadius) {
     const { rows, capped, error: scanError } = await filterQueryRowsByPlaatsRadius(
       async (from, to) => {
         const { data, error } = await query.range(from, to);
@@ -189,7 +239,14 @@ export async function POST(request: NextRequest) {
   }
 
   if (exportedLeads.length === 0) {
-    return NextResponse.json({ error: 'Geen leads gevonden voor deze filters' }, { status: 404 });
+    return NextResponse.json(
+      {
+        error: geselecteerdeIds
+          ? 'Geen van de geselecteerde leads is beschikbaar voor export.'
+          : 'Geen leads gevonden voor deze filters',
+      },
+      { status: 404 },
+    );
   }
 
   const leadIds = exportedLeads.map(l => l.id as string);

@@ -2,6 +2,7 @@ import { createServerClient } from './supabase';
 import { sendLeadNotification } from './email';
 import { sendNewLeadPush } from './pushNotification';
 import { syncBatchDelivered } from './batchSync';
+import { countDeliveredForBatch } from './batchDelivered';
 import { isPipelineBatchKind } from './batchKind';
 import { batchIsAtCapacity, isCappedDeliveryModel } from './batchDeliveryModel';
 import { getLeadLimitPeriodAnchors } from './batchAssignmentCaps';
@@ -219,6 +220,24 @@ interface DistributionResult {
   assignments: { customer_id: string; batch_id: string; distance_km: number | null }[];
 }
 
+/** Uitkomst van één verdeelronde, inclusief de signalen om op te monitoren. */
+export type DistributeRunResult = {
+  /** Leads die daadwerkelijk minstens één nieuwe toewijzing kregen. */
+  distributed: number;
+  /** Aantal aangemaakte toewijzingen in deze ronde. */
+  assignments: number;
+  /** Gemiddeld aantal toewijzingen per kandidaat-lead (streven is 2). */
+  avgAssignments: number;
+  /** Aantal leads dat in deze ronde is bekeken (venster van 3 dagen). */
+  candidates: number;
+  /**
+   * Leads zonder enige toewijzing die ook na deze ronde nergens heen konden.
+   * Loopt dit getal op terwijl er actieve batches zijn, dan zit de verdeling
+   * vast — precies wat tussen 16 aug en 4 sep 2026 onopgemerkt gebeurde.
+   */
+  undeliveredInWindow: number;
+};
+
 /** Row shape from customer_batches select in distribution (PostgREST nested customers). */
 type ActiveCustomerBatch = {
   id: string;
@@ -238,6 +257,22 @@ type ActiveCustomerBatch = {
   batch_kind?: string | null;
   customers: { id: string; is_active: boolean; portal_active: boolean };
 };
+
+/** Klant-targetgebied: `customer_targets` heeft naast de geo-velden een klant-id. */
+type CustomerGeoTargetRow = GeoTargetRow & { customer_id: string };
+
+/** Groepeert klant-targetgebieden per klant-id. */
+function groupTargetsByCustomer(
+  targets: CustomerGeoTargetRow[] | null,
+): Record<string, GeoTargetRow[]> {
+  const perKlant: Record<string, GeoTargetRow[]> = {};
+  for (const t of targets || []) {
+    if (!t?.customer_id) continue;
+    if (!perKlant[t.customer_id]) perKlant[t.customer_id] = [];
+    perKlant[t.customer_id].push(t);
+  }
+  return perKlant;
+}
 
 async function fetchActiveBatchesForBranch(
   supabase: SupabaseClient,
@@ -268,6 +303,20 @@ export type DistributeLeadContext = {
   allowInvalidPhoneForCustomerIds?: string[];
   /** Alleen administratieve backfill: negeer leads_per_day (contract / leveringsbelofte — voorzichtig gebruiken). */
   ignoreBatchDailyCap?: boolean;
+  /**
+   * Per-ronde caches, gevuld door `distributeLeads`. Deze drie verzamelingen
+   * veranderen tijdens een ronde niet, maar werden per lead opnieuw opgehaald:
+   * bij ~55 leads waren dat ruim 150 overbodige queries en liep één cronronde
+   * op tot bijna een minuut. Ontbreken ze (losse aanroep vanuit de webhook of
+   * admin), dan haalt `distributeLead` ze gewoon zelf op.
+   *
+   * Let op: dag-, week- en fairness-tellingen staan hier bewust NIET tussen.
+   * Die veranderen wél tijdens een ronde en moeten vers blijven, anders wordt
+   * `leads_per_day` overschreden.
+   */
+  targetsByCustomer?: Record<string, GeoTargetRow[]>;
+  batchTargetsByBatch?: Map<string, GeoTargetRow[]>;
+  excludeByCustomer?: Record<string, string[]>;
 };
 
 /**
@@ -393,38 +442,39 @@ export async function distributeLead(
 
   const customerIds = [...new Set(fifoActiveBatches.map(b => b.customer_id))];
 
-  const { data: targets } = await supabase
-    .from('customer_targets')
-    .select('*')
-    .in('customer_id', customerIds)
-    .eq('is_active', true);
+  /* Targetgebieden en uitsluitingen veranderen tijdens een ronde niet. Vult
+     `distributeLeads` ze vooraf, dan schelen ze drie queries per lead. */
+  let targetsByCustomer = ctx?.targetsByCustomer;
+  if (!targetsByCustomer) {
+    const { data: targets } = await supabase
+      .from('customer_targets')
+      .select('*')
+      .in('customer_id', customerIds)
+      .eq('is_active', true);
+    targetsByCustomer = groupTargetsByCustomer(targets as CustomerGeoTargetRow[] | null);
+  }
 
   // Batch-specifieke targetgebieden (overrulen de klant-targetgebieden per batch).
-  const batchTargetsByBatch = await fetchActiveBatchTargetsByBatch(
-    supabase,
-    fifoActiveBatches.map(b => b.id),
-  );
+  const batchTargetsByBatch =
+    ctx?.batchTargetsByBatch ??
+    (await fetchActiveBatchTargetsByBatch(supabase, fifoActiveBatches.map(b => b.id)));
 
-  const hasCustomerTargets = !!targets && targets.length > 0;
+  const hasCustomerTargets = Object.keys(targetsByCustomer).length > 0;
   const hasBatchTargets = batchTargetsByBatch.size > 0;
   if (!hasCustomerTargets && !hasBatchTargets) return result;
 
-  const targetsByCustomer: Record<string, GeoTargetRow[]> = {};
-  for (const t of targets || []) {
-    if (!targetsByCustomer[t.customer_id]) targetsByCustomer[t.customer_id] = [];
-    targetsByCustomer[t.customer_id].push(t as GeoTargetRow);
-  }
-
   // Load exclusion lists for bidirectional lead-exclusion between customers
-  const allRelevantIds = [...new Set([...customerIds, ...recentAssignedIds])];
-  const { data: exclusionData } = await supabase
-    .from('customers')
-    .select('id, exclude_customers')
-    .in('id', allRelevantIds);
-
-  const excludeMap: Record<string, string[]> = {};
-  for (const c of exclusionData || []) {
-    excludeMap[c.id] = Array.isArray(c.exclude_customers) ? c.exclude_customers : [];
+  let excludeMap = ctx?.excludeByCustomer;
+  if (!excludeMap) {
+    const allRelevantIds = [...new Set([...customerIds, ...recentAssignedIds])];
+    const { data: exclusionData } = await supabase
+      .from('customers')
+      .select('id, exclude_customers')
+      .in('id', allRelevantIds);
+    excludeMap = {};
+    for (const c of exclusionData || []) {
+      excludeMap[c.id] = Array.isArray(c.exclude_customers) ? c.exclude_customers : [];
+    }
   }
 
   interface Match {
@@ -557,25 +607,42 @@ export async function distributeLead(
     return a.distance_km - b.distance_km;
   });
 
-  // Max 1 assignment per lead per run
-  const toAssign = matches.slice(0, 1);
-
-  for (const m of toAssign) {
-    // Fresh count to prevent race condition overdelivery (include external offset)
-    const { count: currentCount } = await supabase
-      .from('lead_assignments')
-      .select('id', { count: 'exact', head: true })
-      .eq('batch_id', m.batch_id);
+  /**
+   * Max 1 toewijzing per lead per run, maar we lopen wél de hele kandidatenlijst
+   * af: valt de best passende batch alsnog af (net vol geraakt, of de insert
+   * wordt geweigerd), dan gaat de lead naar de volgende kandidaat in plaats van
+   * verloren te gaan.
+   *
+   * Dit was de tweede helft van het incident van 16 aug – 4 sep 2026: alleen
+   * `matches[0]` werd geprobeerd, dus één batch die de sortering won en daarna
+   * afviel, blokkeerde stilzwijgend élke lead in zijn hele werkgebied.
+   */
+  for (const m of matches) {
+    /* Verse telling tegen race-overlevering, met dezelfde definitie (unieke
+       leads) als `leads_delivered`. Tellen we hier rijen en daar distinct, dan
+       kan een batch tegelijk "niet vol" en "vol" zijn — precies de patstelling
+       die het incident veroorzaakte. Zie src/lib/batchDelivered.ts. */
     const batchForCheck = fifoActiveBatches.find(b => b.id === m.batch_id);
-    const externalOffset = (batchForCheck as any)?.leads_delivered_external || 0;
+    const externalOffset =
+      (batchForCheck as { leads_delivered_external?: number | null } | undefined)
+        ?.leads_delivered_external || 0;
+    const currentDelivered = await countDeliveredForBatch(supabase, m.batch_id, externalOffset);
     if (
       batchForCheck &&
       isCappedDeliveryModel(
         (batchForCheck as { delivery_model?: string }).delivery_model,
         (batchForCheck as { batch_kind?: string }).batch_kind,
       ) &&
-      (currentCount || 0) + externalOffset >= batchForCheck.batch_size
+      currentDelivered >= batchForCheck.batch_size
     ) {
+      /* Batch is echt vol maar stond nog open: meteen bijwerken en afsluiten,
+         anders wint hij bij de volgende lead opnieuw de sortering. */
+      console.warn('[distribution] batch vol maar nog open, status wordt bijgewerkt', {
+        batchId: m.batch_id,
+        delivered: currentDelivered,
+        batchSize: batchForCheck.batch_size,
+      });
+      await syncBatchDelivered(supabase, m.batch_id);
       continue;
     }
 
@@ -590,7 +657,17 @@ export async function distributeLead(
       .select('id')
       .single();
 
-    if (error || !insertedAssignment) continue;
+    if (error || !insertedAssignment) {
+      /* Nooit stil falen: zonder deze regel bleef een structureel geweigerde
+         insert (constraint, RLS, trigger) volledig onzichtbaar. */
+      console.error('[distribution] toewijzing kon niet worden opgeslagen', {
+        leadId: lead.id,
+        customerId: m.customer_id,
+        batchId: m.batch_id,
+        error: error?.message ?? 'geen rij teruggekregen',
+      });
+      continue;
+    }
 
     const { onLeadAssignedToCustomer } = await import('@/lib/integrations/onLeadAssigned');
     onLeadAssignedToCustomer({
@@ -622,6 +699,10 @@ export async function distributeLead(
         }
       }
     } catch { /* notification failure should not block distribution */ }
+
+    /* Geslaagd: één toewijzing per lead per run (de volgende kan pas na de
+       12-uurs cooldown, zodat twee klanten nooit tegelijk dezelfde lead bellen). */
+    break;
   }
 
   return result;
@@ -645,7 +726,38 @@ export async function distributeLeads(leads: LeadForDistribution[]): Promise<{ d
     }),
   );
 
-  const ctx: DistributeLeadContext = { supabase, activeBatchesByBranch };
+  /* Eén keer per ronde ophalen wat tijdens de ronde niet verandert. Voorheen
+     deed elke lead deze drie queries opnieuw; bij een volle ronde liep dat op
+     tot ruim 150 overbodige round-trips en bijna een minuut looptijd. */
+  const alleBatchIds = [...activeBatchesByBranch.values()].flat().map(b => b.id);
+  const alleKlantIds = [
+    ...new Set([...activeBatchesByBranch.values()].flat().map(b => b.customer_id)),
+  ];
+
+  const [targetsRes, batchTargetsByBatch, klantenRes] = await Promise.all([
+    alleKlantIds.length
+      ? supabase.from('customer_targets').select('*').in('customer_id', alleKlantIds).eq('is_active', true)
+      : Promise.resolve({ data: [] as unknown[] }),
+    alleBatchIds.length
+      ? fetchActiveBatchTargetsByBatch(supabase, alleBatchIds)
+      : Promise.resolve(new Map<string, GeoTargetRow[]>()),
+    /* Alle klanten, niet alleen de kandidaten: de uitsluitingscheck kijkt ook
+       naar klanten die de lead al hebben. */
+    supabase.from('customers').select('id, exclude_customers'),
+  ]);
+
+  const excludeByCustomer: Record<string, string[]> = {};
+  for (const c of (klantenRes.data || []) as { id: string; exclude_customers: unknown }[]) {
+    excludeByCustomer[c.id] = Array.isArray(c.exclude_customers) ? c.exclude_customers : [];
+  }
+
+  const ctx: DistributeLeadContext = {
+    supabase,
+    activeBatchesByBranch,
+    targetsByCustomer: groupTargetsByCustomer(targetsRes.data as CustomerGeoTargetRow[] | null),
+    batchTargetsByBatch,
+    excludeByCustomer,
+  };
 
   for (const lead of leads) {
     const result = await distributeLead(lead, ctx);
@@ -968,7 +1080,7 @@ export async function backfillBatch(batchId: string, lookbackDays: number): Prom
  * This ensures new leads always get served first, and re-assignments happen
  * only when needed to maintain the target average of ~2 assignments per lead.
  */
-export async function distributeUnassignedLeads(): Promise<{ distributed: number; assignments: number; avgAssignments: number }> {
+export async function distributeUnassignedLeads(): Promise<DistributeRunResult> {
   const supabase = createServerClient();
 
   const cutoff = new Date();
@@ -987,7 +1099,9 @@ export async function distributeUnassignedLeads(): Promise<{ distributed: number
     .order('created_at', { ascending: false })
     .limit(DISTRIBUTE_CRON_LEAD_LIMIT);
 
-  if (!leads || leads.length === 0) return { distributed: 0, assignments: 0, avgAssignments: 0 };
+  if (!leads || leads.length === 0) {
+    return { distributed: 0, assignments: 0, avgAssignments: 0, candidates: 0, undeliveredInWindow: 0 };
+  }
 
   const leadIds = leads.map(l => l.id);
   const existingAssignments = await fetchAssignmentsForLeadIds(supabase, leadIds);
@@ -1067,7 +1181,19 @@ export async function distributeUnassignedLeads(): Promise<{ distributed: number
   const avgAssignments =
     distinctCandidateLeads > 0 ? Math.round((rowsForCandidates / distinctCandidateLeads) * 100) / 100 : 0;
 
-  return { distributed: totalDistributed, assignments: totalAssignments, avgAssignments };
+  /* Leads die na deze ronde nog steeds nergens heen zijn. Meestal legitiem
+     (geen klant dekt dat gebied), maar een plotselinge stijging betekent dat de
+     verdeling ergens vastloopt. Dit getal is het alarm dat er tijdens het
+     incident van augustus 2026 niet was. */
+  const undeliveredInWindow = newLeads.length - pass1Distributed;
+
+  return {
+    distributed: totalDistributed,
+    assignments: totalAssignments,
+    avgAssignments,
+    candidates: distinctCandidateLeads,
+    undeliveredInWindow: Math.max(0, undeliveredInWindow),
+  };
 }
 
 /**
