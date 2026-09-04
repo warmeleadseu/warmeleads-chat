@@ -111,7 +111,14 @@ export async function POST(request: NextRequest) {
   // permanent uit datum-range exports vallen.
   const includeUnknownDate = include_unknown_date !== false && include_unknown_date !== 'false';
 
-  const branchValidation = validateExportBranchFilter(branch);
+  /* De branchefilter is een vangrail tegen een ongewilde export over álle
+     branches. Bij een met de hand aangevinkte selectie bestaat dat risico niet:
+     de selectie ís de afbakening. Werd die eis ook daar gesteld, dan liep elke
+     selectie-export vast op "Selecteer minimaal één branche om te exporteren",
+     ook als alle honderd aangevinkte leads dezelfde branche hadden. */
+  const branchValidation = validateExportBranchFilter(branch, {
+    selectieAanwezig: geselecteerdeIds !== null,
+  });
   if (!branchValidation.ok) {
     return NextResponse.json({ error: branchValidation.error }, { status: 400 });
   }
@@ -119,6 +126,10 @@ export async function POST(request: NextRequest) {
 
   const supabase = createServerClient();
 
+  /* Branches van de doelklant, nodig voor de portaalcontrole. Bij een selectie
+     kunnen we die controle pas ná het ophalen doen, want dan pas weten we in
+     welke branches de aangevinkte leads zitten. */
+  let doelklantBranches: string[] | null = null;
   if (add_to_portal && target_customer_id) {
     const custId = String(target_customer_id);
     const { data: targetCustomer, error: custErr } = await supabase
@@ -129,12 +140,13 @@ export async function POST(request: NextRequest) {
     if (custErr || !targetCustomer) {
       return NextResponse.json({ error: 'Doelklant niet gevonden' }, { status: 400 });
     }
-    const portalBranchCheck = validatePortalExportBranches(
-      branchFilter,
-      (targetCustomer.branches as string[] | null) || [],
-    );
-    if (!portalBranchCheck.ok) {
-      return NextResponse.json({ error: portalBranchCheck.error }, { status: 400 });
+    doelklantBranches = (targetCustomer.branches as string[] | null) || [];
+
+    if (!geselecteerdeIds) {
+      const portalBranchCheck = validatePortalExportBranches(branchFilter, doelklantBranches);
+      if (!portalBranchCheck.ok) {
+        return NextResponse.json({ error: portalBranchCheck.error }, { status: 400 });
+      }
     }
   }
 
@@ -200,6 +212,19 @@ export async function POST(request: NextRequest) {
        de database ze toevallig teruggeeft. */
     const positie = new Map(geselecteerdeIds.map((id, i) => [id, i]));
     exportedLeads.sort((a, b) => (positie.get(a.id as string) ?? 0) - (positie.get(b.id as string) ?? 0));
+
+    /* Portaalcontrole voor de selectie: pas hier weten we welke branches er
+       daadwerkelijk in zitten. Zonder deze check zou een selectie leads van een
+       branche die de klant niet afneemt alsnog in hun portaal belanden. */
+    if (doelklantBranches && doelklantBranches.length > 0) {
+      const aanwezigeBranches = [
+        ...new Set(exportedLeads.map(l => String(l.branch ?? '')).filter(Boolean)),
+      ];
+      const portalBranchCheck = validatePortalExportBranches(aanwezigeBranches, doelklantBranches);
+      if (!portalBranchCheck.ok) {
+        return NextResponse.json({ error: portalBranchCheck.error }, { status: 400 });
+      }
+    }
   } else if (plaatsRadius) {
     const { rows, capped, error: scanError } = await filterQueryRowsByPlaatsRadius(
       async (from, to) => {

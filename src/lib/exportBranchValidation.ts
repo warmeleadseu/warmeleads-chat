@@ -8,9 +8,24 @@ export function parseExportBranchFilter(branch: unknown): string[] {
 }
 
 /** Bulk export requires at least one branch filter. */
-export function validateExportBranchFilter(branch: unknown): { ok: true; branches: string[] } | { ok: false; error: string } {
+export function validateExportBranchFilter(
+  branch: unknown,
+  opties?: {
+    /**
+     * Exporteert de gebruiker een met de hand aangevinkte selectie? Dan is de
+     * selectie zelf de afbakening en is een branchefilter niet nodig.
+     *
+     * De eis bestaat om een ongewilde export over álle branches te voorkomen.
+     * Werd hij ook op een selectie toegepast, dan liep die altijd vast op
+     * "Selecteer minimaal één branche om te exporteren", ook wanneer alle
+     * aangevinkte leads tot dezelfde branche behoorden.
+     */
+    selectieAanwezig?: boolean;
+  },
+): { ok: true; branches: string[] } | { ok: false; error: string } {
   const branches = parseExportBranchFilter(branch);
   if (branches.length === 0) {
+    if (opties?.selectieAanwezig) return { ok: true, branches: [] };
     return { ok: false, error: 'Selecteer minimaal één branche om te exporteren' };
   }
   return { ok: true, branches };
