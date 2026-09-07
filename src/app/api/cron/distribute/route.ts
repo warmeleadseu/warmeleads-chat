@@ -6,6 +6,7 @@ import { isPhoneValid } from '@/lib/phoneValidation';
 import { checkLeadProfanity } from '@/lib/profanityFilter';
 import { syncBatchDelivered } from '@/lib/batchSync';
 import { verifyCronAuth } from '@/lib/cronAuth';
+import { verwerkGeplandeLeveringen } from '@/lib/geplandeLeveringen';
 
 const MAX_LEAD_AGE_DAYS = 3;
 
@@ -37,6 +38,20 @@ export async function GET(request: NextRequest) {
     }
   } catch (e) {
     console.error('[cron/distribute] reconcile onverwacht mislukt:', (e as Error).message);
+  }
+
+  /* Phase 0b: geplande leveringen die aan de beurt zijn. Staat vóór de gewone
+     verdeling zodat een toegezegde, gedoseerde levering voorrang heeft op de
+     dagelijkse instroom. Zie src/lib/geplandeLeveringen.ts en migratie 161. */
+  const geplandT0 = Date.now();
+  let gepland = { bekeken: 0, geleverd: 0, overgeslagen: 0 };
+  try {
+    gepland = await verwerkGeplandeLeveringen(supabase);
+    if (gepland.bekeken > 0) {
+      console.info('[cron/distribute:gepland]', { computeMs: Date.now() - geplandT0, ...gepland });
+    }
+  } catch (e) {
+    console.error('[cron/distribute] geplande leveringen mislukt:', (e as Error).message);
   }
 
   // Phase 1: Enrich recent leads missing coordinates (skip spreadsheet imports and demo leads)
@@ -226,6 +241,8 @@ export async function GET(request: NextRequest) {
     phonesValidated,
     profanityDeleted,
     batchesGecorrigeerd,
+    geplandGeleverd: gepland.geleverd,
+    geplandOvergeslagen: gepland.overgeslagen,
     candidates: distResult.candidates,
     undeliveredInWindow: distResult.undeliveredInWindow,
     distributed: distResult.distributed,
