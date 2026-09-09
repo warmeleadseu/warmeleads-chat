@@ -56,6 +56,11 @@ export async function GET(request: NextRequest) {
       query = scoped.query;
     }
 
+    /* Vaste sortering: zonder ORDER BY garandeert Postgres geen stabiele
+       volgorde tussen pagina's, waardoor een gepagineerde scan rijen kan
+       overslaan of dubbel tellen. */
+    query = query.order('id', { ascending: true });
+
     type ScanRij = { id: string; lat: number | null; lng: number | null; provincie?: string | null };
     const haalPagina = async (from: number, to: number) => {
       const { data, error } = await query.range(from, to);

@@ -169,6 +169,10 @@ export async function POST(request: NextRequest) {
 
   const provincieMarge = resolveProvincieMarge(filterParams);
   query = applyLeadFilters(query, filterParams, {
+    /* Zelfde afbakening als de lijst en de teller. Zonder deze optie telde de
+       export partner-branches wél mee en de lijst niet, wat een verschil van
+       tientallen leads opleverde zodra er geen branchefilter aanstond. */
+    excludePartnerBranchesWhenNoBranchFilter: true,
     plaatsRadius,
     provincieMargeBox: provincieMarge?.box ?? null,
   });
@@ -185,7 +189,7 @@ export async function POST(request: NextRequest) {
      de limiet vóór de toets werd bereikt. Afkappen gebeurt daarna alsnog. */
   const shouldPrioritize = prioritize_least_exported !== false;
   if (shouldPrioritize) {
-    query = query.order('bulk_export_count', { ascending: true }).order('wervingsdatum', { ascending: false });
+    query = query.order('bulk_export_count', { ascending: true }).order('wervingsdatum', { ascending: false }).order('id', { ascending: true });
   } else {
     query = query.order('wervingsdatum', { ascending: false });
   }

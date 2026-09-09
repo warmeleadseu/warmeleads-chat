@@ -482,6 +482,15 @@ export default function LeadsCRMPage() {
     setProvincieMargeKm(LEGE_LEADFILTERS.provincieMargeKm);
   };
 
+  /* Volgnummers tegen wedlopen. De lijst wordt bij elke filterwijziging opnieuw
+     opgehaald, en met een provinciemarge of straal duurt dat merkbaar langer
+     dan een gewone query. Zonder deze bewaking kan een ouder, traag antwoord
+     ná een nieuwer antwoord binnenkomen en het aantal overschrijven. Dat is de
+     reden dat de tellers versprongen en dat een filter aan- en uitzetten het
+     leek te "repareren". */
+  const leadsVerzoekRef = useRef(0);
+  const facetsVerzoekRef = useRef(0);
+
   const fetchMeta = useCallback(async () => {
     const [custRes, branchRes] = await Promise.all([
       adminFetch('/api/admin/customers/options'),
@@ -497,6 +506,7 @@ export default function LeadsCRMPage() {
   }, []);
 
   const fetchLeads = useCallback(async () => {
+    const verzoek = ++leadsVerzoekRef.current;
     setLoading(true);
     const p = new URLSearchParams();
     if (selBranches.length > 0) p.set('branch', selBranches.join(','));
@@ -524,8 +534,10 @@ export default function LeadsCRMPage() {
     p.set('sort_dir', sortDir);
     try {
       const res = await adminFetch(`/api/admin/leads?${p}`);
+      if (verzoek !== leadsVerzoekRef.current) return;   // ingehaald door een nieuwer verzoek
       if (res.ok) {
         const d = await res.json();
+        if (verzoek !== leadsVerzoekRef.current) return;
         setLeads(d.leads || []);
         setTotal(d.total || 0);
         setPlaatsRadiusLabel(typeof d.plaats_radius_label === 'string' ? d.plaats_radius_label : null);
@@ -541,14 +553,18 @@ export default function LeadsCRMPage() {
         setLoadError(d.error || 'Leads laden mislukt. Probeer het opnieuw.');
       }
     } catch {
+      if (verzoek !== leadsVerzoekRef.current) return;
       setPlaatsRadiusLabel(null);
       setLoadError('Netwerkfout bij het laden van leads.');
     } finally {
-      setLoading(false);
+      /* Alleen het nieuwste verzoek mag de laadstatus uitzetten, anders
+         verdwijnt de spinner terwijl er nog iets onderweg is. */
+      if (verzoek === leadsVerzoekRef.current) setLoading(false);
     }
   }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, selCampaigns, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, includeUnknownDate, search, plaatsFilter, plaatsRadiusKm, postcodeRanges, provincieMargeKm, page, perPage, sortBy, sortDir]);
 
   const fetchFacets = useCallback(async () => {
+    const verzoek = ++facetsVerzoekRef.current;
     const p = new URLSearchParams();
     if (selBranches.length > 0) p.set('branch', selBranches.join(','));
     if (selCustomers.length > 0) p.set('customer_id', selCustomers.join(','));
@@ -568,7 +584,12 @@ export default function LeadsCRMPage() {
     if (plaatsFilter.trim() && plaatsRadiusKm == null) p.set('plaats', plaatsFilter.trim());
     if (postcodeRanges.trim()) p.set('postcode_ranges', postcodeRanges.trim());
     const res = await adminFetch(`/api/admin/leads/facets?${p}`);
-    if (res.ok) { const d = await res.json(); setFacets(d.facets || {}); }
+    if (verzoek !== facetsVerzoekRef.current) return;   // ingehaald
+    if (res.ok) {
+      const d = await res.json();
+      if (verzoek !== facetsVerzoekRef.current) return;
+      setFacets(d.facets || {});
+    }
   }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, selCampaigns, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, includeUnknownDate, search, plaatsFilter, plaatsRadiusKm, postcodeRanges, provincieMargeKm]);
 
   const fetchExportHistory = useCallback(async () => {
@@ -1664,6 +1685,12 @@ function ExportModal({
     if (selFilterProvinces.length > 0 && filterProvincieMargeKm.trim()) {
       body.province_margin_km = filterProvincieMargeKm.trim();
     }
+    /* Filters die dit venster zelf niet kan bewerken, maar wél op het scherm
+       staan: klant en campagne. Zonder ze door te geven telde het venster over
+       een bredere verzameling dan de lijst erachter. Bij een actief klantfilter
+       liep dat op tot duizenden leads verschil. */
+    if (filterParams.customer_id) body.customer_id = filterParams.customer_id;
+    if (filterParams.meta_campaign_id) body.meta_campaign_id = filterParams.meta_campaign_id;
     if (selFilterSources.length > 0) body.source = selFilterSources.join(',');
     if (filterPhone !== 'all') body.phone_valid = filterPhone;
     if (filterBulkStatus !== 'all') body.bulk_status = filterBulkStatus;
@@ -1684,7 +1711,7 @@ function ExportModal({
     return body;
   }, [
     selFilterBranches, selFilterStatuses, selFilterProvinces, selFilterSources,
-    filterProvincieMargeKm,
+    filterProvincieMargeKm, filterParams,
     filterPhone, filterBulkStatus, filterDateFrom, filterDateTo, filterIncludeUnknownDate,
     filterSearch, filterPlaats, filterPlaatsRadiusKm, filterPostcodeRanges, excludeCustomers, excludeAlreadyAssigned, isBulkBatchFlow,
   ]);
@@ -1717,6 +1744,10 @@ function ExportModal({
     return () => { cancelled = true; clearTimeout(handle); };
   }, [buildFilterBody, branchRequired]);
 
+  /* Zolang de eigen telling nog loopt valt hij terug op het aantal van het
+     scherm. Dat mag nu, want het venster gebruikt sinds deze wijziging exact
+     dezelfde filters, dus beide getallen zijn gelijk. Voorheen sprong het
+     zichtbaar om zodra de eigen telling binnenkwam. */
   const effectiveTotal = branchRequired ? 0 : (liveCount ?? initialTotal);
   const exportCount = useMemo(() => {
     const cap = maxLeads && Number(maxLeads) > 0 ? Number(maxLeads) : Number.POSITIVE_INFINITY;
@@ -1939,6 +1970,22 @@ function ExportModal({
                       selected={selFilterStatuses}
                       onChange={setSelFilterStatuses}
                     />
+                    {/* Filters die van het scherm worden overgenomen maar hier niet
+                        te bewerken zijn. Ze tellen wel mee, dus ze moeten in beeld
+                        staan; anders klopt het aantal niet met wat je verwacht. */}
+                    {(filterParams.customer_id || filterParams.meta_campaign_id) && (
+                      <p className="col-span-full rounded-lg border border-slate-200 bg-slate-50/60 px-3 py-2 text-xs text-slate-500">
+                        Overgenomen uit het scherm en meegeteld:{' '}
+                        {[
+                          filterParams.customer_id
+                            ? `klant (${filterParams.customer_id.split(',').length})`
+                            : null,
+                          filterParams.meta_campaign_id
+                            ? `campagne (${filterParams.meta_campaign_id.split(',').length})`
+                            : null,
+                        ].filter(Boolean).join(' en ')}. Aanpassen doe je in het filterblok van het scherm.
+                      </p>
+                    )}
                     {selFilterProvinces.length > 0 && (
                       <label className="col-span-full flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50/60 px-3 py-2 text-sm text-slate-700">
                         <input

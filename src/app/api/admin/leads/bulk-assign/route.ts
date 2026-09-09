@@ -136,7 +136,10 @@ export async function POST(request: NextRequest) {
         .from('leads')
         .select('id, lat, lng, provincie')
         .order('bulk_export_count', { ascending: true })
-        .order('wervingsdatum', { ascending: false });
+        .order('wervingsdatum', { ascending: false })
+        // Stabiele paginering: zonder eenduidige volgorde kan een gepagineerde
+        // scan rijen overslaan of dubbel meenemen.
+        .order('id', { ascending: true });
       query = applyLeadFilters(query, filters, {
         excludePartnerBranchesWhenNoBranchFilter: true,
         plaatsRadius,

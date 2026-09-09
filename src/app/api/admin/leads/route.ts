@@ -119,7 +119,10 @@ export async function GET(request: NextRequest) {
       }
       query = scoped.query;
     }
-    query = query.order(col, { ascending: sortDirAsc });
+    /* Tweede sorteersleutel voor een stabiele paginering: op `col` alleen
+       kunnen rijen gelijk scoren, en dan is de volgorde tussen pagina's niet
+       gegarandeerd. */
+    query = query.order(col, { ascending: sortDirAsc }).order('id', { ascending: true });
 
     type ScanRij = { id: string; lat: number | null; lng: number | null; provincie?: string | null };
     const haalPagina = async (from: number, to: number) => {
