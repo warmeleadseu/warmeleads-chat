@@ -9,6 +9,12 @@ export function bodyToLeadFilterParams(body: Record<string, unknown>): LeadFilte
     assignment: typeof body.assignment === 'string' ? body.assignment : null,
     status: typeof body.status === 'string' ? body.status : null,
     province: typeof body.province === 'string' ? body.province : null,
+    /* Marge rond de provincie moet meelopen tot in de export, anders zie je in
+       het scherm meer leads staan dan er in het bestand belanden. */
+    province_margin_km:
+      typeof body.province_margin_km === 'string' || typeof body.province_margin_km === 'number'
+        ? body.province_margin_km
+        : null,
     source: typeof body.source === 'string' ? body.source : null,
     meta_campaign_id: typeof body.meta_campaign_id === 'string' ? body.meta_campaign_id : null,
     phone_valid:

@@ -3,6 +3,11 @@ import { createServerClient } from '@/lib/supabase';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { applyAccountManagerScope, applyLeadFilters, readLeadFilterParams } from '@/lib/leadFilters';
 import {
+  filterRijenOpProvincieMarge,
+  resolveProvincieMarge,
+  scanRijenGepagineerd,
+} from '@/lib/provincieMarge';
+import {
   filterQueryRowsByPlaatsRadius,
   resolvePlaatsRadiusOrigin,
 } from '@/lib/leadPlaatsRadius';
@@ -34,11 +39,16 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  if (plaatsRadius) {
-    let query = supabase.from('leads').select('id, lat, lng');
+  /* Zelfde afbakening als de lijst: telt de marge daar mee, dan hier ook.
+     Anders klopt het aantal boven de lijst niet met wat je exporteert. */
+  const provincieMarge = resolveProvincieMarge(filters);
+
+  if (plaatsRadius || provincieMarge) {
+    let query = supabase.from('leads').select('id, lat, lng, provincie');
     query = applyLeadFilters(query, filters, {
       excludePartnerBranchesWhenNoBranchFilter: true,
       plaatsRadius,
+      provincieMargeBox: provincieMarge?.box ?? null,
     });
     if (admin.role === 'accountmanager') {
       const scoped = await applyAccountManagerScope(supabase, query, admin.id);
@@ -46,21 +56,31 @@ export async function GET(request: NextRequest) {
       query = scoped.query;
     }
 
-    const { rows, error: scanError } = await filterQueryRowsByPlaatsRadius(
-      async (from, to) => {
-        const { data, error } = await query.range(from, to);
-        return { data, error };
-      },
-      plaatsRadius,
-    );
-    if (scanError) {
-      console.error('Leads count radius error:', scanError);
+    type ScanRij = { id: string; lat: number | null; lng: number | null; provincie?: string | null };
+    const haalPagina = async (from: number, to: number) => {
+      const { data, error } = await query.range(from, to);
+      return { data: (data || null) as ScanRij[] | null, error };
+    };
+    const scan = plaatsRadius
+      ? await filterQueryRowsByPlaatsRadius(haalPagina, plaatsRadius)
+      : await scanRijenGepagineerd(haalPagina);
+    if (scan.error) {
+      console.error('Leads count scan error:', scan.error);
       return NextResponse.json({ error: 'Aantal ophalen mislukt' }, { status: 500 });
     }
+    const rows = provincieMarge
+      ? filterRijenOpProvincieMarge(scan.rows as ScanRij[], provincieMarge)
+      : (scan.rows as ScanRij[]);
+    const binnen = provincieMarge
+      ? rows.filter(r => provincieMarge.provincies.includes(String(r.provincie ?? '').trim())).length
+      : rows.length;
     return NextResponse.json({
       count: rows.length,
-      plaats_radius_label: plaatsRadius.label,
-      plaats_radius_km: plaatsRadius.radiusKm,
+      plaats_radius_label: plaatsRadius?.label ?? null,
+      plaats_radius_km: plaatsRadius?.radiusKm ?? null,
+      provincie_marge_km: provincieMarge?.margeKm ?? null,
+      in_provincie: binnen,
+      uit_marge: rows.length - binnen,
     });
   }
 

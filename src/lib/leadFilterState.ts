@@ -25,6 +25,8 @@ export type LeadFilterStand = {
   plaatsFilter: string;
   plaatsRadiusKm: number | null;
   postcodeRanges: string;
+  /** Marge in km rond de gekozen provincies; null als de optie uitstaat. */
+  provincieMargeKm: number | null;
 };
 
 /** De stand waarin niets gefilterd is. */
@@ -45,6 +47,7 @@ export const LEGE_LEADFILTERS: LeadFilterStand = {
   plaatsFilter: '',
   plaatsRadiusKm: null,
   postcodeRanges: '',
+  provincieMargeKm: null,
 };
 
 /**
@@ -70,5 +73,8 @@ export function telActieveLeadFilters(stand: LeadFilterStand): number {
   if (stand.dateFrom || stand.dateTo) n++;
   if (stand.plaatsFilter.trim()) n++;
   if (stand.postcodeRanges.trim()) n++;
+  /* De marge telt apart mee: hij verandert de selectie merkbaar en moet dus
+     zichtbaar zijn in het aantal dat de wisknop belooft op te ruimen. */
+  if (stand.provincieMargeKm != null && stand.provincieMargeKm > 0) n++;
   return n;
 }

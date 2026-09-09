@@ -312,7 +312,10 @@ interface BranchConfig { id: string; slug: string; name: string; color: string; 
 interface Lead {
   id: string; branch: string; customer_id: string | null; customers?: { id: string; name: string } | null;
   naam_klant: string; email: string; telefoonnummer: string; postcode: string; huisnummer: string;
-  plaatsnaam: string; provincie: string; wervingsdatum: string | null; wervingsdatum_unknown?: boolean; status: string; notities: string; bron: string;
+  plaatsnaam: string; provincie: string;
+  /** Gezet door de lijstroute als de lead dankzij de provinciemarge meekomt. */
+  buiten_provincie?: boolean; provincie_marge_afstand_km?: number | null;
+  wervingsdatum: string | null; wervingsdatum_unknown?: boolean; status: string; notities: string; bron: string;
   phone_valid?: boolean;
   lead_cost?: number | string | null;
   bulk_export_count?: number;
@@ -421,6 +424,10 @@ export default function LeadsCRMPage() {
   /** Straal in km rondom plaatsnaam; leeg = alleen plaatsnaam-match */
   const [plaatsRadiusKm, setPlaatsRadiusKm] = useState<number | null>(null);
   const [plaatsRadiusLabel, setPlaatsRadiusLabel] = useState<string | null>(null);
+  /* Marge rond de gekozen provincies, voor bulkverkoop: leads die net over de
+     grens liggen tellen dan mee. Uit als de waarde null is. */
+  const [provincieMargeKm, setProvincieMargeKm] = useState<number | null>(null);
+  const [margeStat, setMargeStat] = useState<{ inProvincie: number; uitMarge: number } | null>(null);
 
   const [facets, setFacets] = useState<Record<string, Record<string, number>>>({});
 
@@ -452,7 +459,7 @@ export default function LeadsCRMPage() {
   const actieveFilters = telActieveLeadFilters({
     search, selBranches, selCustomers, selStatuses, selProvinces, selSources, selCampaigns,
     assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, includeUnknownDate,
-    plaatsFilter, plaatsRadiusKm, postcodeRanges,
+    plaatsFilter, plaatsRadiusKm, postcodeRanges, provincieMargeKm,
   });
 
   const wisAlleFilters = () => {
@@ -472,6 +479,7 @@ export default function LeadsCRMPage() {
     setPlaatsFilter(LEGE_LEADFILTERS.plaatsFilter);
     setPlaatsRadiusKm(LEGE_LEADFILTERS.plaatsRadiusKm);
     setPostcodeRanges(LEGE_LEADFILTERS.postcodeRanges);
+    setProvincieMargeKm(LEGE_LEADFILTERS.provincieMargeKm);
   };
 
   const fetchMeta = useCallback(async () => {
@@ -507,6 +515,9 @@ export default function LeadsCRMPage() {
     if (plaatsFilter.trim()) p.set('plaats', plaatsFilter.trim());
     if (plaatsFilter.trim() && plaatsRadiusKm != null) p.set('plaats_radius_km', String(plaatsRadiusKm));
     if (postcodeRanges.trim()) p.set('postcode_ranges', postcodeRanges.trim());
+    if (selProvinces.length > 0 && provincieMargeKm != null && provincieMargeKm > 0) {
+      p.set('province_margin_km', String(provincieMargeKm));
+    }
     p.set('page', String(page));
     p.set('per_page', String(perPage));
     p.set('sort_by', sortBy);
@@ -518,6 +529,11 @@ export default function LeadsCRMPage() {
         setLeads(d.leads || []);
         setTotal(d.total || 0);
         setPlaatsRadiusLabel(typeof d.plaats_radius_label === 'string' ? d.plaats_radius_label : null);
+        setMargeStat(
+          typeof d.in_provincie === 'number' && typeof d.uit_marge === 'number'
+            ? { inProvincie: d.in_provincie, uitMarge: d.uit_marge }
+            : null,
+        );
         setLoadError('');
       } else {
         const d = await res.json().catch(() => ({}));
@@ -530,7 +546,7 @@ export default function LeadsCRMPage() {
     } finally {
       setLoading(false);
     }
-  }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, selCampaigns, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, includeUnknownDate, search, plaatsFilter, plaatsRadiusKm, postcodeRanges, page, perPage, sortBy, sortDir]);
+  }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, selCampaigns, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, includeUnknownDate, search, plaatsFilter, plaatsRadiusKm, postcodeRanges, provincieMargeKm, page, perPage, sortBy, sortDir]);
 
   const fetchFacets = useCallback(async () => {
     const p = new URLSearchParams();
@@ -553,7 +569,7 @@ export default function LeadsCRMPage() {
     if (postcodeRanges.trim()) p.set('postcode_ranges', postcodeRanges.trim());
     const res = await adminFetch(`/api/admin/leads/facets?${p}`);
     if (res.ok) { const d = await res.json(); setFacets(d.facets || {}); }
-  }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, selCampaigns, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, includeUnknownDate, search, plaatsFilter, plaatsRadiusKm, postcodeRanges]);
+  }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, selCampaigns, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, includeUnknownDate, search, plaatsFilter, plaatsRadiusKm, postcodeRanges, provincieMargeKm]);
 
   const fetchExportHistory = useCallback(async () => {
     const res = await adminFetch('/api/admin/leads/export');
@@ -580,7 +596,7 @@ export default function LeadsCRMPage() {
   useEffect(() => { fetchMeta(); fetchExportHistory(); }, [fetchMeta, fetchExportHistory]);
   useEffect(() => { fetchLeads(); }, [fetchLeads]);
   useEffect(() => { fetchFacets(); }, [fetchFacets]);
-  useEffect(() => { setPage(1); }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, selCampaigns, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, includeUnknownDate, search, plaatsFilter, plaatsRadiusKm, postcodeRanges, perPage]);
+  useEffect(() => { setPage(1); }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, selCampaigns, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, includeUnknownDate, search, plaatsFilter, plaatsRadiusKm, postcodeRanges, provincieMargeKm, perPage]);
 
   useEffect(() => {
     const c = searchParams.get('customer');
@@ -710,6 +726,9 @@ export default function LeadsCRMPage() {
     if (selCustomers.length > 0) p.customer_id = selCustomers.join(',');
     if (selStatuses.length > 0) p.status = selStatuses.join(',');
     if (selProvinces.length > 0) p.province = selProvinces.join(',');
+    if (selProvinces.length > 0 && provincieMargeKm != null && provincieMargeKm > 0) {
+      p.province_margin_km = String(provincieMargeKm);
+    }
     if (selSources.length > 0) p.source = selSources.join(',');
     if (selCampaigns.length > 0) p.meta_campaign_id = selCampaigns.join(',');
     if (assignmentFilter !== 'all') p.assignment = assignmentFilter;
@@ -723,7 +742,7 @@ export default function LeadsCRMPage() {
     if (plaatsFilter.trim() && plaatsRadiusKm != null) p.plaats_radius_km = String(plaatsRadiusKm);
     if (postcodeRanges.trim()) p.postcode_ranges = postcodeRanges.trim();
     return p;
-  }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, selCampaigns, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, includeUnknownDate, search, plaatsFilter, plaatsRadiusKm, postcodeRanges]);
+  }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, selCampaigns, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, includeUnknownDate, search, plaatsFilter, plaatsRadiusKm, postcodeRanges, provincieMargeKm]);
 
   const handleQuickStatus = async (id: string, newStatus: string) => {
     const prevStatus = leads.find(l => l.id === id)?.status;
@@ -983,6 +1002,62 @@ export default function LeadsCRMPage() {
             <option value="multiple">2x+ verkocht</option>
           </select>
         </div>
+        {/* Provinciemarge: leads die net buiten de gekozen provincie liggen ook
+            meenemen. Bedoeld voor bulkverkoop, waar een lead een paar kilometer
+            over de grens praktisch even bruikbaar is. Alleen zinvol als er een
+            provincie gekozen is; zonder provincie is er geen grens. */}
+        {selProvinces.length > 0 && (
+          <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50/60 px-3 py-2">
+            <label className="flex cursor-pointer select-none items-center gap-2 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                checked={provincieMargeKm != null}
+                onChange={e => setProvincieMargeKm(e.target.checked ? 10 : null)}
+                className="h-4 w-4 rounded border-slate-300 text-brand-purple focus:ring-brand-purple"
+              />
+              Ook leads net buiten de provincie
+            </label>
+            {provincieMargeKm != null && (
+              <>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min={1}
+                    max={100}
+                    step={1}
+                    list="admin-leads-provinciemarge-presets"
+                    value={provincieMargeKm}
+                    onChange={e => {
+                      const n = parseFloat(e.target.value.replace(',', '.'));
+                      setProvincieMargeKm(Number.isFinite(n) && n > 0 ? Math.min(100, n) : null);
+                    }}
+                    className="w-20 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-sm text-emerald-900 outline-none focus:ring-1 focus:ring-emerald-400"
+                  />
+                  <datalist id="admin-leads-provinciemarge-presets">
+                    <option value="5" />
+                    <option value="10" />
+                    <option value="15" />
+                    <option value="25" />
+                  </datalist>
+                  <span className="text-xs text-slate-500">km over de grens</span>
+                </div>
+                {margeStat && (
+                  <span className="text-xs text-slate-500">
+                    {margeStat.inProvincie.toLocaleString('nl-NL')} in provincie
+                    {margeStat.uitMarge > 0 && (
+                      <> &middot; <strong className="font-semibold text-emerald-700">+{margeStat.uitMarge.toLocaleString('nl-NL')}</strong> uit de marge</>
+                    )}
+                  </span>
+                )}
+                <span className="text-[11px] text-slate-400">
+                  Hemelsbreed gemeten, ook over water. De facetbalken hieronder tellen zonder marge.
+                </span>
+              </>
+            )}
+          </div>
+        )}
+
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <div className="flex flex-wrap items-center gap-2">
             <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="w-full max-w-[9.5rem] rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 sm:w-auto" />
@@ -1300,6 +1375,18 @@ export default function LeadsCRMPage() {
                           <span className="block max-w-[180px] truncate" title={`${lead.plaatsnaam || '-'} · ${lead.distance_km} km`}>
                             {lead.plaatsnaam || '-'}
                             <span className="ml-1 text-[11px] text-sky-600">{lead.distance_km} km</span>
+                          </span>
+                        ) : col === 'provincie' && lead.buiten_provincie ? (
+                          /* Zichtbaar maken welke leads dankzij de marge zijn
+                             meegekomen, en hoe ver buiten de grens ze liggen. */
+                          <span
+                            className="block max-w-[160px] truncate"
+                            title={`Buiten de gekozen provincie, ${lead.provincie_marge_afstand_km ?? '?'} km van de grens`}
+                          >
+                            {lead.provincie || '-'}
+                            <span className="ml-1 rounded bg-emerald-50 px-1 py-0.5 text-[10px] font-medium text-emerald-700">
+                              +{lead.provincie_marge_afstand_km ?? '?'} km
+                            </span>
                           </span>
                         ) : (
                           <span className="block max-w-[160px] truncate">{getLeadFieldValue(lead, col) || '-'}</span>

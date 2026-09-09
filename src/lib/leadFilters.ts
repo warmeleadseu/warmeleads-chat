@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { MargeBbox } from '@/lib/provincieMarge';
 import { buildPhoneSearchIlikeClauses, sanitizePostgrestIlike } from '@/lib/phoneSearch';
 import { PARTNER_PROSPECT_BRANCH_SLUGS } from '@/lib/partnerProspectConstants';
 import { buildPostcodeRangeOrFilter, parsePostcodeRanges } from '@/lib/postcodeRanges';
@@ -21,6 +22,13 @@ export type LeadFilterParams = {
   assignment?: string | null;
   status?: string | null;
   province?: string | null;
+  /**
+   * Marge in kilometers rond de geselecteerde provincies. Leads die net buiten
+   * de provinciegrens vallen komen dan ook mee. Bedoeld voor bulkverkoop: een
+   * lead drie kilometer over de grens is voor de afnemer even bruikbaar.
+   * Alleen zinvol samen met `province`.
+   */
+  province_margin_km?: string | number | null;
   source?: string | null;
   /**
    * Meta-campagne(s), als komma-gescheiden campagne-ids. De campagnenaam staat
@@ -53,6 +61,7 @@ export function readLeadFilterParams(url: URLSearchParams): LeadFilterParams {
     assignment: url.get('assignment'),
     status: url.get('status'),
     province: url.get('province'),
+    province_margin_km: url.get('province_margin_km'),
     source: url.get('source'),
     meta_campaign_id: url.get('meta_campaign_id'),
     phone_valid: url.get('phone_valid'),
@@ -102,9 +111,20 @@ export function applyLeadFilters<T>(
   options: {
     excludePartnerBranchesWhenNoBranchFilter?: boolean;
     plaatsRadius?: PlaatsRadiusOrigin | null;
+    /**
+     * Als gezet, wordt het harde `provincie in (...)` vervangen door
+     * "provincie matcht OF valt binnen deze rechthoek". De rechthoek is een
+     * grove voorselectie; de exacte afstandstoets gebeurt daarna in geheugen,
+     * net als bij `plaatsRadius`.
+     */
+    provincieMargeBox?: MargeBbox | null;
   } = {},
 ): T {
-  const { excludePartnerBranchesWhenNoBranchFilter = false, plaatsRadius = null } = options;
+  const {
+    excludePartnerBranchesWhenNoBranchFilter = false,
+    plaatsRadius = null,
+    provincieMargeBox = null,
+  } = options;
   let q = query as unknown as ChainableFilter;
 
   if (excludePartnerBranchesWhenNoBranchFilter && !filters.branch) {
@@ -140,7 +160,17 @@ export function applyLeadFilters<T>(
   }
   if (filters.province) {
     const vals = String(filters.province).split(',').filter(Boolean);
-    if (vals.length === 1) q = q.eq('provincie', vals[0]);
+    if (provincieMargeBox && vals.length > 0) {
+      /* Met marge: naast de provincienaam ook alles binnen de omhullende
+         rechthoek ophalen. Zonder deze verruiming zou de database de leads net
+         over de grens al wegfilteren voordat de afstandstoets eraan toekomt. */
+      const lijst = vals.map(v => `"${v.replace(/"/g, '')}"`).join(',');
+      q = q.or(
+        `provincie.in.(${lijst}),` +
+        `and(lat.gte.${provincieMargeBox.minLat},lat.lte.${provincieMargeBox.maxLat},` +
+        `lng.gte.${provincieMargeBox.minLng},lng.lte.${provincieMargeBox.maxLng})`,
+      );
+    } else if (vals.length === 1) q = q.eq('provincie', vals[0]);
     else if (vals.length > 1) q = q.in('provincie', vals);
   }
   if (filters.source) {

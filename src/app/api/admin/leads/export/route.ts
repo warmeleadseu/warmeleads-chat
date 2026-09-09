@@ -12,6 +12,7 @@ import {
 } from '@/lib/exportBranchValidation';
 import { applyAccountManagerScope, applyLeadFilters } from '@/lib/leadFilters';
 import { bodyToLeadFilterParams } from '@/lib/leadExportFilters';
+import { filterRijenOpProvincieMarge, resolveProvincieMarge } from '@/lib/provincieMarge';
 import { assignLeadToBatch } from '@/lib/assignLeadToBatch';
 import { logLeadActivity } from '@/lib/leadActivities';
 import {
@@ -166,7 +167,11 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  query = applyLeadFilters(query, filterParams, { plaatsRadius });
+  const provincieMarge = resolveProvincieMarge(filterParams);
+  query = applyLeadFilters(query, filterParams, {
+    plaatsRadius,
+    provincieMargeBox: provincieMarge?.box ?? null,
+  });
 
   if (admin.role === 'accountmanager') {
     const scoped = await applyAccountManagerScope(supabase, query, admin.id);
@@ -260,6 +265,26 @@ export async function POST(request: NextRequest) {
         cappedByLimit = true;
         break;
       }
+    }
+  }
+
+  /* Exacte margetoets: de database leverde een ruime rechthoek, hier valt af
+     wat toch te ver buiten de provinciegrens ligt. Het selectiepad slaat dit
+     over, want daar bepaalt de handmatige selectie wat meegaat. */
+  if (provincieMarge && !geselecteerdeIds) {
+    const voor = exportedLeads.length;
+    const behouden = filterRijenOpProvincieMarge(
+      exportedLeads as Array<{ provincie?: string | null; lat?: number | null; lng?: number | null }>,
+      provincieMarge,
+    );
+    exportedLeads.length = 0;
+    exportedLeads.push(...(behouden as Record<string, unknown>[]));
+    if (voor !== exportedLeads.length) {
+      console.info('[admin/leads/export] provinciemarge', {
+        margeKm: provincieMarge.margeKm,
+        opgehaald: voor,
+        behouden: exportedLeads.length,
+      });
     }
   }
 

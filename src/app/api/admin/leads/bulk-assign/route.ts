@@ -4,6 +4,11 @@ import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { logAudit } from '@/lib/audit';
 import { normalizeBatchKind } from '@/lib/batchKind';
 import { applyAccountManagerScope, applyLeadFilters, type LeadFilterParams } from '@/lib/leadFilters';
+import {
+  filterRijenOpProvincieMarge,
+  resolveProvincieMarge,
+  scanRijenGepagineerd,
+} from '@/lib/provincieMarge';
 import { assignLeadToBatch } from '@/lib/assignLeadToBatch';
 import { preflightManualAssignments } from '@/lib/manualAssignmentGuardrails';
 import { logLeadActivity } from '@/lib/leadActivities';
@@ -122,15 +127,20 @@ export async function POST(request: NextRequest) {
       ? Math.min(Number(maxLeadsRaw), HARD_LIMIT)
       : HARD_LIMIT;
 
-    if (plaatsRadius) {
+    /* Dezelfde afbakening als lijst, teller en export: bulk toewijzen moet
+       exact dezelfde leads pakken als je in het scherm ziet staan. */
+    const provincieMarge = resolveProvincieMarge(filters);
+
+    if (plaatsRadius || provincieMarge) {
       let query = supabase
         .from('leads')
-        .select('id, lat, lng')
+        .select('id, lat, lng, provincie')
         .order('bulk_export_count', { ascending: true })
         .order('wervingsdatum', { ascending: false });
       query = applyLeadFilters(query, filters, {
         excludePartnerBranchesWhenNoBranchFilter: true,
         plaatsRadius,
+        provincieMargeBox: provincieMarge?.box ?? null,
       });
 
       if (admin.role === 'accountmanager') {
@@ -141,19 +151,22 @@ export async function POST(request: NextRequest) {
         query = scoped.query;
       }
 
-      const { rows, error: scanError } = await filterQueryRowsByPlaatsRadius(
-        async (from, to) => {
-          const { data, error } = await query.range(from, to);
-          return { data, error };
-        },
-        plaatsRadius,
-        cap,
-      );
-      if (scanError) {
-        console.error('[admin/leads/bulk-assign] radius fetch error', scanError);
+      type ScanRij = { id: string; lat: number | null; lng: number | null; provincie?: string | null };
+      const haalPagina = async (from: number, to: number) => {
+        const { data, error } = await query.range(from, to);
+        return { data: (data || null) as ScanRij[] | null, error };
+      };
+      const scan = plaatsRadius
+        ? await filterQueryRowsByPlaatsRadius(haalPagina, plaatsRadius, cap)
+        : await scanRijenGepagineerd(haalPagina, cap);
+      if (scan.error) {
+        console.error('[admin/leads/bulk-assign] scan fetch error', scan.error);
         return NextResponse.json({ error: 'Leads ophalen mislukt' }, { status: 500 });
       }
-      leadIds = rows.map((r) => r.id);
+      const rows = provincieMarge
+        ? filterRijenOpProvincieMarge(scan.rows as ScanRij[], provincieMarge)
+        : (scan.rows as ScanRij[]);
+      leadIds = rows.slice(0, cap).map((r) => r.id);
     } else {
       let query = supabase
         .from('leads')

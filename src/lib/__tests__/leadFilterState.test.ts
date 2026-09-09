@@ -2,6 +2,12 @@ import { describe, it, expect } from 'vitest';
 import { LEGE_LEADFILTERS, telActieveLeadFilters } from '../leadFilterState';
 
 describe('telActieveLeadFilters', () => {
+  it('telt de provinciemarge apart mee', () => {
+    expect(telActieveLeadFilters({ ...LEGE_LEADFILTERS, provincieMargeKm: 10 })).toBe(1);
+    expect(telActieveLeadFilters({ ...LEGE_LEADFILTERS, provincieMargeKm: 0 })).toBe(0);
+    expect(telActieveLeadFilters({ ...LEGE_LEADFILTERS, provincieMargeKm: null })).toBe(0);
+  });
+
   it('telt nul op een schone stand', () => {
     expect(telActieveLeadFilters(LEGE_LEADFILTERS)).toBe(0);
   });
@@ -41,6 +47,7 @@ describe('telActieveLeadFilters', () => {
       assignmentFilter: 'assigned', phoneFilter: 'valid', bulkFilter: 'exported',
       dateFrom: '2026-01-01', dateTo: '2026-02-01', includeUnknownDate: false,
       plaatsFilter: 'Utrecht', plaatsRadiusKm: 25, postcodeRanges: '7500-7599',
-    })).toBe(13);
+      provincieMargeKm: 10,
+    })).toBe(14);
   });
 });

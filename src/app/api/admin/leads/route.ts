@@ -9,6 +9,12 @@ import { calculateQualityScore } from '@/lib/leadQuality';
 import { fireLeadCapi } from '@/lib/aiCapiHooks';
 import { logAudit } from '@/lib/audit';
 import {
+  afstandTotProvincieGrensKm,
+  filterRijenOpProvincieMarge,
+  resolveProvincieMarge,
+  scanRijenGepagineerd,
+} from '@/lib/provincieMarge';
+import {
   findRecentPartnerProspectByEmail,
   insertPartnerProspectFromEnrichedLeadRow,
   isPartnerProspectBranch,
@@ -84,13 +90,20 @@ export async function GET(request: NextRequest) {
   ];
   const col = allowedSorts.includes(sortBy) ? sortBy : 'created_at';
 
-  // Radius-modus: bounding-box in PostgREST + exacte haversine in memory,
+  /* Provinciemarge: leads die net buiten de gekozen provincie vallen tellen
+     ook mee. Net als bij de straal kan dat niet in de database, dus het draait
+     via dezelfde scanmodus: ruime voorselectie ophalen, exact toetsen in
+     geheugen, daarna sorteren en pagineren. */
+  const provincieMarge = resolveProvincieMarge(filters);
+
+  // Scanmodus: bounding-box in PostgREST + exacte toets in memory,
   // daarna sorteren/pagineren (zelfde semantiek als count/export).
-  if (plaatsRadius) {
+  if (plaatsRadius || provincieMarge) {
     let query = supabase.from('leads').select('*, customers(id, name)');
     query = applyLeadFilters(query, filters, {
       excludePartnerBranchesWhenNoBranchFilter: true,
       plaatsRadius,
+      provincieMargeBox: provincieMarge?.box ?? null,
     });
     if (admin.role === 'accountmanager') {
       const scoped = await applyAccountManagerScope(supabase, query, admin.id);
@@ -100,25 +113,32 @@ export async function GET(request: NextRequest) {
           total: 0,
           page,
           perPage,
-          plaats_radius_label: plaatsRadius.label,
-          plaats_radius_km: plaatsRadius.radiusKm,
+          plaats_radius_label: plaatsRadius?.label ?? null,
+          plaats_radius_km: plaatsRadius?.radiusKm ?? null,
         });
       }
       query = scoped.query;
     }
     query = query.order(col, { ascending: sortDirAsc });
 
-    const { rows, error: scanError } = await filterQueryRowsByPlaatsRadius(
-      async (from, to) => {
-        const { data, error } = await query.range(from, to);
-        return { data: (data || null) as Array<{ id: string; lat: number | null; lng: number | null }> | null, error };
-      },
-      plaatsRadius,
-    );
+    type ScanRij = { id: string; lat: number | null; lng: number | null; provincie?: string | null };
+    const haalPagina = async (from: number, to: number) => {
+      const { data, error } = await query.range(from, to);
+      return { data: (data || null) as ScanRij[] | null, error };
+    };
+
+    /* Met straal filtert de scan al tijdens het ophalen; zonder straal halen we
+       de voorselectie op en toetsen we daarna pas. */
+    const scan = plaatsRadius
+      ? await filterQueryRowsByPlaatsRadius(haalPagina, plaatsRadius)
+      : await scanRijenGepagineerd(haalPagina);
+    let rows = scan.rows as ScanRij[];
+    const scanError = scan.error;
     if (scanError) {
-      console.error('Leads radius scan error:', scanError);
+      console.error('Leads scan error:', scanError);
       return NextResponse.json({ error: 'Leads ophalen mislukt' }, { status: 500 });
     }
+    if (provincieMarge) rows = filterRijenOpProvincieMarge(rows, provincieMarge);
 
     rows.sort((a, b) => {
       const rowA = a as Record<string, unknown>;
@@ -140,13 +160,34 @@ export async function GET(request: NextRequest) {
     });
 
     const total = rows.length;
+    /* Splitsing tonen zodat zichtbaar is wat de marge precies oplevert. */
+    const inProvincie = provincieMarge
+      ? rows.filter(r => provincieMarge.provincies.includes(String(r.provincie ?? '').trim())).length
+      : total;
     const from = (page - 1) * perPage;
     const pageRows = rows.slice(from, from + perPage) as Array<Record<string, unknown>>;
     for (const l of pageRows) {
-      l.distance_km = distanceKmToOrigin(
-        { lat: l.lat as number | null, lng: l.lng as number | null },
-        plaatsRadius,
-      );
+      if (plaatsRadius) {
+        l.distance_km = distanceKmToOrigin(
+          { lat: l.lat as number | null, lng: l.lng as number | null },
+          plaatsRadius,
+        );
+      }
+      /* Zichtbaar maken welke leads dankzij de marge zijn meegekomen, en hoe
+         ver buiten de grens ze liggen. Anders is niet te zien wat de marge
+         precies heeft toegevoegd. */
+      if (provincieMarge) {
+        const naam = String(l.provincie ?? '').trim();
+        if (!provincieMarge.provincies.includes(naam)) {
+          l.buiten_provincie = true;
+          l.provincie_marge_afstand_km = afstandTotProvincieGrensKm(
+            l.lat as number,
+            l.lng as number,
+            provincieMarge.sleutels,
+            provincieMarge.margeKm,
+          );
+        }
+      }
     }
     await attachAssignmentMeta(supabase, pageRows);
     return NextResponse.json({
@@ -154,8 +195,11 @@ export async function GET(request: NextRequest) {
       total,
       page,
       perPage,
-      plaats_radius_label: plaatsRadius.label,
-      plaats_radius_km: plaatsRadius.radiusKm,
+      plaats_radius_label: plaatsRadius?.label ?? null,
+      plaats_radius_km: plaatsRadius?.radiusKm ?? null,
+      provincie_marge_km: provincieMarge?.margeKm ?? null,
+      in_provincie: provincieMarge ? inProvincie : null,
+      uit_marge: provincieMarge ? total - inProvincie : null,
     });
   }
 
