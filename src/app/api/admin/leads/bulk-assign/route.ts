@@ -156,9 +156,12 @@ export async function POST(request: NextRequest) {
         const { data, error } = await query.range(from, to);
         return { data: (data || null) as ScanRij[] | null, error };
       };
+      /* Met een marge ruimer ophalen dan de limiet, want de exacte toets neemt
+         daarna nog rijen weg. Anders levert "wijs er 50 toe" er minder op. */
+      const scanCap = provincieMarge ? Math.min(cap * 4, 100_000) : cap;
       const scan = plaatsRadius
-        ? await filterQueryRowsByPlaatsRadius(haalPagina, plaatsRadius, cap)
-        : await scanRijenGepagineerd(haalPagina, cap);
+        ? await filterQueryRowsByPlaatsRadius(haalPagina, plaatsRadius, scanCap)
+        : await scanRijenGepagineerd(haalPagina, scanCap);
       if (scan.error) {
         console.error('[admin/leads/bulk-assign] scan fetch error', scan.error);
         return NextResponse.json({ error: 'Leads ophalen mislukt' }, { status: 500 });

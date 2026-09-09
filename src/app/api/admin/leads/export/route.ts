@@ -179,6 +179,10 @@ export async function POST(request: NextRequest) {
     query = scoped.query;
   }
 
+  /* Met een provinciemarge halen we ruimer op dan de gevraagde limiet: de
+     database levert de omhullende rechthoek, waarna de exacte toets nog rijen
+     wegneemt. Zonder deze ruimte zou "geef me 100 leads" er 60 opleveren omdat
+     de limiet vóór de toets werd bereikt. Afkappen gebeurt daarna alsnog. */
   const shouldPrioritize = prioritize_least_exported !== false;
   if (shouldPrioritize) {
     query = query.order('bulk_export_count', { ascending: true }).order('wervingsdatum', { ascending: false });
@@ -189,7 +193,9 @@ export async function POST(request: NextRequest) {
   /** Veilige bovengrens voor exports zonder expliciete `max_leads`. Voorkomt accidentele full-table-export. */
   const DEFAULT_EXPORT_CAP = 50_000;
   const requestedLimit = max_leads && Number(max_leads) > 0 ? Math.min(Number(max_leads), DEFAULT_EXPORT_CAP) : DEFAULT_EXPORT_CAP;
-  const hardLimit = requestedLimit;
+  const hardLimit = provincieMarge && !geselecteerdeIds
+    ? Math.min(DEFAULT_EXPORT_CAP, requestedLimit * 4)
+    : requestedLimit;
   const PAGE_SIZE = 1000;
   const exportedLeads: Record<string, unknown>[] = [];
   let cappedByLimit = false;
@@ -285,6 +291,13 @@ export async function POST(request: NextRequest) {
         opgehaald: voor,
         behouden: exportedLeads.length,
       });
+    }
+    // Pas ná de toets aftoppen op wat er gevraagd is.
+    if (exportedLeads.length > requestedLimit) {
+      exportedLeads.length = requestedLimit;
+      cappedByLimit = true;
+    } else {
+      cappedByLimit = false;
     }
   }
 

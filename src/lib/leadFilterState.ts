@@ -73,8 +73,10 @@ export function telActieveLeadFilters(stand: LeadFilterStand): number {
   if (stand.dateFrom || stand.dateTo) n++;
   if (stand.plaatsFilter.trim()) n++;
   if (stand.postcodeRanges.trim()) n++;
-  /* De marge telt apart mee: hij verandert de selectie merkbaar en moet dus
-     zichtbaar zijn in het aantal dat de wisknop belooft op te ruimen. */
-  if (stand.provincieMargeKm != null && stand.provincieMargeKm > 0) n++;
+  /* De marge telt apart mee, maar alleen als hij ook echt iets doet: zonder
+     gekozen provincie is er geen grens om omheen te werken en heeft de waarde
+     geen effect. Zou hij dan toch meetellen, dan belooft de wisknop op te
+     ruimen wat er niet is. */
+  if (stand.selProvinces.length > 0 && stand.provincieMargeKm != null && stand.provincieMargeKm > 0) n++;
   return n;
 }

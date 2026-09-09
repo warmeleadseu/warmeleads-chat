@@ -1,4 +1,6 @@
 import grenzen from '@/data/provincieGrenzen.json';
+import { PROVINCES_BE, PROVINCES_NL } from '@/data/provinces';
+import { parseProvinceTargetToken, resolveLeadLandForProvinceMatch } from '@/lib/provinceTargetMatch';
 
 /**
  * Leads meenemen die net buiten een geselecteerde provincie vallen.
@@ -23,11 +25,33 @@ import grenzen from '@/data/provincieGrenzen.json';
  * af ligt, en daarvoor is de contour als lijn genoeg. Er is geen
  * punt-in-vlaktoets nodig.
  *
- * Afstanden zijn hemelsbreed. Een marge rond Noord-Holland reikt dus over het
- * IJsselmeer; dat is een bewuste keuze.
+ * WATER TELT NIET MEE
+ * -------------------
+ * De marge mag alleen over bewoond land lopen. Een grensstuk waarachter water
+ * ligt, zoals de IJsselmeerkust van Noord-Holland of vrijwel de hele kustlijn
+ * van Zeeland, doet niet mee aan de afstandsmeting. Lelystad ligt hemelsbreed
+ * 22 km van Noord-Holland, maar dwars over het IJsselmeer, en komt dus niet in
+ * de marge terecht. Een provincie met uitsluitend water eromheen levert nul
+ * extra leads op.
+ *
+ * Binnen het overgebleven landdeel wordt gewoon hemelsbreed gemeten; er wordt
+ * niet over de weg gerekend.
  */
 
-type ProvincieGrens = { bbox: [number, number, number, number]; ringen: [number, number][][] };
+type ProvincieGrens = {
+  bbox: [number, number, number, number];
+  ringen: [number, number][][];
+  /**
+   * Per ring een reeks van '1' en '0', één teken per grensstuk: ligt er land
+   * achter de grens ('1') of water dan wel buitenland ('0')?
+   *
+   * Vastgesteld bij het bouwen van het bestand door vanaf elk grensstuk 1,5 km
+   * loodrecht naar buiten te prikken en te kijken of dat punt in een provincie
+   * valt. De CBS- en NUTS-contouren bevatten alleen land, dus IJsselmeer,
+   * Markermeer, Waddenzee en Noordzee vallen daar vanzelf buiten.
+   */
+  landzijde: string[];
+};
 const GRENZEN = grenzen as unknown as Record<string, ProvincieGrens>;
 
 /** Graden naar kilometers, lokaal benaderd. Ruim nauwkeurig genoeg onder ~50 km. */
@@ -97,8 +121,12 @@ export function afstandTotProvincieGrensKm(
       if (lng < minLng - marge || lng > maxLng + marge) continue;
     }
 
-    for (const ring of provincie.ringen) {
+    for (let r = 0; r < provincie.ringen.length; r++) {
+      const ring = provincie.ringen[r];
+      const landzijde = provincie.landzijde?.[r] ?? '';
       for (let i = 0; i < ring.length - 1; i++) {
+        // Grensstukken met water erachter tellen niet mee.
+        if (landzijde[i] !== '1') continue;
         const d = afstandTotSegmentKm(lat, lng, ring[i][0], ring[i][1], ring[i + 1][0], ring[i + 1][1]);
         if (d < best) {
           best = d;
@@ -114,7 +142,47 @@ export type MargeLead = {
   provincie?: string | null;
   lat?: number | null;
   lng?: number | null;
+  land?: string | null;
+  postcode?: string | null;
 };
+
+/** Landen waarvoor grenzen bekend zijn, afgeleid uit de gekozen provincies. */
+function landenVanSelectie(sleutels: string[]): Set<string> {
+  return new Set(sleutels.map(s => s.slice(0, 2)));
+}
+
+/**
+ * In welk land ligt deze lead volgens zijn eigen gegevens?
+ *
+ * De provincienaam weegt het zwaarst: die is ingevuld door de adresverrijking
+ * en is betrouwbaarder dan het landveld. In de praktijk staan er Belgische
+ * leads in de database met `land = 'NL'` en een Belgische postcode die als
+ * Nederlandse postcode is gegeocodeerd, waardoor hun coördinaten midden in
+ * Nederland liggen. Zonder deze toets zou zo'n lead in de marge van een
+ * Nederlandse provincie belanden.
+ */
+/**
+ * Schrijfwijzen die in de database voorkomen maar niet in `PROVINCES_BE` staan.
+ * "Brussel" en "Brussels" worden allebei gebruikt.
+ */
+const BE_SCHRIJFWIJZEN = new Set(['brussel', 'bruxelles', 'brussels hoofdstedelijk gewest']);
+
+function landVanLead(lead: MargeLead): string | null {
+  const ruw = (lead.provincie || '').trim();
+  if (BE_SCHRIJFWIJZEN.has(ruw.toLowerCase())) return 'BE';
+  if (ruw) {
+    /* `parseProvinceTargetToken` kent de vormen die echt in de database staan,
+       waaronder "Limburg (BE)", en normaliseert schrijfwijzen als "Brussel". */
+    const { land, name } = parseProvinceTargetToken(ruw);
+    if (land) return land;
+    const inNl = (PROVINCES_NL as readonly string[]).includes(name);
+    const inBe = (PROVINCES_BE as readonly string[]).includes(name);
+    // Limburg bestaat in beide landen; dan pas naar land/postcode kijken.
+    if (inNl && !inBe) return 'NL';
+    if (inBe && !inNl) return 'BE';
+  }
+  return resolveLeadLandForProvinceMatch(lead);
+}
 
 /**
  * Valt deze lead binnen de marge rond de geselecteerde provincies?
@@ -131,6 +199,11 @@ export function leadBinnenProvincieMarge(
   if (!sleutels.length || !(margeKm > 0)) return false;
   if (lead.lat == null || lead.lng == null) return false;
   if (!Number.isFinite(lead.lat) || !Number.isFinite(lead.lng)) return false;
+  /* De marge blijft binnen het land van de gekozen provincies. Kies je een
+     Nederlandse provincie, dan komen er geen Belgische leads in de marge, en
+     omgekeerd. */
+  const land = landVanLead(lead);
+  if (land && !landenVanSelectie(sleutels).has(land)) return false;
   const afstand = afstandTotProvincieGrensKm(lead.lat, lead.lng, sleutels, margeKm);
   return afstand != null && afstand <= margeKm;
 }

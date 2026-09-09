@@ -53,13 +53,31 @@ describe('afstandTotProvincieGrensKm', () => {
     expect(d!).toBeGreaterThan(200);
   });
 
-  it('rekent over water heen, zoals afgesproken', () => {
-    /* Lelystad (Flevoland) ligt hemelsbreed ruim 20 km van Noord-Holland,
-       dwars over het IJsselmeer. Over de weg is dat ongeveer 70 km. Dat de
-       korte route telt is de afgesproken keuze. */
+  it('springt niet over het IJsselmeer', () => {
+    /* Lelystad ligt hemelsbreed 22 km van Noord-Holland, maar dwars over het
+       IJsselmeer. Die kust telt niet mee, dus de gemeten afstand wordt groter
+       en valt buiten elke redelijke marge. */
     const d = afstandTotProvincieGrensKm(52.5185, 5.4714, ['NL:Noord-Holland']);
-    expect(d!).toBeGreaterThan(15);
-    expect(d!).toBeLessThan(30);
+    expect(d!).toBeGreaterThan(25);
+  });
+
+  it('springt niet over het IJsselmeer naar Friesland', () => {
+    /* Enkhuizen ligt hemelsbreed zo'n 25 km van Friesland, dwars over het
+       IJsselmeer. De IJsselmeerkust van Friesland telt niet mee, dus wat
+       overblijft is de landverbinding bij Lemmer, ruim buiten elke marge. */
+    const enkhuizen = { provincie: 'Noord-Holland', land: 'NL', lat: 52.7025, lng: 5.2903 };
+    expect(leadBinnenProvincieMarge(enkhuizen, ['NL:Friesland'], 25)).toBe(false);
+  });
+
+  it('meet wel gewoon over land', () => {
+    // Hattem naar Overijssel: pal over een landgrens.
+    expect(afstandTotProvincieGrensKm(52.4753, 6.0664, ['NL:Overijssel'])!).toBeLessThan(3);
+  });
+
+  it('levert niets op voor een lead die alleen over water te bereiken is', () => {
+    // Midden op Texel, met alleen de Waddenzee en Noordzee eromheen.
+    const texel = { provincie: 'Noord-Holland', lat: 53.0796, lng: 4.7986 };
+    expect(leadBinnenProvincieMarge(texel, ['NL:Friesland'], 25)).toBe(false);
   });
 
   it('neemt de kortste afstand over meerdere provincies', () => {
@@ -83,6 +101,29 @@ describe('afstandTotProvincieGrensKm', () => {
   it('slaat provincies over die ver buiten bereik liggen', () => {
     // Met een krappe maxKm valt Groningen af en blijft er niets over.
     expect(afstandTotProvincieGrensKm(50.8514, 5.6910, ['NL:Groningen'], 5)).toBeNull();
+  });
+});
+
+describe('landgrens van de marge', () => {
+  /**
+   * In de database staan Belgische leads met `land = 'NL'` en een Belgische
+   * postcode die als Nederlandse postcode is gegeocodeerd, waardoor hun
+   * coördinaten midden in Nederland liggen. Zonder landtoets belandden die in
+   * de marge van een Nederlandse provincie.
+   */
+  it('laat een Belgische lead niet in de marge van een Nederlandse provincie', () => {
+    const dilbeek = { provincie: 'Vlaams-Brabant', land: 'NL', postcode: '1700', lat: 52.4007, lng: 4.9323 };
+    expect(leadBinnenProvincieMarge(dilbeek, ['NL:Noord-Holland'], 15)).toBe(false);
+  });
+
+  it('laat een Nederlandse lead wel in de marge van een Nederlandse provincie', () => {
+    const hattem = { provincie: 'Gelderland', land: 'NL', postcode: '8051AA', lat: 52.4753, lng: 6.0664 };
+    expect(leadBinnenProvincieMarge(hattem, ['NL:Overijssel'], 5)).toBe(true);
+  });
+
+  it('laat een Belgische lead wel in de marge van een Belgische provincie', () => {
+    const nabijAntwerpen = { provincie: 'Oost-Vlaanderen', land: 'BE', postcode: '9100', lat: 51.1644, lng: 4.1400 };
+    expect(leadBinnenProvincieMarge(nabijAntwerpen, ['BE:Antwerpen'], 25)).toBe(true);
   });
 });
 

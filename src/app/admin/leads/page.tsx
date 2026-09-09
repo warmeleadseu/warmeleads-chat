@@ -1585,6 +1585,11 @@ function ExportModal({
     filterParams.status ? filterParams.status.split(',').filter(Boolean) : []);
   const [selFilterProvinces, setSelFilterProvinces] = useState<string[]>(() =>
     filterParams.province ? filterParams.province.split(',').filter(Boolean) : []);
+  /* Provinciemarge overnemen uit het scherm. Zonder dit viel de marge weg zodra
+     je het exportvenster opende: de lijst toonde er dan meer dan er in het
+     bestand belandden, precies waar de functie voor bedoeld is. */
+  const [filterProvincieMargeKm, setFilterProvincieMargeKm] = useState<string>(
+    filterParams.province_margin_km || '');
   const [selFilterSources, setSelFilterSources] = useState<string[]>(() =>
     filterParams.source ? filterParams.source.split(',').filter(Boolean) : []);
   const [filterPhone, setFilterPhone] = useState<string>(filterParams.phone_valid || 'all');
@@ -1656,6 +1661,9 @@ function ExportModal({
     if (selFilterBranches.length > 0) body.branch = selFilterBranches.join(',');
     if (selFilterStatuses.length > 0) body.status = selFilterStatuses.join(',');
     if (selFilterProvinces.length > 0) body.province = selFilterProvinces.join(',');
+    if (selFilterProvinces.length > 0 && filterProvincieMargeKm.trim()) {
+      body.province_margin_km = filterProvincieMargeKm.trim();
+    }
     if (selFilterSources.length > 0) body.source = selFilterSources.join(',');
     if (filterPhone !== 'all') body.phone_valid = filterPhone;
     if (filterBulkStatus !== 'all') body.bulk_status = filterBulkStatus;
@@ -1676,6 +1684,7 @@ function ExportModal({
     return body;
   }, [
     selFilterBranches, selFilterStatuses, selFilterProvinces, selFilterSources,
+    filterProvincieMargeKm,
     filterPhone, filterBulkStatus, filterDateFrom, filterDateTo, filterIncludeUnknownDate,
     filterSearch, filterPlaats, filterPlaatsRadiusKm, filterPostcodeRanges, excludeCustomers, excludeAlreadyAssigned, isBulkBatchFlow,
   ]);
@@ -1719,12 +1728,13 @@ function ExportModal({
     if (selFilterBranches.length > 0) n++;
     if (selFilterStatuses.length > 0) n++;
     if (selFilterProvinces.length > 0) n++;
+    if (selFilterProvinces.length > 0 && filterProvincieMargeKm.trim()) n++;
     if (selFilterSources.length > 0) n++;
     if (filterPhone !== 'all') n++;
     if (filterBulkStatus !== 'all') n++;
     if (filterDateFrom || filterDateTo) n++;
     return n;
-  }, [selFilterBranches, selFilterStatuses, selFilterProvinces, selFilterSources, filterPhone, filterBulkStatus, filterDateFrom, filterDateTo]);
+  }, [selFilterBranches, selFilterStatuses, selFilterProvinces, selFilterSources, filterProvincieMargeKm, filterPhone, filterBulkStatus, filterDateFrom, filterDateTo]);
 
   const branchOptions = useMemo(
     () => branches.filter(b => b.is_active).map(b => ({ value: b.slug, label: b.name })),
@@ -1929,6 +1939,31 @@ function ExportModal({
                       selected={selFilterStatuses}
                       onChange={setSelFilterStatuses}
                     />
+                    {selFilterProvinces.length > 0 && (
+                      <label className="col-span-full flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50/60 px-3 py-2 text-sm text-slate-700">
+                        <input
+                          type="checkbox"
+                          checked={filterProvincieMargeKm.trim() !== ''}
+                          onChange={e => setFilterProvincieMargeKm(e.target.checked ? '10' : '')}
+                          className="h-4 w-4 rounded border-slate-300 text-brand-purple focus:ring-brand-purple"
+                        />
+                        Ook leads net buiten de provincie
+                        {filterProvincieMargeKm.trim() !== '' && (
+                          <>
+                            <input
+                              type="number"
+                              min={1}
+                              max={100}
+                              step={1}
+                              value={filterProvincieMargeKm}
+                              onChange={e => setFilterProvincieMargeKm(e.target.value)}
+                              className="w-20 rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-1 text-sm text-emerald-900"
+                            />
+                            <span className="text-xs text-slate-500">km over land, water telt niet mee</span>
+                          </>
+                        )}
+                      </label>
+                    )}
                     <MultiSelect
                       label="bronnen"
                       allLabel="Alle bronnen"
@@ -2023,6 +2058,7 @@ function ExportModal({
                         onClick={() => {
                           setSelFilterStatuses([]);
                           setSelFilterProvinces([]);
+                          setFilterProvincieMargeKm('');
                           setSelFilterSources([]);
                           setFilterPhone('all');
                           setFilterBulkStatus('all');

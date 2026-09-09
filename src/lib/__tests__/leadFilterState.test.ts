@@ -2,10 +2,12 @@ import { describe, it, expect } from 'vitest';
 import { LEGE_LEADFILTERS, telActieveLeadFilters } from '../leadFilterState';
 
 describe('telActieveLeadFilters', () => {
-  it('telt de provinciemarge apart mee', () => {
-    expect(telActieveLeadFilters({ ...LEGE_LEADFILTERS, provincieMargeKm: 10 })).toBe(1);
-    expect(telActieveLeadFilters({ ...LEGE_LEADFILTERS, provincieMargeKm: 0 })).toBe(0);
-    expect(telActieveLeadFilters({ ...LEGE_LEADFILTERS, provincieMargeKm: null })).toBe(0);
+  it('telt de provinciemarge alleen mee als er ook een provincie gekozen is', () => {
+    const metProvincie = { ...LEGE_LEADFILTERS, selProvinces: ['Utrecht'] };
+    expect(telActieveLeadFilters({ ...metProvincie, provincieMargeKm: 10 })).toBe(2);
+    expect(telActieveLeadFilters({ ...metProvincie, provincieMargeKm: null })).toBe(1);
+    // Zonder provincie doet de marge niets en telt hij dus ook niet mee.
+    expect(telActieveLeadFilters({ ...LEGE_LEADFILTERS, provincieMargeKm: 10 })).toBe(0);
   });
 
   it('telt nul op een schone stand', () => {
