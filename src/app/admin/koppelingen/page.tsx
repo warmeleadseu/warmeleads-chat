@@ -4,8 +4,10 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAdmin } from '../adminContext';
 import { adminFetch } from '@/lib/adminAuth';
+import { filterKoppelingen } from '@/lib/koppelingZoek';
 import {
   PlusIcon,
+  MagnifyingGlassIcon,
   TrashIcon,
   ClipboardDocumentIcon,
   CheckIcon,
@@ -58,6 +60,7 @@ export default function KoppelingenPage() {
   const [testing, setTesting] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<{ id: string; success: boolean; message: string } | null>(null);
   const [activeBackfill, setActiveBackfill] = useState<string | null>(null);
+  const [zoekterm, setZoekterm] = useState('');
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -127,6 +130,17 @@ export default function KoppelingenPage() {
     setActiveInstructions(keyId);
   };
 
+  /* Branche-slug naar weergavenaam, zodat je ook op "Thuisbatterij Partners"
+     kunt zoeken en niet alleen op de slug. */
+  const brancheNamen = useMemo(
+    () => Object.fromEntries(branchesList.map(b => [b.slug, b.name])),
+    [branchesList],
+  );
+  const zichtbareKeys = useMemo(
+    () => filterKoppelingen(keys, brancheNamen, zoekterm),
+    [keys, brancheNamen, zoekterm],
+  );
+
   return (
     <div>
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -153,6 +167,38 @@ export default function KoppelingenPage() {
           </p>
         </div>
       </div>
+
+      {/* Zoeken. Alle koppelingen staan al in het geheugen, dus dit filtert
+          direct in de browser: geen extra verzoek, resultaat tijdens het typen. */}
+      {!loading && keys.length > 0 && (
+        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="relative flex-1">
+            <MagnifyingGlassIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              value={zoekterm}
+              onChange={e => setZoekterm(e.target.value)}
+              placeholder="Zoek op naam, branche of klant..."
+              className="w-full rounded-lg border border-slate-200 bg-slate-50/50 py-2.5 pl-9 pr-9 text-sm text-slate-700 outline-none focus:border-brand-purple/50 focus:bg-white focus:ring-1 focus:ring-brand-purple/30"
+            />
+            {zoekterm && (
+              <button
+                type="button"
+                onClick={() => setZoekterm('')}
+                aria-label="Zoekopdracht wissen"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+              >
+                <XMarkIcon className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+          {zoekterm.trim() && (
+            <span className="shrink-0 text-xs text-slate-500 sm:px-1">
+              {zichtbareKeys.length} van {keys.length} koppelingen
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Koppelingen grid */}
       {loading ? (
@@ -182,9 +228,26 @@ export default function KoppelingenPage() {
             <PlusIcon className="h-4 w-4" /> Eerste koppeling aanmaken
           </button>
         </div>
+      ) : zichtbareKeys.length === 0 ? (
+        /* Wel koppelingen, maar geen treffer. Bewust een andere melding dan de
+           lege staat hierboven: daar moet je er één aanmaken, hier moet je je
+           zoekopdracht aanpassen. */
+        <div className="rounded-xl border border-dashed border-slate-300 bg-white py-14 text-center">
+          <MagnifyingGlassIcon className="mx-auto mb-3 h-8 w-8 text-slate-300" />
+          <p className="font-medium text-slate-600">Geen koppelingen gevonden</p>
+          <p className="mt-1 text-sm text-slate-400">
+            Niets komt overeen met &ldquo;{zoekterm}&rdquo;.
+          </p>
+          <button
+            onClick={() => setZoekterm('')}
+            className="mt-4 inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50"
+          >
+            <XMarkIcon className="h-4 w-4" /> Zoekopdracht wissen
+          </button>
+        </div>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {keys.map(k => {
+          {zichtbareKeys.map(k => {
             const hasLeads = k.request_count > 0;
             const isRecent = k.last_used_at && (Date.now() - new Date(k.last_used_at).getTime()) < 7 * 24 * 60 * 60 * 1000;
             const statusLabel = hasLeads ? 'Actief' : 'Nieuw';

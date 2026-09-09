@@ -20,6 +20,7 @@ import {
   UserPlusIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
+import { LEGE_LEADFILTERS, telActieveLeadFilters } from '@/lib/leadFilterState';
 import {
   PROVINCES_ALL,
   LEAD_PROVINCE_OPTIONS_NL,
@@ -444,6 +445,35 @@ export default function LeadsCRMPage() {
     | null
   >(null);
 
+  /* Alle filters in één handeling opruimen. Sortering, rijen per pagina en de
+     aangevinkte leads blijven staan: dat zijn geen filters maar weergave en
+     werkselectie. Het paginanummer springt vanzelf terug naar 1. React bundelt
+     deze setters in één render, dus er gaat precies één verzoek uit. */
+  const actieveFilters = telActieveLeadFilters({
+    search, selBranches, selCustomers, selStatuses, selProvinces, selSources, selCampaigns,
+    assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, includeUnknownDate,
+    plaatsFilter, plaatsRadiusKm, postcodeRanges,
+  });
+
+  const wisAlleFilters = () => {
+    setSearch(LEGE_LEADFILTERS.search);
+    setSelBranches(LEGE_LEADFILTERS.selBranches);
+    setSelCustomers(LEGE_LEADFILTERS.selCustomers);
+    setSelStatuses(LEGE_LEADFILTERS.selStatuses);
+    setSelProvinces(LEGE_LEADFILTERS.selProvinces);
+    setSelSources(LEGE_LEADFILTERS.selSources);
+    setSelCampaigns(LEGE_LEADFILTERS.selCampaigns);
+    setAssignmentFilter(LEGE_LEADFILTERS.assignmentFilter);
+    setPhoneFilter(LEGE_LEADFILTERS.phoneFilter);
+    setBulkFilter(LEGE_LEADFILTERS.bulkFilter);
+    setDateFrom(LEGE_LEADFILTERS.dateFrom);
+    setDateTo(LEGE_LEADFILTERS.dateTo);
+    setIncludeUnknownDate(LEGE_LEADFILTERS.includeUnknownDate);
+    setPlaatsFilter(LEGE_LEADFILTERS.plaatsFilter);
+    setPlaatsRadiusKm(LEGE_LEADFILTERS.plaatsRadiusKm);
+    setPostcodeRanges(LEGE_LEADFILTERS.postcodeRanges);
+  };
+
   const fetchMeta = useCallback(async () => {
     const [custRes, branchRes] = await Promise.all([
       adminFetch('/api/admin/customers/options'),
@@ -855,10 +885,23 @@ export default function LeadsCRMPage() {
       </AnimatePresence>
 
       <div className="mb-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="relative mb-3">
-          <MagnifyingGlassIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Zoek op naam, email, telefoon, postcode of plaats..."
-            className="w-full rounded-lg border border-slate-200 bg-slate-50/50 py-2.5 pl-9 pr-4 text-sm text-slate-700 outline-none focus:border-brand-purple/50 focus:bg-white focus:ring-1 focus:ring-brand-purple/30" />
+        <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="relative flex-1">
+            <MagnifyingGlassIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Zoek op naam, email, telefoon, postcode of plaats..."
+              className="w-full rounded-lg border border-slate-200 bg-slate-50/50 py-2.5 pl-9 pr-4 text-sm text-slate-700 outline-none focus:border-brand-purple/50 focus:bg-white focus:ring-1 focus:ring-brand-purple/30" />
+          </div>
+          {actieveFilters > 0 && (
+            <button
+              type="button"
+              onClick={wisAlleFilters}
+              title="Zet alle filters en de zoekterm terug. Je selectie en sortering blijven staan."
+              className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-800"
+            >
+              <XMarkIcon className="h-4 w-4" />
+              Alle filters verwijderen ({actieveFilters})
+            </button>
+          )}
         </div>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-8">
           <MultiSelect
