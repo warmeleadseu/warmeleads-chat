@@ -20,7 +20,31 @@ import {
   resolvePlaatsRadiusOrigin,
 } from '@/lib/leadPlaatsRadius';
 
-function buildCsv(leads: Record<string, unknown>[]): NextResponse {
+/**
+ * Uitkomst van het toevoegen aan het klantportaal, meegegeven als responskop.
+ *
+ * Het antwoord van deze route is het bestand zelf, dus er is geen ruimte voor
+ * een JSON-verslag. Zonder deze koppen bleef een mislukte portaaltoevoeging
+ * volledig onzichtbaar: je kreeg een keurige Excel terwijl er nul leads in het
+ * portaal terechtkwamen. Dat gebeurde bij Voltedge-Solar met 166 van de 173.
+ */
+export type PortaalUitkomst = {
+  toegevoegd: number;
+  overgeslagen: number;
+  redenen: Record<string, number>;
+};
+
+function portaalKoppen(uitkomst: PortaalUitkomst | null): Record<string, string> {
+  if (!uitkomst) return {};
+  return {
+    'X-Portaal-Toegevoegd': String(uitkomst.toegevoegd),
+    'X-Portaal-Overgeslagen': String(uitkomst.overgeslagen),
+    'X-Portaal-Redenen': encodeURIComponent(JSON.stringify(uitkomst.redenen)),
+    'Access-Control-Expose-Headers': 'X-Portaal-Toegevoegd, X-Portaal-Overgeslagen, X-Portaal-Redenen',
+  };
+}
+
+function buildCsv(leads: Record<string, unknown>[], portaal: PortaalUitkomst | null = null): NextResponse {
   const BOM = '\uFEFF';
   const { headers, rows } = buildLeadExportTable(leads);
   const escape = (cell: string) => {
@@ -37,11 +61,12 @@ function buildCsv(leads: Record<string, unknown>[]): NextResponse {
     headers: {
       'Content-Type': 'text/csv; charset=utf-8',
       'Content-Disposition': `attachment; filename="leads-bulk-export-${stamp}.csv"`,
+      ...portaalKoppen(portaal),
     },
   });
 }
 
-function buildXlsx(leads: Record<string, unknown>[]): NextResponse {
+function buildXlsx(leads: Record<string, unknown>[], portaal: PortaalUitkomst | null = null): NextResponse {
   const { headers, rows } = buildLeadExportTable(leads);
   const sheetData = [headers, ...rows];
   const wb = XLSX.utils.book_new();
@@ -58,6 +83,7 @@ function buildXlsx(leads: Record<string, unknown>[]): NextResponse {
     headers: {
       'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       'Content-Disposition': `attachment; filename="leads-bulk-export-${stamp}.xlsx"`,
+      ...portaalKoppen(portaal),
     },
   });
 }
@@ -317,6 +343,7 @@ export async function POST(request: NextRequest) {
   }
 
   const leadIds = exportedLeads.map(l => l.id as string);
+  let portaalUitkomst: PortaalUitkomst | null = null;
 
   if (add_to_portal && target_customer_id) {
     const custId = String(target_customer_id);
@@ -384,6 +411,13 @@ export async function POST(request: NextRequest) {
       .single();
 
     const newLeadIds = leadIds.filter(id => !alreadyAssigned.has(id));
+    portaalUitkomst = {
+      toegevoegd: 0,
+      overgeslagen: leadIds.length - newLeadIds.length,
+      redenen: leadIds.length > newLeadIds.length
+        ? { al_toegewezen_binnen_30_dagen: leadIds.length - newLeadIds.length }
+        : {},
+    };
     for (const leadId of newLeadIds) {
       const leadRow = exportedLeads.find(l => l.id === leadId) as Record<string, unknown> | undefined;
       if (!leadRow || !targetCustomerFull) continue;
@@ -404,7 +438,14 @@ export async function POST(request: NextRequest) {
         batchId: portalBatchId,
         source: 'bulk_export',
       });
+      if (!result.ok) {
+        /* Niet stil overslaan: tel de reden mee zodat de gebruiker ziet dat en
+           waarom er leads buiten het portaal zijn gebleven. */
+        portaalUitkomst.overgeslagen++;
+        portaalUitkomst.redenen[result.code] = (portaalUitkomst.redenen[result.code] || 0) + 1;
+      }
       if (result.ok) {
+        portaalUitkomst.toegevoegd++;
         await logLeadActivity(supabase, {
           leadId,
           customerId: custId,
@@ -495,7 +536,9 @@ export async function POST(request: NextRequest) {
     format: format === 'xlsx' ? 'xlsx' : 'csv',
   });
 
-  return format === 'xlsx' ? buildXlsx(exportedLeads) : buildCsv(exportedLeads);
+  return format === 'xlsx'
+    ? buildXlsx(exportedLeads, portaalUitkomst)
+    : buildCsv(exportedLeads, portaalUitkomst);
 }
 
 export async function GET(request: NextRequest) {

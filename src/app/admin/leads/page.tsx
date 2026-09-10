@@ -32,6 +32,15 @@ import { DISTANCE_PRESETS_KM } from '@/lib/portalLeadGeoFilters';
 
 /* ── Multi-select dropdown ─────────────────────────────────── */
 
+/** Leesbare tekst bij de weigergronden van assignLeadToBatch. */
+const PORTAAL_REDEN_TEKST: Record<string, string> = {
+  geo_mismatch: 'viel buiten het doelgebied van de klant',
+  branch_mismatch: 'branche hoort niet bij deze klant',
+  recent_assignment: 'was al binnen 30 dagen aan deze klant toegewezen',
+  al_toegewezen_binnen_30_dagen: 'was al binnen 30 dagen aan deze klant toegewezen',
+  insert_failed: 'kon niet worden opgeslagen',
+};
+
 interface MultiSelectOption { value: string; label: string; }
 interface MultiSelectGroup { label: string; options: MultiSelectOption[]; }
 
@@ -1592,6 +1601,9 @@ function ExportModal({
   const [prioritize, setPrioritize] = useState(true);
   const [maxLeads, setMaxLeads] = useState('');
   const [excludeCustomers, setExcludeCustomers] = useState<string[]>([]);
+  const [portaalMelding, setPortaalMelding] = useState<
+    { toegevoegd: number; overgeslagen: number; uitleg: string } | null
+  >(null);
   const [excludeAlreadyAssigned, setExcludeAlreadyAssigned] = useState(false);
   const [showExcludePicker, setShowExcludePicker] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -1805,6 +1817,17 @@ function ExportModal({
         throw new Error(d.error || 'Export mislukt');
       }
 
+      /* Uitkomst van het toevoegen aan het portaal staat in de responskoppen:
+         het antwoord zelf is het bestand, dus daar past geen verslag in. Zonder
+         deze melding blijft een mislukte portaaltoevoeging onzichtbaar. */
+      const toegevoegd = Number(res.headers.get('X-Portaal-Toegevoegd') ?? NaN);
+      const overgeslagen = Number(res.headers.get('X-Portaal-Overgeslagen') ?? NaN);
+      let redenen: Record<string, number> = {};
+      try {
+        const ruw = res.headers.get('X-Portaal-Redenen');
+        if (ruw) redenen = JSON.parse(decodeURIComponent(ruw));
+      } catch { /* melding zonder uitsplitsing is ook bruikbaar */ }
+
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -1813,6 +1836,20 @@ function ExportModal({
       a.download = `leads-bulk-export-${new Date().toISOString().split('T')[0]}.${ext}`;
       a.click();
       URL.revokeObjectURL(url);
+
+      if (Number.isFinite(overgeslagen) && overgeslagen > 0) {
+        const uitleg = Object.entries(redenen)
+          .map(([code, n]) => `${n}x ${PORTAAL_REDEN_TEKST[code] ?? code}`)
+          .join(', ');
+        setPortaalMelding({
+          toegevoegd: Number.isFinite(toegevoegd) ? toegevoegd : 0,
+          overgeslagen,
+          uitleg,
+        });
+        onExported();
+        return;   // venster open laten zodat de melding gelezen kan worden
+      }
+
       onExported();
       onClose();
     } catch (err: unknown) {
@@ -1856,6 +1893,24 @@ function ExportModal({
 
           <div className="flex-1 space-y-4 overflow-y-auto p-5">
             {error && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-600">{error}</div>}
+            {portaalMelding && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                <p className="font-medium">
+                  Bestand gedownload. {portaalMelding.toegevoegd.toLocaleString('nl-NL')} lead
+                  {portaalMelding.toegevoegd === 1 ? '' : 's'} toegevoegd aan het klantportaal,{' '}
+                  <strong>{portaalMelding.overgeslagen.toLocaleString('nl-NL')} overgeslagen</strong>.
+                </p>
+                {portaalMelding.uitleg && (
+                  <p className="mt-1 text-amber-700">Reden: {portaalMelding.uitleg}.</p>
+                )}
+                <button
+                  onClick={() => { setPortaalMelding(null); onClose(); }}
+                  className="mt-2 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-800 hover:bg-amber-100"
+                >
+                  Sluiten
+                </button>
+              </div>
+            )}
 
             {isBulkBatchFlow && batchInfo && (
               <div className="rounded-lg border border-violet-200 bg-violet-50/60 px-4 py-3 text-sm text-violet-900">
