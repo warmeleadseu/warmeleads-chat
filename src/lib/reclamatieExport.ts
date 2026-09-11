@@ -46,7 +46,7 @@ export const RECLAMATIE_KOLOMMEN = [
   'Reden',
   'Toelichting',
   'Afgehandeld op',
-  'Notitie beheerder',
+  'Toelichting voor klant',
   'Klant',
   'Klant e-mail',
   'Lead',

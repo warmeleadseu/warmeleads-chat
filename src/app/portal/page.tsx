@@ -73,6 +73,8 @@ import { PortalPendingBatchesCard } from './_components/PortalPendingBatchesCard
 import LeadAppointmentSchedulePrompt from './_components/LeadAppointmentSchedulePrompt';
 import BookAppointmentModal from './agenda/BookAppointmentModal';
 import { leadRowToAppointmentPrefill } from '@/lib/leadAppointmentPrefill';
+import { RECLAMATION_REASONS, RECLAMATION_STATUS_MAP, reclamationReasonLabel } from './_constants/reclamaties';
+import { ReclamatieUitkomst } from './_components/ReclamatieUitkomst';
 
 function WhatsAppIcon({ className }: { className?: string }) {
   return (
@@ -273,17 +275,6 @@ function assigneeSelectOptions(
   return [{ id: currentId, name: currentName || 'Onbekend teamlid' }, ...team];
 }
 
-const RECLAMATION_REASONS = [
-  { value: 'foutief_telefoonnummer', label: 'Foutief telefoonnummer' },
-  { value: 'dubbele_lead', label: 'Dubbele lead binnen 30 dagen' },
-  { value: 'buiten_doelgebied', label: 'Buiten mijn afgesproken gebied' },
-] as const;
-
-const RECLAMATION_STATUS_MAP: Record<string, { label: string; cls: string }> = {
-  pending: { label: 'In behandeling', cls: 'bg-amber-50 text-amber-700 ring-1 ring-amber-200/80' },
-  approved: { label: 'Goedgekeurd', cls: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/80' },
-  rejected: { label: 'Afgewezen', cls: 'bg-red-50 text-red-600 ring-1 ring-red-200/80' },
-};
 
 function ReclamationListBadge({ status, reason }: { status: string; reason?: string | null }) {
   const st = RECLAMATION_STATUS_MAP[status] || RECLAMATION_STATUS_MAP.pending;
@@ -3631,7 +3622,7 @@ function LeadFeedback({ leadId, showToast }: { leadId: string; showToast: (m: st
 /* ─── Lead Reclamation ─────────────────────────────────────── */
 
 function LeadReclamation({ leadId, showToast }: { leadId: string; showToast: (m: string) => void }) {
-  const [existing, setExisting] = useState<{ id: string; reason: string; description?: string; status: string; created_at: string } | null>(null);
+  const [existing, setExisting] = useState<{ id: string; reason: string; description?: string; status: string; created_at: string; admin_notes?: string | null; resolved_at?: string | null } | null>(null);
   const [allowed, setAllowed] = useState(true);
   const [blockReason, setBlockReason] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -3706,7 +3697,7 @@ function LeadReclamation({ leadId, showToast }: { leadId: string; showToast: (m:
 
   if (existing) {
     const st = RECLAMATION_STATUS_MAP[existing.status] || RECLAMATION_STATUS_MAP.pending;
-    const reasonLabel = RECLAMATION_REASONS.find(r => r.value === existing.reason)?.label || existing.reason;
+    const reasonLabel = reclamationReasonLabel(existing.reason);
     return (
       <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
         <div className="mb-2 flex items-center justify-between">
@@ -3720,6 +3711,13 @@ function LeadReclamation({ leadId, showToast }: { leadId: string; showToast: (m:
         <p className="mt-2 text-[10px] text-slate-400">
           Ingediend op {new Date(existing.created_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' })}
         </p>
+        <div className="mt-3">
+          <ReclamatieUitkomst
+            status={existing.status}
+            adminNotes={existing.admin_notes}
+            resolvedAt={existing.resolved_at}
+          />
+        </div>
       </div>
     );
   }

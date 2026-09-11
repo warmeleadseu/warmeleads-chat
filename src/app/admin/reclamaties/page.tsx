@@ -16,6 +16,7 @@ import {
   UserIcon,
   ChatBubbleLeftEllipsisIcon,
   ArrowDownTrayIcon,
+  EyeIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
 import { useAdmin } from '../adminContext';
@@ -514,13 +515,23 @@ export default function AdminReclamatiesPage() {
                 <div>
                   <label className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-slate-500">
                     <ChatBubbleLeftEllipsisIcon className="h-3.5 w-3.5" />
-                    Admin notities
+                    Toelichting voor de klant
                   </label>
+                  {/* De klant leest deze tekst letterlijk terug in zijn portaal.
+                      Dat moet onmisbaar duidelijk zijn op het moment van typen,
+                      anders belandt een interne opmerking bij de klant. */}
+                  <div className="mb-2 flex items-start gap-2 rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2">
+                    <EyeIcon className="mt-0.5 h-4 w-4 shrink-0 text-indigo-500" />
+                    <p className="text-xs text-indigo-700">
+                      <strong>De klant ziet deze tekst.</strong> Hij verschijnt bij de lead en in zijn
+                      reclamatieoverzicht, zodra je goedkeurt of afwijst. Schrijf hem dus gericht aan de klant.
+                    </p>
+                  </div>
                   <textarea
                     value={adminNotes}
                     onChange={e => setAdminNotes(e.target.value)}
                     disabled={!canResolve}
-                    placeholder={canResolve ? 'Optioneel: voeg een notitie toe...' : ''}
+                    placeholder={canResolve ? 'Bijvoorbeeld: telefoonnummer bleek inderdaad niet in gebruik, reclamatie goedgekeurd.' : ''}
                     rows={3}
                     className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-brand-purple/50 focus:ring-2 focus:ring-brand-purple/20 disabled:bg-slate-50 disabled:text-slate-500"
                   />

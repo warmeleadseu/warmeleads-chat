@@ -24,7 +24,7 @@ import { PortalContext, type PortalCustomer, type ClientPortalUser, isDemoPortal
 import { portalFetch, PORTAL_IMPERSONATION_KEY } from '@/lib/portalAuth';
 import { IMPERSONATION_HANDOFF_PREFIX, IMPERSONATION_HANDOFF_TTL_MS } from '@/lib/adminOpenPortal';
 import { PERMISSIONS } from '@/lib/portalPermissions';
-import { UsersIcon } from '@heroicons/react/24/outline';
+import { UsersIcon, FlagIcon } from '@heroicons/react/24/outline';
 import { ToastProvider, AnnouncementBar } from './_ui';
 
 /**
@@ -334,6 +334,7 @@ const ALL_PORTAL_NAV: (NavItem & { shortLabel?: string })[] = [
   { label: 'Leads', href: '/portal', icon: InboxStackIcon, permission: PERMISSIONS.LEADS_VIEW },
   { label: 'Agenda', href: '/portal/agenda', icon: CalendarDaysIcon, permission: PERMISSIONS.APPOINTMENTS_VIEW },
   { label: 'Bestellen', href: '/portal/bestellen', icon: ShoppingCartIcon, permission: PERMISSIONS.ORDERS_CREATE },
+  { label: 'Reclamaties', href: '/portal/reclamaties', icon: FlagIcon, permission: PERMISSIONS.RECLAMATIONS_CREATE },
   { label: 'Team', href: '/portal/team', icon: UsersIcon, permission: PERMISSIONS.TEAM_MANAGE },
   { label: 'Account & Insights', shortLabel: 'Account', href: '/portal/account', icon: UserCircleIcon },
 ];
