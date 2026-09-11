@@ -15,10 +15,12 @@ import {
   MapPinIcon,
   UserIcon,
   ChatBubbleLeftEllipsisIcon,
+  ArrowDownTrayIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
 import { useAdmin } from '../adminContext';
 import { digitsOnlyPhone, phoneSearchDigitVariants } from '@/lib/phoneSearch';
+import { buildReclamatieCsv, reclamatieBestandsnaam } from '@/lib/reclamatieExport';
 
 interface Reclamation {
   id: string;
@@ -59,6 +61,7 @@ export default function AdminReclamatiesPage() {
   const { user: currentAdmin } = useAdmin();
   const canResolve = currentAdmin.role !== 'accountmanager';
   const [reclamations, setReclamations] = useState<Reclamation[]>([]);
+  const [afgekapt, setAfgekapt] = useState(false);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('pending');
@@ -75,10 +78,14 @@ export default function AdminReclamatiesPage() {
   const fetchReclamations = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await adminFetch('/api/admin/reclamations');
+      /* Vraag meteen het maximum op dat de route toestaat. Zakt er ooit toch
+         iets af, dan zegt X-Truncated dat, en waarschuwen we bij het exporteren
+         in plaats van stilzwijgend een te kort bestand mee te geven. */
+      const res = await adminFetch('/api/admin/reclamations?limit=1000');
       if (res.ok) {
         const data = await res.json();
         setReclamations(Array.isArray(data) ? data : []);
+        setAfgekapt(res.headers.get('X-Truncated') === '1');
       }
     } catch { /* ignore */ }
     setLoading(false);
@@ -164,6 +171,29 @@ export default function AdminReclamatiesPage() {
     setSaving(null);
   };
 
+  /* Exporteert precies de lijst die op dit moment op het scherm staat: het
+     statusfilter en de zoekterm zijn er al op toegepast. Standaard staat de tab
+     op 'openstaand', dus zonder iets aan te klikken krijg je de openstaande
+     reclamaties. */
+  const exporteerCsv = () => {
+    if (filtered.length === 0) return;
+    const blob = new Blob([buildReclamatieCsv(filtered)], {
+      type: 'text/csv;charset=utf-8;',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = reclamatieBestandsnaam(statusFilter);
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast(
+      afgekapt
+        ? `${filtered.length} reclamaties geëxporteerd — let op: er zijn er meer dan het scherm laadt`
+        : `${filtered.length} reclamatie${filtered.length === 1 ? '' : 's'} geëxporteerd`,
+      afgekapt ? 'error' : 'success',
+    );
+  };
+
   const openDetail = (r: Reclamation) => {
     setSelected(r);
     setAdminNotes(r.admin_notes || '');
@@ -231,16 +261,29 @@ export default function AdminReclamatiesPage() {
         ))}
       </div>
 
-      {/* Search */}
-      <div className="relative">
-        <MagnifyingGlassIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-        <input
-          type="text"
-          placeholder="Zoek op klant, lead of telefoonnummer..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="w-full rounded-lg border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm text-slate-900 outline-none transition focus:border-brand-purple/50 focus:ring-2 focus:ring-brand-purple/20"
-        />
+      {/* Search + export */}
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <div className="relative flex-1">
+          <MagnifyingGlassIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Zoek op klant, lead of telefoonnummer..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="w-full rounded-lg border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm text-slate-900 outline-none transition focus:border-brand-purple/50 focus:ring-2 focus:ring-brand-purple/20"
+          />
+        </div>
+        <button
+          onClick={exporteerCsv}
+          disabled={loading || filtered.length === 0}
+          className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:border-brand-purple/50 hover:text-brand-purple disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <ArrowDownTrayIcon className="h-4 w-4" />
+          Exporteer CSV
+          {!loading && filtered.length > 0 && (
+            <span className="text-xs text-slate-400">({filtered.length})</span>
+          )}
+        </button>
       </div>
 
       {/* Content */}
