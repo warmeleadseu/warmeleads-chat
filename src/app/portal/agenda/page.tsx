@@ -22,6 +22,7 @@ import BookAppointmentModal from './BookAppointmentModal';
 import AppointmentDetailModal from './AppointmentDetailModal';
 import AvailabilityPanel from '../AvailabilityPanel';
 import { PageHeader, ToggleGroup, T } from '../_ui';
+import { wachtOpAfboeking, OUTCOME_LABELS, type AppointmentOutcome } from '@/lib/appointmentOutcome';
 
 export interface Appointment {
   id: string;
@@ -44,6 +45,13 @@ export interface Appointment {
   status: 'scheduled' | 'completed' | 'no_show' | 'cancelled' | 'rescheduled';
   notes: string | null;
   source: string;
+  outcome: 'deal' | 'no_deal' | 'follow_up' | null;
+  outcome_reason: string | null;
+  outcome_notes: string | null;
+  deal_value: number | null;
+  cancelled_by: string | null;
+  cancelled_reason: string | null;
+  rescheduled_from_id: string | null;
 }
 
 interface TeamMember {
@@ -384,7 +392,11 @@ export default function AgendaPage() {
                         className={`absolute left-1 right-1 overflow-hidden rounded-md border px-1.5 py-1 text-left text-[11px] font-semibold shadow-sm hover:z-10 hover:shadow-md ${STATUS_STYLES[a.status] || STATUS_STYLES.scheduled}`}
                         style={{ top: `${top}px`, height: `${height}px` }}
                       >
-                        <div className="truncate">{s.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}</div>
+                        <div className="flex items-center gap-1">
+                          <span className="truncate">{s.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}</span>
+                          {a.outcome === 'deal' && <span className="shrink-0 text-emerald-600" title="Deal gesloten">&#9679;</span>}
+                          {wachtOpAfboeking(a) && <span className="shrink-0 text-amber-600" title="Nog afboeken">&#9679;</span>}
+                        </div>
                         <div className="truncate">{a.contact_name}</div>
                       </button>
                     );
@@ -566,7 +578,10 @@ function DayList({
                   <span className="text-[9px] opacity-75">{e.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}</span>
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-slate-900">{a.contact_name}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="truncate text-sm font-semibold text-slate-900">{a.contact_name}</p>
+                    <UitkomstBadge afspraak={a} />
+                  </div>
                   <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-slate-500">
                     <span>{branchNames[a.branch] || a.branch}</span>
                     {a.city && (
@@ -587,5 +602,42 @@ function DayList({
         )}
       </div>
     </section>
+  );
+}
+
+
+/**
+ * Korte samenvatting van de uitkomst in een lijstregel.
+ *
+ * Een afspraak die is geweest maar nog op 'ingepland' staat krijgt een
+ * opvallende markering: dat is werk dat nog gedaan moet worden, en zonder die
+ * duw blijft afboeken liggen. Precies dat gebeurde er tot nu toe, want van de
+ * 26 afspraken in het systeem was er geen enkele afgeboekt.
+ */
+function UitkomstBadge({ afspraak }: { afspraak: Appointment }) {
+  if (wachtOpAfboeking(afspraak)) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800">
+        Nog afboeken
+      </span>
+    );
+  }
+
+  if (!afspraak.outcome) return null;
+
+  const isDeal = afspraak.outcome === 'deal';
+  const kleur = isDeal
+    ? 'bg-emerald-100 text-emerald-800'
+    : afspraak.outcome === 'no_deal'
+      ? 'bg-slate-100 text-slate-600'
+      : 'bg-sky-100 text-sky-800';
+
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${kleur}`}>
+      {OUTCOME_LABELS[afspraak.outcome as AppointmentOutcome]}
+      {isDeal && afspraak.deal_value != null && (
+        <span>· €{Number(afspraak.deal_value).toLocaleString('nl-NL')}</span>
+      )}
+    </span>
   );
 }

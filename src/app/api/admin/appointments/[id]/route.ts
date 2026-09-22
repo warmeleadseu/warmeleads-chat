@@ -4,6 +4,7 @@ import { createServerClient } from '@/lib/supabase';
 import { validateSlot } from '@/lib/appointmentSlots';
 import { sendAppointmentCancelledEmail } from '@/lib/appointmentEmails';
 import { sendAppointmentPush } from '@/lib/pushNotification';
+import { bereidAfboekingVoor, isAppointmentStatus } from '@/lib/appointmentOutcome';
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const admin = await verifyAdmin(request);
@@ -56,16 +57,27 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     updates.travel_buffer_minutes = buffer;
   }
 
+  /* Zelfde afboekregels als in het portaal, uit appointmentOutcome. De admin
+     mag wel elke overgang maken: vanuit hier worden fouten van klanten
+     rechtgezet, en dan moet ook een verzette afspraak nog te corrigeren zijn. */
   if (body.status) {
-    if (!['scheduled', 'completed', 'no_show', 'cancelled', 'rescheduled'].includes(body.status)) {
+    const nieuweStatus: unknown = body.status;
+    if (!isAppointmentStatus(nieuweStatus)) {
       return NextResponse.json({ error: 'Ongeldige status' }, { status: 400 });
     }
-    updates.status = body.status;
-    if (body.status === 'completed') updates.completed_at = new Date().toISOString();
-    if (body.status === 'cancelled') {
-      updates.cancelled_at = new Date().toISOString();
-      if (body.cancelled_reason) updates.cancelled_reason = body.cancelled_reason;
-    }
+    const afboeking = bereidAfboekingVoor({
+      status: nieuweStatus,
+      outcome: body.outcome,
+      outcome_reason: body.outcome_reason,
+      deal_value: body.deal_value,
+      cancelled_by: body.cancelled_by,
+    });
+    if (!afboeking.ok) return NextResponse.json({ error: afboeking.fout }, { status: 400 });
+    Object.assign(updates, afboeking.velden);
+    if (body.cancelled_reason !== undefined) updates.cancelled_reason = body.cancelled_reason || null;
+    if (body.outcome_notes !== undefined) updates.outcome_notes = body.outcome_notes || null;
+  } else if (body.outcome_notes !== undefined) {
+    updates.outcome_notes = body.outcome_notes || null;
   }
 
   const { data, error } = await supabase

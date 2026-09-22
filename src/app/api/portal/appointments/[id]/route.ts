@@ -5,6 +5,12 @@ import { createServerClient } from '@/lib/supabase';
 import { validateSlot } from '@/lib/appointmentSlots';
 import { sendAppointmentCancelledEmail } from '@/lib/appointmentEmails';
 import { sendAppointmentPush } from '@/lib/pushNotification';
+import {
+  bereidAfboekingVoor,
+  mayTransition,
+  isAppointmentStatus,
+  STATUS_LABELS,
+} from '@/lib/appointmentOutcome';
 
 async function loadAppointment(id: string, customerId: string) {
   const supabase = createServerClient();
@@ -91,17 +97,43 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     updates.portal_user_id = body.portal_user_id || null;
   }
 
-  // Status change
+  /* Afboeken. De regels staan in appointmentOutcome zodat portaal, admin en
+     API het niet ieder net iets anders kunnen doen. */
   if (body.status) {
-    if (!['scheduled', 'completed', 'no_show', 'cancelled', 'rescheduled'].includes(body.status)) {
+    const nieuweStatus: unknown = body.status;
+    if (!isAppointmentStatus(nieuweStatus)) {
       return NextResponse.json({ error: 'Ongeldige status' }, { status: 400 });
     }
-    updates.status = body.status;
-    if (body.status === 'completed') updates.completed_at = new Date().toISOString();
-    if (body.status === 'cancelled') {
-      updates.cancelled_at = new Date().toISOString();
-      if (body.cancelled_reason) updates.cancelled_reason = body.cancelled_reason;
+    const huidig: unknown = appt.status;
+    if (!isAppointmentStatus(huidig) || !mayTransition(huidig, nieuweStatus)) {
+      const vanaf = isAppointmentStatus(huidig) ? STATUS_LABELS[huidig] : String(huidig);
+      return NextResponse.json(
+        { error: `Een afspraak met status "${vanaf}" kan niet naar "${STATUS_LABELS[nieuweStatus]}"` },
+        { status: 409 },
+      );
     }
+
+    const afboeking = bereidAfboekingVoor({
+      status: nieuweStatus,
+      outcome: body.outcome,
+      outcome_reason: body.outcome_reason,
+      deal_value: body.deal_value,
+      cancelled_by: body.cancelled_by,
+    });
+    if (!afboeking.ok) {
+      return NextResponse.json({ error: afboeking.fout }, { status: 400 });
+    }
+    Object.assign(updates, afboeking.velden);
+
+    if (body.cancelled_reason !== undefined) {
+      updates.cancelled_reason = body.cancelled_reason || null;
+    }
+    if (body.outcome_notes !== undefined) {
+      updates.outcome_notes = body.outcome_notes || null;
+    }
+    updates.outcome_by_portal_user_id = session.portalUser?.id ?? null;
+  } else if (body.outcome_notes !== undefined) {
+    updates.outcome_notes = body.outcome_notes || null;
   }
 
   const { data, error } = await supabase

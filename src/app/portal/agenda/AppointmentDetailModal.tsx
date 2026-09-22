@@ -22,16 +22,13 @@ import {
   BriefcaseIcon,
 } from '@heroicons/react/24/outline';
 import type { Appointment } from './page';
+import { AfboekPaneel } from './AfboekPaneel';
+import { VerzetPaneel } from './VerzetPaneel';
+import { STATUS_LABELS as GEDEELDE_STATUS_LABELS } from '@/lib/appointmentOutcome';
 
 interface TeamMember { id: string; name: string; role: string }
 
-const STATUS_LABELS: Record<string, string> = {
-  scheduled: 'Ingepland',
-  completed: 'Voltooid',
-  no_show: 'Niet verschenen',
-  cancelled: 'Geannuleerd',
-  rescheduled: 'Verzet',
-};
+const STATUS_LABELS: Record<string, string> = GEDEELDE_STATUS_LABELS;
 
 const STATUS_DOT: Record<string, string> = {
   scheduled: 'bg-indigo-500',
@@ -70,6 +67,7 @@ export default function AppointmentDetailModal({
   const [portalUserId, setPortalUserId] = useState<string | null>(appointment.portal_user_id);
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [verzetten, setVerzetten] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
@@ -245,19 +243,24 @@ export default function AppointmentDetailModal({
                 </section>
               )}
 
-              {/* Status actions */}
-              {canEdit && appointment.status === 'scheduled' && (
-                <section className="mt-5">
-                  <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Markeer als</h3>
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    <button onClick={() => changeStatus('completed')} disabled={saving} className="flex items-center justify-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50">
-                      <CheckCircleIcon className="h-4 w-4" /> Voltooid
-                    </button>
-                    <button onClick={() => changeStatus('no_show')} disabled={saving} className="flex items-center justify-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-sm font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-50">
-                      <ExclamationCircleIcon className="h-4 w-4" /> Niet verschenen
-                    </button>
-                  </div>
-                </section>
+              {/* Afboeken en verzetten */}
+              {canEdit && (
+                verzetten ? (
+                  <VerzetPaneel
+                    appointmentId={appointment.id}
+                    branch={appointment.branch}
+                    portalUserId={appointment.portal_user_id}
+                    huidigeStart={appointment.starts_at}
+                    onKlaar={() => { setVerzetten(false); onUpdated(); }}
+                    onAnnuleer={() => setVerzetten(false)}
+                  />
+                ) : (
+                  <AfboekPaneel
+                    appointment={appointment}
+                    onDone={onUpdated}
+                    onVerzetten={() => setVerzetten(true)}
+                  />
+                )
               )}
             </>
           ) : (
