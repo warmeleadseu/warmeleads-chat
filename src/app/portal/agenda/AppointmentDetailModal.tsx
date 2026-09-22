@@ -257,6 +257,26 @@ export default function AppointmentDetailModal({
                 </section>
               )}
 
+              {/* Reactie van de lead op zijn eigen bevestigingslink */}
+              {appointment.lead_reactie && (
+                <section className={`mt-5 rounded-xl px-3 py-2.5 text-xs ring-1 ${
+                  appointment.lead_reactie === 'afgezegd'
+                    ? 'bg-rose-50 text-rose-900 ring-rose-100'
+                    : 'bg-emerald-50 text-emerald-900 ring-emerald-100'
+                }`}>
+                  <p className="font-semibold">
+                    {appointment.lead_reactie === 'bevestigd' && 'De klant heeft de afspraak bevestigd'}
+                    {appointment.lead_reactie === 'verzet' && 'De klant heeft de afspraak zelf verzet'}
+                    {appointment.lead_reactie === 'afgezegd' && 'De klant heeft zelf afgezegd'}
+                  </p>
+                  {appointment.lead_bevestigd_at && (
+                    <p className="mt-0.5 opacity-70">
+                      {new Date(appointment.lead_bevestigd_at).toLocaleString('nl-NL', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  )}
+                </section>
+              )}
+
               {/* Ingepland door een gekoppeld portaal */}
               {appointment.geboekt_door_customer_id && (
                 <section className="mt-5 rounded-xl border border-sky-200 bg-sky-50 p-3">

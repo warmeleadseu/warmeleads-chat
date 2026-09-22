@@ -68,6 +68,8 @@ export interface Appointment {
   geboekt_door_customer_id: string | null;
   bevestigd_at: string | null;
   koppeling_id: string | null;
+  lead_bevestigd_at: string | null;
+  lead_reactie: string | null;
   geboekt_door?: { name: string } | null;
   agenda_van?: { name: string } | null;
 }
@@ -890,6 +892,14 @@ function UitkomstBadge({ afspraak }: { afspraak: Appointment }) {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800">
         Nog afboeken
+      </span>
+    );
+  }
+
+  if (afspraak.status === 'scheduled' && afspraak.lead_bevestigd_at) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 ring-1 ring-emerald-200/70">
+        Klant bevestigd
       </span>
     );
   }

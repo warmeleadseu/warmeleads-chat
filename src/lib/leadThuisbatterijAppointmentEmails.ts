@@ -1,6 +1,8 @@
 import { createServerClient } from '@/lib/supabase';
 import { sendGmailEmail } from '@/lib/gmailSmtp';
 
+import { leadAfspraakUrl } from './leadAfspraakToken';
+
 export interface LeadAppointmentMailPayload {
   id: string;
   branch: string;
@@ -53,6 +55,28 @@ function addressLine(appt: LeadAppointmentMailPayload): string | null {
   return full || null;
 }
 
+/**
+ * Knoppenblok waarmee de lead zelf kan bevestigen, verzetten of afzeggen.
+ *
+ * Een herinnering zonder knop is alleen een mededeling: wie niet kan komen doet
+ * dan niets en de adviseur rijdt voor niets. Met deze link weet de klant het
+ * vóór vertrek.
+ */
+function reactieKnoppen(appt: LeadAppointmentMailPayload): string {
+  const url = leadAfspraakUrl(appt.id);
+  return `<div style="margin:22px 0;text-align:center">
+     <a href="${url}" style="display:inline-block;padding:13px 26px;border-radius:10px;background:#7c3aed;color:#ffffff;font-weight:700;font-size:15px;text-decoration:none">Bevestig je afspraak</a>
+     <p style="margin:10px 0 0;font-size:12px;color:#64748b">Niet gelegen? Via dezelfde link kun je de afspraak verzetten of afzeggen.</p>
+   </div>`;
+}
+
+function reactieRegelsTekst(appt: LeadAppointmentMailPayload): string[] {
+  return [
+    'Bevestig je afspraak, of verzet of zeg hem af, via deze link:',
+    leadAfspraakUrl(appt.id),
+  ];
+}
+
 function leadMailLayout(title: string, bodyHtml: string): string {
   const year = new Date().getFullYear();
   return `<!DOCTYPE html><html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
@@ -99,6 +123,7 @@ function confirmationBody(appt: LeadAppointmentMailPayload): { html: string; tex
      <p style="margin:0 0 14px">Een van onze adviseurs komt bij je thuis langs om jouw huidige situatie zorgvuldig in kaart te brengen. Tijdens het bezoek bekijken we onder andere je energieverbruik, de aanwezigheid van zonnepanelen (indien van toepassing), je meterkast en jouw wensen voor de toekomst. Zo kunnen we bepalen welke thuisbatterij het beste bij jouw woning en verbruik past.</p>
      <p style="margin:0 0 14px">Na de inventarisatie ontvang je een <strong>persoonlijk en vrijblijvend advies</strong>, inclusief een aanbod op maat. Uiteraard is er tijdens de afspraak alle ruimte om vragen te stellen over de werking, besparingen, terugverdientijd en eventuele subsidiemogelijkheden.</p>
      <p style="margin:0 0 14px"><strong>Goed om te weten:</strong> de afspraak duurt gemiddeld <strong>45 tot 60 minuten</strong>. Het is prettig als degene die over de woning en de energierekening beslist, tijdens het gesprek aanwezig is.</p>
+     ${reactieKnoppen(appt)}
      <p style="margin:0 0 14px">Enkele dagen vóór de afspraak nemen we nog even contact met je op om de afspraak te bevestigen.</p>
      <p style="margin:0 0 14px">Komt het geplande moment toch niet uit? Reageer dan eenvoudig op deze e-mail. We plannen graag samen een nieuw moment in dat beter past.</p>
      <p style="margin:0">We kijken ernaar uit je binnenkort te ontmoeten!</p>`,
@@ -122,7 +147,9 @@ function confirmationBody(appt: LeadAppointmentMailPayload): { html: string; tex
     '',
     'Enkele dagen vóór de afspraak nemen we nog even contact met je op om de afspraak te bevestigen.',
     '',
-    'Komt het geplande moment toch niet uit? Reageer dan eenvoudig op deze e-mail. We plannen graag samen een nieuw moment in dat beter past.',
+    'Komt het geplande moment toch niet uit? Dan kun je hem hieronder zelf verzetten of afzeggen. Je mag ook op deze e-mail reageren.',
+    '',
+    ...reactieRegelsTekst(appt),
     '',
     'We kijken ernaar uit je binnenkort te ontmoeten!',
   ].filter(Boolean).join('\n');
@@ -147,7 +174,7 @@ function reminderBody(appt: LeadAppointmentMailPayload): { html: string; text: s
      ${appointmentHighlight(dateLabel, timeLabel, address)}
      <p style="margin:0 0 14px">Een adviseur komt dan langs voor een inventarisatie van je situatie, zodat we daarna een passend aanbod op maat kunnen doen.</p>
      <p style="margin:0 0 14px">We nemen van tevoren nog even contact met je op.</p>
-     <p style="margin:0">Wil je de afspraak verplaatsen? Reageer dan op deze e-mail.</p>`,
+     ${reactieKnoppen(appt)}`,
   );
 
   const text = [
@@ -163,7 +190,7 @@ function reminderBody(appt: LeadAppointmentMailPayload): { html: string; text: s
     '',
     'We nemen van tevoren nog even contact met je op.',
     '',
-    'Wil je de afspraak verplaatsen? Reageer dan op deze e-mail.',
+    ...reactieRegelsTekst(appt),
   ].filter(Boolean).join('\n');
 
   return {
