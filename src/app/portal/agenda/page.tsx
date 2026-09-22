@@ -23,6 +23,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AgendaKoppelen } from './AgendaKoppelen';
+import { ResultatenPaneel } from './ResultatenPaneel';
 import BookAppointmentModal from './BookAppointmentModal';
 import AppointmentDetailModal from './AppointmentDetailModal';
 import AvailabilityPanel from '../AvailabilityPanel';
@@ -152,6 +153,7 @@ export default function AgendaPage() {
   const [filterBranch, setFilterBranch] = useState<string>('all');
   const [zoek, setZoek] = useState('');
   const [toonKoppelen, setToonKoppelen] = useState(false);
+  const [toonResultaten, setToonResultaten] = useState(false);
   const [showBook, setShowBook] = useState(false);
   const [bookSlot, setBookSlot] = useState<{ start: Date; portalUserId?: string | null } | null>(null);
   const [detail, setDetail] = useState<Appointment | null>(null);
@@ -499,10 +501,27 @@ export default function AgendaPage() {
           </button>
         )}
 
+        <button
+          onClick={() => setToonResultaten(v => !v)}
+          className={`h-9 rounded-lg px-3 text-xs font-semibold transition ${
+            toonResultaten ? 'bg-brand-purple/10 text-brand-purple' : 'text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          Resultaten
+        </button>
+
         <span className="ml-auto text-xs text-slate-400">
           {zichtbaar.length} {zichtbaar.length === 1 ? 'afspraak' : 'afspraken'}
         </span>
       </div>
+
+      {toonResultaten && (
+        <ResultatenPaneel
+          afspraken={zichtbaar}
+          branchNames={branchNames}
+          teamNamen={Object.fromEntries(team.map(m => [m.id, m.name]))}
+        />
+      )}
 
       {/* Nudge: verstreken afspraken die nog niet zijn afgeboekt */}
       {aantalTeBoeken > 0 && filterStatus !== 'te_boeken' && (
