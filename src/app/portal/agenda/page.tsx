@@ -16,13 +16,25 @@ import {
   MapPinIcon,
   PhoneIcon,
   EnvelopeIcon,
+  MagnifyingGlassIcon,
+  ExclamationTriangleIcon,
+  LinkIcon,
+  ArrowDownTrayIcon,
 } from '@heroicons/react/24/outline';
 import { motion, AnimatePresence } from 'framer-motion';
+import { AgendaKoppelen } from './AgendaKoppelen';
 import BookAppointmentModal from './BookAppointmentModal';
 import AppointmentDetailModal from './AppointmentDetailModal';
 import AvailabilityPanel from '../AvailabilityPanel';
 import { PageHeader, ToggleGroup, T } from '../_ui';
-import { wachtOpAfboeking, OUTCOME_LABELS, type AppointmentOutcome } from '@/lib/appointmentOutcome';
+import { buildAfspraakCsv, afspraakBestandsnaam } from '@/lib/afspraakExport';
+import {
+  wachtOpAfboeking,
+  OUTCOME_LABELS,
+  STATUS_LABELS,
+  APPOINTMENT_STATUSES,
+  type AppointmentOutcome,
+} from '@/lib/appointmentOutcome';
 
 export interface Appointment {
   id: string;
@@ -97,6 +109,26 @@ function sameYMD(a: Date, b: Date): boolean {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 }
 
+/** Dag, week, maand of een doorlopende lijst. */
+type AgendaWeergave = 'day' | 'week' | 'month' | 'list';
+
+function startOfMonth(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), 1);
+}
+
+/** Het maandrooster begint op de maandag voor de eerste, zodat de weken kloppen. */
+function monthGridStart(d: Date): Date {
+  return startOfWeek(startOfMonth(d));
+}
+
+function monthGridDays(d: Date): Date[] {
+  const start = monthGridStart(d);
+  const eind = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+  const aantal = Math.ceil((eind.getTime() - start.getTime()) / 86_400_000) + 1;
+  const weken = Math.ceil(aantal / 7);
+  return Array.from({ length: weken * 7 }, (_, i) => addDays(start, i));
+}
+
 export default function AgendaPage() {
   const { customer, portalUser, hasPermission } = usePortal();
 
@@ -104,13 +136,17 @@ export default function AgendaPage() {
   const canViewAll = hasPermission(PERMISSIONS.APPOINTMENTS_VIEW_ALL);
   const canManageAvailability = hasPermission(PERMISSIONS.AVAILABILITY_MANAGE);
 
-  const [view, setView] = useState<'week' | 'day'>(typeof window !== 'undefined' && window.innerWidth < 768 ? 'day' : 'week');
+  const [view, setView] = useState<AgendaWeergave>(typeof window !== 'undefined' && window.innerWidth < 768 ? 'day' : 'week');
   const [anchor, setAnchor] = useState<Date>(new Date());
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [team, setTeam] = useState<TeamMember[]>([]);
   const [filterUserId, setFilterUserId] = useState<string | 'all' | 'unassigned'>('all');
+  const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [filterBranch, setFilterBranch] = useState<string>('all');
+  const [zoek, setZoek] = useState('');
+  const [toonKoppelen, setToonKoppelen] = useState(false);
   const [showBook, setShowBook] = useState(false);
   const [bookSlot, setBookSlot] = useState<{ start: Date; portalUserId?: string | null } | null>(null);
   const [detail, setDetail] = useState<Appointment | null>(null);
@@ -134,14 +170,22 @@ export default function AgendaPage() {
   const weekStart = useMemo(() => startOfWeek(anchor), [anchor]);
   const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart]);
   // Stable date bounds — new Date() every render would change load()'s identity and retrigger useEffect infinitely.
+  const monthDays = useMemo(() => monthGridDays(anchor), [anchor]);
   const rangeStart = useMemo(() => {
     if (view === 'week') return weekStart;
+    if (view === 'month') return monthGridStart(anchor);
+    /* De lijst kijkt bewust een maand terug en drie vooruit: hij is bedoeld om
+       te zoeken en na te lopen wat er nog afgeboekt moet worden, niet om één
+       dag te bekijken. */
+    if (view === 'list') return addDays(new Date(anchor.getFullYear(), anchor.getMonth(), 1), -31);
     return new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate());
   }, [view, weekStart, anchor]);
   const rangeEnd = useMemo(() => {
     if (view === 'week') return addDays(weekStart, 7);
+    if (view === 'month') return addDays(monthGridStart(anchor), monthDays.length);
+    if (view === 'list') return addDays(rangeStart, 31 + 92);
     return addDays(rangeStart, 1);
-  }, [view, weekStart, rangeStart]);
+  }, [view, weekStart, anchor, monthDays.length, rangeStart]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -194,9 +238,38 @@ export default function AgendaPage() {
       .catch(() => {});
   }, []);
 
+  /* Eén gefilterde lijst waar alle weergaven uit putten. Zou elke weergave
+     zelf filteren, dan laat de maand straks iets anders zien dan de week. */
+  const zichtbaar = useMemo(() => {
+    const term = zoek.trim().toLowerCase();
+    return appointments.filter(a => {
+      if (filterStatus === 'te_boeken') {
+        if (!wachtOpAfboeking(a)) return false;
+      } else if (filterStatus !== 'all' && a.status !== filterStatus) {
+        return false;
+      }
+      if (filterBranch !== 'all' && a.branch !== filterBranch) return false;
+      if (!term) return true;
+      const telefoonCijfers = (a.contact_phone || '').replace(/\D/g, '');
+      const zoekCijfers = term.replace(/\D/g, '');
+      return (
+        a.contact_name.toLowerCase().includes(term) ||
+        (a.city || '').toLowerCase().includes(term) ||
+        (a.postcode || '').toLowerCase().includes(term) ||
+        (a.street || '').toLowerCase().includes(term) ||
+        (zoekCijfers.length >= 3 && telefoonCijfers.includes(zoekCijfers))
+      );
+    });
+  }, [appointments, filterStatus, filterBranch, zoek]);
+
+  const aantalTeBoeken = useMemo(
+    () => appointments.filter(a => wachtOpAfboeking(a)).length,
+    [appointments],
+  );
+
   const appointmentsByDay = useMemo(() => {
     const map = new Map<string, Appointment[]>();
-    for (const a of appointments) {
+    for (const a of zichtbaar) {
       const d = new Date(a.starts_at);
       const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
       const arr = map.get(key) || [];
@@ -205,14 +278,32 @@ export default function AgendaPage() {
     }
     for (const arr of map.values()) arr.sort((a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime());
     return map;
-  }, [appointments]);
+  }, [zichtbaar]);
 
   function apptsForDay(d: Date): Appointment[] {
     return appointmentsByDay.get(`${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`) || [];
   }
 
-  const goPrev = () => setAnchor(view === 'week' ? addDays(anchor, -7) : addDays(anchor, -1));
-  const goNext = () => setAnchor(view === 'week' ? addDays(anchor, 7) : addDays(anchor, 1));
+  const exporteerCsv = () => {
+    if (zichtbaar.length === 0) return;
+    const blob = new Blob([buildAfspraakCsv(zichtbaar, branchNames)], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = afspraakBestandsnaam();
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const verschuif = (richting: 1 | -1) => {
+    if (view === 'week') return addDays(anchor, 7 * richting);
+    if (view === 'month' || view === 'list') {
+      return new Date(anchor.getFullYear(), anchor.getMonth() + richting, 1);
+    }
+    return addDays(anchor, richting);
+  };
+  const goPrev = () => setAnchor(verschuif(-1));
+  const goNext = () => setAnchor(verschuif(1));
   const goToday = () => setAnchor(new Date());
 
   const handleCreateSlot = (start: Date, portalUserId?: string | null) => {
@@ -251,9 +342,14 @@ export default function AgendaPage() {
   };
 
   // Header label
-  const headerLabel = view === 'week'
-    ? `${days[0].toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })} t/m ${days[6].toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' })}`
-    : anchor.toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const headerLabel =
+    view === 'week'
+      ? `${days[0].toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })} t/m ${days[6].toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' })}`
+      : view === 'month'
+        ? anchor.toLocaleDateString('nl-NL', { month: 'long', year: 'numeric' })
+        : view === 'list'
+          ? 'Vanaf een maand terug'
+          : anchor.toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
   // Hour grid config for desktop
   const HOUR_START = 7;
@@ -276,6 +372,18 @@ export default function AgendaPage() {
                 <span className="hidden sm:inline">Beschikbaarheid</span>
               </button>
             )}
+            <button onClick={() => setToonKoppelen(true)} className={T.btnSecondary}>
+              <LinkIcon className="h-4 w-4" />
+              <span className="hidden sm:inline">Koppelen</span>
+            </button>
+            <button
+              onClick={exporteerCsv}
+              disabled={zichtbaar.length === 0}
+              className={`${T.btnSecondary} disabled:opacity-40`}
+            >
+              <ArrowDownTrayIcon className="h-4 w-4" />
+              <span className="hidden sm:inline">Export</span>
+            </button>
             {canEdit && (
               <button
                 onClick={openNewAppointment}
@@ -316,10 +424,12 @@ export default function AgendaPage() {
         <div className="ml-auto">
           <ToggleGroup
             value={view}
-            onChange={(v: 'week' | 'day') => setView(v)}
+            onChange={(v: AgendaWeergave) => setView(v)}
             options={[
               { value: 'day', label: 'Dag' },
               { value: 'week', label: 'Week' },
+              { value: 'month', label: 'Maand' },
+              { value: 'list', label: 'Lijst' },
             ]}
             ariaLabel="Agenda-weergave"
           />
@@ -337,6 +447,139 @@ export default function AgendaPage() {
           </select>
         )}
       </div>
+
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative min-w-[180px] flex-1 sm:max-w-xs">
+          <MagnifyingGlassIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden />
+          <input
+            value={zoek}
+            onChange={e => setZoek(e.target.value)}
+            placeholder="Zoek op naam, plaats of telefoon..."
+            className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-700 outline-none focus:border-brand-purple/50"
+          />
+        </div>
+
+        <select
+          value={filterStatus}
+          onChange={e => setFilterStatus(e.target.value)}
+          className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-sm text-slate-700 outline-none focus:border-brand-purple/50"
+        >
+          <option value="all">Alle statussen</option>
+          {aantalTeBoeken > 0 && <option value="te_boeken">Nog afboeken ({aantalTeBoeken})</option>}
+          {APPOINTMENT_STATUSES.map(st => (
+            <option key={st} value={st}>{STATUS_LABELS[st]}</option>
+          ))}
+        </select>
+
+        {Object.keys(branchNames).length > 1 && (
+          <select
+            value={filterBranch}
+            onChange={e => setFilterBranch(e.target.value)}
+            className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-sm text-slate-700 outline-none focus:border-brand-purple/50"
+          >
+            <option value="all">Alle branches</option>
+            {Object.entries(branchNames).map(([slug, naam]) => (
+              <option key={slug} value={slug}>{naam}</option>
+            ))}
+          </select>
+        )}
+
+        {(filterStatus !== 'all' || filterBranch !== 'all' || zoek) && (
+          <button
+            onClick={() => { setFilterStatus('all'); setFilterBranch('all'); setZoek(''); }}
+            className="h-9 rounded-lg px-2 text-xs font-semibold text-slate-500 hover:text-slate-800"
+          >
+            Filters wissen
+          </button>
+        )}
+
+        <span className="ml-auto text-xs text-slate-400">
+          {zichtbaar.length} {zichtbaar.length === 1 ? 'afspraak' : 'afspraken'}
+        </span>
+      </div>
+
+      {/* Nudge: verstreken afspraken die nog niet zijn afgeboekt */}
+      {aantalTeBoeken > 0 && filterStatus !== 'te_boeken' && (
+        <button
+          onClick={() => setFilterStatus('te_boeken')}
+          className="flex w-full items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-left text-sm text-amber-900 transition hover:bg-amber-100"
+        >
+          <ExclamationTriangleIcon className="h-4 w-4 shrink-0 text-amber-500" />
+          <span>
+            <strong>{aantalTeBoeken}</strong> {aantalTeBoeken === 1 ? 'afspraak is' : 'afspraken zijn'} geweest maar nog niet afgeboekt.
+          </span>
+          <span className="ml-auto shrink-0 text-xs font-semibold underline">Bekijk</span>
+        </button>
+      )}
+
+      {/* Maandweergave */}
+      {view === 'month' && (
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50">
+            {DAY_SHORT.slice(1).concat(DAY_SHORT[0]).map(d => (
+              <div key={d} className="p-2 text-center text-[10px] font-semibold uppercase tracking-wider text-slate-400">{d}</div>
+            ))}
+          </div>
+          <div className="grid grid-cols-7">
+            {monthDays.map(d => {
+              const dagAppts = apptsForDay(d);
+              const isHuidigeMaand = d.getMonth() === anchor.getMonth();
+              const isToday = sameYMD(d, new Date());
+              return (
+                <div
+                  key={d.toISOString()}
+                  className={`min-h-[92px] border-b border-r border-slate-100 p-1.5 ${isHuidigeMaand ? 'bg-white' : 'bg-slate-50/60'}`}
+                >
+                  <div className="mb-1 flex items-center justify-between">
+                    <span className={`text-[11px] font-bold ${isToday ? 'flex h-5 w-5 items-center justify-center rounded-full bg-brand-purple text-white' : isHuidigeMaand ? 'text-slate-700' : 'text-slate-300'}`}>
+                      {d.getDate()}
+                    </span>
+                    {canEdit && isHuidigeMaand && (
+                      <button
+                        onClick={() => { const t = new Date(d); t.setHours(9, 0, 0, 0); handleCreateSlot(t); }}
+                        className="text-slate-300 hover:text-brand-purple"
+                        aria-label="Afspraak toevoegen"
+                      >
+                        <PlusIcon className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                  <div className="space-y-0.5">
+                    {dagAppts.slice(0, 3).map(a => (
+                      <button
+                        key={a.id}
+                        onClick={() => setDetail(a)}
+                        className={`block w-full truncate rounded border px-1 py-0.5 text-left text-[10px] font-semibold ${STATUS_STYLES[a.status] || STATUS_STYLES.scheduled}`}
+                      >
+                        {new Date(a.starts_at).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })} {a.contact_name}
+                      </button>
+                    ))}
+                    {dagAppts.length > 3 && (
+                      <button
+                        onClick={() => { setAnchor(d); setView('day'); }}
+                        className="w-full text-left text-[10px] font-semibold text-slate-400 hover:text-brand-purple"
+                      >
+                        +{dagAppts.length - 3} meer
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Lijstweergave */}
+      {view === 'list' && (
+        <AfsprakenLijst
+          appts={zichtbaar}
+          loading={loading}
+          branchNames={branchNames}
+          onSelect={setDetail}
+        />
+      )}
 
       {/* Week view (desktop) */}
       {view === 'week' && (
@@ -409,7 +652,7 @@ export default function AgendaPage() {
       )}
 
       {/* Day / mobile week view as list */}
-      <div className={view === 'week' ? 'space-y-2 md:hidden' : 'space-y-2'}>
+      <div className={view === 'week' ? 'space-y-2 md:hidden' : view === 'day' ? 'space-y-2' : 'hidden'}>
         {view === 'day' ? (
           <DayList
             date={anchor}
@@ -451,6 +694,10 @@ export default function AgendaPage() {
             onCreated={() => { setShowBook(false); setBookSlot(null); load(); }}
           />
         )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {toonKoppelen && <AgendaKoppelen onClose={() => setToonKoppelen(false)} />}
       </AnimatePresence>
 
       <AnimatePresence>
@@ -639,5 +886,99 @@ function UitkomstBadge({ afspraak }: { afspraak: Appointment }) {
         <span>· €{Number(afspraak.deal_value).toLocaleString('nl-NL')}</span>
       )}
     </span>
+  );
+}
+
+
+/**
+ * Doorlopende lijst over een langere periode.
+ *
+ * Bedoeld om in te zoeken en na te lopen wat er nog openstaat, niet om één dag
+ * te bekijken. Daarom gegroepeerd per dag met een kop, en niet per uur.
+ */
+function AfsprakenLijst({
+  appts,
+  loading,
+  branchNames,
+  onSelect,
+}: {
+  appts: Appointment[];
+  loading: boolean;
+  branchNames: Record<string, string>;
+  onSelect: (a: Appointment) => void;
+}) {
+  const gegroepeerd = useMemo(() => {
+    const gesorteerd = [...appts].sort(
+      (a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime(),
+    );
+    const groepen: { dag: Date; rijen: Appointment[] }[] = [];
+    for (const a of gesorteerd) {
+      const d = new Date(a.starts_at);
+      const laatste = groepen[groepen.length - 1];
+      if (laatste && sameYMD(laatste.dag, d)) laatste.rijen.push(a);
+      else groepen.push({ dag: d, rijen: [a] });
+    }
+    return groepen;
+  }, [appts]);
+
+  if (loading) {
+    return (
+      <div className="space-y-2">
+        {[0, 1, 2, 3].map(i => <div key={i} className="h-16 animate-pulse rounded-xl bg-slate-100" />)}
+      </div>
+    );
+  }
+
+  if (gegroepeerd.length === 0) {
+    return (
+      <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-12 text-center">
+        <CalendarDaysIcon className="mx-auto mb-3 h-10 w-10 text-slate-200" />
+        <p className="text-sm font-medium text-slate-400">Geen afspraken gevonden</p>
+        <p className="mt-1 text-xs text-slate-400">Pas je filters aan of kies een andere periode.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {gegroepeerd.map(groep => (
+        <section key={groep.dag.toISOString()} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <header className={`px-4 py-2 ${sameYMD(groep.dag, new Date()) ? 'bg-brand-purple/5' : 'bg-slate-50'}`}>
+            <span className="text-sm font-bold text-slate-900">
+              {sameYMD(groep.dag, new Date()) ? 'Vandaag' : DAY_LONG[groep.dag.getDay()]}
+            </span>
+            <span className="ml-2 text-xs text-slate-500">
+              {groep.dag.toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' })}
+            </span>
+          </header>
+          <div className="divide-y divide-slate-100">
+            {groep.rijen.map(a => {
+              const t = new Date(a.starts_at);
+              return (
+                <button
+                  key={a.id}
+                  onClick={() => onSelect(a)}
+                  className="flex w-full items-start gap-3 px-4 py-3 text-left transition hover:bg-slate-50"
+                >
+                  <div className={`mt-0.5 flex h-9 w-14 shrink-0 items-center justify-center rounded-md border text-[11px] font-semibold ${STATUS_STYLES[a.status] || STATUS_STYLES.scheduled}`}>
+                    {t.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="truncate text-sm font-semibold text-slate-900">{a.contact_name}</p>
+                      <UitkomstBadge afspraak={a} />
+                    </div>
+                    <div className="mt-0.5 flex flex-wrap gap-x-2 text-xs text-slate-500">
+                      <span>{branchNames[a.branch] || a.branch}</span>
+                      {a.city && <span>{a.city}</span>}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      ))}
+    </div>
   );
 }
