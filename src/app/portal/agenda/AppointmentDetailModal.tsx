@@ -24,6 +24,7 @@ import {
 import type { Appointment } from './page';
 import { AfboekPaneel } from './AfboekPaneel';
 import { VerzetPaneel } from './VerzetPaneel';
+import { AfspraakReclamatie } from './AfspraakReclamatie';
 import { STATUS_LABELS as GEDEELDE_STATUS_LABELS } from '@/lib/appointmentOutcome';
 
 interface TeamMember { id: string; name: string; role: string }
@@ -44,6 +45,7 @@ export default function AppointmentDetailModal({
   canEdit,
   canViewAll,
   branchNames,
+  isEigenAgenda = true,
   onClose,
   onUpdated,
 }: {
@@ -52,6 +54,8 @@ export default function AppointmentDetailModal({
   canEdit: boolean;
   canViewAll: boolean;
   branchNames: Record<string, string>;
+  /** False wanneer we kijken naar een afspraak die wij bij een ander inboekten. */
+  isEigenAgenda?: boolean;
   onClose: () => void;
   onUpdated: () => void;
 }) {
@@ -255,6 +259,14 @@ export default function AppointmentDetailModal({
                     <p className="whitespace-pre-wrap">{appointment.notes}</p>
                   </div>
                 </section>
+              )}
+
+              {/* Reclamatie op een geleverde afspraak. Alleen de ontvanger van
+                  de afspraak kan reclameren, niet de partij die hem inboekte:
+                  juist een afspraak die een ander voor je plande is het geval
+                  waarin je wilt kunnen terugmelden dat hij niet deugde. */}
+              {canEdit && isEigenAgenda && (
+                <AfspraakReclamatie appointmentId={appointment.id} />
               )}
 
               {/* Reactie van de lead op zijn eigen bevestigingslink */}

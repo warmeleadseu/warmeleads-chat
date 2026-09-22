@@ -156,6 +156,16 @@ export default function AgendaPage() {
   const [zoek, setZoek] = useState('');
   const [toonKoppelen, setToonKoppelen] = useState(false);
   const [toonResultaten, setToonResultaten] = useState(false);
+  /* Kijken we naar de eigen agenda of naar wat we bij anderen hebben ingepland? */
+  const [bereik, setBereik] = useState<'eigen' | 'weggeboekt'>('eigen');
+  const [heeftKoppelingen, setHeeftKoppelingen] = useState(false);
+
+  useEffect(() => {
+    portalFetch('/api/portal/koppelingen')
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => setHeeftKoppelingen(Array.isArray(d?.koppelingen) && d.koppelingen.length > 0))
+      .catch(() => {});
+  }, []);
   const [showBook, setShowBook] = useState(false);
   const [bookSlot, setBookSlot] = useState<{ start: Date; portalUserId?: string | null } | null>(null);
   const [detail, setDetail] = useState<Appointment | null>(null);
@@ -203,8 +213,13 @@ export default function AgendaPage() {
         from: rangeStart.toISOString(),
         to: rangeEnd.toISOString(),
       });
-      if (filterUserId === 'unassigned') q.set('portal_user_id', 'null');
-      else if (filterUserId !== 'all') q.set('portal_user_id', filterUserId);
+      if (bereik === 'weggeboekt') {
+        q.set('bereik', 'weggeboekt');
+      } else if (filterUserId === 'unassigned') {
+        q.set('portal_user_id', 'null');
+      } else if (filterUserId !== 'all') {
+        q.set('portal_user_id', filterUserId);
+      }
       const res = await portalFetch(`/api/portal/appointments?${q.toString()}`);
       if (res.ok) {
         const data = await res.json();
@@ -220,7 +235,7 @@ export default function AgendaPage() {
     } finally {
       setLoading(false);
     }
-  }, [rangeStart, rangeEnd, filterUserId]);
+  }, [rangeStart, rangeEnd, filterUserId, bereik]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -444,7 +459,7 @@ export default function AgendaPage() {
           />
         </div>
 
-        {canViewAll && team.length > 0 && (
+        {bereik === 'eigen' && canViewAll && team.length > 0 && (
           <select
             value={filterUserId}
             onChange={e => setFilterUserId(e.target.value as 'all' | 'unassigned' | string)}
@@ -456,6 +471,31 @@ export default function AgendaPage() {
           </select>
         )}
       </div>
+
+      {/* Eigen agenda of wat we bij anderen hebben ingepland */}
+      {heeftKoppelingen && (
+        <div className={`${T.pillGroup} w-full sm:w-auto`}>
+          <button
+            onClick={() => setBereik('eigen')}
+            className={`${T.pillItem} flex-1 ${bereik === 'eigen' ? T.pillActive : T.pillIdle}`}
+          >
+            Mijn agenda
+          </button>
+          <button
+            onClick={() => { setBereik('weggeboekt'); setView('list'); }}
+            className={`${T.pillItem} flex-1 ${bereik === 'weggeboekt' ? T.pillActive : T.pillIdle}`}
+          >
+            Weggeboekt bij anderen
+          </button>
+        </div>
+      )}
+
+      {bereik === 'weggeboekt' && (
+        <p className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-2.5 text-xs leading-relaxed text-sky-900">
+          Dit zijn de afspraken die jij in de agenda van een andere klant hebt ingepland. De uitkomst
+          erachter wordt door hén ingevuld na het bezoek, dus hier zie je wat jouw afspraken hebben opgeleverd.
+        </p>
+      )}
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-2">
@@ -526,7 +566,7 @@ export default function AgendaPage() {
       )}
 
       {/* Nudge: verstreken afspraken die nog niet zijn afgeboekt */}
-      {aantalTeBoeken > 0 && filterStatus !== 'te_boeken' && (
+      {bereik === 'eigen' && aantalTeBoeken > 0 && filterStatus !== 'te_boeken' && (
         <button
           onClick={() => setFilterStatus('te_boeken')}
           className="flex w-full items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-left text-sm text-amber-900 transition hover:bg-amber-100"
@@ -540,7 +580,7 @@ export default function AgendaPage() {
       )}
 
       {/* Maandweergave */}
-      {view === 'month' && (
+      {bereik === 'eigen' && view === 'month' && (
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50">
             {DAY_SHORT.slice(1).concat(DAY_SHORT[0]).map(d => (
@@ -598,17 +638,18 @@ export default function AgendaPage() {
       )}
 
       {/* Lijstweergave */}
-      {view === 'list' && (
+      {(view === 'list' || bereik === 'weggeboekt') && (
         <AfsprakenLijst
           appts={zichtbaar}
           loading={loading}
           branchNames={branchNames}
           onSelect={setDetail}
+          toonKlant={bereik === 'weggeboekt'}
         />
       )}
 
       {/* Week view (desktop) */}
-      {view === 'week' && (
+      {bereik === 'eigen' && view === 'week' && (
         <div className="hidden overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm md:block">
           <div className="grid grid-cols-[60px_repeat(7,minmax(0,1fr))]">
             <div className="border-b border-slate-200 bg-slate-50 p-2"></div>
@@ -678,7 +719,7 @@ export default function AgendaPage() {
       )}
 
       {/* Day / mobile week view as list */}
-      <div className={view === 'week' ? 'space-y-2 md:hidden' : view === 'day' ? 'space-y-2' : 'hidden'}>
+      <div className={bereik !== 'eigen' ? 'hidden' : view === 'week' ? 'space-y-2 md:hidden' : view === 'day' ? 'space-y-2' : 'hidden'}>
         {view === 'day' ? (
           <DayList
             date={anchor}
@@ -734,6 +775,7 @@ export default function AgendaPage() {
             canEdit={canEdit}
             canViewAll={canViewAll}
             branchNames={branchNames}
+            isEigenAgenda={bereik === 'eigen'}
             onClose={() => setDetail(null)}
             onUpdated={() => { setDetail(null); load(); }}
           />
@@ -935,11 +977,14 @@ function AfsprakenLijst({
   loading,
   branchNames,
   onSelect,
+  toonKlant = false,
 }: {
   appts: Appointment[];
   loading: boolean;
   branchNames: Record<string, string>;
   onSelect: (a: Appointment) => void;
+  /** Bij weggeboekte afspraken staat er in wiens agenda hij terechtkwam. */
+  toonKlant?: boolean;
 }) {
   const gegroepeerd = useMemo(() => {
     const gesorteerd = [...appts].sort(
@@ -1003,6 +1048,9 @@ function AfsprakenLijst({
                       <UitkomstBadge afspraak={a} />
                     </div>
                     <div className="mt-0.5 flex flex-wrap gap-x-2 text-xs text-slate-500">
+                      {toonKlant && a.agenda_van?.name && (
+                        <span className="font-semibold text-brand-purple">{a.agenda_van.name}</span>
+                      )}
                       <span>{branchNames[a.branch] || a.branch}</span>
                       {a.city && <span>{a.city}</span>}
                     </div>

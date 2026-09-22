@@ -6,6 +6,7 @@ import { pickAppointmentAssignee } from '@/lib/appointmentAssignment';
 import { sendAppointmentCreatedEmail } from '@/lib/appointmentEmails';
 import { maybeSendLeadThuisbatterijConfirmation } from '@/lib/leadThuisbatterijAppointmentEmails';
 import { sendAppointmentPush } from '@/lib/pushNotification';
+import { syncAfsprakenBatch } from '@/lib/appointmentBatchSync';
 
 export async function GET(request: NextRequest) {
   const admin = await verifyAdmin(request);
@@ -188,6 +189,8 @@ export async function POST(request: NextRequest) {
   } catch (e) {
     console.error('[admin/appointments post-notify]', e);
   }
+
+  await syncAfsprakenBatch(supabase, resolvedBatchId);
 
   return NextResponse.json(data);
 }

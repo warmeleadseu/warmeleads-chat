@@ -5,6 +5,7 @@ import { validateSlot } from '@/lib/appointmentSlots';
 import { sendAppointmentCancelledEmail } from '@/lib/appointmentEmails';
 import { sendAppointmentPush } from '@/lib/pushNotification';
 import { bereidAfboekingVoor, isAppointmentStatus } from '@/lib/appointmentOutcome';
+import { syncAfsprakenBatch } from '@/lib/appointmentBatchSync';
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const admin = await verifyAdmin(request);
@@ -88,6 +89,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     .single();
 
   if (error) return NextResponse.json({ error: 'Bewerken mislukt' }, { status: 500 });
+
+  if (updates.status) await syncAfsprakenBatch(supabase, appt.batch_id);
+
   return NextResponse.json(data);
 }
 

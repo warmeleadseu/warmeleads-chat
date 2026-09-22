@@ -3,6 +3,7 @@ import { verifyCustomer, portalUnauthorized } from '@/lib/portalAuth';
 import { hasPermission, PERMISSIONS, forbidden } from '@/lib/portalPermissions';
 import { createServerClient } from '@/lib/supabase';
 import { validateSlot } from '@/lib/appointmentSlots';
+import { syncAfsprakenBatch } from '@/lib/appointmentBatchSync';
 
 /**
  * Een afspraak verzetten naar een nieuw moment.
@@ -117,6 +118,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     await supabase.from('appointments').delete().eq('id', nieuw.id);
     return NextResponse.json({ error: 'Verzetten mislukt' }, { status: 500 });
   }
+
+  /* De oude rij telt niet meer mee (status 'rescheduled') en de nieuwe wel,
+     dus per saldo verandert er niets. Toch hertellen, zodat een batch die om
+     wat voor reden dan ook was scheefgelopen zichzelf herstelt. */
+  await syncAfsprakenBatch(supabase, appt.batch_id);
 
   return NextResponse.json({ appointment: nieuw, vervangt: appt.id });
 }

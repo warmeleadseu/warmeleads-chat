@@ -4,6 +4,7 @@ import { hasPermission, PERMISSIONS, forbidden } from '@/lib/portalPermissions';
 import { createServerClient } from '@/lib/supabase';
 import { validateSlot } from '@/lib/appointmentSlots';
 import { vindKoppeling, boekingsVelden } from '@/lib/portaalkoppelingen';
+import { syncAfsprakenBatch } from '@/lib/appointmentBatchSync';
 import { pickAppointmentAssignee } from '@/lib/appointmentAssignment';
 import { sendAppointmentCreatedEmail } from '@/lib/appointmentEmails';
 import { maybeSendLeadThuisbatterijConfirmation } from '@/lib/leadThuisbatterijAppointmentEmails';
@@ -302,6 +303,10 @@ export async function POST(request: NextRequest) {
 
   // Await notifications: Vercel freezes the lambda after the response, so
   // fire-and-forget often never reaches the lead Gmail send.
+  /* De teller van de afsprakenbatch bijwerken. Zonder dit blijft hij op nul
+     staan terwijl er wel geleverd is, en raakt een batch nooit vol. */
+  await syncAfsprakenBatch(supabase, resolvedBatchId);
+
   try {
     await maybeSendLeadThuisbatterijConfirmation(data);
 
@@ -313,17 +318,42 @@ export async function POST(request: NextRequest) {
     ]);
     const branchName = branchRes.data?.name;
     const assignee = (assigneeRes.data as { name?: string; email?: string } | null) || null;
+
+    /* De bevestiging hoort bij de eigenaar van de agenda, niet bij degene die
+       hem invulde. Boekt een partner voor een ander, dan verscheen de afspraak
+       daar eerder stilletjes terwijl de boeker de mail kreeg. */
+    let ontvanger = {
+      name: session.customer.name,
+      email: session.customer.email,
+      contact_person: session.customer.contact_person ?? undefined,
+    };
+    if (grensoverschrijdend) {
+      const { data: doel } = await supabase
+        .from('customers')
+        .select('name, email, contact_person')
+        .eq('id', doelKlantId)
+        .maybeSingle();
+      if (doel) {
+        ontvanger = {
+          name: doel.name,
+          email: doel.email,
+          contact_person: doel.contact_person ?? undefined,
+        };
+      }
+    }
+
     await sendAppointmentCreatedEmail(
+      ontvanger,
       {
-        name: session.customer.name,
-        email: session.customer.email,
-        contact_person: session.customer.contact_person,
+        ...data,
+        branchName,
+        portal_user_name: assignee?.name || null,
+        geboekt_door_naam: grensoverschrijdend ? session.customer.name : null,
       },
-      { ...data, branchName, portal_user_name: assignee?.name || null },
       assignee?.email ? { name: assignee.name || '', email: assignee.email } : undefined,
     );
     const whenLabel = new Date(data.starts_at).toLocaleString('nl-NL', { timeZone: 'Europe/Amsterdam', weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-    await sendAppointmentPush(session.customer.id, 'created', {
+    await sendAppointmentPush(doelKlantId, 'created', {
       contactName: data.contact_name,
       whenLabel,
       appointmentId: data.id,

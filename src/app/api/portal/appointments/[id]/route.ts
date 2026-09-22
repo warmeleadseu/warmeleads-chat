@@ -6,6 +6,7 @@ import { validateSlot } from '@/lib/appointmentSlots';
 import { sendAppointmentCancelledEmail } from '@/lib/appointmentEmails';
 import { sendAppointmentPush } from '@/lib/pushNotification';
 import { bronMagNogWijzigen, type Portaalkoppeling } from '@/lib/portaalkoppelingen';
+import { syncAfsprakenBatch } from '@/lib/appointmentBatchSync';
 import {
   bereidAfboekingVoor,
   mayTransition,
@@ -194,6 +195,10 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     console.error('[portal/appointments PATCH]', error);
     return NextResponse.json({ error: 'Bewerken mislukt' }, { status: 500 });
   }
+
+  /* Annuleren geeft een plek terug aan de batch, afboeken houdt hem bezet. */
+  if (updates.status) await syncAfsprakenBatch(supabase, appt.batch_id);
+
   return NextResponse.json(data);
 }
 
@@ -222,6 +227,8 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     .eq('id', id);
 
   if (error) return NextResponse.json({ error: 'Annuleren mislukt' }, { status: 500 });
+
+  await syncAfsprakenBatch(supabase, appt.batch_id);
 
   (async () => {
     try {

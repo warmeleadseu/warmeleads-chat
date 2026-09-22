@@ -72,6 +72,7 @@ const NAV: {
   { label: 'Batches', href: '/admin/batches', icon: RectangleStackIcon, roles: ['superadmin', 'admin', 'accountmanager'] },
   { label: 'Levering batches', href: '/admin/batch-levering', icon: SignalIcon, roles: ['superadmin', 'admin', 'accountmanager'] },
   { label: 'Klant-afspraken', href: '/admin/appointments', icon: CalendarDaysIcon, roles: ['superadmin', 'admin', 'accountmanager'] },
+  { label: 'Afspraak-reclamaties', href: '/admin/afspraak-reclamaties', icon: FlagIcon, roles: ['superadmin', 'admin'] },
   { label: 'Portaalkoppelingen', href: '/admin/portaalkoppelingen', icon: LinkIcon, roles: ['superadmin', 'admin'] },
   { label: 'Bestellingen', href: '/admin/orders', icon: ShoppingCartIcon, roles: ['superadmin', 'admin', 'accountmanager'] },
   { label: 'Facturen', href: '/admin/invoices', icon: DocumentTextIcon, roles: ['superadmin', 'admin', 'accountmanager'] },

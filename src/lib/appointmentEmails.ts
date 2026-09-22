@@ -18,6 +18,8 @@ interface AppointmentPayload {
   city: string | null;
   notes: string | null;
   portal_user_name?: string | null;
+  /** Gevuld als een gekoppeld portaal deze afspraak voor je inplande. */
+  geboekt_door_naam?: string | null;
 }
 
 interface CustomerInfo {
@@ -67,6 +69,7 @@ function appointmentCard(appt: AppointmentPayload): string {
     loc ? `<tr><td style="padding:6px 0;color:#64748b;font-size:13px">Adres</td><td style="padding:6px 0;text-align:right">${mapLink}</td></tr>` : '',
     appt.branchName ? `<tr><td style="padding:6px 0;color:#64748b;font-size:13px">Branche</td><td style="padding:6px 0;color:#0f172a;font-size:14px;text-align:right">${appt.branchName}</td></tr>` : '',
     appt.portal_user_name ? `<tr><td style="padding:6px 0;color:#64748b;font-size:13px">Adviseur</td><td style="padding:6px 0;color:#0f172a;font-size:14px;text-align:right">${appt.portal_user_name}</td></tr>` : '',
+    appt.geboekt_door_naam ? `<tr><td style="padding:6px 0;color:#64748b;font-size:13px">Ingepland door</td><td style="padding:6px 0;color:#0f172a;font-size:14px;text-align:right">${appt.geboekt_door_naam}</td></tr>` : '',
   ].filter(Boolean).join('');
   return `<table cellpadding="0" cellspacing="0" style="width:100%;margin:16px 0;border:1px solid #e2e8f0;border-radius:10px;padding:16px 20px;background:#fafafa">
     ${rows}
