@@ -130,8 +130,19 @@ export function bouwAgendaIcs(
 
 /* ── Token ────────────────────────────────────────────────────────────── */
 
+/**
+ * Het geheim waarmee links worden ondertekend.
+ *
+ * Bij voorkeur een eigen variabele, want wie hem deelt met CRON_SECRET zet
+ * vast dat het roteren van dat cron-geheim stilletjes elk bestaand
+ * agenda-abonnement en elke verstuurde afspraaklink ongeldig maakt. De
+ * terugval houdt het werkend zolang AGENDA_TOKEN_SECRET nog niet is gezet.
+ */
 function sleutel(): string {
-  const s = process.env.CRON_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const s =
+    process.env.AGENDA_TOKEN_SECRET ||
+    process.env.CRON_SECRET ||
+    process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!s) throw new Error('Geen servergeheim beschikbaar voor agenda-tokens');
   return s;
 }
