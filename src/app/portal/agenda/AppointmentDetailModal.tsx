@@ -68,6 +68,7 @@ export default function AppointmentDetailModal({
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [verzetten, setVerzetten] = useState(false);
+  const [bevestigen, setBevestigen] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
@@ -120,6 +121,19 @@ export default function AppointmentDetailModal({
       onUpdated();
     } finally {
       setSaving(false);
+    }
+  };
+
+  const bevestig = async () => {
+    setBevestigen(true);
+    setErr(null);
+    try {
+      const res = await portalFetch(`/api/portal/appointments/${appointment.id}/bevestigen`, { method: 'POST' });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) { setErr(d.error || 'Bevestigen mislukt'); return; }
+      onUpdated();
+    } finally {
+      setBevestigen(false);
     }
   };
 
@@ -240,6 +254,36 @@ export default function AppointmentDetailModal({
                     <ChatBubbleBottomCenterTextIcon className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
                     <p className="whitespace-pre-wrap">{appointment.notes}</p>
                   </div>
+                </section>
+              )}
+
+              {/* Ingepland door een gekoppeld portaal */}
+              {appointment.geboekt_door_customer_id && (
+                <section className="mt-5 rounded-xl border border-sky-200 bg-sky-50 p-3">
+                  <p className="text-xs font-semibold text-sky-900">
+                    {appointment.geboekt_door_customer_id === appointment.customer_id
+                      ? 'Ingepland via een koppeling'
+                      : `Ingepland door ${appointment.geboekt_door?.name || 'een partner'}`}
+                  </p>
+                  {appointment.bevestigd_at ? (
+                    <p className="mt-1 text-xs text-sky-800">
+                      Bevestigd op {new Date(appointment.bevestigd_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long' })}.
+                      De boekende partij kan hem niet meer wijzigen.
+                    </p>
+                  ) : canEdit ? (
+                    <>
+                      <p className="mt-1 text-xs leading-relaxed text-sky-800">
+                        Zolang je niet bevestigt, kan de boekende partij deze afspraak nog verzetten of annuleren.
+                      </p>
+                      <button
+                        onClick={bevestig}
+                        disabled={bevestigen}
+                        className="mt-2 h-9 rounded-lg bg-sky-600 px-4 text-xs font-bold text-white hover:bg-sky-700 disabled:opacity-50"
+                      >
+                        {bevestigen ? 'Bevestigen...' : 'Afspraak bevestigen'}
+                      </button>
+                    </>
+                  ) : null}
                 </section>
               )}
 

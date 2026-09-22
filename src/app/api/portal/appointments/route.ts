@@ -3,6 +3,7 @@ import { verifyCustomer, portalUnauthorized } from '@/lib/portalAuth';
 import { hasPermission, PERMISSIONS, forbidden } from '@/lib/portalPermissions';
 import { createServerClient } from '@/lib/supabase';
 import { validateSlot } from '@/lib/appointmentSlots';
+import { vindKoppeling, boekingsVelden } from '@/lib/portaalkoppelingen';
 import { pickAppointmentAssignee } from '@/lib/appointmentAssignment';
 import { sendAppointmentCreatedEmail } from '@/lib/appointmentEmails';
 import { maybeSendLeadThuisbatterijConfirmation } from '@/lib/leadThuisbatterijAppointmentEmails';
@@ -24,6 +25,8 @@ export async function GET(request: NextRequest) {
   const to = url.searchParams.get('to');
   const status = url.searchParams.get('status'); // scheduled|completed|cancelled|no_show|rescheduled
   const portalUserIdParam = url.searchParams.get('portal_user_id');
+  /* 'weggeboekt' toont wat dit portaal bij ándere klanten heeft ingepland. */
+  const bereik = url.searchParams.get('bereik');
 
   // Valideer range. Zonder from/to defaulten we naar [now-31d, now+31d] om volume te begrenzen.
   let fromDate: Date | null = null;
@@ -62,16 +65,26 @@ export async function GET(request: NextRequest) {
   const supabase = createServerClient();
   let q = supabase
     .from('appointments')
-    .select('*')
-    .eq('customer_id', session.customer.id)
+    .select('*, geboekt_door:customers!appointments_geboekt_door_customer_id_fkey(name), agenda_van:customers!appointments_customer_id_fkey(name)')
     .order('starts_at', { ascending: true })
     .limit(MAX_ROWS + 1);
+
+  if (bereik === 'weggeboekt') {
+    /* De afspraken die wij bij een ander hebben ingepland. Die staan in diens
+       agenda, dus op customer_id filteren zou ze nooit vinden. */
+    q = q.eq('geboekt_door_customer_id', session.customer.id);
+  } else {
+    q = q.eq('customer_id', session.customer.id);
+  }
 
   if (fromDate) q = q.gte('starts_at', fromDate.toISOString());
   if (toDate) q = q.lte('starts_at', toDate.toISOString());
   if (status) q = q.eq('status', status);
 
-  if (session.portalUser && session.portalUser.role === 'agent' && !hasPermission(session, PERMISSIONS.APPOINTMENTS_VIEW_ALL)) {
+  if (bereik === 'weggeboekt') {
+    /* De adviseur op zo'n afspraak hoort bij de ontvangende klant, niet bij
+       ons, dus filteren op ons eigen team levert altijd niets op. */
+  } else if (session.portalUser && session.portalUser.role === 'agent' && !hasPermission(session, PERMISSIONS.APPOINTMENTS_VIEW_ALL)) {
     q = q.eq('portal_user_id', session.portalUser.id);
   } else if (portalUserIdParam) {
     if (portalUserIdParam === 'null') q = q.is('portal_user_id', null);
@@ -119,6 +132,7 @@ export async function POST(request: NextRequest) {
     lead_id,
     lead_assignment_id,
     batch_id,
+    voor_klant,
   } = body;
 
   if (!branch || !starts_at || !contact_name) {
@@ -126,6 +140,23 @@ export async function POST(request: NextRequest) {
   }
 
   const supabase = createServerClient();
+
+  /* Boeken bij een ander portaal. De koppeling is de enige plek waar dat wordt
+     toegestaan, en die bepaalt ook of de lead meegaat en of de afspraak een
+     plek uit de batch van de ontvanger opsnoept. */
+  const doelKlantId: string = voor_klant || session.customer.id;
+  const grensoverschrijdend = doelKlantId !== session.customer.id;
+  let koppeling = null;
+
+  if (grensoverschrijdend) {
+    koppeling = await vindKoppeling(supabase, session.customer.id, doelKlantId, branch);
+    if (!koppeling) {
+      return NextResponse.json(
+        { error: 'Je mag voor deze klant geen afspraken inboeken in deze branche' },
+        { status: 403 },
+      );
+    }
+  }
 
   // Determine defaults from branch
   const { data: branchRow } = await supabase
@@ -138,9 +169,27 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Onbekende branche' }, { status: 400 });
   }
 
-  // Check branch is part of customer's branches
-  if (!(session.customer.branches || []).includes(branch)) {
-    return NextResponse.json({ error: 'Geen toegang tot deze branche' }, { status: 403 });
+  /* Bij boeken voor jezelf moet de branche bij jou horen. Boek je voor een
+     ander, dan moet hij bij de ontvanger horen: het is diens agenda. */
+  if (!grensoverschrijdend) {
+    if (!(session.customer.branches || []).includes(branch)) {
+      return NextResponse.json({ error: 'Geen toegang tot deze branche' }, { status: 403 });
+    }
+  } else {
+    const { data: doelKlant } = await supabase
+      .from('customers')
+      .select('branches, is_active')
+      .eq('id', doelKlantId)
+      .maybeSingle();
+    if (!doelKlant || doelKlant.is_active === false) {
+      return NextResponse.json({ error: 'Deze klant is niet beschikbaar' }, { status: 403 });
+    }
+    if (!(doelKlant.branches || []).includes(branch)) {
+      return NextResponse.json(
+        { error: 'Deze klant neemt geen afspraken af in deze branche' },
+        { status: 403 },
+      );
+    }
   }
 
   const duration = Number.isFinite(duration_minutes) ? duration_minutes : branchRow.default_appointment_duration || 60;
@@ -153,7 +202,15 @@ export async function POST(request: NextRequest) {
 
   // Agent: assign to self by default
   let effectivePortalUserId: string | null = portal_user_id ?? null;
-  if (session.portalUser && session.portalUser.role === 'agent') {
+  if (grensoverschrijdend) {
+    /* De adviseur komt uit het team van de ontvanger, niet uit dat van de
+       boeker. Een medewerker van het callcenter kan niet op huisbezoek. */
+    effectivePortalUserId = await pickAppointmentAssignee(doelKlantId, {
+      branch,
+      postcode,
+      starts_at: startsAtDate.toISOString(),
+    });
+  } else if (session.portalUser && session.portalUser.role === 'agent') {
     effectivePortalUserId = session.portalUser.id;
   } else if (effectivePortalUserId === null && body.auto_assign !== false) {
     effectivePortalUserId = await pickAppointmentAssignee(session.customer.id, {
@@ -165,7 +222,7 @@ export async function POST(request: NextRequest) {
 
   // Validate slot availability
   const validation = await validateSlot({
-    customerId: session.customer.id,
+    customerId: doelKlantId,
     portalUserId: effectivePortalUserId,
     startsAt: startsAtDate,
     durationMinutes: duration,
@@ -177,17 +234,23 @@ export async function POST(request: NextRequest) {
 
   // Determine source
   let source = 'portal_owner_booked';
-  if (session.portalUser) {
+  if (grensoverschrijdend) {
+    source = 'partner_booked';
+  } else if (session.portalUser) {
     source = session.portalUser.role === 'agent' ? 'agent_booked' : 'portal_owner_booked';
   }
 
   // If no batch_id, auto-pick oldest active paid batch for this branch (optional)
   let resolvedBatchId: string | null = batch_id ?? null;
-  if (!resolvedBatchId) {
+  /* Verbruikt de koppeling geen batchplek, dan blijft batch_id leeg en wordt er
+     dus ook niets gefactureerd aan de ontvanger. */
+  if (grensoverschrijdend && koppeling && !koppeling.verbruikt_batch) {
+    resolvedBatchId = null;
+  } else if (!resolvedBatchId) {
     const { data: b } = await supabase
       .from('appointment_batches')
       .select('id')
-      .eq('customer_id', session.customer.id)
+      .eq('customer_id', doelKlantId)
       .eq('branch', branch)
       .eq('is_paid', true)
       .eq('status', 'active')
@@ -197,13 +260,20 @@ export async function POST(request: NextRequest) {
     if (b) resolvedBatchId = b.id;
   }
 
+  const leadVelden = koppeling
+    ? boekingsVelden(koppeling, { lead_id, lead_assignment_id })
+    : { lead_id: lead_id || null, lead_assignment_id: lead_assignment_id || null };
+
   const insert = {
-    customer_id: session.customer.id,
+    customer_id: doelKlantId,
     portal_user_id: effectivePortalUserId,
     branch,
     batch_id: resolvedBatchId,
-    lead_id: lead_id || null,
-    lead_assignment_id: lead_assignment_id || null,
+    lead_id: leadVelden.lead_id,
+    lead_assignment_id: leadVelden.lead_assignment_id,
+    geboekt_door_customer_id: grensoverschrijdend ? session.customer.id : null,
+    geboekt_door_portal_user_id: grensoverschrijdend ? session.portalUser?.id ?? null : null,
+    koppeling_id: koppeling?.id ?? null,
     contact_name: contact_name.trim(),
     contact_phone: contact_phone || null,
     contact_email: contact_email || null,

@@ -5,6 +5,7 @@ import { createServerClient } from '@/lib/supabase';
 import { validateSlot } from '@/lib/appointmentSlots';
 import { sendAppointmentCancelledEmail } from '@/lib/appointmentEmails';
 import { sendAppointmentPush } from '@/lib/pushNotification';
+import { bronMagNogWijzigen, type Portaalkoppeling } from '@/lib/portaalkoppelingen';
 import {
   bereidAfboekingVoor,
   mayTransition,
@@ -12,16 +13,59 @@ import {
   STATUS_LABELS,
 } from '@/lib/appointmentOutcome';
 
+/**
+ * Haalt een afspraak op die deze klant mag zien.
+ *
+ * Dat is zijn eigen agenda, én de afspraken die hij bij een gekoppeld portaal
+ * heeft ingeboekt. Die laatste staan in de agenda van een ander, dus filteren
+ * op customer_id alleen zou ze onvindbaar maken voor de partij die ze maakte.
+ */
 async function loadAppointment(id: string, customerId: string) {
   const supabase = createServerClient();
   const { data, error } = await supabase
     .from('appointments')
     .select('*')
     .eq('id', id)
-    .eq('customer_id', customerId)
+    .or(`customer_id.eq.${customerId},geboekt_door_customer_id.eq.${customerId}`)
     .maybeSingle();
   if (error) throw error;
   return data;
+}
+
+/**
+ * Of deze klant deze afspraak mag wijzigen.
+ *
+ * De eigenaar van de agenda mag altijd. Heeft een ander hem ingeboekt, dan
+ * mag die alleen binnen de afspraken van de koppeling: standaard tot de
+ * ontvanger hem bevestigt.
+ */
+async function magWijzigen(
+  appt: { customer_id: string; geboekt_door_customer_id?: string | null; koppeling_id?: string | null; bevestigd_at?: string | null; status?: string | null },
+  customerId: string,
+): Promise<{ ok: true } | { ok: false; reden: string }> {
+  if (appt.customer_id === customerId) return { ok: true };
+  if (appt.geboekt_door_customer_id !== customerId) return { ok: false, reden: 'Geen toegang' };
+
+  if (!appt.koppeling_id) {
+    return { ok: false, reden: 'Deze afspraak hoort bij een klant waar je geen koppeling (meer) mee hebt' };
+  }
+
+  const supabase = createServerClient();
+  const { data } = await supabase
+    .from('portaalkoppelingen')
+    .select('*')
+    .eq('id', appt.koppeling_id)
+    .eq('actief', true)
+    .maybeSingle();
+
+  if (!data) return { ok: false, reden: 'De koppeling met deze klant is niet meer actief' };
+  if (!bronMagNogWijzigen(data as Portaalkoppeling, appt)) {
+    return {
+      ok: false,
+      reden: 'Deze afspraak is al bevestigd door de klant. Neem contact met ze op om hem te wijzigen.',
+    };
+  }
+  return { ok: true };
 }
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -49,7 +93,10 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const appt = await loadAppointment(id, session.customer.id);
   if (!appt) return NextResponse.json({ error: 'Niet gevonden' }, { status: 404 });
 
-  if (session.portalUser && session.portalUser.role === 'agent' && !hasPermission(session, PERMISSIONS.APPOINTMENTS_VIEW_ALL)) {
+  const toestemming = await magWijzigen(appt, session.customer.id);
+  if (!toestemming.ok) return NextResponse.json({ error: toestemming.reden }, { status: 403 });
+
+  if (appt.customer_id === session.customer.id && session.portalUser && session.portalUser.role === 'agent' && !hasPermission(session, PERMISSIONS.APPOINTMENTS_VIEW_ALL)) {
     if (appt.portal_user_id !== session.portalUser.id) {
       return forbidden('Geen toegang');
     }

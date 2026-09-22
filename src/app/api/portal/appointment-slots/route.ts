@@ -3,6 +3,7 @@ import { verifyCustomer, portalUnauthorized } from '@/lib/portalAuth';
 import { hasPermission, PERMISSIONS, forbidden } from '@/lib/portalPermissions';
 import { computeAvailableSlots } from '@/lib/appointmentSlots';
 import { createServerClient } from '@/lib/supabase';
+import { vindKoppeling } from '@/lib/portaalkoppelingen';
 
 export async function GET(request: NextRequest) {
   const session = await verifyCustomer(request);
@@ -17,6 +18,7 @@ export async function GET(request: NextRequest) {
   const bufferParam = url.searchParams.get('buffer');
   const branch = url.searchParams.get('branch') || undefined;
   const excludeId = url.searchParams.get('exclude_id') || undefined;
+  const voorKlant = url.searchParams.get('voor_klant') || undefined;
 
   if (!fromStr || !toStr) {
     return NextResponse.json({ error: 'from en to verplicht' }, { status: 400 });
@@ -59,9 +61,28 @@ export async function GET(request: NextRequest) {
     portalUserId = session.portalUser.id;
   }
 
+  /* Slots opvragen van een gekoppeld portaal. Dit levert alleen vrije tijden
+     op, nooit wie of wat er in die gaten staat: de boekende partij hoort de
+     klantenlijst van de ontvanger niet te zien. */
+  let doelKlantId = session.customer.id;
+  if (voorKlant && voorKlant !== session.customer.id) {
+    if (!branch) {
+      return NextResponse.json({ error: 'branch verplicht bij boeken voor een andere klant' }, { status: 400 });
+    }
+    const supabase = createServerClient();
+    const koppeling = await vindKoppeling(supabase, session.customer.id, voorKlant, branch);
+    if (!koppeling) {
+      return NextResponse.json({ error: 'Geen koppeling met deze klant' }, { status: 403 });
+    }
+    doelKlantId = voorKlant;
+    /* De adviseurs van de ontvanger zijn niet van ons; laat de berekening over
+       het hele team van de ontvanger lopen. */
+    portalUserId = undefined;
+  }
+
   try {
     const slots = await computeAvailableSlots({
-      customerId: session.customer.id,
+      customerId: doelKlantId,
       portalUserId,
       from,
       to,

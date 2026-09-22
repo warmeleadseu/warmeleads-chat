@@ -64,6 +64,11 @@ export interface Appointment {
   cancelled_by: string | null;
   cancelled_reason: string | null;
   rescheduled_from_id: string | null;
+  geboekt_door_customer_id: string | null;
+  bevestigd_at: string | null;
+  koppeling_id: string | null;
+  geboekt_door?: { name: string } | null;
+  agenda_van?: { name: string } | null;
 }
 
 interface TeamMember {

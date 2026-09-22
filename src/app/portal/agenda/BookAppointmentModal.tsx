@@ -74,6 +74,29 @@ export default function BookAppointmentModal({
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  /* Gekoppelde portalen waarvoor dit portaal mag inboeken. Leeg = niemand, en
+     dan verschijnt de keuze helemaal niet. */
+  const [koppelingen, setKoppelingen] = useState<{ klant_id: string; naam: string; branches: string[] }[]>([]);
+  const [voorKlant, setVoorKlant] = useState<string>('');
+
+  useEffect(() => {
+    portalFetch('/api/portal/koppelingen')
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => setKoppelingen(Array.isArray(d?.koppelingen) ? d.koppelingen : []))
+      .catch(() => {});
+  }, []);
+
+  const gekozenKoppeling = koppelingen.find(k => k.klant_id === voorKlant) || null;
+
+  /* Boek je voor een ander, dan gelden diens branches. */
+  const beschikbareBranches = gekozenKoppeling ? gekozenKoppeling.branches : branches;
+
+  useEffect(() => {
+    if (beschikbareBranches.length > 0 && !beschikbareBranches.includes(branch)) {
+      setBranch(beschikbareBranches[0]);
+    }
+  }, [beschikbareBranches, branch]);
+
   useEffect(() => {
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -94,7 +117,8 @@ export default function BookAppointmentModal({
         to: to.toISOString(),
         branch,
       });
-      if (portalUserId) q.set('portal_user_id', portalUserId);
+      if (voorKlant) q.set('voor_klant', voorKlant);
+      else if (portalUserId) q.set('portal_user_id', portalUserId);
       const res = await portalFetch(`/api/portal/appointment-slots?${q.toString()}`);
       if (res.ok) {
         const data = await res.json();
@@ -105,7 +129,7 @@ export default function BookAppointmentModal({
     } finally {
       setSlotsLoading(false);
     }
-  }, [date, portalUserId, branch]);
+  }, [date, portalUserId, branch, voorKlant]);
 
   useEffect(() => { loadSlots(); }, [loadSlots]);
 
@@ -132,6 +156,7 @@ export default function BookAppointmentModal({
           notes: notes.trim() || undefined,
           lead_id: initialLead?.lead_id,
           lead_assignment_id: initialLead?.lead_assignment_id,
+          voor_klant: voorKlant || undefined,
         }),
       });
       const data = await res.json();
@@ -209,12 +234,37 @@ export default function BookAppointmentModal({
 
         <div className="flex-1 overflow-y-auto overscroll-contain px-5 py-5" style={{ WebkitOverflowScrolling: 'touch' }}>
           <div className="space-y-5">
+            {/* Voor wie boek je? Alleen zichtbaar als er koppelingen zijn. */}
+            {koppelingen.length > 0 && (
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  Voor wie boek je?
+                </label>
+                <select
+                  value={voorKlant}
+                  onChange={e => { setVoorKlant(e.target.value); setSelectedStart(null); }}
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-brand-purple/50"
+                >
+                  <option value="">{customer.name} (eigen agenda)</option>
+                  {koppelingen.map(k => (
+                    <option key={k.klant_id} value={k.klant_id}>{k.naam}</option>
+                  ))}
+                </select>
+                {gekozenKoppeling && (
+                  <p className="mt-1.5 rounded-lg bg-sky-50 px-3 py-2 text-xs leading-relaxed text-sky-800">
+                    Deze afspraak komt in de agenda van <strong>{gekozenKoppeling.naam}</strong>. Je ziet
+                    hun vrije tijden, niet wat er in de bezette uren staat. Ze wijzen zelf een adviseur toe.
+                  </p>
+                )}
+              </div>
+            )}
+
             {/* Branch */}
-            {branches.length > 1 && (
+            {beschikbareBranches.length > 1 && (
               <div>
                 <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-500">Branche</label>
                 <div className="flex flex-wrap gap-2">
-                  {branches.map(b => (
+                  {beschikbareBranches.map(b => (
                     <button
                       key={b}
                       onClick={() => setBranch(b)}
@@ -231,8 +281,8 @@ export default function BookAppointmentModal({
               </div>
             )}
 
-            {/* Assignee */}
-            {canShowAssignee && (
+            {/* Assignee — niet bij boeken voor een ander: dat team is niet van ons */}
+            {canShowAssignee && !voorKlant && (
               <div>
                 <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-500">Adviseur</label>
                 <select
