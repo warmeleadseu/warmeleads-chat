@@ -42,24 +42,50 @@ async function attachAssignmentMeta(
   const leadIds = leads.map((l) => l.id as string);
   const { data: assignments } = await supabase
     .from('lead_assignments')
-    .select('lead_id, customer_id, customers(name), distance_km')
-    .in('lead_id', leadIds);
+    .select('lead_id, customer_id, customers(name), distance_km, assigned_at, source, batch_id')
+    .in('lead_id', leadIds)
+    .order('assigned_at', { ascending: true });
 
-  const assignMap: Record<string, { count: number; customers: string[] }> = {};
+  type Toewijzing = {
+    klant: string;
+    klant_id: string;
+    datum: string | null;
+    bron: string | null;
+    via_batch: boolean;
+    afstand_km: number | null;
+  };
+
+  const assignMap: Record<string, { count: number; customers: string[]; details: Toewijzing[] }> = {};
   (assignments || []).forEach((a: {
     lead_id: string;
+    customer_id: string;
     customers?: { name?: string } | { name?: string }[] | null;
+    distance_km?: number | null;
+    assigned_at?: string | null;
+    source?: string | null;
+    batch_id?: string | null;
   }) => {
-    if (!assignMap[a.lead_id]) assignMap[a.lead_id] = { count: 0, customers: [] };
+    if (!assignMap[a.lead_id]) assignMap[a.lead_id] = { count: 0, customers: [], details: [] };
     assignMap[a.lead_id].count++;
     const cust = Array.isArray(a.customers) ? a.customers[0] : a.customers;
     if (cust?.name) assignMap[a.lead_id].customers.push(cust.name);
+    /* De volledige geschiedenis per toewijzing. Die lag altijd al in
+       lead_assignments vast, alleen werd er nooit iets van getoond. */
+    assignMap[a.lead_id].details.push({
+      klant: cust?.name || 'Onbekende klant',
+      klant_id: a.customer_id,
+      datum: a.assigned_at ?? null,
+      bron: a.source ?? null,
+      via_batch: Boolean(a.batch_id),
+      afstand_km: a.distance_km ?? null,
+    });
   });
 
   leads.forEach((l) => {
     const id = l.id as string;
     l.assignment_count = assignMap[id]?.count || 0;
     l.assigned_customers = assignMap[id]?.customers || [];
+    l.assignment_details = assignMap[id]?.details || [];
   });
 }
 

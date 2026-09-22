@@ -2717,6 +2717,8 @@ function LeadFormPanel({
         </div>
         <div className="space-y-5 p-5">
           {error && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-600">{error}</div>}
+
+          {isEdit && <UitdeelGeschiedenis lead={lead} />}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-500">Branche</label>
@@ -2873,5 +2875,78 @@ function LeadFormPanel({
         </div>
       </motion.div>
     </>
+  );
+}
+
+
+/** Eén toewijzing zoals de API hem meestuurt. */
+interface Toewijzing {
+  klant: string;
+  klant_id: string;
+  datum: string | null;
+  bron: string | null;
+  via_batch: boolean;
+  afstand_km: number | null;
+}
+
+/** Leesbare naam voor de manier waarop een lead bij een klant terechtkwam. */
+const BRON_TEKST: Record<string, string> = {
+  distribution: 'Automatische verdeling',
+  bulk_export: 'Bulkexport',
+  bulk_assign: 'Handmatig toegewezen',
+  demo: 'Demo',
+  mirror: 'Masterportaal',
+  backfill: 'Backfill',
+};
+
+/**
+ * Aan welke klanten is deze lead uitgedeeld, en wanneer.
+ *
+ * De lijst stond altijd al volledig in lead_assignments: alle 14.612
+ * toewijzingen hebben een klant-id en er ontbreekt niets. Er was alleen nooit
+ * een scherm dat het liet zien, dus het terughalen kostte geen herstelactie.
+ */
+function UitdeelGeschiedenis({ lead }: { lead: Lead | null }) {
+  const rijen = ((lead as unknown as { assignment_details?: Toewijzing[] })?.assignment_details) || [];
+
+  if (rijen.length === 0) {
+    return (
+      <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/60 px-4 py-3">
+        <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Uitgedeeld aan</p>
+        <p className="mt-1 text-sm text-slate-500">Deze lead is nog niet uitgedeeld.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+      <div className="mb-2 flex items-center justify-between">
+        <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Uitgedeeld aan</p>
+        <span className="rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-bold text-purple-700">
+          {rijen.length}x
+        </span>
+      </div>
+      <ol className="space-y-1.5">
+        {rijen.map((r, i) => (
+          <li key={`${r.klant_id}-${r.datum}-${i}`} className="flex items-start justify-between gap-3 rounded-lg bg-white px-3 py-2">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-slate-800">{r.klant}</p>
+              <p className="mt-0.5 text-[11px] text-slate-400">
+                {/* Een lege bron betekent historisch gewoon de normale verdeling. */}
+                {BRON_TEKST[r.bron || 'distribution'] ?? r.bron}
+                {!r.via_batch && ' · zonder batch'}
+                {/* Bij een provinciedoel staat de afstand op 0; dat zegt niets. */}
+                {r.afstand_km != null && r.afstand_km > 0 && ` · ${Math.round(r.afstand_km)} km`}
+              </p>
+            </div>
+            <span className="shrink-0 text-[11px] tabular-nums text-slate-500">
+              {r.datum
+                ? new Date(r.datum).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' })
+                : 'datum onbekend'}
+            </span>
+          </li>
+        ))}
+      </ol>
+    </div>
   );
 }
