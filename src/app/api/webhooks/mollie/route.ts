@@ -416,13 +416,13 @@ export async function POST(request: NextRequest) {
           ? String((order as { lead_branch_slug: string }).lead_branch_slug).trim()
           : '';
 
+      /* Een bulkbatch is een eenmalige levering, geen pijplijn: de leads gaan
+         bij verkoop in één keer weg. Op 'active' zetten liet hem daar voorgoed
+         in hangen, omdat reconcile_batch_delivered() alleen batches met
+         leveringsmodel 'capped' sluit en bulk op 'manual' staat. */
       const researchCompleted =
-        orderBatchKind === 'niche_research'
-          ? {
-              status: 'active' as const,
-              leads_delivered: 0,
-              completed_at: null as string | null,
-            }
+        orderBatchKind === 'bulk_leads'
+          ? { status: 'completed' as const, leads_delivered: 0, completed_at: new Date().toISOString() as string | null }
           : { status: 'active' as const, leads_delivered: 0, completed_at: null as string | null };
 
       const orderSourceBatchId =

@@ -7,6 +7,7 @@ import { usePathname } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   HomeIcon,
+  InboxStackIcon,
   UserGroupIcon,
   DocumentArrowUpIcon,
   BuildingOfficeIcon,
@@ -63,6 +64,7 @@ const NAV: {
   { label: 'Dashboard', href: '/admin', icon: HomeIcon, roles: ['superadmin', 'admin', 'accountmanager'] },
   { label: 'Leads CRM', href: '/admin/leads', icon: ChartBarSquareIcon, roles: ['superadmin', 'admin', 'accountmanager'] },
   { label: 'Reclamaties', href: '/admin/reclamaties', icon: FlagIcon, badge: true, roles: ['superadmin', 'admin', 'accountmanager'] },
+  { label: 'Restleads', href: '/admin/restleads', icon: InboxStackIcon, roles: ['superadmin', 'admin'] },
   { label: 'Verdeling', href: '/admin/verdeling', icon: ArrowsRightLeftIcon, roles: ['superadmin'] },
   { label: 'Importeren', href: '/admin/import', icon: DocumentArrowUpIcon, roles: ['superadmin'] },
   { label: 'Klanten', href: '/admin/customers', icon: BuildingOfficeIcon, roles: ['superadmin', 'admin', 'accountmanager'] },

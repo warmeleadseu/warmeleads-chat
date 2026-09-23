@@ -211,7 +211,14 @@ function matchesFilter(lead: LeadForDistribution, filter: LeadFilter): boolean {
   }
 }
 
-function matchesAllFilters(lead: LeadForDistribution, filters: LeadFilter[]): boolean {
+/**
+ * Of een lead aan alle batchfilters voldoet.
+ *
+ * Geëxporteerd omdat het Restleads-overzicht dezelfde vraag stelt: welke
+ * klanten zouden deze lead accepteren? Twee eigen implementaties zouden
+ * onvermijdelijk uit elkaar lopen.
+ */
+export function matchesAllFilters(lead: LeadForDistribution, filters: LeadFilter[]): boolean {
   if (!filters || filters.length === 0) return true;
   return filters.every(f => matchesFilter(lead, f));
 }

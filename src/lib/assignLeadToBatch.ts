@@ -20,6 +20,8 @@ export type AssignLeadToBatchInput = {
   source: AssignmentSource;
   /** Skip branch/geo guardrails (distribution cron only). */
   skipGuardrails?: boolean;
+  /** Alleen de geocontrole overslaan; branche en dubbelcheck blijven gelden. */
+  negeerGeo?: boolean;
   distance_km?: number | null;
   /**
    * Behoud de oorspronkelijke ontvangstdatum bij verplaatsen tussen klanten.
@@ -42,7 +44,7 @@ export type AssignLeadToBatchResult =
 export async function assignLeadToBatch(
   input: AssignLeadToBatchInput,
 ): Promise<AssignLeadToBatchResult> {
-  const { supabase, lead, customer, batchId, source, skipGuardrails } = input;
+  const { supabase, lead, customer, batchId, source, skipGuardrails, negeerGeo } = input;
 
   if (!skipGuardrails) {
     const branchIssue = checkBranchGuardrail(lead, customer);
@@ -56,8 +58,12 @@ export async function assignLeadToBatch(
 
     const activeTargets = (targets || []) as GeoTargetRow[];
     if (activeTargets.length > 0) {
+      /* negeerGeo is bedoeld voor Restleads: daar deelt een mens bewust een
+         lead uit die net buiten het gebied valt. Alleen deze controle vervalt;
+         branche en het dubbelcheck blijven staan, anders zou je met één vlag
+         alle vangrails tegelijk uitzetten. */
       const geo = matchLeadToTargets(lead, activeTargets);
-      if (!geo.matches) {
+      if (!geo.matches && !negeerGeo) {
         return {
           ok: false,
           reason: 'Lead valt buiten de doelgebieden van de klant',
