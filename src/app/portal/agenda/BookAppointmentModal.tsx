@@ -88,6 +88,21 @@ export default function BookAppointmentModal({
 
   const gekozenKoppeling = koppelingen.find(k => k.klant_id === voorKlant) || null;
 
+  /* Wie zou de automatische toewijzer kiezen als je de adviseur leeg laat?
+     Zonder dit is een lege keuze stil en merk je pas achteraf wat er gebeurde. */
+  const [autoAdviseur, setAutoAdviseur] = useState<{ naam: string | null } | null>(null);
+  useEffect(() => {
+    if (portalUserId || voorKlant || !branch || !selectedStart) { setAutoAdviseur(null); return; }
+    const q = new URLSearchParams({ branch, starts_at: selectedStart });
+    if (postcode.trim()) q.set('postcode', postcode.trim());
+    let afgebroken = false;
+    portalFetch(`/api/portal/appointment-assignee?${q.toString()}`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => { if (!afgebroken) setAutoAdviseur(d ? { naam: d.naam } : null); })
+      .catch(() => {});
+    return () => { afgebroken = true; };
+  }, [portalUserId, voorKlant, branch, selectedStart, postcode]);
+
   /* Boek je voor een ander, dan gelden diens branches. */
   const beschikbareBranches = gekozenKoppeling ? gekozenKoppeling.branches : branches;
 
@@ -290,9 +305,18 @@ export default function BookAppointmentModal({
                   onChange={e => setPortalUserId(e.target.value || null)}
                   className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-brand-purple/50"
                 >
-                  <option value="">-- Niet toegewezen --</option>
+                  <option value="">Automatisch toewijzen</option>
                   {team.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                 </select>
+                {!portalUserId && (
+                  <p className="mt-1.5 text-xs text-slate-500">
+                    {autoAdviseur === null
+                      ? 'Kies een moment, dan zie je wie dit automatisch krijgt.'
+                      : autoAdviseur.naam
+                        ? <>Gaat naar <strong className="text-slate-700">{autoAdviseur.naam}</strong>.</>
+                        : 'Niemand komt automatisch in aanmerking; de afspraak blijft zonder adviseur staan. Stel de toewijzingsregels van je team in, of kies hierboven zelf iemand.'}
+                  </p>
+                )}
               </div>
             )}
 

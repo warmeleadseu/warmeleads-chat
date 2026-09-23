@@ -159,6 +159,9 @@ export default function AgendaPage() {
   /* Kijken we naar de eigen agenda of naar wat we bij anderen hebben ingepland? */
   const [bereik, setBereik] = useState<'eigen' | 'weggeboekt'>('eigen');
   const [heeftKoppelingen, setHeeftKoppelingen] = useState(false);
+  /* Wiens rooster bewerk je? Leeg = het bedrijfsbrede rooster, dat geldt voor
+     iedereen die geen eigen rooster heeft. */
+  const [roosterVan, setRoosterVan] = useState<string>('');
 
   useEffect(() => {
     portalFetch('/api/portal/koppelingen')
@@ -811,8 +814,33 @@ export default function AgendaPage() {
                     </button>
                   </div>
                   <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5" style={{ WebkitOverflowScrolling: 'touch', paddingBottom: 'max(env(safe-area-inset-bottom), 1.25rem)' }}>
+                    {/* Een agent bewerkt altijd zijn eigen rooster. Eigenaar en
+                        manager kiezen wiens rooster ze voor zich hebben; tot nu
+                        toe kon dat niet en bewerkten zij altijd het bedrijfs-
+                        brede rooster, waardoor niemand eigen werktijden had. */}
+                    {portalUser?.role !== 'agent' && team.length > 0 && (
+                      <div className="mb-4">
+                        <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-500">
+                          Rooster van
+                        </label>
+                        <select
+                          value={roosterVan}
+                          onChange={e => setRoosterVan(e.target.value)}
+                          className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-brand-purple/50"
+                        >
+                          <option value="">Het hele bedrijf</option>
+                          {team.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                        </select>
+                        <p className="mt-1.5 text-xs text-slate-500">
+                          {roosterVan
+                            ? 'Dit rooster geldt alleen voor deze adviseur en komt bovenop het bedrijfsrooster.'
+                            : 'Geldt voor iedereen die geen eigen rooster heeft.'}
+                        </p>
+                      </div>
+                    )}
                     <AvailabilityPanel
-                      portalUserId={portalUser?.role === 'agent' ? portalUser.id : null}
+                      key={portalUser?.role === 'agent' ? portalUser.id : (roosterVan || 'bedrijf')}
+                      portalUserId={portalUser?.role === 'agent' ? portalUser.id : (roosterVan || null)}
                       canEdit={canManageAvailability}
                     />
                   </div>

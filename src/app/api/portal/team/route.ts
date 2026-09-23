@@ -117,7 +117,13 @@ export async function POST(request: NextRequest) {
         password_hash: passwordHash,
         role: userRole,
         permissions: userPermissions,
-        assignment_rules: assignment_rules || {},
+        /* Expliciet 'manual' in plaats van een leeg object. De automatische
+           toewijzer slaat iedereen zonder modus over, dus een leeg object
+           betekende in de praktijk "ontvangt nooit iets" zonder dat dat ergens
+           stond. Nu is het een zichtbare keuze die je kunt omzetten. */
+        assignment_rules: assignment_rules && Object.keys(assignment_rules).length > 0
+          ? assignment_rules
+          : { mode: 'manual' },
         phone: phone || null,
       })
       .select('id, name, email, role, is_active, permissions, assignment_rules, last_login_at, last_seen_at, login_count, phone, created_at')

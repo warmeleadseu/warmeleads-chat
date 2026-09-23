@@ -6,6 +6,7 @@ import { sendAppointmentCancelledEmail } from '@/lib/appointmentEmails';
 import { sendAppointmentPush } from '@/lib/pushNotification';
 import { bereidAfboekingVoor, isAppointmentStatus } from '@/lib/appointmentOutcome';
 import { syncAfsprakenBatch } from '@/lib/appointmentBatchSync';
+import { controleerToewijzing } from '@/lib/appointmentAssignee';
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const admin = await verifyAdmin(request);
@@ -38,6 +39,28 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     'postcode', 'city', 'notes', 'portal_user_id', 'batch_id',
   ];
   for (const k of passthrough) if (k in body) updates[k] = body[k];
+
+  /* Zelfde conflictcontrole als in het portaal: een adviseur mag niet
+     stilzwijgend twee afspraken op hetzelfde moment krijgen. */
+  if (body.portal_user_id !== undefined && (body.portal_user_id || null) !== appt.portal_user_id) {
+    const uitkomst = await controleerToewijzing(supabase, {
+      customerId: appt.customer_id,
+      afspraak: {
+        id: appt.id,
+        starts_at: body.starts_at || appt.starts_at,
+        duration_minutes: body.duration_minutes ?? appt.duration_minutes,
+        travel_buffer_minutes: body.travel_buffer_minutes ?? appt.travel_buffer_minutes,
+      },
+      nieuweAdviseurId: body.portal_user_id || null,
+      forceer: body.forceer_toewijzing === true,
+    });
+    if (!uitkomst.ok) {
+      return NextResponse.json(
+        { error: uitkomst.conflict, conflict: true, conflicten: uitkomst.conflicten.length },
+        { status: 409 },
+      );
+    }
+  }
 
   if (body.starts_at || body.duration_minutes || body.travel_buffer_minutes != null) {
     const startsAt = new Date(body.starts_at || appt.starts_at);

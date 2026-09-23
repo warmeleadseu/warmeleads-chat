@@ -25,6 +25,7 @@ import type { Appointment } from './page';
 import { AfboekPaneel } from './AfboekPaneel';
 import { VerzetPaneel } from './VerzetPaneel';
 import { AfspraakReclamatie } from './AfspraakReclamatie';
+import { AdviseurToewijzen } from './AdviseurToewijzen';
 import { STATUS_LABELS as GEDEELDE_STATUS_LABELS } from '@/lib/appointmentOutcome';
 
 interface TeamMember { id: string; name: string; role: string }
@@ -259,6 +260,17 @@ export default function AppointmentDetailModal({
                     <p className="whitespace-pre-wrap">{appointment.notes}</p>
                   </div>
                 </section>
+              )}
+
+              {/* Adviseur wijzigen zonder het hele formulier te openen */}
+              {isEigenAgenda && (
+                <AdviseurToewijzen
+                  appointmentId={appointment.id}
+                  huidigeAdviseurId={appointment.portal_user_id}
+                  team={team}
+                  mag={canEdit && canViewAll}
+                  onGewijzigd={onUpdated}
+                />
               )}
 
               {/* Reclamatie op een geleverde afspraak. Alleen de ontvanger van

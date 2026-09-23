@@ -3,6 +3,7 @@ import { verifyCustomer, portalUnauthorized } from '@/lib/portalAuth';
 import { hasPermission, PERMISSIONS, forbidden } from '@/lib/portalPermissions';
 import { createServerClient } from '@/lib/supabase';
 import { validateSlot } from '@/lib/appointmentSlots';
+import { controleerToewijzing } from '@/lib/appointmentAssignee';
 import { sendAppointmentCancelledEmail } from '@/lib/appointmentEmails';
 import { sendAppointmentPush } from '@/lib/pushNotification';
 import { bronMagNogWijzigen, type Portaalkoppeling } from '@/lib/portaalkoppelingen';
@@ -121,9 +122,16 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (isNaN(startsAt.getTime())) {
       return NextResponse.json({ error: 'Ongeldige starts_at' }, { status: 400 });
     }
+    /* De adviseur zoals hij ná deze wijziging is. Stond hier eerder altijd de
+       oude adviseur, waardoor verplaatsen én herverdelen in één handeling de
+       beschikbaarheid van de verkeerde persoon controleerde. De adminroute
+       deed dit al goed; nu doen ze hetzelfde. */
+    const adviseurNa =
+      body.portal_user_id !== undefined ? (body.portal_user_id || null) : appt.portal_user_id;
+
     const validation = await validateSlot({
       customerId: session.customer.id,
-      portalUserId: appt.portal_user_id,
+      portalUserId: adviseurNa,
       startsAt,
       durationMinutes: duration,
       bufferMinutes: buffer,
@@ -140,9 +148,36 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
   }
 
-  // Reassignment — only for non-agents
+  /* Herverdelen. Alleen voor niet-agents: een agent mag zijn afspraak niet aan
+     een collega doorschuiven. */
   if (body.portal_user_id !== undefined && (!session.portalUser || session.portalUser.role !== 'agent')) {
-    updates.portal_user_id = body.portal_user_id || null;
+    const nieuweAdviseur = body.portal_user_id || null;
+
+    /* Wijzigt alleen de adviseur, dan kwam hier voorheen geen enkele controle
+       aan te pas en kon dezelfde persoon twee afspraken op hetzelfde moment
+       krijgen. validateSlot is hier niet bruikbaar: die weigert alles in het
+       verleden, terwijl een afspraak van gisteren alsnog toewijzen moet kunnen. */
+    if (nieuweAdviseur !== appt.portal_user_id) {
+      const uitkomst = await controleerToewijzing(supabase, {
+        customerId: appt.customer_id,
+        afspraak: {
+          id: appt.id,
+          starts_at: (updates.starts_at as string) || appt.starts_at,
+          duration_minutes: (updates.duration_minutes as number) ?? appt.duration_minutes,
+          travel_buffer_minutes: (updates.travel_buffer_minutes as number) ?? appt.travel_buffer_minutes,
+        },
+        nieuweAdviseurId: nieuweAdviseur,
+        forceer: body.forceer_toewijzing === true,
+      });
+      if (!uitkomst.ok) {
+        return NextResponse.json(
+          { error: uitkomst.conflict, conflict: true, conflicten: uitkomst.conflicten.length },
+          { status: 409 },
+        );
+      }
+    }
+
+    updates.portal_user_id = nieuweAdviseur;
   }
 
   /* Afboeken. De regels staan in appointmentOutcome zodat portaal, admin en
