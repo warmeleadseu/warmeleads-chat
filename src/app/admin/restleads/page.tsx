@@ -8,8 +8,12 @@ import {
   MagnifyingGlassIcon,
   MapPinIcon,
   CheckIcon,
+  BoltIcon,
+  ClockIcon,
+  XMarkIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
+import { beschrijfMoment } from '@/lib/restleadPlanning';
 
 /**
  * Leads die tussen wal en schip vielen.
@@ -45,6 +49,16 @@ interface Restlead {
   kandidaten: Kandidaat[];
 }
 
+interface WachtrijRij {
+  id: string;
+  lead_id: string;
+  gepland_voor: string;
+  status: string;
+  reden: string | null;
+  leads: { naam_klant: string | null; plaatsnaam: string | null; postcode: string | null; branch: string } | null;
+  customers: { name: string } | null;
+}
+
 const MAX_KLANTEN_PER_LEAD = 3;
 
 function datum(iso: string | null): string {
@@ -58,7 +72,10 @@ export default function RestleadsPage() {
   const [verlopen, setVerlopen] = useState<Restlead[]>([]);
   const [laden, setLaden] = useState(true);
   const [fout, setFout] = useState<string | null>(null);
-  const [lijst, setLijst] = useState<'kansrijk' | 'verlopen'>('kansrijk');
+  const [lijst, setLijst] = useState<'kansrijk' | 'verlopen' | 'ingepland'>('kansrijk');
+  const [wachtrij, setWachtrij] = useState<WachtrijRij[]>([]);
+  const [wachtrijLaden, setWachtrijLaden] = useState(false);
+  const [massaBezig, setMassaBezig] = useState(false);
 
   const [marge, setMarge] = useState('5');
   const [ruimeMarge, setRuimeMarge] = useState('10');
@@ -91,8 +108,23 @@ export default function RestleadsPage() {
     }
   }, [marge, ruimeMarge, droogNa]);
 
-  useEffect(() => { laad(); }, [laad]);
+  const laadWachtrij = useCallback(async () => {
+    setWachtrijLaden(true);
+    try {
+      const res = await adminFetch('/api/admin/restleads/ingepland');
+      if (res.ok) {
+        const d = await res.json();
+        setWachtrij(d.rijen || []);
+      }
+    } finally {
+      setWachtrijLaden(false);
+    }
+  }, []);
 
+  useEffect(() => { laad(); }, [laad]);
+  useEffect(() => { laadWachtrij(); }, [laadWachtrij]);
+
+  /* In de stand 'ingepland' tonen we de wachtrij, niet deze lijst. */
   const bron = lijst === 'kansrijk' ? kansrijk : verlopen;
 
   const branches = useMemo(
@@ -154,6 +186,53 @@ export default function RestleadsPage() {
     }
   };
 
+  /* Alles in één keer, met de regels die alleen hier gelden: niets uit de
+     ruime marge (daar beslis jij over), geen gratis klanten, en bij meer
+     kandidaten dan plekken de goedkoopste eerst. */
+  const deelAllesUit = async () => {
+    const kandidaten = zichtbaar.filter(l =>
+      l.kandidaten.some(k => k.km_buiten <= Number(marge) && k.prijs_per_lead > 0),
+    );
+    if (kandidaten.length === 0) return;
+    if (!confirm(
+      `${kandidaten.length} leads uitdelen aan de goedkoopste beschikbare klanten, ` +
+      `gespreid over 12 uur? Leads die alleen dankzij de ruime marge een klant hebben, blijven liggen.`,
+    )) return;
+
+    setMassaBezig(true);
+    setMelding(null);
+    try {
+      const res = await adminFetch('/api/admin/restleads/alles-uitdelen', {
+        method: 'POST',
+        body: JSON.stringify({
+          marge_grens: Number(marge),
+          leads: kandidaten.map(l => ({
+            lead_id: l.id,
+            uitgedeeld: l.uitgedeeld,
+            kandidaten: l.kandidaten,
+          })),
+        }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) { setMelding(d.error || 'Massaal uitdelen mislukt'); return; }
+      setMelding(
+        `${d.leads} leads ingepland, ${d.leveringen} leveringen. ` +
+        `${d.overgeslagen_ruime_marge} overgeslagen omdat ze alleen via de ruime marge matchten.`,
+      );
+      laad();
+      laadWachtrij();
+    } finally {
+      setMassaBezig(false);
+      setTimeout(() => setMelding(null), 10000);
+    }
+  };
+
+  const annuleerLevering = async (id: string) => {
+    const res = await adminFetch(`/api/admin/restleads/ingepland?id=${id}`, { method: 'DELETE' });
+    if (res.ok) laadWachtrij();
+    else setMelding('Annuleren mislukt');
+  };
+
   const exporteer = () => {
     const kop = ['Naam', 'Plaats', 'Postcode', 'Provincie', 'Branche', 'Wervingsdatum', 'Dagen oud', 'Uitgedeeld', 'Kandidaten'];
     const cel = (v: unknown) => {
@@ -194,9 +273,21 @@ export default function RestleadsPage() {
           <button onClick={laad} disabled={laden} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50">
             <ArrowPathIcon className={`h-4 w-4 ${laden ? 'animate-spin' : ''}`} /> Vernieuwen
           </button>
-          <button onClick={exporteer} disabled={zichtbaar.length === 0} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40">
-            <ArrowDownTrayIcon className="h-4 w-4" /> Export
-          </button>
+          {lijst !== 'ingepland' && (
+            <button onClick={exporteer} disabled={zichtbaar.length === 0} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40">
+              <ArrowDownTrayIcon className="h-4 w-4" /> Export
+            </button>
+          )}
+          {lijst !== 'ingepland' && (
+            <button
+              onClick={deelAllesUit}
+              disabled={massaBezig || zichtbaar.length === 0}
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-gradient-to-r from-brand-purple to-brand-pink px-3.5 text-sm font-bold text-white disabled:opacity-40"
+            >
+              <BoltIcon className="h-4 w-4" />
+              {massaBezig ? 'Bezig...' : 'Deel alles uit'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -212,6 +303,7 @@ export default function RestleadsPage() {
         {([
           ['kansrijk', 'Nog kansrijk', kansrijk.length, 'laatste 7 dagen'],
           ['verlopen', 'Verlopen', verlopen.length, '7 tot 90 dagen'],
+          ['ingepland', 'Ingepland', wachtrij.length, 'staat in de wachtrij'],
         ] as const).map(([waarde, label, aantal, hint]) => (
           <button
             key={waarde}
@@ -228,7 +320,7 @@ export default function RestleadsPage() {
       </div>
 
       {/* Instellingen en filters */}
-      <div className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-3">
+      <div className={`flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-3 ${lijst === 'ingepland' ? 'hidden' : 'flex'}`}>
         <div>
           <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-slate-400">Marge</label>
           <div className="flex h-9 w-20 items-center rounded-lg border border-slate-200 px-2">
@@ -269,7 +361,44 @@ export default function RestleadsPage() {
         <span className="ml-auto text-xs text-slate-400">{zichtbaar.length} leads</span>
       </div>
 
-      {laden ? (
+      {lijst === 'ingepland' ? (
+        wachtrijLaden ? (
+          <div className="space-y-2">{[0, 1, 2].map(i => <div key={i} className="h-14 animate-pulse rounded-xl bg-slate-100" />)}</div>
+        ) : wachtrij.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-slate-300 bg-white py-16 text-center">
+            <ClockIcon className="mx-auto mb-3 h-10 w-10 text-slate-200" />
+            <p className="font-medium text-slate-600">Niets ingepland</p>
+            <p className="mt-1 text-sm text-slate-400">
+              Leveringen die je spreidt over de cooldown van 12 uur komen hier te staan tot ze zijn uitgevoerd.
+            </p>
+          </div>
+        ) : (
+          <div className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+            {wachtrij.map(r => (
+              <div key={r.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
+                <span className="w-28 shrink-0 text-xs font-semibold tabular-nums text-brand-purple">
+                  {beschrijfMoment(new Date(r.gepland_voor))}
+                </span>
+                <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-800">
+                  {r.leads?.naam_klant || 'Naamloos'}
+                  <span className="ml-2 text-xs font-normal text-slate-400">
+                    {[r.leads?.postcode, r.leads?.plaatsnaam].filter(Boolean).join(' ')}
+                  </span>
+                </span>
+                <span className="hidden shrink-0 text-xs text-slate-400 sm:inline">{r.leads?.branch}</span>
+                <span className="shrink-0 text-sm text-slate-600">&rarr; {r.customers?.name || '?'}</span>
+                <button
+                  onClick={() => annuleerLevering(r.id)}
+                  title="Deze levering annuleren"
+                  className="shrink-0 rounded-lg p-1.5 text-slate-400 transition hover:bg-red-50 hover:text-red-500"
+                >
+                  <XMarkIcon className="h-4 w-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )
+      ) : laden ? (
         <div className="space-y-2">{[0, 1, 2, 3].map(i => <div key={i} className="h-24 animate-pulse rounded-xl bg-slate-100" />)}</div>
       ) : zichtbaar.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-300 bg-white py-16 text-center">
@@ -295,6 +424,11 @@ export default function RestleadsPage() {
                       }`}>
                         {l.uitgedeeld}x uitgedeeld
                       </span>
+                      {wachtrij.filter(w => w.lead_id === l.id).length > 0 && (
+                        <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-bold text-indigo-700">
+                          {wachtrij.filter(w => w.lead_id === l.id).length} gepland
+                        </span>
+                      )}
                       {l.phone_valid === false && (
                         <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500" title="Leads met een ongeldig nummer worden niet uitgedeeld">
                           ongeldig nummer

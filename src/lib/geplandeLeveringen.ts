@@ -35,6 +35,9 @@ type Rij = {
   customer_id: string;
   batch_id: string | null;
   pogingen: number;
+  /* Restleads liggen bewust net buiten het doelgebied; zonder deze vlag zou
+     assignLeadToBatch ze twaalf uur later netjes weigeren. */
+  negeer_geo?: boolean | null;
 };
 
 export async function verwerkGeplandeLeveringen(
@@ -44,7 +47,7 @@ export async function verwerkGeplandeLeveringen(
 
   const { data: rijen, error } = await supabase
     .from('geplande_leadleveringen')
-    .select('id, lead_id, customer_id, batch_id, pogingen')
+    .select('id, lead_id, customer_id, batch_id, pogingen, negeer_geo')
     .eq('status', 'gepland')
     .lte('gepland_voor', nu)
     .order('gepland_voor', { ascending: true })
@@ -118,6 +121,7 @@ async function leverEenRij(supabase: SupabaseClient, rij: Rij): Promise<'gelever
     customer: { id: klant.id, branches: (klant.branches as string[] | null) ?? null },
     batchId: rij.batch_id,
     source: 'distribution',
+    negeerGeo: rij.negeer_geo === true,
   });
 
   if (!resultaat.ok) {
