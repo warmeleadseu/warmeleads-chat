@@ -47,13 +47,16 @@ export default function PortaalkoppelingenPage() {
     try {
       const [kRes, cRes] = await Promise.all([
         adminFetch('/api/admin/portaalkoppelingen'),
-        adminFetch('/api/admin/customers?limit=500'),
+        /* De lichte keuzelijst-route, niet /api/admin/customers. Die laatste
+           kapt af op 100 klanten gesorteerd op naam, waardoor de lijst bij 213
+           klanten ergens rond de K ophield. */
+        adminFetch('/api/admin/customers/options?active=1'),
       ]);
       if (kRes.ok) setKoppelingen(await kRes.json());
       if (cRes.ok) {
         const d = await cRes.json();
-        const lijst = Array.isArray(d) ? d : (d.customers ?? []);
-        setKlanten(lijst.map((c: Klant) => ({ id: c.id, name: c.name, branches: c.branches })));
+        const lijst: Klant[] = Array.isArray(d) ? d : (d.customers ?? []);
+        setKlanten(lijst.map(c => ({ id: c.id, name: c.name, branches: c.branches ?? null })));
       }
     } finally {
       setLaden(false);
