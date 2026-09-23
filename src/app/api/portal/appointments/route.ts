@@ -202,6 +202,20 @@ export async function POST(request: NextRequest) {
   }
 
   // Agent: assign to self by default
+  /* De stralen in het werkgebied van een agent hebben coordinaten nodig. Een
+     afspraak heeft die niet, maar de lead erachter meestal wel. Zonder
+     coordinaten kan de stralencontrole niets zeggen en blijft de afspraak
+     zonder adviseur staan, wat zichtbaar is in de agenda. */
+  let leadPlek: { provincie?: string | null; land?: string | null; lat?: number | null; lng?: number | null } = {};
+  if (lead_id) {
+    const { data: leadRij } = await supabase
+      .from('leads')
+      .select('provincie, land, lat, lng')
+      .eq('id', lead_id)
+      .maybeSingle();
+    if (leadRij) leadPlek = leadRij;
+  }
+
   let effectivePortalUserId: string | null = portal_user_id ?? null;
   if (grensoverschrijdend) {
     /* De adviseur komt uit het team van de ontvanger, niet uit dat van de
@@ -210,6 +224,7 @@ export async function POST(request: NextRequest) {
       branch,
       postcode,
       starts_at: startsAtDate.toISOString(),
+      ...leadPlek,
     });
   } else if (session.portalUser && session.portalUser.role === 'agent') {
     effectivePortalUserId = session.portalUser.id;
@@ -218,6 +233,7 @@ export async function POST(request: NextRequest) {
       branch,
       postcode,
       starts_at: startsAtDate.toISOString(),
+      ...leadPlek,
     });
   }
 

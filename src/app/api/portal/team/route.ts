@@ -5,6 +5,39 @@ import { hasPermission, forbidden, PERMISSIONS, ROLE_DEFAULTS, sanitizePermissio
 import bcrypt from 'bcryptjs';
 import { sendEmail } from '@/lib/email';
 import { escapeForIlikeExact, pickEmailRow } from '@/lib/emailDbLookup';
+import { isGeldigGebied } from '@/lib/agentGebied';
+
+/**
+ * Maakt de toewijzingsregels veilig voor opslag.
+ *
+ * De gebieden komen uit de browser, dus coordinaten en stralen worden hier
+ * gecontroleerd in plaats van geloofd. Een straal van een miljoen kilometer of
+ * een lat van "veel" zou anders de hele verdeling scheeftrekken.
+ */
+function schoonAssignmentRules(ruw: unknown): Record<string, unknown> {
+  if (!ruw || typeof ruw !== 'object') return {};
+  const regels = { ...(ruw as Record<string, unknown>) };
+
+  if ('gebieden' in regels) {
+    const lijst = Array.isArray(regels.gebieden) ? regels.gebieden : [];
+    regels.gebieden = lijst
+      .filter(isGeldigGebied)
+      .slice(0, MAX_GEBIEDEN)
+      .map((g) => ({
+        label: String(g.label).trim().slice(0, 120),
+        lat: g.lat,
+        lng: g.lng,
+        radius_km: Math.min(500, Math.max(1, Math.round(g.radius_km))),
+        land: typeof (g as { land?: unknown }).land === 'string' ? (g as { land: string }).land.slice(0, 2) : null,
+      }));
+  }
+
+  return regels;
+}
+
+/** Ruim boven wat iemand handmatig instelt; voorkomt een opgeblazen veld. */
+const MAX_GEBIEDEN = 25;
+
 
 const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.warmeleads.eu';
 
@@ -122,7 +155,7 @@ export async function POST(request: NextRequest) {
            betekende in de praktijk "ontvangt nooit iets" zonder dat dat ergens
            stond. Nu is het een zichtbare keuze die je kunt omzetten. */
         assignment_rules: assignment_rules && Object.keys(assignment_rules).length > 0
-          ? assignment_rules
+          ? schoonAssignmentRules(assignment_rules)
           : { mode: 'manual' },
         phone: phone || null,
       })

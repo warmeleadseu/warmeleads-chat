@@ -8,6 +8,7 @@ import { batchIsAtCapacity, isCappedDeliveryModel } from './batchDeliveryModel';
 import { getLeadLimitPeriodAnchors } from './batchAssignmentCaps';
 import { leadMatchesAnyProvinceTarget } from './provinceTargetMatch';
 import { targetCountryAllowsLead } from './targetCountryMatch';
+import { agentDektLocatie } from './agentGebied';
 import { filterPipelineBatchesToFifoHeads, isPipelineFifoHeadBatch } from './pipelineBatchFifo';
 import {
   TARGET_AVG_ASSIGNMENTS,
@@ -1232,14 +1233,16 @@ async function assignToPortalUser(
       if (!rules.branches.includes(lead.branch)) return false;
     }
 
-    // Region filter
-    if (rules.regions && rules.regions.values && rules.regions.values.length > 0) {
-      if (rules.regions.type === 'provinces') {
-        if (!leadMatchesAnyProvinceTarget(lead, rules.regions.values)) return false;
-      }
-    }
-
-    return true;
+    /* Werkgebied: provincies én stralen rond een plaats, via dezelfde functie
+       als de afsprakentoewijzer. Hier stond eerder alleen een provincie-
+       controle, waardoor een instelling op postcodes werd genegeerd. */
+    return agentDektLocatie(rules, {
+      provincie: lead.provincie,
+      land: (lead as { land?: string | null }).land,
+      postcode: lead.postcode,
+      lat: lead.lat,
+      lng: lead.lng,
+    });
   });
 
   if (candidates.length === 0) return;

@@ -24,6 +24,8 @@ import { EmptyState, PageHeader, Skeleton, T } from '../_ui';
 
 import { PROVINCE_OPTIONS_BE, PROVINCE_OPTIONS_NL } from '@/data/provinces';
 import { formatProvinceTargetLabel } from '@/lib/provinceTargetMatch';
+import { GebiedenKiezer } from './GebiedenKiezer';
+import { leesGebieden, type AgentGebied } from '@/lib/agentGebied';
 
 const MODE_OPTIONS: { value: AssignmentRules['mode']; label: string; desc: string }[] = [
   { value: 'manual', label: 'Handmatig', desc: 'Alleen handmatig toegewezen leads' },
@@ -462,6 +464,14 @@ function AssignmentRulesEditor({
                 <p className="mt-1 text-[10px] text-slate-400">Geen selectie = alle regio&apos;s</p>
               )}
             </div>
+
+            {/* Plaats met een vrij in te vullen straal, naast de provincies.
+                Een agent komt in aanmerking als de lead of afspraak in een van
+                zijn provincies valt OF binnen een van zijn cirkels. */}
+            <GebiedenKiezer
+              gebieden={leesGebieden(rules)}
+              onChange={(g: AgentGebied[]) => onChange({ ...rules, gebieden: g })}
+            />
 
             {/* Limits */}
             <div>

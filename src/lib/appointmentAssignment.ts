@@ -1,10 +1,17 @@
 import { createServerClient } from './supabase';
 import type { AssignmentRules } from './portalPermissions';
+import { agentDektLocatie } from './agentGebied';
 
 interface AppointmentContext {
   branch: string;
   postcode?: string | null;
   starts_at: string;
+  /* Voor het werkgebied van de agent. Optioneel: een aanroep zonder deze
+     velden werkt nog steeds, dan telt alleen wat er wél bekend is. */
+  provincie?: string | null;
+  land?: string | null;
+  lat?: number | null;
+  lng?: number | null;
 }
 
 /**
@@ -47,13 +54,17 @@ export async function pickAppointmentAssignee(
 
     if (rules.branches && rules.branches.length > 0 && !rules.branches.includes(ctx.branch)) return false;
 
-    if (rules.regions && rules.regions.values.length > 0 && ctx.postcode) {
-      if (rules.regions.type === 'postcodes') {
-        const pc4 = ctx.postcode.replace(/\s/g, '').slice(0, 4);
-        if (!rules.regions.values.some(v => pc4.startsWith(v.replace(/\s/g, '').slice(0, 4)))) return false;
-      }
-    }
-    return true;
+    /* Werkgebied: provincies én stralen rond een plaats, via de gedeelde
+       functie. Hier stond eerder alleen een postcodecontrole, terwijl de
+       teampagina uitsluitend provincies wegschrijft: het werkgebied van een
+       agent werd bij afspraken dus volledig genegeerd. */
+    return agentDektLocatie(rules, {
+      postcode: ctx.postcode,
+      provincie: ctx.provincie,
+      land: ctx.land,
+      lat: ctx.lat,
+      lng: ctx.lng,
+    });
   });
 
   if (candidates.length === 0) return null;

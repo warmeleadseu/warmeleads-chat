@@ -4,6 +4,39 @@ import { createServerClient } from '@/lib/supabase';
 import { hasPermission, forbidden, PERMISSIONS, sanitizePermissions } from '@/lib/portalPermissions';
 import bcrypt from 'bcryptjs';
 import { escapeForIlikeExact, pickEmailRow } from '@/lib/emailDbLookup';
+import { isGeldigGebied } from '@/lib/agentGebied';
+
+/**
+ * Maakt de toewijzingsregels veilig voor opslag.
+ *
+ * De gebieden komen uit de browser, dus coordinaten en stralen worden hier
+ * gecontroleerd in plaats van geloofd. Een straal van een miljoen kilometer of
+ * een lat van "veel" zou anders de hele verdeling scheeftrekken.
+ */
+function schoonAssignmentRules(ruw: unknown): Record<string, unknown> {
+  if (!ruw || typeof ruw !== 'object') return {};
+  const regels = { ...(ruw as Record<string, unknown>) };
+
+  if ('gebieden' in regels) {
+    const lijst = Array.isArray(regels.gebieden) ? regels.gebieden : [];
+    regels.gebieden = lijst
+      .filter(isGeldigGebied)
+      .slice(0, MAX_GEBIEDEN)
+      .map((g) => ({
+        label: String(g.label).trim().slice(0, 120),
+        lat: g.lat,
+        lng: g.lng,
+        radius_km: Math.min(500, Math.max(1, Math.round(g.radius_km))),
+        land: typeof (g as { land?: unknown }).land === 'string' ? (g as { land: string }).land.slice(0, 2) : null,
+      }));
+  }
+
+  return regels;
+}
+
+/** Ruim boven wat iemand handmatig instelt; voorkomt een opgeblazen veld. */
+const MAX_GEBIEDEN = 25;
+
 
 export async function PUT(
   request: NextRequest,
@@ -46,7 +79,7 @@ export async function PUT(
       updates.role = body.role;
     }
     if (Array.isArray(body.permissions)) updates.permissions = sanitizePermissions(body.permissions);
-    if (body.assignment_rules !== undefined) updates.assignment_rules = body.assignment_rules;
+    if (body.assignment_rules !== undefined) updates.assignment_rules = schoonAssignmentRules(body.assignment_rules);
 
     if (body.password && body.password.length >= 8) {
       updates.password_hash = await bcrypt.hash(body.password, 12);

@@ -96,6 +96,13 @@ export async function POST(request: NextRequest) {
       branch,
       postcode,
       starts_at: startsAtDate.toISOString(),
+      ...(await (async () => {
+        /* Zelfde reden als in de portaalroute: de stralen van een agent hebben
+           coordinaten nodig en die staan op de lead, niet op de afspraak. */
+        if (!lead_id) return {};
+        const { data } = await supabase.from('leads').select('provincie, land, lat, lng').eq('id', lead_id).maybeSingle();
+        return data ?? {};
+      })()),
     });
   }
 

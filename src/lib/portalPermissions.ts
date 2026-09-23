@@ -134,6 +134,9 @@ export interface AssignmentRules {
   mode?: 'auto' | 'manual' | 'all';
   branches?: string[];
   regions?: { type: 'provinces' | 'postcodes'; values: string[] };
+  /* Cirkels rond een plaats, naast de provincies hierboven. Een agent komt in
+     aanmerking als een van beide past; zie src/lib/agentGebied.ts. */
+  gebieden?: { label: string; lat: number; lng: number; radius_km: number }[];
   max_leads_per_day?: number;
   max_leads_per_week?: number;
   max_appointments_per_day?: number;
