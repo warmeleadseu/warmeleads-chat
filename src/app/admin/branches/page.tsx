@@ -18,6 +18,7 @@ import {
   CurrencyEuroIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
+import { WeergaveKiezer, useWeergave } from '@/components/admin/WeergaveKiezer';
 
 interface BranchField {
   id: string;
@@ -126,6 +127,8 @@ export default function BranchesPage() {
     fetchBranches();
   };
 
+  const [weergave, setWeergave] = useWeergave('branches');
+
   const handleToggleActive = async (b: Branch) => {
     await adminFetch('/api/admin/branches', {
       method: 'PUT',
@@ -141,12 +144,19 @@ export default function BranchesPage() {
           <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">Branches</h1>
           <p className="mt-0.5 text-sm text-slate-500">Beheer je productlijnen en configureer custom velden per branche</p>
         </div>
-        <button
-          onClick={() => setShowNew(true)}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-button-gradient px-3.5 py-2 text-sm font-bold text-white shadow-sm"
-        >
-          <PlusIcon className="h-4 w-4" /> Nieuwe branche
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Alleen op desktop: een tabel van zeven kolommen werkt niet op een
+              telefoon, daar blijft het altijd kaarten. */}
+          <div className="hidden md:block">
+            <WeergaveKiezer waarde={weergave} onKies={setWeergave} />
+          </div>
+          <button
+            onClick={() => setShowNew(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-button-gradient px-3.5 py-2 text-sm font-bold text-white shadow-sm"
+          >
+            <PlusIcon className="h-4 w-4" /> Nieuwe branche
+          </button>
+        </div>
       </div>
 
       {loading ? (
@@ -177,7 +187,27 @@ export default function BranchesPage() {
           <p className="mt-1 text-sm text-slate-400">Maak je eerste branche aan.</p>
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <>
+        {weergave === 'tabel' && (
+          <BranchesTabel
+            branches={branches}
+            onBewerk={setEditing}
+            onVelden={setManagingFields}
+            onVerwijder={handleDelete}
+            onWisselActief={handleToggleActive}
+          />
+        )}
+
+        {weergave === 'compact' && (
+          <BranchesCompact
+            branches={branches}
+            onBewerk={setEditing}
+            onVelden={setManagingFields}
+            onWisselActief={handleToggleActive}
+          />
+        )}
+
+        <div className={`grid gap-4 sm:grid-cols-2 xl:grid-cols-3 ${weergave === 'kaarten' ? '' : 'md:hidden'}`}>
           {branches.map(b => {
             const c = COLOR_MAP[b.color] || COLOR_MAP.slate;
             return (
@@ -283,6 +313,7 @@ export default function BranchesPage() {
             );
           })}
         </div>
+        </>
       )}
 
       <AnimatePresence>
@@ -989,5 +1020,144 @@ function FieldsManager({ branch, onClose, onSaved }: { branch: Branch; onClose: 
         </div>
       </motion.div>
     </>
+  );
+}
+
+
+/* ─── Weergaven ───────────────────────────────────────────────────────────
+   De kaartweergave hierboven blijft ongewijzigd. Deze twee zijn erbij gekomen
+   omdat het raster met kaarten van sterk wisselende hoogte rafelige rijen gaf:
+   een branche met vijf staffels en zes velden is drie keer zo hoog als een met
+   één van elk, en de rest van de rij vult zich met witruimte. */
+
+interface WeergaveProps {
+  branches: Branch[];
+  onBewerk: (b: Branch) => void;
+  onVelden: (b: Branch) => void;
+  onWisselActief: (b: Branch) => void;
+}
+
+function StatusKnop({ branch, onWissel }: { branch: Branch; onWissel: (b: Branch) => void }) {
+  return (
+    <button
+      onClick={() => onWissel(branch)}
+      className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium transition ${
+        branch.is_active
+          ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+          : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+      }`}
+    >
+      {branch.is_active ? 'Actief' : 'Inactief'}
+    </button>
+  );
+}
+
+function BranchesTabel({ branches, onBewerk, onVelden, onVerwijder, onWisselActief }: WeergaveProps & { onVerwijder: (b: Branch) => void }) {
+  return (
+    <div className="hidden overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm md:block">
+      <table className="w-full text-sm">
+        <thead className="border-b border-slate-100 bg-slate-50/70">
+          <tr className="text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+            <th className="px-4 py-2.5">Branche</th>
+            <th className="px-4 py-2.5">Status</th>
+            <th className="px-4 py-2.5 text-right">Leads</th>
+            <th className="px-4 py-2.5 text-right">Koppelingen</th>
+            <th className="px-4 py-2.5 text-right">Velden</th>
+            <th className="px-4 py-2.5">Staffels</th>
+            <th className="px-4 py-2.5 text-right">Acties</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-50">
+          {branches.map(b => {
+            const c = COLOR_MAP[b.color] || COLOR_MAP.slate;
+            const staffels = [...(b.pricing_tiers || [])].sort(
+              (x: PricingTier, y: PricingTier) => x.min_leads - y.min_leads,
+            );
+            return (
+              <tr key={b.id} className="transition hover:bg-slate-50/60">
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${c.light}`}>
+                      <BoltIcon className={`h-4 w-4 ${c.text}`} />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold text-slate-900">{b.name}</p>
+                      <p className="truncate font-mono text-[11px] text-slate-400">{b.slug}</p>
+                    </div>
+                    {b.is_partner_branch && (
+                      <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800" title="Partner-branche, prospects-pijplijn">
+                        Partner
+                      </span>
+                    )}
+                  </div>
+                </td>
+                <td className="px-4 py-3"><StatusKnop branch={b} onWissel={onWisselActief} /></td>
+                <td className="px-4 py-3 text-right tabular-nums text-slate-600">{b.lead_count.toLocaleString('nl-NL')}</td>
+                <td className="px-4 py-3 text-right tabular-nums text-slate-600">{b.webhook_count}</td>
+                <td className="px-4 py-3 text-right tabular-nums text-slate-600">{b.branch_fields.length}</td>
+                <td className="px-4 py-3">
+                  {staffels.length === 0 ? (
+                    <span className="text-xs text-slate-300">-</span>
+                  ) : (
+                    /* Alleen het aantal in de regel; de bedragen in de tooltip.
+                       Vijf chips naast elkaar maakte de rij te breed. */
+                    <span
+                      className="cursor-help border-b border-dotted border-slate-300 text-xs text-slate-600"
+                      title={staffels.map((t: PricingTier) => `${t.min_leads}+ → €${Number(t.price_per_lead).toFixed(2)}`).join('\n')}
+                    >
+                      {staffels.length} {staffels.length === 1 ? 'staffel' : 'staffels'}
+                      {Number(b.nationwide_discount) > 0 && <span className="ml-1 text-emerald-600">·korting</span>}
+                    </span>
+                  )}
+                </td>
+                <td className="px-4 py-3">
+                  <div className="flex items-center justify-end gap-1">
+                    <button onClick={() => onBewerk(b)} title="Bewerken" className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-brand-purple">
+                      <PencilSquareIcon className="h-4 w-4" />
+                    </button>
+                    <button onClick={() => onVelden(b)} title="Velden beheren" className="rounded-lg p-1.5 text-slate-400 transition hover:bg-brand-purple/10 hover:text-brand-purple">
+                      <SwatchIcon className="h-4 w-4" />
+                    </button>
+                    <button onClick={() => onVerwijder(b)} title="Verwijderen" className="rounded-lg p-1.5 text-slate-400 transition hover:bg-red-50 hover:text-red-500">
+                      <TrashIcon className="h-4 w-4" />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function BranchesCompact({ branches, onBewerk, onVelden, onWisselActief }: WeergaveProps) {
+  return (
+    <div className="hidden divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm md:block">
+      {branches.map(b => {
+        const c = COLOR_MAP[b.color] || COLOR_MAP.slate;
+        return (
+          <div key={b.id} className="flex items-center gap-3 px-4 py-2.5 transition hover:bg-slate-50/60">
+            {/* Het kleurstipje van de branche, zodat je in een dichte lijst
+                nog steeds in één oogopslag ziet waar je bent. */}
+            <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${c.light} ring-1 ring-inset ${c.text.replace('text-', 'ring-')}`} />
+            <span className="min-w-0 flex-1 truncate font-medium text-slate-800">{b.name}</span>
+            <span className="hidden shrink-0 font-mono text-[11px] text-slate-400 lg:inline">{b.slug}</span>
+            <span className="shrink-0 tabular-nums text-xs text-slate-500">{b.lead_count.toLocaleString('nl-NL')} leads</span>
+            <span className="shrink-0 tabular-nums text-xs text-slate-400">{b.branch_fields.length} velden</span>
+            <StatusKnop branch={b} onWissel={onWisselActief} />
+            <div className="flex shrink-0 items-center gap-0.5">
+              <button onClick={() => onBewerk(b)} title="Bewerken" className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-brand-purple">
+                <PencilSquareIcon className="h-3.5 w-3.5" />
+              </button>
+              <button onClick={() => onVelden(b)} title="Velden beheren" className="rounded-lg p-1.5 text-slate-400 transition hover:bg-brand-purple/10 hover:text-brand-purple">
+                <SwatchIcon className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }

@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useAdmin } from '../adminContext';
 import { adminFetch } from '@/lib/adminAuth';
 import { filterKoppelingen } from '@/lib/koppelingZoek';
+import { WeergaveKiezer, useWeergave } from '@/components/admin/WeergaveKiezer';
 import {
   PlusIcon,
   MagnifyingGlassIcon,
@@ -61,6 +62,7 @@ export default function KoppelingenPage() {
   const [testResult, setTestResult] = useState<{ id: string; success: boolean; message: string } | null>(null);
   const [activeBackfill, setActiveBackfill] = useState<string | null>(null);
   const [zoekterm, setZoekterm] = useState('');
+  const [weergave, setWeergave] = useWeergave('koppelingen');
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -148,12 +150,17 @@ export default function KoppelingenPage() {
           <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">Koppelingen</h1>
           <p className="mt-0.5 text-sm text-slate-500">Verbind je Zapier zaps om leads automatisch binnen te krijgen</p>
         </div>
-        <button
-          onClick={() => setShowWizard(true)}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-button-gradient px-3.5 py-2 text-sm font-bold text-white shadow-sm"
-        >
-          <PlusIcon className="h-4 w-4" /> Nieuwe koppeling
-        </button>
+        <div className="flex items-center gap-2">
+          <div className="hidden md:block">
+            <WeergaveKiezer waarde={weergave} onKies={setWeergave} />
+          </div>
+          <button
+            onClick={() => setShowWizard(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-button-gradient px-3.5 py-2 text-sm font-bold text-white shadow-sm"
+          >
+            <PlusIcon className="h-4 w-4" /> Nieuwe koppeling
+          </button>
+        </div>
       </div>
 
       {/* Info banner */}
@@ -246,7 +253,20 @@ export default function KoppelingenPage() {
           </button>
         </div>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <>
+        {weergave !== 'kaarten' && (
+          <KoppelingenLijst
+            keys={zichtbareKeys}
+            branchesList={branchesList}
+            compact={weergave === 'compact'}
+            onInstructies={(id: string) => setActiveInstructions(activeInstructions === id ? null : id)}
+            onBackfill={(id: string) => setActiveBackfill(activeBackfill === id ? null : id)}
+            onTest={testWebhookFromPanel}
+            onVerwijder={(id: string, label: string) => deleteKey(id, label)}
+          />
+        )}
+
+        <div className={`grid gap-3 sm:grid-cols-2 lg:grid-cols-3 ${weergave === 'kaarten' ? '' : 'md:hidden'}`}>
           {zichtbareKeys.map(k => {
             const hasLeads = k.request_count > 0;
             const isRecent = k.last_used_at && (Date.now() - new Date(k.last_used_at).getTime()) < 7 * 24 * 60 * 60 * 1000;
@@ -365,6 +385,7 @@ export default function KoppelingenPage() {
             );
           })}
         </div>
+        </>
       )}
 
       {/* Instructions slide-over */}
@@ -1751,5 +1772,133 @@ function BackfillPanel({
         </div>
       </motion.div>
     </>
+  );
+}
+
+
+/* ─── Lijstweergaven ──────────────────────────────────────────────────────
+   Het raster met kaarten blijft ongewijzigd bestaan. Deze lijst is erbij
+   gekomen omdat 28 koppelingen in een raster van drie kolommen lastig te
+   overzien zijn: je moet scrollen om twee regels te vergelijken.
+
+   De instructie- en backfill-panelen zijn slide-overs en staan los van de
+   kaart, dus die werken hier zonder aanpassing. */
+
+function tijdSinds(datum: string | null): string {
+  if (!datum) return 'nooit';
+  const sec = Math.floor((Date.now() - new Date(datum).getTime()) / 1000);
+  if (Number.isNaN(sec)) return 'onbekend';
+  if (sec < 3600) return `${Math.max(1, Math.floor(sec / 60))} min`;
+  if (sec < 86400) return `${Math.floor(sec / 3600)} uur`;
+  return `${Math.floor(sec / 86400)} dgn`;
+}
+
+function KoppelingenLijst({
+  keys,
+  branchesList,
+  compact,
+  onInstructies,
+  onBackfill,
+  onTest,
+  onVerwijder,
+}: {
+  keys: WebhookKey[];
+  branchesList: BranchConfig[];
+  compact: boolean;
+  onInstructies: (id: string) => void;
+  onBackfill: (id: string) => void;
+  onTest: (id: string) => void;
+  onVerwijder: (id: string, label: string) => void;
+}) {
+  const brancheVan = (slug: string) => branchesList.find(b => b.slug === slug);
+
+  const acties = (k: WebhookKey) => (
+    <div className="flex shrink-0 items-center gap-0.5">
+      <button onClick={() => onInstructies(k.id)} title="Instructies" className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-brand-purple">
+        <InformationCircleIcon className="h-4 w-4" />
+      </button>
+      <button onClick={() => onTest(k.id)} title="Testen" className="rounded-lg p-1.5 text-slate-400 transition hover:bg-emerald-50 hover:text-emerald-600">
+        <SignalIcon className="h-4 w-4" />
+      </button>
+      <button onClick={() => onBackfill(k.id)} title="Backfill" className="rounded-lg p-1.5 text-slate-400 transition hover:bg-sky-50 hover:text-sky-600">
+        <ArrowPathIcon className="h-4 w-4" />
+      </button>
+      <button onClick={() => onVerwijder(k.id, k.label)} title="Verwijderen" className="rounded-lg p-1.5 text-slate-400 transition hover:bg-red-50 hover:text-red-500">
+        <TrashIcon className="h-4 w-4" />
+      </button>
+    </div>
+  );
+
+  if (compact) {
+    return (
+      <div className="hidden divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm md:block">
+        {keys.map(k => {
+          const bc = brancheVan(k.branch);
+          return (
+            <div key={k.id} className="flex items-center gap-3 px-4 py-2.5 transition hover:bg-slate-50/60">
+              <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${k.request_count > 0 ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+              <span className="min-w-0 flex-1 truncate font-medium text-slate-800">{k.label}</span>
+              <span className="hidden shrink-0 text-xs text-slate-400 lg:inline">{bc?.name || k.branch}</span>
+              <span className="shrink-0 tabular-nums text-xs text-slate-500">{k.request_count.toLocaleString('nl-NL')} leads</span>
+              <span className="hidden shrink-0 text-xs text-slate-400 sm:inline">{tijdSinds(k.last_used_at)}</span>
+              {acties(k)}
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  return (
+    <div className="hidden overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm md:block">
+      <table className="w-full text-sm">
+        <thead className="border-b border-slate-100 bg-slate-50/70">
+          <tr className="text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+            <th className="px-4 py-2.5">Koppeling</th>
+            <th className="px-4 py-2.5">Branche</th>
+            <th className="px-4 py-2.5">Klant</th>
+            <th className="px-4 py-2.5">Status</th>
+            <th className="px-4 py-2.5 text-right">Leads</th>
+            <th className="px-4 py-2.5">Laatst gebruikt</th>
+            <th className="px-4 py-2.5 text-right">Acties</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-50">
+          {keys.map(k => {
+            const bc = brancheVan(k.branch);
+            const c = BRANCH_COLOR_MAP[bc?.color || 'slate'] || BRANCH_COLOR_MAP.slate;
+            const heeftLeads = k.request_count > 0;
+            return (
+              <tr key={k.id} className="transition hover:bg-slate-50/60">
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <span className={`h-2 w-2 shrink-0 rounded-full ${heeftLeads ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+                    <span className="truncate font-medium text-slate-900">{k.label}</span>
+                  </div>
+                </td>
+                <td className="px-4 py-3">
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${c.light} ${c.text}`}>
+                    {bc?.name || k.branch}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-slate-600">
+                  <span className="truncate">{k.customers?.name || <span className="text-slate-300">-</span>}</span>
+                </td>
+                <td className="px-4 py-3">
+                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${
+                    heeftLeads ? 'border-emerald-200 bg-emerald-50 text-emerald-600' : 'border-amber-200 bg-amber-50 text-amber-600'
+                  }`}>
+                    {heeftLeads ? 'Actief' : 'Nieuw'}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-right tabular-nums text-slate-600">{k.request_count.toLocaleString('nl-NL')}</td>
+                <td className="px-4 py-3 text-slate-500">{tijdSinds(k.last_used_at)}</td>
+                <td className="px-4 py-3"><div className="flex justify-end">{acties(k)}</div></td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
   );
 }
