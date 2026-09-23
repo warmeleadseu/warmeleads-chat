@@ -55,3 +55,7 @@ assets/meta-app-review/_tmp/
 
 # Runtime-state van scripts/stagger-greenteam-load.ts (per run, hoort niet in git)
 scripts/.stagger-state/
+
+# Momentopnames van doelgebieden: bevatten klantlocaties, horen niet in git
+straal-oorspronkelijk.json
+straal-momentopname-*.json
