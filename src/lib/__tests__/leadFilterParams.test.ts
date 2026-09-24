@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { standNaarFilterParams, filterParamsNaarStand } from '../leadFilterParams';
 import { LEGE_LEADFILTERS, telActieveLeadFilters, type LeadFilterStand } from '../leadFilterState';
+import { bodyToLeadFilterParams } from '../leadExportFilters';
 
 /**
  * De rondgangtest is de kern: elke filter die het scherm kan zetten moet het
@@ -92,5 +93,39 @@ describe('standNaarFilterParams en terug', () => {
       .toBeUndefined();
     expect(standNaarFilterParams({ ...LEGE_LEADFILTERS, dateFrom: '2026-01-01', includeUnknownDate: false }).include_unknown_date)
       .toBe('false');
+  });
+
+  it('houdt elk filter heel tot in de exportroute', () => {
+    /* De laatste schakel: van de stand in het scherm, via de parameters die het
+       exportvenster verstuurt, naar de filters waarmee de route de database
+       bevraagt. Valt er onderweg iets weg, dan exporteer je een andere
+       verzameling dan je op het scherm hebt staan. */
+    const params = standNaarFilterParams(VOL);
+    const routeFilters = bodyToLeadFilterParams(params);
+
+    expect(routeFilters.branch).toBe('warmtepomp,zonnepanelen');
+    expect(routeFilters.customer_id).toBe('klant-a,klant-b');
+    expect(routeFilters.status).toBe('nieuw');
+    expect(routeFilters.province).toBe('Noord-Brabant,Limburg');
+    expect(routeFilters.province_margin_km).toBe('5');
+    expect(routeFilters.source).toBe('meta');
+    expect(routeFilters.meta_campaign_id).toBe('camp-1');
+    expect(routeFilters.assignment).toBe('unassigned');
+    expect(routeFilters.phone_valid).toBe('true');
+    expect(routeFilters.bulk_status).toBe('never');
+    expect(routeFilters.date_from).toBe('2026-09-12');
+    expect(routeFilters.date_to).toBe('2026-09-24');
+    expect(routeFilters.include_unknown_date).toBe('false');
+    expect(routeFilters.search).toBe('jansen');
+    expect(routeFilters.plaats).toBe('Eindhoven');
+    expect(routeFilters.plaats_radius_km).toBe('25');
+    expect(routeFilters.postcode_ranges).toBe('7500-7599');
+
+    /* En geen enkel filter van de route blijft leeg, op de uitsluiting na: die
+       bestaat alleen in het exportvenster en staat niet op het scherm. */
+    for (const [sleutel, waarde] of Object.entries(routeFilters)) {
+      if (sleutel === 'exclude_customer_id') continue;
+      expect(waarde, `filter ${sleutel} komt niet door`).not.toBeNull();
+    }
   });
 });
