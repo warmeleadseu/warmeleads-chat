@@ -92,6 +92,40 @@ async function runSyncJob(
   return true;
 }
 
+/** Legt een fout vast die optrad voordat de synchronisatie zelf iets kon loggen. */
+async function legFoutVast(
+  supabase: ReturnType<typeof createServerClient>,
+  row: SyncJob,
+  err: unknown,
+): Promise<void> {
+  const bericht = err instanceof Error ? err.message : String(err);
+  try {
+    const { data: bestaand } = await supabase
+      .from('integration_sync_log')
+      .select('id')
+      .eq('assignment_id', row.assignment_id)
+      .eq('provider', row.provider)
+      .maybeSingle();
+    if (bestaand?.id) return;
+
+    await supabase.from('integration_sync_log').insert({
+      customer_id: row.customer_id,
+      lead_id: row.lead_id,
+      assignment_id: row.assignment_id,
+      provider: row.provider,
+      status: 'failed',
+      attempts: 1,
+      error_message: bericht.slice(0, 500),
+    });
+  } catch (logErr) {
+    console.error('[integration-sync-retry] fout vastleggen mislukt', {
+      assignmentId: row.assignment_id,
+      provider: row.provider,
+      message: logErr instanceof Error ? logErr.message : String(logErr),
+    });
+  }
+}
+
 export async function GET(request: NextRequest) {
   const cronError = verifyCronAuth(request);
   if (cronError) return cronError;
@@ -109,7 +143,23 @@ export async function GET(request: NextRequest) {
     .order('created_at', { ascending: true })
     .limit(60);
 
-  for (const row of failed || []) {
+  /* Ook regels die op 'pending' bleven staan. Een synchronisatie zet zijn regel
+     eerst op pending en daarna pas op success of failed; gaat de functie er
+     tussenin onderuit, dan blijft hij voor altijd pending en pakte niemand hem
+     nog op. De half uur wachttijd voorkomt dat we een poging inhalen die op dit
+     moment gewoon nog bezig is. */
+  const pendingGrens = new Date(Date.now() - 30 * 60_000).toISOString();
+  const { data: blijvenHangen } = await supabase
+    .from('integration_sync_log')
+    .select('customer_id, lead_id, assignment_id, attempts, created_at, provider')
+    .in('provider', [TEAMLEADER_PROVIDER, GOOGLE_SHEETS_PROVIDER, OUTBOUND_WEBHOOK_PROVIDER])
+    .eq('status', 'pending')
+    .lt('attempts', MAX_ATTEMPTS)
+    .lt('created_at', pendingGrens)
+    .order('created_at', { ascending: true })
+    .limit(30);
+
+  for (const row of [...(failed || []), ...(blijvenHangen || [])]) {
     const key = `${row.assignment_id}:${row.provider}`;
     if (seen.has(key)) continue;
     seen.add(key);
@@ -117,12 +167,19 @@ export async function GET(request: NextRequest) {
   }
 
   const cutoff = new Date(Date.now() - MISSING_LOOKBACK_HOURS * 3_600_000).toISOString();
+  /* Nieuwste eerst, en dat is geen detail.
+     Dit stond op oudste eerst, met een limiet van 200. Zolang er in 72 uur
+     minder dan 200 leads werden uitgedeeld viel dat niet op. Zodra het er meer
+     werden, kwam de grens midden in het venster te liggen en verdween alles
+     wat er ná die 200e stond definitief uit beeld: juist de verse leads. Bij
+     Mediabink liep de spreadsheet daardoor een etmaal leeg zonder één
+     foutmelding, want wat de cron niet ziet, probeert hij ook niet. */
   const { data: recentAssignments } = await supabase
     .from('lead_assignments')
     .select('id, lead_id, customer_id, assigned_at, customers(branches), leads(branch, bron)')
     .gte('assigned_at', cutoff)
     .neq('source', 'demo')
-    .order('assigned_at', { ascending: true })
+    .order('assigned_at', { ascending: false })
     .limit(200);
 
   for (const a of recentAssignments || []) {
@@ -182,8 +239,13 @@ export async function GET(request: NextRequest) {
     try {
       const ok = await runSyncJob(supabase, row);
       if (ok) succeeded++;
-    } catch {
-      /* logged in sync log */
+    } catch (err) {
+      /* De synchronisatie schrijft zelf een regel zodra hij eraan toe is, maar
+         gaat hij daarvóór onderuit dan verdween de fout hier in een leeg
+         catch-blok. Dat is precies hoe een koppeling een etmaal stil kan
+         uitvallen zonder spoor. Staat er nog niets, dan leggen we het hier
+         vast, zodat het zichtbaar wordt en de volgende ronde het oppakt. */
+      await legFoutVast(supabase, row, err);
     }
     retried++;
   }
