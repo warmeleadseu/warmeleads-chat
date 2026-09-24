@@ -1,4 +1,4 @@
-import type { OutboundWebhookFieldMapping } from './types';
+import type { OutboundWebhookConstant, OutboundWebhookFieldMapping } from './types';
 
 export type WebhookSourceField = {
   /** Vaste interne sleutel. Branche-specifieke velden krijgen het prefix 'custom:'. */
@@ -21,6 +21,8 @@ export const WEBHOOK_BASE_FIELDS: WebhookSourceField[] = [
   { key: 'categorieen', defaultTarget: 'categorieen', label: 'Categorieën (lijst)' },
   { key: 'aanhef', defaultTarget: 'aanhef', label: 'Aanhef' },
   { key: 'naam', defaultTarget: 'naam', label: 'Naam' },
+  { key: 'voornaam', defaultTarget: 'voornaam', label: 'Voornaam (afgeleid)' },
+  { key: 'achternaam', defaultTarget: 'achternaam', label: 'Achternaam (afgeleid, incl. tussenvoegsel)' },
   { key: 'email', defaultTarget: 'email', label: 'E-mailadres' },
   { key: 'telefoonnummer', defaultTarget: 'telefoonnummer', label: 'Telefoonnummer' },
   { key: 'adres', defaultTarget: 'adres', label: 'Adres (straat + huisnummer)' },
@@ -105,4 +107,33 @@ export function sanitizeFieldMappings(
     out.push({ source: m.source, target, enabled: m.enabled !== false });
   }
   return out;
+}
+
+/** Maximaal aantal vaste waarden; genoeg voor elke partner, klein genoeg om overzicht te houden. */
+export const MAX_CONSTANTS = 15;
+
+/**
+ * Saneert vaste waarden uit een portal-request.
+ *
+ * Een lege sleutel valt af, want zonder JSON-key is er niets om te vullen. Een
+ * lege wáárde mag wel: sommige ontvangers willen een sleutel zien staan, ook
+ * als hij leeg is.
+ */
+export function sanitizeConstants(input: unknown): OutboundWebhookConstant[] {
+  if (!Array.isArray(input)) return [];
+  const uit: OutboundWebhookConstant[] = [];
+  const gezien = new Set<string>();
+  for (const raw of input) {
+    if (!raw || typeof raw !== 'object') continue;
+    const c = raw as { target?: unknown; value?: unknown };
+    const target = typeof c.target === 'string' ? c.target.trim().slice(0, 100) : '';
+    if (!target || gezien.has(target)) continue;
+    gezien.add(target);
+    uit.push({
+      target,
+      value: typeof c.value === 'string' ? c.value.slice(0, 500) : '',
+    });
+    if (uit.length >= MAX_CONSTANTS) break;
+  }
+  return uit;
 }

@@ -9,6 +9,22 @@ export type OutboundWebhookFieldMapping = {
   enabled: boolean;
 };
 
+/**
+ * Een vaste waarde die altijd meegaat, los van de lead.
+ *
+ * Sommige ontvangers willen een letterlijke tekst die bij ons nergens als
+ * leadveld bestaat: AfsprakenMachine verwacht bijvoorbeeld `bron: "WarmeLeads"`
+ * om te zien waar een lead vandaan komt, en `land: "Nederland"` voluit terwijl
+ * wij `NL` opslaan. Zonder deze mogelijkheid zou je zoiets per klant in de code
+ * moeten zetten, en dat is precies wat je niet wilt.
+ */
+export type OutboundWebhookConstant = {
+  /** JSON-key in de uitgaande payload. */
+  target: string;
+  /** De letterlijke waarde. */
+  value: string;
+};
+
 export type OutboundWebhookSettings = {
   enabled?: boolean;
   url?: string | null;
@@ -16,6 +32,8 @@ export type OutboundWebhookSettings = {
   branches?: string[];
   /** Veld-mapping; leeg/undefined = standaardmapping (zie fields.ts). */
   field_mappings?: OutboundWebhookFieldMapping[];
+  /** Vaste waarden die altijd meegaan, bovenop de veld-mapping. */
+  constants?: OutboundWebhookConstant[];
 };
 
 export type StoredOutboundWebhook = {

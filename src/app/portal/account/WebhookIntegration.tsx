@@ -18,8 +18,12 @@ type WebhookConfig = {
   available_branches: string[];
   available_fields: SourceField[];
   field_mappings: FieldMapping[];
+  constants: Constante[];
   last_delivery: { status: string; at: string; error: string | null } | null;
 };
+
+/** Een vaste waarde die altijd meegaat, los van de lead. */
+type Constante = { target: string; value: string };
 
 const BRANCH_LABELS: Record<string, string> = {
   isolatie: 'Isolatie',
@@ -70,6 +74,7 @@ export function WebhookIntegration({
   const [token, setToken] = useState('');
   const [branches, setBranches] = useState<string[]>([]);
   const [fields, setFields] = useState<SourceField[]>([]);
+  const [constanten, setConstanten] = useState<Constante[]>([]);
   const [mappings, setMappings] = useState<Record<string, { target: string; enabled: boolean }>>(
     {},
   );
@@ -82,6 +87,7 @@ export function WebhookIntegration({
     const map: Record<string, { target: string; enabled: boolean }> = {};
     for (const m of c.field_mappings ?? []) map[m.source] = { target: m.target, enabled: m.enabled };
     setMappings(map);
+    setConstanten(c.constants ?? []);
     setToken('');
   }, []);
 
@@ -141,6 +147,9 @@ export function WebhookIntegration({
             enabled: m.enabled,
           };
         }),
+        constants: constanten
+          .map((c) => ({ target: c.target.trim(), value: c.value }))
+          .filter((c) => c.target.length > 0),
       };
       if (token.trim().length > 0) body.token = token.trim();
       if (typeof nextEnabled === 'boolean') body.enabled = nextEnabled;
@@ -414,6 +423,58 @@ export function WebhookIntegration({
             </div>
           </div>
         )}
+
+        <div>
+          <p className="mb-1.5 block text-xs font-medium text-slate-700">Vaste waarden</p>
+          <p className="mb-2 text-[11px] text-slate-400">
+            Voor velden die bij elke lead hetzelfde zijn en dus niet uit de lead komen, zoals een
+            herkenning van de afzender. Wordt als laatste toegepast en gaat dus vóór een veld
+            hierboven met dezelfde JSON-key.
+          </p>
+          <div className="space-y-2">
+            {constanten.map((c, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={c.target}
+                  onChange={(e) =>
+                    setConstanten((v) =>
+                      v.map((x, j) => (j === i ? { ...x, target: e.target.value } : x)),
+                    )
+                  }
+                  placeholder="JSON-key, bijv. bron"
+                  className="min-w-0 flex-1 rounded-lg border border-slate-200 px-2.5 py-1.5 font-mono text-sm text-slate-900 outline-none transition focus:border-brand-purple focus:ring-1 focus:ring-brand-purple/20"
+                />
+                <span className="shrink-0 text-slate-300">=</span>
+                <input
+                  type="text"
+                  value={c.value}
+                  onChange={(e) =>
+                    setConstanten((v) =>
+                      v.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)),
+                    )
+                  }
+                  placeholder="waarde, bijv. WarmeLeads"
+                  className="min-w-0 flex-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm text-slate-900 outline-none transition focus:border-brand-purple focus:ring-1 focus:ring-brand-purple/20"
+                />
+                <button
+                  type="button"
+                  onClick={() => setConstanten((v) => v.filter((_, j) => j !== i))}
+                  className="shrink-0 rounded-lg px-2 py-1.5 text-xs font-medium text-slate-400 hover:bg-slate-50 hover:text-red-600"
+                >
+                  Verwijderen
+                </button>
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={() => setConstanten((v) => [...v, { target: '', value: '' }])}
+              className="rounded-lg border border-dashed border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-500 hover:border-brand-purple/40 hover:text-brand-purple"
+            >
+              Vaste waarde toevoegen
+            </button>
+          </div>
+        </div>
 
         {config?.last_delivery && (
           <div className="rounded-xl border border-slate-100 bg-white px-4 py-3 text-xs">

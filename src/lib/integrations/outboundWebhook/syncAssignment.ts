@@ -91,7 +91,13 @@ export async function syncAssignmentToOutboundWebhook(args: WebhookSyncArgs): Pr
         email: lead.email ?? undefined,
       });
     }
-    const payload = buildWebhookPayload(lead, assignmentId, config.settings.field_mappings, straat);
+    const payload = buildWebhookPayload(
+      lead,
+      assignmentId,
+      config.settings.field_mappings,
+      straat,
+      config.settings.constants,
+    );
     const res = await sendWebhookRequest(config.settings.url!, config.token, payload, {
       idempotencyKey: assignmentId,
     });

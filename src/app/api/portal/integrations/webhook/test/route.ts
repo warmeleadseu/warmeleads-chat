@@ -56,7 +56,11 @@ export async function POST(request: NextRequest) {
   // Token is optioneel: endpoints zoals Softr-workflows accepteren geen auth-header.
   // Voorbeeld-payload volgens de door de klant ingestelde veld-mapping + branche.
   const payload = {
-    ...buildSampleWebhookPayload(config?.settings.field_mappings, { branch }),
+    ...buildSampleWebhookPayload(
+      config?.settings.field_mappings,
+      { branch },
+      config?.settings.constants,
+    ),
     test: true,
   };
 

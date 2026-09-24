@@ -5,7 +5,12 @@ import {
   defaultFieldMappings,
   resolveFieldMappings,
 } from './fields';
-import type { LeadForWebhook, OutboundWebhookFieldMapping } from './types';
+import { splitsNaam } from './naam';
+import type {
+  LeadForWebhook,
+  OutboundWebhookConstant,
+  OutboundWebhookFieldMapping,
+} from './types';
 
 /** Realistische voorbeeld-custom_fields per branche (zelfde set als Teamleader-test). */
 const BRANCH_SAMPLE_CUSTOM_FIELDS: Record<string, Record<string, string>> = {
@@ -62,6 +67,7 @@ export function buildLeadSourceValues(
   straat?: string | null,
 ): Record<string, unknown> {
   const categorieen = resolveCategorieen(lead.branch, lead.custom_fields ?? null);
+  const gesplitst = splitsNaam(lead.naam_klant);
   const straatnaam = nullable(straat);
   const huisnummer = nullable(lead.huisnummer);
   const adres = straatnaam
@@ -73,6 +79,8 @@ export function buildLeadSourceValues(
     categorieen,
     aanhef: null,
     naam: nullable(lead.naam_klant),
+    voornaam: gesplitst.voornaam,
+    achternaam: gesplitst.achternaam,
     email: nullable(lead.email),
     telefoonnummer: nullable(lead.telefoonnummer),
     adres: adres.length > 0 ? adres : null,
@@ -113,18 +121,39 @@ export function applyFieldMappings(
   return out;
 }
 
+/**
+ * Vaste waarden toevoegen aan een payload.
+ *
+ * Ze worden als laatste toegepast en winnen dus van een veld-mapping met
+ * dezelfde sleutel. Dat is met opzet: wie een letterlijke waarde invult, wil
+ * die zien staan en niet stilletjes overschreven worden door een leadveld.
+ */
+export function applyConstants(
+  payload: Record<string, unknown>,
+  constants?: OutboundWebhookConstant[] | null,
+): Record<string, unknown> {
+  const out = { ...payload };
+  for (const c of constants ?? []) {
+    const target = c?.target?.trim();
+    if (!target) continue;
+    out[target] = c.value ?? '';
+  }
+  return out;
+}
+
 /** Bouwt de uiteindelijke payload voor een lead volgens de (opgeslagen) mapping. */
 export function buildWebhookPayload(
   lead: LeadForWebhook,
   assignmentId: string,
   mappings?: OutboundWebhookFieldMapping[] | null,
   straat?: string | null,
+  constants?: OutboundWebhookConstant[] | null,
 ): Record<string, unknown> {
   const values = buildLeadSourceValues(lead, assignmentId, straat);
   // Opgeslagen mapping bevat al de juiste bronvelden (incl. custom:); pas die
   // direct toe. Zonder mapping vallen we terug op de basisvelden.
   const effective = mappings && mappings.length > 0 ? mappings : defaultFieldMappings();
-  return applyFieldMappings(values, effective);
+  return applyConstants(applyFieldMappings(values, effective), constants);
 }
 
 /**
@@ -153,6 +182,8 @@ function sampleSourceValues(branch: string): Record<string, unknown> {
     categorieen,
     aanhef: null,
     naam: 'Warme Leads Test',
+    voornaam: splitsNaam('Warme Leads Test').voornaam,
+    achternaam: splitsNaam('Warme Leads Test').achternaam,
     email: 'test+webhook@warmeleads.test',
     telefoonnummer: '+31612345678',
     adres: 'Dorpsstraat 10',
@@ -186,6 +217,7 @@ export type BuildSampleWebhookPayloadOptions = {
 export function buildSampleWebhookPayload(
   mappings?: OutboundWebhookFieldMapping[] | null,
   options?: BuildSampleWebhookPayloadOptions,
+  constants?: OutboundWebhookConstant[] | null,
 ): Record<string, unknown> {
   const branch = pickWebhookSampleBranch({ preferred: options?.branch });
   const values = sampleSourceValues(branch);
@@ -200,5 +232,7 @@ export function buildSampleWebhookPayload(
     mappings && mappings.length > 0
       ? resolveFieldMappings(mappings, catalog)
       : defaultFieldMappings(catalog);
-  return applyFieldMappings(values, effective);
+  /* Ook de testlead krijgt de vaste waarden mee. Anders test je iets anders
+     dan er straks echt verstuurd wordt, en dat is geen test. */
+  return applyConstants(applyFieldMappings(values, effective), constants);
 }

@@ -11,6 +11,7 @@ import { OUTBOUND_WEBHOOK_PROVIDER } from '@/lib/integrations/outboundWebhook/ty
 import {
   buildSourceFieldCatalog,
   resolveFieldMappings,
+  sanitizeConstants,
   sanitizeFieldMappings,
 } from '@/lib/integrations/outboundWebhook/fields';
 import { getWebhookDynamicFields } from '@/lib/integrations/outboundWebhook/branchFields';
@@ -68,6 +69,7 @@ async function buildStateResponse(
     available_branches: availableBranches,
     available_fields: catalog,
     field_mappings: resolveFieldMappings(config?.settings.field_mappings, catalog),
+    constants: config?.settings.constants ?? [],
     last_delivery: lastDelivery,
   });
 }
@@ -94,6 +96,7 @@ export async function PUT(request: NextRequest) {
     token?: string | null;
     branches?: string[];
     field_mappings?: unknown;
+    constants?: unknown;
   };
 
   const patch: Parameters<typeof saveOutboundWebhookConfig>[2] = {};
@@ -136,6 +139,8 @@ export async function PUT(request: NextRequest) {
     const validKeys = new Set(catalog.map((f) => f.key));
     patch.field_mappings = sanitizeFieldMappings(body.field_mappings, validKeys);
   }
+
+  if (body.constants !== undefined) patch.constants = sanitizeConstants(body.constants);
 
   if (typeof body.enabled === 'boolean') patch.enabled = body.enabled;
 
