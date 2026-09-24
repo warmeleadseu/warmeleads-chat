@@ -30,6 +30,15 @@ export const MAX_UITDELINGEN = 2;
  */
 export const RESTLEAD_REDEN = 'Restleads:';
 
+/**
+ * Hoe lang een handmatige uitdeling nog teruggedraaid kan worden.
+ *
+ * Kort met opzet: daarna heeft de klant de lead in zijn portaal zien staan of
+ * via een koppeling binnengekregen, en een lead weghalen die hij misschien al
+ * heeft gebeld levert meer verwarring op dan het oplost.
+ */
+export const TERUGDRAAI_VENSTER_MINUTEN = 5;
+
 export interface RestleadInstellingen {
   /** Standaardmarge buiten het doelgebied, in kilometers. */
   marge_km: number;

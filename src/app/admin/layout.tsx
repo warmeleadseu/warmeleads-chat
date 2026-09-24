@@ -241,11 +241,13 @@ function Sidebar({
   onLogout,
   pendingReclamations,
   pendingTasks,
+  restleads,
 }: {
   user: AdminUser;
   onLogout: () => void;
   pendingReclamations: number;
   pendingTasks: number;
+  restleads: number;
 }) {
   const pathname = usePathname();
   const visibleNav = NAV.filter(item => item.roles.includes(user.role as NavRole));
@@ -274,6 +276,11 @@ function Sidebar({
                 {item.badge && pendingReclamations > 0 && (
                   <span className="ml-auto flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white">
                     {pendingReclamations}
+                  </span>
+                )}
+                {item.href === '/admin/restleads' && restleads > 0 && (
+                  <span className="ml-auto flex h-5 min-w-[20px] items-center justify-center rounded-full bg-sky-500 px-1.5 text-[10px] font-bold text-white">
+                    {restleads > 99 ? '99+' : restleads}
                   </span>
                 )}
                 {item.href === '/admin/prospects/taken' && pendingTasks > 0 && (
@@ -325,11 +332,13 @@ function MobileHeader({
   onLogout,
   pendingReclamations,
   pendingTasks,
+  restleads,
 }: {
   user: AdminUser;
   onLogout: () => void;
   pendingReclamations: number;
   pendingTasks: number;
+  restleads: number;
 }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
@@ -390,6 +399,11 @@ function MobileHeader({
                             {pendingReclamations}
                           </span>
                         )}
+                        {item.href === '/admin/restleads' && restleads > 0 && (
+                          <span className="ml-auto flex h-5 min-w-[20px] items-center justify-center rounded-full bg-sky-500 px-1.5 text-[10px] font-bold text-white">
+                            {restleads > 99 ? '99+' : restleads}
+                          </span>
+                        )}
                         {item.href === '/admin/prospects/taken' && pendingTasks > 0 && (
                           <span className="ml-auto flex h-5 min-w-[20px] items-center justify-center rounded-full bg-orange-500 px-1.5 text-[10px] font-bold text-white">
                             {pendingTasks > 99 ? '99+' : pendingTasks}
@@ -444,6 +458,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [pendingReclamations, setPendingReclamations] = useState(0);
   const [pendingTasks, setPendingTasks] = useState(0);
+  const [restleads, setRestleads] = useState(0);
 
   useEffect(() => {
     try {
@@ -567,6 +582,25 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     return () => clearInterval(interval);
   }, [user]);
 
+  /* Kansrijke restleads. Alleen voor wie de pagina mag zien, en via de lichte
+     telroute: de volledige berekening kost seconden en hoort niet bij elke
+     paginaklik te draaien. */
+  useEffect(() => {
+    if (!user || (user.role !== 'superadmin' && user.role !== 'admin')) return;
+    const haal = async () => {
+      try {
+        const res = await adminFetch('/api/admin/restleads/telling');
+        if (res.ok) {
+          const d = await res.json();
+          setRestleads(typeof d.aantal === 'number' ? d.aantal : 0);
+        }
+      } catch { /* ignore */ }
+    };
+    haal();
+    const interval = setInterval(haal, 300_000);
+    return () => clearInterval(interval);
+  }, [user]);
+
   useEffect(() => {
     if (!user) return;
     const isAm = user.role === 'accountmanager';
@@ -633,8 +667,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     <AdminConfirmProvider>
     <AdminContext.Provider value={{ user, logout: handleLogout }}>
       <div className="min-h-screen bg-slate-50">
-        <Sidebar user={user} onLogout={handleLogout} pendingReclamations={pendingReclamations} pendingTasks={pendingTasks} />
-        <MobileHeader user={user} onLogout={handleLogout} pendingReclamations={pendingReclamations} pendingTasks={pendingTasks} />
+        <Sidebar user={user} onLogout={handleLogout} pendingReclamations={pendingReclamations} pendingTasks={pendingTasks} restleads={restleads} />
+        <MobileHeader user={user} onLogout={handleLogout} pendingReclamations={pendingReclamations} pendingTasks={pendingTasks} restleads={restleads} />
         <main className="min-w-0 lg:pl-60">
           <div className="mx-auto max-w-7xl overflow-x-clip px-4 py-6 sm:px-6 lg:px-8">
             {routeAllowed ? children : <RouteBlocked />}

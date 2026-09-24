@@ -20,7 +20,8 @@ import {
   UserPlusIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
-import { LEGE_LEADFILTERS, telActieveLeadFilters } from '@/lib/leadFilterState';
+import { LEGE_LEADFILTERS, telActieveLeadFilters, type LeadFilterStand } from '@/lib/leadFilterState';
+import { standNaarFilterParams, filterParamsNaarStand } from '@/lib/leadFilterParams';
 import {
   PROVINCES_ALL,
   LEAD_PROVINCE_OPTIONS_NL,
@@ -465,11 +466,20 @@ export default function LeadsCRMPage() {
      aangevinkte leads blijven staan: dat zijn geen filters maar weergave en
      werkselectie. Het paginanummer springt vanzelf terug naar 1. React bundelt
      deze setters in één render, dus er gaat precies één verzoek uit. */
-  const actieveFilters = telActieveLeadFilters({
+  /* De hele filterstand als één waarde. Lijst, facetten, het aantal boven de
+     lijst en het exportvenster leiden hier allemaal hun parameters uit af, dus
+     ze kunnen niet meer uiteenlopen. */
+  const filterStand: LeadFilterStand = useMemo(() => ({
     search, selBranches, selCustomers, selStatuses, selProvinces, selSources, selCampaigns,
     assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, includeUnknownDate,
     plaatsFilter, plaatsRadiusKm, postcodeRanges, provincieMargeKm,
-  });
+  }), [
+    search, selBranches, selCustomers, selStatuses, selProvinces, selSources, selCampaigns,
+    assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, includeUnknownDate,
+    plaatsFilter, plaatsRadiusKm, postcodeRanges, provincieMargeKm,
+  ]);
+
+  const actieveFilters = telActieveLeadFilters(filterStand);
 
   const wisAlleFilters = () => {
     setSearch(LEGE_LEADFILTERS.search);
@@ -517,26 +527,7 @@ export default function LeadsCRMPage() {
   const fetchLeads = useCallback(async () => {
     const verzoek = ++leadsVerzoekRef.current;
     setLoading(true);
-    const p = new URLSearchParams();
-    if (selBranches.length > 0) p.set('branch', selBranches.join(','));
-    if (selCustomers.length > 0) p.set('customer_id', selCustomers.join(','));
-    if (selStatuses.length > 0) p.set('status', selStatuses.join(','));
-    if (selProvinces.length > 0) p.set('province', selProvinces.join(','));
-    if (selSources.length > 0) p.set('source', selSources.join(','));
-    if (selCampaigns.length > 0) p.set('meta_campaign_id', selCampaigns.join(','));
-    if (assignmentFilter !== 'all') p.set('assignment', assignmentFilter);
-    if (phoneFilter !== 'all') p.set('phone_valid', phoneFilter);
-    if (bulkFilter !== 'all') p.set('bulk_status', bulkFilter);
-    if (dateFrom) p.set('date_from', dateFrom);
-    if (dateTo) p.set('date_to', dateTo);
-    if ((dateFrom || dateTo) && !includeUnknownDate) p.set('include_unknown_date', 'false');
-    if (search) p.set('search', search);
-    if (plaatsFilter.trim()) p.set('plaats', plaatsFilter.trim());
-    if (plaatsFilter.trim() && plaatsRadiusKm != null) p.set('plaats_radius_km', String(plaatsRadiusKm));
-    if (postcodeRanges.trim()) p.set('postcode_ranges', postcodeRanges.trim());
-    if (selProvinces.length > 0 && provincieMargeKm != null && provincieMargeKm > 0) {
-      p.set('province_margin_km', String(provincieMargeKm));
-    }
+    const p = new URLSearchParams(standNaarFilterParams(filterStand));
     p.set('page', String(page));
     p.set('per_page', String(perPage));
     p.set('sort_by', sortBy);
@@ -570,28 +561,17 @@ export default function LeadsCRMPage() {
          verdwijnt de spinner terwijl er nog iets onderweg is. */
       if (verzoek === leadsVerzoekRef.current) setLoading(false);
     }
-  }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, selCampaigns, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, includeUnknownDate, search, plaatsFilter, plaatsRadiusKm, postcodeRanges, provincieMargeKm, page, perPage, sortBy, sortDir]);
+  }, [filterStand, page, perPage, sortBy, sortDir]);
 
   const fetchFacets = useCallback(async () => {
     const verzoek = ++facetsVerzoekRef.current;
-    const p = new URLSearchParams();
-    if (selBranches.length > 0) p.set('branch', selBranches.join(','));
-    if (selCustomers.length > 0) p.set('customer_id', selCustomers.join(','));
-    if (selStatuses.length > 0) p.set('status', selStatuses.join(','));
-    if (selProvinces.length > 0) p.set('province', selProvinces.join(','));
-    if (selSources.length > 0) p.set('source', selSources.join(','));
-    if (selCampaigns.length > 0) p.set('meta_campaign_id', selCampaigns.join(','));
-    if (assignmentFilter !== 'all') p.set('assignment', assignmentFilter);
-    if (phoneFilter !== 'all') p.set('phone_valid', phoneFilter);
-    if (bulkFilter !== 'all') p.set('bulk_status', bulkFilter);
-    if (dateFrom) p.set('date_from', dateFrom);
-    if (dateTo) p.set('date_to', dateTo);
-    if ((dateFrom || dateTo) && !includeUnknownDate) p.set('include_unknown_date', 'false');
-    if (search) p.set('search', search);
-    // Facets RPC heeft geen straal-geo; bij straal alleen plaatsnaam weglaten
-    // zodat facet-counts niet vals beperkt worden tot exacte plaatsnaam.
-    if (plaatsFilter.trim() && plaatsRadiusKm == null) p.set('plaats', plaatsFilter.trim());
-    if (postcodeRanges.trim()) p.set('postcode_ranges', postcodeRanges.trim());
+    const p = new URLSearchParams(standNaarFilterParams(filterStand));
+    /* De facetten-RPC kent geen geo. Een straal om een plaats kan hij niet
+       uitrekenen, en zou hij de plaatsnaam kaal toepassen dan vallen de
+       aantallen vals terug op die ene plaats; dan liever de plaats weglaten.
+       Om dezelfde reden gaat de provinciemarge er niet heen. */
+    if (plaatsRadiusKm != null) { p.delete('plaats'); p.delete('plaats_radius_km'); }
+    p.delete('province_margin_km');
     const res = await adminFetch(`/api/admin/leads/facets?${p}`);
     if (verzoek !== facetsVerzoekRef.current) return;   // ingehaald
     if (res.ok) {
@@ -599,7 +579,7 @@ export default function LeadsCRMPage() {
       if (verzoek !== facetsVerzoekRef.current) return;
       setFacets(d.facets || {});
     }
-  }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, selCampaigns, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, includeUnknownDate, search, plaatsFilter, plaatsRadiusKm, postcodeRanges, provincieMargeKm]);
+  }, [filterStand, plaatsRadiusKm]);
 
   const fetchExportHistory = useCallback(async () => {
     const res = await adminFetch('/api/admin/leads/export');
@@ -750,29 +730,7 @@ export default function LeadsCRMPage() {
     setValidatingPhones(false);
   };
 
-  const currentFilterParams = useMemo(() => {
-    const p: Record<string, string> = {};
-    if (selBranches.length > 0) p.branch = selBranches.join(',');
-    if (selCustomers.length > 0) p.customer_id = selCustomers.join(',');
-    if (selStatuses.length > 0) p.status = selStatuses.join(',');
-    if (selProvinces.length > 0) p.province = selProvinces.join(',');
-    if (selProvinces.length > 0 && provincieMargeKm != null && provincieMargeKm > 0) {
-      p.province_margin_km = String(provincieMargeKm);
-    }
-    if (selSources.length > 0) p.source = selSources.join(',');
-    if (selCampaigns.length > 0) p.meta_campaign_id = selCampaigns.join(',');
-    if (assignmentFilter !== 'all') p.assignment = assignmentFilter;
-    if (phoneFilter !== 'all') p.phone_valid = phoneFilter;
-    if (bulkFilter !== 'all') p.bulk_status = bulkFilter;
-    if (dateFrom) p.date_from = dateFrom;
-    if (dateTo) p.date_to = dateTo;
-    if ((dateFrom || dateTo) && !includeUnknownDate) p.include_unknown_date = 'false';
-    if (search) p.search = search;
-    if (plaatsFilter.trim()) p.plaats = plaatsFilter.trim();
-    if (plaatsFilter.trim() && plaatsRadiusKm != null) p.plaats_radius_km = String(plaatsRadiusKm);
-    if (postcodeRanges.trim()) p.postcode_ranges = postcodeRanges.trim();
-    return p;
-  }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, selCampaigns, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, includeUnknownDate, search, plaatsFilter, plaatsRadiusKm, postcodeRanges, provincieMargeKm]);
+  const currentFilterParams = useMemo(() => standNaarFilterParams(filterStand), [filterStand]);
 
   const handleQuickStatus = async (id: string, newStatus: string) => {
     const prevStatus = leads.find(l => l.id === id)?.status;
@@ -1604,7 +1562,17 @@ function ExportModal({
   const [portaalMelding, setPortaalMelding] = useState<
     { toegevoegd: number; overgeslagen: number; uitleg: string } | null
   >(null);
-  const [excludeAlreadyAssigned, setExcludeAlreadyAssigned] = useState(false);
+  /* De filterstand waarmee het scherm dit venster opent. Alles wat hieronder
+     bewerkbaar is begint hier, zodat het venster nooit met andere filters
+     rekent dan de lijst erachter. */
+  const beginStand = useMemo(() => filterParamsNaarStand(filterParams), [filterParams]);
+
+  /* Het uitdeelfilter van het scherm overnemen. Dit ontbrak: het venster begon
+     altijd op "alle leads". Stond de lijst op "niet uitgedeeld", dan toonde de
+     lijst er 32 en exporteerde het venster er 74, inclusief 42 leads die al
+     bij een klant lagen. */
+  const [uitdeelfilter, setUitdeelfilter] = useState<LeadFilterStand['assignmentFilter']>(
+    () => beginStand.assignmentFilter);
   const [showExcludePicker, setShowExcludePicker] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState('');
@@ -1612,31 +1580,26 @@ function ExportModal({
   // Filter-state binnen de modal — geïnitialiseerd vanuit `filterParams` zodat
   // de admin verder kan met wat al actief was op de leads-pagina, en daarna
   // vrij kan tweaken zonder de buiten-state te wijzigen.
-  const [selFilterBranches, setSelFilterBranches] = useState<string[]>(() =>
-    filterParams.branch ? filterParams.branch.split(',').filter(Boolean) : []);
-  const [selFilterStatuses, setSelFilterStatuses] = useState<string[]>(() =>
-    filterParams.status ? filterParams.status.split(',').filter(Boolean) : []);
-  const [selFilterProvinces, setSelFilterProvinces] = useState<string[]>(() =>
-    filterParams.province ? filterParams.province.split(',').filter(Boolean) : []);
+  const [selFilterBranches, setSelFilterBranches] = useState<string[]>(() => beginStand.selBranches);
+  const [selFilterStatuses, setSelFilterStatuses] = useState<string[]>(() => beginStand.selStatuses);
+  const [selFilterProvinces, setSelFilterProvinces] = useState<string[]>(() => beginStand.selProvinces);
   /* Provinciemarge overnemen uit het scherm. Zonder dit viel de marge weg zodra
      je het exportvenster opende: de lijst toonde er dan meer dan er in het
      bestand belandden, precies waar de functie voor bedoeld is. */
   const [filterProvincieMargeKm, setFilterProvincieMargeKm] = useState<string>(
-    filterParams.province_margin_km || '');
-  const [selFilterSources, setSelFilterSources] = useState<string[]>(() =>
-    filterParams.source ? filterParams.source.split(',').filter(Boolean) : []);
-  const [filterPhone, setFilterPhone] = useState<string>(filterParams.phone_valid || 'all');
-  const [filterBulkStatus, setFilterBulkStatus] = useState<string>(filterParams.bulk_status || 'all');
-  const [filterDateFrom, setFilterDateFrom] = useState<string>(filterParams.date_from || '');
-  const [filterDateTo, setFilterDateTo] = useState<string>(filterParams.date_to || '');
+    beginStand.provincieMargeKm != null ? String(beginStand.provincieMargeKm) : '');
+  const [selFilterSources, setSelFilterSources] = useState<string[]>(() => beginStand.selSources);
+  const [filterPhone, setFilterPhone] = useState<string>(beginStand.phoneFilter);
+  const [filterBulkStatus, setFilterBulkStatus] = useState<string>(beginStand.bulkFilter);
+  const [filterDateFrom, setFilterDateFrom] = useState<string>(beginStand.dateFrom);
+  const [filterDateTo, setFilterDateTo] = useState<string>(beginStand.dateTo);
   const [filterIncludeUnknownDate, setFilterIncludeUnknownDate] = useState<boolean>(
-    filterParams.include_unknown_date !== 'false');
-  const filterPostcodeRanges = filterParams.postcode_ranges || '';
-  const filterPlaats = filterParams.plaats || '';
-  const filterPlaatsRadiusKm = filterParams.plaats_radius_km || '';
-  const filterSearch = filterParams.search || '';
+    beginStand.includeUnknownDate);
+  /* Zoekterm, plaats met straal, postcodereeksen, klant en campagne zijn hier
+     niet bewerkbaar, maar reizen via `beginStand` wel mee in de telling en het
+     bestand: ze staan op het scherm, dus ze horen bij wat je exporteert. */
   const [filtersExpanded, setFiltersExpanded] = useState<boolean>(
-    isBulkBatchFlow || !(filterParams.branch?.split(',').filter(Boolean).length),
+    isBulkBatchFlow || beginStand.selBranches.length === 0,
   );
 
   // Bulk-batch context: opgehaald via /api/admin/batches/[id] zodat we
@@ -1686,47 +1649,42 @@ function ExportModal({
     return () => { cancelled = true; };
   }, [presetBulkBatchId]);
 
-  // Body voor zowel /api/admin/leads/count als /api/admin/leads/export.
-  // Bevat ALLE filters die de export-route ook respecteert, behalve format
-  // en target_customer_id.
-  const buildFilterBody = useCallback((): Record<string, string> => {
-    const body: Record<string, string> = {};
-    if (selFilterBranches.length > 0) body.branch = selFilterBranches.join(',');
-    if (selFilterStatuses.length > 0) body.status = selFilterStatuses.join(',');
-    if (selFilterProvinces.length > 0) body.province = selFilterProvinces.join(',');
-    if (selFilterProvinces.length > 0 && filterProvincieMargeKm.trim()) {
-      body.province_margin_km = filterProvincieMargeKm.trim();
-    }
-    /* Filters die dit venster zelf niet kan bewerken, maar wél op het scherm
-       staan: klant en campagne. Zonder ze door te geven telde het venster over
-       een bredere verzameling dan de lijst erachter. Bij een actief klantfilter
-       liep dat op tot duizenden leads verschil. */
-    if (filterParams.customer_id) body.customer_id = filterParams.customer_id;
-    if (filterParams.meta_campaign_id) body.meta_campaign_id = filterParams.meta_campaign_id;
-    if (selFilterSources.length > 0) body.source = selFilterSources.join(',');
-    if (filterPhone !== 'all') body.phone_valid = filterPhone;
-    if (filterBulkStatus !== 'all') body.bulk_status = filterBulkStatus;
-    if (filterDateFrom) body.date_from = filterDateFrom;
-    if (filterDateTo) body.date_to = filterDateTo;
-    if ((filterDateFrom || filterDateTo) && !filterIncludeUnknownDate) body.include_unknown_date = 'false';
-    if (filterSearch.trim()) body.search = filterSearch.trim();
-    if (filterPlaats.trim()) body.plaats = filterPlaats.trim();
-    if (filterPlaats.trim() && filterPlaatsRadiusKm.trim()) {
-      body.plaats_radius_km = filterPlaatsRadiusKm.trim();
-    }
-    if (filterPostcodeRanges.trim()) body.postcode_ranges = filterPostcodeRanges.trim();
-    if (excludeCustomers.length > 0) body.exclude_customer_id = excludeCustomers.join(',');
-    // De "Sluit reeds uitgedeelde leads uit"-checkbox is in de bulk-batch
-    // flow verborgen; daar regelt klant-exclude (`exclude_customer_id`) dat
-    // op een minder strenge manier.
-    if (excludeAlreadyAssigned && !isBulkBatchFlow) body.assignment = 'unassigned';
-    return body;
-  }, [
-    selFilterBranches, selFilterStatuses, selFilterProvinces, selFilterSources,
-    filterProvincieMargeKm, filterParams,
-    filterPhone, filterBulkStatus, filterDateFrom, filterDateTo, filterIncludeUnknownDate,
-    filterSearch, filterPlaats, filterPlaatsRadiusKm, filterPostcodeRanges, excludeCustomers, excludeAlreadyAssigned, isBulkBatchFlow,
+  /* De stand waarmee dit venster rekent: wat er in het venster is bijgesteld,
+     aangevuld met de filters van het scherm die hier niet bewerkbaar zijn
+     (klant, campagne, zoekterm, plaats, postcodereeksen). Door hem als
+     `LeadFilterStand` op te bouwen dwingt de typecontrole af dat elk filter
+     een waarde krijgt: een nieuw filter vergeten kan niet meer stilletjes. */
+  const vensterStand: LeadFilterStand = useMemo(() => ({
+    ...beginStand,
+    selBranches: selFilterBranches,
+    selStatuses: selFilterStatuses,
+    selProvinces: selFilterProvinces,
+    provincieMargeKm: filterProvincieMargeKm.trim() ? Number(filterProvincieMargeKm.trim()) : null,
+    selSources: selFilterSources,
+    assignmentFilter: uitdeelfilter,
+    phoneFilter: filterPhone,
+    bulkFilter: filterBulkStatus,
+    dateFrom: filterDateFrom,
+    dateTo: filterDateTo,
+    includeUnknownDate: filterIncludeUnknownDate,
+  }), [
+    beginStand, selFilterBranches, selFilterStatuses, selFilterProvinces,
+    filterProvincieMargeKm, selFilterSources, uitdeelfilter, filterPhone,
+    filterBulkStatus, filterDateFrom, filterDateTo, filterIncludeUnknownDate,
   ]);
+
+  /* Body voor zowel /api/admin/leads/count als /api/admin/leads/export, uit
+     exact dezelfde functie als de lijst erachter. Daarbovenop alleen wat het
+     venster zelf toevoegt en de lijst niet kent. */
+  const buildFilterBody = useCallback((): Record<string, string> => {
+    const body = standNaarFilterParams(vensterStand);
+    if (excludeCustomers.length > 0) body.exclude_customer_id = excludeCustomers.join(',');
+    /* In de bulk-batch-flow geldt het uitdeelfilter niet: daar regelt
+       klant-exclude (`exclude_customer_id`) dat op een minder strenge manier,
+       zodat een lead die bij een ándere klant ligt gewoon mee mag. */
+    if (isBulkBatchFlow) delete body.assignment;
+    return body;
+  }, [vensterStand, excludeCustomers, isBulkBatchFlow]);
 
   const [liveCount, setLiveCount] = useState<number | null>(null);
   const [countLoading, setCountLoading] = useState(false);
@@ -1766,18 +1724,11 @@ function ExportModal({
     return Math.min(effectiveTotal, cap);
   }, [effectiveTotal, maxLeads]);
 
-  const activeFilterCount = useMemo(() => {
-    let n = 0;
-    if (selFilterBranches.length > 0) n++;
-    if (selFilterStatuses.length > 0) n++;
-    if (selFilterProvinces.length > 0) n++;
-    if (selFilterProvinces.length > 0 && filterProvincieMargeKm.trim()) n++;
-    if (selFilterSources.length > 0) n++;
-    if (filterPhone !== 'all') n++;
-    if (filterBulkStatus !== 'all') n++;
-    if (filterDateFrom || filterDateTo) n++;
-    return n;
-  }, [selFilterBranches, selFilterStatuses, selFilterProvinces, selFilterSources, filterProvincieMargeKm, filterPhone, filterBulkStatus, filterDateFrom, filterDateTo]);
+  /* Dezelfde teller als op het scherm, over dezelfde stand. Stond hier eerder
+     een eigen optelling, en die kende het uitdeelfilter niet: het scherm
+     meldde vier actieve filters en dit venster drie. Dat verschil was precies
+     het filter dat wegviel. */
+  const activeFilterCount = telActieveLeadFilters(vensterStand);
 
   const branchOptions = useMemo(
     () => branches.filter(b => b.is_active).map(b => ({ value: b.slug, label: b.name })),
@@ -2167,6 +2118,7 @@ function ExportModal({
                           setFilterDateFrom('');
                           setFilterDateTo('');
                           setFilterIncludeUnknownDate(true);
+                          setUitdeelfilter('all');
                         }}
                         className="text-xs font-medium text-slate-500 hover:text-slate-700"
                       >
@@ -2179,14 +2131,45 @@ function ExportModal({
             </div>
 
             {!isBulkBatchFlow && (
-              <label className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-slate-50/50 px-4 py-3 text-sm text-slate-700 cursor-pointer hover:bg-slate-50">
-                <input type="checkbox" checked={excludeAlreadyAssigned} onChange={e => setExcludeAlreadyAssigned(e.target.checked)}
-                  className="h-4 w-4 rounded border-slate-300 text-brand-purple focus:ring-brand-purple/30" />
-                <div>
-                  <span className="font-medium">Sluit reeds uitgedeelde leads uit</span>
-                  <p className="text-xs text-slate-500">Alleen leads exporteren die nog niet aan een klant zijn toegewezen</p>
+              <div className="rounded-lg border border-slate-200 bg-slate-50/50 px-4 py-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <span className="text-sm font-medium text-slate-700">Al uitgedeelde leads</span>
+                    <p className="text-xs text-slate-500">
+                      {uitdeelfilter === 'unassigned'
+                        ? 'Alleen leads die nog niet aan een klant zijn toegewezen'
+                        : uitdeelfilter === 'assigned'
+                          ? 'Alleen leads die al aan een klant zijn toegewezen'
+                          : 'Zowel toegewezen als nog niet toegewezen leads'}
+                    </p>
+                  </div>
+                  {uitdeelfilter !== beginStand.assignmentFilter && (
+                    <button
+                      type="button"
+                      onClick={() => setUitdeelfilter(beginStand.assignmentFilter)}
+                      className="shrink-0 text-xs font-medium text-slate-500 hover:text-slate-700"
+                    >
+                      Terug naar scherm
+                    </button>
+                  )}
                 </div>
-              </label>
+                <div className="mt-2 flex overflow-hidden rounded-lg border border-slate-200">
+                  {([
+                    { v: 'all', l: 'Alle' },
+                    { v: 'unassigned', l: 'Nog niet uitgedeeld' },
+                    { v: 'assigned', l: 'Al uitgedeeld' },
+                  ] as const).map(opt => (
+                    <button
+                      key={opt.v}
+                      type="button"
+                      onClick={() => setUitdeelfilter(opt.v)}
+                      className={`flex-1 px-2 py-1.5 text-xs font-medium transition ${uitdeelfilter === opt.v ? 'bg-brand-purple text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
+                    >
+                      {opt.l}
+                    </button>
+                  ))}
+                </div>
+              </div>
             )}
 
             <div className="rounded-lg border border-slate-200 bg-slate-50/50 px-4 py-3">

@@ -14,6 +14,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
 import { beschrijfMoment } from '@/lib/restleadPlanning';
+import { TERUGDRAAI_VENSTER_MINUTEN } from '@/lib/restleads';
 
 /**
  * Leads die tussen wal en schip vielen.
@@ -55,11 +56,35 @@ interface WachtrijRij {
   gepland_voor: string;
   status: string;
   reden: string | null;
+  laatste_reden?: string | null;
   leads: { naam_klant: string | null; plaatsnaam: string | null; postcode: string | null; branch: string } | null;
   customers: { name: string } | null;
 }
 
 const MAX_KLANTEN_PER_LEAD = 3;
+/** Aantal regels per stap; zie de opmerking bij `toon`. */
+const PER_STAP = 50;
+
+
+/* De instellingen hergebruiken dezelfde opslag als de weergavekeuze elders in
+   de admin: die vangt een geblokkeerde localStorage al netjes af. */
+function leesGetal(sleutel: string, standaard: string): string {
+  if (typeof window === 'undefined') return standaard;
+  try {
+    return window.localStorage.getItem(`wl-restleads-${sleutel}`) ?? standaard;
+  } catch {
+    return standaard;
+  }
+}
+
+function bewaarGetal(sleutel: string, waarde: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(`wl-restleads-${sleutel}`, waarde);
+  } catch {
+    /* Privémodus. De waarde geldt dan alleen deze sessie. */
+  }
+}
 
 function datum(iso: string | null): string {
   if (!iso) return '';
@@ -72,14 +97,28 @@ export default function RestleadsPage() {
   const [verlopen, setVerlopen] = useState<Restlead[]>([]);
   const [laden, setLaden] = useState(true);
   const [fout, setFout] = useState<string | null>(null);
-  const [lijst, setLijst] = useState<'kansrijk' | 'verlopen' | 'ingepland'>('kansrijk');
+  const [lijst, setLijst] = useState<'kansrijk' | 'verlopen' | 'ingepland' | 'geschiedenis'>('kansrijk');
   const [wachtrij, setWachtrij] = useState<WachtrijRij[]>([]);
   const [wachtrijLaden, setWachtrijLaden] = useState(false);
   const [massaBezig, setMassaBezig] = useState(false);
+  const [historie, setHistorie] = useState<WachtrijRij[]>([]);
+  /* Hoeveel regels er getoond worden. De lijst "verlopen" telt 1.300 leads en
+     die allemaal tekenen maakt het scherm stroperig. */
+  const [toon, setToon] = useState(PER_STAP);
+  /* Wat er zojuist is uitgedeeld, om het binnen vijf minuten te kunnen
+     terugdraaien. */
+  const [laatsteActie, setLaatsteActie] = useState<{ lead_id: string; doelen: { customer_id: string; klant: string }[]; tijd: number } | null>(null);
 
   const [marge, setMarge] = useState('5');
   const [ruimeMarge, setRuimeMarge] = useState('10');
   const [droogNa, setDroogNa] = useState('7');
+
+  /* Pas na de eerste render lezen, anders lopen server- en clientrender uiteen. */
+  useEffect(() => {
+    setMarge(leesGetal('marge', '5'));
+    setRuimeMarge(leesGetal('ruime-marge', '10'));
+    setDroogNa(leesGetal('droog-na', '7'));
+  }, []);
 
   const [zoek, setZoek] = useState('');
   const [branche, setBranche] = useState('all');
@@ -111,10 +150,16 @@ export default function RestleadsPage() {
   const laadWachtrij = useCallback(async () => {
     setWachtrijLaden(true);
     try {
-      const res = await adminFetch('/api/admin/restleads/ingepland');
-      if (res.ok) {
-        const d = await res.json();
-        setWachtrij(d.rijen || []);
+      const [openRes, histRes] = await Promise.all([
+        adminFetch('/api/admin/restleads/ingepland'),
+        adminFetch('/api/admin/restleads/ingepland?historie=1'),
+      ]);
+      if (openRes.ok) setWachtrij((await openRes.json()).rijen || []);
+      if (histRes.ok) {
+        const d = await histRes.json();
+        /* De geschiedenis bevat ook wat nog gepland staat; dat heeft zijn eigen
+           tabblad en hoort hier niet nog eens. */
+        setHistorie((d.rijen || []).filter((r: WachtrijRij) => r.status !== 'gepland'));
       }
     } finally {
       setWachtrijLaden(false);
@@ -125,6 +170,10 @@ export default function RestleadsPage() {
   useEffect(() => { laadWachtrij(); }, [laadWachtrij]);
 
   /* In de stand 'ingepland' tonen we de wachtrij, niet deze lijst. */
+  /* Terug naar de eerste vijftig zodra je van lijst wisselt of anders filtert. */
+  useEffect(() => { setToon(PER_STAP); }, [lijst, zoek, branche, alleenMetKandidaat]);
+
+  /* In de stand 'ingepland' en 'geschiedenis' tonen we de wachtrij. */
   const bron = lijst === 'kansrijk' ? kansrijk : verlopen;
 
   const branches = useMemo(
@@ -176,10 +225,30 @@ export default function RestleadsPage() {
       const mislukt = (d.uitkomsten || []).filter((u: { ok: boolean }) => !u.ok);
       setMelding(
         mislukt.length === 0
-          ? `${d.gelukt} keer uitgedeeld${d.verdwijnt_uit_lijst ? ', lead verdwijnt uit de lijst' : ''}`
+          ? `${d.gelukt} keer uitgedeeld`
           : `${d.gelukt} gelukt, ${mislukt.length} niet: ${mislukt.map((u: { klant?: string; reden?: string }) => `${u.klant ?? '?'} (${u.reden})`).join(', ')}`,
       );
+
+      /* De lead meteen uit de lijst halen in plaats van te wachten op de
+         verversing. Die haalt 2.500 leads op en duurt ruim twee seconden; tot
+         die tijd zag je de regel gewoon staan en leek er niets te gebeuren. */
+      if (d.gelukt > 0) {
+        setKansrijk(v => v.filter(x => x.id !== lead.id));
+        setVerlopen(v => v.filter(x => x.id !== lead.id));
+
+        const direct = (d.uitkomsten || []).filter((u: { ok: boolean; wanneer?: string }) => u.ok && u.wanneer === 'nu');
+        if (direct.length > 0) {
+          setLaatsteActie({
+            lead_id: lead.id,
+            doelen: direct.map((u: { customer_id: string; klant?: string }) => ({ customer_id: u.customer_id, klant: u.klant ?? 'klant' })),
+            tijd: Date.now(),
+          });
+        }
+      }
+
+      /* Daarna op de achtergrond bijtrekken, puur om te corrigeren. */
       laad();
+      laadWachtrij();
     } finally {
       setBezig(null);
       setTimeout(() => setMelding(null), 8000);
@@ -215,6 +284,8 @@ export default function RestleadsPage() {
       });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) { setMelding(d.error || 'Massaal uitdelen mislukt'); return; }
+      const ids = new Set(kandidaten.map(l => l.id));
+      setKansrijk(v => v.filter(x => !ids.has(x.id)));
       setMelding(
         `${d.leads} leads ingepland, ${d.leveringen} leveringen. ` +
         `${d.overgeslagen_ruime_marge} overgeslagen omdat ze alleen via de ruime marge matchten.`,
@@ -225,6 +296,27 @@ export default function RestleadsPage() {
       setMassaBezig(false);
       setTimeout(() => setMelding(null), 10000);
     }
+  };
+
+  const maakOngedaan = async () => {
+    if (!laatsteActie) return;
+    setMelding(null);
+    let terug = 0;
+    for (const doel of laatsteActie.doelen) {
+      const res = await adminFetch('/api/admin/restleads/ongedaan', {
+        method: 'POST',
+        body: JSON.stringify({ lead_id: laatsteActie.lead_id, customer_id: doel.customer_id }),
+      });
+      if (res.ok) terug++;
+      else {
+        const d = await res.json().catch(() => ({}));
+        setMelding(d.error || 'Terugdraaien mislukt');
+      }
+    }
+    if (terug > 0) setMelding(`${terug} toewijzing${terug === 1 ? '' : 'en'} teruggedraaid`);
+    setLaatsteActie(null);
+    laad();
+    laadWachtrij();
   };
 
   const annuleerLevering = async (id: string) => {
@@ -273,12 +365,12 @@ export default function RestleadsPage() {
           <button onClick={laad} disabled={laden} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50">
             <ArrowPathIcon className={`h-4 w-4 ${laden ? 'animate-spin' : ''}`} /> Vernieuwen
           </button>
-          {lijst !== 'ingepland' && (
+          {(lijst === 'kansrijk' || lijst === 'verlopen') && (
             <button onClick={exporteer} disabled={zichtbaar.length === 0} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40">
               <ArrowDownTrayIcon className="h-4 w-4" /> Export
             </button>
           )}
-          {lijst !== 'ingepland' && (
+          {lijst === 'kansrijk' && (
             <button
               onClick={deelAllesUit}
               disabled={massaBezig || zichtbaar.length === 0}
@@ -292,7 +384,19 @@ export default function RestleadsPage() {
       </div>
 
       {melding && (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-800">{melding}</div>
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-800">
+          <span className="min-w-0 flex-1">{melding}</span>
+          {/* Terugdraaien kan alleen zolang de klant de lead nog niet heeft
+              opgehaald; de server bewaakt dezelfde termijn. */}
+          {laatsteActie && Date.now() - laatsteActie.tijd < TERUGDRAAI_VENSTER_MINUTEN * 60_000 && (
+            <button
+              onClick={maakOngedaan}
+              className="shrink-0 rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-800 hover:bg-emerald-100"
+            >
+              Ongedaan maken
+            </button>
+          )}
+        </div>
       )}
       {fout && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-700">{fout}</div>
@@ -304,6 +408,7 @@ export default function RestleadsPage() {
           ['kansrijk', 'Nog kansrijk', kansrijk.length, 'laatste 7 dagen'],
           ['verlopen', 'Verlopen', verlopen.length, '7 tot 90 dagen'],
           ['ingepland', 'Ingepland', wachtrij.length, 'staat in de wachtrij'],
+          ['geschiedenis', 'Geschiedenis', historie.length, 'geleverd en overgeslagen'],
         ] as const).map(([waarde, label, aantal, hint]) => (
           <button
             key={waarde}
@@ -320,25 +425,25 @@ export default function RestleadsPage() {
       </div>
 
       {/* Instellingen en filters */}
-      <div className={`flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-3 ${lijst === 'ingepland' ? 'hidden' : 'flex'}`}>
+      <div className={`flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-3 ${lijst === 'kansrijk' || lijst === 'verlopen' ? 'flex' : 'hidden'}`}>
         <div>
           <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-slate-400">Marge</label>
           <div className="flex h-9 w-20 items-center rounded-lg border border-slate-200 px-2">
-            <input value={marge} onChange={e => setMarge(e.target.value)} inputMode="numeric" className="w-full min-w-0 bg-transparent text-sm outline-none" />
+            <input value={marge} onChange={e => { setMarge(e.target.value); bewaarGetal('marge', e.target.value); }} inputMode="numeric" className="w-full min-w-0 bg-transparent text-sm outline-none" />
             <span className="text-xs text-slate-400">km</span>
           </div>
         </div>
         <div>
           <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-slate-400">Ruime marge</label>
           <div className="flex h-9 w-20 items-center rounded-lg border border-slate-200 px-2">
-            <input value={ruimeMarge} onChange={e => setRuimeMarge(e.target.value)} inputMode="numeric" className="w-full min-w-0 bg-transparent text-sm outline-none" />
+            <input value={ruimeMarge} onChange={e => { setRuimeMarge(e.target.value); bewaarGetal('ruime-marge', e.target.value); }} inputMode="numeric" className="w-full min-w-0 bg-transparent text-sm outline-none" />
             <span className="text-xs text-slate-400">km</span>
           </div>
         </div>
         <div>
           <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-slate-400">Droog na</label>
           <div className="flex h-9 w-20 items-center rounded-lg border border-slate-200 px-2">
-            <input value={droogNa} onChange={e => setDroogNa(e.target.value)} inputMode="numeric" className="w-full min-w-0 bg-transparent text-sm outline-none" />
+            <input value={droogNa} onChange={e => { setDroogNa(e.target.value); bewaarGetal('droog-na', e.target.value); }} inputMode="numeric" className="w-full min-w-0 bg-transparent text-sm outline-none" />
             <span className="text-xs text-slate-400">d</span>
           </div>
         </div>
@@ -358,25 +463,33 @@ export default function RestleadsPage() {
           Alleen met kandidaat
         </label>
 
-        <span className="ml-auto text-xs text-slate-400">{zichtbaar.length} leads</span>
+        <span className="ml-auto text-xs text-slate-400">
+          {zichtbaar.length > toon ? `${toon} van ${zichtbaar.length}` : `${zichtbaar.length}`} leads
+        </span>
       </div>
 
-      {lijst === 'ingepland' ? (
+      {lijst === 'ingepland' || lijst === 'geschiedenis' ? (
         wachtrijLaden ? (
           <div className="space-y-2">{[0, 1, 2].map(i => <div key={i} className="h-14 animate-pulse rounded-xl bg-slate-100" />)}</div>
-        ) : wachtrij.length === 0 ? (
+        ) : (lijst === 'ingepland' ? wachtrij : historie).length === 0 ? (
           <div className="rounded-xl border border-dashed border-slate-300 bg-white py-16 text-center">
             <ClockIcon className="mx-auto mb-3 h-10 w-10 text-slate-200" />
-            <p className="font-medium text-slate-600">Niets ingepland</p>
+            <p className="font-medium text-slate-600">
+              {lijst === 'ingepland' ? 'Niets ingepland' : 'Nog geen geschiedenis'}
+            </p>
             <p className="mt-1 text-sm text-slate-400">
-              Leveringen die je spreidt over de cooldown van 12 uur komen hier te staan tot ze zijn uitgevoerd.
+              {lijst === 'ingepland'
+                ? 'Leveringen die je spreidt over de cooldown van 12 uur komen hier te staan tot ze zijn uitgevoerd.'
+                : 'Hier komt te staan wat er geleverd is en wat is overgeslagen, met de reden erbij.'}
             </p>
           </div>
         ) : (
           <div className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-            {wachtrij.map(r => (
+            {(lijst === 'ingepland' ? wachtrij : historie).map(r => (
               <div key={r.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
-                <span className="w-28 shrink-0 text-xs font-semibold tabular-nums text-brand-purple">
+                <span className={`w-28 shrink-0 text-xs font-semibold tabular-nums ${
+                  r.status === 'overgeslagen' ? 'text-slate-400' : r.status === 'geleverd' ? 'text-emerald-600' : 'text-brand-purple'
+                }`}>
                   {beschrijfMoment(new Date(r.gepland_voor))}
                 </span>
                 <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-800">
@@ -387,13 +500,21 @@ export default function RestleadsPage() {
                 </span>
                 <span className="hidden shrink-0 text-xs text-slate-400 sm:inline">{r.leads?.branch}</span>
                 <span className="shrink-0 text-sm text-slate-600">&rarr; {r.customers?.name || '?'}</span>
-                <button
-                  onClick={() => annuleerLevering(r.id)}
-                  title="Deze levering annuleren"
-                  className="shrink-0 rounded-lg p-1.5 text-slate-400 transition hover:bg-red-50 hover:text-red-500"
-                >
-                  <XMarkIcon className="h-4 w-4" />
-                </button>
+                {lijst === 'geschiedenis' ? (
+                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                    r.status === 'geleverd' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'
+                  }`} title={r.laatste_reden || undefined}>
+                    {r.status === 'geleverd' ? 'geleverd' : `overgeslagen: ${r.laatste_reden || 'onbekend'}`}
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => annuleerLevering(r.id)}
+                    title="Deze levering annuleren"
+                    className="shrink-0 rounded-lg p-1.5 text-slate-400 transition hover:bg-red-50 hover:text-red-500"
+                  >
+                    <XMarkIcon className="h-4 w-4" />
+                  </button>
+                )}
               </div>
             ))}
           </div>
@@ -410,7 +531,7 @@ export default function RestleadsPage() {
         </div>
       ) : (
         <div className="space-y-2">
-          {zichtbaar.map(l => {
+          {zichtbaar.slice(0, toon).map(l => {
             const ruimte = MAX_KLANTEN_PER_LEAD - l.uitgedeeld;
             const gekozen = selectie[l.id] ?? new Set<string>();
             return (
@@ -435,15 +556,21 @@ export default function RestleadsPage() {
                         </span>
                       )}
                     </div>
-                    <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-slate-500">
-                      <span className="flex items-center gap-1">
-                        <MapPinIcon className="h-3 w-3" />
-                        {[l.postcode, l.plaatsnaam].filter(Boolean).join(' ') || '-'}
+                    {/* Postcode en datum met hetzelfde gewicht als de plaats: er
+                        staan meerdere leads uit dezelfde plaats in de lijst en
+                        die waren anders niet uit elkaar te houden. */}
+                    <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
+                      <span className="flex items-center gap-1 font-medium text-slate-600">
+                        <MapPinIcon className="h-3 w-3 shrink-0" />
+                        {[l.postcode, l.plaatsnaam].filter(Boolean).join(' ') || 'geen adres'}
                       </span>
-                      <span>{l.provincie}</span>
-                      <span>{l.branch}</span>
+                      <span className="text-slate-400">{l.provincie}</span>
+                      <span className="text-slate-400">{l.branch}</span>
+                      <span className="font-medium text-slate-600">
+                        {datum(l.wervingsdatum || l.created_at)}
+                      </span>
                       <span className="text-slate-400">
-                        {datum(l.wervingsdatum || l.created_at)} · {l.dagen_oud} {l.dagen_oud === 1 ? 'dag' : 'dagen'} oud
+                        {l.dagen_oud} {l.dagen_oud === 1 ? 'dag' : 'dagen'} oud
                       </span>
                     </p>
                   </div>
@@ -509,6 +636,15 @@ export default function RestleadsPage() {
               </div>
             );
           })}
+
+          {zichtbaar.length > toon && (
+            <button
+              onClick={() => setToon(t => t + PER_STAP)}
+              className="w-full rounded-xl border border-dashed border-slate-300 bg-white py-3 text-sm font-semibold text-slate-600 transition hover:border-brand-purple/50 hover:text-brand-purple"
+            >
+              Meer laden ({zichtbaar.length - toon} resterend)
+            </button>
+          )}
         </div>
       )}
     </div>

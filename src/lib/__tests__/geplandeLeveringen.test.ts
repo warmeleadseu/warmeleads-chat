@@ -18,6 +18,13 @@ type Opzet = {
   lead?: Record<string, unknown> | null;
   klant?: Record<string, unknown> | null;
   bestaandeToewijzingen?: { customer_id: string; assigned_at: string }[];
+  batch?: Record<string, unknown> | null;
+};
+
+/** Een gewone, actieve batch met ruimte: de toestand waarin leveren mag. */
+const RUIME_BATCH = {
+  delivery_model: 'capped', batch_kind: 'standard',
+  batch_size: 100, leads_delivered: 3, status: 'active',
 };
 
 const updates: Record<string, unknown>[] = [];
@@ -52,6 +59,17 @@ function maakClient(o: Opzet) {
           neq: () => ({
             eq: () => Promise.resolve({
               data: (o.bestaandeToewijzingen ?? []).map(a => ({ ...a, assigned_at: a.assigned_at || nu })),
+            }),
+          }),
+        }),
+      };
+    }
+    if (tabel === 'customer_batches') {
+      return {
+        select: () => ({
+          eq: () => ({
+            maybeSingle: () => Promise.resolve({
+              data: o.batch === undefined ? RUIME_BATCH : o.batch,
             }),
           }),
         }),
@@ -116,6 +134,30 @@ describe('verwerkGeplandeLeveringen', () => {
     const r = await verwerkGeplandeLeveringen(maakClient({ rijen: [RIJ], lead: LEAD, klant: KLANT }));
     expect(r.overgeslagen).toBe(1);
     expect(String(updates[0].laatste_reden)).toContain('geo_mismatch');
+  });
+
+  it('slaat over als de batch intussen niet meer actief is', async () => {
+    const r = await verwerkGeplandeLeveringen(
+      maakClient({
+        rijen: [RIJ], lead: LEAD, klant: KLANT,
+        batch: { ...RUIME_BATCH, status: 'paused' },
+      }),
+    );
+    expect(r).toEqual({ bekeken: 1, geleverd: 0, overgeslagen: 1 });
+    expect(assignMock).not.toHaveBeenCalled();
+    expect(updates[0]).toMatchObject({ status: 'overgeslagen' });
+  });
+
+  it('slaat over als de batch intussen is volgelopen', async () => {
+    const r = await verwerkGeplandeLeveringen(
+      maakClient({
+        rijen: [RIJ], lead: LEAD, klant: KLANT,
+        batch: { ...RUIME_BATCH, batch_size: 50, leads_delivered: 50 },
+      }),
+    );
+    expect(r).toEqual({ bekeken: 1, geleverd: 0, overgeslagen: 1 });
+    expect(assignMock).not.toHaveBeenCalled();
+    expect(updates[0]).toMatchObject({ status: 'overgeslagen' });
   });
 
   it('slaat over bij een inactieve klant', async () => {

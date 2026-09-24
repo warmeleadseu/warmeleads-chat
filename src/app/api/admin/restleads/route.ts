@@ -104,23 +104,32 @@ export async function GET(request: NextRequest) {
 
     const klantIds = [...new Set((batchRijen || []).map(b => b.customer_id))];
 
-    /* Droogstand: wanneer kreeg deze klant voor het laatst een lead? */
+    /* Droogstand: wanneer kreeg deze klant voor het laatst een lead?
+       Eén gerichte vraag per klant in plaats van alle toewijzingen ophalen. Dat
+       laatste haalde er 4.165 op terwijl de database er maximaal 1.000 per
+       aanvraag teruggeeft: klanten wier laatste lead buiten die nieuwste
+       duizend viel, golden onterecht als "kreeg nog nooit een lead" en kregen
+       daardoor de ruime marge. Met tien actieve klanten zijn tien kleine
+       vragen bovendien goedkoper. */
     const droogDagen = new Map<string, number | null>();
-    if (klantIds.length > 0) {
-      const { data: laatste } = await supabase
-        .from('lead_assignments')
-        .select('customer_id, assigned_at')
-        .in('customer_id', klantIds)
-        .gte('assigned_at', new Date(Date.now() - 180 * 86_400_000).toISOString())
-        .order('assigned_at', { ascending: false });
+    await Promise.all(
+      klantIds.map(async id => {
+        const { data } = await supabase
+          .from('lead_assignments')
+          .select('assigned_at')
+          .eq('customer_id', id)
+          .order('assigned_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
 
-      for (const id of klantIds) droogDagen.set(id, null);
-      for (const r of laatste || []) {
-        if (droogDagen.get(r.customer_id) === null) {
-          droogDagen.set(r.customer_id, (Date.now() - new Date(r.assigned_at).getTime()) / 86_400_000);
-        }
-      }
-    }
+        droogDagen.set(
+          id,
+          data?.assigned_at
+            ? (Date.now() - new Date(data.assigned_at).getTime()) / 86_400_000
+            : null,
+        );
+      }),
+    );
 
     const { data: doelen } = await supabase
       .from('customer_targets')
