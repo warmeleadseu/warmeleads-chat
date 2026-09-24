@@ -52,7 +52,7 @@ export async function assignLeadToBatch(
 
     const { data: targets } = await supabase
       .from('customer_targets')
-      .select('target_type, lat, lng, radius_km, provinces, country, is_active')
+      .select('target_type, lat, lng, radius_km, provinces, country, is_active, marge_km')
       .eq('customer_id', customer.id)
       .eq('is_active', true);
 
@@ -90,7 +90,7 @@ export async function assignLeadToBatch(
   if (distance_km == null && !skipGuardrails) {
     const { data: targets } = await supabase
       .from('customer_targets')
-      .select('target_type, lat, lng, radius_km, provinces, country, is_active')
+      .select('target_type, lat, lng, radius_km, provinces, country, is_active, marge_km')
       .eq('customer_id', customer.id)
       .eq('is_active', true);
     const geo = matchLeadToTargets(lead, (targets || []) as GeoTargetRow[]);

@@ -1,3 +1,4 @@
+import { binnenProvincieMarge, margeVan } from './provincieDoelMarge';
 import { leadMatchesAnyProvinceTarget } from './provinceTargetMatch';
 import { targetCountryAllowsLead } from './targetCountryMatch';
 import type { GeoTargetRow } from './batchTargets';
@@ -54,6 +55,13 @@ export function matchLeadToTargets(
       const provs: string[] = Array.isArray(t.provinces) ? t.provinces : [];
       if (provs.length > 0 && leadMatchesAnyProvinceTarget(lead, provs)) {
         return { matches: true, distance_km: 0, matched_target_type: 'province' };
+      }
+      /* Net buiten de provincie mag ook, als de klant een marge heeft. Een
+         lead 1 km over de grens ligt vaak dichterbij dan een lead diep in de
+         eigen provincie. */
+      const marge = margeVan(t as { marge_km?: number | null });
+      if (provs.length > 0 && marge > 0 && binnenProvincieMarge(lead, provs, marge)) {
+        return { matches: true, distance_km: null, matched_target_type: 'province' };
       }
     } else if (hasCoords && t.lat != null && t.lng != null && t.radius_km != null) {
       const dist = haversineKm(lead.lat!, lead.lng!, t.lat, t.lng);

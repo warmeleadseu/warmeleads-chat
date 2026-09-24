@@ -152,7 +152,7 @@ export async function tryAssignLeadToNicheResearchBatch(
   const candidateCustomerIds = Array.from(new Set(list.map((b) => b.customer_id)));
   const { data: targetsData } = await supabase
     .from('customer_targets')
-    .select('customer_id, target_type, lat, lng, radius_km, provinces, country')
+    .select('customer_id, target_type, lat, lng, radius_km, provinces, country, marge_km')
     .in('customer_id', candidateCustomerIds)
     .eq('is_active', true);
   const targetsByCustomer = new Map<string, NicheResearchTarget[]>();

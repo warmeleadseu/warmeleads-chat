@@ -9,6 +9,7 @@ import { getLeadLimitPeriodAnchors } from './batchAssignmentCaps';
 import { leadMatchesAnyProvinceTarget } from './provinceTargetMatch';
 import { targetCountryAllowsLead } from './targetCountryMatch';
 import { agentDektLocatie } from './agentGebied';
+import { binnenProvincieMarge, margeVan } from './provincieDoelMarge';
 import { filterPipelineBatchesToFifoHeads, isPipelineFifoHeadBatch } from './pipelineBatchFifo';
 import {
   TARGET_AVG_ASSIGNMENTS,
@@ -544,7 +545,14 @@ export async function distributeLead(
       if (!targetCountryAllowsLead(t as { country?: string | null }, fullLead)) continue;
       if ((t.target_type || 'radius') === 'province') {
         const provs: string[] = Array.isArray(t.provinces) ? t.provinces : [];
-        if (provs.length > 0 && leadMatchesAnyProvinceTarget(fullLead, provs)) {
+        const marge = margeVan(t as { marge_km?: number | null });
+        /* Binnen de provincie, of net erbuiten binnen de marge. Beide tellen
+           als provinciematch; zie provincieDoelMarge voor het waarom. */
+        const raak =
+          provs.length > 0 &&
+          (leadMatchesAnyProvinceTarget(fullLead, provs) ||
+            (marge > 0 && binnenProvincieMarge(fullLead, provs, marge)));
+        if (raak) {
           if (!bestMatch || 999 < bestMatch.radius) {
             bestMatch = { radius: 999, distance: 0 };
           }

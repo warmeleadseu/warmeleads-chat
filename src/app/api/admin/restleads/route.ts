@@ -124,7 +124,7 @@ export async function GET(request: NextRequest) {
 
     const { data: doelen } = await supabase
       .from('customer_targets')
-      .select('customer_id, target_type, lat, lng, radius_km, provinces, country')
+      .select('customer_id, target_type, lat, lng, radius_km, provinces, country, marge_km')
       .in('customer_id', klantIds)
       .eq('is_active', true);
 
