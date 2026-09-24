@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { assignLeadToBatch } from './assignLeadToBatch';
+import { batchIsAtCapacity } from './batchDeliveryModel';
 import { effectiveMaxAssignments, recentDistinctCustomerIds } from './assignmentCap';
 import { MIRROR_ASSIGNMENT_SOURCE } from './masterPortalMirror';
 import { sendLeadNotification } from './email';
@@ -113,6 +114,28 @@ async function leverEenRij(supabase: SupabaseClient, rij: Rij): Promise<'gelever
   if (distinct.size >= effectiveMaxAssignments(lead)) {
     await markeer('overgeslagen', `plafond bereikt: lead staat al bij ${distinct.size} klanten`);
     return 'overgeslagen';
+  }
+
+  /* Ruimte in de batch, op het moment van leveren. Tussen inplannen en leveren
+     kan er een halve dag zitten en kan de batch zijn volgelopen; zonder deze
+     controle levert de wachtrij er stilletjes overheen. assignLeadToBatch kijkt
+     hier niet naar, want die wordt ook gebruikt door paden die bewust mogen
+     overvullen. */
+  if (rij.batch_id) {
+    const { data: batch } = await supabase
+      .from('customer_batches')
+      .select('delivery_model, batch_kind, batch_size, leads_delivered, status')
+      .eq('id', rij.batch_id)
+      .maybeSingle();
+
+    if (batch && batch.status !== 'active') {
+      await markeer('overgeslagen', `batch is niet meer actief (${batch.status})`);
+      return 'overgeslagen';
+    }
+    if (batch && batchIsAtCapacity(batch)) {
+      await markeer('overgeslagen', 'batch is intussen vol');
+      return 'overgeslagen';
+    }
   }
 
   const resultaat = await assignLeadToBatch({
