@@ -57,7 +57,7 @@ export async function syncAssignmentToGoogleSheets(args: SyncAssignmentArgs): Pr
 
   const { data: assignment } = await supabase
     .from('lead_assignments')
-    .select('id, customer_id, lead_id, status, notities')
+    .select('id, customer_id, lead_id, status, notities, assigned_at')
     .eq('id', assignmentId)
     .maybeSingle();
   if (!assignment || assignment.customer_id !== customerId || assignment.lead_id !== leadId) {
@@ -86,10 +86,18 @@ export async function syncAssignmentToGoogleSheets(args: SyncAssignmentArgs): Pr
   const { data: leadRow } = await supabase.from('leads').select('*').eq('id', leadId).single();
   if (!leadRow || leadRow.bron === 'demo') return;
 
+  /* geleverd_op is de datum waarop déze klant de lead kreeg. Het portaal toont
+     die al; zonder dit veld stond in de spreadsheet alleen de wervingsdatum en
+     zeiden de twee dus iets anders. Nederlandse notatie, want daar wordt hij
+     gelezen. */
+  const geleverdOp = new Date(assignment?.assigned_at ?? Date.now());
   const lead = {
     ...leadRow,
     status: assignment?.status ?? leadRow.status ?? 'nieuw',
     notities: assignment?.notities ?? leadRow.notities ?? '',
+    geleverd_op: Number.isNaN(geleverdOp.getTime())
+      ? ''
+      : geleverdOp.toLocaleDateString('nl-NL', { timeZone: 'Europe/Amsterdam' }),
   };
 
   const logPayload = {

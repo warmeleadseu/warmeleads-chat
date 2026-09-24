@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
 import { planMomenten } from '@/lib/restleadPlanning';
+import { RESTLEAD_REDEN } from '@/lib/restleads';
 
 /**
  * Alle restleads in één keer uitdelen aan de klanten die ervoor in aanmerking
@@ -125,7 +126,7 @@ export async function POST(request: NextRequest) {
       status: 'gepland',
       pogingen: 0,
       negeer_geo: true,
-      reden: 'Restleads: massaal uitgedeeld, goedkoopste klant eerst, gespreid over 12 uur.',
+      reden: `${RESTLEAD_REDEN} massaal uitgedeeld, goedkoopste klant eerst, gespreid over 12 uur.`,
       aangemaakt_door: admin.id,
     }));
 

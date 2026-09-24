@@ -8,6 +8,11 @@ export const PORTAL_STANDARD_FIELDS = [
   { key: 'plaatsnaam', label: 'Plaats', native: 'address' as const },
   { key: 'provincie', label: 'Provincie', native: 'none' as const },
   { key: 'wervingsdatum', label: 'Wervingsdatum', native: 'none' as const },
+  /* De datum waarop déze klant de lead kreeg, niet wanneer de consument zich
+     meldde. Het portaal toont deze datum al (received_at); in een gekoppelde
+     spreadsheet stond tot nu toe alleen de wervingsdatum, waardoor de twee
+     verschillende dingen zeiden. */
+  { key: 'geleverd_op', label: 'Geleverd op', native: 'none' as const },
   { key: 'notities', label: 'Notities', native: 'none' as const },
   { key: 'land', label: 'Land', native: 'none' as const },
 ] as const;

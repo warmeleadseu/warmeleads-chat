@@ -7,6 +7,7 @@ import {
   lijstVoor,
   STANDAARD_INSTELLINGEN,
   MAX_UITDELINGEN,
+  RESTLEAD_REDEN,
   type RestLead,
   type KandidaatBatch,
   type RestleadInstellingen,
@@ -77,8 +78,24 @@ export async function GET(request: NextRequest) {
       perLead.set(a.lead_id, set);
     }
 
-    /* Alleen wat nog te redden valt: nul of één uitdeling. */
-    const onderbedeeld = leads.filter(l => (perLead.get(l.id)?.size ?? 0) < MAX_UITDELINGEN);
+    /* Leads die hier al zijn afgehandeld horen niet meer in de werklijst: een
+       openstaande levering in de wachtrij, of een eerdere plaatsing vanuit dit
+       scherm. Anders staan ze dubbel en kun je er nog eens op klikken. */
+    const { data: afgehandeld } = await supabase
+      .from('geplande_leadleveringen')
+      .select('lead_id, status, reden')
+      .in('status', ['gepland', 'geleverd']);
+
+    const uitLijst = new Set(
+      (afgehandeld || [])
+        .filter(r => r.status === 'gepland' || String(r.reden || '').startsWith(RESTLEAD_REDEN))
+        .map(r => r.lead_id),
+    );
+
+    /* Alleen wat nog te redden valt: nul of één uitdeling, en niet al afgehandeld. */
+    const onderbedeeld = leads.filter(
+      l => (perLead.get(l.id)?.size ?? 0) < MAX_UITDELINGEN && !uitLijst.has(l.id),
+    );
 
     const { data: batchRijen } = await supabase
       .from('customer_batches')

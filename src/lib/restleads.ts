@@ -21,6 +21,15 @@ import { leadMatchesAnyProvinceTarget } from './provinceTargetMatch';
 /** Boven dit aantal uitdelingen hoort een lead niet meer in de lijst. */
 export const MAX_UITDELINGEN = 2;
 
+/**
+ * Voorvoegsel op de reden van een wachtrijrij die vanuit dit scherm is gemaakt.
+ *
+ * Hieraan ziet het overzicht dat een lead hier al is afgehandeld en dus uit de
+ * werklijst mag, ook als hij daarna nog maar één klant heeft. Wie hem handmatig
+ * plaatst heeft er immers zelf voor gekozen het daarbij te laten.
+ */
+export const RESTLEAD_REDEN = 'Restleads:';
+
 export interface RestleadInstellingen {
   /** Standaardmarge buiten het doelgebied, in kilometers. */
   marge_km: number;

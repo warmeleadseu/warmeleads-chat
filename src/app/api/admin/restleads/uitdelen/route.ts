@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
 import { assignLeadToBatch } from '@/lib/assignLeadToBatch';
-import { MAX_UITDELINGEN } from '@/lib/restleads';
+import { MAX_UITDELINGEN, RESTLEAD_REDEN } from '@/lib/restleads';
 import { planMomenten } from '@/lib/restleadPlanning';
 
 /**
@@ -132,6 +132,26 @@ export async function POST(request: NextRequest) {
       if (resultaat.ok) {
         al.add(doel.customer_id);
         direct++;
+
+        /* Ook een directe plaatsing krijgt een rij in de wachtrijtabel, meteen
+           als geleverd. Zonder dat spoor is er geen verschil te zien tussen
+           een lead die de verdeler zelf plaatste en een lead die jij hier
+           bewust hebt afgehandeld, en zou hij in de werklijst blijven staan. */
+        await supabase.from('geplande_leadleveringen').upsert({
+          lead_id: leadId,
+          customer_id: doel.customer_id,
+          batch_id: doel.batch_id,
+          gepland_voor: new Date().toISOString(),
+          status: 'geleverd',
+          pogingen: 1,
+          negeer_geo: true,
+          geleverd_op: new Date().toISOString(),
+          assignment_id: resultaat.assignmentId ?? null,
+          laatste_reden: null,
+          reden: `${RESTLEAD_REDEN} direct uitgedeeld vanuit het overzicht.`,
+          aangemaakt_door: admin.id,
+        }, { onConflict: 'lead_id,customer_id' });
+
         uitkomsten.push({ customer_id: doel.customer_id, klant: klant.name, ok: true, wanneer: 'nu' });
       } else {
         uitkomsten.push({ customer_id: doel.customer_id, klant: klant.name, ok: false, reden: resultaat.reason });
@@ -147,7 +167,7 @@ export async function POST(request: NextRequest) {
       status: 'gepland',
       pogingen: 0,
       negeer_geo: true,
-      reden: 'Restleads: gespreid volgens de cooldown van 12 uur.',
+      reden: `${RESTLEAD_REDEN} gespreid volgens de cooldown van 12 uur.`,
       aangemaakt_door: admin.id,
     });
 

@@ -124,6 +124,7 @@ const FIELD_ALIASES: Record<string, string[]> = {
   plaatsnaam: ['plaats', 'stad', 'city', 'woonplaats'],
   provincie: ['provincie', 'province', 'regio'],
   wervingsdatum: ['datum', 'date', 'aanvraag'],
+  geleverd_op: ['geleverd', 'geleverdop', 'leverdatum', 'ontvangen', 'datumgeleverd'],
   notities: ['notities', 'opmerking', 'notes', 'remarks'],
 };
 
