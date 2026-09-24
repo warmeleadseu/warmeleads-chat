@@ -110,13 +110,15 @@ export function buildLeadSourceValues(
 export function applyFieldMappings(
   values: Record<string, unknown>,
   mappings: OutboundWebhookFieldMapping[],
+  legeWaarden: 'null' | 'leeg' = 'null',
 ): Record<string, unknown> {
+  const leeg = legeWaarden === 'leeg' ? '' : null;
   const out: Record<string, unknown> = {};
   for (const m of mappings) {
     if (m.enabled === false) continue;
     const target = m.target?.trim();
     if (!target) continue;
-    out[target] = values[m.source] ?? null;
+    out[target] = values[m.source] ?? leeg;
   }
   return out;
 }
@@ -148,12 +150,13 @@ export function buildWebhookPayload(
   mappings?: OutboundWebhookFieldMapping[] | null,
   straat?: string | null,
   constants?: OutboundWebhookConstant[] | null,
+  legeWaarden: 'null' | 'leeg' = 'null',
 ): Record<string, unknown> {
   const values = buildLeadSourceValues(lead, assignmentId, straat);
   // Opgeslagen mapping bevat al de juiste bronvelden (incl. custom:); pas die
   // direct toe. Zonder mapping vallen we terug op de basisvelden.
   const effective = mappings && mappings.length > 0 ? mappings : defaultFieldMappings();
-  return applyConstants(applyFieldMappings(values, effective), constants);
+  return applyConstants(applyFieldMappings(values, effective, legeWaarden), constants);
 }
 
 /**
@@ -218,6 +221,7 @@ export function buildSampleWebhookPayload(
   mappings?: OutboundWebhookFieldMapping[] | null,
   options?: BuildSampleWebhookPayloadOptions,
   constants?: OutboundWebhookConstant[] | null,
+  legeWaarden: 'null' | 'leeg' = 'null',
 ): Record<string, unknown> {
   const branch = pickWebhookSampleBranch({ preferred: options?.branch });
   const values = sampleSourceValues(branch);
@@ -234,5 +238,5 @@ export function buildSampleWebhookPayload(
       : defaultFieldMappings(catalog);
   /* Ook de testlead krijgt de vaste waarden mee. Anders test je iets anders
      dan er straks echt verstuurd wordt, en dat is geen test. */
-  return applyConstants(applyFieldMappings(values, effective), constants);
+  return applyConstants(applyFieldMappings(values, effective, legeWaarden), constants);
 }

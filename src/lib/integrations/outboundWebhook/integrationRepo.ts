@@ -93,6 +93,7 @@ export type SaveOutboundWebhookInput = {
   branches?: string[];
   field_mappings?: OutboundWebhookFieldMapping[];
   constants?: OutboundWebhookConstant[];
+  lege_waarden?: 'null' | 'leeg';
 };
 
 export async function saveOutboundWebhookConfig(
@@ -109,6 +110,7 @@ export async function saveOutboundWebhookConfig(
   if (input.branches !== undefined) settings.branches = input.branches;
   if (input.field_mappings !== undefined) settings.field_mappings = input.field_mappings;
   if (input.constants !== undefined) settings.constants = input.constants;
+  if (input.lege_waarden !== undefined) settings.lege_waarden = input.lege_waarden;
 
   const payload: Record<string, unknown> = {
     customer_id: customerId,

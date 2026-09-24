@@ -70,6 +70,7 @@ async function buildStateResponse(
     available_fields: catalog,
     field_mappings: resolveFieldMappings(config?.settings.field_mappings, catalog),
     constants: config?.settings.constants ?? [],
+    lege_waarden: config?.settings.lege_waarden ?? 'null',
     last_delivery: lastDelivery,
   });
 }
@@ -97,6 +98,7 @@ export async function PUT(request: NextRequest) {
     branches?: string[];
     field_mappings?: unknown;
     constants?: unknown;
+    lege_waarden?: unknown;
   };
 
   const patch: Parameters<typeof saveOutboundWebhookConfig>[2] = {};
@@ -141,6 +143,9 @@ export async function PUT(request: NextRequest) {
   }
 
   if (body.constants !== undefined) patch.constants = sanitizeConstants(body.constants);
+  if (body.lege_waarden === 'leeg' || body.lege_waarden === 'null') {
+    patch.lege_waarden = body.lege_waarden;
+  }
 
   if (typeof body.enabled === 'boolean') patch.enabled = body.enabled;
 

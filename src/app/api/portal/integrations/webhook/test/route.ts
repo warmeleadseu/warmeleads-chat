@@ -60,6 +60,7 @@ export async function POST(request: NextRequest) {
       config?.settings.field_mappings,
       { branch },
       config?.settings.constants,
+      config?.settings.lege_waarden,
     ),
     test: true,
   };

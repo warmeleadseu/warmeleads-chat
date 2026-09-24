@@ -19,6 +19,7 @@ type WebhookConfig = {
   available_fields: SourceField[];
   field_mappings: FieldMapping[];
   constants: Constante[];
+  lege_waarden: 'null' | 'leeg';
   last_delivery: { status: string; at: string; error: string | null } | null;
 };
 
@@ -75,6 +76,7 @@ export function WebhookIntegration({
   const [branches, setBranches] = useState<string[]>([]);
   const [fields, setFields] = useState<SourceField[]>([]);
   const [constanten, setConstanten] = useState<Constante[]>([]);
+  const [legeWaarden, setLegeWaarden] = useState<'null' | 'leeg'>('null');
   const [mappings, setMappings] = useState<Record<string, { target: string; enabled: boolean }>>(
     {},
   );
@@ -88,6 +90,7 @@ export function WebhookIntegration({
     for (const m of c.field_mappings ?? []) map[m.source] = { target: m.target, enabled: m.enabled };
     setMappings(map);
     setConstanten(c.constants ?? []);
+    setLegeWaarden(c.lege_waarden ?? 'null');
     setToken('');
   }, []);
 
@@ -150,6 +153,7 @@ export function WebhookIntegration({
         constants: constanten
           .map((c) => ({ target: c.target.trim(), value: c.value }))
           .filter((c) => c.target.length > 0),
+        lege_waarden: legeWaarden,
       };
       if (token.trim().length > 0) body.token = token.trim();
       if (typeof nextEnabled === 'boolean') body.enabled = nextEnabled;
@@ -423,6 +427,22 @@ export function WebhookIntegration({
             </div>
           </div>
         )}
+
+        <label className="flex items-start gap-2.5 rounded-lg border border-slate-200 bg-slate-50/50 px-4 py-3 text-sm text-slate-700 cursor-pointer hover:bg-slate-50">
+          <input
+            type="checkbox"
+            checked={legeWaarden === 'leeg'}
+            onChange={(e) => setLegeWaarden(e.target.checked ? 'leeg' : 'null')}
+            className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-brand-purple focus:ring-brand-purple/30"
+          />
+          <div>
+            <span className="font-medium">Stuur lege velden als lege tekst</span>
+            <p className="text-xs text-slate-500">
+              Standaard sturen we <code>null</code> voor een veld dat leeg is. Weigert jouw systeem
+              dat, zet dit dan aan; dan sturen we <code>&quot;&quot;</code>.
+            </p>
+          </div>
+        </label>
 
         <div>
           <p className="mb-1.5 block text-xs font-medium text-slate-700">Vaste waarden</p>

@@ -34,6 +34,16 @@ export type OutboundWebhookSettings = {
   field_mappings?: OutboundWebhookFieldMapping[];
   /** Vaste waarden die altijd meegaan, bovenop de veld-mapping. */
   constants?: OutboundWebhookConstant[];
+  /**
+   * Wat te sturen voor een veld dat leeg is.
+   *
+   * Standaard `null`, want dat is voor de meeste ontvangers de duidelijkste
+   * manier om "niets" te zeggen. Sommige API's accepteren dat niet en willen
+   * een lege tekst: AfsprakenMachine antwoordt op een null met
+   * "Expected string, received null" en weigert de hele lead. Per koppeling
+   * instelbaar, zodat de ene ontvanger de andere niet in de weg zit.
+   */
+  lege_waarden?: 'null' | 'leeg';
 };
 
 export type StoredOutboundWebhook = {

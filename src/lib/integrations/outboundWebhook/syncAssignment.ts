@@ -97,6 +97,7 @@ export async function syncAssignmentToOutboundWebhook(args: WebhookSyncArgs): Pr
       config.settings.field_mappings,
       straat,
       config.settings.constants,
+      config.settings.lege_waarden,
     );
     const res = await sendWebhookRequest(config.settings.url!, config.token, payload, {
       idempotencyKey: assignmentId,
