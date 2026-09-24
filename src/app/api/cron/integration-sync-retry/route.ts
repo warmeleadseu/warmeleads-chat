@@ -182,6 +182,7 @@ export async function GET(request: NextRequest) {
     .order('assigned_at', { ascending: false })
     .limit(200);
 
+  let nieuwErbij = 0;
   for (const a of recentAssignments || []) {
     if (jobs.length >= 60 + MISSING_BATCH_LIMIT) break;
     const branches = ((a as { customers?: { branches?: string[] } }).customers?.branches ??
@@ -207,11 +208,21 @@ export async function GET(request: NextRequest) {
 
       const { data: log } = await supabase
         .from('integration_sync_log')
-        .select('status')
+        .select('status, attempts, created_at')
         .eq('assignment_id', a.id)
         .eq('provider', provider)
         .maybeSingle();
       if (log?.status === 'success') continue;
+
+      /* Bestaat er al een regel, dan tellen zijn pogingen en zijn leeftijd mee.
+         Zonder dat werd elke mislukte levering uit het venster van 72 uur bij
+         élke ronde opnieuw als verse poging ingeschoten: het plafond van acht
+         pogingen gold niet en de wachttijd tussen pogingen evenmin. Bij
+         Energiekompas liep Teamleader daardoor op tot 29 pogingen en begon het
+         te antwoorden met 429, oftewel we werden afgeknepen omdat we te vaak
+         aanklopten. Een koppeling die stuk is moet je niet blijven rammen. */
+      const pogingen = Number(log?.attempts) || 0;
+      if (pogingen >= MAX_ATTEMPTS) continue;
 
       seen.add(key);
       jobs.push({
@@ -219,10 +230,11 @@ export async function GET(request: NextRequest) {
         lead_id: a.lead_id,
         assignment_id: a.id,
         provider,
-        attempts: 0,
-        created_at: a.assigned_at,
+        attempts: pogingen,
+        created_at: log?.created_at ?? a.assigned_at,
       });
-      if (jobs.filter((j) => j.attempts === 0).length >= MISSING_BATCH_LIMIT) break;
+      nieuwErbij++;
+      if (nieuwErbij >= MISSING_BATCH_LIMIT) break;
     }
   }
 
