@@ -3,6 +3,7 @@ import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
 import { planMomenten, dagSleutel } from '@/lib/restleadPlanning';
 import { RESTLEAD_REDEN } from '@/lib/restleads';
+import { herverdeelRestleadWachtrij } from '@/lib/restleadWachtrij';
 
 /**
  * Alle restleads in één keer uitdelen aan de klanten die ervoor in aanmerking
@@ -220,6 +221,13 @@ export async function POST(request: NextRequest) {
 
     leadsGeraakt++;
     leveringen += rijen.length;
+  }
+
+  /* Hierboven is per lead alleen de dag bepaald. Nu alles er staat weten we
+     hoeveel het er per klant per dag zijn, en smeren we ze uit over de werkdag
+     in plaats van ze allemaal op het begin van het venster te laten staan. */
+  if (leveringen > 0) {
+    await herverdeelRestleadWachtrij(supabase, [...plafondCache.keys()]);
   }
 
   return NextResponse.json({

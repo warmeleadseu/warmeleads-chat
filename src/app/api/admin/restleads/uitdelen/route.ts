@@ -4,6 +4,7 @@ import { createServerClient } from '@/lib/supabase';
 import { assignLeadToBatch } from '@/lib/assignLeadToBatch';
 import { MAX_UITDELINGEN, RESTLEAD_REDEN } from '@/lib/restleads';
 import { planMomenten, dagSleutel } from '@/lib/restleadPlanning';
+import { herverdeelRestleadWachtrij } from '@/lib/restleadWachtrij';
 
 /**
  * Een restlead alsnog uitdelen aan een of meer klanten.
@@ -117,7 +118,7 @@ export async function POST(request: NextRequest) {
     : null;
 
   const teDoen: Doel[] = [];
-  const uitkomsten: { customer_id: string; klant?: string; ok: boolean; reden?: string; wanneer?: string }[] = [];
+  const uitkomsten: { customer_id: string; klant?: string; ok: boolean; reden?: string; wanneer?: string; rij_id?: string }[] = [];
 
   for (const doel of doelen) {
     if (al.has(doel.customer_id)) {
@@ -228,7 +229,7 @@ export async function POST(request: NextRequest) {
       continue;
     }
 
-    const { error } = await supabase.from('geplande_leadleveringen').insert({
+    const { data: nieuweRij, error } = await supabase.from('geplande_leadleveringen').insert({
       lead_id: leadId,
       customer_id: doel.customer_id,
       batch_id: doel.batch_id,
@@ -238,7 +239,7 @@ export async function POST(request: NextRequest) {
       negeer_geo: true,
       reden: `${RESTLEAD_REDEN} gespreid volgens de cooldown van 12 uur.`,
       aangemaakt_door: admin.id,
-    });
+    }).select('id').single();
 
     if (error) {
       console.error('[restleads/uitdelen] inplannen mislukt:', error.message);
@@ -253,7 +254,24 @@ export async function POST(request: NextRequest) {
       klant: klant.name,
       ok: true,
       wanneer: moment.toISOString(),
+      rij_id: nieuweRij?.id,
     });
+  }
+
+  /* Pas nu is bekend wat er per dag bij deze klanten samenkomt; smeer dat uit
+     over de werkdag en toon het moment dat er uiteindelijk staat. */
+  if (ingepland > 0) {
+    await herverdeelRestleadWachtrij(supabase, [...new Set(teDoen.map(d => d.customer_id))]);
+    const rijIds = uitkomsten.map(u => u.rij_id).filter((id): id is string => !!id);
+    const { data: definitief } = await supabase
+      .from('geplande_leadleveringen')
+      .select('id, gepland_voor')
+      .in('id', rijIds);
+    const tijdPerRij = new Map((definitief || []).map(r => [r.id, r.gepland_voor as string]));
+    for (const u of uitkomsten) {
+      if (u.rij_id && tijdPerRij.has(u.rij_id)) u.wanneer = tijdPerRij.get(u.rij_id);
+      delete u.rij_id;
+    }
   }
 
   return NextResponse.json({
