@@ -19,10 +19,10 @@ import { TERUGDRAAI_VENSTER_MINUTEN } from '@/lib/restleads';
 /**
  * Leads die tussen wal en schip vielen.
  *
- * Twee lijsten uit dezelfde live berekening: "nog kansrijk" (laatste 7 dagen,
- * hier valt nog wat te redden) en "verlopen" (7 tot 90 dagen, voorraad om als
- * exclusieve bulk te verkopen). Een lead verdwijnt zodra hij twee keer is
- * uitgedeeld.
+ * Lijsten uit dezelfde live berekening: de verse leads (laatste 7 dagen) in
+ * "uit te delen" en "geen klant (nog)", en "verlopen" (7 tot 90 dagen, voorraad
+ * om als exclusieve bulk te verkopen). Een lead verdwijnt zodra hij twee keer
+ * is uitgedeeld.
  */
 
 interface Kandidaat {
@@ -98,7 +98,7 @@ export default function RestleadsPage() {
   const [verlopen, setVerlopen] = useState<Restlead[]>([]);
   const [laden, setLaden] = useState(true);
   const [fout, setFout] = useState<string | null>(null);
-  const [lijst, setLijst] = useState<'kansrijk' | 'verlopen' | 'ingepland' | 'geschiedenis'>('kansrijk');
+  const [lijst, setLijst] = useState<'kansrijk' | 'geenklant' | 'verlopen' | 'ingepland' | 'geschiedenis'>('kansrijk');
   const [berekendOp, setBerekendOp] = useState<string | null>(null);
   const [klantenMee, setKlantenMee] = useState<string[]>([]);
   const [wachtrij, setWachtrij] = useState<WachtrijRij[]>([]);
@@ -186,8 +186,15 @@ export default function RestleadsPage() {
   /* Terug naar de eerste vijftig zodra je van lijst wisselt of anders filtert. */
   useEffect(() => { setToon(PER_STAP); }, [lijst, zoek, branche, alleenMetKandidaat]);
 
+  /* "Nog kansrijk" in tweeën: wat nu naar een klant kan, en wat (nog) nergens
+     past. De lijst wordt bij elke verversing opnieuw berekend, dus komt er een
+     klant bij of wordt een gebied ruimer, dan schuift een lead vanzelf over. */
+  const kansrijkUit = useMemo(() => kansrijk.filter(l => l.kandidaten.length > 0), [kansrijk]);
+  const kansrijkGeen = useMemo(() => kansrijk.filter(l => l.kandidaten.length === 0), [kansrijk]);
+
   /* In de stand 'ingepland' en 'geschiedenis' tonen we de wachtrij. */
-  const bron = lijst === 'kansrijk' ? kansrijk : verlopen;
+  const bron = lijst === 'kansrijk' ? kansrijkUit : lijst === 'geenklant' ? kansrijkGeen : verlopen;
+  const isLeadLijst = lijst === 'kansrijk' || lijst === 'geenklant' || lijst === 'verlopen';
 
   const branches = useMemo(
     () => [...new Set([...kansrijk, ...verlopen].map(l => l.branch))].sort(),
@@ -198,7 +205,7 @@ export default function RestleadsPage() {
     const term = zoek.trim().toLowerCase();
     return bron.filter(l => {
       if (branche !== 'all' && l.branch !== branche) return false;
-      if (alleenMetKandidaat && l.kandidaten.length === 0) return false;
+      if (lijst === 'verlopen' && alleenMetKandidaat && l.kandidaten.length === 0) return false;
       if (!term) return true;
       return (
         (l.naam_klant || '').toLowerCase().includes(term) ||
@@ -207,7 +214,7 @@ export default function RestleadsPage() {
         (l.provincie || '').toLowerCase().includes(term)
       );
     });
-  }, [bron, branche, zoek, alleenMetKandidaat]);
+  }, [bron, branche, zoek, alleenMetKandidaat, lijst]);
 
   const wissel = (leadId: string, customerId: string, max: number) => {
     setSelectie(vorig => {
@@ -387,7 +394,7 @@ export default function RestleadsPage() {
           <button onClick={laad} disabled={laden} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50">
             <ArrowPathIcon className={`h-4 w-4 ${laden ? 'animate-spin' : ''}`} /> Vernieuwen
           </button>
-          {(lijst === 'kansrijk' || lijst === 'verlopen') && (
+          {isLeadLijst && (
             <button onClick={exporteer} disabled={zichtbaar.length === 0} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40">
               <ArrowDownTrayIcon className="h-4 w-4" /> Export
             </button>
@@ -425,9 +432,10 @@ export default function RestleadsPage() {
       )}
 
       {/* Lijstkeuze */}
-      <div className="inline-flex items-center gap-1 rounded-xl bg-slate-100 p-1">
+      <div className="inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1">
         {([
-          ['kansrijk', 'Nog kansrijk', kansrijk.length, 'laatste 7 dagen'],
+          ['kansrijk', 'Uit te delen', kansrijkUit.length, 'laatste 7 dagen, er is een klant voor'],
+          ['geenklant', 'Geen klant (nog)', kansrijkGeen.length, 'laatste 7 dagen, er komt nu geen klant voor in aanmerking'],
           ['verlopen', 'Verlopen', verlopen.length, '7 tot 90 dagen'],
           ['ingepland', 'Ingepland', wachtrij.length, 'staat in de wachtrij'],
           ['geschiedenis', 'Geschiedenis', historie.length, 'geleverd en overgeslagen'],
@@ -436,7 +444,7 @@ export default function RestleadsPage() {
             key={waarde}
             onClick={() => setLijst(waarde)}
             title={hint}
-            className={`flex min-h-9 items-center gap-1.5 rounded-lg px-4 text-sm font-semibold transition ${
+            className={`flex min-h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-4 text-sm font-semibold transition ${
               lijst === waarde ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
             }`}
           >
@@ -447,7 +455,7 @@ export default function RestleadsPage() {
       </div>
 
       {/* Instellingen en filters */}
-      <div className={`flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-3 ${lijst === 'kansrijk' || lijst === 'verlopen' ? 'flex' : 'hidden'}`}>
+      <div className={`flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-3 ${isLeadLijst ? 'flex' : 'hidden'}`}>
         <div>
           <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-slate-400">Marge</label>
           <div className="flex h-9 w-20 items-center rounded-lg border border-slate-200 px-2">
@@ -480,10 +488,13 @@ export default function RestleadsPage() {
           {branches.map(b => <option key={b} value={b}>{b}</option>)}
         </select>
 
-        <label className="flex h-9 cursor-pointer items-center gap-2 text-xs text-slate-600">
-          <input type="checkbox" checked={alleenMetKandidaat} onChange={e => setAlleenMetKandidaat(e.target.checked)} className="h-4 w-4 accent-[#7c3aed]" />
-          Alleen met kandidaat
-        </label>
+        {/* Bij de verse leads zit deze splitsing al in de tabbladen. */}
+        {lijst === 'verlopen' && (
+          <label className="flex h-9 cursor-pointer items-center gap-2 text-xs text-slate-600">
+            <input type="checkbox" checked={alleenMetKandidaat} onChange={e => setAlleenMetKandidaat(e.target.checked)} className="h-4 w-4 accent-[#7c3aed]" />
+            Alleen met kandidaat
+          </label>
+        )}
 
         <span className="ml-auto text-xs text-slate-400">
           {zichtbaar.length > toon ? `${toon} van ${zichtbaar.length}` : `${zichtbaar.length}`} leads
@@ -548,7 +559,11 @@ export default function RestleadsPage() {
           <InboxStackIcon className="mx-auto mb-3 h-10 w-10 text-slate-200" />
           <p className="font-medium text-slate-600">Niets in deze lijst</p>
           <p className="mt-1 text-sm text-slate-400">
-            {lijst === 'kansrijk' ? 'Alle verse leads zijn minstens twee keer uitgedeeld.' : 'Geen oudere leads met minder dan twee uitdelingen.'}
+            {lijst === 'kansrijk'
+              ? 'Geen verse leads die nu naar een klant kunnen.'
+              : lijst === 'geenklant'
+                ? 'Voor elke verse lead met minder dan twee klanten is er een klant beschikbaar.'
+                : 'Geen oudere leads met minder dan twee uitdelingen.'}
           </p>
         </div>
       ) : (
