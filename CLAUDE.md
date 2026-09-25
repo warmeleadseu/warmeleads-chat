@@ -12,7 +12,7 @@ Leadgeneratie- en CRM-platform (Next.js 14 App Router, TypeScript, Tailwind, Sup
 ## Automatisch committen en pushen
 Een Stop-hook (`.claude/hooks/auto-commit.ps1`) commit en pusht aan het eind van elke beurt wat nog openstaat. Faalt de typecheck, dan blokkeert de hook en moet je de fouten eerst oplossen. Commit bij voorkeur zelf met een goede boodschap; de hook is het vangnet.
 
-**Let op:** een push naar `main` gaat direct live op warmeleads.eu. Werk voor grote of risicovolle wijzigingen op een featurebranch en meld dat.
+Werk altijd direct op `main` (geen featurebranches). Een push naar `main` gaat direct live op warmeleads.eu, dus controleer extra zorgvuldig vóór afronden.
 
 ## Omgeving
 - Windows, PowerShell 5.1. `npm run dev` gebruikt bash-syntax; lokaal draaien met `npx next dev`.
