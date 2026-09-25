@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell.exe",
+            "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ".claude/hooks/auto-commit.ps1"],
+            "timeout": 300,
+            "statusMessage": "Typecheck, commit en push..."
+          }
+        ]
+      }
+    ]
+  }
+}
