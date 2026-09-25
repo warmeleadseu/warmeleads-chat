@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { planMomenten, naarWerkbaarMoment, beschrijfMoment, dagSleutel, COOLDOWN_UREN } from '../restleadPlanning';
+import { planMomenten, naarWerkbaarMoment, beschrijfMoment, dagSleutel, COOLDOWN_UREN, VROEGSTE_UUR, SPREIDING_UREN } from '../restleadPlanning';
 
 const NU = new Date('2026-09-24T10:00:00');
 
@@ -127,5 +127,46 @@ describe('dagplafond van de klant', () => {
       dagplafond: 2, alGepland: { '2026-09-25': 2, '2026-09-26': 2 },
     });
     expect(dagSleutel(m[0])).toBe('2026-09-27');
+  });
+});
+
+describe('uitsmeren over vier uur', () => {
+  it('zet opeenvolgende leveringen niet allemaal op 08:00', () => {
+    /* Dit was de klacht: deel je er vijftig uit, dan stonden ze allemaal op
+       precies 08:00 en kreeg de klant ze in één klap binnen. */
+    const bezet: Record<string, number> = {};
+    const momenten: Date[] = [];
+    const nu = new Date('2026-09-25T22:00:00');
+    for (let i = 0; i < 5; i++) {
+      const [m] = planMomenten({ laatsteToewijzing: null, aantal: 1, nu, alGepland: { ...bezet } });
+      momenten.push(m);
+      const d = dagSleutel(m);
+      bezet[d] = (bezet[d] ?? 0) + 1;
+    }
+    const tijden = momenten.map((m) => `${m.getHours()}:${String(m.getMinutes()).padStart(2, '0')}`);
+    expect(tijden).toEqual(['8:00', '8:10', '8:20', '8:30', '8:40']);
+    expect(new Set(tijden).size).toBe(5);
+  });
+
+  it('blijft binnen het venster van vier uur', () => {
+    const bezet: Record<string, number> = {};
+    const nu = new Date('2026-09-25T22:00:00');
+    let laatste: Date | null = null;
+    for (let i = 0; i < 40; i++) {
+      const [m] = planMomenten({ laatsteToewijzing: null, aantal: 1, nu, alGepland: { ...bezet } });
+      const d = dagSleutel(m);
+      bezet[d] = (bezet[d] ?? 0) + 1;
+      laatste = m;
+    }
+    expect(laatste!.getHours()).toBeGreaterThanOrEqual(VROEGSTE_UUR);
+    expect(laatste!.getHours()).toBeLessThan(VROEGSTE_UUR + SPREIDING_UREN);
+  });
+
+  it('laat een moment binnen werktijd ongemoeid', () => {
+    /* Wie om 14:00 uitdeelt wil dat het om 14:00 gebeurt, niet morgenvroeg. */
+    const nu = new Date('2026-09-25T14:00:00');
+    const [m] = planMomenten({ laatsteToewijzing: null, aantal: 1, nu });
+    expect(m.getHours()).toBe(14);
+    expect(m.getMinutes()).toBe(0);
   });
 });

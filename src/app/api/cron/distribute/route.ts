@@ -6,6 +6,7 @@ import { isPhoneValid } from '@/lib/phoneValidation';
 import { checkLeadProfanity } from '@/lib/profanityFilter';
 import { syncBatchDelivered } from '@/lib/batchSync';
 import { verifyCronAuth } from '@/lib/cronAuth';
+import { neemCronSlot, geefCronSlotTerug } from '@/lib/cronSlot';
 import { verwerkGeplandeLeveringen } from '@/lib/geplandeLeveringen';
 
 const MAX_LEAD_AGE_DAYS = 3;
@@ -19,6 +20,23 @@ export async function GET(request: NextRequest) {
   if (cronError) return cronError;
 
   const supabase = createServerClient();
+
+  /* Eén ronde tegelijk. Duurt een ronde langer dan het kwartier tussen twee
+     starts, dan liepen er twee door elkaar, lazen ze dezelfde stand en deelden
+     ze dezelfde lead allebei uit. Sinds 1 augustus gebeurde dat 52 keer. */
+  const slot = 'cron:distribute';
+  if (!(await neemCronSlot(supabase, slot, 20))) {
+    return NextResponse.json({ ok: true, overgeslagen: 'vorige ronde loopt nog' });
+  }
+
+  try {
+    return await verdeelronde(supabase);
+  } finally {
+    await geefCronSlotTerug(supabase, slot);
+  }
+}
+
+async function verdeelronde(supabase: ReturnType<typeof createServerClient>) {
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - MAX_LEAD_AGE_DAYS);
 

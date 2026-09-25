@@ -47,6 +47,7 @@ interface Restlead {
   dagen_oud: number;
   uitgedeeld: number;
   phone_valid: boolean | null;
+  wachtrij: { klant: string; wanneer: string | null; status: string } | null;
   kandidaten: Kandidaat[];
 }
 
@@ -134,7 +135,9 @@ export default function RestleadsPage() {
     setFout(null);
     try {
       const q = new URLSearchParams({ marge, ruime_marge: ruimeMarge, droog_na: droogNa });
-      const res = await adminFetch(`/api/admin/restleads?${q.toString()}`);
+      /* Nooit uit de browsercache. Deze lijst verandert bij elke uitdeling, en
+         een bewaard antwoord laat een lead staan die allang weg is. */
+      const res = await adminFetch(`/api/admin/restleads?${q.toString()}`, { cache: 'no-store' });
       if (!res.ok) { setFout('Restleads konden niet worden berekend.'); return; }
       const d = await res.json();
       setKansrijk(d.kansrijk || []);
@@ -575,6 +578,18 @@ export default function RestleadsPage() {
                     </p>
                   </div>
                 </div>
+
+                {l.wachtrij && (
+                  /* Hoort hier eigenlijk niet te staan: een lead die al
+                     klaarstaat wordt uitgefilterd. Zie je dit tóch, dan is er
+                     iets mis en dan wil je dat lezen in plaats van je af te
+                     vragen of je hem al hebt uitgedeeld. */
+                  <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    Staat al klaar voor <strong>{l.wachtrij.klant}</strong>
+                    {l.wachtrij.wanneer && ` op ${datum(l.wachtrij.wanneer)}`} ({l.wachtrij.status}).
+                    Meld dit even; hij hoort hier niet meer te staan.
+                  </p>
+                )}
 
                 {l.kandidaten.length === 0 ? (
                   <p className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">

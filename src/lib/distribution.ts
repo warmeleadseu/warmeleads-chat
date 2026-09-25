@@ -23,6 +23,15 @@ import { fetchActiveBatchTargetsByBatch, type GeoTargetRow } from './batchTarget
 
 const MAX_LEAD_AGE_DAYS = 3;
 const COOLDOWN_HOURS = 12;
+
+/**
+ * Hoe ver de verdeling terugkijkt naar leads die nog niet vol zitten.
+ *
+ * Ruimer dan de drie dagen van de verrijking: een lead die op dag vier alsnog
+ * bij een klant past hoort gewoon geleverd te worden, niet stil te blijven
+ * liggen tot iemand hem met de hand oppakt.
+ */
+const HERVERDEEL_DAGEN = 7;
 const FAIRNESS_WINDOW_HOURS = 24;
 
 const ASSIGNMENT_PAGE_SIZE = 1000;
@@ -1099,8 +1108,14 @@ export async function backfillBatch(batchId: string, lookbackDays: number): Prom
 export async function distributeUnassignedLeads(): Promise<DistributeRunResult> {
   const supabase = createServerClient();
 
+  /* Terugkijkvenster voor de verdeling.
+     Dit stond op drie dagen, net als de verrijking. Gevolg: een lead die op
+     dag vier alsnog in het werkgebied van een klant met ruimte viel, werd
+     nooit meer bekeken. Er stonden er 262 zo stil. Zeven dagen sluit aan op
+     wat de Restleads-pagina "nog kansrijk" noemt: wat de verdeling zelf nog
+     kan plaatsen plaatst ze, wat overblijft is handwerk. */
   const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - MAX_LEAD_AGE_DAYS);
+  cutoff.setDate(cutoff.getDate() - HERVERDEEL_DAGEN);
 
   // Neem leads mee met coördinaten (radius-targets) OF met een provincie
   // (province-targets matchen op `provincie`+land, zonder lat/lng).
@@ -1172,24 +1187,43 @@ export async function distributeUnassignedLeads(): Promise<DistributeRunResult> 
 
   const currentAvg = leadsWithAssignments > 0 ? sumAssignments / leadsWithAssignments : 0;
 
-  // Pass 2: re-assign leads to boost average toward TARGET_AVG
-  if (currentAvg < TARGET_AVG_ASSIGNMENTS) {
-    const reAssignCandidates = leads.filter(l => {
-      const count = recentAssignmentCounts[l.id] || 0;
-      const cap = effectiveMaxAssignments(l as LeadForDistribution);
-      if (count === 0 || count >= cap) return false;
-      const last = lastAssignedAt[l.id];
-      if (last && last > cooldownCutoff) return false;
-      return true;
-    });
+  /* Pass 2: leads die nog niet vol zitten alsnog aanbieden.
+   *
+   * Hier zat de scheve prikkel. Voorheen besliste één gemiddelde over álle
+   * leads of déze lead een tweede klant kreeg. Was het gemiddelde gehaald, dan
+   * bleef een lead op één klant staan, ook al woonde hij midden in het
+   * werkgebied van een klant met ruimte. Twee identieke leads kregen zo een
+   * andere behandeling, puur door wat andere leads die dag deden.
+   *
+   * Nu geldt: een tweede klant is een ondergrens, geen gunst. Alleen de stap
+   * naar een derde klant hangt nog van het streefgemiddelde af, zodat de
+   * exclusiviteit niet alsnog wegvalt. Wie binnen het gebied past en ruimte
+   * heeft, krijgt de lead; de rest blijft handwerk op de Restleads-pagina. */
+  const mag = (l: { id: string }) => {
+    const last = lastAssignedAt[l.id];
+    return !(last && last > cooldownCutoff);
+  };
+  const naarTweede = leads.filter(l => {
+    const count = recentAssignmentCounts[l.id] || 0;
+    return count === 1 && effectiveMaxAssignments(l as LeadForDistribution) > 1 && mag(l);
+  });
+  const naarDerde = leads.filter(l => {
+    const count = recentAssignmentCounts[l.id] || 0;
+    return count >= 2 && count < effectiveMaxAssignments(l as LeadForDistribution) && mag(l);
+  });
 
-    reAssignCandidates.sort((a, b) => (recentAssignmentCounts[a.id] || 0) - (recentAssignmentCounts[b.id] || 0));
+  const reAssignCandidates = [
+    ...naarTweede,
+    ...(currentAvg < TARGET_AVG_ASSIGNMENTS ? naarDerde : []),
+  ];
 
-    if (reAssignCandidates.length > 0) {
-      const r = await distributeLeads(reAssignCandidates as LeadForDistribution[]);
-      totalDistributed += r.distributed;
-      totalAssignments += r.assignments;
-    }
+  if (reAssignCandidates.length > 0) {
+    reAssignCandidates.sort(
+      (a, b) => (recentAssignmentCounts[a.id] || 0) - (recentAssignmentCounts[b.id] || 0),
+    );
+    const r = await distributeLeads(reAssignCandidates as LeadForDistribution[]);
+    totalDistributed += r.distributed;
+    totalAssignments += r.assignments;
   }
 
   const rowsForCandidates = existingAssignments.length + totalAssignments;

@@ -81,10 +81,33 @@ export async function GET(request: NextRequest) {
     /* Leads die hier al zijn afgehandeld horen niet meer in de werklijst: een
        openstaande levering in de wachtrij, of een eerdere plaatsing vanuit dit
        scherm. Anders staan ze dubbel en kun je er nog eens op klikken. */
-    const { data: afgehandeld } = await supabase
+    const { data: afgehandeld, error: wachtrijFout } = await supabase
       .from('geplande_leadleveringen')
-      .select('lead_id, status, reden')
+      .select('lead_id, customer_id, status, reden, gepland_voor, customers:customer_id(name)')
       .in('status', ['gepland', 'geleverd']);
+
+    /* Nooit stil doorgaan als deze vraag mislukt. Zonder deze regel viel de
+       lijst terug op "niets is afgehandeld" en stond álles weer in de
+       linkerkolom, inclusief wat al lang bij een klant klaarstond. Liever een
+       zichtbare fout dan een lijst waar je niet op kunt vertrouwen. */
+    if (wachtrijFout) {
+      console.error('[admin/restleads] wachtrij ophalen mislukt:', wachtrijFout.message);
+      return NextResponse.json(
+        { error: 'De wachtrij kon niet worden gelezen, dus de lijst zou onbetrouwbaar zijn.' },
+        { status: 500 },
+      );
+    }
+
+    const wachtrijPerLead = new Map<string, { klant: string; wanneer: string | null; status: string }>();
+    for (const r of afgehandeld || []) {
+      if (wachtrijPerLead.has(r.lead_id)) continue;
+      const klant = (r as unknown as { customers?: { name?: string } | null }).customers;
+      wachtrijPerLead.set(r.lead_id, {
+        klant: klant?.name ?? 'onbekende klant',
+        wanneer: r.gepland_voor ?? null,
+        status: r.status,
+      });
+    }
 
     const uitLijst = new Set(
       (afgehandeld || [])
@@ -191,18 +214,23 @@ export async function GET(request: NextRequest) {
         dagen_oud: Math.floor((nu.getTime() - new Date(lead.created_at).getTime()) / 86_400_000),
         uitgedeeld: al.size,
         phone_valid: lead.phone_valid,
+        /* Staat hij al ergens klaar? Dan hoort hij hier niet te staan, en als
+           dat tóch gebeurt wil je dat meteen zien in plaats van te moeten
+           gissen. */
+        wachtrij: wachtrijPerLead.get(lead.id) ?? null,
         kandidaten,
       };
 
       (lijst === 'kansrijk' ? kansrijk : verlopen).push(rij);
     }
 
-    return NextResponse.json({
-      kansrijk,
-      verlopen,
-      instellingen,
-      actieve_batches: batches.length,
-    });
+    /* Geen caching. De browser mocht dit antwoord bewaren, en dan zie je na
+       een uitdeling nog steeds de oude lijst. Dat is precies hoe het lijkt
+       alsof een uitgedeelde lead blijft staan. */
+    return NextResponse.json(
+      { kansrijk, verlopen, instellingen, actieve_batches: batches.length },
+      { headers: { 'Cache-Control': 'no-store, max-age=0' } },
+    );
   } catch (e) {
     console.error('[admin/restleads]', e);
     return NextResponse.json({ error: 'Restleads berekenen mislukt' }, { status: 500 });

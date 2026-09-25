@@ -13,6 +13,18 @@ export const COOLDOWN_UREN = 12;
 export const VROEGSTE_UUR = 8;
 export const LAATSTE_UUR = 20;
 
+/**
+ * Over hoeveel uur we leveringen uitsmeren die op hetzelfde beginmoment uitkomen.
+ *
+ * Alles wat buiten werktijd valt schoof naar precies 08:00. Deel je er vijftig
+ * uit, dan stonden ze allemaal op dezelfde minuut en kreeg de klant ze in één
+ * klap binnen. Dit geldt alleen voor uitdelingen vanaf de Restleads-pagina; de
+ * gewone verdeling en de twaalf uur tussen twee klanten blijven ongemoeid.
+ */
+export const SPREIDING_UREN = 4;
+/** Afstand tussen twee leveringen binnen dat venster. */
+export const SPREIDING_STAP_MINUTEN = 10;
+
 export interface PlanInvoer {
   /** Wanneer deze lead voor het laatst aan een klant is gegeven. */
   laatsteToewijzing: Date | null;
@@ -92,9 +104,19 @@ export function planMomenten(invoer: PlanInvoer): Date[] {
         volgende.setHours(VROEGSTE_UUR, 0, 0, 0);
         werkbaar = volgende;
       }
-      const sleutel = dagSleutel(werkbaar);
-      perDag.set(sleutel, (perDag.get(sleutel) ?? 0) + 1);
     }
+
+    /* Uitsmeren, maar alleen voor leveringen die op het begin van het venster
+       zijn uitgekomen. Een moment dat gewoon binnen werktijd viel laten we
+       staan; dat is al verspreid. */
+    const sleutel = dagSleutel(werkbaar);
+    const alDieDag = perDag.get(sleutel) ?? 0;
+    if (werkbaar.getHours() === VROEGSTE_UUR && werkbaar.getMinutes() === 0) {
+      const plaatsen = Math.floor((SPREIDING_UREN * 60) / SPREIDING_STAP_MINUTEN);
+      werkbaar = new Date(werkbaar);
+      werkbaar.setMinutes((alDieDag % plaatsen) * SPREIDING_STAP_MINUTEN, 0, 0);
+    }
+    perDag.set(sleutel, alDieDag + 1);
 
     momenten.push(werkbaar);
     vorige = werkbaar;
