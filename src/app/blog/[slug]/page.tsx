@@ -19,9 +19,9 @@ function toISO(nlDate: string): string {
 }
 
 interface BlogPostPageProps {
-  params: {
+  params: Promise<{
     slug: string;
-  };
+  }>;
 }
 
 // Generate static params for all blog articles
@@ -32,9 +32,10 @@ export async function generateStaticParams() {
 }
 
 // Generate metadata for SEO
-export async function generateMetadata({ params }: BlogPostPageProps): Promise<Metadata> {
+export async function generateMetadata(props: BlogPostPageProps): Promise<Metadata> {
+  const params = await props.params;
   const article = blogArticles.find((a) => a.slug === params.slug);
-  
+
   if (!article) {
     return {
       title: "Artikel niet gevonden | WarmeLeads",
@@ -94,7 +95,8 @@ export async function generateMetadata({ params }: BlogPostPageProps): Promise<M
   };
 }
 
-export default function BlogPostPage({ params }: BlogPostPageProps) {
+export default async function BlogPostPage(props: BlogPostPageProps) {
+  const params = await props.params;
   const article = blogArticles.find((a) => a.slug === params.slug);
 
   if (!article) {

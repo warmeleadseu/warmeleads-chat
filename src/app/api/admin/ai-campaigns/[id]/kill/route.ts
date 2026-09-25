@@ -5,7 +5,7 @@ import { setEntityStatus } from '@/lib/metaMarketingApi';
 
 export const runtime = 'nodejs';
 
-interface Ctx { params: { id: string } }
+interface Ctx { params: Promise<{ id: string }> }
 
 /**
  * Kill een experiment: pauzeert ALLE Meta-campagnes + adsets in de tree
@@ -18,7 +18,7 @@ export async function POST(request: NextRequest, ctx: Ctx) {
   const { admin, error: authErr } = await requireSuperAdmin(request);
   if (authErr || !admin) return authErr;
 
-  const experimentId = ctx.params.id;
+  const experimentId = (await ctx.params).id;
   const supabase = createServerClient();
 
   const { data: exp } = await supabase

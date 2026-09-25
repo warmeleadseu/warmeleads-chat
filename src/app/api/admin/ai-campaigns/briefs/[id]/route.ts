@@ -4,7 +4,7 @@ import { createServerClient } from '@/lib/supabase';
 
 export const runtime = 'nodejs';
 
-interface Ctx { params: { id: string } }
+interface Ctx { params: Promise<{ id: string }> }
 
 export async function GET(request: NextRequest, ctx: Ctx) {
   const { admin, error: authErr } = await requireSuperAdmin(request);
@@ -14,7 +14,7 @@ export async function GET(request: NextRequest, ctx: Ctx) {
   const { data: brief } = await supabase
     .from('ai_campaign_briefs')
     .select('*')
-    .eq('id', ctx.params.id)
+    .eq('id', (await ctx.params).id)
     .maybeSingle();
   if (!brief) return NextResponse.json({ error: 'Brief niet gevonden' }, { status: 404 });
 

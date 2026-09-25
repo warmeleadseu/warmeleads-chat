@@ -11,7 +11,8 @@ function isAllowedType(s: unknown): s is ActivityType {
   return typeof s === 'string' && (ALLOWED_TYPES as readonly string[]).includes(s);
 }
 
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const admin = await verifyAdmin(request);
   if (!admin) return unauthorized();
 
@@ -36,7 +37,8 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   return NextResponse.json({ activities: data || [] });
 }
 
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const admin = await verifyAdmin(request);
   if (!admin) return unauthorized();
 

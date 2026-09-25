@@ -18,7 +18,8 @@ async function loadTask(supabase: ReturnType<typeof createServerClient>, taskId:
     | null;
 }
 
-export async function PATCH(request: NextRequest, { params }: { params: { taskId: string } }) {
+export async function PATCH(request: NextRequest, props: { params: Promise<{ taskId: string }> }) {
+  const params = await props.params;
   const admin = await verifyAdmin(request);
   if (!admin) return unauthorized();
 
@@ -102,7 +103,8 @@ export async function PATCH(request: NextRequest, { params }: { params: { taskId
   return NextResponse.json({ success: true, task: data });
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: { taskId: string } }) {
+export async function DELETE(request: NextRequest, props: { params: Promise<{ taskId: string }> }) {
+  const params = await props.params;
   const admin = await verifyAdmin(request);
   if (!admin) return unauthorized();
 

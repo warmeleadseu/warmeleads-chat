@@ -6,7 +6,7 @@ import { isAiCampaignsEnabled, reserveBranchBudget } from '@/lib/aiCampaignBudge
 
 export const runtime = 'nodejs';
 
-interface Ctx { params: { id: string } }
+interface Ctx { params: Promise<{ id: string }> }
 
 /**
  * Hervat een gekild experiment: activeert ALLE niet-archived ad sets en
@@ -20,7 +20,7 @@ export async function POST(request: NextRequest, ctx: Ctx) {
     return NextResponse.json({ error: 'AI campaigns master switch staat uit.' }, { status: 409 });
   }
 
-  const experimentId = ctx.params.id;
+  const experimentId = (await ctx.params).id;
   const supabase = createServerClient();
 
   const { data: exp } = await supabase

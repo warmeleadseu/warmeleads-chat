@@ -28,10 +28,8 @@ function skipMessage(reason: ConfirmationSkipReason | undefined): string {
  * Verstuurt de afspraakbevestiging naar de gekoppelde klant of prospect nadat
  * de accountmanager de preview heeft geakkordeerd.
  */
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { id: string } },
-) {
+export async function POST(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const admin = await verifyAdmin(request);
   if (!admin) return unauthorized();
 

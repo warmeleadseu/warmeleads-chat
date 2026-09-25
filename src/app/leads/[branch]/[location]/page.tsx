@@ -12,10 +12,10 @@ import { getBranchLeadContent } from "@/data/branchLeadContent";
 import { BranchLeadsPageContent, type BranchLeadsLocationLink } from "@/components/BranchLeadsPage";
 
 interface LocalLeadsPageProps {
-  params: {
+  params: Promise<{
     branch: string;
     location: string;
-  };
+  }>;
 }
 
 // Generate all possible combinations for static generation
@@ -35,7 +35,8 @@ export async function generateStaticParams() {
 }
 
 // Generate metadata for SEO
-export async function generateMetadata({ params }: LocalLeadsPageProps): Promise<Metadata> {
+export async function generateMetadata(props: LocalLeadsPageProps): Promise<Metadata> {
+  const params = await props.params;
   const branch = branches.find(b => b.slug === params.branch);
   const city = cities.find(c => c.slug === params.location);
   const province = provinces.find(p => p.slug === params.location);
@@ -99,7 +100,8 @@ export async function generateMetadata({ params }: LocalLeadsPageProps): Promise
   };
 }
 
-export default function LocalLeadsPage({ params }: LocalLeadsPageProps) {
+export default async function LocalLeadsPage(props: LocalLeadsPageProps) {
+  const params = await props.params;
   const branch = branches.find(b => b.slug === params.branch);
   const city = cities.find(c => c.slug === params.location);
   const province = provinces.find(p => p.slug === params.location);

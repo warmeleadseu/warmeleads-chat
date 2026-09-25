@@ -15,7 +15,8 @@ import {
   validateCustomerBranchSlugs,
 } from '@/lib/customerBranches';
 
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const admin = await verifyAdmin(request);
   if (!admin) return unauthorized();
 
@@ -85,7 +86,8 @@ const EDITABLE_FIELDS = [
   'branches', 'company_size', 'notes', 'last_contacted_at',
 ] as const;
 
-export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const admin = await verifyAdmin(request);
   if (!admin) return unauthorized();
 
@@ -257,7 +259,8 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   });
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const admin = await verifyAdmin(request);
   if (!admin) return unauthorized();
 

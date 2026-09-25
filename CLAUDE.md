@@ -1,6 +1,6 @@
 # WarmeLeads – werkafspraken voor Claude
 
-Leadgeneratie- en CRM-platform (Next.js 14 App Router, TypeScript, Tailwind, Supabase). Live op warmeleads.eu via Vercel-project `warmeleads`. Achtergrond: [ARCHITECTURE.md](ARCHITECTURE.md), [DESIGN_GUIDELINES.md](DESIGN_GUIDELINES.md).
+Leadgeneratie- en CRM-platform (Next.js 15 App Router met React 19, TypeScript, Tailwind, Supabase). Let op: `params`/`searchParams` zijn in Next 15 een Promise en moeten ge-`await` worden. Live op warmeleads.eu via Vercel-project `warmeleads`. Achtergrond: [ARCHITECTURE.md](ARCHITECTURE.md), [DESIGN_GUIDELINES.md](DESIGN_GUIDELINES.md).
 
 ## Werkwijze per opdracht
 1. Lees eerst de bestaande code rond de wijziging en volg de patronen, naamgeving en stijl die er al zijn.

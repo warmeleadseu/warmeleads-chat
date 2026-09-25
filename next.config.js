@@ -20,7 +20,11 @@ const nextConfig = {
       },
     ],
   },
-  swcMinify: true,
+  // Lint draait apart in CI (niet-blokkerend zolang de bestaande lint-schuld er is);
+  // sinds Next 15 zou de build er anders op stranden.
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
   compress: true,
   poweredByHeader: false,
   

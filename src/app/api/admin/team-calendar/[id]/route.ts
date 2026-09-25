@@ -144,10 +144,8 @@ const FULL_SELECT = `
   participants:team_calendar_event_participants(admin_user_id, admin_users(id, name, email, avatar_url))
 `;
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } },
-) {
+export async function GET(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const admin = await verifyAdmin(request);
   if (!admin) return unauthorized();
 
@@ -182,10 +180,8 @@ async function ensureCanMutate(
   return { ok: true as const, event: data };
 }
 
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: { id: string } },
-) {
+export async function PATCH(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const admin = await verifyAdmin(request);
   if (!admin) return unauthorized();
 
@@ -336,10 +332,8 @@ export async function PATCH(
   return NextResponse.json({ ...shapeEvent(full as unknown as EventRow), invite: inviteResult });
 }
 
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: { id: string } },
-) {
+export async function DELETE(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const admin = await verifyAdmin(request);
   if (!admin) return unauthorized();
 

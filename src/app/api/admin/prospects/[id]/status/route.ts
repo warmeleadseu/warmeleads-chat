@@ -8,7 +8,8 @@ import {
   PROSPECT_STATUS_LABELS,
 } from '@/lib/prospects';
 
-export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const admin = await verifyAdmin(request);
   if (!admin) return unauthorized();
 

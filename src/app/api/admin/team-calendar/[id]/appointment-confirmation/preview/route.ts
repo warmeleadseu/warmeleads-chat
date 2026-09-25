@@ -29,10 +29,8 @@ function skipMessage(reason: ConfirmationSkipReason | undefined): string {
  * zonder iets te versturen. De accountmanager controleert deze in de
  * EmailPreviewModal voordat hij akkoord geeft.
  */
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } },
-) {
+export async function GET(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const admin = await verifyAdmin(request);
   if (!admin) return unauthorized();
 

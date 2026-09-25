@@ -4,7 +4,8 @@ import { verifyAdmin, unauthorized, forbidden } from '@/lib/adminAuth';
 import { logAudit } from '@/lib/audit';
 import { isAccountManagerScope, loadAccessibleProspect } from '@/lib/prospects';
 
-export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const admin = await verifyAdmin(request);
   if (!admin) return unauthorized();
   if (isAccountManagerScope(admin)) return forbidden();
