@@ -5,6 +5,7 @@ import {
   vindKandidaten,
   lijstVoor,
   beschrijfKandidaat,
+  automatischeStatus,
   STANDAARD_INSTELLINGEN,
   type RestLead,
   type KandidaatBatch,
@@ -153,6 +154,74 @@ describe('vindKandidaten', () => {
     const k = vindKandidaten(lead(), [b1, b2, b3], new Set(), STANDAARD_INSTELLINGEN, altijdWaar);
     expect(k[0].klant).toBe('Voorrang');
     expect(k[1].klant).toBe('Dichtbij');
+  });
+});
+
+describe('vindKandidaten, gelijk aan de verdeling', () => {
+  it('respecteert een uitsluiting van de klant die de lead al heeft', () => {
+    /* De bestaande klant sluit de kandidaat uit; eerder werd alleen de andere
+       kant gecontroleerd en stond de kandidaat er onterecht. */
+    const k = vindKandidaten(lead(), [batch()], new Set(['bestaand']), STANDAARD_INSTELLINGEN, altijdWaar, {
+      uitsluitingenPerKlant: new Map([['bestaand', ['k1']]]),
+    });
+    expect(k).toHaveLength(0);
+  });
+
+  it('respecteert een lager plafond dat op de lead is ingesteld', () => {
+    const k = vindKandidaten(lead(), [batch()], new Set(['x']), STANDAARD_INSTELLINGEN, altijdWaar, { maxKlanten: 1 });
+    expect(k).toHaveLength(0);
+  });
+
+  it('noemt een klant één keer, met de eerste batch die past', () => {
+    const k = vindKandidaten(
+      lead(),
+      [batch({ batch_id: 'oud' }), batch({ batch_id: 'nieuw' })],
+      new Set(), STANDAARD_INSTELLINGEN, altijdWaar,
+    );
+    expect(k).toHaveLength(1);
+    expect(k[0].batch_id).toBe('oud');
+  });
+
+  it('valt terug op de volgende batch van de klant als de eerste niet past', () => {
+    const k = vindKandidaten(
+      lead(),
+      [batch({ batch_id: 'oud', doelen: [{ target_type: 'radius', ...ZWOLLE, radius_km: 20, country: 'NL' }] }), batch({ batch_id: 'nieuw' })],
+      new Set(), STANDAARD_INSTELLINGEN, altijdWaar,
+    );
+    expect(k[0].batch_id).toBe('nieuw');
+  });
+});
+
+describe('automatischeStatus', () => {
+  const nu = new Date('2026-09-25T10:00:00Z');
+
+  it('noemt buiten het gebied handwerk', () => {
+    expect(automatischeStatus(3, {}, null, nu).status).toBe('handwerk');
+  });
+
+  it('wacht op de 12 uur tussen twee klanten', () => {
+    const s = automatischeStatus(0, {}, new Date('2026-09-25T06:00:00Z'), nu);
+    expect(s.status).toBe('wacht');
+    expect(s.uitleg).toContain('12 uur');
+  });
+
+  it('wacht als het dagplafond is bereikt', () => {
+    const s = automatischeStatus(0, { leads_per_day: 5, vandaag: 5 }, null, nu);
+    expect(s.status).toBe('wacht');
+    expect(s.uitleg).toContain('Dagplafond');
+  });
+
+  it('wacht als het weekplafond is bereikt', () => {
+    expect(automatischeStatus(0, { leads_per_week: 10, deze_week: 10 }, null, nu).uitleg).toContain('Weekplafond');
+  });
+
+  it('wacht als de batch nog niet gestart is', () => {
+    expect(automatischeStatus(0, { starts_at: '2026-09-28T07:00:00Z' }, null, nu).status).toBe('wacht');
+  });
+
+  it('meldt dat de verdeling hem oppakt als niets hem tegenhoudt', () => {
+    const s = automatischeStatus(0, { leads_per_day: 5, vandaag: 2 }, new Date('2026-09-20T10:00:00Z'), nu);
+    expect(s.status).toBe('automatisch');
   });
 });
 

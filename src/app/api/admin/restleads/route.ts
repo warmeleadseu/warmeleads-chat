@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
 import { matchesAllFilters } from '@/lib/distribution';
+import { effectiveMaxAssignments } from '@/lib/assignmentCap';
+import { batchIsAtCapacity, isCappedDeliveryModel } from '@/lib/batchDeliveryModel';
+import { getLeadLimitPeriodAnchors } from '@/lib/batchAssignmentCaps';
+import { fetchActiveBatchTargetsByBatch } from '@/lib/batchTargets';
 import {
   vindKandidaten,
   lijstVoor,
@@ -63,19 +67,22 @@ export async function GET(request: NextRequest) {
         .order('created_at', { ascending: false })
         .range(van, tot));
 
-    const toewijzingen = await alleRijen<{ lead_id: string; customer_id: string; source: string | null }>((van, tot) =>
+    const toewijzingen = await alleRijen<{ lead_id: string; customer_id: string; source: string | null; assigned_at: string }>((van, tot) =>
       supabase
         .from('lead_assignments')
-        .select('lead_id, customer_id, source')
+        .select('lead_id, customer_id, source, assigned_at')
         .gte('assigned_at', sinds)
         .range(van, tot));
 
     const perLead = new Map<string, Set<string>>();
+    const laatstePerLead = new Map<string, number>();
     for (const a of toewijzingen) {
       if (a.source === MIRROR) continue;
       const set = perLead.get(a.lead_id) ?? new Set<string>();
       set.add(a.customer_id);
       perLead.set(a.lead_id, set);
+      const ms = new Date(a.assigned_at).getTime();
+      if (ms > (laatstePerLead.get(a.lead_id) ?? 0)) laatstePerLead.set(a.lead_id, ms);
     }
 
     /* Leads die hier al zijn afgehandeld horen niet meer in de werklijst: een
@@ -120,12 +127,66 @@ export async function GET(request: NextRequest) {
       l => (perLead.get(l.id)?.size ?? 0) < MAX_UITDELINGEN && !uitLijst.has(l.id),
     );
 
-    const { data: batchRijen } = await supabase
+    /* Dezelfde batches als de verdeling bekijkt. Deze lijst nam ook onbetaalde
+       batches, batches van een ander soort en inactieve klanten mee; die
+       stonden dan als kandidaat terwijl de verdeling ze nooit zou kiezen. */
+    const { data: batchRijenOngesorteerd } = await supabase
       .from('customer_batches')
-      .select('id, customer_id, branch, batch_size, leads_delivered, price_per_lead, lead_filters, distribution_priority, customers(name, exclude_customers)')
-      .eq('status', 'active');
+      .select('id, customer_id, branch, batch_size, leads_delivered, price_per_lead, lead_filters, distribution_priority, created_at, starts_at, leads_per_day, leads_per_week, delivery_model, batch_kind, customers!inner(name, exclude_customers, is_active)')
+      .eq('status', 'active')
+      .eq('batch_kind', 'leads')
+      .neq('is_paid', false)
+      .eq('customers.is_active', true);
 
-    const klantIds = [...new Set((batchRijen || []).map(b => b.customer_id))];
+    /* FIFO-volgorde, zoals de verdeling: per klant de voorrangsbatch, dan de
+       oudste. vindKandidaten neemt per klant de eerste batch die past. */
+    const batchRijen = [...(batchRijenOngesorteerd || [])].sort((a, b) => {
+      if ((a.distribution_priority === true) !== (b.distribution_priority === true)) {
+        return a.distribution_priority === true ? -1 : 1;
+      }
+      return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+    });
+
+    const klantIds = [...new Set(batchRijen.map(b => b.customer_id))];
+    const batchIds = batchRijen.map(b => b.id);
+
+    /* Dag- en weektellingen per batch, voor de uitleg waarom de verdeling een
+       kandidaat nog niet zelf heeft geplaatst. Zelfde vensters als de verdeling. */
+    const { dayStart, weekStart } = getLeadLimitPeriodAnchors(new Date());
+    const periode = batchIds.length > 0
+      ? await alleRijen<{ batch_id: string | null; assigned_at: string }>((van, tot) =>
+          supabase
+            .from('lead_assignments')
+            .select('batch_id, assigned_at')
+            .in('batch_id', batchIds)
+            .gte('assigned_at', weekStart.toISOString())
+            .range(van, tot))
+      : [];
+    const vandaagPerBatch = new Map<string, number>();
+    const weekPerBatch = new Map<string, number>();
+    for (const r of periode) {
+      if (!r.batch_id) continue;
+      weekPerBatch.set(r.batch_id, (weekPerBatch.get(r.batch_id) ?? 0) + 1);
+      if (new Date(r.assigned_at) >= dayStart) {
+        vandaagPerBatch.set(r.batch_id, (vandaagPerBatch.get(r.batch_id) ?? 0) + 1);
+      }
+    }
+
+    /* Batches met een eigen gebied: dan telt alléén dat gebied, net als in de
+       verdeling. De klantgebieden gelden voor die batch niet. */
+    const batchGebieden = await fetchActiveBatchTargetsByBatch(supabase, batchIds);
+
+    /* Uitsluitingen van álle klanten, ook zonder actieve batch: een klant die
+       de lead al heeft kan een ander uitsluiten. */
+    const { data: uitsluitRijen } = await supabase
+      .from('customers')
+      .select('id, exclude_customers')
+      .not('exclude_customers', 'is', null);
+    const uitsluitingenPerKlant = new Map<string, string[]>(
+      (uitsluitRijen || [])
+        .filter(c => Array.isArray(c.exclude_customers) && c.exclude_customers.length > 0)
+        .map(c => [c.id, c.exclude_customers as string[]]),
+    );
 
     /* Droogstand: wanneer kreeg deze klant voor het laatst een lead?
        Eén gerichte vraag per klant in plaats van alle toewijzingen ophalen. Dat
@@ -167,20 +228,32 @@ export async function GET(request: NextRequest) {
       doelenPer.set(d.customer_id, lijst);
     }
 
-    const batches: KandidaatBatch[] = (batchRijen || []).map(b => {
+    const batches: KandidaatBatch[] = batchRijen.map(b => {
       const klant = b.customers as unknown as { name?: string; exclude_customers?: string[] } | null;
+      const eigenGebied = batchGebieden.get(b.id);
       return {
         batch_id: b.id,
         customer_id: b.customer_id,
         klant: klant?.name ?? 'Onbekend',
         branch: b.branch,
         prijs_per_lead: Number(b.price_per_lead) || 0,
-        ruimte: (b.batch_size || 0) - (b.leads_delivered || 0),
+        /* Batches zonder vast aantal (doorlopend, handmatig) raken nooit vol;
+           die vielen hier weg zodra het getal op nul stond. */
+        ruimte: batchIsAtCapacity(b)
+          ? 0
+          : isCappedDeliveryModel(b.delivery_model, b.batch_kind)
+            ? (b.batch_size || 0) - (b.leads_delivered || 0)
+            : Number.MAX_SAFE_INTEGER,
         distribution_priority: b.distribution_priority === true,
         droog_dagen: droogDagen.get(b.customer_id) ?? null,
-        doelen: doelenPer.get(b.customer_id) ?? [],
+        doelen: eigenGebied && eigenGebied.length > 0 ? eigenGebied : (doelenPer.get(b.customer_id) ?? []),
         lead_filters: Array.isArray(b.lead_filters) ? b.lead_filters : [],
         uitsluitingen: Array.isArray(klant?.exclude_customers) ? klant!.exclude_customers! : [],
+        starts_at: b.starts_at,
+        leads_per_day: b.leads_per_day,
+        leads_per_week: b.leads_per_week,
+        vandaag: vandaagPerBatch.get(b.id) ?? 0,
+        deze_week: weekPerBatch.get(b.id) ?? 0,
       };
     });
 
@@ -200,6 +273,13 @@ export async function GET(request: NextRequest) {
         instellingen,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (l, filters) => matchesAllFilters(l as any, filters as any),
+        {
+          uitsluitingenPerKlant,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          maxKlanten: effectiveMaxAssignments(lead as any),
+          laatsteToewijzing: laatstePerLead.has(lead.id) ? new Date(laatstePerLead.get(lead.id)!) : null,
+          nu,
+        },
       );
 
       const rij = {

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   filterPipelineBatchesToFifoHeads,
   isPipelineFifoHeadBatch,
+  orderPipelineBatchesFifo,
   pickPipelineFifoHeadBatch,
 } from '../pipelineBatchFifo';
 
@@ -75,6 +76,18 @@ describe('filterPipelineBatchesToFifoHeads', () => {
     ];
     const filtered = filterPipelineBatchesToFifoHeads(rows, now);
     expect(filtered.map((r) => r.id)).toEqual(['a1', 'b1']);
+  });
+});
+
+describe('orderPipelineBatchesFifo', () => {
+  it('houdt alle open batches, per klant voorrang en dan de oudste eerst', () => {
+    const rows = [
+      batch('nieuw', '2026-03-01'),
+      batch('vol', '2026-01-01', { delivered: 50, size: 50 }),
+      batch('oud', '2026-02-01'),
+      batch('urgent', '2026-04-01', { priority: true }),
+    ];
+    expect(orderPipelineBatchesFifo(rows, now).map((r) => r.id)).toEqual(['urgent', 'oud', 'nieuw']);
   });
 });
 

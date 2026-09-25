@@ -10,7 +10,7 @@ import { leadMatchesAnyProvinceTarget } from './provinceTargetMatch';
 import { targetCountryAllowsLead } from './targetCountryMatch';
 import { agentDektLocatie } from './agentGebied';
 import { binnenProvincieMarge, margeVan } from './provincieDoelMarge';
-import { filterPipelineBatchesToFifoHeads, isPipelineFifoHeadBatch } from './pipelineBatchFifo';
+import { isPipelineFifoHeadBatch, orderPipelineBatchesFifo } from './pipelineBatchFifo';
 import {
   TARGET_AVG_ASSIGNMENTS,
   REASSIGNMENT_COOLDOWN_DAYS,
@@ -36,8 +36,16 @@ const FAIRNESS_WINDOW_HOURS = 24;
 
 const ASSIGNMENT_PAGE_SIZE = 1000;
 
-/** Max leads per cron-run: voorkomt full-table scans en Nano overload. */
-const DISTRIBUTE_CRON_LEAD_LIMIT = 400;
+/**
+ * Max leads per cron-run: voorkomt full-table scans en Nano overload.
+ *
+ * Stond op 400, terwijl er in zeven dagen al ruim 360 binnenkomen. Deze grens
+ * telt ook leads die al vol zitten, en de nieuwste gaan voor: bij een drukke
+ * week vielen de oudste leads er stil buiten en werden ze nooit meer bekeken.
+ * Alleen de leads die echt aan bod komen kosten per stuk queries; de rest is
+ * één ophaalronde.
+ */
+const DISTRIBUTE_CRON_LEAD_LIMIT = 1500;
 
 /** PostgREST veilige chunk voor .in('lead_id', …) */
 const LEAD_ID_IN_CHUNK = 400;
@@ -50,14 +58,14 @@ type SupabaseClient = ReturnType<typeof createServerClient>;
 async function fetchAssignmentsForLeadIds(
   supabase: SupabaseClient,
   leadIds: string[],
-): Promise<{ lead_id: string; assigned_at: string }[]> {
+): Promise<{ lead_id: string; customer_id: string | null; assigned_at: string }[]> {
   if (leadIds.length === 0) return [];
-  const out: { lead_id: string; assigned_at: string }[] = [];
+  const out: { lead_id: string; customer_id: string | null; assigned_at: string }[] = [];
   for (let i = 0; i < leadIds.length; i += LEAD_ID_IN_CHUNK) {
     const chunk = leadIds.slice(i, i + LEAD_ID_IN_CHUNK);
     const { data, error } = await supabase
       .from('lead_assignments')
-      .select('lead_id, assigned_at')
+      .select('lead_id, customer_id, assigned_at')
       .neq('source', MIRROR_ASSIGNMENT_SOURCE)
       .in('lead_id', chunk);
     if (error) {
@@ -65,7 +73,9 @@ async function fetchAssignmentsForLeadIds(
       continue;
     }
     for (const row of data || []) {
-      if (row.lead_id && row.assigned_at) out.push({ lead_id: row.lead_id, assigned_at: row.assigned_at });
+      if (row.lead_id && row.assigned_at) {
+        out.push({ lead_id: row.lead_id, customer_id: row.customer_id ?? null, assigned_at: row.assigned_at });
+      }
     }
   }
   return out;
@@ -426,7 +436,9 @@ export async function distributeLead(
   if (!activeBatches || activeBatches.length === 0) return result;
 
   const now = new Date();
-  const fifoActiveBatches = filterPipelineBatchesToFifoHeads(activeBatches, now);
+  /* Alle open batches, per klant in FIFO-volgorde. De eerste die past wint
+     (zie `existing` hieronder), dus de kop gaat nog steeds voor. */
+  const fifoActiveBatches = orderPipelineBatchesFifo(activeBatches, now);
   if (fifoActiveBatches.length === 0) return result;
 
   const batchesWithWeeklyLimit = fifoActiveBatches.filter(b => b.leads_per_week && b.leads_per_week > 0);
@@ -506,11 +518,18 @@ export async function distributeLead(
 
   const matches: Match[] = [];
 
+  /* Klanten waarvan de batch die aan de beurt is zijn dag- of weekplafond al
+     heeft bereikt. Dan ook niet via een latere batch van dezelfde klant: het
+     plafond is bedoeld om de klant te doseren, niet één batch. */
+  const plafondBereikt = new Set<string>();
+
   for (const batch of fifoActiveBatches) {
     if (batchIsAtCapacity(batch as { delivery_model?: string; batch_kind?: string; batch_size: number; leads_delivered: number | null })) {
       continue;
     }
     if (recentAssignedIds.has(batch.customer_id)) continue;
+    if (plafondBereikt.has(batch.customer_id)) continue;
+    if (matches.some(m => m.customer_id === batch.customer_id)) continue;
     if (batch.starts_at && new Date(batch.starts_at) > now) continue;
 
     if (
@@ -533,12 +552,12 @@ export async function distributeLead(
 
     if (batch.leads_per_week && batch.leads_per_week > 0) {
       const thisWeekCount = weeklyCountByBatch[batch.id] || 0;
-      if (thisWeekCount >= batch.leads_per_week) continue;
+      if (thisWeekCount >= batch.leads_per_week) { plafondBereikt.add(batch.customer_id); continue; }
     }
 
     if (!ctx?.ignoreBatchDailyCap && batch.leads_per_day && batch.leads_per_day > 0) {
       const todayCount = dailyCountByBatch[batch.id] || 0;
-      if (todayCount >= batch.leads_per_day) continue;
+      if (todayCount >= batch.leads_per_day) { plafondBereikt.add(batch.customer_id); continue; }
     }
 
     // Batch-target-override: heeft de batch eigen actieve targetgebieden, dan tellen
@@ -1139,17 +1158,26 @@ export async function distributeUnassignedLeads(): Promise<DistributeRunResult> 
 
   const reassignWindowCutoff = new Date(Date.now() - REASSIGNMENT_COOLDOWN_DAYS * 24 * 60 * 60 * 1000);
 
-  const recentAssignmentCounts: Record<string, number> = {};
+  /* Aantal unieke klanten per lead, niet het aantal rijen. Twee rijen voor
+     dezelfde klant (een oude dubbele levering, of niche plus pipeline) lieten
+     een lead met één klant eruitzien als een lead met twee; hij kreeg dan pas
+     een tweede klant als het streefgemiddelde het toeliet. */
+  const recentKlanten: Record<string, Set<string>> = {};
   const lastAssignedAt: Record<string, Date> = {};
   existingAssignments.forEach(a => {
     const d = new Date(a.assigned_at);
     if (d >= reassignWindowCutoff) {
-      recentAssignmentCounts[a.lead_id] = (recentAssignmentCounts[a.lead_id] || 0) + 1;
+      (recentKlanten[a.lead_id] ??= new Set()).add(a.customer_id ?? `onbekend-${a.assigned_at}`);
     }
     if (!lastAssignedAt[a.lead_id] || d > lastAssignedAt[a.lead_id]) {
       lastAssignedAt[a.lead_id] = d;
     }
   });
+
+  const recentAssignmentCounts: Record<string, number> = {};
+  for (const [leadId, klanten] of Object.entries(recentKlanten)) {
+    recentAssignmentCounts[leadId] = klanten.size;
+  }
 
   const cooldownCutoff = new Date(Date.now() - COOLDOWN_HOURS * 60 * 60 * 1000);
 

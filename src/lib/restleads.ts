@@ -1,6 +1,7 @@
 import { haversineKm } from './portalDistanceOrigin';
 import { targetCountryAllowsLead } from './targetCountryMatch';
 import { leadMatchesAnyProvinceTarget } from './provinceTargetMatch';
+import { binnenProvincieMarge, margeVan } from './provincieDoelMarge';
 
 /**
  * Leads die tussen wal en schip vielen, en welke klanten ze alsnog kunnen krijgen.
@@ -83,6 +84,15 @@ export interface KandidaatBatch {
   doelen: Doelgebied[];
   lead_filters: unknown[];
   uitsluitingen: string[];
+  /* Wat de verdeling nog meer bekijkt. Alleen nodig om te kunnen zeggen waarom
+     een kandidaat (nog) niet automatisch is geplaatst. */
+  starts_at?: string | null;
+  leads_per_day?: number | null;
+  leads_per_week?: number | null;
+  /** Toewijzingen aan deze batch sinds het begin van de Nederlandse dag. */
+  vandaag?: number;
+  /** Toewijzingen aan deze batch sinds maandag. */
+  deze_week?: number;
 }
 
 export interface Doelgebied {
@@ -92,6 +102,20 @@ export interface Doelgebied {
   radius_km?: number | null;
   provinces?: string[] | null;
   country?: string | null;
+  marge_km?: number | null;
+}
+
+/**
+ * Plaatst de gewone verdeling deze kandidaat zelf, en zo niet: waarom niet?
+ *
+ * - `automatisch`: voldoet aan alle regels, de volgende verdeelronde pakt hem op
+ * - `wacht`: tijdelijk geblokkeerd (cooldown, plafond, batch nog niet gestart);
+ *   daarna gaat hij vanzelf
+ * - `handwerk`: buiten het gebied; de verdeling doet dat bewust nooit
+ */
+export interface AutoStatus {
+  status: 'automatisch' | 'wacht' | 'handwerk';
+  uitleg: string;
 }
 
 export interface Kandidaat {
@@ -103,6 +127,7 @@ export interface Kandidaat {
   km_buiten: number;
   reden: string;
   distribution_priority: boolean;
+  automatisch: AutoStatus;
 }
 
 /** Hoe ver ligt de lead buiten het dichtstbijzijnde doelgebied? 0 = erbinnen. */
@@ -115,6 +140,10 @@ export function afstandBuitenGebied(lead: RestLead, doelen: Doelgebied[]): numbe
     if ((d.target_type || 'radius') === 'province') {
       const provs = Array.isArray(d.provinces) ? d.provinces : [];
       if (provs.length > 0 && leadMatchesAnyProvinceTarget(lead, provs)) return 0;
+      /* Net over de provinciegrens, binnen de marge van dit doel: de verdeling
+         telt dat als binnen het gebied, dus hier ook. */
+      const marge = margeVan(d);
+      if (provs.length > 0 && marge > 0 && binnenProvincieMarge(lead, provs, marge)) return 0;
       continue;
     }
 
@@ -169,16 +198,68 @@ export function beschrijfKandidaat(kmBuiten: number, ruimeReden: string | null):
 }
 
 
+const COOLDOWN_UREN = 12;
+
+/** Waarom de gewone verdeling deze kandidaat (nog) niet zelf heeft geplaatst. */
+export function automatischeStatus(
+  kmBuiten: number,
+  batch: Pick<KandidaatBatch, 'starts_at' | 'leads_per_day' | 'leads_per_week' | 'vandaag' | 'deze_week'>,
+  laatsteToewijzing: Date | null,
+  nu: Date = new Date(),
+): AutoStatus {
+  const tijd = (d: Date) =>
+    d.toLocaleString('nl-NL', {
+      timeZone: 'Europe/Amsterdam', weekday: 'short', hour: '2-digit', minute: '2-digit',
+    });
+
+  if (kmBuiten > 0) {
+    return {
+      status: 'handwerk',
+      uitleg: 'Buiten het gebied: de verdeling plaatst alleen binnen het gebied, dit is handwerk.',
+    };
+  }
+  if (laatsteToewijzing) {
+    const vrij = new Date(laatsteToewijzing.getTime() + COOLDOWN_UREN * 3600_000);
+    if (vrij > nu) {
+      return { status: 'wacht', uitleg: `Wacht op de 12 uur tussen twee klanten; gaat vanzelf vanaf ${tijd(vrij)}.` };
+    }
+  }
+  if (batch.starts_at && new Date(batch.starts_at) > nu) {
+    return { status: 'wacht', uitleg: `Batch start pas ${tijd(new Date(batch.starts_at))}; daarna gaat hij vanzelf.` };
+  }
+  if (batch.leads_per_day && batch.leads_per_day > 0 && (batch.vandaag ?? 0) >= batch.leads_per_day) {
+    return { status: 'wacht', uitleg: `Dagplafond van ${batch.leads_per_day} bereikt; morgen weer ruimte.` };
+  }
+  if (batch.leads_per_week && batch.leads_per_week > 0 && (batch.deze_week ?? 0) >= batch.leads_per_week) {
+    return { status: 'wacht', uitleg: `Weekplafond van ${batch.leads_per_week} bereikt; maandag weer ruimte.` };
+  }
+  return {
+    status: 'automatisch',
+    uitleg: 'Voldoet aan alle regels; de verdeling plaatst hem binnen een kwartier.',
+  };
+}
+
+export interface KandidaatOpties {
+  /** Uitsluitingen van de klanten die de lead al hebben (de andere kant op). */
+  uitsluitingenPerKlant?: Map<string, string[]>;
+  /** Plafond voor deze lead; lager dan drie als dat op de lead is ingesteld. */
+  maxKlanten?: number;
+  laatsteToewijzing?: Date | null;
+  nu?: Date;
+}
+
 /**
  * Welke klanten deze lead alsnog kunnen krijgen.
  *
- * Controleert hetzelfde als de normale verdeling: branche, het plafond van
- * drie klanten, onderlinge uitsluitingen, batchfilters, ruimte in de batch en
- * een geldig telefoonnummer.
+ * Controleert hetzelfde als de normale verdeling: branche, het plafond per
+ * lead, onderlinge uitsluitingen (beide kanten op), batchfilters, ruimte in de
+ * batch en een geldig telefoonnummer. Per klant telt de eerste batch die past,
+ * in FIFO-volgorde, net als in de verdeling; geef de batches dus in die
+ * volgorde mee.
  *
- * Bewust NIET meegenomen: de 12-uurs cooldown en de dag- en weekplafonds. Die
- * doseren de automatische verdeling; hier deelt een mens handmatig uit en dan
- * is doseren niet de bedoeling.
+ * De 12-uurs cooldown en de dag- en weekplafonds houden een kandidaat níet
+ * tegen: hier deelt een mens uit. Ze staan wel in `automatisch`, zodat je ziet
+ * waarom de verdeling hem nog niet zelf heeft geplaatst.
  */
 export function vindKandidaten(
   lead: RestLead,
@@ -186,11 +267,12 @@ export function vindKandidaten(
   alToegewezenAan: Set<string>,
   instellingen: RestleadInstellingen,
   matchtFilters: (lead: RestLead, filters: unknown[]) => boolean,
+  opties: KandidaatOpties = {},
 ): Kandidaat[] {
   /* Een ongeldig telefoonnummer is precies de reden dat een lead blijft
      liggen; hem alsnog uitdelen lost niets op. */
   if (lead.phone_valid === false) return [];
-  if (alToegewezenAan.size >= 3) return [];
+  if (alToegewezenAan.size >= (opties.maxKlanten ?? 3)) return [];
 
   const uit: Kandidaat[] = [];
 
@@ -198,12 +280,15 @@ export function vindKandidaten(
     if (batch.branch !== lead.branch) continue;
     if (alToegewezenAan.has(batch.customer_id)) continue;
     if (batch.ruimte <= 0) continue;
+    if (uit.some(k => k.customer_id === batch.customer_id)) continue;
 
     /* Uitsluitingen werken beide kanten op: deze klant mag de lead niet als
-       een uitgesloten partij hem al heeft, en andersom. */
+       een uitgesloten partij hem al heeft, en een klant die hem al heeft kan
+       deze klant evengoed uitsluiten. */
     let uitgesloten = false;
     for (const bestaande of alToegewezenAan) {
       if (batch.uitsluitingen.includes(bestaande)) { uitgesloten = true; break; }
+      if (opties.uitsluitingenPerKlant?.get(bestaande)?.includes(batch.customer_id)) { uitgesloten = true; break; }
     }
     if (uitgesloten) continue;
 
@@ -223,6 +308,7 @@ export function vindKandidaten(
       km_buiten: buiten,
       reden: beschrijfKandidaat(buiten, buiten > instellingen.marge_km ? marge.waarom : null),
       distribution_priority: batch.distribution_priority,
+      automatisch: automatischeStatus(buiten, batch, opties.laatsteToewijzing ?? null, opties.nu),
     });
   }
 

@@ -33,7 +33,15 @@ interface Kandidaat {
   km_buiten: number;
   reden: string;
   distribution_priority: boolean;
+  /** Waarom de gewone verdeling deze kandidaat (nog) niet zelf plaatste. */
+  automatisch?: { status: 'automatisch' | 'wacht' | 'handwerk'; uitleg: string };
 }
+
+const AUTO_KLEUR: Record<string, string> = {
+  automatisch: 'text-emerald-700',
+  wacht: 'text-amber-700',
+  handwerk: 'text-slate-500',
+};
 
 interface Restlead {
   id: string;
@@ -652,10 +660,17 @@ export default function RestleadsPage() {
                               onChange={() => wissel(l.id, k.customer_id, ruimte)}
                               className="h-4 w-4 shrink-0 accent-[#7c3aed]"
                             />
-                            <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-800">
-                              {k.klant}
-                              {k.distribution_priority && (
-                                <span className="ml-1.5 rounded bg-indigo-100 px-1.5 py-0.5 text-[9px] font-bold text-indigo-700">voorrang</span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-sm font-medium text-slate-800">
+                                {k.klant}
+                                {k.distribution_priority && (
+                                  <span className="ml-1.5 rounded bg-indigo-100 px-1.5 py-0.5 text-[9px] font-bold text-indigo-700">voorrang</span>
+                                )}
+                              </span>
+                              {k.automatisch && (
+                                <span className={`block text-[11px] leading-snug ${AUTO_KLEUR[k.automatisch.status] ?? 'text-slate-500'}`}>
+                                  {k.automatisch.uitleg}
+                                </span>
                               )}
                             </span>
                             <span className="shrink-0 text-xs text-slate-400">{k.reden}</span>

@@ -62,6 +62,27 @@ export function filterPipelineBatchesToFifoHeads<T extends PipelineFifoBatchRow>
   return batches.filter((b) => keep.has(b.id));
 }
 
+/**
+ * Alle open batches, per klant+branche in FIFO-volgorde (voorrang, dan oudste).
+ *
+ * Voor de verdeling: de kop gaat voor, maar past een lead daar niet (ander
+ * batchgebied, andere filters), dan komt de volgende batch van dezelfde klant
+ * aan bod. Alleen de kop overhouden liet zo'n lead stil liggen terwijl de klant
+ * een batch had die hem wél wilde.
+ */
+export function orderPipelineBatchesFifo<T extends PipelineFifoBatchRow>(
+  batches: T[],
+  now: Date = new Date(),
+): T[] {
+  return batches
+    .filter((b) => isPipelineBatchOpenForInbound(b, now))
+    .sort((a, b) => {
+      const pr = priorityRank(b) - priorityRank(a);
+      if (pr !== 0) return pr;
+      return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+    });
+}
+
 export function isPipelineFifoHeadBatch<T extends PipelineFifoBatchRow>(
   batch: T,
   siblings: T[],
