@@ -41,3 +41,27 @@ jobs:
 
       - name: Test
         run: npm run test
+
+  # Het Vercel-project is niet via de Vercel GitHub-app gekoppeld, dus deployen we
+  # hier zelf: elke groene push naar main gaat live op warmeleads.eu.
+  deploy:
+    name: Deploy naar Vercel (productie)
+    needs: verify
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      VERCEL_ORG_ID: team_ngxvcy0uY4agKh6L1RsH5SrJ
+      VERCEL_PROJECT_ID: prj_1BiSJ71o8UVRB0jHmrGH7q2jBGSK
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "::warning::Secret VERCEL_TOKEN ontbreekt; deploy overgeslagen."
+            exit 0
+          fi
+          npx --yes vercel@latest deploy --prod --yes --token "$VERCEL_TOKEN"
