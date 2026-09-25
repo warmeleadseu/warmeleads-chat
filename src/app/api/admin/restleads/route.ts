@@ -228,7 +228,17 @@ export async function GET(request: NextRequest) {
        een uitdeling nog steeds de oude lijst. Dat is precies hoe het lijkt
        alsof een uitgedeelde lead blijft staan. */
     return NextResponse.json(
-      { kansrijk, verlopen, instellingen, actieve_batches: batches.length },
+      {
+        kansrijk,
+        verlopen,
+        instellingen,
+        actieve_batches: batches.length,
+        /* Het moment van berekenen, zichtbaar in het scherm. Zie je een oud
+           tijdstip, dan kijk je naar een bewaard antwoord en niet naar de
+           werkelijkheid. Dat was hier twee keer de verwarrende factor. */
+        berekend_op: new Date().toISOString(),
+        klanten_meegenomen: [...new Set(batches.map(b => b.klant))].sort(),
+      },
       { headers: { 'Cache-Control': 'no-store, max-age=0' } },
     );
   } catch (e) {

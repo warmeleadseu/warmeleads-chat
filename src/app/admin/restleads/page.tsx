@@ -99,6 +99,8 @@ export default function RestleadsPage() {
   const [laden, setLaden] = useState(true);
   const [fout, setFout] = useState<string | null>(null);
   const [lijst, setLijst] = useState<'kansrijk' | 'verlopen' | 'ingepland' | 'geschiedenis'>('kansrijk');
+  const [berekendOp, setBerekendOp] = useState<string | null>(null);
+  const [klantenMee, setKlantenMee] = useState<string[]>([]);
   const [wachtrij, setWachtrij] = useState<WachtrijRij[]>([]);
   const [wachtrijLaden, setWachtrijLaden] = useState(false);
   const [massaBezig, setMassaBezig] = useState(false);
@@ -134,7 +136,13 @@ export default function RestleadsPage() {
     setLaden(true);
     setFout(null);
     try {
-      const q = new URLSearchParams({ marge, ruime_marge: ruimeMarge, droog_na: droogNa });
+      /* Het tijdstip in de URL maakt elk verzoek uniek. Een `no-store`-header
+         helpt niet tegen een service worker die de aanvraag onderschept, en
+         precies zo'n bewaard antwoord liet hier een klant zien die allang geen
+         actieve batch meer had. Een uniek adres kan niemand bewaren. */
+      const q = new URLSearchParams({
+        marge, ruime_marge: ruimeMarge, droog_na: droogNa, _t: String(Date.now()),
+      });
       /* Nooit uit de browsercache. Deze lijst verandert bij elke uitdeling, en
          een bewaard antwoord laat een lead staan die allang weg is. */
       const res = await adminFetch(`/api/admin/restleads?${q.toString()}`, { cache: 'no-store' });
@@ -142,6 +150,8 @@ export default function RestleadsPage() {
       const d = await res.json();
       setKansrijk(d.kansrijk || []);
       setVerlopen(d.verlopen || []);
+      setBerekendOp(d.berekend_op || null);
+      setKlantenMee(d.klanten_meegenomen || []);
       setSelectie({});
     } catch {
       setFout('Netwerkfout bij het berekenen.');
@@ -362,6 +372,15 @@ export default function RestleadsPage() {
           <p className="mt-0.5 text-sm text-slate-500">
             Leads die nul of één keer zijn uitgedeeld, met de klanten die ze alsnog kunnen krijgen.
             Live berekend, dus een nieuwe klant of een verruimd gebied telt meteen mee.
+            {berekendOp && (
+              <>
+                {' '}Berekend om{' '}
+                <strong>
+                  {new Date(berekendOp).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                </strong>
+                {klantenMee.length > 0 && ` met ${klantenMee.length} actieve batches: ${klantenMee.join(', ')}.`}
+              </>
+            )}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
