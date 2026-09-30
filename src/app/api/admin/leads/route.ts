@@ -33,6 +33,7 @@ import {
   resolvePlaatsRadiusOrigin,
 } from '@/lib/leadPlaatsRadius';
 import { assignLeadToBatch } from '@/lib/assignLeadToBatch';
+import { onLeadAssignedToCustomer } from '@/lib/integrations/onLeadAssigned';
 
 async function attachAssignmentMeta(
   supabase: ReturnType<typeof createServerClient>,
@@ -492,12 +493,35 @@ export async function PUT(request: NextRequest) {
           .eq('customer_id', prevCustomerId);
       }
       if (updates.customer_id) {
-        await supabase
+        /* Dit was een upsert op (lead_id, customer_id), maar daar staat geen
+           unieke index op. Postgres weigert zo'n upsert, en omdat de fout niet
+           werd bekeken ontstond er stil géén toewijzing: de klant kreeg de lead
+           niet in zijn portaal en koppelingen (webhook, Sheets, Teamleader)
+           vuurden niet. Nu: kijken of hij er al staat, anders invoegen. */
+        const { data: bestaand } = await supabase
           .from('lead_assignments')
-          .upsert(
-            { lead_id: id, customer_id: updates.customer_id },
-            { onConflict: 'lead_id,customer_id' }
-          );
+          .select('id')
+          .eq('lead_id', id)
+          .eq('customer_id', updates.customer_id)
+          .neq('source', 'mirror')
+          .limit(1)
+          .maybeSingle();
+        if (!bestaand) {
+          const { data: nieuw, error: toewijsFout } = await supabase
+            .from('lead_assignments')
+            .insert({ lead_id: id, customer_id: updates.customer_id, source: 'manual' })
+            .select('id')
+            .single();
+          if (toewijsFout || !nieuw) {
+            console.error('[admin/leads PATCH] toewijzing aanmaken mislukt', toewijsFout?.message);
+            return NextResponse.json(
+              { error: `Lead bijgewerkt, maar toewijzen aan de klant mislukte: ${toewijsFout?.message ?? 'onbekend'}` },
+              { status: 500 },
+            );
+          }
+          /* Koppelingen van de klant meteen laten vuren, net als bij de verdeling. */
+          onLeadAssignedToCustomer({ customerId: updates.customer_id, leadId: id, assignmentId: nieuw.id });
+        }
       }
     }
 
