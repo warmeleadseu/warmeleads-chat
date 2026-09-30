@@ -70,4 +70,5 @@ export type LeadForWebhook = {
   bron: string | null;
   created_at: string | null;
   custom_fields: Record<string, unknown> | null;
+  notities?: string | null;
 };

@@ -7,6 +7,12 @@ export type WebhookSourceField = {
   defaultTarget: string;
   /** Label voor in het portaal. */
   label: string;
+  /**
+   * False = staat standaard uit. Voor velden die later zijn toegevoegd: een
+   * koppeling zonder eigen mapping stuurt alle standaardvelden, en een strenge
+   * ontvanger kan een onbekende sleutel weigeren.
+   */
+  standaardAan?: boolean;
 };
 
 /** Prefix voor branche-specifieke velden uit lead.custom_fields. */
@@ -36,6 +42,12 @@ export const WEBHOOK_BASE_FIELDS: WebhookSourceField[] = [
   { key: 'lead_id', defaultTarget: 'lead_id', label: 'Lead-ID (uniek)' },
   { key: 'assignment_id', defaultTarget: 'assignment_id', label: 'Toewijzings-ID' },
   { key: 'aangemaakt_op', defaultTarget: 'aangemaakt_op', label: 'Aangemaakt op' },
+  {
+    key: 'samenvatting',
+    defaultTarget: 'opmerking',
+    label: 'Samenvatting (alle antwoorden en notities als tekst)',
+    standaardAan: false,
+  },
 ];
 
 export type DynamicField = { key: string; label: string };
@@ -61,7 +73,7 @@ export function buildSourceFieldCatalog(dynamic: DynamicField[] = []): WebhookSo
 export function defaultFieldMappings(
   catalog: WebhookSourceField[] = WEBHOOK_BASE_FIELDS,
 ): OutboundWebhookFieldMapping[] {
-  return catalog.map((f) => ({ source: f.key, target: f.defaultTarget, enabled: true }));
+  return catalog.map((f) => ({ source: f.key, target: f.defaultTarget, enabled: f.standaardAan !== false }));
 }
 
 /**

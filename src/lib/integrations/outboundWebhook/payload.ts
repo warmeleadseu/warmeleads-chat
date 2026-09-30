@@ -45,6 +45,36 @@ const BRANCH_SAMPLE_CUSTOM_FIELDS: Record<string, Record<string, string>> = {
   },
 };
 
+/** Adresvelden en interne sleutels: staan al elders in de payload of zijn geen leadinhoud. */
+const NIET_IN_SAMENVATTING = new Set([
+  'straat', 'street', 'adres', 'max_customer_assignments', 'meta_lead_form_id', 'meta_leadgen_id',
+]);
+
+/**
+ * Alle antwoorden van de lead als één leesbare tekst, bijvoorbeeld
+ * "Termijn: Binnen 6 maanden. Eigenaar woning: Ja". Voor ontvangers die één
+ * vrij tekstveld hebben (zoals Ventasol's `opmerking`) en die de adviseur vóór
+ * het bellen wil laten zien. Notities komen erachter.
+ */
+export function samenvatting(
+  customFields: Record<string, unknown> | null,
+  notities: string | null,
+): string | null {
+  const delen: string[] = [];
+  for (const [k, v] of Object.entries(customFields ?? {})) {
+    if (NIET_IN_SAMENVATTING.has(k)) continue;
+    const waarde = Array.isArray(v) ? v.filter(x => x != null && String(x).trim()).join(', ') : v;
+    if (waarde === null || waarde === undefined || typeof waarde === 'object') continue;
+    const tekst = typeof waarde === 'boolean' ? (waarde ? 'Ja' : 'Nee') : String(waarde).trim();
+    if (!tekst) continue;
+    const label = k.replace(/_/g, ' ');
+    delen.push(`${label.charAt(0).toUpperCase()}${label.slice(1)}: ${tekst}`);
+  }
+  const notitie = (notities ?? '').trim();
+  if (notitie) delen.push(`Notities: ${notitie}`);
+  return delen.length > 0 ? delen.join('. ') : null;
+}
+
 function nullable(value: unknown): string | null {
   if (value === null || value === undefined) return null;
   const str = String(value).trim();
@@ -94,6 +124,7 @@ export function buildLeadSourceValues(
     lead_id: lead.id,
     assignment_id: assignmentId,
     aangemaakt_op: nullable(lead.created_at),
+    samenvatting: samenvatting(lead.custom_fields ?? null, lead.notities ?? null),
   };
 
   // Branche-specifieke antwoorden uit custom_fields beschikbaar maken onder
@@ -200,6 +231,7 @@ function sampleSourceValues(branch: string): Record<string, unknown> {
     lead_id: '00000000-0000-4000-8000-000000000001',
     assignment_id: '00000000-0000-4000-8000-000000000002',
     aangemaakt_op: new Date().toISOString(),
+    samenvatting: samenvatting(custom, null),
   };
   for (const [k, v] of Object.entries(custom)) {
     values[`${CUSTOM_FIELD_PREFIX}${k}`] = v;

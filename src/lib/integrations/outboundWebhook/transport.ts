@@ -10,10 +10,10 @@ const WEBHOOK_TIMEOUT_MS = 25_000;
 /** Max. aantal bytes dat we uit het antwoord lezen (exfiltratie-cap). */
 const MAX_RESPONSE_BYTES = 1_000_000;
 
-export type WebhookOutcome = 'success' | 'http_error' | 'timeout' | 'network_error';
+export type WebhookOutcome = 'success' | 'http_error' | 'rejected' | 'timeout' | 'network_error';
 
 export type WebhookResponse = {
-  /** True alleen bij een echte 2xx-respons. */
+  /** True alleen bij een 2xx-respons waarin de ontvanger de lead niet weigert. */
   ok: boolean;
   /** HTTP-status, of 0 als er geen respons kwam (timeout/netwerkfout). */
   status: number;
@@ -21,7 +21,70 @@ export type WebhookResponse = {
   outcome: WebhookOutcome;
   /** Mensvriendelijke foutomschrijving (null bij succes). */
   errorMessage: string | null;
+  /** Aangenomen maar overgeslagen (bv. dubbel), met de reden van de ontvanger. */
+  notitie?: string | null;
 };
+
+/** Haalt een leesbare reden uit één item van `failed`/`skipped`. */
+function redenVan(item: unknown): string {
+  if (typeof item === 'string') return item;
+  if (item && typeof item === 'object') {
+    const o = item as Record<string, unknown>;
+    for (const k of ['reason', 'reden', 'error', 'message', 'fout']) {
+      const v = o[k];
+      if (typeof v === 'string' && v.trim()) return v.trim();
+    }
+    return JSON.stringify(item).slice(0, 200);
+  }
+  return String(item);
+}
+
+function lijstOfAantal(v: unknown): { aantal: number; redenen: string[] } {
+  if (Array.isArray(v)) return { aantal: v.length, redenen: v.map(redenVan) };
+  if (typeof v === 'number' && Number.isFinite(v)) return { aantal: v, redenen: [] };
+  return { aantal: 0, redenen: [] };
+}
+
+/**
+ * Leest uit een 2xx-antwoord of de ontvanger de lead tóch weigerde.
+ *
+ * Sommige ontvangers (Ventasol) antwoorden altijd met 200 en zetten per lead
+ * in `failed` wat er niet is binnengekomen, en in `skipped` wat ze bewust
+ * lieten liggen (bijvoorbeeld een dubbele). Alleen naar de HTTP-status kijken
+ * markeert een geweigerde lead als afgeleverd, en dan verdwijnt hij zonder dat
+ * iemand het ziet.
+ *
+ * - `failed` niet leeg: geweigerd, met de reden erbij.
+ * - `skipped` niet leeg (en niets geïmporteerd): aangenomen met een notitie.
+ *   De ontvanger heeft hem gezien en er bewust iets mee gedaan; opnieuw sturen
+ *   levert hetzelfde op.
+ * Geen JSON of geen van deze velden: gewoon geslaagd, zoals voorheen.
+ */
+export function leesOntvangerUitslag(body: string): { geweigerd: string | null; notitie: string | null } {
+  let json: unknown;
+  try {
+    json = JSON.parse(body);
+  } catch {
+    return { geweigerd: null, notitie: null };
+  }
+  if (!json || typeof json !== 'object' || Array.isArray(json)) return { geweigerd: null, notitie: null };
+  const o = json as Record<string, unknown>;
+
+  const mislukt = lijstOfAantal(o.failed);
+  if (mislukt.aantal > 0) {
+    const reden = mislukt.redenen.filter(Boolean).join('; ') || JSON.stringify(o).slice(0, 300);
+    return { geweigerd: reden, notitie: null };
+  }
+
+  const overgeslagen = lijstOfAantal(o.skipped);
+  const binnen = lijstOfAantal(o.imported).aantal;
+  if (overgeslagen.aantal > 0 && binnen === 0) {
+    const reden = overgeslagen.redenen.filter(Boolean).join('; ');
+    return { geweigerd: null, notitie: `Overgeslagen door ontvanger${reden ? `: ${reden}` : ''}` };
+  }
+
+  return { geweigerd: null, notitie: null };
+}
 
 type SendOptions = {
   /** Stabiele sleutel zodat de ontvanger zelf kan dedupliceren. */
@@ -77,18 +140,38 @@ export async function sendWebhookRequest(
       redirect: 'manual',
     });
 
-    let bodySnippet = '';
+    let body = '';
     try {
       const lenHeader = Number(res.headers.get('content-length') || '0');
       if (!Number.isFinite(lenHeader) || lenHeader <= MAX_RESPONSE_BYTES) {
-        bodySnippet = (await res.text()).slice(0, 500);
+        body = (await res.text()).slice(0, MAX_RESPONSE_BYTES);
       }
     } catch {
       /* body niet leesbaar — niet kritiek */
     }
+    const bodySnippet = body.slice(0, 500);
 
     if (res.ok) {
-      return { ok: true, status: res.status, bodySnippet, outcome: 'success', errorMessage: null };
+      /* Het hele antwoord lezen, niet het afgekapte stukje: een lange lijst
+         redenen zou anders net geen geldige JSON meer zijn. */
+      const uitslag = leesOntvangerUitslag(body);
+      if (uitslag.geweigerd) {
+        return {
+          ok: false,
+          status: res.status,
+          bodySnippet,
+          outcome: 'rejected',
+          errorMessage: `Ontvanger weigerde de lead: ${uitslag.geweigerd}`.slice(0, 1000),
+        };
+      }
+      return {
+        ok: true,
+        status: res.status,
+        bodySnippet,
+        outcome: 'success',
+        errorMessage: null,
+        notitie: uitslag.notitie,
+      };
     }
     const detail = bodySnippet ? `: ${bodySnippet}` : '';
     return {

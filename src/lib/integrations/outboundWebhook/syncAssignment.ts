@@ -125,13 +125,18 @@ export async function syncAssignmentToOutboundWebhook(args: WebhookSyncArgs): Pr
     }
 
     if (!res.ok) {
-      // HTTP-fout of netwerkfout: laat de cron-retry het opnieuw proberen.
+      /* HTTP-fout, netwerkfout of een lead die de ontvanger weigerde: vastleggen
+         als mislukt, zodat hij zichtbaar is en de cron-retry het opnieuw
+         probeert (begrensd). Na een aanpassing van de koppeling gaan mislukte
+         leveringen vanzelf opnieuw in de wachtrij. */
       throw new Error(res.errorMessage ?? `Webhook gaf HTTP ${res.status}`);
     }
 
     await supabase
       .from('integration_sync_log')
-      .update({ status: 'success', error_message: null, updated_at: new Date().toISOString() })
+      /* Een notitie bewaren als de ontvanger hem aannam maar oversloeg (bv. een
+         dubbele); dan is later te zien waarom hij daar niet als nieuw staat. */
+      .update({ status: 'success', error_message: res.notitie ?? null, updated_at: new Date().toISOString() })
       .eq('assignment_id', assignmentId)
       .eq('provider', OUTBOUND_WEBHOOK_PROVIDER);
   } catch (err) {
