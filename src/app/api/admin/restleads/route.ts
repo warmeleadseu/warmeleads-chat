@@ -6,6 +6,10 @@ import { effectiveMaxAssignments } from '@/lib/assignmentCap';
 import { batchIsAtCapacity, isCappedDeliveryModel } from '@/lib/batchDeliveryModel';
 import { getLeadLimitPeriodAnchors } from '@/lib/batchAssignmentCaps';
 import { fetchActiveBatchTargetsByBatch } from '@/lib/batchTargets';
+import { applyLeadFilters, readLeadFilterParams, type LeadFilterParams } from '@/lib/leadFilters';
+import { resolvePlaatsRadiusOrigin, leadWithinRadiusKm, type PlaatsRadiusOrigin } from '@/lib/leadPlaatsRadius';
+import { resolveProvincieMarge } from '@/lib/provincieMarge';
+import { filterEnTel, type RestleadFilterItem, type RestleadFilterKeuze } from '@/lib/restleadFilters';
 import {
   vindKandidaten,
   lijstVoor,
@@ -28,6 +32,12 @@ import {
 export const dynamic = 'force-dynamic';
 
 const MIRROR = 'mirror';
+
+type FilterLead = RestLead & {
+  bron?: string | null;
+  meta_campaign_id?: string | null;
+  assigned_customer_ids?: string[] | null;
+};
 const VENSTER_DAGEN = 90;
 
 async function alleRijen<T>(bouw: (van: number, tot: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>): Promise<T[]> {
@@ -53,19 +63,65 @@ export async function GET(request: NextRequest) {
     droog_na_dagen: Number(q.get('droog_na') ?? STANDAARD_INSTELLINGEN.droog_na_dagen) || STANDAARD_INSTELLINGEN.droog_na_dagen,
   };
 
+  /* Filters zoals in het Leads CRM. Wat de database kan, gaat via dezelfde
+     applyLeadFilters als daar; de meerkeuzefilters draaien hieronder in
+     geheugen, zodat er per optie geteld kan worden. Status en "wel/niet
+     uitgedeeld" ontbreken bewust: die zeggen hier niets. */
+  const filters = readLeadFilterParams(q);
+  const lijstParam = (sleutel: string) => (q.get(sleutel) || '').split(',').map(v => v.trim()).filter(Boolean);
+  const databaseFilters: LeadFilterParams = {
+    search: filters.search,
+    phone_valid: filters.phone_valid,
+    bulk_status: filters.bulk_status,
+    date_from: filters.date_from,
+    date_to: filters.date_to,
+    include_unknown_date: filters.include_unknown_date,
+    plaats: filters.plaats,
+    plaats_radius_km: filters.plaats_radius_km,
+    postcode_ranges: filters.postcode_ranges,
+  };
+  let plaatsRadius: PlaatsRadiusOrigin | null = null;
+  try {
+    plaatsRadius = await resolvePlaatsRadiusOrigin(filters);
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : 'Plaats niet gevonden' },
+      { status: 400 },
+    );
+  }
+  const keuze: RestleadFilterKeuze = {
+    branches: lijstParam('branch'),
+    provincies: lijstParam('province'),
+    marge: resolveProvincieMarge(filters),
+    bronnen: lijstParam('source'),
+    campagnes: lijstParam('meta_campaign_id'),
+    uitgedeeldAan: lijstParam('customer_id'),
+    kanNaar: lijstParam('kan_naar'),
+  };
+
   const supabase = createServerClient();
   const sinds = new Date(Date.now() - VENSTER_DAGEN * 86_400_000).toISOString();
 
   try {
-    const leads = await alleRijen<RestLead>((van, tot) =>
-      supabase
-        .from('leads')
-        .select('id, naam_klant, plaatsnaam, provincie, postcode, land, branch, lat, lng, phone_valid, wervingsdatum, created_at, custom_fields')
-        .gte('created_at', sinds)
-        .neq('bron', 'excel_import')
-        .neq('bron', 'demo')
+    const opgehaald = await alleRijen<FilterLead>((van, tot) =>
+      applyLeadFilters(
+        supabase
+          .from('leads')
+          .select('id, naam_klant, plaatsnaam, provincie, postcode, land, branch, lat, lng, phone_valid, wervingsdatum, created_at, custom_fields, bron, meta_campaign_id, assigned_customer_ids')
+          .gte('created_at', sinds)
+          .neq('bron', 'excel_import')
+          .neq('bron', 'demo'),
+        databaseFilters,
+        { plaatsRadius },
+      )
         .order('created_at', { ascending: false })
         .range(van, tot));
+
+    /* De database filtert de straal alleen grof op een rechthoek; hier de
+       exacte afstand, net als in het Leads CRM. */
+    const leads = plaatsRadius
+      ? opgehaald.filter(l => leadWithinRadiusKm(l, plaatsRadius!, plaatsRadius!.radiusKm))
+      : opgehaald;
 
     const toewijzingen = await alleRijen<{ lead_id: string; customer_id: string; source: string | null; assigned_at: string }>((van, tot) =>
       supabase
@@ -258,8 +314,7 @@ export async function GET(request: NextRequest) {
     });
 
     const nu = new Date();
-    const kansrijk: unknown[] = [];
-    const verlopen: unknown[] = [];
+    const regels: { lijst: 'kansrijk' | 'verlopen'; rij: unknown; item: RestleadFilterItem }[] = [];
 
     for (const lead of onderbedeeld) {
       const lijst = lijstVoor(lead, nu);
@@ -301,8 +356,27 @@ export async function GET(request: NextRequest) {
         kandidaten,
       };
 
-      (lijst === 'kansrijk' ? kansrijk : verlopen).push(rij);
+      regels.push({
+        lijst,
+        rij,
+        item: {
+          branch: lead.branch,
+          provincie: lead.provincie,
+          bron: lead.bron ?? null,
+          meta_campaign_id: lead.meta_campaign_id ?? null,
+          lat: lead.lat,
+          lng: lead.lng,
+          land: lead.land,
+          postcode: lead.postcode,
+          klanten: [...new Set([...al, ...(lead.assigned_customer_ids ?? [])])],
+          kandidaten: kandidaten.map(k => k.customer_id),
+        },
+      });
     }
+
+    const { over, facetten } = filterEnTel(regels, r => r.item, keuze);
+    const kansrijk = over.filter(r => r.lijst === 'kansrijk').map(r => r.rij);
+    const verlopen = over.filter(r => r.lijst === 'verlopen').map(r => r.rij);
 
     /* Geen caching. De browser mocht dit antwoord bewaren, en dan zie je na
        een uitdeling nog steeds de oude lijst. Dat is precies hoe het lijkt
@@ -318,6 +392,9 @@ export async function GET(request: NextRequest) {
            werkelijkheid. Dat was hier twee keer de verwarrende factor. */
         berekend_op: new Date().toISOString(),
         klanten_meegenomen: [...new Set(batches.map(b => b.klant))].sort(),
+        /* Tellingen per filteroptie, over alle lijsten heen. */
+        facetten,
+        plaats_radius_label: plaatsRadius?.label ?? null,
       },
       { headers: { 'Cache-Control': 'no-store, max-age=0' } },
     );

@@ -1,11 +1,10 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   InboxStackIcon,
   ArrowPathIcon,
   ArrowDownTrayIcon,
-  MagnifyingGlassIcon,
   MapPinIcon,
   CheckIcon,
   BoltIcon,
@@ -15,6 +14,9 @@ import {
 import { adminFetch } from '@/lib/adminAuth';
 import { beschrijfMoment } from '@/lib/restleadPlanning';
 import { TERUGDRAAI_VENSTER_MINUTEN } from '@/lib/restleads';
+import { LEGE_LEADFILTERS, telActieveLeadFilters, type LeadFilterStand } from '@/lib/leadFilterState';
+import { standNaarFilterParams } from '@/lib/leadFilterParams';
+import RestleadsFilters from './RestleadsFilters';
 
 /**
  * Leads die tussen wal en schip vielen.
@@ -101,6 +103,14 @@ function datum(iso: string | null): string {
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
+const FILTER_OPSLAG = 'restleads-filters';
+
+function naarParams(stand: LeadFilterStand, kanNaar: string[]): Record<string, string> {
+  const p = standNaarFilterParams(stand);
+  if (kanNaar.length > 0) p.kan_naar = kanNaar.join(',');
+  return p;
+}
+
 export default function RestleadsPage() {
   const [kansrijk, setKansrijk] = useState<Restlead[]>([]);
   const [verlopen, setVerlopen] = useState<Restlead[]>([]);
@@ -131,8 +141,89 @@ export default function RestleadsPage() {
     setDroogNa(leesGetal('droog-na', '7'));
   }, []);
 
-  const [zoek, setZoek] = useState('');
-  const [branche, setBranche] = useState('all');
+  /* Filters zoals in het Leads CRM. Status en "wel/niet uitgedeeld" blijven
+     leeg; die bestaan hier niet. Ze worden onthouden, zodat verversen of later
+     terugkomen je filters niet kwijtraakt. */
+  const [filters, setFilters] = useState<LeadFilterStand>(LEGE_LEADFILTERS);
+  const [kanNaar, setKanNaar] = useState<string[]>([]);
+  const [filtersGeladen, setFiltersGeladen] = useState(false);
+  const zet = useCallback(<K extends keyof LeadFilterStand>(sleutel: K, waarde: LeadFilterStand[K]) => {
+    setFilters(f => ({ ...f, [sleutel]: waarde }));
+  }, []);
+  useEffect(() => {
+    try {
+      const opgeslagen = JSON.parse(localStorage.getItem(FILTER_OPSLAG) || 'null');
+      const stand: LeadFilterStand = opgeslagen?.filters
+        ? { ...LEGE_LEADFILTERS, ...opgeslagen.filters, selStatuses: [], assignmentFilter: 'all' }
+        : LEGE_LEADFILTERS;
+      const naar: string[] = Array.isArray(opgeslagen?.kanNaar) ? opgeslagen.kanNaar : [];
+      setFilters(stand);
+      setKanNaar(naar);
+      /* Meteen mee in de eerste aanvraag, niet pas na de typvertraging. */
+      setFilterParams(naarParams(stand, naar));
+    } catch { /* geen of onleesbare opslag: gewoon zonder filters beginnen */ }
+    setFiltersGeladen(true);
+  }, []);
+  useEffect(() => {
+    if (!filtersGeladen) return;
+    try { localStorage.setItem(FILTER_OPSLAG, JSON.stringify({ filters, kanNaar })); } catch { /* niet erg */ }
+  }, [filters, kanNaar, filtersGeladen]);
+
+  /* De server rekent elke keer de hele lijst uit; wachten tot je klaar bent met
+     typen scheelt een reeks verzoeken per toetsaanslag. */
+  const [filterParams, setFilterParams] = useState<Record<string, string>>({});
+  useEffect(() => {
+    if (!filtersGeladen) return;
+    const t = setTimeout(() => {
+      const nieuw = naarParams(filters, kanNaar);
+      /* Alleen bij een echte wijziging, anders rekent de server voor niets. */
+      setFilterParams(oud => (JSON.stringify(oud) === JSON.stringify(nieuw) ? oud : nieuw));
+    }, 400);
+    return () => clearTimeout(t);
+  }, [filters, kanNaar, filtersGeladen]);
+
+  const actieveFilters = telActieveLeadFilters(filters) + (kanNaar.length > 0 ? 1 : 0);
+  const wisFilters = () => { setFilters(LEGE_LEADFILTERS); setKanNaar([]); };
+
+  const [facetten, setFacetten] = useState<Record<string, Record<string, number>>>({});
+  const [plaatsLabel, setPlaatsLabel] = useState<string | null>(null);
+  const [opties, setOpties] = useState<{
+    branches: { value: string; label: string }[];
+    klanten: { value: string; label: string }[];
+    campagnes: { value: string; label: string }[];
+  }>({ branches: [], klanten: [], campagnes: [] });
+
+  useEffect(() => {
+    (async () => {
+      const [klantRes, brancheRes] = await Promise.all([
+        adminFetch('/api/admin/customers/options'),
+        adminFetch('/api/admin/branches'),
+      ]);
+      const klanten = klantRes.ok ? ((await klantRes.json()).customers || []) : [];
+      const branches = brancheRes.ok ? ((await brancheRes.json()).branches || []) : [];
+      setOpties(o => ({
+        ...o,
+        klanten: klanten.map((c: { id: string; name: string }) => ({ value: c.id, label: c.name })),
+        branches: branches
+          .filter((b: { is_active?: boolean }) => b.is_active)
+          .map((b: { slug: string; name: string }) => ({ value: b.slug, label: b.name })),
+      }));
+      /* Campagnes apart: trager, en het scherm hoeft er niet op te wachten. */
+      try {
+        const campRes = await adminFetch('/api/admin/meta-campaign-options');
+        if (campRes.ok) {
+          const d = await campRes.json();
+          setOpties(o => ({
+            ...o,
+            campagnes: (d.campaigns || []).map((c: { id: string; name: string; leads: number }) => ({
+              value: c.id, label: `${c.name} (${c.leads})`,
+            })),
+          }));
+        }
+      } catch { /* filter blijft leeg, de rest werkt gewoon */ }
+    })().catch(() => {});
+  }, []);
+
   const [alleenMetKandidaat, setAlleenMetKandidaat] = useState(false);
 
   /* Per lead de aangevinkte klanten. */
@@ -140,7 +231,13 @@ export default function RestleadsPage() {
   const [bezig, setBezig] = useState<string | null>(null);
   const [melding, setMelding] = useState<string | null>(null);
 
+  /* Volgnummer tegen wedlopen: een traag antwoord op een oude filterstand mag
+     een sneller antwoord op de nieuwe niet overschrijven. */
+  const laadVerzoek = useRef(0);
+
   const laad = useCallback(async () => {
+    if (!filtersGeladen) return;
+    const verzoek = ++laadVerzoek.current;
     setLaden(true);
     setFout(null);
     try {
@@ -149,24 +246,34 @@ export default function RestleadsPage() {
          precies zo'n bewaard antwoord liet hier een klant zien die allang geen
          actieve batch meer had. Een uniek adres kan niemand bewaren. */
       const q = new URLSearchParams({
+        ...filterParams,
         marge, ruime_marge: ruimeMarge, droog_na: droogNa, _t: String(Date.now()),
       });
       /* Nooit uit de browsercache. Deze lijst verandert bij elke uitdeling, en
          een bewaard antwoord laat een lead staan die allang weg is. */
       const res = await adminFetch(`/api/admin/restleads?${q.toString()}`, { cache: 'no-store' });
-      if (!res.ok) { setFout('Restleads konden niet worden berekend.'); return; }
+      if (verzoek !== laadVerzoek.current) return;
+      if (!res.ok) {
+        /* Een onvindbare plaatsnaam is een gewone invoerfout; toon wat de
+           server erover zegt in plaats van een algemene melding. */
+        const d = await res.json().catch(() => ({}));
+        setFout(res.status === 400 && d.error ? d.error : 'Restleads konden niet worden berekend.');
+        return;
+      }
       const d = await res.json();
       setKansrijk(d.kansrijk || []);
       setVerlopen(d.verlopen || []);
       setBerekendOp(d.berekend_op || null);
       setKlantenMee(d.klanten_meegenomen || []);
+      setFacetten(d.facetten || {});
+      setPlaatsLabel(d.plaats_radius_label ?? null);
       setSelectie({});
     } catch {
-      setFout('Netwerkfout bij het berekenen.');
+      if (verzoek === laadVerzoek.current) setFout('Netwerkfout bij het berekenen.');
     } finally {
-      setLaden(false);
+      if (verzoek === laadVerzoek.current) setLaden(false);
     }
-  }, [marge, ruimeMarge, droogNa]);
+  }, [marge, ruimeMarge, droogNa, filterParams, filtersGeladen]);
 
   const laadWachtrij = useCallback(async () => {
     setWachtrijLaden(true);
@@ -192,7 +299,7 @@ export default function RestleadsPage() {
 
   /* In de stand 'ingepland' tonen we de wachtrij, niet deze lijst. */
   /* Terug naar de eerste vijftig zodra je van lijst wisselt of anders filtert. */
-  useEffect(() => { setToon(PER_STAP); }, [lijst, zoek, branche, alleenMetKandidaat]);
+  useEffect(() => { setToon(PER_STAP); }, [lijst, filterParams, alleenMetKandidaat]);
 
   /* "Nog kansrijk" in tweeën: wat nu naar een klant kan, en wat (nog) nergens
      past. De lijst wordt bij elke verversing opnieuw berekend, dus komt er een
@@ -204,25 +311,11 @@ export default function RestleadsPage() {
   const bron = lijst === 'kansrijk' ? kansrijkUit : lijst === 'geenklant' ? kansrijkGeen : verlopen;
   const isLeadLijst = lijst === 'kansrijk' || lijst === 'geenklant' || lijst === 'verlopen';
 
-  const branches = useMemo(
-    () => [...new Set([...kansrijk, ...verlopen].map(l => l.branch))].sort(),
-    [kansrijk, verlopen],
+  /* De filters zelf draait de server; hier alleen nog het vinkje bij Verlopen. */
+  const zichtbaar = useMemo(
+    () => bron.filter(l => !(lijst === 'verlopen' && alleenMetKandidaat && l.kandidaten.length === 0)),
+    [bron, alleenMetKandidaat, lijst],
   );
-
-  const zichtbaar = useMemo(() => {
-    const term = zoek.trim().toLowerCase();
-    return bron.filter(l => {
-      if (branche !== 'all' && l.branch !== branche) return false;
-      if (lijst === 'verlopen' && alleenMetKandidaat && l.kandidaten.length === 0) return false;
-      if (!term) return true;
-      return (
-        (l.naam_klant || '').toLowerCase().includes(term) ||
-        (l.plaatsnaam || '').toLowerCase().includes(term) ||
-        (l.postcode || '').toLowerCase().includes(term) ||
-        (l.provincie || '').toLowerCase().includes(term)
-      );
-    });
-  }, [bron, branche, zoek, alleenMetKandidaat, lijst]);
 
   const wissel = (leadId: string, customerId: string, max: number) => {
     setSelectie(vorig => {
@@ -486,16 +579,6 @@ export default function RestleadsPage() {
           </div>
         </div>
 
-        <div className="relative min-w-[180px] flex-1">
-          <MagnifyingGlassIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <input value={zoek} onChange={e => setZoek(e.target.value)} placeholder="Zoek op naam, plaats of postcode..." className="h-9 w-full rounded-lg border border-slate-200 pl-9 pr-3 text-sm outline-none focus:border-brand-purple/50" />
-        </div>
-
-        <select value={branche} onChange={e => setBranche(e.target.value)} className="h-9 rounded-lg border border-slate-200 px-2 text-sm text-slate-700">
-          <option value="all">Alle branches</option>
-          {branches.map(b => <option key={b} value={b}>{b}</option>)}
-        </select>
-
         {/* Bij de verse leads zit deze splitsing al in de tabbladen. */}
         {lijst === 'verlopen' && (
           <label className="flex h-9 cursor-pointer items-center gap-2 text-xs text-slate-600">
@@ -506,8 +589,25 @@ export default function RestleadsPage() {
 
         <span className="ml-auto text-xs text-slate-400">
           {zichtbaar.length > toon ? `${toon} van ${zichtbaar.length}` : `${zichtbaar.length}`} leads
+          {actieveFilters > 0 && ' (gefilterd)'}
         </span>
       </div>
+
+      {isLeadLijst && (
+        <RestleadsFilters
+          filters={filters}
+          zet={zet}
+          kanNaar={kanNaar}
+          setKanNaar={setKanNaar}
+          facetten={facetten}
+          branches={opties.branches}
+          klanten={opties.klanten}
+          campagnes={opties.campagnes}
+          plaatsLabel={plaatsLabel}
+          actief={actieveFilters}
+          onWis={wisFilters}
+        />
+      )}
 
       {lijst === 'ingepland' || lijst === 'geschiedenis' ? (
         wachtrijLaden ? (
