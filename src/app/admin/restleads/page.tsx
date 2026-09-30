@@ -446,27 +446,42 @@ export default function RestleadsPage() {
     else setMelding('Annuleren mislukt');
   };
 
-  const exporteer = () => {
-    const kop = ['Naam', 'Plaats', 'Postcode', 'Provincie', 'Branche', 'Wervingsdatum', 'Dagen oud', 'Uitgedeeld', 'Kandidaten'];
-    const cel = (v: unknown) => {
-      const s = v == null ? '' : String(v);
-      return /[;"\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-    };
-    const regels = [
-      kop.join(';'),
-      ...zichtbaar.map(l => [
-        l.naam_klant, l.plaatsnaam, l.postcode, l.provincie, l.branch,
-        datum(l.wervingsdatum || l.created_at), l.dagen_oud, `${l.uitgedeeld}x`,
-        l.kandidaten.map(k => k.klant).join(' | '),
-      ].map(cel).join(';')),
-    ];
-    const blob = new Blob(['﻿' + regels.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `restleads-${lijst}-${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+  /* Excel met álle leadgegevens, in hetzelfde formaat als de export uit het
+     Leads CRM. Die gegevens staan niet in deze lijst (alleen wat het scherm
+     toont), dus de server haalt ze op. Telt niet als bulkverkoop. */
+  const [exportBezig, setExportBezig] = useState(false);
+  const exporteer = async () => {
+    if (zichtbaar.length === 0) return;
+    setExportBezig(true);
+    try {
+      const res = await adminFetch('/api/admin/restleads/export', {
+        method: 'POST',
+        body: JSON.stringify({
+          lijst,
+          lead_ids: zichtbaar.map(l => l.id),
+          extra: Object.fromEntries(zichtbaar.map(l => [l.id, {
+            dagen_oud: l.dagen_oud,
+            uitgedeeld: l.uitgedeeld,
+            kan_naar: l.kandidaten.map(k => k.klant),
+          }])),
+        }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        setMelding(d.error || 'Exporteren mislukt');
+        return;
+      }
+      const url = URL.createObjectURL(await res.blob());
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `restleads-${lijst}-${new Date().toISOString().split('T')[0]}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setMelding('Netwerkfout bij het exporteren');
+    } finally {
+      setExportBezig(false);
+    }
   };
 
   return (
@@ -496,8 +511,13 @@ export default function RestleadsPage() {
             <ArrowPathIcon className={`h-4 w-4 ${laden ? 'animate-spin' : ''}`} /> Vernieuwen
           </button>
           {isLeadLijst && (
-            <button onClick={exporteer} disabled={zichtbaar.length === 0} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40">
-              <ArrowDownTrayIcon className="h-4 w-4" /> Export
+            <button
+              onClick={exporteer}
+              disabled={zichtbaar.length === 0 || exportBezig}
+              title="Excel met alle leadgegevens van de leads in deze lijst. Telt niet als bulkverkoop."
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+            >
+              <ArrowDownTrayIcon className={`h-4 w-4 ${exportBezig ? 'animate-pulse' : ''}`} /> {exportBezig ? 'Exporteren...' : 'Export'}
             </button>
           )}
           {lijst === 'kansrijk' && (

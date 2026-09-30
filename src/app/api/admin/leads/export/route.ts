@@ -3,9 +3,9 @@ import { createServerClient } from '@/lib/supabase';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { logAudit } from '@/lib/audit';
 import { isBulkLeadsBatchKind, normalizeBatchKind } from '@/lib/batchKind';
-import * as XLSX from 'xlsx';
 import { syncBatchDelivered } from '@/lib/batchSync';
 import { buildLeadExportTable } from '@/lib/leadExportTable';
+import { leadExportWerkboek } from '@/lib/leadExportWerkboek';
 import {
   validateExportBranchFilter,
   validatePortalExportBranches,
@@ -68,17 +68,9 @@ function buildCsv(leads: Record<string, unknown>[], portaal: PortaalUitkomst | n
 
 function buildXlsx(leads: Record<string, unknown>[], portaal: PortaalUitkomst | null = null): NextResponse {
   const { headers, rows } = buildLeadExportTable(leads);
-  const sheetData = [headers, ...rows];
-  const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.aoa_to_sheet(sheetData);
-  ws['!cols'] = headers.map((h, i) => {
-    const maxLen = Math.max(h.length, ...rows.map(r => String(r[i] ?? '').length));
-    return { wch: Math.min(maxLen + 2, 40) };
-  });
-  XLSX.utils.book_append_sheet(wb, ws, 'Leads');
-  const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+  const buffer = leadExportWerkboek(headers, rows);
   const stamp = new Date().toISOString().split('T')[0];
-  return new NextResponse(buffer, {
+  return new NextResponse(new Uint8Array(buffer), {
     status: 200,
     headers: {
       'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
