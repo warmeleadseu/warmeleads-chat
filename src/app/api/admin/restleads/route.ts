@@ -188,7 +188,7 @@ export async function GET(request: NextRequest) {
        stonden dan als kandidaat terwijl de verdeling ze nooit zou kiezen. */
     const { data: batchRijenOngesorteerd } = await supabase
       .from('customer_batches')
-      .select('id, customer_id, branch, batch_size, leads_delivered, price_per_lead, lead_filters, distribution_priority, created_at, starts_at, leads_per_day, leads_per_week, delivery_model, batch_kind, customers!inner(name, exclude_customers, is_active)')
+      .select('id, customer_id, branch, batch_size, leads_delivered, price_per_lead, lead_filters, distribution_priority, created_at, starts_at, leads_per_day, leads_per_week, delivery_model, batch_kind, lookback_days, customers!inner(name, exclude_customers, is_active)')
       .eq('status', 'active')
       .eq('batch_kind', 'leads')
       .neq('is_paid', false)
@@ -310,6 +310,8 @@ export async function GET(request: NextRequest) {
         leads_per_week: b.leads_per_week,
         vandaag: vandaagPerBatch.get(b.id) ?? 0,
         deze_week: weekPerBatch.get(b.id) ?? 0,
+        created_at: b.created_at,
+        lookback_days: b.lookback_days,
       };
     });
 

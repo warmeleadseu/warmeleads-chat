@@ -20,6 +20,7 @@ import {
 } from './assignmentCap';
 import { mirrorLeadToMasterPortal, MIRROR_ASSIGNMENT_SOURCE } from './masterPortalMirror';
 import { fetchActiveBatchTargetsByBatch, type GeoTargetRow } from './batchTargets';
+import { kiesDerdeKlantLeads, leadPastInBatchVenster } from './verdeelGrenzen';
 
 const MAX_LEAD_AGE_DAYS = 3;
 const COOLDOWN_HOURS = 12;
@@ -283,6 +284,7 @@ type ActiveCustomerBatch = {
   distribution_priority?: boolean | null;
   delivery_model?: string | null;
   batch_kind?: string | null;
+  lookback_days?: number | null;
   customers: { id: string; is_active: boolean; portal_active: boolean };
 };
 
@@ -308,7 +310,7 @@ async function fetchActiveBatchesForBranch(
 ): Promise<ActiveCustomerBatch[]> {
   const { data } = await supabase
     .from('customer_batches')
-    .select('id, customer_id, branch, batch_size, leads_delivered, leads_delivered_external, leads_per_week, leads_per_day, lead_filters, created_at, is_paid, starts_at, distribution_priority, delivery_model, batch_kind, customers!inner(id, is_active, portal_active)')
+    .select('id, customer_id, branch, batch_size, leads_delivered, leads_delivered_external, leads_per_week, leads_per_day, lead_filters, created_at, is_paid, starts_at, distribution_priority, delivery_model, batch_kind, lookback_days, customers!inner(id, is_active, portal_active)')
     .eq('branch', branch)
     .eq('status', 'active')
     .eq('batch_kind', 'leads')
@@ -531,6 +533,10 @@ export async function distributeLead(
     if (plafondBereikt.has(batch.customer_id)) continue;
     if (matches.some(m => m.customer_id === batch.customer_id)) continue;
     if (batch.starts_at && new Date(batch.starts_at) > now) continue;
+    /* De lookback van de batch geldt ook hier, niet alleen bij het aanmaken.
+       Anders krijgt een batch zonder lookback via de gewone verdeling alsnog
+       leads van vóór zijn start. */
+    if (!leadPastInBatchVenster(fullLead as { created_at?: string | null }, batch)) continue;
 
     if (
       fullLead.phone_valid === false &&
@@ -1240,10 +1246,19 @@ export async function distributeUnassignedLeads(): Promise<DistributeRunResult> 
     return count >= 2 && count < effectiveMaxAssignments(l as LeadForDistribution) && mag(l);
   });
 
-  const reAssignCandidates = [
-    ...naarTweede,
-    ...(currentAvg < TARGET_AVG_ASSIGNMENTS ? naarDerde : []),
-  ];
+  /* Een derde klant gelijkmatig en alleen op verse leads. Dit was één
+     schakelaar: zakte het gemiddelde onder 2, dan gingen álle wachtende leads
+     tegelijk weg, tot zeven dagen oud. Zo kreeg Deal Dynasty op 30 sep in één
+     minuut 43 leads die al bij twee anderen stonden. Zie verdeelGrenzen.ts. */
+  const derdeDezeRonde = currentAvg < TARGET_AVG_ASSIGNMENTS
+    ? kiesDerdeKlantLeads(naarDerde, {
+        leadsMetKlant: leadsWithAssignments,
+        klantenTotaal: sumAssignments,
+        streefGemiddelde: TARGET_AVG_ASSIGNMENTS,
+      })
+    : [];
+
+  const reAssignCandidates = [...naarTweede, ...derdeDezeRonde];
 
   if (reAssignCandidates.length > 0) {
     reAssignCandidates.sort(

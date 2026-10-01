@@ -2,6 +2,7 @@ import { haversineKm } from './portalDistanceOrigin';
 import { targetCountryAllowsLead } from './targetCountryMatch';
 import { leadMatchesAnyProvinceTarget } from './provinceTargetMatch';
 import { binnenProvincieMarge, margeVan } from './provincieDoelMarge';
+import { leadPastInBatchVenster } from './verdeelGrenzen';
 
 /**
  * Leads die tussen wal en schip vielen, en welke klanten ze alsnog kunnen krijgen.
@@ -93,6 +94,8 @@ export interface KandidaatBatch {
   vandaag?: number;
   /** Toewijzingen aan deze batch sinds maandag. */
   deze_week?: number;
+  created_at?: string;
+  lookback_days?: number | null;
 }
 
 export interface Doelgebied {
@@ -203,9 +206,10 @@ const COOLDOWN_UREN = 12;
 /** Waarom de gewone verdeling deze kandidaat (nog) niet zelf heeft geplaatst. */
 export function automatischeStatus(
   kmBuiten: number,
-  batch: Pick<KandidaatBatch, 'starts_at' | 'leads_per_day' | 'leads_per_week' | 'vandaag' | 'deze_week'>,
+  batch: Pick<KandidaatBatch, 'starts_at' | 'leads_per_day' | 'leads_per_week' | 'vandaag' | 'deze_week' | 'created_at' | 'lookback_days'>,
   laatsteToewijzing: Date | null,
   nu: Date = new Date(),
+  leadBinnen?: string | null,
 ): AutoStatus {
   const tijd = (d: Date) =>
     d.toLocaleString('nl-NL', {
@@ -216,6 +220,16 @@ export function automatischeStatus(
     return {
       status: 'handwerk',
       uitleg: 'Buiten het gebied: de verdeling plaatst alleen binnen het gebied, dit is handwerk.',
+    };
+  }
+  /* Kwam de lead binnen vóór de start van deze batch (min de lookback), dan
+     geeft de verdeling hem er nooit zelf aan. */
+  if (batch.created_at && !leadPastInBatchVenster({ created_at: leadBinnen ?? null }, {
+    created_at: batch.created_at, starts_at: batch.starts_at, lookback_days: batch.lookback_days,
+  })) {
+    return {
+      status: 'handwerk',
+      uitleg: 'Lead is van vóór de start van deze batch (lookback); de verdeling geeft hem er niet zelf aan.',
     };
   }
   if (laatsteToewijzing) {
@@ -308,7 +322,7 @@ export function vindKandidaten(
       km_buiten: buiten,
       reden: beschrijfKandidaat(buiten, buiten > instellingen.marge_km ? marge.waarom : null),
       distribution_priority: batch.distribution_priority,
-      automatisch: automatischeStatus(buiten, batch, opties.laatsteToewijzing ?? null, opties.nu),
+      automatisch: automatischeStatus(buiten, batch, opties.laatsteToewijzing ?? null, opties.nu, lead.created_at),
     });
   }
 
