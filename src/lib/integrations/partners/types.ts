@@ -58,6 +58,11 @@ export type PartnerDefinitie = {
   naam: string;
   /** Eén regel uitleg voor op de kaart. */
   tagline: string;
+  /**
+   * Icoon van de partner in public/, vierkant met transparante achtergrond
+   * (zie public/partners/). Zonder logo tonen we de eerste letter.
+   */
+  logo: string | null;
   /** Uitleg bij het invoerveld: waar komt de URL vandaan. */
   urlUitleg: string;
   /**

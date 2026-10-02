@@ -10,6 +10,7 @@ import {
   PlayIcon,
   TrashIcon,
 } from '@heroicons/react/24/outline';
+import PartnerLogo from './PartnerLogo';
 
 /**
  * Kaart voor één partnerkoppeling (bijvoorbeeld Snelraak), gedeeld door het
@@ -18,7 +19,7 @@ import {
  */
 
 export type PartnerStatusData = {
-  partner: { id: string; naam: string; tagline: string; urlUitleg: string };
+  partner: { id: string; naam: string; tagline: string; urlUitleg: string; logo?: string | null };
   gekoppeld: boolean;
   aan: boolean;
   url_hint: string | null;
@@ -177,9 +178,7 @@ export default function PartnerKoppelingKaart({
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-base font-bold text-white">
-            {naam.charAt(0)}
-          </div>
+          <PartnerLogo naam={naam} logo={s.partner.logo} grootte={44} />
           <div className="min-w-0">
             <p className="font-semibold text-slate-900">{naam}</p>
             <p className="text-xs text-slate-500">{s.partner.tagline}</p>

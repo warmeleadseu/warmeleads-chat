@@ -288,8 +288,9 @@ export async function GET(request: NextRequest) {
   let retried = 0;
   let succeeded = 0;
 
-  /* Per partner: wanneer we er voor het laatst iets heen stuurden (voor hun
-     limiet), en welke partners om rust vroegen (429). */
+  /* Per afleveradres (partner + klant): wanneer we er voor het laatst iets
+     heen stuurden, en welke adressen om rust vroegen (429). De limiet van
+     Snelraak geldt per adres, niet voor ons verkeer samen. */
   const laatstePartnerLevering = new Map<string, number>();
   const partnerInRust = new Set<string>();
   const partnerFoutenOpRij = new Map<string, number>();
@@ -311,25 +312,26 @@ export async function GET(request: NextRequest) {
     }
 
     const partner = partnerOpProvider(row.provider);
+    const adres = partner ? `${partner.provider}:${row.customer_id}` : '';
     if (partner) {
-      if (partnerInRust.has(partner.provider)) continue;
-      const vorige = laatstePartnerLevering.get(partner.provider);
+      if (partnerInRust.has(adres)) continue;
+      const vorige = laatstePartnerLevering.get(adres);
       const wacht = vorige ? partner.pauzeMs - (Date.now() - vorige) : 0;
       if (wacht > 0) await new Promise(klaar => setTimeout(klaar, wacht));
-      laatstePartnerLevering.set(partner.provider, Date.now());
+      laatstePartnerLevering.set(adres, Date.now());
     }
 
     try {
       const ok = await runSyncJob(supabase, row);
       if (ok) succeeded++;
-      if (partner) partnerFoutenOpRij.set(partner.provider, 0);
+      if (partner) partnerFoutenOpRij.set(adres, 0);
     } catch (err) {
       if (partner && err instanceof PartnerTijdelijkFout) {
         /* Bij 429, of na drie tijdelijke fouten op rij (partner ligt eruit),
            de partner de rest van deze ronde met rust laten. */
-        const fouten = (partnerFoutenOpRij.get(partner.provider) ?? 0) + 1;
-        partnerFoutenOpRij.set(partner.provider, fouten);
-        if (err.wachtSeconden != null || fouten >= 3) partnerInRust.add(partner.provider);
+        const fouten = (partnerFoutenOpRij.get(adres) ?? 0) + 1;
+        partnerFoutenOpRij.set(adres, fouten);
+        if (err.wachtSeconden != null || fouten >= 3) partnerInRust.add(adres);
       }
       /* De synchronisatie schrijft zelf een regel zodra hij eraan toe is, maar
          gaat hij daarvóór onderuit dan verdween de fout hier in een leeg

@@ -29,7 +29,7 @@ export type Actor = {
 };
 
 export type PartnerStatus = {
-  partner: { id: string; naam: string; tagline: string; urlUitleg: string };
+  partner: { id: string; naam: string; tagline: string; urlUitleg: string; logo: string | null };
   gekoppeld: boolean;
   aan: boolean;
   url_hint: string | null;
@@ -75,7 +75,7 @@ export async function partnerStatus(
   const openRijen = open.data || [];
 
   return {
-    partner: { id: partner.id, naam: partner.naam, tagline: partner.tagline, urlUitleg: partner.urlUitleg },
+    partner: { id: partner.id, naam: partner.naam, tagline: partner.tagline, urlUitleg: partner.urlUitleg, logo: partner.logo },
     gekoppeld: Boolean(config?.token),
     aan: config?.settings.enabled === true && Boolean(config?.token),
     url_hint: config?.token ? partner.urlHint(config.token) : null,

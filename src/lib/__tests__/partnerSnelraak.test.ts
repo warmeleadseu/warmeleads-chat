@@ -242,3 +242,21 @@ describe('Partnerregister', () => {
     for (const p of PARTNERS) expect(60_000 / p.pauzeMs).toBeLessThanOrEqual(120);
   });
 });
+
+describe('Partnerlogo', () => {
+  it('elk logo bestaat, is vierkant, transparant en klein', async () => {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const sharp = (await import('sharp')).default;
+    for (const p of PARTNERS) {
+      if (!p.logo) continue;
+      const bestand = path.join(process.cwd(), 'public', p.logo);
+      expect(fs.existsSync(bestand)).toBe(true);
+      const m = await sharp(bestand).metadata();
+      expect(m.width).toBe(m.height);
+      expect(m.width).toBeGreaterThanOrEqual(128);
+      expect(m.hasAlpha).toBe(true);
+      expect(fs.statSync(bestand).size).toBeLessThan(60_000);
+    }
+  });
+});

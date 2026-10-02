@@ -5,6 +5,7 @@ import { ArrowPathIcon, ChatBubbleLeftRightIcon, ChevronDownIcon, PlusIcon } fro
 import { adminFetch } from '@/lib/adminAuth';
 import SearchableSelect from '@/components/ui/SearchableSelect';
 import PartnerKoppelingKaart, { type PartnerApi, type PartnerStatusData } from '@/components/integrations/PartnerKoppelingKaart';
+import PartnerLogo from '@/components/integrations/PartnerLogo';
 
 /**
  * Partnerkoppelingen: klanten koppelen aan partners als Snelraak, en in één
@@ -12,7 +13,7 @@ import PartnerKoppelingKaart, { type PartnerApi, type PartnerStatusData } from '
  * staan bovenaan.
  */
 
-type Partner = { id: string; naam: string; tagline: string; urlUitleg: string };
+type Partner = { id: string; naam: string; tagline: string; urlUitleg: string; logo: string | null };
 type Rij = PartnerStatusData & { customer_id: string; klant: string };
 
 async function lees<T>(res: Response): Promise<T & { error?: string }> {
@@ -193,7 +194,10 @@ export default function PartnerkoppelingenPage() {
               <div key={sleutel}>
                 <button onClick={() => setOpen(isOpen ? null : sleutel)} className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 text-left hover:bg-slate-50">
                   <span className="min-w-0 flex-1 truncate font-medium text-slate-900">{r.klant}</span>
-                  <span className="text-xs text-slate-500">{partnerNaam[r.partner.id] ?? r.partner.naam}</span>
+                  <span className="inline-flex items-center gap-1.5 text-xs text-slate-500">
+                    <PartnerLogo naam={r.partner.naam} logo={r.partner.logo} grootte={22} />
+                    {partnerNaam[r.partner.id] ?? r.partner.naam}
+                  </span>
                   <StatusPil r={r} />
                   <span className="w-36 text-xs text-slate-500">Laatste: {wanneer(r.laatste_succes)}</span>
                   <span className="w-32 text-xs text-slate-500">

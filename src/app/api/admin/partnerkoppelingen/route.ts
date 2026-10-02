@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json(
     {
-      partners: PARTNERS.map(p => ({ id: p.id, naam: p.naam, tagline: p.tagline, urlUitleg: p.urlUitleg })),
+      partners: PARTNERS.map(p => ({ id: p.id, naam: p.naam, tagline: p.tagline, urlUitleg: p.urlUitleg, logo: p.logo })),
       koppelingen,
     },
     { headers: { 'Cache-Control': 'no-store' } },

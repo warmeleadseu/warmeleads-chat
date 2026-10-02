@@ -12,6 +12,13 @@ import type { PartnerAntwoord, PartnerDefinitie, PartnerLead, PartnerPayloadCont
  * - test: `"is_test": true`
  * - 200 {"ok":true} = ontvangen; 404 = verkeerde URL; 429 of 5xx = later opnieuw
  * - maximaal 120 verzoeken per minuut, body maximaal 256 KB
+ *
+ * Bevestigd door Snelraak (2 okt 2026):
+ * - ontdubbeling op lead_id geldt per afleveradres; dezelfde lead bij twee
+ *   klanten aanleveren kan gewoon (twee adressen)
+ * - de limiet van 120 per minuut geldt per afleveradres, dus per klant
+ * - Snelraak is verwerker van de klant; tussen WarmeLeads en Snelraak bestaat
+ *   geen verwerkersrelatie (wij leveren in opdracht van dezelfde klant)
  */
 
 const BASIS = 'https://snelraak.nl/api/v1/ingest/';
@@ -157,6 +164,7 @@ export const SNELRAAK: PartnerDefinitie = {
   provider: 'partner_snelraak',
   naam: 'Snelraak',
   tagline: 'Automatische leadopvolging via WhatsApp',
+  logo: '/partners/snelraak.png',
   urlUitleg: 'Plak het afleveradres dat je van Snelraak kreeg (begint met https://snelraak.nl/api/v1/ingest/).',
   leesToken: leesSnelraakToken,
   bouwUrl: token => `${BASIS}${token}`,
@@ -165,7 +173,8 @@ export const SNELRAAK: PartnerDefinitie = {
   bouwTestPayload: bouwSnelraakTestPayload,
   beoordeel: beoordeelSnelraak,
   timeoutMs: 10_000,
-  /* 120 per minuut is hun grens; met ruim een halve seconde ertussen blijven we eronder. */
+  /* 120 per minuut per afleveradres is hun grens; met ruim een halve seconde
+     tussen twee leveringen aan hetzelfde adres blijven we eronder. */
   pauzeMs: 600,
   /* Gelijk aan het venster van de retry-cron. */
   maxLeeftijdUren: 72,
