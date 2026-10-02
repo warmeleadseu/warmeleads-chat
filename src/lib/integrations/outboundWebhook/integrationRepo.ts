@@ -138,10 +138,13 @@ export async function saveOutboundWebhookConfig(
     .upsert(payload, { onConflict: 'customer_id,provider' });
   if (error) throw new Error(error.message);
 
-  // Oude mislukte deliveries opnieuw in de wachtrij na een config-wijziging.
+  // Oude mislukte deliveries opnieuw in de wachtrij na een config-wijziging,
+  // met een schone teller. Zonder die reset bleven leveringen die al acht keer
+  // waren mislukt voor altijd liggen: de retry-cron slaat ze over, ook nadat
+  // de oorzaak is verholpen.
   await supabase
     .from('integration_sync_log')
-    .update({ status: 'pending', error_message: null, updated_at: now })
+    .update({ status: 'pending', attempts: 0, error_message: null, updated_at: now })
     .eq('customer_id', customerId)
     .eq('provider', OUTBOUND_WEBHOOK_PROVIDER)
     .eq('status', 'failed');

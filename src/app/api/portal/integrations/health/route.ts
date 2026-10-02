@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
 
   const { data: recentFailures } = await supabase
     .from('integration_sync_log')
-    .select('integration, status, error_message, created_at')
+    .select('provider, status, error_message, created_at')
     .eq('customer_id', customerId)
     .eq('status', 'failed')
     .gte('created_at', since)
@@ -31,7 +31,9 @@ export async function GET(request: NextRequest) {
 
   const byIntegration: Record<string, { failed: number; last_error: string | null }> = {};
   for (const row of recentFailures || []) {
-    const key = row.integration || 'unknown';
+    /* Deze kolom heette hier 'integration', maar bestaat als 'provider'. De
+       vraag faalde daardoor altijd en het scherm meldde steeds 'gezond'. */
+    const key = row.provider || 'unknown';
     if (!byIntegration[key]) byIntegration[key] = { failed: 0, last_error: null };
     byIntegration[key].failed++;
     if (!byIntegration[key].last_error && row.error_message) {

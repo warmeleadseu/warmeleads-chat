@@ -10,6 +10,8 @@ import { getTeamleaderIntegration } from '@/lib/teamleader/integrationRepo';
 import { TEAMLEADER_PROVIDER } from '@/lib/teamleader/types';
 import { isOutboundWebhookReadyForCustomer } from '@/lib/integrations/outboundWebhook/integrationRepo';
 import { OUTBOUND_WEBHOOK_PROVIDER } from '@/lib/integrations/outboundWebhook/types';
+import { partnerOpProvider } from '@/lib/integrations/partners/registry';
+import { haalPartnerConfig, partnerKlaar } from '@/lib/integrations/partners/repo';
 
 export type IntegrationSyncTargets = {
   teamleader: boolean;
@@ -101,6 +103,8 @@ export async function shouldRetryIntegrationSync(
   if (provider === OUTBOUND_WEBHOOK_PROVIDER) {
     return isOutboundWebhookReadyForCustomer(supabase, customerId);
   }
+  const partner = partnerOpProvider(provider);
+  if (partner) return partnerKlaar(await haalPartnerConfig(supabase, customerId, partner));
   const targets = await resolveIntegrationSyncTargets(supabase, customerId, customerBranches);
   if (provider === TEAMLEADER_PROVIDER) return targets.teamleader;
   if (provider === GOOGLE_SHEETS_PROVIDER) return targets.google_sheets;

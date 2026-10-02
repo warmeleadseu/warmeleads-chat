@@ -11,6 +11,15 @@ import { TEAMLEADER_PROVIDER } from '@/lib/teamleader/types';
 import { getTeamleaderConnectionState } from '@/lib/teamleader/integrationRepo';
 import { syncAssignmentToOutboundWebhook } from '@/lib/integrations/outboundWebhook/syncAssignment';
 import { verifyCronAuth } from '@/lib/cronAuth';
+import { PARTNER_PROVIDERS, partnerOpProvider, PARTNERS } from '@/lib/integrations/partners/registry';
+import {
+  binnenLeverperiode,
+  brancheToegestaan,
+  haalPartnerConfig,
+  partnerKlaar,
+  type PartnerConfig,
+} from '@/lib/integrations/partners/repo';
+import { leverAanPartner, PartnerTijdelijkFout } from '@/lib/integrations/partners/sync';
 import {
   OUTBOUND_WEBHOOK_PROVIDER,
   type OutboundWebhookSettings,
@@ -20,6 +29,9 @@ import {
   isBranchAllowed,
   isOutboundWebhookSyncReady,
 } from '@/lib/integrations/outboundWebhook/integrationRepo';
+
+/* Partnerleveringen worden gedoseerd (limiet van de partner); ruim genoeg. */
+export const maxDuration = 300;
 
 const MAX_ATTEMPTS = 8;
 const MISSING_LOOKBACK_HOURS = 72;
@@ -42,7 +54,11 @@ type SyncJob = {
   provider: string;
   attempts: number;
   created_at: string;
+  /** Laatste poging; de wachttijd tussen pogingen telt vanaf hier. */
+  updated_at?: string | null;
 };
+
+const ALLE_PROVIDERS = [TEAMLEADER_PROVIDER, GOOGLE_SHEETS_PROVIDER, OUTBOUND_WEBHOOK_PROVIDER, ...PARTNER_PROVIDERS];
 
 async function runSyncJob(
   supabase: ReturnType<typeof createServerClient>,
@@ -85,6 +101,14 @@ async function runSyncJob(
       customerId: row.customer_id,
       leadId: row.lead_id,
       assignmentId: row.assignment_id,
+    });
+  } else if (partnerOpProvider(row.provider)) {
+    await leverAanPartner({
+      partner: partnerOpProvider(row.provider)!,
+      customerId: row.customer_id,
+      leadId: row.lead_id,
+      assignmentId: row.assignment_id,
+      supabase,
     });
   } else {
     return false;
@@ -136,8 +160,8 @@ export async function GET(request: NextRequest) {
 
   const { data: failed } = await supabase
     .from('integration_sync_log')
-    .select('customer_id, lead_id, assignment_id, attempts, created_at, provider')
-    .in('provider', [TEAMLEADER_PROVIDER, GOOGLE_SHEETS_PROVIDER, OUTBOUND_WEBHOOK_PROVIDER])
+    .select('customer_id, lead_id, assignment_id, attempts, created_at, updated_at, provider')
+    .in('provider', ALLE_PROVIDERS)
     .eq('status', 'failed')
     .lt('attempts', MAX_ATTEMPTS)
     .order('created_at', { ascending: true })
@@ -151,11 +175,13 @@ export async function GET(request: NextRequest) {
   const pendingGrens = new Date(Date.now() - 30 * 60_000).toISOString();
   const { data: blijvenHangen } = await supabase
     .from('integration_sync_log')
-    .select('customer_id, lead_id, assignment_id, attempts, created_at, provider')
-    .in('provider', [TEAMLEADER_PROVIDER, GOOGLE_SHEETS_PROVIDER, OUTBOUND_WEBHOOK_PROVIDER])
+    .select('customer_id, lead_id, assignment_id, attempts, created_at, updated_at, provider')
+    .in('provider', ALLE_PROVIDERS)
     .eq('status', 'pending')
     .lt('attempts', MAX_ATTEMPTS)
-    .lt('created_at', pendingGrens)
+    /* Op de laatste poging, niet de eerste: een regel die net opnieuw in de
+       wachtrij is gezet (of nu wordt verstuurd) is niet blijven hangen. */
+    .lt('updated_at', pendingGrens)
     .order('created_at', { ascending: true })
     .limit(30);
 
@@ -183,6 +209,7 @@ export async function GET(request: NextRequest) {
     .limit(200);
 
   let nieuwErbij = 0;
+  const partnerCache = new Map<string, PartnerConfig | null>();
   for (const a of recentAssignments || []) {
     if (jobs.length >= 60 + MISSING_BATCH_LIMIT) break;
     const branches = ((a as { customers?: { branches?: string[] } }).customers?.branches ??
@@ -202,13 +229,32 @@ export async function GET(request: NextRequest) {
       providers.push(OUTBOUND_WEBHOOK_PROVIDER);
     }
 
+    /* Partnerkoppelingen, alleen binnen hun leverperiode: een nieuwe koppeling
+       mag niet ongevraagd de toewijzingen van de afgelopen drie dagen
+       nasturen. Configuratie per klant één keer per ronde ophalen. */
+    for (const partner of PARTNERS) {
+      const sleutel = `${a.customer_id}:${partner.provider}`;
+      if (!partnerCache.has(sleutel)) {
+        partnerCache.set(sleutel, await haalPartnerConfig(supabase, a.customer_id, partner));
+      }
+      const pc = partnerCache.get(sleutel) ?? null;
+      if (
+        partnerKlaar(pc) &&
+        lead?.bron !== 'demo' &&
+        brancheToegestaan(pc.settings, lead?.branch ?? null) &&
+        binnenLeverperiode(pc.settings, a.assigned_at)
+      ) {
+        providers.push(partner.provider);
+      }
+    }
+
     for (const provider of providers) {
       const key = `${a.id}:${provider}`;
       if (seen.has(key)) continue;
 
       const { data: log } = await supabase
         .from('integration_sync_log')
-        .select('status, attempts, created_at')
+        .select('status, attempts, created_at, updated_at')
         .eq('assignment_id', a.id)
         .eq('provider', provider)
         .maybeSingle();
@@ -232,6 +278,7 @@ export async function GET(request: NextRequest) {
         provider,
         attempts: pogingen,
         created_at: log?.created_at ?? a.assigned_at,
+        updated_at: log?.updated_at ?? null,
       });
       nieuwErbij++;
       if (nieuwErbij >= MISSING_BATCH_LIMIT) break;
@@ -241,17 +288,49 @@ export async function GET(request: NextRequest) {
   let retried = 0;
   let succeeded = 0;
 
+  /* Per partner: wanneer we er voor het laatst iets heen stuurden (voor hun
+     limiet), en welke partners om rust vroegen (429). */
+  const laatstePartnerLevering = new Map<string, number>();
+  const partnerInRust = new Set<string>();
+  const partnerFoutenOpRij = new Map<string, number>();
+  /* Binnen de looptijd blijven, ook als een partner bij elke poging pas na de
+     time-out antwoordt; wat overblijft komt de volgende ronde. */
+  const rondeStart = Date.now();
+  const RONDE_BUDGET_MS = 240_000;
+
   for (const row of jobs) {
+    if (Date.now() - rondeStart > RONDE_BUDGET_MS) break;
     if (row.attempts > 0) {
-      const minutesSince = (Date.now() - new Date(row.created_at).getTime()) / 60_000;
+      /* Vanaf de laatste poging, niet de eerste. Gemeten vanaf de eerste ging
+         na een dag elke nieuwe poging meteen, en gold de opbouwende wachttijd
+         niet meer. */
+      const vanaf = row.updated_at ?? row.created_at;
+      const minutesSince = (Date.now() - new Date(vanaf).getTime()) / 60_000;
       const minWaitMinutes = retryWaitMinutes(row.attempts);
       if (minutesSince < minWaitMinutes) continue;
+    }
+
+    const partner = partnerOpProvider(row.provider);
+    if (partner) {
+      if (partnerInRust.has(partner.provider)) continue;
+      const vorige = laatstePartnerLevering.get(partner.provider);
+      const wacht = vorige ? partner.pauzeMs - (Date.now() - vorige) : 0;
+      if (wacht > 0) await new Promise(klaar => setTimeout(klaar, wacht));
+      laatstePartnerLevering.set(partner.provider, Date.now());
     }
 
     try {
       const ok = await runSyncJob(supabase, row);
       if (ok) succeeded++;
+      if (partner) partnerFoutenOpRij.set(partner.provider, 0);
     } catch (err) {
+      if (partner && err instanceof PartnerTijdelijkFout) {
+        /* Bij 429, of na drie tijdelijke fouten op rij (partner ligt eruit),
+           de partner de rest van deze ronde met rust laten. */
+        const fouten = (partnerFoutenOpRij.get(partner.provider) ?? 0) + 1;
+        partnerFoutenOpRij.set(partner.provider, fouten);
+        if (err.wachtSeconden != null || fouten >= 3) partnerInRust.add(partner.provider);
+      }
       /* De synchronisatie schrijft zelf een regel zodra hij eraan toe is, maar
          gaat hij daarvóór onderuit dan verdween de fout hier in een leeg
          catch-blok. Dat is precies hoe een koppeling een etmaal stil kan
