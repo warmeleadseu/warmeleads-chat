@@ -54,6 +54,7 @@ import { PROVINCE_OPTIONS_BE, PROVINCE_OPTIONS_NL } from '@/data/provinces';
 import { formatProvinceTargetLabel } from '@/lib/provinceTargetMatch';
 import { ComposeMailDrawer } from '../_components/ComposeMailDrawer';
 import { MailHistory } from '../_components/MailHistory';
+import PartnerOpvolgingBlok from './PartnerOpvolgingBlok';
 import { LEAD_STATUS_LABELS, LEAD_STATUS_VALUES } from '@/lib/leadStatuses';
 
 interface Customer {
@@ -1374,6 +1375,9 @@ function CustomerDetailPanel({
                   )}
                 </div>
               </div>
+
+              {/* Automatische opvolging (Snelraak): direct zien of het aan staat, en aan/uit zetten. */}
+              <PartnerOpvolgingBlok customerId={c.id} klantNaam={c.name} />
 
               {/* Welcome offer */}
               <WelcomeOfferBlock customer={c} onUpdated={onRefresh} />
