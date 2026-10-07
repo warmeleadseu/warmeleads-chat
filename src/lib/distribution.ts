@@ -20,7 +20,7 @@ import {
 } from './assignmentCap';
 import { mirrorLeadToMasterPortal, MIRROR_ASSIGNMENT_SOURCE } from './masterPortalMirror';
 import { fetchActiveBatchTargetsByBatch, type GeoTargetRow } from './batchTargets';
-import { kiesDerdeKlantLeads, leadPastInBatchVenster } from './verdeelGrenzen';
+import { inhaalslagWeigering, kiesDerdeKlantLeads, leadPastInBatchVenster } from './verdeelGrenzen';
 
 const MAX_LEAD_AGE_DAYS = 3;
 const COOLDOWN_HOURS = 12;
@@ -821,41 +821,18 @@ export async function distributeLeads(leads: LeadForDistribution[]): Promise<{ d
 }
 
 /**
- * Sleutel voor "kalenderdag" van een ISO-timestamp in server-locale (Vercel = UTC).
- * Bewust gelijk aan de runtime-distributie die ook `Date#getDate()` gebruikt voor
- * daily/weekly buckets, zodat backfill en cron op dezelfde grens werken.
- */
-function backfillDayKey(iso: string | null | undefined): string | null {
-  if (!iso) return null;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-/**
- * Sleutel voor "kalenderweek" (maandag-start, NL-gewoonte). Identieke definitie
- * als gebruikt in de runtime weekly-cap (zie `distributeLead`-tellingen).
- */
-function backfillWeekKey(iso: string | null | undefined): string | null {
-  if (!iso) return null;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
-  const day = d.getDay();
-  const monday = new Date(d);
-  monday.setDate(d.getDate() - day + (day === 0 ? -6 : 1));
-  monday.setHours(0, 0, 0, 0);
-  return `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, '0')}-${String(monday.getDate()).padStart(2, '0')}`;
-}
-
-/**
  * Targeted backfill for a single newly created batch.
  * Only assigns leads from the last `lookbackDays` to this specific batch.
  * If lookbackDays is 0, no backfill is performed (only future leads via cron).
  *
- * Respecteert `leads_per_day` / `leads_per_week`: per kalenderdag (resp. -week)
- * in het lookback-venster worden niet meer leads toegewezen dan het limiet.
- * Daarmee voorkomen we dat een batch met bv. `max 5/dag` en `lookback 2` ineens
- * 20 leads in één keer krijgt zodra die historisch beschikbaar zijn.
+ * Houdt zich aan dezelfde regels als de gewone verdeling:
+ * - `leads_per_day` / `leads_per_week` tellen per leverdag (resp. -week),
+ *   inclusief wat de batch die dag al kreeg. Voorheen telde het per
+ *   aanmaakdag van de lead, waardoor Mediabink (max 28/dag) op 7 okt in één
+ *   inhaalslag 44 leads van vier verschillende dagen kreeg, 50 op die dag.
+ * - het venster van de batch (start min lookback);
+ * - 12 uur pauze tussen twee klanten, en geen derde klant (zie
+ *   `inhaalslagWeigering`).
  */
 export async function backfillBatch(batchId: string, lookbackDays: number): Promise<{ assigned: number }> {
   if (lookbackDays <= 0) return { assigned: 0 };
@@ -864,7 +841,7 @@ export async function backfillBatch(batchId: string, lookbackDays: number): Prom
 
   const { data: batch } = await supabase
     .from('customer_batches')
-    .select('id, customer_id, branch, batch_size, leads_delivered, leads_delivered_external, leads_per_week, leads_per_day, lead_filters, is_paid, starts_at, created_at, distribution_priority, batch_kind, delivery_model, customers!inner(id, is_active)')
+    .select('id, customer_id, branch, batch_size, leads_delivered, leads_delivered_external, leads_per_week, leads_per_day, lead_filters, is_paid, starts_at, created_at, distribution_priority, batch_kind, delivery_model, lookback_days, customers!inner(id, is_active)')
     .eq('id', batchId)
     .eq('status', 'active')
     .single();
@@ -983,33 +960,25 @@ export async function backfillBatch(batchId: string, lookbackDays: number): Prom
   const dailyLimit = batch.leads_per_day && batch.leads_per_day > 0 ? Number(batch.leads_per_day) : null;
   const weeklyLimit = batch.leads_per_week && batch.leads_per_week > 0 ? Number(batch.leads_per_week) : null;
 
-  const dailyCountByDay = new Map<string, number>();
-  const weeklyCountByWeek = new Map<string, number>();
-
-  // Bestaande assignments voor deze batch meetellen op `lead.created_at`-basis,
-  // zodat een tweede backfill-run (bv. na batch-grow) de eerder geleverde leads
-  // van dezelfde lookback-dag niet opnieuw negeert.
+  /* Wat de batch vandaag en deze week al kreeg, op leverdatum: dezelfde
+     telling als de gewone verdeling (Amsterdamse dag, week vanaf maandag). */
+  let vandaagGeleverd = 0;
+  let dezeWeekGeleverd = 0;
   if (dailyLimit !== null || weeklyLimit !== null) {
-    type ExistingAssignmentRow = { leads: { created_at?: string | null } | { created_at?: string | null }[] | null };
-    const { data: existingAssigns } = await supabase
+    const { dayStart, weekStart } = getLeadLimitPeriodAnchors(new Date());
+    const { data: periode } = await supabase
       .from('lead_assignments')
-      .select('leads(created_at)')
-      .eq('batch_id', batch.id);
-
-    for (const row of (existingAssigns as ExistingAssignmentRow[] | null) || []) {
-      const joined = Array.isArray(row.leads) ? row.leads[0] : row.leads;
-      const createdAt = joined?.created_at ?? null;
-      if (!createdAt) continue;
-      if (dailyLimit !== null) {
-        const k = backfillDayKey(createdAt);
-        if (k) dailyCountByDay.set(k, (dailyCountByDay.get(k) || 0) + 1);
-      }
-      if (weeklyLimit !== null) {
-        const k = backfillWeekKey(createdAt);
-        if (k) weeklyCountByWeek.set(k, (weeklyCountByWeek.get(k) || 0) + 1);
-      }
+      .select('assigned_at')
+      .eq('batch_id', batch.id)
+      .gte('assigned_at', weekStart.toISOString());
+    for (const a of periode || []) {
+      dezeWeekGeleverd++;
+      if (a.assigned_at && new Date(a.assigned_at) >= dayStart) vandaagGeleverd++;
     }
   }
+  let skippedByPauze = 0;
+  let skippedByDerdeKlant = 0;
+  let skippedByVenster = 0;
 
   let skippedByDailyLimit = 0;
   let skippedByWeeklyLimit = 0;
@@ -1035,18 +1004,16 @@ export async function backfillBatch(batchId: string, lookbackDays: number): Prom
       continue;
     }
 
-    const leadCreatedAt = (lead as { created_at?: string | null }).created_at ?? null;
-    const dayKey = dailyLimit !== null ? backfillDayKey(leadCreatedAt) : null;
-    const weekKey = weeklyLimit !== null ? backfillWeekKey(leadCreatedAt) : null;
+    /* Dag- of weekmaximum vol: voor deze inhaalslag klaar. De gewone
+       verdeling gaat morgen (of volgende week) verder. */
+    if (dailyLimit !== null && vandaagGeleverd >= dailyLimit) { skippedByDailyLimit++; break; }
+    if (weeklyLimit !== null && dezeWeekGeleverd >= weeklyLimit) { skippedByWeeklyLimit++; break; }
 
-    if (dailyLimit !== null && dayKey) {
-      const used = dailyCountByDay.get(dayKey) || 0;
-      if (used >= dailyLimit) { skippedByDailyLimit++; continue; }
-    }
-    if (weeklyLimit !== null && weekKey) {
-      const used = weeklyCountByWeek.get(weekKey) || 0;
-      if (used >= weeklyLimit) { skippedByWeeklyLimit++; continue; }
-    }
+    if (!leadPastInBatchVenster(lead as { created_at?: string | null }, batch)) { skippedByVenster++; continue; }
+
+    const weigering = inhaalslagWeigering(assignmentsByLead.get(lead.id) || [], batch.customer_id, nowCap);
+    if (weigering === 'pauze') { skippedByPauze++; continue; }
+    if (weigering === 'derde_klant') { skippedByDerdeKlant++; continue; }
 
     let inRange = false;
     let bestDist = Infinity;
@@ -1081,12 +1048,8 @@ export async function backfillBatch(batchId: string, lookbackDays: number): Prom
       assigned++;
       runningAssignCount++;
       alreadyAssigned.add(lead.id);
-      if (dailyLimit !== null && dayKey) {
-        dailyCountByDay.set(dayKey, (dailyCountByDay.get(dayKey) || 0) + 1);
-      }
-      if (weeklyLimit !== null && weekKey) {
-        weeklyCountByWeek.set(weekKey, (weeklyCountByWeek.get(weekKey) || 0) + 1);
-      }
+      vandaagGeleverd++;
+      dezeWeekGeleverd++;
 
       // Auto-assign to portal user if rules match
       assignToPortalUser(supabase, batch.customer_id, lead).catch(() => {});
@@ -1105,13 +1068,16 @@ export async function backfillBatch(batchId: string, lookbackDays: number): Prom
     await syncBatchDelivered(supabase, batch.id);
   }
 
-  if (skippedByDailyLimit > 0 || skippedByWeeklyLimit > 0 || skippedByCap > 0) {
+  if (skippedByDailyLimit > 0 || skippedByWeeklyLimit > 0 || skippedByCap > 0 || skippedByPauze > 0 || skippedByDerdeKlant > 0 || skippedByVenster > 0) {
     console.info('[backfillBatch] limits respected', {
       batchId: batch.id,
       assigned,
       skippedByDailyLimit,
       skippedByWeeklyLimit,
       skippedByCap,
+      skippedByPauze,
+      skippedByDerdeKlant,
+      skippedByVenster,
       leads_per_day: dailyLimit,
       leads_per_week: weeklyLimit,
       lookbackDays,

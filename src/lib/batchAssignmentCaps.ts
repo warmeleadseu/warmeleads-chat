@@ -63,10 +63,10 @@ type CapCountRow = {
  * met `assigned_at` als fallback wanneer de lead-join ontbreekt. Dit is
  * semantisch correct voor de Meta-campagne cap-check: "hoeveel verse leads
  * heeft Meta vandaag/deze week voor deze batch opgeleverd?". Op die manier
- * tellen door `backfillBatch` zojuist toegewezen historische leads mee tegen
- * **hun eigen** kalenderdag (zoals backfill zelf ook al doet via
- * `backfillDayKey`/`backfillWeekKey`), niet tegen de dag waarop de assignment
- * werd ingeschreven. Voor verse Meta-leads zijn `assigned_at` en
+ * tellen door `backfillBatch` toegewezen historische leads mee tegen **hun
+ * eigen** kalenderdag, niet tegen de dag waarop de assignment werd
+ * ingeschreven. (Het dagmaximum van de batch zelf telt wél per leverdag; zie
+ * `backfillBatch`.) Voor verse Meta-leads zijn `assigned_at` en
  * `lead.created_at` praktisch identiek, dus het runtime gedrag van
  * `distributeLead` blijft consistent.
  */

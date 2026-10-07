@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
+import { logAudit } from '@/lib/audit';
 import { backfillBatch, distributeUnassignedLeads } from '@/lib/distribution';
 import { resolveCity } from '@/lib/pdok';
 import {
@@ -61,6 +62,27 @@ async function verifyAndResolveCoords(
   return { lat: clientLat, lng: clientLng, resolvedLabel: label };
 }
 
+/**
+ * Gebiedswijzigingen vastleggen. Een gebied bepaalt waar leads heen gaan en
+ * kan een inhaalslag starten; bij Mediabink (7 okt) was achteraf niet te zien
+ * wie "Heel Nederland" had toegevoegd.
+ */
+function logGebied(
+  admin: { id: string; name?: string | null },
+  actie: 'batch_target_toegevoegd' | 'batch_target_gewijzigd' | 'batch_target_verwijderd',
+  batch: { id: string; customer_id: string; lookback_days?: number | null },
+  details: Record<string, unknown>,
+): void {
+  void logAudit({
+    adminId: admin.id,
+    adminName: admin.name ?? null,
+    action: actie,
+    entityType: 'batch',
+    entityId: batch.id,
+    details: { customer_id: batch.customer_id, lookback_days: batch.lookback_days ?? null, ...details },
+  });
+}
+
 /** Batch + klant ophalen en (voor accountmanagers) toegang controleren. */
 async function loadBatchForAdmin(
   supabase: Supa,
@@ -103,11 +125,21 @@ async function provinceTokensForBatch(
   return normalizeProvinceTargetTokens(provinces, defaultLand);
 }
 
-/** Nieuw/gewijzigd geo-target → distributie + gerichte backfill triggeren (non-blocking). */
+/**
+ * Nieuw/gewijzigd geo-target → distributie + gerichte backfill (non-blocking).
+ *
+ * De inhaalslag volgt de lookback van de batch. Hier stond `Math.max(lookback, 3)`:
+ * een batch met lookback 0 kreeg bij elke gebiedswijziging toch drie dagen
+ * terug. Zo kreeg Mediabink (lookback 0, max 28/dag) op 7 okt na het toevoegen
+ * van "Heel Nederland" in drie minuten 44 oudere leads. Lookback 0 of leeg:
+ * alleen nieuwe leads, via de gewone verdeling.
+ */
 function triggerRedistribution(batchId: string, lookbackDays: number | null): void {
   try { distributeUnassignedLeads(); } catch { /* non-blocking */ }
-  const lookback = typeof lookbackDays === 'number' ? Math.max(lookbackDays, 3) : 3;
-  try { backfillBatch(batchId, lookback); } catch { /* non-blocking */ }
+  const lookback = Math.max(0, Number(lookbackDays) || 0);
+  if (lookback > 0) {
+    try { backfillBatch(batchId, lookback); } catch { /* non-blocking */ }
+  }
 }
 
 export async function GET(request: NextRequest) {
@@ -176,6 +208,7 @@ export async function POST(request: NextRequest) {
       .select()
       .single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    logGebied(admin, 'batch_target_toegevoegd', batch, { target_id: data.id, label: data.label, target_type: 'province', provinces: normalized });
     triggerRedistribution(batch_id, batch.lookback_days);
     return NextResponse.json(data, { status: 201 });
   }
@@ -202,6 +235,7 @@ export async function POST(request: NextRequest) {
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+  logGebied(admin, 'batch_target_toegevoegd', batch, { target_id: data.id, label: data.label, target_type: 'radius', radius_km: data.radius_km });
   triggerRedistribution(batch_id, batch.lookback_days);
   return NextResponse.json(data, { status: 201 });
 }
@@ -260,6 +294,7 @@ export async function PUT(request: NextRequest) {
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+  logGebied(admin, 'batch_target_gewijzigd', batch, { target_id: id, label: data.label, wijzigingen: updates });
   const geoFieldChanged = 'lat' in updates || 'lng' in updates || 'radius_km' in updates || 'provinces' in updates || 'is_active' in updates;
   if (geoFieldChanged) triggerRedistribution(existing.batch_id, batch.lookback_days);
 
@@ -276,7 +311,7 @@ export async function DELETE(request: NextRequest) {
 
   const { data: existing } = await supabase
     .from('batch_targets')
-    .select('id, batch_id')
+    .select('id, batch_id, label, target_type, radius_km, provinces')
     .eq('id', id)
     .single();
   if (!existing) return NextResponse.json({ ok: true });
@@ -286,6 +321,9 @@ export async function DELETE(request: NextRequest) {
 
   const { error } = await supabase.from('batch_targets').delete().eq('id', id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  logGebied(admin, 'batch_target_verwijderd', access.batch, {
+    target_id: id, label: existing.label, target_type: existing.target_type, radius_km: existing.radius_km, provinces: existing.provinces,
+  });
 
   return NextResponse.json({ ok: true });
 }

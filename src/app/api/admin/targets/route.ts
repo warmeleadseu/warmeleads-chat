@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin, unauthorized, forbidden } from '@/lib/adminAuth';
+import { logAudit } from '@/lib/audit';
 import { createServerClient } from '@/lib/supabase';
 import { adminCanAccessCustomer, getCustomerScope } from '@/lib/permissions';
 import { distributeUnassignedLeads } from '@/lib/distribution';
@@ -94,6 +95,16 @@ async function verifyAndResolveCoords(
   return { lat: clientLat, lng: clientLng, resolvedLabel: label };
 }
 
+/** Klantgebied gewijzigd: vastleggen wie wat deed (zie ook batch-targets). */
+function logKlantGebied(
+  admin: { id: string; name?: string | null },
+  actie: 'klant_target_toegevoegd' | 'klant_target_gewijzigd' | 'klant_target_verwijderd',
+  customerId: string,
+  details: Record<string, unknown>,
+): void {
+  void logAudit({ adminId: admin.id, adminName: admin.name ?? null, action: actie, entityType: 'customer', entityId: customerId, details });
+}
+
 export async function GET(request: NextRequest) {
   const admin = await verifyAdmin(request);
   if (!admin) return unauthorized();
@@ -164,6 +175,7 @@ export async function POST(request: NextRequest) {
       .select()
       .single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    logKlantGebied(admin, 'klant_target_toegevoegd', customer_id, { target_id: data.id, label: data.label, target_type: 'province', provinces: data.provinces });
     try { distributeUnassignedLeads(); } catch { /* non-blocking */ }
     return NextResponse.json(data, { status: 201 });
   }
@@ -191,6 +203,7 @@ export async function POST(request: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+  logKlantGebied(admin, 'klant_target_toegevoegd', customer_id, { target_id: data.id, label: data.label, target_type: 'radius', radius_km: data.radius_km });
   try { distributeUnassignedLeads(); } catch { /* non-blocking */ }
 
   return NextResponse.json(data, { status: 201 });
@@ -264,6 +277,7 @@ export async function PUT(request: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+  logKlantGebied(admin, 'klant_target_gewijzigd', data.customer_id, { target_id: id, label: data.label, wijzigingen: updates });
   const geoFieldChanged = 'lat' in updates || 'lng' in updates || 'radius_km' in updates || 'provinces' in updates || 'is_active' in updates;
   if (geoFieldChanged) {
     try { distributeUnassignedLeads(); } catch { /* non-blocking */ }
@@ -291,8 +305,10 @@ export async function DELETE(request: NextRequest) {
     if (!(await adminCanAccessCustomer(admin, owner.customer_id))) return forbidden();
   }
 
+  const { data: oud } = await supabase.from('customer_targets').select('customer_id, label, target_type, radius_km, provinces').eq('id', id).maybeSingle();
   const { error } = await supabase.from('customer_targets').delete().eq('id', id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (oud) logKlantGebied(admin, 'klant_target_verwijderd', oud.customer_id as string, { target_id: id, label: oud.label, target_type: oud.target_type, radius_km: oud.radius_km, provinces: oud.provinces });
 
   return NextResponse.json({ ok: true });
 }
