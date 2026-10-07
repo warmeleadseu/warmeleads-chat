@@ -86,6 +86,10 @@ function esc(s: string): string {
   return s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 }
 
+function dag(iso: string): string {
+  return new Date(iso).toLocaleDateString('nl-NL', { timeZone: 'Europe/Amsterdam', day: 'numeric', month: 'long' });
+}
+
 function datum(iso: string | null): string {
   if (!iso) return 'nooit (sinds de laatste 30 dagen)';
   return new Date(iso).toLocaleString('nl-NL', {
@@ -96,14 +100,17 @@ function datum(iso: string | null): string {
 export function bouwStoringMail(storingen: (Storing & { klant: string })[]): { onderwerp: string; html: string } {
   const totaal = storingen.reduce((n, s) => n + s.aantal, 0);
   const leads = `${totaal} ${totaal === 1 ? 'lead' : 'leads'}`;
+  /* Het gaat om het doorzetten naar het systeem van de klant; in het portaal
+     krijgt hij zijn leads gewoon. Dat moet uit het onderwerp blijken. */
+  const eerste = storingen[0];
   const onderwerp = storingen.length === 1
-    ? `[STORING] ${providerLabel(storingen[0].provider)} van ${storingen[0].klant} levert al een dag niets af (${leads})`
-    : `[STORING] ${storingen.length} koppelingen leveren al een dag niets af (${leads})`;
+    ? `[STORING] ${providerLabel(eerste.provider)} van ${eerste.klant} ontvangt geen leads meer ${eerste.laatsteSucces ? `sinds ${dag(eerste.laatsteSucces)}` : ''} (${leads} gemist, in het portaal staan ze wel)`.replace(/  +/g, ' ')
+    : `[STORING] ${storingen.length} koppelingen zetten geen leads meer door (${leads} gemist, in het portaal staan ze wel)`;
 
   const blokken = storingen.map(s => `
     <tr><td style="padding:14px 16px;border:1px solid #fecaca;border-radius:10px;background:#fef2f2">
       <p style="margin:0 0 4px;font-size:15px;font-weight:700;color:#0f172a">${esc(s.klant)} &middot; ${esc(providerLabel(s.provider))}</p>
-      <p style="margin:0 0 2px;font-size:13px;color:#334155"><strong>${s.aantal}</strong> ${s.aantal === 1 ? 'lead kwam' : 'leads kwamen'} niet aan, sinds ${esc(datum(s.sinds))}.</p>
+      <p style="margin:0 0 2px;font-size:13px;color:#334155"><strong>${s.aantal}</strong> ${s.aantal === 1 ? 'lead kwam' : 'leads kwamen'} niet aan in ${esc(providerLabel(s.provider))} (de afgelopen 30 dagen; de oudste van ${esc(datum(s.sinds))}).</p>
       <p style="margin:0 0 2px;font-size:13px;color:#334155">Laatste geslaagde levering: ${esc(datum(s.laatsteSucces))}.</p>
       ${s.laatsteFout ? `<p style="margin:6px 0 0;font-size:12px;color:#b91c1c">Laatste fout: ${esc(s.laatsteFout.slice(0, 300))}</p>` : ''}
       <p style="margin:8px 0 0;font-size:13px"><a href="${EMAIL_BASE_URL}/admin/customers?open=${s.customer_id}" style="color:#3B2F75;font-weight:600">Klant openen</a></p>

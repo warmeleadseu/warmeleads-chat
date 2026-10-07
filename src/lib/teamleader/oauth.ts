@@ -49,23 +49,51 @@ export function buildAuthorizationUrl(
   return `${TEAMLEADER_AUTH_BASE}/oauth2/authorize?${params}`;
 }
 
+/**
+ * Leesbare foutmelding uit het antwoord van Teamleader. Voorheen bleef alleen
+ * "Token exchange faalde (400)" over: de reden die Teamleader gaf (sleutel
+ * ingetrokken, al gebruikt, verkeerd app-geheim) ging verloren, en daarmee
+ * de diagnose toen de koppeling van Energiekompas uitviel.
+ */
+export function tokenFoutmelding(status: number, tekst: string): string {
+  let reden = '';
+  try {
+    const j = JSON.parse(tekst) as {
+      error?: unknown;
+      error_description?: unknown;
+      message?: unknown;
+      errors?: Array<{ title?: unknown; detail?: unknown }>;
+    };
+    const delen = [
+      j.error,
+      j.error_description,
+      j.message,
+      j.errors?.[0]?.title,
+      j.errors?.[0]?.detail,
+    ].filter((x): x is string => typeof x === 'string' && x.trim() !== '');
+    reden = [...new Set(delen)].join(': ');
+  } catch {
+    reden = tekst.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+  reden = reden.slice(0, 300);
+  return `Teamleader weigerde de toegang (HTTP ${status})${reden ? `: ${reden}` : ''}`;
+}
+
 async function tokenRequest(body: Record<string, string>): Promise<TeamleaderTokenPair> {
   const res = await fetch(`${TEAMLEADER_AUTH_BASE}/oauth2/access_token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams(body),
   });
-  const json = (await res.json()) as {
-    access_token?: string;
-    refresh_token?: string;
-    expires_in?: number;
-    error?: string;
-    error_description?: string;
-  };
+  const tekst = await res.text();
+  let json: { access_token?: string; refresh_token?: string; expires_in?: number } = {};
+  try {
+    json = JSON.parse(tekst);
+  } catch {
+    /* geen JSON: hieronder als fout behandeld */
+  }
   if (!res.ok || !json.access_token || !json.refresh_token) {
-    throw new Error(
-      json.error_description || json.error || `Token exchange faalde (${res.status})`,
-    );
+    throw new Error(tokenFoutmelding(res.status, tekst));
   }
   const expiresIn = json.expires_in ?? 3600;
   return {

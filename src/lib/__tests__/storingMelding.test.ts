@@ -45,7 +45,7 @@ describe('bouwStoringMail', () => {
   it('maakt een duidelijk onderwerp en ontsnapt klantnamen', () => {
     const [s] = bepaalStoringen([fout('ek', 'teamleader', 30, '<script>')], new Map(), NU);
     const { onderwerp, html } = bouwStoringMail([{ ...s, klant: 'Energie & <Kompas>' }]);
-    expect(onderwerp).toBe('[STORING] Teamleader van Energie & <Kompas> levert al een dag niets af (1 lead)');
+    expect(onderwerp).toBe('[STORING] Teamleader van Energie & <Kompas> ontvangt geen leads meer (1 lead gemist, in het portaal staan ze wel)');
     expect(html).toContain('Energie &amp; &lt;Kompas&gt;');
     expect(html).not.toContain('<script>');
     expect(html).toContain('/admin/customers?open=ek');
@@ -54,7 +54,14 @@ describe('bouwStoringMail', () => {
   it('meerdere koppelingen in één mail', () => {
     const st = bepaalStoringen([fout('a', 'teamleader', 30), fout('b', 'partner_snelraak', 30)], new Map(), NU);
     const { onderwerp } = bouwStoringMail(st.map(x => ({ ...x, klant: x.customer_id })));
-    expect(onderwerp).toBe('[STORING] 2 koppelingen leveren al een dag niets af (2 leads)');
+    expect(onderwerp).toBe('[STORING] 2 koppelingen zetten geen leads meer door (2 leads gemist, in het portaal staan ze wel)');
+  });
+});
+
+describe('onderwerp met laatste succes', () => {
+  it('noemt de dag van de laatste geslaagde levering', () => {
+    const [s] = bepaalStoringen([fout('ek', 'teamleader', 30)], new Map([[storingSleutel('ek', 'teamleader'), '2026-09-01T17:00:12Z']]), NU);
+    expect(bouwStoringMail([{ ...s, klant: 'Energiekompas' }]).onderwerp).toBe('[STORING] Teamleader van Energiekompas ontvangt geen leads meer sinds 1 september (1 lead gemist, in het portaal staan ze wel)');
   });
 });
 

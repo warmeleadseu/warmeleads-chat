@@ -8,6 +8,8 @@ import {
   type TeamleaderTokenPair,
 } from './types';
 import { getFirstPhaseId } from './deals';
+import { geldigeSleutelMetSlot, isVers, type TokenStand } from './tokenVernieuwing';
+import { neemCronSlot, geefCronSlotTerug } from '@/lib/cronSlot';
 
 export type StoredIntegration = {
   id: string;
@@ -128,17 +130,24 @@ export async function saveTeamleaderTokens(
   });
   if (error) throw new Error(error.message);
 
-  // Oude mislukte syncs zijn niet meer relevant na een succesvolle koppeling.
+  /* Na (opnieuw) koppelen: wat in de storing bleef hangen opnieuw in de rij,
+     met een schone teller. De herhaalronde stuurt ze daarna na, ook leads
+     ouder dan 72 uur. Zonder het terugzetten van de teller bleven leads die
+     al acht keer waren geprobeerd voorgoed liggen (bij Energiekompas liep een
+     lead op tot dertig pogingen). Hooguit 60 dagen terug: wat ouder is,
+     verwacht een klant niet meer in zijn CRM. */
   await supabase
     .from('integration_sync_log')
     .update({
       status: 'pending',
+      attempts: 0,
       error_message: null,
       updated_at: now,
     })
     .eq('customer_id', customerId)
     .eq('provider', TEAMLEADER_PROVIDER)
-    .eq('status', 'failed');
+    .eq('status', 'failed')
+    .gte('created_at', new Date(Date.now() - 60 * 24 * 3_600_000).toISOString());
 }
 
 /** Vernieuw tokens na expiry — laat connected_at en settings ongemoeid. */
@@ -245,19 +254,47 @@ export async function ensureValidAccessToken(
   supabase: SupabaseClient,
   integration: StoredIntegration,
 ): Promise<string> {
-  const bufferMs = 2 * 60 * 1000;
-  if (integration.expires_at.getTime() > Date.now() + bufferMs) {
-    return integration.access_token;
-  }
-  const oauthConfig = await getEffectiveOAuthConfig(supabase, integration.customer_id);
-  if (!oauthConfig) {
-    throw new Error(
-      'Teamleader-koppeling kan niet vernieuwen: OAuth-app credentials ontbreken.',
-    );
-  }
-  const refreshed = await refreshAccessToken(oauthConfig, integration.refresh_token);
-  await updateTeamleaderTokens(supabase, integration.customer_id, refreshed);
-  return refreshed.accessToken;
+  const customerId = integration.customer_id;
+  const naarStand = (i: StoredIntegration | null): TokenStand | null =>
+    i ? { accessToken: i.access_token, refreshToken: i.refresh_token, verlooptOp: i.expires_at } : null;
+
+  /* Snelle weg: de sleutel in handen is nog geldig. */
+  const inHanden = naarStand(integration)!;
+  if (isVers(inHanden, Date.now())) return integration.access_token;
+
+  const slot = `teamleader-token:${customerId}`;
+  return geldigeSleutelMetSlot({
+    lees: async () => naarStand(await getTeamleaderIntegration(supabase, customerId)),
+    neemSlot: () => neemCronSlot(supabase, slot, 1),
+    geefSlotTerug: () => geefCronSlotTerug(supabase, slot),
+    vernieuw: async refreshToken => {
+      const oauthConfig = await getEffectiveOAuthConfig(supabase, customerId);
+      if (!oauthConfig) {
+        throw new Error(
+          'Teamleader-koppeling kan niet vernieuwen: OAuth-app credentials ontbreken.',
+        );
+      }
+      const refreshed = await refreshAccessToken(oauthConfig, refreshToken);
+      /* Vanaf hier is de oude vernieuwingssleutel bij Teamleader vervallen.
+         Mislukt het opslaan, dan is de koppeling stuk; dus een paar keer
+         proberen en anders luid melden. */
+      let laatsteFout: unknown = null;
+      for (let poging = 1; poging <= 3; poging++) {
+        try {
+          await updateTeamleaderTokens(supabase, customerId, refreshed);
+          return refreshed.accessToken;
+        } catch (err) {
+          laatsteFout = err;
+          await new Promise(r => setTimeout(r, 500 * poging));
+        }
+      }
+      console.error('[teamleader] nieuwe sleutel ontvangen maar niet opgeslagen; koppeling moet opnieuw', {
+        customerId,
+        message: laatsteFout instanceof Error ? laatsteFout.message : String(laatsteFout),
+      });
+      throw new Error('Nieuwe Teamleader-sleutel kon niet worden opgeslagen; opnieuw koppelen nodig.');
+    },
+  });
 }
 
 export async function resolvePhaseIdForPipeline(
