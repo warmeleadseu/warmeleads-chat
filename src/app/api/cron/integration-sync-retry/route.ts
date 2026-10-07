@@ -11,6 +11,7 @@ import { TEAMLEADER_PROVIDER } from '@/lib/teamleader/types';
 import { getTeamleaderConnectionState } from '@/lib/teamleader/integrationRepo';
 import { syncAssignmentToOutboundWebhook } from '@/lib/integrations/outboundWebhook/syncAssignment';
 import { verifyCronAuth } from '@/lib/cronAuth';
+import { meldIntegratieStoringen } from '@/lib/integrations/storingMelding';
 import { PARTNER_PROVIDERS, partnerOpProvider, PARTNERS } from '@/lib/integrations/partners/registry';
 import {
   binnenLeverperiode,
@@ -343,5 +344,14 @@ export async function GET(request: NextRequest) {
     retried++;
   }
 
-  return NextResponse.json({ retried, succeeded, queued: jobs.length });
+  /* Na de pogingen van deze ronde: wat dan nog een dag lang niets aflevert,
+     is een storing waar iemand iets mee moet. */
+  let storingen: { inStoring: number; gemeld: number } | null = null;
+  try {
+    storingen = await meldIntegratieStoringen(supabase);
+  } catch (err) {
+    console.error('[integration-sync-retry] storingsmelding mislukt', err instanceof Error ? err.message : err);
+  }
+
+  return NextResponse.json({ retried, succeeded, queued: jobs.length, storingen });
 }
