@@ -4,6 +4,7 @@ import { enrichLeadAddress, isValidPlace } from '@/lib/pdok';
 import { distributeLead } from '@/lib/distribution';
 import { isPhoneValid } from '@/lib/phoneValidation';
 import { checkLeadProfanity } from '@/lib/profanityFilter';
+import { quarantaineReden, zetInQuarantaine } from '@/lib/leadQuarantaine';
 import { checkRateLimit } from '@/lib/rateLimit';
 import { calculateQualityScore } from '@/lib/leadQuality';
 import { fireLeadCapi } from '@/lib/aiCapiHooks';
@@ -246,7 +247,21 @@ export async function POST(request: NextRequest) {
 
     const profanity = checkLeadProfanity(lead as Record<string, unknown>);
     if (profanity.blocked) {
-      return NextResponse.json({ success: false, error: 'Lead geweigerd: ongepaste inhoud' }, { status: 422 });
+      /* Niet weggooien: een beheerder beoordeelt hem (de woordenlijst raakt
+         ook gewone achternamen). Antwoord 200, anders blijft Zapier het
+         opnieuw proberen. Lukt het bewaren niet, dan 500: dan probeert Zapier
+         het later opnieuw en raakt de lead niet kwijt. */
+      const q = await zetInQuarantaine(supabase, {
+        route: 'webhook',
+        reden: quarantaineReden(profanity),
+        lead: lead as Record<string, unknown>,
+        metaLeadgenId: typeof lead.meta_leadgen_id === 'string' ? lead.meta_leadgen_id : null,
+      });
+      if (!q.ok) {
+        console.error('Webhook quarantaine mislukt:', q.fout);
+        return NextResponse.json({ error: 'Verwerking mislukt' }, { status: 500 });
+      }
+      return NextResponse.json({ success: true, quarantaine: true, quarantaine_id: q.id });
     }
 
     const quality_score = calculateQualityScore(lead);

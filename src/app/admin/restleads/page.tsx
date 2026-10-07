@@ -17,6 +17,7 @@ import { TERUGDRAAI_VENSTER_MINUTEN } from '@/lib/restleads';
 import { LEGE_LEADFILTERS, telActieveLeadFilters, type LeadFilterStand } from '@/lib/leadFilterState';
 import { standNaarFilterParams } from '@/lib/leadFilterParams';
 import RestleadsFilters from './RestleadsFilters';
+import QuarantaineLijst from './QuarantaineLijst';
 
 /**
  * Leads die tussen wal en schip vielen.
@@ -116,7 +117,9 @@ export default function RestleadsPage() {
   const [verlopen, setVerlopen] = useState<Restlead[]>([]);
   const [laden, setLaden] = useState(true);
   const [fout, setFout] = useState<string | null>(null);
-  const [lijst, setLijst] = useState<'kansrijk' | 'geenklant' | 'verlopen' | 'ingepland' | 'geschiedenis'>('kansrijk');
+  const [lijst, setLijst] = useState<'kansrijk' | 'geenklant' | 'verlopen' | 'ingepland' | 'geschiedenis' | 'quarantaine'>('kansrijk');
+  /* null: geen toegang (accountmanager) of nog niet geladen; dan geen tabblad. */
+  const [quarantaineOpen, setQuarantaineOpen] = useState<number | null>(null);
   const [berekendOp, setBerekendOp] = useState<string | null>(null);
   const [klantenMee, setKlantenMee] = useState<string[]>([]);
   const [wachtrij, setWachtrij] = useState<WachtrijRij[]>([]);
@@ -295,6 +298,12 @@ export default function RestleadsPage() {
   }, []);
 
   useEffect(() => { laad(); }, [laad]);
+
+  useEffect(() => {
+    void adminFetch('/api/admin/quarantaine?status=open', { cache: 'no-store' }).then(async res => {
+      if (res.ok) setQuarantaineOpen(((await res.json()) as { open?: number }).open ?? 0);
+    }).catch(() => {});
+  }, []);
   useEffect(() => { laadWachtrij(); }, [laadWachtrij]);
 
   /* In de stand 'ingepland' tonen we de wachtrij, niet deze lijst. */
@@ -560,6 +569,9 @@ export default function RestleadsPage() {
           ['verlopen', 'Verlopen', verlopen.length, '7 tot 90 dagen'],
           ['ingepland', 'Ingepland', wachtrij.length, 'staat in de wachtrij'],
           ['geschiedenis', 'Geschiedenis', historie.length, 'geleverd en overgeslagen'],
+          ...(quarantaineOpen !== null
+            ? [['quarantaine', 'Quarantaine', quarantaineOpen, 'tegengehouden door de scheldwoordfilter, wacht op beoordeling'] as const]
+            : []),
         ] as const).map(([waarde, label, aantal, hint]) => (
           <button
             key={waarde}
@@ -570,7 +582,7 @@ export default function RestleadsPage() {
             }`}
           >
             {label}
-            <span className="text-xs text-slate-400">{aantal}</span>
+            <span className={`text-xs ${waarde === 'quarantaine' && aantal > 0 ? 'font-bold text-amber-600' : 'text-slate-400'}`}>{aantal}</span>
           </button>
         ))}
       </div>
@@ -629,7 +641,9 @@ export default function RestleadsPage() {
         />
       )}
 
-      {lijst === 'ingepland' || lijst === 'geschiedenis' ? (
+      {lijst === 'quarantaine' ? (
+        <QuarantaineLijst onAantalOpen={setQuarantaineOpen} />
+      ) : lijst === 'ingepland' || lijst === 'geschiedenis' ? (
         wachtrijLaden ? (
           <div className="space-y-2">{[0, 1, 2].map(i => <div key={i} className="h-14 animate-pulse rounded-xl bg-slate-100" />)}</div>
         ) : (lijst === 'ingepland' ? wachtrij : historie).length === 0 ? (

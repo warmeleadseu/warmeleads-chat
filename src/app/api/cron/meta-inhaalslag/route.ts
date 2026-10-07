@@ -5,6 +5,7 @@ import { getMetaCredentials } from '@/lib/meta';
 import { enrichLeadAddress } from '@/lib/pdok';
 import { isPhoneValid } from '@/lib/phoneValidation';
 import { checkLeadProfanity } from '@/lib/profanityFilter';
+import { quarantaineReden, zetInQuarantaine } from '@/lib/leadQuarantaine';
 import { calculateQualityScore } from '@/lib/leadQuality';
 import { neemCronSlot, geefCronSlotTerug } from '@/lib/cronSlot';
 
@@ -128,7 +129,20 @@ async function ronde(supabase: ReturnType<typeof createServerClient>) {
     if (data.length < 1000) break;
   }
 
+  /* Wat in quarantaine staat (open, vrijgegeven of afgewezen), is al
+     beoordeeld of wacht op een beheerder; niet opnieuw als ontbrekend tellen. */
+  const inQuarantaine = new Set<string>();
+  const metaIds = metaLeads.map((l) => String(l.id));
+  for (let i = 0; i < metaIds.length; i += 150) {
+    const { data } = await supabase
+      .from('leads_quarantaine')
+      .select('meta_leadgen_id')
+      .in('meta_leadgen_id', metaIds.slice(i, i + 150));
+    for (const r of data || []) if (r.meta_leadgen_id) inQuarantaine.add(String(r.meta_leadgen_id));
+  }
+
   const ontbreekt = metaLeads.filter((l) => {
+    if (inQuarantaine.has(String(l.id))) return false;
     const em = (veld(l, /email/i) ?? '').toLowerCase().trim();
     const tl = staart(veld(l, /phone|telefoon/i));
     return !((em && mails.has(em)) || (tl && tels.has(tl)));
@@ -175,7 +189,17 @@ async function ronde(supabase: ReturnType<typeof createServerClient>) {
       meta_leadgen_id: String(m.id),
     });
 
-    if (checkLeadProfanity(lead as Record<string, unknown>).blocked) { sla('ongepaste inhoud'); continue; }
+    const profanity = checkLeadProfanity(lead as Record<string, unknown>);
+    if (profanity.blocked) {
+      const q = await zetInQuarantaine(supabase, {
+        route: 'meta_inhaalslag',
+        reden: quarantaineReden(profanity),
+        lead: lead as Record<string, unknown>,
+        metaLeadgenId: String(m.id),
+      });
+      sla(q.ok ? 'in quarantaine (ongepaste inhoud)' : 'quarantaine mislukt');
+      continue;
+    }
 
     const quality_score = calculateQualityScore(lead);
     const { error } = await supabase.from('leads').insert({ ...lead, quality_score });

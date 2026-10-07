@@ -4,6 +4,7 @@ import { resolveAddress, isValidPlace } from '@/lib/pdok';
 import { distributeUnassignedLeads, backfillBatch } from '@/lib/distribution';
 import { isPhoneValid } from '@/lib/phoneValidation';
 import { checkLeadProfanity } from '@/lib/profanityFilter';
+import { quarantaineReden, vrijgegevenLeadIds, zetInQuarantaine } from '@/lib/leadQuarantaine';
 import { syncBatchDelivered } from '@/lib/batchSync';
 import { verifyCronAuth } from '@/lib/cronAuth';
 import { neemCronSlot, geefCronSlotTerug } from '@/lib/cronSlot';
@@ -149,10 +150,12 @@ async function verdeelronde(supabase: ReturnType<typeof createServerClient>) {
     }
   }
 
-  // Phase 3: Delete profanity leads (recent, skip spreadsheet imports and demo leads) and sync affected batch counters.
+  // Phase 3: Profanity leads (recent, skip spreadsheet imports and demo leads) naar quarantaine en daarna
+  // pas verwijderen; daarna de tellers van betrokken batches bijwerken.
   // Voorheen: per geblokte lead aparte select + delete = N+1. Nu: 1 .in()-select + chunked .in()-deletes.
   const profanityT0 = Date.now();
   let profanityDeleted = 0;
+  let profanityQuarantaineMislukt = 0;
   const affectedBatchIds = new Set<string>();
   const { data: recentLeads } = await supabase
     .from('leads')
@@ -162,10 +165,34 @@ async function verdeelronde(supabase: ReturnType<typeof createServerClient>) {
     .gte('created_at', cutoff.toISOString())
     .limit(2000);
 
-  const blockedIds: string[] = [];
+  const redenPerLead = new Map<string, string>();
   for (const lead of recentLeads || []) {
-    if (checkLeadProfanity(lead as Record<string, unknown>).blocked) {
-      blockedIds.push(lead.id);
+    const p = checkLeadProfanity(lead as Record<string, unknown>);
+    if (p.blocked) redenPerLead.set(lead.id, quarantaineReden(p));
+  }
+
+  /* Een beheerder die een lead heeft vrijgegeven, heeft al beslist; die
+     houden we niet opnieuw tegen. */
+  const vrijgegeven = redenPerLead.size > 0 ? await vrijgegevenLeadIds(supabase, [...redenPerLead.keys()]) : new Set<string>();
+
+  /* Alleen wat veilig in quarantaine staat, mag weg. Lukt het bewaren niet,
+     dan blijft de lead staan en proberen we het de volgende ronde opnieuw. */
+  const blockedIds: string[] = [];
+  for (const id of redenPerLead.keys()) {
+    if (vrijgegeven.has(id)) continue;
+    const { data: volledig } = await supabase.from('leads').select('*').eq('id', id).maybeSingle();
+    if (!volledig) continue;
+    const q = await zetInQuarantaine(supabase, {
+      route: 'verdeel_cron',
+      reden: redenPerLead.get(id)!,
+      lead: volledig as Record<string, unknown>,
+      oorspronkelijkLeadId: id,
+      metaLeadgenId: (volledig as { meta_leadgen_id?: string | null }).meta_leadgen_id ?? null,
+    });
+    if (q.ok) blockedIds.push(id);
+    else {
+      profanityQuarantaineMislukt++;
+      console.warn('[cron/distribute] quarantaine mislukt, lead blijft staan:', id, q.fout);
     }
   }
 
@@ -207,7 +234,9 @@ async function verdeelronde(supabase: ReturnType<typeof createServerClient>) {
   console.info('[cron/distribute:profanity]', {
     computeMs: Date.now() - profanityT0,
     scanned: recentLeads?.length || 0,
-    blocked: blockedIds.length,
+    blocked: redenPerLead.size,
+    vrijgegeven: vrijgegeven.size,
+    quarantaineMislukt: profanityQuarantaineMislukt,
     deleted: profanityDeleted,
     affectedBatches: affectedBatchIds.size,
   });
@@ -258,6 +287,7 @@ async function verdeelronde(supabase: ReturnType<typeof createServerClient>) {
     enriched,
     phonesValidated,
     profanityDeleted,
+    profanityQuarantaine: profanityDeleted,
     batchesGecorrigeerd,
     geplandGeleverd: gepland.geleverd,
     geplandOvergeslagen: gepland.overgeslagen,
