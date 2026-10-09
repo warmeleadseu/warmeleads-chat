@@ -51,11 +51,21 @@ interface Invoice {
   batch_order_id: string | null;
   batch_id: string | null;
   uploaded_pdf_path: string | null;
+  /** Hoe hij op betaald kwam: de klant via Mollie, of wij met de hand. */
+  betaald_via?: 'mollie' | 'handmatig' | null;
+  betaald_door?: string | null;
 }
 
 interface Customer { id: string; name: string; email: string; country?: string | null; vat_id?: string | null }
 
 type StatusFilter = 'all' | 'open' | 'paid' | 'credit_note' | 'overdue';
+/** Alleen betaalde facturen: via Mollie, met de hand (staat ook in Rompslomp), of nog niet vastgesteld. */
+type BetaaldViaFilter = 'all' | 'mollie' | 'handmatig' | 'onbekend';
+
+function betaaldViaLabel(inv: Pick<Invoice, 'status' | 'betaald_via'>): string {
+  if (inv.status !== 'paid') return '';
+  return inv.betaald_via === 'mollie' ? 'Klant via Mollie' : inv.betaald_via === 'handmatig' ? 'Handmatig door ons' : 'Nog onbekend';
+}
 type PeriodFilter = 'all' | 'this_month' | 'last_month' | 'this_year' | 'custom';
 type SortKey = 'invoice_number' | 'customer' | 'total' | 'date' | 'status';
 type SortDir = 'asc' | 'desc';
@@ -87,6 +97,8 @@ export default function AdminInvoicesPage() {
   const [zipBusy, setZipBusy] = useState(false);
 
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [betaaldViaFilter, setBetaaldViaFilter] = useState<BetaaldViaFilter>('all');
+  const [mollieBezig, setMollieBezig] = useState(false);
   const [periodFilter, setPeriodFilter] = useState<PeriodFilter>('all');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
@@ -189,6 +201,10 @@ export default function AdminInvoicesPage() {
         if (i.status !== statusFilter) return false;
       }
       if (customerFilter && i.customer_id !== customerFilter) return false;
+      if (betaaldViaFilter !== 'all') {
+        if (i.status !== 'paid') return false;
+        if (betaaldViaFilter === 'onbekend' ? i.betaald_via != null : i.betaald_via !== betaaldViaFilter) return false;
+      }
       if (periodRange.from || periodRange.to) {
         const d = new Date(i.created_at).getTime();
         if (periodRange.from && d < periodRange.from.getTime()) return false;
@@ -196,7 +212,7 @@ export default function AdminInvoicesPage() {
       }
       return true;
     });
-  }, [invoices, search, statusFilter, customerFilter, periodRange]);
+  }, [invoices, search, statusFilter, betaaldViaFilter, customerFilter, periodRange]);
 
   const sorted = useMemo(() => {
     const arr = [...filtered];
@@ -224,7 +240,7 @@ export default function AdminInvoicesPage() {
   );
 
   // Reset naar pagina 1 wanneer filters/zoekterm wijzigen.
-  useEffect(() => { setPage(1); }, [search, statusFilter, periodFilter, customFrom, customTo, customerFilter, pageSize]);
+  useEffect(() => { setPage(1); }, [search, statusFilter, betaaldViaFilter, periodFilter, customFrom, customTo, customerFilter, pageSize]);
 
   // Statistieken afgeleid van de (gefilterde) set.
   const stats = useMemo(() => {
@@ -247,12 +263,13 @@ export default function AdminInvoicesPage() {
 
   const activeFilterCount =
     (statusFilter !== 'all' ? 1 : 0) +
+    (betaaldViaFilter !== 'all' ? 1 : 0) +
     (periodFilter !== 'all' ? 1 : 0) +
     (customerFilter ? 1 : 0) +
     (search.trim() ? 1 : 0);
 
   const resetFilters = useCallback(() => {
-    setSearch(''); setStatusFilter('all'); setPeriodFilter('all');
+    setSearch(''); setStatusFilter('all'); setBetaaldViaFilter('all'); setPeriodFilter('all');
     setCustomFrom(''); setCustomTo(''); setCustomerFilter('');
   }, []);
 
@@ -345,7 +362,7 @@ export default function AdminInvoicesPage() {
 
     const headers = [
       'Factuurnummer', 'Factuurdatum', 'Vervaldatum', 'Klant', 'E-mail', 'Land', 'BTW-nummer',
-      'Omschrijving', 'Subtotaal', 'BTW%', 'BTW-bedrag', 'Totaal', 'BTW-modus', 'Status', 'Betaaldatum', 'Creditnota van',
+      'Omschrijving', 'Subtotaal', 'BTW%', 'BTW-bedrag', 'Totaal', 'BTW-modus', 'Status', 'Betaaldatum', 'Betaald via', 'Creditnota van',
     ];
     const rows = sorted.map(i => [
       i.invoice_number,
@@ -363,6 +380,7 @@ export default function AdminInvoicesPage() {
       i.vat_mode === 'reverse_charge_be' ? 'BTW verlegd' : 'NL 21%',
       statusLabel(i.status),
       dmy(i.paid_at),
+      betaaldViaLabel(i),
       i.credit_note_of ? (invoiceNumberById.get(i.credit_note_of) || '') : '',
     ]);
 
@@ -388,6 +406,43 @@ export default function AdminInvoicesPage() {
     URL.revokeObjectURL(url);
     showToast(`${sorted.length} facturen geëxporteerd`);
   }, [sorted, countryById, invoiceNumberById, showToast]);
+
+  /* Oudere betaalde facturen waarvan nog niet vaststaat of de klant via Mollie
+     betaalde of dat wij ze op betaald zetten. De server vraagt het Mollie. */
+  const nogOnbekend = useMemo(
+    () => invoices.filter(i => i.status === 'paid' && i.betaald_via == null && (i.mollie_payment_id ?? '').startsWith('tr_')).length,
+    [invoices],
+  );
+  const controleerBijMollie = useCallback(async () => {
+    if (mollieBezig) return;
+    setMollieBezig(true);
+    let viaMollie = 0;
+    let handmatig = 0;
+    let fouten = 0;
+    let resterend = 0;
+    try {
+      for (let ronde = 0; ronde < 15; ronde++) {
+        const res = await adminFetch('/api/admin/invoices/betaalbron', { method: 'POST' });
+        const d = (await res.json().catch(() => ({}))) as { gecontroleerd?: number; viaMollie?: number; handmatig?: number; fouten?: string[]; resterend?: number; error?: string };
+        if (!res.ok) {
+          showToast(res.status === 403 ? 'Alleen een superadmin kan dit controleren.' : d.error || 'Controle bij Mollie mislukt.');
+          return;
+        }
+        viaMollie += d.viaMollie ?? 0;
+        handmatig += d.handmatig ?? 0;
+        fouten += d.fouten?.length ?? 0;
+        resterend = d.resterend ?? 0;
+        /* Klaar, of alleen nog facturen die Mollie niet kent. */
+        if (!d.gecontroleerd || (d.viaMollie ?? 0) + (d.handmatig ?? 0) === 0) break;
+      }
+      showToast(`Gecontroleerd: ${viaMollie} via Mollie, ${handmatig} handmatig${fouten ? `, ${fouten} niet te controleren` : ''}${resterend ? ` · ${resterend} nog onbekend` : ''}`);
+      await fetchInvoices();
+    } catch {
+      showToast('Netwerkfout bij de controle bij Mollie.');
+    } finally {
+      setMollieBezig(false);
+    }
+  }, [mollieBezig, showToast, fetchInvoices]);
 
   const ZIP_MAX = 200;
   const downloadZip = useCallback(async () => {
@@ -448,6 +503,14 @@ export default function AdminInvoicesPage() {
             className="flex items-center gap-2 rounded-lg bg-button-gradient px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:shadow-md">
             <PlusIcon className="h-4 w-4" /> Factuur aanmaken
           </button>
+          {nogOnbekend > 0 && (
+            <button onClick={() => void controleerBijMollie()} disabled={mollieBezig}
+              title="Vraagt Mollie per factuur of de klant echt via Mollie betaalde; zo niet, dan hebben wij hem met de hand op betaald gezet"
+              className="flex items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-medium text-violet-700 hover:bg-violet-100 disabled:opacity-50">
+              {mollieBezig ? <ArrowPathIcon className="h-4 w-4 animate-spin" /> : null}
+              Controleer bij Mollie ({nogOnbekend})
+            </button>
+          )}
           <button onClick={exportCsv} disabled={sorted.length === 0}
             className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-50">
             <TableCellsIcon className="h-4 w-4" /> Exporteer CSV
@@ -499,7 +562,7 @@ export default function AdminInvoicesPage() {
             placeholder="Zoek op factuurnummer, klant of omschrijving..."
             className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-sm text-slate-900 outline-none focus:border-brand-purple/50 focus:bg-white" />
         </div>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
           <div>
             <label className="mb-1 block text-[11px] font-medium text-slate-500">Status</label>
             <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as StatusFilter)}
@@ -509,6 +572,17 @@ export default function AdminInvoicesPage() {
               <option value="overdue">Te laat</option>
               <option value="paid">Betaald</option>
               <option value="credit_note">Creditnota</option>
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-[11px] font-medium text-slate-500">Betaald via</label>
+            <select value={betaaldViaFilter} onChange={e => setBetaaldViaFilter(e.target.value as BetaaldViaFilter)}
+              title="Handmatig door ons: wij zetten hem op betaald, bijvoorbeeld omdat de klant een factuur uit Rompslomp betaalde"
+              className="w-full min-w-0 max-w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50">
+              <option value="all">Alle betalingen</option>
+              <option value="mollie">Klant via Mollie</option>
+              <option value="handmatig">Handmatig door ons</option>
+              <option value="onbekend">Nog onbekend</option>
             </select>
           </div>
           <div>
@@ -616,6 +690,12 @@ export default function AdminInvoicesPage() {
                         }`}>
                           {statusLabel(inv.status)}
                         </span>
+                        {inv.status === 'paid' && (
+                          <span title={inv.betaald_door ? `Op betaald gezet door ${inv.betaald_door}` : undefined}
+                            className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${inv.betaald_via === 'mollie' ? 'bg-sky-50 text-sky-700' : inv.betaald_via === 'handmatig' ? 'bg-violet-50 text-violet-700' : 'bg-slate-100 text-slate-500'}`}>
+                            {inv.betaald_via === 'mollie' ? 'via Mollie' : inv.betaald_via === 'handmatig' ? 'handmatig' : 'onbekend'}
+                          </span>
+                        )}
                         {overdue && (
                           <span className="inline-flex items-center gap-0.5 rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-bold text-white" title={`Vervallen op ${fmtDateNl(inv.due_date)}`}>
                             <ExclamationTriangleIcon className="h-3 w-3" /> Te laat
@@ -687,6 +767,12 @@ export default function AdminInvoicesPage() {
                     }`}>
                       {statusLabel(inv.status)}
                     </span>
+                    {inv.status === 'paid' && (
+                      <span title={inv.betaald_door ? `Op betaald gezet door ${inv.betaald_door}` : undefined}
+                        className={`rounded-full shrink-0 px-2 py-0.5 text-[10px] font-medium ${inv.betaald_via === 'mollie' ? 'bg-sky-50 text-sky-700' : inv.betaald_via === 'handmatig' ? 'bg-violet-50 text-violet-700' : 'bg-slate-100 text-slate-500'}`}>
+                        {inv.betaald_via === 'mollie' ? 'via Mollie' : inv.betaald_via === 'handmatig' ? 'handmatig' : 'onbekend'}
+                      </span>
+                    )}
                     {overdue && (
                       <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-bold text-white">
                         <ExclamationTriangleIcon className="h-3 w-3" /> Te laat

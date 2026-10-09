@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin, unauthorized, forbidden } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
+import { beheerderNaam } from '@/lib/factuurBetaling';
 import { notifyCustomerInvoicePaid } from '@/lib/invoice';
 import { finalizePaidLeadBatch, finalizePaidBulkLeadBatch } from '@/lib/finalizePaidLeadBatch';
 import { isBulkLeadsBatchKind } from '@/lib/batchKind';
@@ -47,7 +48,9 @@ export async function POST(
 
   const { data: updated, error: updateErr } = await supabase
     .from('invoices')
-    .update({ status: 'paid', paid_at: nowIso })
+    /* Met de hand op betaald: ook als er een Mollie-betaallink bij hoort,
+       betaalde de klant niet via Mollie (anders had de webhook het gedaan). */
+    .update({ status: 'paid', paid_at: nowIso, betaald_via: 'handmatig', betaald_door: beheerderNaam(admin) })
     .eq('id', id)
     .eq('status', 'open')
     .select('*')

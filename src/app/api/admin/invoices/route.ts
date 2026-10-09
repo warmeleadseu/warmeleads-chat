@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
+import { beheerderNaam } from '@/lib/factuurBetaling';
 import { createServerClient } from '@/lib/supabase';
 import { resendOpenInvoiceWithPaymentLinks } from '@/lib/invoice';
 import { computeInvoiceVat } from '@/lib/invoiceVat';
@@ -128,6 +129,9 @@ export async function POST(request: NextRequest) {
     vat_mode: vatMode,
     status: invStatus,
     paid_at: paidAtValue,
+    /* Hier aangemaakt als betaald: dat heeft de klant niet via ons betaald. */
+    betaald_via: invStatus === 'paid' ? 'handmatig' : null,
+    betaald_door: invStatus === 'paid' ? beheerderNaam(admin) : null,
     due_date: dueDateValue,
   });
 
@@ -214,6 +218,19 @@ export async function PUT(request: NextRequest) {
   const safeUpdates: Record<string, unknown> = {};
   for (const key of allowed) {
     if (updates[key] !== undefined) safeUpdates[key] = updates[key];
+  }
+
+  /* Status met de hand gewijzigd: vastleggen dat wij het deden, of weer
+     wissen als hij terug op open gaat. */
+  if (safeUpdates.status !== undefined) {
+    const { data: huidig } = await supabase.from('invoices').select('status').eq('id', id).maybeSingle();
+    if (safeUpdates.status === 'paid' && huidig?.status !== 'paid') {
+      safeUpdates.betaald_via = 'handmatig';
+      safeUpdates.betaald_door = beheerderNaam(admin);
+    } else if (safeUpdates.status !== 'paid') {
+      safeUpdates.betaald_via = null;
+      safeUpdates.betaald_door = null;
+    }
   }
 
   const sanitizedUpdates = await sanitizeInvoiceWritePayload(supabase, safeUpdates);

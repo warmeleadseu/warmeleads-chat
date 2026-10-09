@@ -267,7 +267,7 @@ export async function POST(request: NextRequest) {
         const nowIso = new Date().toISOString();
         const { data: inv, error: invErr } = await supabase
           .from('invoices')
-          .update({ status: 'paid', paid_at: nowIso, mollie_payment_id: paymentId })
+          .update({ status: 'paid', paid_at: nowIso, mollie_payment_id: paymentId, betaald_via: 'mollie', betaald_door: null })
           .eq('id', invoiceId)
           .eq('status', 'open')
           .select('*')

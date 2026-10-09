@@ -1,4 +1,5 @@
 import { createServerClient } from '@/lib/supabase';
+import { betaaldViaUitBetaalId } from './factuurBetaling';
 import { sendEmail } from '@/lib/email';
 import type { InvoiceLineItem } from '@/lib/invoicePdf';
 import { ensureInvoiceMollieCheckout } from '@/lib/invoiceCheckout';
@@ -180,6 +181,7 @@ export async function createInvoice(params: CreateInvoiceParams) {
     mollie_payment_id: params.mollie_payment_id || null,
     status: invoiceStatus,
     paid_at: isPaid ? (params.paid_at || now) : null,
+    betaald_via: isPaid ? betaaldViaUitBetaalId(params.mollie_payment_id) : null,
     due_date: dueDate,
   });
 
@@ -271,7 +273,7 @@ export async function markInvoicePaid(batchId: string, molliePaymentId: string) 
   const now = new Date().toISOString();
   const { data: updated, error } = await supabase
     .from('invoices')
-    .update({ status: 'paid', paid_at: now, mollie_payment_id: molliePaymentId })
+    .update({ status: 'paid', paid_at: now, mollie_payment_id: molliePaymentId, betaald_via: betaaldViaUitBetaalId(molliePaymentId) })
     .eq('id', existing.id)
     .select()
     .single();
@@ -322,7 +324,7 @@ export async function markInvoicePaidByAppointmentBatch(appointmentBatchId: stri
   const now = new Date().toISOString();
   const { data: updated, error } = await supabase
     .from('invoices')
-    .update({ status: 'paid', paid_at: now, mollie_payment_id: molliePaymentId })
+    .update({ status: 'paid', paid_at: now, mollie_payment_id: molliePaymentId, betaald_via: betaaldViaUitBetaalId(molliePaymentId) })
     .eq('id', existing.id)
     .select()
     .single();

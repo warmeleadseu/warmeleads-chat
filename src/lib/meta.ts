@@ -100,16 +100,8 @@ function extractLeadCount(actions?: { action_type: string; value: string }[]): n
   return leadAction ? parseInt(leadAction.value, 10) || 0 : 0;
 }
 
-/** Lookback voor leads-scan in fase 2 (CPL toewijzing). Houd ruim genoeg voor late attributie. */
-const META_LEAD_LOOKBACK_DAYS = 90;
-/** Hardcap op aantal leads dat we in 1 sync verrijken met CPL. Voorkomt full-table-scan bij groei. */
-const META_LEAD_SCAN_MAX = 20_000;
-/** Pagina-grootte voor leads-paginatie binnen META_LEAD_SCAN_MAX. */
-const META_LEAD_PAGE = 1000;
 /** Chunkgrootte voor `meta_ad_spend` batch-upserts. */
 const META_UPSERT_CHUNK = 200;
-/** Chunkgrootte voor `leads.update(...).in('id', ids)` per unieke CPL-waarde. PostgREST `IN`-filter blijft op proportionele payload. */
-const META_LEAD_UPDATE_CHUNK = 500;
 
 export async function syncMetaAdSpend(dateFrom: string, dateTo: string): Promise<{
   synced: number;
@@ -170,109 +162,22 @@ export async function syncMetaAdSpend(dateFrom: string, dateTo: string): Promise
     }
   }
 
-  /* ── Fase 2: CPL toekennen aan onze leads (gebatcht per unieke CPL) ── */
+  /* ── Fase 2: kosten per lead herberekenen ─────────────────────────
+     Eén berekening voor de kosten per lead (lead_kosten) en de CPL in Leads
+     CRM (leads.lead_cost): uitgaven van een campagne per week gedeeld door
+     de leads van die campagne in die week; zie herbereken_lead_kosten in
+     migratie 174/176. Hier stond een eigen berekening die de uitgaven van de
+     laatste 7 dagen deelde door de leads van een veel langere periode, wat
+     de CPL gemiddeld rond 3 euro liet uitkomen in plaats van rond 15 tot 20.
+     Meta corrigeert uitgaven achteraf; daarom 30 dagen terug. */
   let leadsUpdated = 0;
-  let truncated = false;
-
-  // Lookback-venster: alleen leads die nog relevant zijn voor CPL-attributie. Bij groei voorkomt dit een full-table-scan.
-  const leadCutoff = new Date(Date.now() - META_LEAD_LOOKBACK_DAYS * 24 * 60 * 60 * 1000).toISOString();
-
-  type OurLead = { id: string; meta_campaign_id: string | null; wervingsdatum: string | null };
-  const ourLeads: OurLead[] = [];
-  let from = 0;
-  while (ourLeads.length < META_LEAD_SCAN_MAX) {
-    const room = META_LEAD_SCAN_MAX - ourLeads.length;
-    const take = Math.min(META_LEAD_PAGE, room);
-    const { data } = await supabase
-      .from('leads')
-      .select('id, meta_campaign_id, wervingsdatum')
-      .neq('bron', 'excel_import')
-      .not('meta_campaign_id', 'is', null)
-      .gte('created_at', leadCutoff)
-      .order('created_at', { ascending: false })
-      .range(from, from + take - 1);
-    if (!data?.length) break;
-    ourLeads.push(...(data as OurLead[]));
-    if (data.length < take) break;
-    from += data.length;
-  }
-  if (ourLeads.length >= META_LEAD_SCAN_MAX) truncated = true;
-
-  const ourLeadsByKey = new Map<string, string[]>();
-  const ourLeadsByCampaign = new Map<string, string[]>();
-  for (const lead of ourLeads) {
-    if (!lead.meta_campaign_id) continue;
-    const dayKey = `${lead.meta_campaign_id}__${lead.wervingsdatum}`;
-    if (!ourLeadsByKey.has(dayKey)) ourLeadsByKey.set(dayKey, []);
-    ourLeadsByKey.get(dayKey)!.push(lead.id);
-
-    if (!ourLeadsByCampaign.has(lead.meta_campaign_id)) ourLeadsByCampaign.set(lead.meta_campaign_id, []);
-    ourLeadsByCampaign.get(lead.meta_campaign_id)!.push(lead.id);
-  }
-
-  const { data: spendRows } = await supabase
-    .from('meta_ad_spend')
-    .select('campaign_id, date, spend')
-    .gte('date', dateFrom)
-    .lte('date', dateTo);
-
-  let leadUpdateChunks = 0;
-
-  if (spendRows && spendRows.length > 0) {
-    const campaignDaySpend = new Map<string, number>();
-    const campaignTotalSpend = new Map<string, number>();
-    for (const sr of spendRows) {
-      const key = `${sr.campaign_id}__${sr.date}`;
-      campaignDaySpend.set(key, (campaignDaySpend.get(key) || 0) + (parseFloat(sr.spend) || 0));
-      campaignTotalSpend.set(sr.campaign_id, (campaignTotalSpend.get(sr.campaign_id) || 0) + (parseFloat(sr.spend) || 0));
-    }
-
-    // Groepeer lead-ids per CPL-waarde, vervolgens 1 update-call per unieke CPL met `.in('id', chunk)`.
-    // Hierdoor schaalt het aantal DB-roundtrips met het aantal unieke CPL's (klein) i.p.v. het aantal leads (groot).
-    const idsByCpl = new Map<number, string[]>();
-    const updatedLeadIds = new Set<string>();
-
-    for (const [key, spend] of campaignDaySpend) {
-      const leadIds = ourLeadsByKey.get(key);
-      if (!leadIds || leadIds.length === 0 || spend === 0) continue;
-      const cpl = Math.round((spend / leadIds.length) * 100) / 100;
-      const bucket = idsByCpl.get(cpl) || [];
-      for (const id of leadIds) {
-        if (!updatedLeadIds.has(id)) {
-          bucket.push(id);
-          updatedLeadIds.add(id);
-        }
-      }
-      idsByCpl.set(cpl, bucket);
-    }
-
-    for (const [campaignId, leadIds] of ourLeadsByCampaign) {
-      const uncosted = leadIds.filter(id => !updatedLeadIds.has(id));
-      if (uncosted.length === 0) continue;
-      const totalSpend = campaignTotalSpend.get(campaignId);
-      const totalOurLeads = leadIds.length;
-      if (!totalSpend || totalOurLeads === 0) continue;
-      const avgCpl = Math.round((totalSpend / totalOurLeads) * 100) / 100;
-      const bucket = idsByCpl.get(avgCpl) || [];
-      for (const id of uncosted) {
-        bucket.push(id);
-        updatedLeadIds.add(id);
-      }
-      idsByCpl.set(avgCpl, bucket);
-    }
-
-    for (const [cpl, ids] of idsByCpl) {
-      for (let i = 0; i < ids.length; i += META_LEAD_UPDATE_CHUNK) {
-        const chunk = ids.slice(i, i + META_LEAD_UPDATE_CHUNK);
-        const { error } = await supabase.from('leads').update({ lead_cost: cpl }).in('id', chunk);
-        leadUpdateChunks++;
-        if (error) {
-          errors.push(`Lead update chunk error (cpl=${cpl}): ${error.message}`);
-        } else {
-          leadsUpdated += chunk.length;
-        }
-      }
-    }
+  const truncated = false;
+  {
+    const vanaf = new Date(`${dateFrom}T00:00:00Z`);
+    vanaf.setUTCDate(vanaf.getUTCDate() - 23);
+    const { data, error } = await supabase.rpc('herbereken_lead_kosten', { p_vanaf: vanaf.toISOString().slice(0, 10) });
+    if (error) errors.push(`Kosten per lead herberekenen mislukt: ${error.message}`);
+    else leadsUpdated = Number(data) || 0;
   }
 
   const computeMs = Date.now() - t0;
@@ -281,9 +186,6 @@ export async function syncMetaAdSpend(dateFrom: string, dateTo: string): Promise
     insightsCount: insights.length,
     upsertChunks,
     synced,
-    leadsScanned: ourLeads.length,
-    leadsScanTruncated: truncated,
-    leadUpdateChunks,
     leadsUpdated,
     errorCount: errors.length,
   });
