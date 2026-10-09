@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireSuperAdmin } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
 import { logAudit } from '@/lib/audit';
+import { berekenBatchWinst } from '@/lib/batchWinst';
+import { laadFacturenPerBatch, laadKostenPerBatch } from '@/lib/batchWinstLaden';
 
 /**
  * Detail van de winst van één batch: per geleverde lead wat hij kostte, uit
@@ -20,6 +22,26 @@ export async function GET(request: NextRequest, { params }: Ctx) {
   if (!UUID.test(batchId)) return NextResponse.json({ error: 'Ongeldige batch' }, { status: 400 });
 
   const supabase = createServerClient();
+
+  /* Alleen de cijfers, voor het winstblok in de batchkaart. */
+  if (request.nextUrl.searchParams.get('samenvatting') === '1') {
+    const { data: batch } = await supabase
+      .from('customer_batches')
+      .select('id, batch_kind, batch_size, total_price, is_paid, mollie_payment_id, leads_delivered_external, extern_bedrag_excl, extern_factuurnummer')
+      .eq('id', batchId)
+      .maybeSingle();
+    if (!batch) return NextResponse.json({ error: 'Batch niet gevonden' }, { status: 404 });
+    try {
+      const [facturen, kosten] = await Promise.all([laadFacturenPerBatch(supabase, [batchId]), laadKostenPerBatch(supabase, [batchId])]);
+      return NextResponse.json(
+        { samenvatting: berekenBatchWinst(batch, facturen.get(batchId) ?? [], kosten.get(batchId) ?? null), extern_factuurnummer: batch.extern_factuurnummer },
+        { headers: { 'Cache-Control': 'no-store' } },
+      );
+    } catch {
+      return NextResponse.json({ error: 'Winst kon niet worden berekend' }, { status: 500 });
+    }
+  }
+
   const { data: toewijzingen, error } = await supabase
     .from('lead_assignments')
     .select('lead_id, assigned_at, source, leads(naam_klant, plaatsnaam, created_at, meta_campaign_id)')

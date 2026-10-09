@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { leesExterneFactuur } from '@/lib/factuurBetaling';
 import { resolveBatchPricing } from '@/lib/batchPricing';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
@@ -287,6 +288,13 @@ export async function POST(request: NextRequest) {
 
   const batchIsPaid = body.is_paid === true;
 
+  /* Al betaald en gefactureerd buiten het systeem om (bijv. Rompslomp): dan
+     maken we hier geen eigen factuur, anders staat dezelfde batch twee keer
+     in de boekhouding. Nummer en bedrag tellen mee voor de winst. */
+  const externGefactureerd = batchIsPaid && body.extern_gefactureerd === true;
+  const externeFactuur = externGefactureerd ? leesExterneFactuur(body) : null;
+  if (externeFactuur && !externeFactuur.ok) return NextResponse.json({ error: externeFactuur.fout }, { status: 400 });
+
   const insertPayload: Record<string, unknown> = {
     customer_id,
     branch,
@@ -298,6 +306,7 @@ export async function POST(request: NextRequest) {
     notes,
     lead_filters: sanitizedFilters,
     status: initialPipelineBatchStatus(batchIsPaid, batch_kind),
+    ...(externeFactuur?.ok ? externeFactuur.waarde : {}),
     is_paid: batchIsPaid,
     lookback_days: lookback,
     starts_at: startsAtValue,
@@ -391,7 +400,7 @@ export async function POST(request: NextRequest) {
   /* Ook factureren wanneer de prijs uit de staffel komt. Voorheen hing dit aan
      het ingevulde formulierveld, dus een batch zonder ingevulde prijs kreeg
      stilzwijgend geen factuur. */
-  if (effectievePrijsPerLead && total_price) {
+  if (effectievePrijsPerLead && total_price && !externGefactureerd) {
     try {
       await createInvoice({
         customer_id,
@@ -570,7 +579,14 @@ export async function PUT(request: NextRequest) {
     'compensations', 'starts_at', 'account_manager_id', 'batch_kind', 'niche_title',
     'meta_campaign_ids', 'meta_campaign_paused_ids', 'meta_campaign_sync_enabled',
     'lead_branch_slug', 'distribution_priority',
+    'extern_factuurnummer', 'extern_bedrag_excl',
   ];
+  if ('extern_factuurnummer' in updates || 'extern_bedrag_excl' in updates) {
+    const ext = leesExterneFactuur(updates);
+    if (!ext.ok) return NextResponse.json({ error: ext.fout }, { status: 400 });
+    if ('extern_factuurnummer' in updates) updates.extern_factuurnummer = ext.waarde.extern_factuurnummer;
+    if ('extern_bedrag_excl' in updates) updates.extern_bedrag_excl = ext.waarde.extern_bedrag_excl;
+  }
   const effectiveBatchKind =
     updates.batch_kind !== undefined
       ? String(updates.batch_kind)

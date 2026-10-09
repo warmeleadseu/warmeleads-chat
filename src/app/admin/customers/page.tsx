@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef, useMemo, Suspense } from 'react';
+import ExterneFactuurKeuze, { naarVelden, type ExterneFactuurStand } from '@/components/admin/ExterneFactuurKeuze';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { createPortal } from 'react-dom';
@@ -3254,7 +3255,9 @@ function BatchesPanel({ customer, branchOptions, onClose, embedded }: { customer
   const [apptForm, setApptForm] = useState<{ branch: string; batch_size: number; price_per_appointment: string; appointments_per_day: string; appointments_per_week: string; notes: string; lead_filters: LeadFilter[]; is_paid: boolean; send_payment_email: boolean }>({ branch: '', batch_size: 10, price_per_appointment: '', appointments_per_day: '', appointments_per_week: '', notes: '', lead_filters: [], is_paid: false, send_payment_email: true });
   const [saving, setSaving] = useState(false);
 
+  const [externeFactuur, setExterneFactuur] = useState<ExterneFactuurStand>({ extern: false, nummer: '', bedrag: '' });
   const resetLeadForm = () => {
+    setExterneFactuur({ extern: false, nummer: '', bedrag: '' });
     setForm({ branch: '', batch_size: 100, price_per_lead: '', leads_per_day: '', leads_per_week: '', lookback_days: '3', notes: '', lead_filters: [], is_paid: false, send_payment_email: true });
     setDraftTargets([]);
   };
@@ -3330,6 +3333,7 @@ function BatchesPanel({ customer, branchOptions, onClose, embedded }: { customer
           lead_filters: form.lead_filters.filter(f => f.field && (f.values?.length || 0) > 0),
           is_paid: form.is_paid,
           ...(form.is_paid ? {} : { send_payment_email: form.send_payment_email }),
+          ...(form.is_paid && externeFactuur.extern ? { extern_gefactureerd: true, ...naarVelden(externeFactuur) } : {}),
           ...(draftTargets.length > 0
             ? { batch_targets: draftTargets.map(({ _key, ...t }) => t) }
             : {}),
@@ -3552,6 +3556,11 @@ function BatchesPanel({ customer, branchOptions, onClose, embedded }: { customer
                   }`} />
                 </button>
               </div>
+              {form.is_paid && (
+                <div className="mb-3 rounded-lg border border-slate-200 bg-white p-3">
+                  <ExterneFactuurKeuze stand={externeFactuur} onChange={setExterneFactuur} modus="aanmaken" />
+                </div>
+              )}
               {!form.is_paid && (
                 <div className="mb-3 flex items-center justify-between rounded-lg border border-slate-200 bg-white p-3">
                   <div>

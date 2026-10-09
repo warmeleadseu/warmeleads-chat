@@ -23,3 +23,20 @@ describe('beheerderNaam', () => {
     expect(beheerderNaam(null)).toBeNull();
   });
 });
+
+import { leesExterneFactuur } from '../factuurBetaling';
+
+describe('leesExterneFactuur', () => {
+  it('nummer en bedrag, komma als decimaalteken', () => {
+    expect(leesExterneFactuur({ extern_factuurnummer: ' RS-2026-041 ', extern_bedrag_excl: '1.250,50'.replace('.', '') }))
+      .toEqual({ ok: true, waarde: { extern_factuurnummer: 'RS-2026-041', extern_bedrag_excl: 1250.5 } });
+  });
+  it('leeg: de batchprijs geldt', () => {
+    expect(leesExterneFactuur({ extern_factuurnummer: '', extern_bedrag_excl: '' }))
+      .toEqual({ ok: true, waarde: { extern_factuurnummer: null, extern_bedrag_excl: null } });
+  });
+  it('ongeldig bedrag', () => {
+    expect(leesExterneFactuur({ extern_bedrag_excl: 'abc' }).ok).toBe(false);
+    expect(leesExterneFactuur({ extern_bedrag_excl: -5 }).ok).toBe(false);
+  });
+});

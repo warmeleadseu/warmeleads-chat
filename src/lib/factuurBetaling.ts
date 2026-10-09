@@ -19,3 +19,23 @@ export function betaaldViaUitBetaalId(betaalId: string | null | undefined): Beta
 export function beheerderNaam(admin: { name?: string | null; email?: string | null } | null | undefined): string | null {
   return admin?.name || admin?.email || null;
 }
+
+export type ExterneFactuur = { extern_factuurnummer: string | null; extern_bedrag_excl: number | null };
+
+/**
+ * Leest factuurnummer en bedrag excl. btw van een factuur die buiten het
+ * systeem om ging (bijvoorbeeld Rompslomp). Een leeg bedrag betekent: de
+ * batchprijs geldt. Geeft een foutmelding terug bij een ongeldig bedrag.
+ */
+export function leesExterneFactuur(invoer: { extern_factuurnummer?: unknown; extern_bedrag_excl?: unknown }):
+  { ok: true; waarde: ExterneFactuur } | { ok: false; fout: string } {
+  const nr = typeof invoer.extern_factuurnummer === 'string' ? invoer.extern_factuurnummer.trim().slice(0, 100) : '';
+  const ruw = invoer.extern_bedrag_excl;
+  let bedrag: number | null = null;
+  if (ruw !== null && ruw !== undefined && String(ruw).trim() !== '') {
+    const n = Number(String(ruw).trim().replace(',', '.'));
+    if (!Number.isFinite(n) || n < 0 || n > 10_000_000) return { ok: false, fout: 'Vul een geldig bedrag excl. btw in' };
+    bedrag = Math.round(n * 100) / 100;
+  }
+  return { ok: true, waarde: { extern_factuurnummer: nr || null, extern_bedrag_excl: bedrag } };
+}

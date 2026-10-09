@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireSuperAdmin } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
-import { berekenBatchWinst, telWinstOp, type WinstFactuur, type WinstKosten } from '@/lib/batchWinst';
+import { berekenBatchWinst, telWinstOp, type WinstKosten } from '@/lib/batchWinst';
+import { laadFacturenPerBatch, laadKostenPerBatch } from '@/lib/batchWinstLaden';
 
 /**
  * Winst per batch, over de batches die in de gekozen periode zijn aangemaakt.
@@ -55,44 +56,12 @@ export async function GET(request: NextRequest) {
 
   const ids = batches.map(b => b.id);
 
-  /* Facturen per batch, met creditnota's (die verwijzen naar de factuur). */
-  const facturenPerBatch = new Map<string, WinstFactuur[]>();
-  const factuurNaarBatch = new Map<string, string>();
-  for (let i = 0; i < ids.length; i += 150) {
-    const { data } = await supabase
-      .from('invoices')
-      .select('id, batch_id, subtotal, credit_note_of')
-      .in('batch_id', ids.slice(i, i + 150));
-    for (const f of data ?? []) {
-      if (!f.batch_id) continue;
-      if (!f.credit_note_of) factuurNaarBatch.set(f.id as string, f.batch_id as string);
-      const lijst = facturenPerBatch.get(f.batch_id as string) ?? [];
-      lijst.push({ subtotal: f.subtotal as number, credit: Boolean(f.credit_note_of) });
-      facturenPerBatch.set(f.batch_id as string, lijst);
-    }
-  }
-  /* Creditnota's zonder eigen batch_id, via de factuur waar ze bij horen. */
-  const factuurIds = [...factuurNaarBatch.keys()];
-  for (let i = 0; i < factuurIds.length; i += 150) {
-    const { data } = await supabase
-      .from('invoices')
-      .select('subtotal, credit_note_of, batch_id')
-      .in('credit_note_of', factuurIds.slice(i, i + 150))
-      .is('batch_id', null);
-    for (const c of data ?? []) {
-      const batchId = factuurNaarBatch.get(c.credit_note_of as string);
-      if (!batchId) continue;
-      const lijst = facturenPerBatch.get(batchId) ?? [];
-      lijst.push({ subtotal: c.subtotal as number, credit: true });
-      facturenPerBatch.set(batchId, lijst);
-    }
-  }
-
-  const kostenPerBatch = new Map<string, WinstKosten>();
-  for (let i = 0; i < ids.length; i += 200) {
-    const { data, error } = await supabase.rpc('batch_winst_kosten', { p_batch_ids: ids.slice(i, i + 200) });
-    if (error) return NextResponse.json({ error: 'Kosten konden niet worden berekend' }, { status: 500 });
-    for (const k of (data ?? []) as (WinstKosten & { batch_id: string })[]) kostenPerBatch.set(k.batch_id, k);
+  const facturenPerBatch = await laadFacturenPerBatch(supabase, ids);
+  let kostenPerBatch: Map<string, WinstKosten>;
+  try {
+    kostenPerBatch = await laadKostenPerBatch(supabase, ids);
+  } catch {
+    return NextResponse.json({ error: 'Kosten konden niet worden berekend' }, { status: 500 });
   }
 
   const rijen = batches.map(b => {

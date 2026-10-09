@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import ExterneFactuurKeuze, { beginStand, naarVelden, type ExterneFactuurStand } from '@/components/admin/ExterneFactuurKeuze';
+import BatchWinstBlok from '@/components/admin/BatchWinstBlok';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -93,6 +95,9 @@ interface Batch {
   meta_sync_last_success_at?: string | null;
   meta_sync_last_error?: string | null;
   distribution_priority?: boolean | null;
+  mollie_payment_id?: string | null;
+  extern_factuurnummer?: string | null;
+  extern_bedrag_excl?: number | string | null;
   batch_targets?: CustomerTargetRow[] | null;
   customers?: {
     id?: string;
@@ -1485,6 +1490,9 @@ function BatchDetailPanel({ batchId, branches, onClose, onEdit, onListRefresh }:
                   </div>
                 </div>
 
+                {/* Winst (alleen superadmin) */}
+                {currentUser.role === 'superadmin' && <BatchWinstBlok batchId={batch.id} />}
+
                 {/* Account Manager */}
                 {currentUser.role !== 'accountmanager' && (
                   <div>
@@ -1691,6 +1699,9 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
   const isNicheResearch = isNicheResearchBatch(batch);
   const initStartsAt = batch.starts_at ? new Date(batch.starts_at) : null;
   const [leadBranchSlug, setLeadBranchSlug] = useState(batch.lead_branch_slug || '');
+  const [externeFactuur, setExterneFactuur] = useState<ExterneFactuurStand>(() => beginStand(batch));
+  /* Echt via Mollie betaald: dan valt er niets te kiezen. */
+  const betaaldViaMollie = (batch.mollie_payment_id ?? '').startsWith('tr_');
   const [form, setForm] = useState({
     batch_size: batch.batch_size,
     leads_delivered: batch.leads_delivered,
@@ -1805,6 +1816,7 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
         lead_filters: form.lead_filters.filter(f => f.field && (f.values?.length || 0) > 0),
         trigger_backfill: batchSizeGrew,
         starts_at: startsAtISO,
+        ...(form.is_paid && !betaaldViaMollie ? naarVelden(externeFactuur) : {}),
       };
       // Lookback: aanpasbaar voor pijplijn-batches (ook na betaling → retroactieve backfill).
       if (isPipelineBatchKind(batch.batch_kind) && !isNicheResearch) {
@@ -2274,7 +2286,7 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
             <div>
               <p className="text-sm font-medium text-slate-700">Betaalstatus</p>
               <p className="text-[11px] text-slate-400">
-                {form.is_paid ? 'Batch is betaald' : 'Klant kan via portaal betalen'}
+                {form.is_paid ? (betaaldViaMollie ? 'Batch is betaald via Mollie' : 'Batch is betaald') : 'Klant kan via portaal betalen'}
               </p>
             </div>
             <button type="button" onClick={() => setForm(f => ({ ...f, is_paid: !f.is_paid }))}
@@ -2287,6 +2299,9 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
               }`} />
             </button>
           </div>
+          {form.is_paid && !betaaldViaMollie && (
+            <ExterneFactuurKeuze stand={externeFactuur} onChange={setExterneFactuur} batchprijs={batch.total_price} modus="bewerken" />
+          )}
 
           {/* Lead filters */}
           <div>
@@ -2342,6 +2357,7 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
     // Mollie-checkout aan te maken zonder mail.
     send_payment_email: true,
   });
+  const [externeFactuur, setExterneFactuur] = useState<ExterneFactuurStand>({ extern: false, nummer: '', bedrag: '' });
   const [saving, setSaving] = useState(false);
   const [branchFields, setBranchFields] = useState<BranchField[]>([]);
   const [pricingInfo, setPricingInfo] = useState<PricingInfo | null>(null);
@@ -2662,6 +2678,7 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
           starts_at: startsAtISO,
           batch_kind: form.batch_delivery === 'bulk' ? 'bulk_leads' : 'leads',
           ...(form.is_paid ? {} : { send_payment_email: form.send_payment_email }),
+          ...(form.is_paid && externeFactuur.extern ? { extern_gefactureerd: true, ...naarVelden(externeFactuur) } : {}),
           ...(form.batch_delivery === 'pipeline'
             ? {
                 ...metaPayload,
@@ -3158,6 +3175,10 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
               }`} />
             </button>
           </div>
+
+          {form.is_paid && !isAppointments && form.batch_delivery !== 'niche_research' && (
+            <ExterneFactuurKeuze stand={externeFactuur} onChange={setExterneFactuur} modus="aanmaken" />
+          )}
 
           {!form.is_paid && (
             <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 p-3">
