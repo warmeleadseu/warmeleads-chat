@@ -1,4 +1,4 @@
-import { binnenProvincieMarge, margeVan } from './provincieDoelMarge';
+import { binnenProvincieMarge, effectieveStraal, margeVan } from './provincieDoelMarge';
 import { leadMatchesAnyProvinceTarget } from './provinceTargetMatch';
 import { targetCountryAllowsLead } from './targetCountryMatch';
 import type { GeoTargetRow } from './batchTargets';
@@ -65,7 +65,7 @@ export function matchLeadToTargets(
       }
     } else if (hasCoords && t.lat != null && t.lng != null && t.radius_km != null) {
       const dist = haversineKm(lead.lat!, lead.lng!, t.lat, t.lng);
-      if (dist <= t.radius_km) {
+      if (dist <= effectieveStraal(t as { radius_km: number; marge_km?: number | null })) {
         const rounded = Math.round(dist * 10) / 10;
         if (bestDistance == null || rounded < bestDistance) {
           bestDistance = rounded;

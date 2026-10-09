@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { requireSuperAdmin } from '@/lib/adminAuth';
 import { leadMatchesAnyProvinceTarget } from '@/lib/provinceTargetMatch';
+import { effectieveStraal } from '@/lib/provincieDoelMarge';
 
 function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371;
@@ -40,7 +41,7 @@ export async function GET(request: NextRequest) {
       .limit(DEBUG_LIMIT),
     supabase
       .from('customer_targets')
-      .select('id, customer_id, label, lat, lng, radius_km, is_active, target_type, provinces')
+      .select('id, customer_id, label, lat, lng, radius_km, marge_km, is_active, target_type, provinces')
       .limit(DEBUG_LIMIT),
     supabase
       .from('customers')
@@ -211,7 +212,8 @@ export async function GET(request: NextRequest) {
         } else if (hasCoords) {
           const dist = haversineKm(lead.lat!, lead.lng!, t.lat, t.lng);
           if (!closestTarget || dist < closestTarget.distance) {
-            closestTarget = { label: t.label, distance: Math.round(dist * 10) / 10, radius: t.radius_km };
+            /* Inclusief de marge van het doel: daarmee rekent de verdeling. */
+            closestTarget = { label: t.label, distance: Math.round(dist * 10) / 10, radius: effectieveStraal(t) };
           }
         }
       }

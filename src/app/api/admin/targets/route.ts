@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin, unauthorized, forbidden } from '@/lib/adminAuth';
 import { logAudit } from '@/lib/audit';
+import { leesMarge, STANDAARD_STRAAL_MARGE_KM } from '@/lib/provincieDoelMarge';
 import { createServerClient } from '@/lib/supabase';
 import { adminCanAccessCustomer, getCustomerScope } from '@/lib/permissions';
 import { distributeUnassignedLeads } from '@/lib/distribution';
@@ -196,6 +197,8 @@ export async function POST(request: NextRequest) {
       lat: verified.lat,
       lng: verified.lng,
       radius_km: radius_km || 25,
+      /* Elk nieuw cirkeldoel krijgt de standaardmarge, apart van de straal. */
+      marge_km: leesMarge((body as { marge_km?: unknown }).marge_km) ?? STANDAARD_STRAAL_MARGE_KM,
       country,
     })
     .select()
@@ -232,6 +235,12 @@ export async function PUT(request: NextRequest) {
 
   if ('country' in updates) {
     updates.country = sanitizeCountry(updates.country);
+  }
+
+  if ('marge_km' in updates) {
+    const m = leesMarge(updates.marge_km);
+    if (m === null) return NextResponse.json({ error: 'Marge moet tussen 0 en 100 km liggen' }, { status: 400 });
+    updates.marge_km = m;
   }
 
   if ('provinces' in updates && Array.isArray(updates.provinces)) {
@@ -278,7 +287,7 @@ export async function PUT(request: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   logKlantGebied(admin, 'klant_target_gewijzigd', data.customer_id, { target_id: id, label: data.label, wijzigingen: updates });
-  const geoFieldChanged = 'lat' in updates || 'lng' in updates || 'radius_km' in updates || 'provinces' in updates || 'is_active' in updates;
+  const geoFieldChanged = 'lat' in updates || 'lng' in updates || 'radius_km' in updates || 'marge_km' in updates || 'provinces' in updates || 'is_active' in updates;
   if (geoFieldChanged) {
     try { distributeUnassignedLeads(); } catch { /* non-blocking */ }
   }

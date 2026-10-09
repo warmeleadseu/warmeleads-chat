@@ -104,7 +104,7 @@ export async function preflightManualAssignments(
 ): Promise<PreflightResult> {
   const { data: targets } = await supabase
     .from('customer_targets')
-    .select('target_type, lat, lng, radius_km, provinces, country, is_active')
+    .select('target_type, lat, lng, radius_km, provinces, country, is_active, marge_km')
     .eq('customer_id', customer.id)
     .eq('is_active', true);
 

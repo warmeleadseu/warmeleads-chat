@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
 import { planMomenten, dagSleutel } from '@/lib/restleadPlanning';
-import { RESTLEAD_REDEN } from '@/lib/restleads';
+import { RESTLEAD_REDEN, STANDAARD_INSTELLINGEN } from '@/lib/restleads';
 import { herverdeelRestleadWachtrij } from '@/lib/restleadWachtrij';
 
 /**
@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json().catch(() => ({}));
   const opdrachten: LeadOpdracht[] = Array.isArray(body.leads) ? body.leads : [];
-  const margeGrens: number = Number(body.marge_grens) || 5;
+  const margeGrens: number = Number(body.marge_grens) || STANDAARD_INSTELLINGEN.marge_km;
 
   if (opdrachten.length === 0) {
     return NextResponse.json({ error: 'Geen leads meegegeven' }, { status: 400 });

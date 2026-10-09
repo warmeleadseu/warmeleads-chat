@@ -50,6 +50,28 @@ export function binnenProvincieMarge(
   return afstand != null && afstand <= margeKm;
 }
 
+/**
+ * De straal waarbinnen een lead bij een cirkeldoel hoort: de straal plus de
+ * marge van het doel. De marge staat apart, zodat in het beheer zichtbaar is
+ * welk deel afspraak is en welk deel speling. Tot 9 okt 2026 zat de marge
+ * ingebakken in radius_km (een script hoogde in september alle actieve
+ * doelen op met 3, toen 7, toen 5 km), waardoor niemand meer kon zien wat de
+ * echte straal van een klant was.
+ */
+export function effectieveStraal(target: { radius_km?: number | null; marge_km?: number | null }): number {
+  return Number(target.radius_km) + margeVan(target);
+}
+
+/** De marge die een nieuw cirkeldoel standaard krijgt, in kilometers. */
+export const STANDAARD_STRAAL_MARGE_KM = 3;
+
+/** Een marge uit invoer: een geheel getal van 0 tot 100, anders null. */
+export function leesMarge(invoer: unknown): number | null {
+  if (invoer === null || invoer === undefined || invoer === '') return null;
+  const m = Math.round(Number(invoer));
+  return Number.isFinite(m) && m >= 0 && m <= 100 ? m : null;
+}
+
 /** De marge van een doelrij, met een veilige ondergrens. */
 export function margeVan(target: { marge_km?: number | null }): number {
   const m = Number(target.marge_km);

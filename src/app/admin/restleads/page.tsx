@@ -133,13 +133,15 @@ export default function RestleadsPage() {
      terugdraaien. */
   const [laatsteActie, setLaatsteActie] = useState<{ lead_id: string; doelen: { customer_id: string; klant: string }[]; tijd: number } | null>(null);
 
-  const [marge, setMarge] = useState('5');
+  const [marge, setMarge] = useState('3');
   const [ruimeMarge, setRuimeMarge] = useState('10');
   const [droogNa, setDroogNa] = useState('7');
 
   /* Pas na de eerste render lezen, anders lopen server- en clientrender uiteen. */
   useEffect(() => {
-    setMarge(leesGetal('marge', '5'));
+    /* Nieuwe sleutel sinds de marge van 5 naar 3 km ging (9 okt 2026), zodat
+       een eerder bewaarde 5 niet blijft hangen. */
+    setMarge(leesGetal('marge-3km', '3'));
     setRuimeMarge(leesGetal('ruime-marge', '10'));
     setDroogNa(leesGetal('droog-na', '7'));
   }, []);
@@ -592,7 +594,7 @@ export default function RestleadsPage() {
         <div>
           <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-slate-400">Marge</label>
           <div className="flex h-9 w-20 items-center rounded-lg border border-slate-200 px-2">
-            <input value={marge} onChange={e => { setMarge(e.target.value); bewaarGetal('marge', e.target.value); }} inputMode="numeric" className="w-full min-w-0 bg-transparent text-sm outline-none" />
+            <input value={marge} onChange={e => { setMarge(e.target.value); bewaarGetal('marge-3km', e.target.value); }} inputMode="numeric" className="w-full min-w-0 bg-transparent text-sm outline-none" />
             <span className="text-xs text-slate-400">km</span>
           </div>
         </div>

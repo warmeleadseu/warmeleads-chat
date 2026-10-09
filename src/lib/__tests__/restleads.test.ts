@@ -67,7 +67,7 @@ describe('afstandBuitenGebied', () => {
 describe('geldendeMarge', () => {
   it('houdt de standaardmarge bij een actieve klant en een geplaatste lead', () => {
     const m = geldendeMarge(STANDAARD_INSTELLINGEN, { droog_dagen: 0 }, 1);
-    expect(m.km).toBe(5);
+    expect(m.km).toBe(3);
     expect(m.ruim).toBe(false);
   });
 

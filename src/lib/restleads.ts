@@ -1,7 +1,7 @@
 import { haversineKm } from './portalDistanceOrigin';
 import { targetCountryAllowsLead } from './targetCountryMatch';
 import { leadMatchesAnyProvinceTarget } from './provinceTargetMatch';
-import { binnenProvincieMarge, margeVan } from './provincieDoelMarge';
+import { binnenProvincieMarge, effectieveStraal, margeVan } from './provincieDoelMarge';
 import { leadPastInBatchVenster } from './verdeelGrenzen';
 
 /**
@@ -51,7 +51,7 @@ export interface RestleadInstellingen {
 }
 
 export const STANDAARD_INSTELLINGEN: RestleadInstellingen = {
-  marge_km: 5,
+  marge_km: 3,
   ruime_marge_km: 10,
   droog_na_dagen: 7,
 };
@@ -153,7 +153,9 @@ export function afstandBuitenGebied(lead: RestLead, doelen: Doelgebied[]): numbe
     if (lead.lat == null || lead.lng == null) continue;
     if (d.lat == null || d.lng == null || d.radius_km == null) continue;
 
-    const buiten = haversineKm(lead.lat, lead.lng, d.lat, d.lng) - d.radius_km;
+    /* Gemeten vanaf de rand inclusief de marge van het doel: binnen die
+       marge plaatst de verdeling de lead zelf al. */
+    const buiten = haversineKm(lead.lat, lead.lng, d.lat, d.lng) - effectieveStraal(d);
     if (buiten <= 0) return 0;
     if (beste === null || buiten < beste) beste = buiten;
   }

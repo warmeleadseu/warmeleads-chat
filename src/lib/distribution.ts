@@ -9,7 +9,7 @@ import { getLeadLimitPeriodAnchors } from './batchAssignmentCaps';
 import { leadMatchesAnyProvinceTarget } from './provinceTargetMatch';
 import { targetCountryAllowsLead } from './targetCountryMatch';
 import { agentDektLocatie } from './agentGebied';
-import { binnenProvincieMarge, margeVan } from './provincieDoelMarge';
+import { binnenProvincieMarge, effectieveStraal, margeVan } from './provincieDoelMarge';
 import { isPipelineFifoHeadBatch, orderPipelineBatchesFifo } from './pipelineBatchFifo';
 import {
   TARGET_AVG_ASSIGNMENTS,
@@ -593,7 +593,7 @@ export async function distributeLead(
         }
       } else if (hasCoords && t.lat != null && t.lng != null && t.radius_km != null) {
         const dist = haversineKm(lead.lat, lead.lng, t.lat, t.lng);
-        if (dist <= t.radius_km) {
+        if (dist <= effectieveStraal(t as { radius_km: number; marge_km?: number | null })) {
           if (!bestMatch || t.radius_km < bestMatch.radius) {
             bestMatch = { radius: t.radius_km, distance: dist };
           }
@@ -1027,7 +1027,7 @@ export async function backfillBatch(batchId: string, lookbackDays: number): Prom
         }
       } else if (lead.lat && lead.lng && t.lat != null && t.lng != null && t.radius_km != null) {
         const dist = haversineKm(lead.lat, lead.lng, t.lat, t.lng);
-        if (dist <= t.radius_km) { inRange = true; bestDist = Math.min(bestDist, dist); }
+        if (dist <= effectieveStraal(t as { radius_km: number; marge_km?: number | null })) { inRange = true; bestDist = Math.min(bestDist, dist); }
       }
     }
     if (!inRange) continue;

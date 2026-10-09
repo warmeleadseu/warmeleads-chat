@@ -147,6 +147,8 @@ interface BranchOption { slug: string; name: string; color: string; is_active: b
 interface Target {
   id: string; customer_id: string; label: string; lat: number | null; lng: number | null;
   radius_km: number; is_active: boolean; created_at: string;
+  /** Speling bovenop de straal; de verdeling rekent met straal + marge. */
+  marge_km?: number | null;
   target_type: 'radius' | 'province'; provinces: string[];
   country: 'NL' | 'BE' | null;
 }
@@ -2429,6 +2431,7 @@ function TargetsPanel({ customer, onClose, embedded }: { customer: Customer; onC
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editLabel, setEditLabel] = useState('');
   const [editRadius, setEditRadius] = useState(25);
+  const [editMarge, setEditMarge] = useState(3);
   const [editCityQuery, setEditCityQuery] = useState('');
   const [editCityResult, setEditCityResult] = useState<{ lat: number; lng: number; naam: string } | null>(null);
   const [editCitySearching, setEditCitySearching] = useState(false);
@@ -2552,6 +2555,7 @@ function TargetsPanel({ customer, onClose, embedded }: { customer: Customer; onC
     setEditingId(t.id);
     setEditLabel(t.label);
     setEditRadius(t.radius_km);
+    setEditMarge(Number(t.marge_km) || 0);
     setEditCityQuery('');
     setEditCityResult(null);
     setEditCityError('');
@@ -2596,6 +2600,7 @@ function TargetsPanel({ customer, onClose, embedded }: { customer: Customer; onC
     const updates: Record<string, unknown> = { id: t.id };
     if (isRadius) {
       updates.radius_km = editRadius;
+      updates.marge_km = Math.max(0, Math.min(100, Math.round(editMarge || 0)));
       if (editCityResult) {
         updates.label = editCityResult.naam;
         updates.lat = editCityResult.lat;
@@ -2868,10 +2873,20 @@ function TargetsPanel({ customer, onClose, embedded }: { customer: Customer; onC
                           </p>
                         </div>
                       )}
-                      <div className="mb-3">
-                        <label className="mb-1 block text-xs font-medium text-slate-500">Radius (km)</label>
-                        <input type="number" value={editRadius} onChange={e => setEditRadius(Number(e.target.value))} min={1} max={500}
-                          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
+                      <div className="mb-3 grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="mb-1 block text-xs font-medium text-slate-500">Radius (km)</label>
+                          <input type="number" value={editRadius} onChange={e => setEditRadius(Number(e.target.value))} min={1} max={500}
+                            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs font-medium text-slate-500">Marge (km)</label>
+                          <input type="number" value={editMarge} onChange={e => setEditMarge(Number(e.target.value))} min={0} max={100}
+                            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
+                        </div>
+                        <p className="col-span-2 text-[11px] text-slate-400">
+                          Leads tot {(Number(editRadius) || 0) + Math.max(0, Number(editMarge) || 0)} km worden geleverd: de radius plus de marge.
+                        </p>
                       </div>
                       <div className="mb-3">
                         <label className="mb-1 block text-xs font-medium text-slate-500">Land-restrictie</label>
@@ -2991,6 +3006,11 @@ function TargetsPanel({ customer, onClose, embedded }: { customer: Customer; onC
                       ) : (
                         <p className="mt-0.5 text-xs text-slate-500">
                           Radius: <span className="font-medium">{t.radius_km} km</span>
+                          {Number(t.marge_km) > 0 && (
+                            <span title={`Leads tot ${t.radius_km + Number(t.marge_km)} km worden geleverd`}>
+                              {' '}+ {t.marge_km} km marge
+                            </span>
+                          )}
                           {t.lat != null && t.lng != null && (
                             <>
                               <span className="mx-1.5 text-slate-300">|</span>
