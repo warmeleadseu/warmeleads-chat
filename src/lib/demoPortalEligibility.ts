@@ -5,15 +5,25 @@ type Supabase = ReturnType<typeof createServerClient>;
 /**
  * Brede check: klant is "echt" zodra:
  *  - er minstens één **betaalde** `customer_batches`-rij is (lead, bulk, niche, ...), **of**
+ *  - er minstens één **betaalde** `appointment_batches`-rij is (afspraken), **of**
  *  - er minstens één **non-demo lead_assignments**-rij is (bulk-export, distributie, hand-toewijzing).
+ *
+ * Afspraakbatches telden tot 11 okt 2026 niet mee: een klant die alleen
+ * afspraken kocht (zoals RJ CV Optimalisatie) bleef na betaling in het
+ * demoportaal hangen.
  *
  * Dit voorkomt dat klanten met al verkochte/uitgedeelde leads opnieuw in het demoportaal vallen
  * wanneer `customer_batches.is_paid` om wat voor reden dan ook niet (meer) waar is.
  */
 export async function getHasPaidCustomerBatch(supabase: Supabase, customerId: string): Promise<boolean> {
-  const [paidBatchRes, realAssignRes] = await Promise.all([
+  const [paidBatchRes, paidAppointmentRes, realAssignRes] = await Promise.all([
     supabase
       .from('customer_batches')
+      .select('id', { count: 'exact', head: true })
+      .eq('customer_id', customerId)
+      .eq('is_paid', true),
+    supabase
+      .from('appointment_batches')
       .select('id', { count: 'exact', head: true })
       .eq('customer_id', customerId)
       .eq('is_paid', true),
@@ -24,6 +34,7 @@ export async function getHasPaidCustomerBatch(supabase: Supabase, customerId: st
       .neq('source', 'demo'),
   ]);
   if ((paidBatchRes.count ?? 0) > 0) return true;
+  if ((paidAppointmentRes.count ?? 0) > 0) return true;
   if ((realAssignRes.count ?? 0) > 0) return true;
   return false;
 }
