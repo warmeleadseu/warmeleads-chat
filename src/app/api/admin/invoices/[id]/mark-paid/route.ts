@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin, unauthorized, forbidden } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
 import { beheerderNaam } from '@/lib/factuurBetaling';
+import { logAudit } from '@/lib/audit';
 import { notifyCustomerInvoicePaid } from '@/lib/invoice';
 import { finalizePaidLeadBatch, finalizePaidBulkLeadBatch } from '@/lib/finalizePaidLeadBatch';
 import { isBulkLeadsBatchKind } from '@/lib/batchKind';
@@ -74,6 +75,16 @@ export async function POST(
       .single();
 
     if (batchClaim) {
+      /* Batch ging hierdoor op betaald en actief: vastleggen, net als bij een
+         statuswijziging in het batchformulier. */
+      void logAudit({
+        adminId: admin.id,
+        adminName: beheerderNaam(admin),
+        action: 'batch_status',
+        entityType: 'customer_batch',
+        entityId: batchClaim.id,
+        details: { customer_id: batchClaim.customer_id, branch: batchClaim.branch, status_after: 'active', is_paid_before: false, is_paid_after: true, via: 'factuur handmatig betaald', invoice_id: id },
+      });
       try {
         if (isBulkLeadsBatchKind(batchClaim.batch_kind)) {
           await finalizePaidBulkLeadBatch(supabase, batchClaim, paymentRef, { skipInvoiceHandling: true });

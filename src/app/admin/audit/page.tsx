@@ -49,6 +49,16 @@ const ACTION_LABELS: Record<string, string> = {
   import_leads: 'Leads geïmporteerd',
   distribute_leads: 'Leads verdeeld',
   update_settings: 'Instellingen bijgewerkt',
+  batch_status: 'Batchstatus gewijzigd',
+  batch_externe_factuur: 'Externe factuur vastgelegd',
+  batch_target_toegevoegd: 'Batchgebied toegevoegd',
+  batch_target_gewijzigd: 'Batchgebied gewijzigd',
+  batch_target_verwijderd: 'Batchgebied verwijderd',
+  klant_target_toegevoegd: 'Klantgebied toegevoegd',
+  klant_target_gewijzigd: 'Klantgebied gewijzigd',
+  klant_target_verwijderd: 'Klantgebied verwijderd',
+  quarantaine_vrijgeven: 'Lead uit quarantaine vrijgegeven',
+  quarantaine_afwijzen: 'Lead in quarantaine afgewezen',
 };
 
 const ENTITY_LABELS: Record<string, string> = {
@@ -58,6 +68,8 @@ const ENTITY_LABELS: Record<string, string> = {
   assignment: 'Toewijzing',
   target: 'Doelgebied',
   batch: 'Batch',
+  customer_batch: 'Batch',
+  leads_quarantaine: 'Quarantaine',
   settings: 'Instellingen',
   admin: 'Beheerder',
 };

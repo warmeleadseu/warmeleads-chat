@@ -663,6 +663,32 @@ export async function PUT(request: NextRequest) {
     }).catch(() => {});
   }
 
+  /* Status of betaling met de hand gewijzigd (pauzeren, hervatten, afronden,
+     op betaald zetten). Voorheen kwam dat nergens terecht: bij de kozijnenbatch
+     van Ventasol was niet terug te vinden wie hem had gepauzeerd en wanneer. */
+  const statusNa = (data as { status?: string }).status ?? null;
+  const betaaldNa = (data as { is_paid?: boolean | null }).is_paid ?? null;
+  const statusGewijzigd = statusNa !== existing.status;
+  const betaaldGewijzigd = betaaldNa !== (existing.is_paid ?? null);
+  if (statusGewijzigd || betaaldGewijzigd) {
+    const { data: klant } = await supabase.from('customers').select('name').eq('id', existing.customer_id).maybeSingle();
+    logAudit({
+      adminId: admin.id,
+      adminName: (admin as { name?: string | null }).name ?? null,
+      action: 'batch_status',
+      entityType: 'customer_batch',
+      entityId: id,
+      details: {
+        customer_id: existing.customer_id,
+        customer_name: klant?.name ?? null,
+        branch: (data as { branch?: string }).branch ?? null,
+        status_before: existing.status,
+        status_after: statusNa,
+        ...(betaaldGewijzigd ? { is_paid_before: existing.is_paid ?? null, is_paid_after: betaaldNa } : {}),
+      },
+    }).catch(() => {});
+  }
+
   const batchKindAfterUpdate = String(
     (data as { batch_kind?: string }).batch_kind ?? effectiveBatchKind,
   );
