@@ -63,6 +63,18 @@ describe('berekenBatchWinst: naar rato geleverd', () => {
     expect(w.gerealiseerd).toBe(2000);
   });
 
+  it('afgeronde batch telt volledig, ook als er toewijzingen zijn opgeruimd', () => {
+    const w = berekenBatchWinst({ ...basis, batch_size: 250, total_price: 5125, status: 'completed' }, [], { geleverd: 166, kosten: 0 });
+    expect(w.voortgang).toBe(1);
+    expect(w.gerealiseerd).toBe(5125);
+    expect(w.prognoseWinst).toBe(5125);
+  });
+
+  it('lopende batch met dezelfde aantallen telt naar rato', () => {
+    const w = berekenBatchWinst({ ...basis, batch_size: 250, total_price: 5125, status: 'active' }, [], { geleverd: 166, kosten: 0 });
+    expect(w.voortgang).toBe(0.664);
+  });
+
   it('niche-onderzoek: vast pakket telt in één keer', () => {
     const w = berekenBatchWinst({ ...basis, batch_kind: 'niche_research', total_price: 1000 }, [], { geleverd: 3, kosten: 50 });
     expect(w.gerealiseerd).toBe(1000);

@@ -20,6 +20,8 @@ export type Betaalwijze = 'open' | 'mollie' | 'factuur' | 'extern';
 
 export type WinstBatchInvoer = {
   batch_kind?: string | null;
+  /** Een afgeronde batch is volledig geleverd, ook als er toewijzingen zijn opgeruimd. */
+  status?: string | null;
   batch_size: number;
   total_price: number | string | null;
   is_paid: boolean | null;
@@ -100,7 +102,12 @@ export function berekenBatchWinst(
   const kostenTotaal = getal(kosten?.kosten);
 
   const pakket = batch.batch_kind === 'niche_research';
-  const voortgang = pakket ? 1 : grootte > 0 ? Math.min(1, totaalGeleverd / grootte) : 0;
+  /* Afgerond = volledig geleverd en verdiend. Bij drie Mediabink-batches uit
+     maart en april stond de teller op 250 van 250 terwijl er nog maar 161 tot
+     187 toewijzingen bestonden (opgeruimde leads); op toewijzingen geteld
+     leek zo'n batch voor twee derde verdiend. */
+  const afgerond = batch.status === 'completed';
+  const voortgang = pakket || afgerond ? 1 : grootte > 0 ? Math.min(1, totaalGeleverd / grootte) : 0;
   const gerealiseerd = pakket ? omzet : omzet * voortgang;
   const winst = gerealiseerd - kostenTotaal;
 

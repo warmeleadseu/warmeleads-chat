@@ -27,7 +27,7 @@ export async function GET(request: NextRequest, { params }: Ctx) {
   if (request.nextUrl.searchParams.get('samenvatting') === '1') {
     const { data: batch } = await supabase
       .from('customer_batches')
-      .select('id, batch_kind, batch_size, total_price, is_paid, mollie_payment_id, leads_delivered_external, extern_bedrag_excl, extern_factuurnummer')
+      .select('id, batch_kind, status, batch_size, total_price, is_paid, mollie_payment_id, leads_delivered_external, extern_bedrag_excl, extern_factuurnummer')
       .eq('id', batchId)
       .maybeSingle();
     if (!batch) return NextResponse.json({ error: 'Batch niet gevonden' }, { status: 404 });
