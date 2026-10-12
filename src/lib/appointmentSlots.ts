@@ -41,7 +41,7 @@ interface AppointmentRow {
   status: string;
 }
 
-interface Interval {
+export interface Interval {
   start: Date;
   end: Date;
 }
@@ -136,6 +136,11 @@ export function filterBusyAppointments<T extends { portal_user_id: string | null
   return arr.filter((r) => r.portal_user_id === portalUserId || r.portal_user_id === null);
 }
 
+/** Middernacht (Amsterdam) van een kalenderdag, in ms. */
+function dayIntervalsStart(ymd: string): number {
+  return amsterdamWallTimeToUtc(ymd, '00:00:00').getTime();
+}
+
 function mergeIntervals(intervals: Interval[]): Interval[] {
   if (intervals.length === 0) return [];
   const sorted = [...intervals].sort((a, b) => a.start.getTime() - b.start.getTime());
@@ -168,6 +173,46 @@ function subtractIntervals(base: Interval[], subtract: Interval[]): Interval[] {
     current = next;
   }
   return current;
+}
+
+/**
+ * Tijdsloten op één dag.
+ *
+ * De beschikbaarheid geldt voor de afspraak zelf: bij 18:00 - 19:30 kan een
+ * afspraak van een uur om 18:00 of 18:30. Reistijd zit alleen tussen twee
+ * afspraken: tussen een nieuwe en een bestaande afspraak moet minstens de
+ * grootste van beide reistijden vrij blijven.
+ *
+ * Voorheen moest de reistijd vóór en na elke afspraak ook binnen de
+ * beschikbaarheid passen. RJ CV Optimalisatie (beschikbaar 18:00 - 19:30,
+ * afspraak 60 min + 2 x 30 min reistijd) kreeg daardoor geen enkel tijdslot.
+ */
+export function slotsVoorDag(params: {
+  beschikbaar: Interval[];
+  afspraken: { start: Date; end: Date; buffer: number }[];
+  durationMinutes: number;
+  bufferMinutes: number;
+  step: number;
+  now: Date;
+  from: Date;
+  to: Date;
+}): AvailableSlot[] {
+  const { beschikbaar, afspraken, durationMinutes, bufferMinutes, step, now, from, to } = params;
+  const duur = durationMinutes * 60_000;
+  const uit: AvailableSlot[] = [];
+  for (const iv of beschikbaar) {
+    for (let t = iv.start.getTime(); t + duur <= iv.end.getTime(); t += step * 60_000) {
+      const start = new Date(t);
+      const end = new Date(t + duur);
+      if (start < now || start < from || end > to) continue;
+      const botst = afspraken.some(a => {
+        const gat = Math.max(bufferMinutes, a.buffer) * 60_000;
+        return start.getTime() < a.end.getTime() + gat && a.start.getTime() - gat < end.getTime();
+      });
+      if (!botst) uit.push({ start: start.toISOString(), end: end.toISOString() });
+    }
+  }
+  return uit;
 }
 
 /**
@@ -259,32 +304,28 @@ export async function computeAvailableSlots(params: ComputeSlotsParams): Promise
         }));
       dayIntervals = subtractIntervals(dayIntervals, blockedIntervals);
 
-      const apptIntervals: Interval[] = appointments
-        .filter((a) => amsterdamYmd(new Date(a.starts_at)) === ymd)
-        .map((a) => {
-          const s = new Date(a.starts_at);
-          const buffer = a.travel_buffer_minutes || 0;
-          return {
-            start: new Date(s.getTime() - buffer * 60_000),
-            end: new Date(s.getTime() + (a.duration_minutes + buffer) * 60_000),
-          };
+      const afspraken = appointments
+        .filter((ap) => {
+          /* Ook afspraken die net op een andere kalenderdag beginnen kunnen
+             met hun reistijd raken; een dag ruim pakken is goedkoop. */
+          const st = new Date(ap.starts_at).getTime();
+          return st > dayIntervalsStart(ymd) - 86_400_000 && st < dayIntervalsStart(ymd) + 2 * 86_400_000;
+        })
+        .map((ap) => {
+          const st = new Date(ap.starts_at);
+          return { start: st, end: new Date(st.getTime() + ap.duration_minutes * 60_000), buffer: ap.travel_buffer_minutes || 0 };
         });
 
-      dayIntervals = subtractIntervals(dayIntervals, apptIntervals);
-
-      for (const iv of dayIntervals) {
-        const slotDurationMs = (durationMinutes + bufferMinutes * 2) * 60_000;
-        const ivStartMs = iv.start.getTime();
-        const ivEndMs = iv.end.getTime();
-
-        for (let t = ivStartMs; t + slotDurationMs <= ivEndMs; t += step * 60_000) {
-          const slotStart = new Date(t + bufferMinutes * 60_000);
-          const slotEnd = new Date(slotStart.getTime() + durationMinutes * 60_000);
-          if (slotStart < now) continue;
-          if (slotStart < from || slotEnd > to) continue;
-          slots.push({ start: slotStart.toISOString(), end: slotEnd.toISOString() });
-        }
-      }
+      slots.push(...slotsVoorDag({
+        beschikbaar: dayIntervals,
+        afspraken,
+        durationMinutes,
+        bufferMinutes,
+        step,
+        now,
+        from,
+        to,
+      }));
     }
 
     ymd = addCivilDays(ymd, 1);
