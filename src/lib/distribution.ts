@@ -21,6 +21,7 @@ import {
 import { mirrorLeadToMasterPortal, MIRROR_ASSIGNMENT_SOURCE } from './masterPortalMirror';
 import { fetchActiveBatchTargetsByBatch, type GeoTargetRow } from './batchTargets';
 import { inhaalslagWeigering, kiesDerdeKlantLeads, leadPastInBatchVenster } from './verdeelGrenzen';
+import { INHAALSLAG_VENSTER_UREN, planInhaalslag, vroegsteMoment } from './inhaalslagPlanning';
 
 const MAX_LEAD_AGE_DAYS = 3;
 const COOLDOWN_HOURS = 12;
@@ -834,8 +835,8 @@ export async function distributeLeads(leads: LeadForDistribution[]): Promise<{ d
  * - 12 uur pauze tussen twee klanten, en geen derde klant (zie
  *   `inhaalslagWeigering`).
  */
-export async function backfillBatch(batchId: string, lookbackDays: number): Promise<{ assigned: number }> {
-  if (lookbackDays <= 0) return { assigned: 0 };
+export async function backfillBatch(batchId: string, lookbackDays: number): Promise<{ assigned: number; gepland: number }> {
+  if (lookbackDays <= 0) return { assigned: 0, gepland: 0 };
 
   const supabase = createServerClient();
 
@@ -847,11 +848,11 @@ export async function backfillBatch(batchId: string, lookbackDays: number): Prom
     .single();
 
   if (!batch || !isPipelineBatchKind((batch as { batch_kind?: string }).batch_kind)) {
-    return { assigned: 0 };
+    return { assigned: 0, gepland: 0 };
   }
-  if (batchIsAtCapacity(batch)) return { assigned: 0 };
-  if (batch.is_paid === false) return { assigned: 0 };
-  if (batch.starts_at && new Date(batch.starts_at) > new Date()) return { assigned: 0 };
+  if (batchIsAtCapacity(batch)) return { assigned: 0, gepland: 0 };
+  if (batch.is_paid === false) return { assigned: 0, gepland: 0 };
+  if (batch.starts_at && new Date(batch.starts_at) > new Date()) return { assigned: 0, gepland: 0 };
 
   const nowBf = new Date();
   const { data: fifoSiblings } = await supabase
@@ -864,7 +865,7 @@ export async function backfillBatch(batchId: string, lookbackDays: number): Prom
     .neq('is_paid', false);
 
   if (!isPipelineFifoHeadBatch(batch, fifoSiblings || [], nowBf)) {
-    return { assigned: 0 };
+    return { assigned: 0, gepland: 0 };
   }
 
   // Batch-target-override: eigen actieve targetgebieden van de batch overrulen de klant.
@@ -882,7 +883,7 @@ export async function backfillBatch(batchId: string, lookbackDays: number): Prom
     targets = (custTargets || []) as GeoTargetRow[];
   }
 
-  if (targets.length === 0) return { assigned: 0 };
+  if (targets.length === 0) return { assigned: 0, gepland: 0 };
 
   // Load exclusion list for this customer (bidirectional)
   const { data: custRow } = await supabase
@@ -934,7 +935,7 @@ export async function backfillBatch(batchId: string, lookbackDays: number): Prom
 
   const { data: leads } = await leadsQuery.limit(BACKFILL_LEAD_SCAN_LIMIT);
 
-  if (!leads || leads.length === 0) return { assigned: 0 };
+  if (!leads || leads.length === 0) return { assigned: 0, gepland: 0 };
 
   const alreadyAssigned = await fetchAllLeadIdsAssignedToCustomer(supabase, batch.customer_id);
 
@@ -947,15 +948,14 @@ export async function backfillBatch(batchId: string, lookbackDays: number): Prom
   const nowCap = new Date();
 
   const filters: LeadFilter[] = Array.isArray(batch.lead_filters) ? batch.lead_filters : [];
-  let assigned = 0;
 
-  const backfillExternal = (batch as any).leads_delivered_external || 0;
+  const backfillExternal = Number((batch as { leads_delivered_external?: number | null }).leads_delivered_external) || 0;
 
   const { count: initialAssignCount } = await supabase
     .from('lead_assignments')
     .select('id', { count: 'exact', head: true })
     .eq('batch_id', batch.id);
-  let runningAssignCount = initialAssignCount ?? 0;
+  const runningAssignCount = initialAssignCount ?? 0;
 
   const dailyLimit = batch.leads_per_day && batch.leads_per_day > 0 ? Number(batch.leads_per_day) : null;
   const weeklyLimit = batch.leads_per_week && batch.leads_per_week > 0 ? Number(batch.leads_per_week) : null;
@@ -976,115 +976,108 @@ export async function backfillBatch(batchId: string, lookbackDays: number): Prom
       if (a.assigned_at && new Date(a.assigned_at) >= dayStart) vandaagGeleverd++;
     }
   }
-  let skippedByPauze = 0;
+  /* Wat al in de wachtrij staat voor deze batch telt mee: voor de ruimte in
+     de batch, het dagmaximum, en om een lead niet twee keer in te plannen. */
+  const { data: alGepland } = await supabase
+    .from('geplande_leadleveringen')
+    .select('lead_id, gepland_voor')
+    .eq('batch_id', batch.id)
+    .eq('status', 'gepland');
+  const alGeplandIds = new Set((alGepland || []).map(g => g.lead_id as string));
+  const { dayStart: vandaagStart } = getLeadLimitPeriodAnchors(new Date());
+  const morgenStart = new Date(vandaagStart.getTime() + 86_400_000);
+  const geplandVandaag = (alGepland || []).filter(g => {
+    const t = new Date(g.gepland_voor as string);
+    return t >= vandaagStart && t < morgenStart;
+  }).length;
+
+  let ruimteBatch = isCappedDeliveryModel(batch.delivery_model, batch.batch_kind)
+    ? Math.max(0, Number(batch.batch_size) - (runningAssignCount + backfillExternal) - alGeplandIds.size)
+    : Infinity;
+  /* Ingeplande leads tellen mee voor het dagmaximum (afspraak 12 okt 2026). */
+  let ruimteDag = dailyLimit !== null ? Math.max(0, dailyLimit - vandaagGeleverd - geplandVandaag) : Infinity;
+  let ruimteWeek = weeklyLimit !== null ? Math.max(0, weeklyLimit - dezeWeekGeleverd - alGeplandIds.size) : Infinity;
+
   let skippedByDerdeKlant = 0;
   let skippedByVenster = 0;
-
   let skippedByDailyLimit = 0;
   let skippedByWeeklyLimit = 0;
   let skippedByCap = 0;
 
+  const kandidaten: { lead_id: string; vroegst: Date | null }[] = [];
   for (const lead of leads) {
-    if (batchIsAtCapacity({ ...batch, leads_delivered: runningAssignCount + backfillExternal })) break;
+    if (ruimteBatch <= 0) break;
+    if (ruimteDag <= 0) { skippedByDailyLimit++; break; }
+    if (ruimteWeek <= 0) { skippedByWeeklyLimit++; break; }
 
-    if (alreadyAssigned.has(lead.id)) continue;
+    if (alreadyAssigned.has(lead.id) || alGeplandIds.has(lead.id)) continue;
     if (excludedLeadIds.has(lead.id)) continue;
     if (!matchesAllFilters(lead as LeadForDistribution, filters)) continue;
 
-    // Max. aantal klanten per lead respecteren (zelfde regel als de pipeline).
-    if (
-      !canAssignWithinCap(
-        lead as LeadForDistribution,
-        assignmentsByLead.get(lead.id) || [],
-        batch.customer_id,
-        nowCap,
-      )
-    ) {
-      skippedByCap++;
-      continue;
-    }
-
-    /* Dag- of weekmaximum vol: voor deze inhaalslag klaar. De gewone
-       verdeling gaat morgen (of volgende week) verder. */
-    if (dailyLimit !== null && vandaagGeleverd >= dailyLimit) { skippedByDailyLimit++; break; }
-    if (weeklyLimit !== null && dezeWeekGeleverd >= weeklyLimit) { skippedByWeeklyLimit++; break; }
-
+    const bestaand = assignmentsByLead.get(lead.id) || [];
+    if (!canAssignWithinCap(lead as LeadForDistribution, bestaand, batch.customer_id, nowCap)) { skippedByCap++; continue; }
     if (!leadPastInBatchVenster(lead as { created_at?: string | null }, batch)) { skippedByVenster++; continue; }
-
-    const weigering = inhaalslagWeigering(assignmentsByLead.get(lead.id) || [], batch.customer_id, nowCap);
-    if (weigering === 'pauze') { skippedByPauze++; continue; }
-    if (weigering === 'derde_klant') { skippedByDerdeKlant++; continue; }
+    /* Geen derde klant via een inhaalslag. De 12 uur tussen twee klanten
+       wacht de planning af in plaats van de lead over te slaan. */
+    if (inhaalslagWeigering(bestaand, batch.customer_id, nowCap) === 'derde_klant') { skippedByDerdeKlant++; continue; }
 
     let inRange = false;
-    let bestDist = Infinity;
     for (const t of targets) {
       if (!targetCountryAllowsLead(t as { country?: string | null }, lead)) continue;
       if ((t.target_type || 'radius') === 'province') {
         const provs: string[] = Array.isArray(t.provinces) ? t.provinces : [];
-        if (provs.length > 0 && leadMatchesAnyProvinceTarget(lead, provs)) {
-          inRange = true;
-          bestDist = Math.min(bestDist, 0);
-        }
+        if (provs.length > 0 && leadMatchesAnyProvinceTarget(lead, provs)) inRange = true;
       } else if (lead.lat && lead.lng && t.lat != null && t.lng != null && t.radius_km != null) {
         const dist = haversineKm(lead.lat, lead.lng, t.lat, t.lng);
-        if (dist <= effectieveStraal(t as { radius_km: number; marge_km?: number | null })) { inRange = true; bestDist = Math.min(bestDist, dist); }
+        if (dist <= effectieveStraal(t as { radius_km: number; marge_km?: number | null })) inRange = true;
       }
     }
     if (!inRange) continue;
 
-    const { data: insertedAssignment, error } = await supabase
-      .from('lead_assignments')
-      .insert({ lead_id: lead.id, customer_id: batch.customer_id, batch_id: batch.id, distance_km: Math.round(bestDist * 10) / 10 })
-      .select('id')
-      .single();
-
-    if (!error && insertedAssignment) {
-      const { onLeadAssignedToCustomer } = await import('@/lib/integrations/onLeadAssigned');
-      onLeadAssignedToCustomer({
-        customerId: batch.customer_id,
-        leadId: lead.id,
-        assignmentId: insertedAssignment.id,
-      });
-      assigned++;
-      runningAssignCount++;
-      alreadyAssigned.add(lead.id);
-      vandaagGeleverd++;
-      dezeWeekGeleverd++;
-
-      // Auto-assign to portal user if rules match
-      assignToPortalUser(supabase, batch.customer_id, lead).catch(() => {});
-
-      try {
-        const { data: custData } = await supabase.from('customers').select('id, name, email, contact_person, email_notifications').eq('id', batch.customer_id).single();
-        if (custData) {
-          if (custData.email && custData.email_notifications) sendLeadNotification(custData, lead);
-          sendNewLeadPush(custData.id, lead).catch(() => {});
-        }
-      } catch { /* notification failure should not block */ }
-    }
+    kandidaten.push({ lead_id: lead.id, vroegst: vroegsteMoment(bestaand, batch.customer_id, nowCap) });
+    ruimteBatch--;
+    ruimteDag--;
+    ruimteWeek--;
   }
 
-  if (assigned > 0) {
-    await syncBatchDelivered(supabase, batch.id);
+  /* Gefaseerd over 8 uur in de wachtrij; de verdeelronde levert ze af en
+     controleert de regels opnieuw op het moment van leveren. Het gebied is
+     hier al getoetst met de batchgebieden erbij, vandaar negeer_geo. */
+  const planning = planInhaalslag(kandidaten, nowCap);
+  if (planning.length > 0) {
+    const reden = `Terugkijkperiode ${lookbackDays} dag${lookbackDays === 1 ? '' : 'en'}, gefaseerd over ${INHAALSLAG_VENSTER_UREN} uur.`;
+    const { error: planFout } = await supabase.from('geplande_leadleveringen').upsert(
+      planning.map(p => ({
+        lead_id: p.lead_id,
+        customer_id: batch.customer_id,
+        batch_id: batch.id,
+        gepland_voor: p.gepland_voor.toISOString(),
+        status: 'gepland',
+        pogingen: 0,
+        negeer_geo: true,
+        soort: 'inhaalslag',
+        reden,
+        aangemaakt_door: 'inhaalslag',
+      })),
+      { onConflict: 'lead_id,customer_id', ignoreDuplicates: true },
+    );
+    if (planFout) console.error('[backfillBatch] inplannen mislukt:', planFout.message);
   }
 
-  if (skippedByDailyLimit > 0 || skippedByWeeklyLimit > 0 || skippedByCap > 0 || skippedByPauze > 0 || skippedByDerdeKlant > 0 || skippedByVenster > 0) {
-    console.info('[backfillBatch] limits respected', {
-      batchId: batch.id,
-      assigned,
-      skippedByDailyLimit,
-      skippedByWeeklyLimit,
-      skippedByCap,
-      skippedByPauze,
-      skippedByDerdeKlant,
-      skippedByVenster,
-      leads_per_day: dailyLimit,
-      leads_per_week: weeklyLimit,
-      lookbackDays,
-    });
-  }
+  console.info('[backfillBatch] gefaseerd ingepland', {
+    batchId: batch.id,
+    gepland: planning.length,
+    afgevallenBuitenVenster: kandidaten.length - planning.length,
+    skippedByDailyLimit,
+    skippedByWeeklyLimit,
+    skippedByCap,
+    skippedByDerdeKlant,
+    skippedByVenster,
+    leads_per_day: dailyLimit,
+    lookbackDays,
+  });
 
-  return { assigned };
+  return { assigned: 0, gepland: planning.length };
 }
 
 /**

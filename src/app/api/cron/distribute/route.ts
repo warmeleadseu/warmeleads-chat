@@ -276,7 +276,7 @@ async function verdeelronde(supabase: ReturnType<typeof createServerClient>) {
       if (lookback > 0) {
         try {
           const result = await backfillBatch(b.id, lookback);
-          cronBackfilled += result.assigned;
+          cronBackfilled += result.gepland;
         } catch { /* non-blocking */ }
       }
     }

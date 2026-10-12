@@ -236,6 +236,6 @@ export async function finalizePaidLeadBatch(
   const startsInFuture = claimed.starts_at && new Date(claimed.starts_at) > new Date();
   if (!startsInFuture) {
     const lookback = claimed.lookback_days ?? 3;
-    if (lookback > 0) backfillBatch(claimed.id, lookback).catch(() => {});
+    if (lookback > 0) await backfillBatch(claimed.id, lookback).catch(err => console.error('[finalizePaidLeadBatch] inhaalslag mislukt:', err));
   }
 }

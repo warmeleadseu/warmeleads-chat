@@ -377,7 +377,7 @@ export async function POST(request: NextRequest) {
   // Targeted backfill: only if starts_at is NULL or in the past
   const startsInFuture = startsAtValue && new Date(startsAtValue) > new Date();
   if (lookback > 0 && !startsInFuture && batchIsPaid && isPipelineBatchKind(batch_kind)) {
-    try { backfillBatch(data.id, lookback); } catch { /* non-blocking */ }
+    await backfillBatch(data.id, lookback).catch(err => console.error('[admin/batches POST] inhaalslag mislukt:', err));
   }
 
   // Admin notification email + invoice if paid with pricing
@@ -705,7 +705,7 @@ export async function PUT(request: NextRequest) {
   const batchGrew = trigger_backfill && updates.batch_size && updates.batch_size > existing.batch_size;
   if (batchGrew && isPipelineBatchKind(batchKindAfterUpdate) && data.is_paid === true) {
     const lookback = (data as { lookback_days?: number | null }).lookback_days ?? existing.lookback_days ?? 3;
-    try { backfillBatch(id, Math.max(lookback, 0)); } catch { /* non-blocking */ }
+    await backfillBatch(id, Math.max(lookback, 0)).catch(err => console.error('[admin/batches PUT] inhaalslag mislukt:', err));
   }
 
   // Lookback gewijzigd → met terugwerkende kracht opnieuw backfillen (alleen extra
@@ -723,7 +723,7 @@ export async function PUT(request: NextRequest) {
     nextLookback > 0 &&
     !batchGrew
   ) {
-    try { backfillBatch(id, nextLookback); } catch { /* non-blocking */ }
+    await backfillBatch(id, nextLookback).catch(err => console.error('[admin/batches PUT] inhaalslag mislukt:', err));
     try { distributeUnassignedLeads(); } catch { /* non-blocking */ }
   }
 

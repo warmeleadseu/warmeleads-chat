@@ -623,7 +623,7 @@ export async function POST(request: NextRequest) {
       ).catch(() => {});
 
       if (orderBatchKind === 'leads') {
-        backfillBatch(newBatch.id, 3).catch(() => {});
+        await backfillBatch(newBatch.id, 3).catch(err => console.error('[mollie] inhaalslag mislukt:', err));
       }
 
       if (isMetaCampaignSyncBatchKind(orderBatchKind)) {

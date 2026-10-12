@@ -134,11 +134,13 @@ async function provinceTokensForBatch(
  * van "Heel Nederland" in drie minuten 44 oudere leads. Lookback 0 of leeg:
  * alleen nieuwe leads, via de gewone verdeling.
  */
-function triggerRedistribution(batchId: string, lookbackDays: number | null): void {
+async function triggerRedistribution(batchId: string, lookbackDays: number | null): Promise<void> {
   try { distributeUnassignedLeads(); } catch { /* non-blocking */ }
   const lookback = Math.max(0, Number(lookbackDays) || 0);
   if (lookback > 0) {
-    try { backfillBatch(batchId, lookback); } catch { /* non-blocking */ }
+    /* Afwachten: de inhaalslag plant leads in de wachtrij; zonder await kan
+       Vercel de functie stoppen voordat dat klaar is. */
+    await backfillBatch(batchId, lookback).catch(err => console.error('[batch-targets] inhaalslag mislukt:', err));
   }
 }
 
@@ -209,7 +211,7 @@ export async function POST(request: NextRequest) {
       .single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     logGebied(admin, 'batch_target_toegevoegd', batch, { target_id: data.id, label: data.label, target_type: 'province', provinces: normalized });
-    triggerRedistribution(batch_id, batch.lookback_days);
+    await triggerRedistribution(batch_id, batch.lookback_days);
     return NextResponse.json(data, { status: 201 });
   }
 
@@ -236,7 +238,7 @@ export async function POST(request: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   logGebied(admin, 'batch_target_toegevoegd', batch, { target_id: data.id, label: data.label, target_type: 'radius', radius_km: data.radius_km });
-  triggerRedistribution(batch_id, batch.lookback_days);
+  await triggerRedistribution(batch_id, batch.lookback_days);
   return NextResponse.json(data, { status: 201 });
 }
 
@@ -296,7 +298,7 @@ export async function PUT(request: NextRequest) {
 
   logGebied(admin, 'batch_target_gewijzigd', batch, { target_id: id, label: data.label, wijzigingen: updates });
   const geoFieldChanged = 'lat' in updates || 'lng' in updates || 'radius_km' in updates || 'provinces' in updates || 'is_active' in updates;
-  if (geoFieldChanged) triggerRedistribution(existing.batch_id, batch.lookback_days);
+  if (geoFieldChanged) await triggerRedistribution(existing.batch_id, batch.lookback_days);
 
   return NextResponse.json(data);
 }
