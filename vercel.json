@@ -43,6 +43,10 @@
     {
       "path": "/api/cron/meta-inhaalslag",
       "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/cron/onverkochte-leads-week",
+      "schedule": "0 6 * * 1"
     }
   ]
 }

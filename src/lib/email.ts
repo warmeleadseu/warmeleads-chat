@@ -203,7 +203,7 @@ interface WeeklyStats {
   topBranches: { name: string; count: number }[];
 }
 
-function layout(title: string, content: string): string {
+export function layout(title: string, content: string): string {
   const logoUrl = `${BASE_URL}/warmeleads-logo-2026.png`;
   const year = new Date().getFullYear();
   return `<!DOCTYPE html>
@@ -272,7 +272,7 @@ function dataTable(rows: string, headerLabel?: string): string {
   return `<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="margin:20px 0;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">${header}<tr><td style="padding:0"><table width="100%" cellpadding="0" cellspacing="0" role="presentation">${rows}</table></td></tr></table>`;
 }
 
-function cta(text: string, url: string): string {
+export function cta(text: string, url: string): string {
   return `<table cellpadding="0" cellspacing="0" role="presentation" style="margin:28px 0 8px">
     <tr><td style="border-radius:10px;background:linear-gradient(135deg,#FF6B35,#FF4757)">
       <a href="${url}" target="_blank" style="display:inline-block;padding:14px 32px;color:#ffffff;font-size:14px;font-weight:700;text-decoration:none;letter-spacing:0.3px">${text}</a>

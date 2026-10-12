@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { MASTER_PORTAL_MIRROR_BY_BRANCH } from './masterPortalMirror';
 import type { MargeBbox } from '@/lib/provincieMarge';
 import { buildPhoneSearchIlikeClauses, sanitizePostgrestIlike } from '@/lib/phoneSearch';
 import { PARTNER_PROSPECT_BRANCH_SLUGS } from '@/lib/partnerProspectConstants';
@@ -91,6 +92,7 @@ type ChainableFilter = {
   lte(col: string, val: unknown): ChainableFilter;
   ilike(col: string, pattern: string): ChainableFilter;
   overlaps(col: string, vals: readonly unknown[] | string): ChainableFilter;
+  containedBy(col: string, vals: readonly unknown[] | string): ChainableFilter;
 };
 
 /**
@@ -150,8 +152,20 @@ export function applyLeadFilters<T>(
       q = q.not('assigned_customer_ids', 'ov', `{${vals.join(',')}}`);
     }
   }
-  if (filters.assignment === 'assigned') q = q.eq('is_assigned', true);
-  else if (filters.assignment === 'unassigned') q = q.eq('is_assigned', false);
+  /* Een spiegelkopie naar een masterportaal (alle kozijnenleads gaan ook
+     naar het WarmeLeads.eu-portaal) is geen verkoop. Tot 12 okt 2026 telde
+     die wel: geen enkele kozijnenlead stond ooit op "niet uitgedeeld", ook
+     als geen klant hem kreeg. Nu: uitgedeeld = minstens één andere klant. */
+  const spiegelKlanten = Object.values(MASTER_PORTAL_MIRROR_BY_BRANCH);
+  if (filters.assignment === 'assigned') {
+    q = spiegelKlanten.length > 0
+      ? q.not('assigned_customer_ids', 'cd', `{${spiegelKlanten.join(',')}}`)
+      : q.eq('is_assigned', true);
+  } else if (filters.assignment === 'unassigned') {
+    q = spiegelKlanten.length > 0
+      ? q.containedBy('assigned_customer_ids', spiegelKlanten)
+      : q.eq('is_assigned', false);
+  }
 
   if (filters.status) {
     const vals = String(filters.status).split(',').filter(Boolean);

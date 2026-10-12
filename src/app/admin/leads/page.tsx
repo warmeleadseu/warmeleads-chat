@@ -421,6 +421,25 @@ export default function LeadsCRMPage() {
   useEffect(() => { fetchFacets(); }, [fetchFacets]);
   useEffect(() => { setPage(1); }, [selBranches, selCustomers, selStatuses, selProvinces, selSources, selCampaigns, assignmentFilter, phoneFilter, bulkFilter, dateFrom, dateTo, includeUnknownDate, search, plaatsFilter, plaatsRadiusKm, postcodeRanges, provincieMargeKm, perPage]);
 
+  /* Filters uit de URL, bijvoorbeeld vanuit de wekelijkse mail met
+     onverkochte leads per regio: één klik opent precies die selectie. */
+  useEffect(() => {
+    const SLEUTELS = ['branch', 'province', 'assignment', 'date_from', 'date_to', 'phone_valid', 'include_unknown_date', 'status', 'source'];
+    if (!SLEUTELS.some(k => searchParams.has(k))) return;
+    const params: Record<string, string | undefined> = {};
+    for (const k of SLEUTELS) { const v = searchParams.get(k); if (v != null) params[k] = v; }
+    const st = filterParamsNaarStand(params);
+    setSelBranches(st.selBranches);
+    setSelProvinces(st.selProvinces);
+    setSelStatuses(st.selStatuses);
+    setSelSources(st.selSources);
+    setAssignmentFilter(st.assignmentFilter);
+    setPhoneFilter(st.phoneFilter);
+    setDateFrom(st.dateFrom);
+    setDateTo(st.dateTo);
+    setIncludeUnknownDate(st.includeUnknownDate);
+  }, [searchParams]);
+
   useEffect(() => {
     const c = searchParams.get('customer');
     if (!c) return;
