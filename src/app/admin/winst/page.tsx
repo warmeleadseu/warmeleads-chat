@@ -23,8 +23,9 @@ type Rij = {
   prognoseWinst: number | null; leadsZonderKosten: number; gedeeldGemiddeld: number | null;
 };
 type Totaal = { omzet: number; gerealiseerd: number; kosten: number; winst: number; marge: number | null; prognoseWinst: number };
-type Lekkage = { uitgaven: number; acquisitie: number; aan_batches: number; buiten_batch: number; onverkocht: number; rest: number };
-type Antwoord = { van: string; tot: string; rijen: Rij[]; totaal: Totaal; totaalOnbetaald: Totaal; lekkage: Lekkage | null; error?: string };
+type Lekkage = { uitgaven: number; acquisitie: number; aan_batches: number; intern?: number; buiten_batch: number; onverkocht: number; rest: number };
+type OmzetBuitenBatches = { bedrag: number; facturen: { nummer: string; klant: string; bedrag: number; omschrijving: string | null; betaald: string | null }[] };
+type Antwoord = { van: string; tot: string; rijen: Rij[]; totaal: Totaal; totaalOnbetaald: Totaal; lekkage: Lekkage | null; omzetBuitenBatches?: OmzetBuitenBatches; error?: string };
 type DetailLead = {
   lead_id: string; naam: string; plaats: string; binnengekomen: string | null; geleverd_op: string;
   campagne: string | null; kosten_lead: number | null; kosten_bron: string; klanten: number; aandeel: number;
@@ -252,7 +253,8 @@ export default function WinstPage() {
   const lek = data?.lekkage;
   const lekRegels: [string, number, string][] = lek ? [
     ['Leads in batches', lek.aan_batches, 'naar rato verdeeld over de batches hierboven (alle batches, niet alleen deze selectie)'],
-    ['Leads buiten een batch', lek.buiten_batch, 'bulktoewijzingen en -exports; opbrengst onbekend in het systeem'],
+    ['Leads buiten een batch', lek.buiten_batch, 'bulktoewijzingen en -exports; de betaalde losse facturen staan hieronder bij "omzet buiten batches"'],
+    ['Interne batches', Number(lek.intern) || 0, 'klanten die WarmeLeads zelf is (masterportaal, verzameling voor afspraken); geen omzet van buiten'],
     ['Onverkochte leads', lek.onverkocht, 'leads die naar geen enkele klant gingen'],
     ['Acquisitie', lek.acquisitie, 'campagnes zonder leads, zoals de partnercampagnes die nieuwe klanten werven'],
     ['Overig', lek.rest, 'uitgaven zonder lead, en verschil door de weekverdeling aan de randen van de periode'],
@@ -267,7 +269,7 @@ export default function WinstPage() {
           </h1>
           <p className="mt-0.5 max-w-3xl text-sm text-slate-500">
             Omzet naar rato van wat er geleverd is, min de advertentiekosten van de geleverde leads. Een lead die naar drie klanten ging,
-            telt per batch voor een derde. Alle bedragen excl. btw; advertentiekosten vanaf 1 mei 2026.
+            telt per batch voor een derde. Alle bedragen excl. btw; advertentiekosten vanaf 1 mei 2026. Interne klanten tellen niet mee.
           </p>
         </div>
         <button onClick={() => void laad()} disabled={laden}
@@ -388,6 +390,33 @@ export default function WinstPage() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {data?.omzetBuitenBatches && (
+        <details className="rounded-xl border border-slate-200 bg-white p-4">
+          <summary className="flex cursor-pointer list-none flex-wrap items-baseline justify-between gap-2">
+            <span className="text-sm font-semibold text-slate-800">Omzet buiten batches</span>
+            <span className="text-xs text-slate-400">
+              {data.omzetBuitenBatches.facturen.length} betaalde factu{data.omzetBuitenBatches.facturen.length === 1 ? 'ur' : 'ren'} zonder batch, betaald in deze periode:{' '}
+              <strong className="text-slate-700">{eur(data.omzetBuitenBatches.bedrag)}</strong>
+            </span>
+          </summary>
+          <p className="mt-2 text-xs text-slate-500">
+            Bijvoorbeeld een losse bulkverkoop. Deze omzet hoort bij geen enkele batch en staat daarom niet in de tabel; de kosten van die leads staan hieronder bij &ldquo;leads buiten een batch&rdquo;.
+          </p>
+          {data.omzetBuitenBatches.facturen.length > 0 && (
+            <div className="mt-2 divide-y divide-slate-100 rounded-lg border border-slate-100 text-xs">
+              {data.omzetBuitenBatches.facturen.map(f => (
+                <div key={f.nummer} className="flex flex-wrap items-center gap-x-3 gap-y-0.5 px-3 py-1.5">
+                  <span className="font-medium text-slate-700">{f.nummer}</span>
+                  <span className="min-w-0 flex-1 truncate text-slate-500">{f.klant} · {f.omschrijving}</span>
+                  <span className="text-slate-400">{datum(f.betaald)}</span>
+                  <span className="w-20 text-right font-medium tabular-nums text-slate-700">{eur2(f.bedrag)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </details>
       )}
 
       {lek && (

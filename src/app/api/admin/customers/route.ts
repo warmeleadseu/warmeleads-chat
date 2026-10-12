@@ -166,6 +166,12 @@ export async function POST(request: NextRequest) {
       rest.account_manager_id = admin.id;
     }
 
+    /* Alleen een superadmin maakt een interne klant aan. */
+    if ('intern' in rest) {
+      if (admin.role !== 'superadmin') delete rest.intern;
+      else rest.intern = rest.intern === true;
+    }
+
     const supabase = createServerClient();
 
     if ('branches' in rest) {
@@ -215,6 +221,13 @@ export async function PUT(request: NextRequest) {
     // Voorkom dat een admin-PUT per ongeluk een demo-portaal ontdoet van zijn demo-status.
     const { demo_mode: _ignoredDemoMode, ...updates } = rawUpdates as Record<string, unknown>;
     void _ignoredDemoMode;
+
+    /* "Interne klant" bepaalt of batches als omzet tellen in de winst per
+       batch; alleen een superadmin mag dat wijzigen. */
+    if ('intern' in updates) {
+      if (admin.role !== 'superadmin') delete updates.intern;
+      else updates.intern = updates.intern === true;
+    }
 
     if (password) {
       updates.password_hash = await bcrypt.hash(password as string, 12);

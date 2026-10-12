@@ -31,10 +31,12 @@ export async function GET(request: NextRequest, { params }: Ctx) {
       .eq('id', batchId)
       .maybeSingle();
     if (!batch) return NextResponse.json({ error: 'Batch niet gevonden' }, { status: 404 });
+    const { data: klant } = await supabase.from('customer_batches').select('customers(intern)').eq('id', batchId).maybeSingle();
+    const k = (Array.isArray(klant?.customers) ? klant?.customers[0] : klant?.customers) as { intern?: boolean } | null | undefined;
     try {
       const [facturen, kosten] = await Promise.all([laadFacturenPerBatch(supabase, [batchId]), laadKostenPerBatch(supabase, [batchId])]);
       return NextResponse.json(
-        { samenvatting: berekenBatchWinst(batch, facturen.get(batchId) ?? [], kosten.get(batchId) ?? null), extern_factuurnummer: batch.extern_factuurnummer },
+        { samenvatting: berekenBatchWinst(batch, facturen.get(batchId) ?? [], kosten.get(batchId) ?? null), extern_factuurnummer: batch.extern_factuurnummer, intern: Boolean(k?.intern) },
         { headers: { 'Cache-Control': 'no-store' } },
       );
     } catch {

@@ -30,6 +30,7 @@ const BETAAL: Record<BatchWinst['betaalwijze'], string> = {
 export default function BatchWinstBlok({ batchId }: { batchId: string }) {
   const [w, setW] = useState<BatchWinst | null>(null);
   const [extNr, setExtNr] = useState<string | null>(null);
+  const [intern, setIntern] = useState(false);
   const [verborgen, setVerborgen] = useState(false);
   const [fout, setFout] = useState(false);
 
@@ -41,10 +42,11 @@ export default function BatchWinstBlok({ batchId }: { batchId: string }) {
       .then(async res => {
         if (weg) return;
         if (res.status === 401 || res.status === 403) { setVerborgen(true); return; }
-        const d = (await res.json().catch(() => ({}))) as { samenvatting?: BatchWinst; extern_factuurnummer?: string | null };
+        const d = (await res.json().catch(() => ({}))) as { samenvatting?: BatchWinst; extern_factuurnummer?: string | null; intern?: boolean };
         if (!res.ok || !d.samenvatting) { setFout(true); return; }
         setW(d.samenvatting);
         setExtNr(d.extern_factuurnummer ?? null);
+        setIntern(Boolean(d.intern));
       })
       .catch(() => { if (!weg) setFout(true); });
     return () => { weg = true; };
@@ -65,6 +67,11 @@ export default function BatchWinstBlok({ batchId }: { batchId: string }) {
           <p className="text-xs text-slate-500">De winst kon niet worden berekend.</p>
         ) : !w ? (
           <div className="h-20 animate-pulse rounded-lg bg-slate-50" />
+        ) : intern ? (
+          <div className="space-y-1 text-xs text-slate-600">
+            <p className="font-medium text-slate-700">Interne batch</p>
+            <p>Deze klant is WarmeLeads zelf. De batch telt niet als omzet; de leadkosten ({EURO.format(w.kosten)} voor {w.geleverd} leads) staan in het winstoverzicht apart onder &ldquo;interne batches&rdquo;.</p>
+          </div>
         ) : (
           <div className="space-y-3">
             <div className="grid grid-cols-3 gap-2 text-center">

@@ -63,6 +63,8 @@ interface Customer {
   branches: string[]; is_active: boolean; portal_active: boolean;
   /** Default true: agents zien ook niet-toegewezen leads. False = alleen eigen toegewezen leads. */
   agents_see_unassigned_leads?: boolean;
+  /** WarmeLeads zelf (masterportaal, afsprakenverzameling): telt niet als omzet in de winst per batch. */
+  intern?: boolean;
   has_password?: boolean; notes: string; created_at: string;
   lead_count?: number;
   bulk_lead_count?: number;
@@ -1617,6 +1619,7 @@ function CustomerForm({ customer, branchOptions, allCustomers, accountManagers, 
     is_active: customer?.is_active ?? true,
     portal_active: customer?.portal_active ?? true,
     agents_see_unassigned_leads: customer?.agents_see_unassigned_leads !== false,
+    intern: customer?.intern === true,
     notes: customer?.notes || '',
     password: '',
     exclude_customers: customer?.exclude_customers || [] as string[],
@@ -2143,6 +2146,25 @@ function CustomerForm({ customer, branchOptions, allCustomers, accountManagers, 
               </label>
             </div>
           </div>
+          {currentUser.role === 'superadmin' && (
+            <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-3">
+              <div className="flex items-start gap-2">
+                <input
+                  type="checkbox"
+                  id="intern"
+                  checked={form.intern}
+                  onChange={e => setForm(f => ({ ...f, intern: e.target.checked }))}
+                  className="mt-0.5 rounded border-slate-300"
+                />
+                <label htmlFor="intern" className="text-sm text-slate-700">
+                  <span className="font-medium">Interne klant</span>
+                  <span className="mt-0.5 block text-[11px] text-slate-500">
+                    WarmeLeads zelf, zoals het masterportaal of de verzameling voor afspraken. Batches tellen niet als omzet in de winst per batch; de leadkosten staan daar apart.
+                  </span>
+                </label>
+              </div>
+            </div>
+          )}
           {/* Lead exclusies */}
           <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-3">
             <div className="mb-2">
