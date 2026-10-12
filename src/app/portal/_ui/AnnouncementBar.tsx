@@ -1,6 +1,6 @@
 import { ReactNode } from 'react';
 
-type Variant = 'demo' | 'admin' | 'info';
+type Variant = 'demo' | 'admin' | 'info' | 'actie';
 
 interface AnnouncementBarProps {
   variant: Variant;
@@ -13,10 +13,11 @@ const VARIANT_BG: Record<Variant, string> = {
   demo: 'bg-gradient-to-r from-brand-purple via-brand-pink to-brand-orange text-white',
   admin: 'bg-gradient-to-r from-amber-500 to-orange-500 text-white',
   info: 'bg-brand-purple/5 text-brand-purple/80 border-b border-brand-purple/10',
+  actie: 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white',
 };
 
 /**
- * Uniforme topbar voor demo/admin/info statussen.
+ * Uniforme topbar voor demo/admin/info/actie statussen.
  * Zelfde hoogte en padding voor elke variant, veilig stapelbaar.
  */
 export function AnnouncementBar({ variant, icon, children, action }: AnnouncementBarProps) {

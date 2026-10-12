@@ -49,6 +49,7 @@ const ACTION_LABELS: Record<string, string> = {
   import_leads: 'Leads geïmporteerd',
   distribute_leads: 'Leads verdeeld',
   update_settings: 'Instellingen bijgewerkt',
+  klant_opvolging: 'Klant opgevolgd',
   batch_status: 'Batchstatus gewijzigd',
   batch_externe_factuur: 'Externe factuur vastgelegd',
   batch_target_toegevoegd: 'Batchgebied toegevoegd',

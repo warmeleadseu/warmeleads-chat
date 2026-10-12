@@ -595,6 +595,80 @@ function DemoBanner() {
   );
 }
 
+type NabestelSuggestie = { batch_id: string; branche_naam: string; status: 'bijna_vol' | 'vol'; procent: number; geleverd: number; grootte: number };
+
+/**
+ * Nabestellen: zodra een batch voor 80% vol is (of net vol), een balk met één
+ * knop naar de vooraf ingevulde herbestelling. De mail bij 80% en 100% bestond
+ * al; deze balk zorgt dat de klant het ook ziet als hij in het portaal werkt.
+ * Weg te klikken per batch; na 3 dagen komt hij terug zolang er niet is
+ * nabesteld.
+ */
+const NABESTEL_VERBORGEN_DAGEN = 3;
+function NabestelBanner() {
+  const pathname = usePathname();
+  const [s, setS] = useState<NabestelSuggestie | null>(null);
+  const [weg, setWeg] = useState(false);
+  const sleutel = s ? `wl-nabestel-weg:${s.batch_id}:${s.status}` : null;
+
+  useEffect(() => {
+    let gestopt = false;
+    portalFetch('/api/portal/nabestellen', { cache: 'no-store' })
+      .then(r => (r.ok ? r.json() : null))
+      .then((d: { suggestie?: NabestelSuggestie | null } | null) => { if (!gestopt) setS(d?.suggestie ?? null); })
+      .catch(() => {});
+    return () => { gestopt = true; };
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!sleutel) return;
+    try {
+      const tot = Number(localStorage.getItem(sleutel) || 0);
+      setWeg(tot > Date.now());
+    } catch { setWeg(false); }
+  }, [sleutel]);
+
+  if (!s || weg || pathname?.startsWith('/portal/bestellen')) return null;
+
+  const verberg = () => {
+    setWeg(true);
+    try { if (sleutel) localStorage.setItem(sleutel, String(Date.now() + NABESTEL_VERBORGEN_DAGEN * 86_400_000)); } catch { /* niet erg */ }
+  };
+
+  return (
+    <AnnouncementBar
+      variant="actie"
+      icon={<ShoppingCartIcon className="h-4 w-4" />}
+      action={
+        <div className="flex items-center gap-1.5">
+          <Link
+            href={`/portal/bestellen?batch=${s.batch_id}`}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-bold text-emerald-700 transition hover:bg-emerald-50"
+          >
+            <span className="hidden sm:inline">Nu nabestellen</span>
+            <span className="sm:hidden">Nabestellen</span>
+          </Link>
+          <button onClick={verberg} aria-label="Melding verbergen" className="rounded-lg p-1.5 text-white/80 transition hover:bg-white/15 hover:text-white">
+            <XMarkIcon className="h-4 w-4" />
+          </button>
+        </div>
+      }
+    >
+      {s.status === 'vol' ? (
+        <span>
+          <span className="font-semibold">Je batch {s.branche_naam} is vol.</span>
+          <span className="hidden text-white/90 sm:inline"> Je ontvangt geen nieuwe leads meer; bestel een nieuwe batch met dezelfde instellingen.</span>
+        </span>
+      ) : (
+        <span>
+          <span className="font-semibold">Je batch {s.branche_naam} is voor {s.procent}% vol</span>
+          <span className="hidden text-white/90 sm:inline"> ({s.geleverd} van {s.grootte}). Bestel nu bij, dan loopt de levering zonder onderbreking door.</span>
+        </span>
+      )}
+    </AnnouncementBar>
+  );
+}
+
 function AdminViewBanner({ customerName, adminName, onStop }: { customerName: string; adminName: string; onStop: () => void }) {
   return (
     <AnnouncementBar
@@ -990,6 +1064,7 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
               <RoleSubBar role={portalUser.role} customerName={customer.name} />
             )}
             <PortalHeader customer={customer} portalUser={portalUser} hasPermFn={hasPermFn} onLogout={handleLogout} />
+            {!isDemoPortalExperience(customer) && hasPermFn(PERMISSIONS.ORDERS_CREATE) && <NabestelBanner />}
           </div>
           {!isAdminView && <InstallBanner />}
           <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 lg:px-8">
