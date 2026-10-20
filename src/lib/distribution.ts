@@ -22,6 +22,7 @@ import { mirrorLeadToMasterPortal, MIRROR_ASSIGNMENT_SOURCE } from './masterPort
 import { fetchActiveBatchTargetsByBatch, type GeoTargetRow } from './batchTargets';
 import { inhaalslagWeigering, kiesDerdeKlantLeads, leadPastInBatchVenster } from './verdeelGrenzen';
 import { INHAALSLAG_VENSTER_UREN, planInhaalslag, vroegsteMoment } from './inhaalslagPlanning';
+import { effectiefDirect, vergelijkKandidaten } from './directLeveren';
 
 const MAX_LEAD_AGE_DAYS = 3;
 const COOLDOWN_HOURS = 12;
@@ -286,7 +287,11 @@ type ActiveCustomerBatch = {
   delivery_model?: string | null;
   batch_kind?: string | null;
   lookback_days?: number | null;
-  customers: { id: string; is_active: boolean; portal_active: boolean };
+  /** aan / uit / null (volgt klantkaart); zie directLeveren.ts. */
+  direct_leveren?: string | null;
+  /** Effectieve stand, berekend bij het ophalen. */
+  direct?: boolean;
+  customers: { id: string; is_active: boolean; portal_active: boolean; direct_leveren?: boolean | null };
 };
 
 /** Klant-targetgebied: `customer_targets` heeft naast de geo-velden een klant-id. */
@@ -311,14 +316,17 @@ async function fetchActiveBatchesForBranch(
 ): Promise<ActiveCustomerBatch[]> {
   const { data } = await supabase
     .from('customer_batches')
-    .select('id, customer_id, branch, batch_size, leads_delivered, leads_delivered_external, leads_per_week, leads_per_day, lead_filters, created_at, is_paid, starts_at, distribution_priority, delivery_model, batch_kind, lookback_days, customers!inner(id, is_active, portal_active)')
+    .select('id, customer_id, branch, batch_size, leads_delivered, leads_delivered_external, leads_per_week, leads_per_day, lead_filters, created_at, is_paid, starts_at, distribution_priority, direct_leveren, delivery_model, batch_kind, lookback_days, customers!inner(id, is_active, portal_active, direct_leveren)')
     .eq('branch', branch)
     .eq('status', 'active')
     .eq('batch_kind', 'leads')
     .eq('customers.is_active', true)
     .neq('is_paid', false)
     .order('created_at', { ascending: true });
-  return (data || []) as unknown as ActiveCustomerBatch[];
+  return ((data || []) as unknown as ActiveCustomerBatch[]).map(b => ({
+    ...b,
+    direct: effectiefDirect(b.direct_leveren, b.customers?.direct_leveren),
+  }));
 }
 
 export type DistributeLeadContext = {
@@ -517,6 +525,7 @@ export async function distributeLead(
     distance_km: number;
     recent_24h: number;
     distribution_priority: boolean;
+    direct: boolean;
   }
 
   const matches: Match[] = [];
@@ -615,6 +624,7 @@ export async function distributeLead(
           distance_km: Math.round(bestMatch.distance * 10) / 10,
           recent_24h: 0,
           distribution_priority: batch.distribution_priority === true,
+          direct: batch.direct === true,
         });
       }
     }
@@ -641,22 +651,9 @@ export async function distributeLead(
   }
 
   const prefer = ctx?.preferCustomerId;
-  matches.sort((a, b) => {
-    if (prefer) {
-      const aPref = a.customer_id === prefer;
-      const bPref = b.customer_id === prefer;
-      if (aPref !== bPref) return aPref ? -1 : 1;
-    }
-    if (a.distribution_priority !== b.distribution_priority) {
-      return a.distribution_priority ? -1 : 1;
-    }
-    // 1. Smallest target radius wins (specific area > broad area)
-    if (a.min_radius !== b.min_radius) return a.min_radius - b.min_radius;
-    // 2. Fewest recent assignments wins (fairness round-robin)
-    if (a.recent_24h !== b.recent_24h) return a.recent_24h - b.recent_24h;
-    // 3. Shortest distance as tiebreaker
-    return a.distance_km - b.distance_km;
-  });
+  /* Direct leveren gaat voor voorrang; zonder direct-kandidaten is de
+     volgorde exact zoals voorheen (zie vergelijkKandidaten). */
+  matches.sort((a, b) => vergelijkKandidaten(a, b, prefer));
 
   /**
    * Max 1 toewijzing per lead per run, maar we lopen wél de hele kandidatenlijst
@@ -704,6 +701,7 @@ export async function distributeLead(
         customer_id: m.customer_id,
         batch_id: m.batch_id,
         distance_km: m.distance_km,
+        via_direct: m.direct,
       })
       .select('id')
       .single();
@@ -842,7 +840,7 @@ export async function backfillBatch(batchId: string, lookbackDays: number): Prom
 
   const { data: batch } = await supabase
     .from('customer_batches')
-    .select('id, customer_id, branch, batch_size, leads_delivered, leads_delivered_external, leads_per_week, leads_per_day, lead_filters, is_paid, starts_at, created_at, distribution_priority, batch_kind, delivery_model, lookback_days, customers!inner(id, is_active)')
+    .select('id, customer_id, branch, batch_size, leads_delivered, leads_delivered_external, leads_per_week, leads_per_day, lead_filters, is_paid, starts_at, created_at, distribution_priority, direct_leveren, batch_kind, delivery_model, lookback_days, customers!inner(id, is_active, direct_leveren)')
     .eq('id', batchId)
     .eq('status', 'active')
     .single();
@@ -857,14 +855,17 @@ export async function backfillBatch(batchId: string, lookbackDays: number): Prom
   const nowBf = new Date();
   const { data: fifoSiblings } = await supabase
     .from('customer_batches')
-    .select('id, customer_id, branch, created_at, leads_delivered, batch_size, starts_at, distribution_priority, delivery_model, batch_kind')
+    .select('id, customer_id, branch, created_at, leads_delivered, batch_size, starts_at, distribution_priority, direct_leveren, delivery_model, batch_kind')
     .eq('customer_id', batch.customer_id)
     .eq('branch', batch.branch)
     .eq('status', 'active')
     .eq('batch_kind', 'leads')
     .neq('is_paid', false);
 
-  if (!isPipelineFifoHeadBatch(batch, fifoSiblings || [], nowBf)) {
+  /* Dezelfde volgorde als de verdeling: direct, voorrang, oudste. */
+  const klantDirect = (Array.isArray(batch.customers) ? batch.customers[0] : batch.customers)?.direct_leveren as boolean | null | undefined;
+  const metDirect = <T extends { direct_leveren?: string | null }>(b: T) => ({ ...b, direct: effectiefDirect(b.direct_leveren, klantDirect) });
+  if (!isPipelineFifoHeadBatch(metDirect(batch), (fifoSiblings || []).map(metDirect), nowBf)) {
     return { assigned: 0, gepland: 0 };
   }
 

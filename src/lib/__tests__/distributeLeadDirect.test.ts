@@ -1,0 +1,166 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+/* Alles rond de verdeling dat niet over de keuze gaat, buiten spel. */
+vi.mock('../masterPortalMirror', () => ({
+  MIRROR_ASSIGNMENT_SOURCE: 'mirror',
+  MASTER_PORTAL_MIRROR_BY_BRANCH: {},
+  getMirrorCustomerIdForBranch: () => null,
+  mirrorLeadToMasterPortal: vi.fn(async () => {}),
+}));
+vi.mock('../nicheResearchDistribution', () => ({ tryAssignLeadToNicheResearchBatch: vi.fn(async () => null) }));
+vi.mock('../batchTargets', () => ({ fetchActiveBatchTargetsByBatch: vi.fn(async () => new Map()) }));
+vi.mock('../batchDelivered', () => ({ countDeliveredForBatch: vi.fn(async () => 0), countDistinctLeadsForBatch: vi.fn(async () => 0) }));
+vi.mock('../batchSync', () => ({ syncBatchDelivered: vi.fn(async () => {}) }));
+vi.mock('../email', () => ({ sendLeadNotification: vi.fn() }));
+vi.mock('../pushNotification', () => ({ sendNewLeadPush: vi.fn(async () => {}) }));
+vi.mock('@/lib/integrations/onLeadAssigned', () => ({ onLeadAssignedToCustomer: vi.fn() }));
+vi.mock('../supabase', () => ({ createServerClient: () => { throw new Error('gebruik ctx.supabase'); } }));
+
+import { distributeLead } from '../distribution';
+
+type Batch = Record<string, unknown>;
+
+/**
+ * Nep-database: per tabel (en voor lead_assignments per soort query) vaste
+ * rijen; inserts in lead_assignments worden vastgelegd.
+ */
+function nepDb(opties: {
+  batches: Batch[];
+  targets: Record<string, unknown>[];
+  bestaand?: Record<string, unknown>[];
+  periode?: Record<string, unknown>[];
+}) {
+  const inserts: Record<string, unknown>[] = [];
+  const db = {
+    from(tabel: string) {
+      let selectie = '';
+      let isInsert = false;
+      const b: Record<string, unknown> = {};
+      const rijen = (): unknown[] => {
+        if (tabel === 'customer_batches') return opties.batches;
+        if (tabel === 'customer_targets') return opties.targets;
+        if (tabel === 'customers') return opties.batches.map(x => ({ id: x.customer_id, exclude_customers: [], name: 'k', email: null, email_notifications: false }));
+        if (tabel === 'lead_assignments') {
+          if (selectie.includes('customer_batches(batch_kind)')) return opties.bestaand ?? [];
+          if (selectie === 'batch_id, assigned_at') return opties.periode ?? [];
+          return [];
+        }
+        return [];
+      };
+      for (const m of ['eq', 'neq', 'in', 'gte', 'lte', 'order', 'limit', 'or', 'not', 'contains', 'is']) b[m] = () => b;
+      b.select = (s?: string) => { if (!isInsert) selectie = s ?? ''; return b; };
+      b.insert = (row: Record<string, unknown>) => { isInsert = true; inserts.push({ tabel, ...row }); return b; };
+      b.update = () => b;
+      b.single = async () => ({ data: isInsert ? { id: `nieuw-${inserts.length}` } : rijen()[0] ?? null, error: null });
+      b.maybeSingle = b.single;
+      b.then = (ok: (v: unknown) => unknown) => Promise.resolve({ data: rijen(), error: null }).then(ok);
+      return b;
+    },
+    rpc: async () => ({ data: null, error: null }),
+  };
+  return { db, inserts: () => inserts.filter(i => i.tabel === 'lead_assignments') };
+}
+
+/* Een lead in Utrecht. */
+const LEAD = {
+  id: 'lead-1', branch: 'thuisbatterij', lat: 52.09, lng: 5.12, provincie: 'Utrecht', land: 'NL',
+  bron: 'zapier', phone_valid: true, created_at: new Date().toISOString(), custom_fields: {},
+};
+
+const batch = (klant: string, extra: Batch = {}): Batch => ({
+  id: `batch-${klant}`, customer_id: klant, branch: 'thuisbatterij', batch_size: 100, leads_delivered: 0,
+  leads_delivered_external: 0, leads_per_week: null, leads_per_day: null, lead_filters: [],
+  created_at: '2026-10-01T00:00:00Z', is_paid: true, starts_at: null, distribution_priority: false,
+  direct_leveren: null, delivery_model: 'capped', batch_kind: 'leads', lookback_days: 30,
+  customers: { id: klant, is_active: true, portal_active: true, direct_leveren: false },
+  ...extra,
+});
+const klantDirect = (klant: string, extra: Batch = {}) => batch(klant, { customers: { id: klant, is_active: true, portal_active: true, direct_leveren: true }, ...extra });
+
+/* A: klein gebied vlakbij (wint normaal). B: groot gebied verder weg. */
+const TARGETS = [
+  { customer_id: 'A', target_type: 'radius', lat: 52.09, lng: 5.12, radius_km: 20, marge_km: 0, is_active: true, country: 'NL' },
+  { customer_id: 'B', target_type: 'radius', lat: 52.37, lng: 4.9, radius_km: 60, marge_km: 0, is_active: true, country: 'NL' },
+];
+
+describe('distributeLead met direct leveren', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('niemand op direct: de gewone winnaar (kleinste gebied) krijgt de lead, via_direct false', async () => {
+    const { db, inserts } = nepDb({ batches: [batch('A'), batch('B')], targets: TARGETS });
+    const r = await distributeLead(LEAD as never, { supabase: db as never });
+    expect(r.assignments.map(a => a.customer_id)).toEqual(['A']);
+    expect(inserts()).toHaveLength(1);
+    expect(inserts()[0]).toMatchObject({ customer_id: 'A', via_direct: false });
+  });
+
+  it('klantkaart op direct: die klant wint, ook met een groter gebied, via_direct true', async () => {
+    const { db, inserts } = nepDb({ batches: [batch('A'), klantDirect('B')], targets: TARGETS });
+    const r = await distributeLead(LEAD as never, { supabase: db as never });
+    expect(r.assignments.map(a => a.customer_id)).toEqual(['B']);
+    expect(inserts()[0]).toMatchObject({ customer_id: 'B', via_direct: true });
+  });
+
+  it('alleen de batch op direct (klantkaart uit): ook direct', async () => {
+    const { db, inserts } = nepDb({ batches: [batch('A'), batch('B', { direct_leveren: 'aan' })], targets: TARGETS });
+    await distributeLead(LEAD as never, { supabase: db as never });
+    expect(inserts()[0]).toMatchObject({ customer_id: 'B', via_direct: true });
+  });
+
+  it('klantkaart op direct maar batch op "nooit direct": gewone verdeling', async () => {
+    const { db, inserts } = nepDb({ batches: [batch('A'), klantDirect('B', { direct_leveren: 'uit' })], targets: TARGETS });
+    await distributeLead(LEAD as never, { supabase: db as never });
+    expect(inserts()[0]).toMatchObject({ customer_id: 'A', via_direct: false });
+  });
+
+  it('direct gaat voor voorrang', async () => {
+    const { db, inserts } = nepDb({ batches: [batch('A', { distribution_priority: true }), klantDirect('B')], targets: TARGETS });
+    await distributeLead(LEAD as never, { supabase: db as never });
+    expect(inserts()[0]).toMatchObject({ customer_id: 'B' });
+  });
+
+  it('dagmaximum van de direct-klant vol: de volgende kandidaat krijgt hem', async () => {
+    const vandaag = new Date().toISOString();
+    const { db, inserts } = nepDb({
+      batches: [batch('A'), klantDirect('B', { leads_per_day: 2 })],
+      targets: TARGETS,
+      periode: [{ batch_id: 'batch-B', assigned_at: vandaag }, { batch_id: 'batch-B', assigned_at: vandaag }],
+    });
+    await distributeLead(LEAD as never, { supabase: db as never });
+    expect(inserts()[0]).toMatchObject({ customer_id: 'A', via_direct: false });
+  });
+
+  it('lead buiten het gebied van de direct-klant: gewone verdeling', async () => {
+    const ver = { ...LEAD, lat: 51.44, lng: 5.48, provincie: 'Noord-Brabant' }; /* Eindhoven */
+    const targets = [
+      { customer_id: 'A', target_type: 'radius', lat: 51.44, lng: 5.48, radius_km: 30, marge_km: 0, is_active: true, country: 'NL' },
+      TARGETS[1],
+    ];
+    const { db, inserts } = nepDb({ batches: [batch('A'), klantDirect('B')], targets });
+    await distributeLead(ver as never, { supabase: db as never });
+    expect(inserts()[0]).toMatchObject({ customer_id: 'A', via_direct: false });
+  });
+
+  it('lead die net een andere klant kreeg: geen tweede klant binnen 12 uur, ook niet voor direct', async () => {
+    const { db, inserts } = nepDb({
+      batches: [batch('A'), klantDirect('B')],
+      targets: TARGETS,
+      bestaand: [{ customer_id: 'A', assigned_at: new Date().toISOString(), batch_id: 'batch-A', customer_batches: { batch_kind: 'leads' } }],
+    });
+    const r = await distributeLead(LEAD as never, { supabase: db as never });
+    expect(r.assignments).toEqual([]);
+    expect(inserts()).toHaveLength(0);
+  });
+
+  it('twee direct-klanten: onderling de gewone volgorde (kleinste gebied)', async () => {
+    const { db, inserts } = nepDb({ batches: [klantDirect('A'), klantDirect('B')], targets: TARGETS });
+    await distributeLead(LEAD as never, { supabase: db as never });
+    expect(inserts()[0]).toMatchObject({ customer_id: 'A', via_direct: true });
+  });
+
+  it('demo-lead: nooit verdeeld', async () => {
+    const { db, inserts } = nepDb({ batches: [klantDirect('B')], targets: TARGETS });
+    await distributeLead({ ...LEAD, bron: 'demo' } as never, { supabase: db as never });
+    expect(inserts()).toHaveLength(0);
+  });
+});

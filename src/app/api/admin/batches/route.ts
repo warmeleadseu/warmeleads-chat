@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { leesExterneFactuur } from '@/lib/factuurBetaling';
+import { leesDirectStand } from '@/lib/directLeveren';
 import { resolveBatchPricing } from '@/lib/batchPricing';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
@@ -345,6 +346,13 @@ export async function POST(request: NextRequest) {
 
   if (isPipelineBatchKind(batch_kind)) {
     insertPayload.distribution_priority = body.distribution_priority === true;
+    /* Direct leveren per batch: aan / uit / leeg (volgt klantkaart). Alleen
+       superadmin en admin; ongeldige invoer wordt geweigerd. */
+    if (body.direct_leveren !== undefined && admin.role !== 'accountmanager') {
+      const stand = leesDirectStand(body.direct_leveren);
+      if (stand === undefined) return NextResponse.json({ error: 'Ongeldige stand voor direct leveren' }, { status: 400 });
+      insertPayload.direct_leveren = stand;
+    }
   }
 
   const { data, error } = await supabase.from('customer_batches').insert(insertPayload).select().single();
@@ -578,7 +586,7 @@ export async function PUT(request: NextRequest) {
     'notes', 'lead_filters', 'status', 'completed_at', 'lookback_days',
     'compensations', 'starts_at', 'account_manager_id', 'batch_kind', 'niche_title',
     'meta_campaign_ids', 'meta_campaign_paused_ids', 'meta_campaign_sync_enabled',
-    'lead_branch_slug', 'distribution_priority',
+    'lead_branch_slug', 'distribution_priority', 'direct_leveren',
     'extern_factuurnummer', 'extern_bedrag_excl',
   ];
   if ('extern_factuurnummer' in updates || 'extern_bedrag_excl' in updates) {
@@ -596,6 +604,15 @@ export async function PUT(request: NextRequest) {
       delete updates.distribution_priority;
     } else {
       updates.distribution_priority = updates.distribution_priority === true;
+    }
+  }
+  if ('direct_leveren' in updates) {
+    if (admin.role === 'accountmanager' || !isPipelineBatchKind(effectiveBatchKind)) {
+      delete updates.direct_leveren;
+    } else {
+      const stand = leesDirectStand(updates.direct_leveren);
+      if (stand === undefined) return NextResponse.json({ error: 'Ongeldige stand voor direct leveren' }, { status: 400 });
+      updates.direct_leveren = stand;
     }
   }
   const safeUpdates: Record<string, unknown> = {};
@@ -660,6 +677,20 @@ export async function PUT(request: NextRequest) {
         status_after: (data as { status?: string }).status ?? null,
         reopened: existing.status === 'completed' && (data as { status?: string }).status === 'active',
       },
+    }).catch(() => {});
+  }
+
+  /* Direct leveren op de batch gewijzigd: vastleggen. */
+  const directNa = (data as { direct_leveren?: string | null }).direct_leveren ?? null;
+  const directVoor = (existing as { direct_leveren?: string | null }).direct_leveren ?? null;
+  if ('direct_leveren' in safeUpdates && directNa !== directVoor) {
+    logAudit({
+      adminId: admin.id,
+      adminName: (admin as { name?: string | null }).name ?? null,
+      action: 'direct_leveren_batch',
+      entityType: 'customer_batch',
+      entityId: id,
+      details: { customer_id: existing.customer_id, branch: (data as { branch?: string }).branch ?? null, van: directVoor, naar: directNa },
     }).catch(() => {});
   }
 

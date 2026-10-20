@@ -6,6 +6,7 @@
 export const ADMIN_CUSTOMER_WITH_TARGETS = `customers(
   id,
   name,
+  direct_leveren,
   contact_person,
   email,
   phone,

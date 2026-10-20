@@ -44,6 +44,7 @@ import {
   SignalIcon,
   SparklesIcon,
   ChatBubbleLeftRightIcon,
+  BoltIcon,
 } from '@heroicons/react/24/outline';
 import { AdminContext, type AdminUser } from './adminContext';
 import { AdminConfirmProvider } from '@/components/admin/ui/AdminConfirmProvider';
@@ -84,6 +85,7 @@ const NAV: {
   { label: 'Bestellingen', href: '/admin/orders', icon: ShoppingCartIcon, roles: ['superadmin', 'admin', 'accountmanager'] },
   { label: 'Facturen', href: '/admin/invoices', icon: DocumentTextIcon, roles: ['superadmin', 'admin', 'accountmanager'] },
   { label: 'Winst per batch', href: '/admin/winst', icon: CurrencyEuroIcon, roles: ['superadmin'] },
+  { label: 'Direct leveren', href: '/admin/direct-leveren', icon: BoltIcon, roles: ['superadmin', 'admin'] },
   { label: 'Branches', href: '/admin/branches', icon: Squares2X2Icon, roles: ['superadmin', 'admin'] },
   { label: 'Plan-gesprekken', href: '/admin/agenda', icon: CalendarDaysIcon, roles: ['superadmin', 'admin', 'accountmanager'] },
   { label: 'Team-agenda', href: '/admin/team-agenda', icon: UserGroupIcon, roles: ['superadmin', 'admin', 'accountmanager'] },

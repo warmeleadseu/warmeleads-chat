@@ -47,6 +47,10 @@
     {
       "path": "/api/cron/onverkochte-leads-week",
       "schedule": "0 6 * * 1"
+    },
+    {
+      "path": "/api/cron/direct-vangnet",
+      "schedule": "* * * * *"
     }
   ]
 }

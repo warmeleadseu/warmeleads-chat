@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
   // Sommige oude omgevingen hebben nog geen `country` kolom — netjes
   // detecteren en weglaten uit de SELECT om een 42703-fout te vermijden.
   const hasCountry = await customersHaveCountryColumn(supabase);
-  const baseFields = ['id', 'name', 'email', 'is_active', 'account_manager_id', 'vat_id'];
+  const baseFields = ['id', 'name', 'email', 'is_active', 'account_manager_id', 'vat_id', 'direct_leveren'];
   const selectFields = hasCountry ? [...baseFields, 'country'].join(', ') : baseFields.join(', ');
 
   let query = supabase

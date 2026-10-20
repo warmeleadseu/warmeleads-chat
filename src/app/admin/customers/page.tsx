@@ -56,6 +56,7 @@ import { formatProvinceTargetLabel } from '@/lib/provinceTargetMatch';
 import { ComposeMailDrawer } from '../_components/ComposeMailDrawer';
 import { MailHistory } from '../_components/MailHistory';
 import PartnerOpvolgingBlok from './PartnerOpvolgingBlok';
+import DirectLeverenBlok from './DirectLeverenBlok';
 import { LEAD_STATUS_LABELS, LEAD_STATUS_VALUES } from '@/lib/leadStatuses';
 
 interface Customer {
@@ -65,6 +66,9 @@ interface Customer {
   agents_see_unassigned_leads?: boolean;
   /** WarmeLeads zelf (masterportaal, afsprakenverzameling): telt niet als omzet in de winst per batch. */
   intern?: boolean;
+  /** Krijgt passende leads bij binnenkomst altijd als eerste (per batch te overschrijven). */
+  direct_leveren?: boolean;
+  direct_leveren_sinds?: string | null;
   has_password?: boolean; notes: string; created_at: string;
   lead_count?: number;
   bulk_lead_count?: number;
@@ -1383,6 +1387,15 @@ function CustomerDetailPanel({
 
               {/* Automatische opvolging (Snelraak): direct zien of het aan staat, en aan/uit zetten. */}
               <PartnerOpvolgingBlok customerId={c.id} klantNaam={c.name} />
+
+              {/* Direct leveren: passende leads als eerste, binnen een minuut. */}
+              <DirectLeverenBlok
+                customerId={c.id}
+                klantNaam={c.name}
+                aan={c.direct_leveren === true}
+                sinds={c.direct_leveren_sinds ?? null}
+                onGewijzigd={onRefresh}
+              />
 
               {/* Welcome offer */}
               <WelcomeOfferBlock customer={c} onUpdated={onRefresh} />

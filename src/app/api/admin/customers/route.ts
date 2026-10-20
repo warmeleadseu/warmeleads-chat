@@ -172,6 +172,13 @@ export async function POST(request: NextRequest) {
       else rest.intern = rest.intern === true;
     }
 
+    /* Direct leveren bij aanmaken: alleen superadmin en admin. */
+    delete rest.direct_leveren_sinds;
+    if ('direct_leveren' in rest) {
+      if (admin.role === 'accountmanager' || rest.direct_leveren !== true) delete rest.direct_leveren;
+      else { rest.direct_leveren = true; rest.direct_leveren_sinds = new Date().toISOString(); }
+    }
+
     const supabase = createServerClient();
 
     if ('branches' in rest) {
@@ -229,6 +236,18 @@ export async function PUT(request: NextRequest) {
       else updates.intern = updates.intern === true;
     }
 
+    /* Direct leveren: alleen superadmin en admin. De datum van aanzetten is
+       het begin van de "na"-periode in de vergelijking. */
+    delete updates.direct_leveren_sinds;
+    let directWijziging: boolean | null = null;
+    if ('direct_leveren' in updates) {
+      if (admin.role === 'accountmanager') delete updates.direct_leveren;
+      else {
+        updates.direct_leveren = updates.direct_leveren === true;
+        directWijziging = updates.direct_leveren as boolean;
+      }
+    }
+
     if (password) {
       updates.password_hash = await bcrypt.hash(password as string, 12);
     }
@@ -240,12 +259,22 @@ export async function PUT(request: NextRequest) {
     const supabase = createServerClient();
 
     const hasCountryColumn = await customersHaveCountryColumn(supabase);
-    const beforeSelect = hasCountryColumn ? 'country, vat_id, branches' : 'vat_id, branches';
+    const beforeSelect = hasCountryColumn ? 'country, vat_id, branches, direct_leveren' : 'vat_id, branches, direct_leveren';
     const { data: before } = await supabase
       .from('customers')
       .select(beforeSelect)
       .eq('id', id)
-      .maybeSingle<{ country?: string | null; vat_id?: string | null; branches?: string[] | null }>();
+      .maybeSingle<{ country?: string | null; vat_id?: string | null; branches?: string[] | null; direct_leveren?: boolean | null }>();
+
+    if (directWijziging !== null) {
+      if (directWijziging === (before?.direct_leveren === true)) {
+        /* Ongewijzigd (het formulier stuurt alles mee): datum laten staan. */
+        delete updates.direct_leveren;
+        directWijziging = null;
+      } else {
+        updates.direct_leveren_sinds = directWijziging ? new Date().toISOString() : null;
+      }
+    }
 
     /**
      * Valideer alleen wat de bewerker daadwerkelijk verandert.
@@ -300,6 +329,16 @@ export async function PUT(request: NextRequest) {
 
     const updatePayload = await sanitizeCustomerWritePayload(supabase, updates);
     const { data, error } = await supabase.from('customers').update(updatePayload).eq('id', id).select().single();
+    if (!error && directWijziging !== null) {
+      void logAudit({
+        adminId: admin.id,
+        adminName: admin.name ?? null,
+        action: 'direct_leveren_klant',
+        entityType: 'customer',
+        entityId: id,
+        details: { customer_name: (data as { name?: string } | null)?.name ?? null, direct_leveren: directWijziging },
+      });
+    }
 
     if (error) {
       /* De oorzaak werd hier weggegooid, waardoor "Bijwerken mislukt" jarenlang

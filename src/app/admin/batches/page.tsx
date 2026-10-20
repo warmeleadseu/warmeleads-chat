@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import ExterneFactuurKeuze, { beginStand, naarVelden, type ExterneFactuurStand } from '@/components/admin/ExterneFactuurKeuze';
 import BatchWinstBlok from '@/components/admin/BatchWinstBlok';
+import { directHerkomst, type DirectStand } from '@/lib/directLeveren';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -98,10 +99,13 @@ interface Batch {
   mollie_payment_id?: string | null;
   extern_factuurnummer?: string | null;
   extern_bedrag_excl?: number | string | null;
+  /** aan / uit / null (volgt klantkaart). */
+  direct_leveren?: string | null;
   batch_targets?: CustomerTargetRow[] | null;
   customers?: {
     id?: string;
     name: string;
+    direct_leveren?: boolean | null;
     contact_person?: string | null;
     email?: string | null;
     phone?: string | null;
@@ -170,6 +174,58 @@ function DistributionPriorityField({
   );
 }
 
+/** Effectieve stand van direct leveren voor een label, of null als het niet van toepassing is. */
+function directLabel(b: Pick<Batch, 'direct_leveren' | 'batch_kind' | 'status' | 'customers'>): string | null {
+  if (!isPipelineBatchKind(b.batch_kind) || b.status === 'completed') return null;
+  const h = directHerkomst(b.direct_leveren as DirectStand, b.customers?.direct_leveren);
+  return h.direct ? h.label : null;
+}
+
+/**
+ * Direct leveren per batch: volgt de klantkaart (standaard), altijd direct of
+ * nooit direct. Alleen superadmin en admin wijzigen.
+ */
+function DirectLeverenField({
+  stand,
+  onChange,
+  klantDirect,
+  disabled,
+}: {
+  stand: DirectStand;
+  onChange: (s: DirectStand) => void;
+  klantDirect: boolean | null | undefined;
+  disabled?: boolean;
+}) {
+  const opties: { waarde: DirectStand; titel: string; uitleg: string }[] = [
+    { waarde: null, titel: 'Volgt klantkaart', uitleg: klantDirect ? 'Nu: direct (staat aan op de klantkaart)' : 'Nu: gewone verdeling' },
+    { waarde: 'aan', titel: 'Altijd direct', uitleg: 'Passende leads als eerste, binnen een minuut' },
+    { waarde: 'uit', titel: 'Nooit direct', uitleg: 'Altijd de gewone verdeling' },
+  ];
+  return (
+    <div className={`rounded-xl border border-emerald-200/80 bg-emerald-50/50 p-3.5 ${disabled ? 'opacity-60' : ''}`}>
+      <p className="flex items-center gap-1.5 text-sm font-semibold text-emerald-900">
+        <BoltIcon className="h-4 w-4 shrink-0" aria-hidden />
+        Direct leveren
+      </p>
+      <p className="mt-0.5 text-xs leading-relaxed text-emerald-900/80">
+        Past een nieuwe lead bij deze batch, dan krijgt de klant hem als eerste, binnen een minuut. Gaat voor voorrang. Dagmaximum, gebied en filters blijven gelden.
+      </p>
+      <div className="mt-2 grid gap-2 sm:grid-cols-3">
+        {opties.map(o => (
+          <label key={String(o.waarde)} className={`flex items-start gap-2 rounded-lg border p-2 ${stand === o.waarde ? 'border-emerald-400 bg-white' : 'border-emerald-100 bg-white/60'} ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
+            <input type="radio" checked={stand === o.waarde} disabled={disabled} onChange={() => onChange(o.waarde)} className="mt-0.5 accent-emerald-600" />
+            <span>
+              <span className="block text-xs font-semibold text-slate-700">{o.titel}</span>
+              <span className="block text-[11px] text-slate-500">{o.uitleg}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+      {disabled && <p className="mt-1.5 text-[11px] text-slate-500">Alleen een admin of superadmin kan dit wijzigen.</p>}
+    </div>
+  );
+}
+
 function batchProgressProps(b: Pick<Batch, 'delivery_model' | 'batch_kind' | 'batch_size' | 'leads_delivered'>) {
   return {
     delivery_model: b.delivery_model,
@@ -179,7 +235,7 @@ function batchProgressProps(b: Pick<Batch, 'delivery_model' | 'batch_kind' | 'ba
   };
 }
 interface BranchOption { slug: string; name: string; color: string; is_active: boolean; is_partner_branch?: boolean }
-interface Customer { id: string; name: string; is_active: boolean }
+interface Customer { id: string; name: string; is_active: boolean; direct_leveren?: boolean | null }
 interface BranchField { id: string; key: string; label: string; field_type: string; options: string[] }
 
 function getNLOffset(date: Date): string {
@@ -565,6 +621,12 @@ export default function BatchesPage() {
                               Meta · {metaLinkCount}
                             </span>
                           )}
+                          {directLabel(b) && (
+                            <span title={directLabel(b) ?? undefined} className="inline-flex w-fit items-center gap-0.5 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
+                              <BoltIcon className="h-3 w-3 shrink-0" aria-hidden />
+                              Direct
+                            </span>
+                          )}
                           {showDistributionPriorityBadge(b) && (
                             <span className="inline-flex w-fit items-center gap-0.5 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-900">
                               <BoltIcon className="h-3 w-3 shrink-0" aria-hidden />
@@ -647,6 +709,12 @@ export default function BatchesPage() {
                           <span className="inline-flex items-center gap-0.5 rounded-md bg-indigo-50 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-800">
                             <GlobeAltIcon className="h-3 w-3 shrink-0" aria-hidden />
                             Meta · {metaLinkCount}
+                          </span>
+                        )}
+                        {directLabel(b) && (
+                          <span title={directLabel(b) ?? undefined} className="inline-flex items-center gap-0.5 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
+                            <BoltIcon className="h-3 w-3 shrink-0" aria-hidden />
+                            Direct
                           </span>
                         )}
                         {showDistributionPriorityBadge(b) && (
@@ -1216,6 +1284,12 @@ function BatchDetailPanel({ batchId, branches, onClose, onEdit, onListRefresh }:
                       <ExclamationCircleIcon className="h-3.5 w-3.5" /> Onbetaald
                     </span>
                   )}
+                  {directLabel(batch) && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-800">
+                      <BoltIcon className="h-3.5 w-3.5" aria-hidden />
+                      {directLabel(batch)}
+                    </span>
+                  )}
                   {showDistributionPriorityBadge(batch) && (
                     <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-900">
                       <BoltIcon className="h-3.5 w-3.5" aria-hidden />
@@ -1738,6 +1812,9 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
   const [defaultExists, setDefaultExists] = useState(false);
   const [defaultLoaded, setDefaultLoaded] = useState(false);
   const [distributionPriority, setDistributionPriority] = useState(() => batch.distribution_priority === true);
+  const { user: bewerker } = useAdmin();
+  const magDirectWijzigen = bewerker.role !== 'accountmanager';
+  const [directStand, setDirectStand] = useState<DirectStand>(() => (batch.direct_leveren === 'aan' || batch.direct_leveren === 'uit' ? batch.direct_leveren : null));
   const priorityEditable = isPipelineBatchKind(batch.batch_kind) && batch.status !== 'completed';
 
   useEffect(() => {
@@ -1839,6 +1916,7 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
         }
       }
       if (priorityEditable) payload.distribution_priority = distributionPriority;
+      if (priorityEditable && magDirectWijzigen) payload.direct_leveren = directStand;
       if (extraLeads > 0) {
         payload.compensation = { amount: extraLeads, reason: extraReason };
       }
@@ -2039,6 +2117,15 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
               checked={distributionPriority}
               onChange={setDistributionPriority}
               disabled={!priorityEditable}
+            />
+          )}
+
+          {isPipelineBatchKind(batch.batch_kind) && (
+            <DirectLeverenField
+              stand={directStand}
+              onChange={setDirectStand}
+              klantDirect={batch.customers?.direct_leveren}
+              disabled={!priorityEditable || !magDirectWijzigen}
             />
           )}
 
@@ -2368,6 +2455,8 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
   const [metaCampaignPicks, setMetaCampaignPicks] = useState<MetaCampaignPick[]>([]);
   const [metaSyncEnabled, setMetaSyncEnabled] = useState(true);
   const [distributionPriority, setDistributionPriority] = useState(false);
+  const [directStand, setDirectStand] = useState<DirectStand>(null);
+  const { user: aanmaker } = useAdmin();
   // Defaults uit `customer_branch_meta_defaults` worden automatisch geladen
   // wanneer (klant + branche) of (klant + niche-onderzoek + lead-branche)
   // bekend zijn. We onthouden welke combinatie geladen is om dubbel
@@ -2377,7 +2466,7 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
   const [draftTargets, setDraftTargets] = useState<BatchTargetDraft[]>([]);
 
   useEffect(() => {
-    if (form.batch_delivery !== 'pipeline') setDistributionPriority(false);
+    if (form.batch_delivery !== 'pipeline') { setDistributionPriority(false); setDirectStand(null); }
   }, [form.batch_delivery]);
 
   // Welke (customer + branche-of-niche) is relevant voor defaults?
@@ -2683,6 +2772,7 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
             ? {
                 ...metaPayload,
                 distribution_priority: distributionPriority,
+                ...(directStand !== null && aanmaker.role !== 'accountmanager' ? { direct_leveren: directStand } : {}),
                 ...(draftTargets.length > 0
                   ? {
                       batch_targets: draftTargets.map(({ _key, ...t }) => t),
@@ -2982,6 +3072,15 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
             <DistributionPriorityField
               checked={distributionPriority}
               onChange={setDistributionPriority}
+            />
+          )}
+
+          {form.batch_product === 'leads' && form.batch_delivery === 'pipeline' && (
+            <DirectLeverenField
+              stand={directStand}
+              onChange={setDirectStand}
+              klantDirect={customers.find(c => c.id === form.customer_id)?.direct_leveren}
+              disabled={aanmaker.role === 'accountmanager'}
             />
           )}
 

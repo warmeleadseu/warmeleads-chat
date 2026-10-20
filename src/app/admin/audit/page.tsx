@@ -60,6 +60,8 @@ const ACTION_LABELS: Record<string, string> = {
   klant_target_verwijderd: 'Klantgebied verwijderd',
   quarantaine_vrijgeven: 'Lead uit quarantaine vrijgegeven',
   quarantaine_afwijzen: 'Lead in quarantaine afgewezen',
+  direct_leveren_klant: 'Direct leveren (klant) gewijzigd',
+  direct_leveren_batch: 'Direct leveren (batch) gewijzigd',
 };
 
 const ENTITY_LABELS: Record<string, string> = {
