@@ -314,7 +314,7 @@ async function fetchActiveBatchesForBranch(
   supabase: SupabaseClient,
   branch: string,
 ): Promise<ActiveCustomerBatch[]> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('customer_batches')
     .select('id, customer_id, branch, batch_size, leads_delivered, leads_delivered_external, leads_per_week, leads_per_day, lead_filters, created_at, is_paid, starts_at, distribution_priority, direct_leveren, delivery_model, batch_kind, lookback_days, customers!inner(id, is_active, portal_active, direct_leveren)')
     .eq('branch', branch)
@@ -323,6 +323,9 @@ async function fetchActiveBatchesForBranch(
     .eq('customers.is_active', true)
     .neq('is_paid', false)
     .order('created_at', { ascending: true });
+  /* Zonder deze melding zou een mislukte query de verdeling van een hele
+     branche stil laten stoppen (geen batches = geen kandidaten). */
+  if (error) console.error('[distribution] actieve batches ophalen mislukt:', branch, error.message);
   return ((data || []) as unknown as ActiveCustomerBatch[]).map(b => ({
     ...b,
     direct: effectiefDirect(b.direct_leveren, b.customers?.direct_leveren),
@@ -437,6 +440,8 @@ export async function distributeLead(
     );
     if (cooldownHit) return result;
   }
+
+  const eersteKlant = pipelineCooldownAssignments.length === 0;
 
   let activeBatches = ctx?.activeBatchesByBranch?.get(lead.branch);
   if (activeBatches === undefined) {
@@ -624,7 +629,10 @@ export async function distributeLead(
           distance_km: Math.round(bestMatch.distance * 10) / 10,
           recent_24h: 0,
           distribution_priority: batch.distribution_priority === true,
-          direct: batch.direct === true,
+          /* Direct leveren bepaalt alleen wie de eerste klant van een lead
+             wordt. Een tweede of derde klant (na de 12 uur) volgt de
+             gewone volgorde, en telt dus ook niet als directe levering. */
+          direct: eersteKlant && batch.direct === true,
         });
       }
     }
@@ -715,6 +723,20 @@ export async function distributeLead(
         batchId: m.batch_id,
         error: error?.message ?? 'geen rij teruggekregen',
       });
+      /* Dubbele toewijzing (23505) of het plafond van drie klanten (23514):
+         mogelijk heeft een gelijktijdige verdeling deze lead net uitgedeeld.
+         Heeft hij binnen de cooldown al een klant, dan niet doorschuiven naar
+         de volgende kandidaat, anders bellen er twee bedrijven tegelijk. */
+      if (error?.code === '23505' || error?.code === '23514') {
+        const { data: nuToegewezen } = await supabase
+          .from('lead_assignments')
+          .select('assigned_at')
+          .neq('source', MIRROR_ASSIGNMENT_SOURCE)
+          .eq('lead_id', lead.id)
+          .gte('assigned_at', new Date(Date.now() - COOLDOWN_HOURS * 60 * 60 * 1000).toISOString())
+          .limit(1);
+        if ((nuToegewezen?.length ?? 0) > 0) break;
+      }
       continue;
     }
 
@@ -862,10 +884,8 @@ export async function backfillBatch(batchId: string, lookbackDays: number): Prom
     .eq('batch_kind', 'leads')
     .neq('is_paid', false);
 
-  /* Dezelfde volgorde als de verdeling: direct, voorrang, oudste. */
-  const klantDirect = (Array.isArray(batch.customers) ? batch.customers[0] : batch.customers)?.direct_leveren as boolean | null | undefined;
-  const metDirect = <T extends { direct_leveren?: string | null }>(b: T) => ({ ...b, direct: effectiefDirect(b.direct_leveren, klantDirect) });
-  if (!isPipelineFifoHeadBatch(metDirect(batch), (fifoSiblings || []).map(metDirect), nowBf)) {
+  /* Dezelfde volgorde als de verdeling: batch op direct, voorrang, oudste. */
+  if (!isPipelineFifoHeadBatch(batch, fifoSiblings || [], nowBf)) {
     return { assigned: 0, gepland: 0 };
   }
 

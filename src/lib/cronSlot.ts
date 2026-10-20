@@ -17,6 +17,7 @@ export async function neemCronSlot(
   supabase: SupabaseClient,
   naam: string,
   minuten: number,
+  opties: { bijFout?: 'doorgaan' | 'stoppen' } = {},
 ): Promise<boolean> {
   const { data, error } = await supabase.rpc('neem_cron_slot', {
     p_naam: naam,
@@ -25,11 +26,13 @@ export async function neemCronSlot(
   if (error) {
     /* Bij twijfel doorgaan. Een slot dat niet te pakken is mag de verdeling
        niet stilleggen; dat middel is erger dan de kwaal. */
-    console.error('[cronSlot] slot nemen mislukt, ronde gaat toch door', {
+    /* Een optionele ronde (zoals het minuut-vangnet) slaat juist over bij twijfel. */
+    const stoppen = opties.bijFout === 'stoppen';
+    console.error(stoppen ? '[cronSlot] slot nemen mislukt, ronde overgeslagen' : '[cronSlot] slot nemen mislukt, ronde gaat toch door', {
       naam,
       message: error.message,
     });
-    return true;
+    return !stoppen;
   }
   return data === true;
 }
@@ -39,4 +42,17 @@ export async function geefCronSlotTerug(supabase: SupabaseClient, naam: string):
   if (error) {
     console.error('[cronSlot] slot teruggeven mislukt', { naam, message: error.message });
   }
+}
+
+/**
+ * Loopt een andere ronde nu? Alleen kijken, het slot niet aanraken. Bij een
+ * fout geldt het slot als bezet: wie dit vraagt, slaat dan liever een keer over.
+ */
+export async function cronSlotBezet(supabase: SupabaseClient, naam: string): Promise<boolean> {
+  const { data, error } = await supabase.from('cron_sloten').select('vergrendeld_tot').eq('naam', naam).maybeSingle();
+  if (error) {
+    console.error('[cronSlot] slot lezen mislukt', { naam, message: error.message });
+    return true;
+  }
+  return !!data && new Date(data.vergrendeld_tot as string).getTime() > Date.now();
 }

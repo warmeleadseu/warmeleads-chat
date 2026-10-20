@@ -208,7 +208,7 @@ function DirectLeverenField({
         Direct leveren
       </p>
       <p className="mt-0.5 text-xs leading-relaxed text-emerald-900/80">
-        Past een nieuwe lead bij deze batch, dan krijgt de klant hem als eerste, binnen een minuut. Gaat voor voorrang. Dagmaximum, gebied en filters blijven gelden.
+        Past een nieuwe lead bij deze batch, dan krijgt de klant hem als eerste, binnen een minuut. Weegt zwaarder dan voorrang. Dag- en weekmaximum, gebied en filters blijven gelden. Geldt alleen voor deze batch: een nieuwe batch volgt weer de klantkaart.
       </p>
       <div className="mt-2 grid gap-2 sm:grid-cols-3">
         {opties.map(o => (
@@ -1820,6 +1820,10 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
   useEffect(() => {
     setDistributionPriority(batch.distribution_priority === true);
   }, [batch.id, batch.distribution_priority]);
+
+  useEffect(() => {
+    setDirectStand(batch.direct_leveren === 'aan' || batch.direct_leveren === 'uit' ? batch.direct_leveren : null);
+  }, [batch.id, batch.direct_leveren]);
 
   useEffect(() => {
     if (!supportsBatchMetaCampaigns(batch.batch_kind)) return;

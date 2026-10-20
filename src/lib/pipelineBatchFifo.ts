@@ -12,14 +12,18 @@ export type PipelineFifoBatchRow = {
   delivery_model?: string | null;
   batch_kind?: string | null;
   distribution_priority?: boolean | null;
-  /** Effectieve stand van direct leveren (batch, anders klantkaart); zie directLeveren.ts. */
-  direct?: boolean | null;
+  /** Stand van direct leveren op de batch zelf: aan / uit / null (volgt klantkaart). */
+  direct_leveren?: string | null;
 };
 
-/** Direct gaat voor voorrang, voorrang voor de rest; daarna de oudste batch. */
+/**
+ * Volgorde binnen één klant: een batch die zelf op "altijd direct" staat gaat
+ * voor, daarna voorrang, daarna de oudste. De klantkaart en "nooit direct"
+ * veranderen de eigen wachtrij van de klant niet: die gelden voor alle
+ * batches van de klant tegelijk, of houden een batch juist gewoon.
+ */
 function priorityRank(b: PipelineFifoBatchRow): number {
-  if (b.direct === true) return 2;
-  return b.distribution_priority === true ? 1 : 0;
+  return (b.direct_leveren === 'aan' ? 2 : 0) + (b.distribution_priority === true ? 1 : 0);
 }
 
 /**

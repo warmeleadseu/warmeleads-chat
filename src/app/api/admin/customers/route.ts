@@ -174,9 +174,13 @@ export async function POST(request: NextRequest) {
 
     /* Direct leveren bij aanmaken: alleen superadmin en admin. */
     delete rest.direct_leveren_sinds;
+    let directBijAanmaken = false;
     if ('direct_leveren' in rest) {
+      if (admin.role !== 'accountmanager' && rest.direct_leveren !== true && rest.direct_leveren !== false) {
+        return NextResponse.json({ error: 'Direct leveren moet aan of uit staan' }, { status: 400 });
+      }
       if (admin.role === 'accountmanager' || rest.direct_leveren !== true) delete rest.direct_leveren;
-      else { rest.direct_leveren = true; rest.direct_leveren_sinds = new Date().toISOString(); }
+      else { rest.direct_leveren = true; rest.direct_leveren_sinds = new Date().toISOString(); directBijAanmaken = true; }
     }
 
     const supabase = createServerClient();
@@ -207,6 +211,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Klant aanmaken mislukt', details: error.message }, { status: 500 });
     }
     logAudit({ adminId: admin.id, adminName: admin.name, action: 'create_customer', entityType: 'customer', entityId: data.id, details: { name: data.name } });
+    if (directBijAanmaken) {
+      await logAudit({
+        adminId: admin.id, adminName: admin.name ?? null, action: 'direct_leveren_klant', entityType: 'customer', entityId: data.id,
+        details: { van: 'uit', naar: 'aan', customer_name: data.name ?? null },
+      });
+    }
     return NextResponse.json({ success: true, customer: { ...data, password_hash: undefined, portal_password: undefined } });
   } catch {
     return NextResponse.json({ error: 'Ongeldige data' }, { status: 400 });
@@ -242,9 +252,10 @@ export async function PUT(request: NextRequest) {
     let directWijziging: boolean | null = null;
     if ('direct_leveren' in updates) {
       if (admin.role === 'accountmanager') delete updates.direct_leveren;
-      else {
-        updates.direct_leveren = updates.direct_leveren === true;
-        directWijziging = updates.direct_leveren as boolean;
+      else if (typeof updates.direct_leveren !== 'boolean') {
+        return NextResponse.json({ error: 'Direct leveren moet aan of uit staan' }, { status: 400 });
+      } else {
+        directWijziging = updates.direct_leveren;
       }
     }
 
@@ -328,15 +339,22 @@ export async function PUT(request: NextRequest) {
     }
 
     const updatePayload = await sanitizeCustomerWritePayload(supabase, updates);
+    /* Niets te wijzigen (bijvoorbeeld twee keer dezelfde schakelaar): een lege
+       update geeft in PostgREST geen rij terug en zou als fout eindigen. */
+    if (Object.keys(updatePayload).length === 0) {
+      const { data: huidig, error: leesFout } = await supabase.from('customers').select().eq('id', id).maybeSingle();
+      if (leesFout || !huidig) return NextResponse.json({ error: 'Klant niet gevonden' }, { status: 404 });
+      return NextResponse.json({ success: true, customer: { ...huidig, password_hash: undefined, portal_password: undefined }, recalced_invoices: [], branch_change: null });
+    }
     const { data, error } = await supabase.from('customers').update(updatePayload).eq('id', id).select().single();
     if (!error && directWijziging !== null) {
-      void logAudit({
+      await logAudit({
         adminId: admin.id,
         adminName: admin.name ?? null,
         action: 'direct_leveren_klant',
         entityType: 'customer',
         entityId: id,
-        details: { customer_name: (data as { name?: string } | null)?.name ?? null, direct_leveren: directWijziging },
+        details: { van: directWijziging ? 'uit' : 'aan', naar: directWijziging ? 'aan' : 'uit', customer_name: (data as { name?: string } | null)?.name ?? null },
       });
     }
 

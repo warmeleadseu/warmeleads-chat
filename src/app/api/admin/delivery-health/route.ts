@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
   let batchQuery = supabase
     .from('customer_batches')
     .select(
-      'id, customer_id, branch, batch_size, leads_delivered, leads_per_day, created_at, starts_at, status, is_paid, batch_kind, customers!inner(name, is_active)',
+      'id, customer_id, branch, batch_size, leads_delivered, leads_per_day, created_at, starts_at, status, is_paid, batch_kind, distribution_priority, direct_leveren, customers!inner(name, is_active)',
     )
     .eq('status', 'active')
     .eq('customers.is_active', true)

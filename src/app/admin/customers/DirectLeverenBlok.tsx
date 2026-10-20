@@ -31,7 +31,7 @@ export default function DirectLeverenBlok({
   klantNaam: string;
   aan: boolean;
   sinds: string | null;
-  onGewijzigd: () => void;
+  onGewijzigd: () => void | Promise<void>;
 }) {
   const { user } = useAdmin();
   const { confirm } = useAdminConfirm();
@@ -39,6 +39,10 @@ export default function DirectLeverenBlok({
   const [bezig, setBezig] = useState(false);
   const [fout, setFout] = useState<string | null>(null);
   const [afwijkend, setAfwijkend] = useState<Batch[]>([]);
+  /* Na opslaan meteen de nieuwe stand tonen, ook als de klantenlijst nog ververst. */
+  const [lokaal, setLokaal] = useState<{ aan: boolean; sinds: string | null } | null>(null);
+  useEffect(() => { setLokaal(null); }, [aan, sinds, customerId]);
+  const huidig = lokaal ?? { aan, sinds };
 
   const laadBatches = useCallback(async () => {
     const res = await adminFetch(`/api/admin/batches?customer_id=${customerId}`, { cache: 'no-store' });
@@ -49,11 +53,12 @@ export default function DirectLeverenBlok({
   useEffect(() => { void laadBatches(); }, [laadBatches]);
 
   const wissel = async () => {
-    const nieuw = !aan;
+    if (bezig) return;
+    const nieuw = !huidig.aan;
     const zeker = await confirm({
       title: nieuw ? `${klantNaam} direct leveren?` : 'Direct leveren uitzetten?',
       message: nieuw
-        ? 'Past een nieuwe lead bij deze klant, dan krijgt hij hem altijd als eerste, binnen een minuut. Andere klanten volgen zoals altijd pas na 12 uur. Dagmaximum, gebied en filters blijven gelden.'
+        ? 'Past een nieuwe lead bij deze klant, dan krijgt deze klant hem altijd als eerste, binnen een minuut. Andere klanten volgen zoals altijd pas na 12 uur. Dag- en weekmaximum, gebied en filters blijven gelden.'
         : 'Nieuwe leads gaan weer via de gewone verdeling. Batches die zelf op "altijd direct" staan, blijven direct.',
       confirmLabel: nieuw ? 'Aanzetten' : 'Uitzetten',
       destructive: !nieuw,
@@ -68,7 +73,8 @@ export default function DirectLeverenBlok({
         setFout(d.error || 'Opslaan mislukt');
         return;
       }
-      onGewijzigd();
+      setLokaal({ aan: nieuw, sinds: nieuw ? new Date().toISOString() : null });
+      await onGewijzigd();
     } catch {
       setFout('Netwerkfout bij opslaan');
     } finally {
@@ -77,16 +83,16 @@ export default function DirectLeverenBlok({
   };
 
   return (
-    <div className={`rounded-lg border p-4 ${aan ? 'border-emerald-200 bg-emerald-50/40' : 'border-slate-100 bg-slate-50/70'}`}>
+    <div className={`rounded-lg border p-4 ${huidig.aan ? 'border-emerald-200 bg-emerald-50/40' : 'border-slate-100 bg-slate-50/70'}`}>
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2.5">
-          <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${aan ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-500'}`}>
+          <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${huidig.aan ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-500'}`}>
             <BoltIcon className="h-4 w-4" />
           </span>
           <div className="min-w-0">
             <p className="text-sm font-semibold text-slate-700">Direct leveren</p>
             <p className="text-[11px] text-slate-400">
-              {aan ? `Aan${sinds ? ` sinds ${datum(sinds)}` : ''}: krijgt passende leads als eerste, binnen een minuut` : 'Uit: gewone verdeling'}
+              {huidig.aan ? `Aan${huidig.sinds ? ` sinds ${datum(huidig.sinds)}` : ''}: krijgt passende leads als eerste, binnen een minuut` : 'Uit: gewone verdeling'}
             </p>
           </div>
         </div>
@@ -94,16 +100,16 @@ export default function DirectLeverenBlok({
           <button
             type="button"
             role="switch"
-            aria-checked={aan}
-            aria-label={aan ? 'Direct leveren uitzetten' : 'Direct leveren aanzetten'}
+            aria-checked={huidig.aan}
+            aria-label={huidig.aan ? 'Direct leveren uitzetten' : 'Direct leveren aanzetten'}
             onClick={() => void wissel()}
             disabled={bezig}
-            className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60 ${aan ? 'bg-emerald-500' : 'bg-slate-300'}`}
+            className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60 ${huidig.aan ? 'bg-emerald-500' : 'bg-slate-300'}`}
           >
-            <span className={`inline-block h-5 w-5 rounded-full bg-white shadow transition-transform duration-200 ${aan ? 'translate-x-[22px]' : 'translate-x-0.5'}`} />
+            <span className={`inline-block h-5 w-5 rounded-full bg-white shadow transition-transform duration-200 ${huidig.aan ? 'translate-x-[22px]' : 'translate-x-0.5'}`} />
           </button>
         ) : (
-          <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${aan ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{aan ? 'Aan' : 'Uit'}</span>
+          <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${huidig.aan ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{huidig.aan ? 'Aan' : 'Uit'}</span>
         )}
       </div>
 
@@ -121,9 +127,11 @@ export default function DirectLeverenBlok({
 
       {fout && <p className="mt-2 text-xs text-red-600">{fout}</p>}
 
-      <Link href="/admin/direct-leveren" className="mt-3 inline-flex items-center gap-1 text-[11px] font-medium text-slate-400 hover:text-slate-600">
-        Resultaten vergelijken <ArrowTopRightOnSquareIcon className="h-3 w-3" />
-      </Link>
+      {magWijzigen && (
+        <Link href="/admin/direct-leveren" className="mt-3 inline-flex items-center gap-1 text-[11px] font-medium text-slate-400 hover:text-slate-600">
+          Resultaten vergelijken <ArrowTopRightOnSquareIcon className="h-3 w-3" />
+        </Link>
+      )}
     </div>
   );
 }

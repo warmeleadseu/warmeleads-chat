@@ -18,6 +18,12 @@ export const BIJWERK_TERMIJN_DAGEN = 7;
 export const MIN_LEADS_BETROUWBAAR = 30;
 export const MIN_BIJGEWERKT_BETROUWBAAR = 0.5;
 export const HERBESTEL_TERMIJN_DAGEN = 30;
+/**
+ * Vanaf dit moment worden statuswijzigingen bijgehouden (migratie 181). Voor
+ * eerdere leveringen kennen we de eerste wijziging niet: een latere wijziging
+ * zou dan als "eerste" tellen en de tijd tot opvolging veel te lang maken.
+ */
+export const STATUSLOG_SINDS = '2026-10-20T12:15:00Z';
 
 export type LeveringRij = {
   assignment_id: string;
@@ -42,11 +48,13 @@ export type Kengetallen = {
   /** Aandeel leads ouder dan de termijn dat een status kreeg. */
   bijgewerktPct: number | null;
   bijgewerktBasis: number;
-  /** Verdeling van de opvolging, alleen over bijgewerkte leads. */
+  /** Verdeling van de opvolging, over bijgewerkte leads ouder dan de termijn. */
   opvolging: Record<OpvolgStatus, number>;
   opvolgingBasis: number;
-  /** Mediaan uren tot de eerste statuswijziging (alleen waar de geschiedenis bestaat). */
+  /** Mediaan uren tot de eerste statuswijziging (alleen leveringen sinds de statusgeschiedenis bestaat). */
   urenTotEersteStatus: number | null;
+  urenBasis: number;
+  /** Goedgekeurde reclamaties, over leads ouder dan de termijn. */
   reclamatiePct: number | null;
   betrouwbaar: boolean;
   waarschuwing: string | null;
@@ -65,23 +73,29 @@ export function berekenKengetallen(rijen: LeveringRij[], nu: Date = new Date()):
     .filter(r => r.eerste_klant && r.lead_created_at)
     .map(r => Math.max(0, (new Date(r.assigned_at).getTime() - new Date(r.lead_created_at as string).getTime()) / 1000));
 
+  /* Opvolging, datakwaliteit en reclamaties over dezelfde leads: die ouder
+     dan de termijn. Jonge leads staan nog vaak op "gecontacteerd" en zijn nog
+     niet gereclameerd; zouden ze meetellen, dan scoort een groep met veel
+     recente leads (zoals net aangezet direct leveren) ongelijk. */
   const termijn = nu.getTime() - BIJWERK_TERMIJN_DAGEN * 86_400_000;
   const oudGenoeg = rijen.filter(r => new Date(r.assigned_at).getTime() <= termijn);
   const isBijgewerkt = (r: LeveringRij) => !!r.status && r.status !== 'nieuw';
-  const bijgewerkt = rijen.filter(isBijgewerkt);
+  const bijgewerkt = oudGenoeg.filter(isBijgewerkt);
 
   const opvolging = Object.fromEntries(OPVOLG_STATUSSEN.map(s => [s, 0])) as Record<OpvolgStatus, number>;
   for (const r of bijgewerkt) if ((OPVOLG_STATUSSEN as readonly string[]).includes(r.status as string)) opvolging[r.status as OpvolgStatus]++;
 
+  const logStart = new Date(STATUSLOG_SINDS).getTime();
   const uren = rijen
-    .filter(r => r.eerste_status_at)
+    .filter(r => r.eerste_status_at && new Date(r.assigned_at).getTime() >= logStart)
     .map(r => Math.max(0, (new Date(r.eerste_status_at as string).getTime() - new Date(r.assigned_at).getTime()) / 3_600_000));
 
-  const bijgewerktPct = pct(oudGenoeg.filter(isBijgewerkt).length, oudGenoeg.length);
+  const bijgewerktPct = pct(bijgewerkt.length, oudGenoeg.length);
   let waarschuwing: string | null = null;
   if (rijen.length < MIN_LEADS_BETROUWBAAR) waarschuwing = `Te weinig leads (${rijen.length}) voor een betrouwbare vergelijking`;
-  else if (bijgewerktPct !== null && bijgewerktPct < MIN_BIJGEWERKT_BETROUWBAAR * 100) waarschuwing = `Maar ${bijgewerktPct}% van de leads is bijgewerkt; de opvolging zegt dan weinig`;
-  else if (bijgewerktPct === null) waarschuwing = `Nog geen leads ouder dan ${BIJWERK_TERMIJN_DAGEN} dagen om de opvolging te beoordelen`;
+  else if (oudGenoeg.length === 0) waarschuwing = `Nog geen leads ouder dan ${BIJWERK_TERMIJN_DAGEN} dagen om de opvolging te beoordelen`;
+  else if (oudGenoeg.length < MIN_LEADS_BETROUWBAAR) waarschuwing = `Pas ${oudGenoeg.length} leads ouder dan ${BIJWERK_TERMIJN_DAGEN} dagen; te weinig om de opvolging te beoordelen`;
+  else if (bijgewerktPct !== null && bijgewerktPct < MIN_BIJGEWERKT_BETROUWBAAR * 100) waarschuwing = `Maar ${String(bijgewerktPct).replace('.', ',')}% van de leads is bijgewerkt; de opvolging zegt dan weinig`;
 
   return {
     leveringen: rijen.length,
@@ -95,7 +109,8 @@ export function berekenKengetallen(rijen: LeveringRij[], nu: Date = new Date()):
     opvolging,
     opvolgingBasis: bijgewerkt.length,
     urenTotEersteStatus: uren.length ? Math.round(mediaan(uren)! * 10) / 10 : null,
-    reclamatiePct: pct(rijen.filter(r => r.reclamatie).length, rijen.length),
+    urenBasis: uren.length,
+    reclamatiePct: pct(oudGenoeg.filter(r => r.reclamatie).length, oudGenoeg.length),
     betrouwbaar: waarschuwing === null,
     waarschuwing,
   };
@@ -119,8 +134,11 @@ export type Herbestelling = {
 
 /**
  * Herbestellen: voor elke afgeronde betaalde batch, hoeveel dagen tot de
- * volgende betaalde batch van dezelfde klant. Alleen batches die lang genoeg
- * geleden afrondden tellen voor het percentage binnen de termijn.
+ * volgende betaalde batch van dezelfde klant (eerder besteld dan afgerond
+ * telt als 0 dagen). Het percentage binnen de termijn rekent alleen over
+ * batches die minstens de termijn geleden afrondden: van een recent
+ * afgeronde batch weten we nog niet of de klant terugkomt, en alleen de
+ * snelle herbestellers meetellen zou het percentage opblazen.
  */
 export function berekenHerbestelling(
   afgerondeBatches: BatchRij[],
@@ -133,18 +151,18 @@ export function berekenHerbestelling(
   for (const b of afgerondeBatches) {
     if (!b.completed_at || !b.is_paid) continue;
     const klaar = new Date(b.completed_at).getTime();
+    const besteld = new Date(b.created_at).getTime();
     const volgende = alleBatches
-      .filter(x => x.customer_id === b.customer_id && x.id !== b.id && x.is_paid && new Date(x.created_at).getTime() >= new Date(b.created_at).getTime())
+      .filter(x => x.customer_id === b.customer_id && x.id !== b.id && x.is_paid)
       .map(x => new Date(x.created_at).getTime())
-      .filter(t => t > new Date(b.created_at).getTime())
+      .filter(t => t > besteld)
       .sort((x, y) => x - y)[0];
-    const lang = nu.getTime() - klaar >= HERBESTEL_TERMIJN_DAGEN * 86_400_000;
-    if (volgende !== undefined) {
-      const d = Math.max(0, (volgende - klaar) / 86_400_000);
-      dagen.push(d);
-      if (d <= HERBESTEL_TERMIJN_DAGEN) binnen++;
-      if (d <= HERBESTEL_TERMIJN_DAGEN || lang) beoordeelbaar++;
-    } else if (lang) beoordeelbaar++;
+    const d = volgende === undefined ? null : Math.max(0, (volgende - klaar) / 86_400_000);
+    if (d !== null) dagen.push(d);
+    if (nu.getTime() - klaar >= HERBESTEL_TERMIJN_DAGEN * 86_400_000) {
+      beoordeelbaar++;
+      if (d !== null && d <= HERBESTEL_TERMIJN_DAGEN) binnen++;
+    }
   }
   return {
     afgerond: afgerondeBatches.filter(b => b.completed_at && b.is_paid).length,
@@ -162,9 +180,18 @@ export function groepVan(r: Pick<LeveringRij, 'via_direct' | 'snelraak'>): Groep
   return 'geen';
 }
 
-/** Even lange periodes vóór en na het aanzetten (maximaal `maxDagen`). */
-export function voorNaVensters(sinds: Date, nu: Date = new Date(), maxDagen = 90): { voor: [Date, Date]; na: [Date, Date] } {
-  const lengte = Math.min(nu.getTime() - sinds.getTime(), maxDagen * 86_400_000);
+/**
+ * Even lange periodes vóór en na het aanzetten (maximaal `maxDagen`). Het
+ * na-venster eindigt bij `einde` (nu, of wanneer direct leveren stopte);
+ * `vroegst` is het begin van de opgehaalde gegevens, zodat het vóór-venster
+ * nooit langer is dan waarvoor we gegevens hebben.
+ */
+export function voorNaVensters(sinds: Date, einde: Date = new Date(), maxDagen = 90, vroegst?: Date): { voor: [Date, Date]; na: [Date, Date] } {
+  const lengte = Math.max(0, Math.min(
+    einde.getTime() - sinds.getTime(),
+    maxDagen * 86_400_000,
+    vroegst ? sinds.getTime() - vroegst.getTime() : Infinity,
+  ));
   return {
     voor: [new Date(sinds.getTime() - lengte), sinds],
     na: [sinds, new Date(sinds.getTime() + lengte)],

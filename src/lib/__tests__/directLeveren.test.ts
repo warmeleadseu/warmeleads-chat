@@ -108,12 +108,28 @@ describe('vergelijkKandidaten', () => {
 
 describe('volgorde van batches binnen één klant', () => {
   const basis = { customer_id: 'k', branch: 'thuisbatterij', leads_delivered: 0, batch_size: 50, delivery_model: 'capped', batch_kind: 'leads' };
-  it('direct-batch gaat voor een oudere en voor een voorrang-batch', () => {
+  it('batch op "altijd direct" gaat voor een oudere en voor een voorrang-batch', () => {
     const oud = { ...basis, id: 'oud', created_at: '2026-09-01T00:00:00Z' };
     const voorrang = { ...basis, id: 'voorrang', created_at: '2026-09-15T00:00:00Z', distribution_priority: true };
-    const direct = { ...basis, id: 'direct', created_at: '2026-10-01T00:00:00Z', direct: true };
+    const direct = { ...basis, id: 'direct', created_at: '2026-10-01T00:00:00Z', direct_leveren: 'aan' };
     expect(orderPipelineBatchesFifo([oud, voorrang, direct]).map(b => b.id)).toEqual(['direct', 'voorrang', 'oud']);
     expect(pickPipelineFifoHeadBatch([oud, voorrang, direct])?.id).toBe('direct');
+  });
+  it('direct + voorrang gaat voor alleen direct', () => {
+    const direct = { ...basis, id: 'direct', created_at: '2026-09-01T00:00:00Z', direct_leveren: 'aan' };
+    const beide = { ...basis, id: 'beide', created_at: '2026-10-01T00:00:00Z', direct_leveren: 'aan', distribution_priority: true };
+    expect(orderPipelineBatchesFifo([direct, beide]).map(b => b.id)).toEqual(['beide', 'direct']);
+  });
+  it('klantkaart op direct verandert de eigen wachtrij niet: voorrang blijft voorgaan', () => {
+    /* De klantkaart geldt voor alle batches tegelijk; die staan dus niet als "aan" op de batch. */
+    const oud = { ...basis, id: 'oud', created_at: '2026-09-01T00:00:00Z', direct_leveren: null };
+    const voorrang = { ...basis, id: 'voorrang', created_at: '2026-10-01T00:00:00Z', distribution_priority: true, direct_leveren: null };
+    expect(pickPipelineFifoHeadBatch([oud, voorrang])?.id).toBe('voorrang');
+  });
+  it('"nooit direct" schuift een oudere batch niet naar achteren', () => {
+    const oudUit = { ...basis, id: 'oud-uit', created_at: '2026-09-01T00:00:00Z', direct_leveren: 'uit' };
+    const nieuw = { ...basis, id: 'nieuw', created_at: '2026-10-01T00:00:00Z', direct_leveren: null };
+    expect(pickPipelineFifoHeadBatch([nieuw, oudUit])?.id).toBe('oud-uit');
   });
   it('zonder direct: zoals voorheen (voorrang, dan oudste)', () => {
     const oud = { ...basis, id: 'oud', created_at: '2026-09-01T00:00:00Z' };

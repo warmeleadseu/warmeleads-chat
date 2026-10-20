@@ -29,6 +29,10 @@ function nepDb(opties: {
   targets: Record<string, unknown>[];
   bestaand?: Record<string, unknown>[];
   periode?: Record<string, unknown>[];
+  /** Foutcode voor de eerste insert in lead_assignments (een gelijktijdige verdeling). */
+  eersteInsertFout?: string;
+  /** Wat de hercontrole na zo'n fout vindt. */
+  nuToegewezen?: Record<string, unknown>[];
 }) {
   const inserts: Record<string, unknown>[] = [];
   const db = {
@@ -43,6 +47,7 @@ function nepDb(opties: {
         if (tabel === 'lead_assignments') {
           if (selectie.includes('customer_batches(batch_kind)')) return opties.bestaand ?? [];
           if (selectie === 'batch_id, assigned_at') return opties.periode ?? [];
+          if (selectie === 'assigned_at') return opties.nuToegewezen ?? [];
           return [];
         }
         return [];
@@ -51,7 +56,12 @@ function nepDb(opties: {
       b.select = (s?: string) => { if (!isInsert) selectie = s ?? ''; return b; };
       b.insert = (row: Record<string, unknown>) => { isInsert = true; inserts.push({ tabel, ...row }); return b; };
       b.update = () => b;
-      b.single = async () => ({ data: isInsert ? { id: `nieuw-${inserts.length}` } : rijen()[0] ?? null, error: null });
+      b.single = async () => {
+        if (isInsert && opties.eersteInsertFout && tabel === 'lead_assignments' && inserts.filter(i => i.tabel === 'lead_assignments').length === 1) {
+          return { data: null, error: { code: opties.eersteInsertFout, message: 'gelijktijdig' } };
+        }
+        return { data: isInsert ? { id: `nieuw-${inserts.length}` } : rijen()[0] ?? null, error: null };
+      };
       b.maybeSingle = b.single;
       b.then = (ok: (v: unknown) => unknown) => Promise.resolve({ data: rijen(), error: null }).then(ok);
       return b;
@@ -156,6 +166,53 @@ describe('distributeLead met direct leveren', () => {
     const { db, inserts } = nepDb({ batches: [klantDirect('A'), klantDirect('B')], targets: TARGETS });
     await distributeLead(LEAD as never, { supabase: db as never });
     expect(inserts()[0]).toMatchObject({ customer_id: 'A', via_direct: true });
+  });
+
+  it('tweede klant (na de 12 uur): direct telt niet, gewone volgorde en via_direct false', async () => {
+    const dertienUurGeleden = new Date(Date.now() - 13 * 3_600_000).toISOString();
+    const { db, inserts } = nepDb({
+      batches: [batch('A'), klantDirect('B')],
+      targets: TARGETS,
+      bestaand: [{ customer_id: 'C', assigned_at: dertienUurGeleden, batch_id: 'batch-C', customer_batches: { batch_kind: 'leads' } }],
+    });
+    await distributeLead(LEAD as never, { supabase: db as never });
+    expect(inserts()[0]).toMatchObject({ customer_id: 'A', via_direct: false });
+  });
+
+  it('gelijktijdige verdeling won de lead net (dubbele sleutel): geen tweede klant erbij', async () => {
+    const { db, inserts } = nepDb({
+      batches: [klantDirect('B'), batch('A')],
+      targets: TARGETS,
+      eersteInsertFout: '23505',
+      nuToegewezen: [{ assigned_at: new Date().toISOString() }],
+    });
+    const r = await distributeLead(LEAD as never, { supabase: db as never });
+    expect(inserts()).toHaveLength(1);
+    expect(r.assignments).toEqual([]);
+  });
+
+  it('plafondfout van de database bij een gelijktijdige verdeling: ook stoppen', async () => {
+    const { db, inserts } = nepDb({
+      batches: [klantDirect('B'), batch('A')],
+      targets: TARGETS,
+      eersteInsertFout: '23514',
+      nuToegewezen: [{ assigned_at: new Date().toISOString() }],
+    });
+    await distributeLead(LEAD as never, { supabase: db as never });
+    expect(inserts()).toHaveLength(1);
+  });
+
+  it('dubbele sleutel door een oude toewijzing (geen verse klant): volgende kandidaat krijgt hem', async () => {
+    const { db, inserts } = nepDb({ batches: [klantDirect('B'), batch('A')], targets: TARGETS, eersteInsertFout: '23505', nuToegewezen: [] });
+    const r = await distributeLead(LEAD as never, { supabase: db as never });
+    expect(inserts().map(i => i.customer_id)).toEqual(['B', 'A']);
+    expect(r.assignments.map(a => a.customer_id)).toEqual(['A']);
+  });
+
+  it('andere insertfout: gewoon de volgende kandidaat (zoals voorheen)', async () => {
+    const { db, inserts } = nepDb({ batches: [klantDirect('B'), batch('A')], targets: TARGETS, eersteInsertFout: '42501' });
+    await distributeLead(LEAD as never, { supabase: db as never });
+    expect(inserts().map(i => i.customer_id)).toEqual(['B', 'A']);
   });
 
   it('demo-lead: nooit verdeeld', async () => {

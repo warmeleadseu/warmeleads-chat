@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowPathIcon, BoltIcon, ExclamationTriangleIcon, InformationCircleIcon } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
 import {
@@ -16,7 +16,7 @@ import {
  */
 
 type PerKlant = {
-  customer_id: string; klant: string; aan: boolean; sinds: string; dagen: number;
+  customer_id: string; klant: string; aan: boolean; bron: 'klantkaart' | 'batch' | 'uit'; sinds: string; dagen: number;
   voor: Kengetallen; na: Kengetallen; herbestelVoor: Herbestelling; herbestelNa: Herbestelling;
 };
 type Antwoord = { van: string; tot: string; branche: string | null; branches: string[]; groepen: Record<Groep, Kengetallen>; perKlant: PerKlant[]; error?: string };
@@ -31,8 +31,9 @@ const STATUS_LABEL: Record<OpvolgStatus, string> = {
   gecontacteerd: 'Gecontacteerd', geen_gehoor: 'Geen gehoor', afspraak: 'Afspraak', offerte: 'Offerte', verkocht: 'Verkocht', afgewezen: 'Afgewezen',
 };
 
-function isoDag(d: Date) { return d.toISOString().slice(0, 10); }
-function dagenTerug(n: number) { const d = new Date(); d.setDate(d.getDate() - n); return isoDag(d); }
+/** Kalenderdag in Nederlandse tijd (de API rekent ook in Amsterdamse dagen). */
+function isoDag(d: Date) { return d.toLocaleDateString('sv-SE', { timeZone: 'Europe/Amsterdam' }); }
+function dagenTerug(n: number) { return isoDag(new Date(Date.now() - n * 86_400_000)); }
 const PERIODES = [
   { label: '7 dagen', dagen: 7 }, { label: '30 dagen', dagen: 30 }, { label: '90 dagen', dagen: 90 },
 ];
@@ -57,11 +58,11 @@ const REGELS: Regel[] = [
   { label: 'Binnen een minuut', waarde: k => pct(k.snelheid.binnenMinuutPct) },
   { label: 'Datakwaliteit', kop: true, waarde: () => '' },
   { label: `Bijgewerkt (na ${BIJWERK_TERMIJN_DAGEN} dagen)`, waarde: k => pct(k.bijgewerktPct), sub: k => `van ${k.bijgewerktBasis} leads` },
-  { label: 'Tijd tot eerste status (mediaan)', waarde: k => (k.urenTotEersteStatus == null ? '—' : duur(k.urenTotEersteStatus * 3600)) },
-  { label: 'Opvolging (van bijgewerkte leads)', kop: true, waarde: () => '' },
+  { label: 'Tijd tot eerste status (mediaan)', waarde: k => (k.urenTotEersteStatus == null ? '—' : duur(k.urenTotEersteStatus * 3600)), sub: k => `${k.urenBasis} leads` },
+  { label: `Opvolging (bijgewerkte leads ouder dan ${BIJWERK_TERMIJN_DAGEN} dagen)`, kop: true, waarde: () => '' },
   ...OPVOLG_STATUSSEN.map((s): Regel => ({ label: STATUS_LABEL[s], waarde: k => aandeel(k.opvolging[s], k.opvolgingBasis) })),
   { label: 'Reclamaties', kop: true, waarde: () => '' },
-  { label: 'Goedgekeurde reclamaties', waarde: k => pct(k.reclamatiePct) },
+  { label: `Goedgekeurd (leads ouder dan ${BIJWERK_TERMIJN_DAGEN} dagen)`, waarde: k => pct(k.reclamatiePct) },
 ];
 
 function Waarschuwing({ k }: { k: Kengetallen }) {
@@ -133,8 +134,12 @@ export default function DirectLeverenPagina() {
   const [data, setData] = useState<Antwoord | null>(null);
   const [laden, setLaden] = useState(true);
   const [fout, setFout] = useState<string | null>(null);
+  /* Alleen het antwoord op de laatste aanvraag tonen: een trage eerdere
+     aanvraag mag een nieuwere niet overschrijven. */
+  const volgnummer = useRef(0);
 
   const laad = useCallback(async () => {
+    const mijn = ++volgnummer.current;
     setLaden(true);
     setFout(null);
     try {
@@ -142,12 +147,13 @@ export default function DirectLeverenPagina() {
       if (branche) qs.set('branche', branche);
       const res = await adminFetch(`/api/admin/direct-leveren?${qs}`, { cache: 'no-store' });
       const d = (await res.json().catch(() => ({}))) as Antwoord;
+      if (mijn !== volgnummer.current) return;
       if (!res.ok) { setFout(res.status === 403 ? 'Alleen admins en superadmins kunnen deze vergelijking bekijken.' : d.error ?? 'Laden mislukt'); return; }
       setData(d);
     } catch {
-      setFout('Netwerkfout bij laden');
+      if (mijn === volgnummer.current) setFout('Netwerkfout bij laden');
     } finally {
-      setLaden(false);
+      if (mijn === volgnummer.current) setLaden(false);
     }
   }, [van, tot, branche]);
 
@@ -162,7 +168,8 @@ export default function DirectLeverenPagina() {
           </h1>
           <p className="mt-0.5 max-w-3xl text-sm text-slate-500">
             Geeft direct leveren, eventueel met de WhatsApp-opvolging van Snelraak, betere resultaten dan de gewone verdeling?
-            Per levering staat vast of hij direct ging, dus de cijfers kloppen ook als de instelling later verandert. Interne klanten tellen niet mee.
+            Per levering staat vast of hij direct ging, dus de cijfers kloppen ook als de instelling later verandert. Alleen leveringen van de
+            automatische verdeling tellen (geen bulkexports of handmatige toewijzingen); interne klanten tellen niet mee.
           </p>
         </div>
         <button onClick={() => void laad()} disabled={laden}
@@ -175,9 +182,10 @@ export default function DirectLeverenPagina() {
         <InformationCircleIcon className="h-4 w-4 shrink-0 text-sky-600" />
         <p>
           De opvolging (gecontacteerd, afspraak, verkocht…) komt van de statussen die klanten zelf in hun portaal zetten, en niet elke klant doet dat.
-          Daarom rekenen we de opvolging alleen over leads die echt zijn bijgewerkt, en staat erbij hoeveel procent dat is.
-          Een kolom is grijs bij minder dan {MIN_LEADS_BETROUWBAAR} leads of als minder dan {MIN_BIJGEWERKT_BETROUWBAAR * 100}% is bijgewerkt: dan zegt het verschil nog weinig.
-          De tijd tot de eerste status wordt bijgehouden vanaf de livegang van deze functie.
+          Daarom rekenen we de opvolging alleen over leads die echt zijn bijgewerkt, en staat erbij hoeveel procent dat is. Opvolging en
+          reclamaties tellen alleen leads van minstens {BIJWERK_TERMIJN_DAGEN} dagen oud, zodat een groep met veel verse leads niet ongelijk scoort.
+          Een kolom is grijs bij minder dan {MIN_LEADS_BETROUWBAAR} (beoordeelbare) leads of als minder dan {MIN_BIJGEWERKT_BETROUWBAAR * 100}% is bijgewerkt: dan zegt het verschil nog weinig.
+          De tijd tot de eerste status wordt bijgehouden voor leveringen vanaf 20 oktober 2026.
         </p>
       </div>
 
@@ -215,7 +223,9 @@ export default function DirectLeverenPagina() {
           <section className="space-y-2">
             <h2 className="text-sm font-semibold text-slate-800">Per klant: vóór en na direct leveren</h2>
             <p className="text-xs text-slate-500">
-              Een even lange periode vóór het aanzetten tegenover de periode erna (maximaal 90 dagen). Los van het periodefilter hierboven.
+              Een even lange periode vóór het aanzetten tegenover de periode erna (maximaal 90 dagen), los van het periodefilter hierboven.
+              Directe leveringen tellen nooit mee in &quot;vóór&quot;; staat direct leveren inmiddels uit, dan loopt &quot;na&quot; tot de laatste directe levering.
+              Herbestellen binnen {HERBESTEL_TERMIJN_DAGEN} dagen telt alleen batches die minstens zo lang geleden zijn afgerond.
             </p>
             {data.perKlant.length === 0 ? (
               <p className="rounded-xl border border-dashed border-slate-200 bg-white p-6 text-center text-sm text-slate-400">
@@ -226,7 +236,7 @@ export default function DirectLeverenPagina() {
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="font-semibold text-slate-800">{k.klant}</p>
                   <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${k.aan ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
-                    {k.aan ? 'Klantkaart: aan' : 'Klantkaart: uit (via batch of eerder)'}
+                    {k.bron === 'klantkaart' ? 'Aan op de klantkaart' : k.bron === 'batch' ? 'Aan op een batch' : 'Staat nu uit'}
                   </span>
                   <span className="text-xs text-slate-500">sinds {datum(k.sinds)}, {k.dagen} {k.dagen === 1 ? 'dag' : 'dagen'} vergeleken</span>
                 </div>

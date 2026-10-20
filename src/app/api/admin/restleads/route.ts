@@ -188,18 +188,20 @@ export async function GET(request: NextRequest) {
        stonden dan als kandidaat terwijl de verdeling ze nooit zou kiezen. */
     const { data: batchRijenOngesorteerd } = await supabase
       .from('customer_batches')
-      .select('id, customer_id, branch, batch_size, leads_delivered, price_per_lead, lead_filters, distribution_priority, created_at, starts_at, leads_per_day, leads_per_week, delivery_model, batch_kind, lookback_days, customers!inner(name, exclude_customers, is_active)')
+      .select('id, customer_id, branch, batch_size, leads_delivered, price_per_lead, lead_filters, distribution_priority, direct_leveren, created_at, starts_at, leads_per_day, leads_per_week, delivery_model, batch_kind, lookback_days, customers!inner(name, exclude_customers, is_active)')
       .eq('status', 'active')
       .eq('batch_kind', 'leads')
       .neq('is_paid', false)
       .eq('customers.is_active', true);
 
-    /* FIFO-volgorde, zoals de verdeling: per klant de voorrangsbatch, dan de
-       oudste. vindKandidaten neemt per klant de eerste batch die past. */
+    /* FIFO-volgorde, zoals de verdeling: per klant een batch op "altijd
+       direct", dan voorrang, dan de oudste. vindKandidaten neemt per klant de
+       eerste batch die past. */
+    const rang = (b: { distribution_priority?: boolean | null; direct_leveren?: string | null }) =>
+      (b.direct_leveren === 'aan' ? 2 : 0) + (b.distribution_priority === true ? 1 : 0);
     const batchRijen = [...(batchRijenOngesorteerd || [])].sort((a, b) => {
-      if ((a.distribution_priority === true) !== (b.distribution_priority === true)) {
-        return a.distribution_priority === true ? -1 : 1;
-      }
+      const verschil = rang(b) - rang(a);
+      if (verschil !== 0) return verschil;
       return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
     });
 

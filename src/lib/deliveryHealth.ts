@@ -58,6 +58,7 @@ export function fifoHeadBatchIdsVoorLevering<
     delivery_model?: string | null;
     batch_kind?: string | null;
     distribution_priority?: boolean | null;
+    direct_leveren?: string | null;
   },
 >(batches: T[], now: Date = new Date()): Set<string> {
   const heads = filterPipelineBatchesToFifoHeads(batches, now);

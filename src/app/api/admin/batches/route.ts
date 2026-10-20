@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { leesExterneFactuur } from '@/lib/factuurBetaling';
 import { leesDirectStand } from '@/lib/directLeveren';
+
+/** Leesbare stand voor de activiteitenlog. */
+function directStandTekst(stand: string | null | undefined): string {
+  return stand === 'aan' ? 'altijd direct' : stand === 'uit' ? 'nooit direct' : 'volgt klantkaart';
+}
 import { resolveBatchPricing } from '@/lib/batchPricing';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
@@ -359,6 +364,17 @@ export async function POST(request: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+  if (insertPayload.direct_leveren === 'aan' || insertPayload.direct_leveren === 'uit') {
+    await logAudit({
+      adminId: admin.id,
+      adminName: (admin as { name?: string | null }).name ?? null,
+      action: 'direct_leveren_batch',
+      entityType: 'customer_batch',
+      entityId: data.id,
+      details: { van: 'volgt klantkaart', naar: directStandTekst(insertPayload.direct_leveren as string), branch: data.branch ?? null, customer_id: data.customer_id },
+    }).catch(() => {});
+  }
+
   // Optionele batch-target-overrides direct bij aanmaak (vóór backfill).
   const rawBatchTargets = body.batch_targets;
   if (Array.isArray(rawBatchTargets) && rawBatchTargets.length > 0) {
@@ -684,13 +700,13 @@ export async function PUT(request: NextRequest) {
   const directNa = (data as { direct_leveren?: string | null }).direct_leveren ?? null;
   const directVoor = (existing as { direct_leveren?: string | null }).direct_leveren ?? null;
   if ('direct_leveren' in safeUpdates && directNa !== directVoor) {
-    logAudit({
+    await logAudit({
       adminId: admin.id,
       adminName: (admin as { name?: string | null }).name ?? null,
       action: 'direct_leveren_batch',
       entityType: 'customer_batch',
       entityId: id,
-      details: { customer_id: existing.customer_id, branch: (data as { branch?: string }).branch ?? null, van: directVoor, naar: directNa },
+      details: { van: directStandTekst(directVoor), naar: directStandTekst(directNa), branch: (data as { branch?: string }).branch ?? null, customer_id: existing.customer_id },
     }).catch(() => {});
   }
 
