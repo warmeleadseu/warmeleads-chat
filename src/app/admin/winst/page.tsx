@@ -4,6 +4,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { ArrowPathIcon, ChevronDownIcon, CurrencyEuroIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
+import ResultaatPerPeriode from '@/components/admin/ResultaatPerPeriode';
 
 /**
  * Winst per batch: wat een batch opbracht (naar rato geleverd) min de
@@ -265,7 +266,7 @@ export default function WinstPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="flex items-center gap-2 text-xl font-bold text-slate-900 sm:text-2xl">
-            <CurrencyEuroIcon className="h-6 w-6 text-brand-purple" /> Winst per batch
+            <CurrencyEuroIcon className="h-6 w-6 text-brand-purple" /> Winst en verlies
           </h1>
           <p className="mt-0.5 max-w-3xl text-sm text-slate-500">
             Omzet naar rato van wat er geleverd is, min de advertentiekosten van de geleverde leads. Een lead die naar drie klanten ging,
@@ -277,6 +278,10 @@ export default function WinstPage() {
           <ArrowPathIcon className={`h-4 w-4 ${laden ? 'animate-spin' : ''}`} /> Vernieuwen
         </button>
       </div>
+
+      <ResultaatPerPeriode />
+
+      <h2 className="pt-2 text-base font-bold text-slate-900">Winst per batch</h2>
 
       <div className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-3">
         <div className="flex flex-wrap gap-1">

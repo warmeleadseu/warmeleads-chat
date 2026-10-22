@@ -63,6 +63,8 @@ const ACTION_LABELS: Record<string, string> = {
   direct_leveren_klant: 'Direct leveren (klant) gewijzigd',
   direct_leveren_batch: 'Direct leveren (batch) gewijzigd',
   lookback_spoed: 'Lookback met spoed geleverd',
+  personeelskosten: 'Personeelskosten gewijzigd',
+  personeelskosten_verwijderd: 'Personeelskosten verwijderd',
 };
 
 const ENTITY_LABELS: Record<string, string> = {
