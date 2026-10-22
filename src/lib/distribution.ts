@@ -1024,7 +1024,16 @@ export async function distributeLeads(
 export async function backfillBatch(
   batchId: string,
   lookbackDays: number,
-  opties: { spoed?: boolean } = {},
+  opties: {
+    /** Overschrijft de keuze op de batch (lookback_levering). */
+    spoed?: boolean;
+    /**
+     * Met spoed meteen in deze aanroep afleveren (alleen vanuit het
+     * beheerscherm). Vanuit een betaalwebhook niet: die moet snel antwoorden;
+     * de wachtrij levert binnen een minuut.
+     */
+    meteenAfleveren?: boolean;
+  } = {},
 ): Promise<{ assigned: number; gepland: number }> {
   if (lookbackDays <= 0) return { assigned: 0, gepland: 0 };
 
@@ -1032,7 +1041,7 @@ export async function backfillBatch(
 
   const { data: batch } = await supabase
     .from('customer_batches')
-    .select('id, customer_id, branch, batch_size, leads_delivered, leads_delivered_external, leads_per_week, leads_per_day, lead_filters, is_paid, starts_at, created_at, distribution_priority, direct_leveren, batch_kind, delivery_model, lookback_days, customers!inner(id, is_active, direct_leveren)')
+    .select('id, customer_id, branch, batch_size, leads_delivered, leads_delivered_external, leads_per_week, leads_per_day, lead_filters, is_paid, starts_at, created_at, distribution_priority, direct_leveren, batch_kind, delivery_model, lookback_days, lookback_levering, customers!inner(id, is_active, direct_leveren)')
     .eq('id', batchId)
     .eq('status', 'active')
     .single();
@@ -1075,6 +1084,15 @@ export async function backfillBatch(
   }
 
   if (targets.length === 0) return { assigned: 0, gepland: 0 };
+
+  /* De lookback loopt nu echt. Met spoed als de batch daarop staat (gekozen
+     bij het aanmaken); die keuze geldt één keer en valt daarna terug op
+     gefaseerd, zodat een latere lookback weer gefaseerd gaat. */
+  const spoed = opties.spoed ?? (batch as { lookback_levering?: string | null }).lookback_levering === 'spoed';
+  if ((batch as { lookback_levering?: string | null }).lookback_levering === 'spoed') {
+    const { error: terugFout } = await supabase.from('customer_batches').update({ lookback_levering: 'gefaseerd' }).eq('id', batch.id);
+    if (terugFout) console.error('[backfillBatch] spoedkeuze terugzetten mislukt:', terugFout.message);
+  }
 
   // Load exclusion list for this customer (bidirectional)
   const { data: custRow } = await supabase
@@ -1245,10 +1263,10 @@ export async function backfillBatch(
      batch) alles meteen. De wachtrij levert af en controleert de regels
      opnieuw op het moment van leveren. Het gebied is hier al getoetst met de
      batchgebieden erbij, vandaar negeer_geo. */
-  const planning = opties.spoed ? planInhaalslagSpoed(kandidaten, nowCap) : planInhaalslag(kandidaten, nowCap);
+  const planning = spoed ? planInhaalslagSpoed(kandidaten, nowCap) : planInhaalslag(kandidaten, nowCap);
   let gepland = 0;
   if (planning.length > 0) {
-    const reden = opties.spoed
+    const reden = spoed
       ? `Terugkijkperiode ${lookbackDays} dag${lookbackDays === 1 ? '' : 'en'}, met spoed (in één keer).`
       : `Terugkijkperiode ${lookbackDays} dag${lookbackDays === 1 ? '' : 'en'}, gefaseerd over ${INHAALSLAG_VENSTER_UREN} uur.`;
     const uitkomst = await zetInWachtrij(supabase, planning.map(p => ({
@@ -1259,7 +1277,7 @@ export async function backfillBatch(
       soort: 'inhaalslag' as const,
       negeer_geo: true,
       reden,
-      aangemaakt_door: opties.spoed ? 'inhaalslag-spoed' : 'inhaalslag',
+      aangemaakt_door: spoed ? 'inhaalslag-spoed' : 'inhaalslag',
     })));
     gepland = uitkomst.gepland;
     if (uitkomst.fout) console.error('[backfillBatch] inplannen mislukt:', uitkomst.fout);
@@ -1268,7 +1286,7 @@ export async function backfillBatch(
   /* Met spoed: meteen afleveren wat nu mag. Wat de eerste keer niet past,
      pakt de wachtrij binnen een minuut op. */
   let assigned = 0;
-  if (opties.spoed && gepland > 0) {
+  if (spoed && opties.meteenAfleveren && gepland > 0) {
     const { verwerkGeplandeLeveringen } = await import('./geplandeLeveringen');
     const r = await verwerkGeplandeLeveringen(supabase, { batchId: batch.id, max: 50, tijdBudgetMs: 40_000 });
     assigned = r.geleverd;
@@ -1276,7 +1294,7 @@ export async function backfillBatch(
 
   console.info('[backfillBatch] ingepland', {
     batchId: batch.id,
-    spoed: opties.spoed === true,
+    spoed,
     gepland,
     meteenGeleverd: assigned,
     afgevallenBuitenVenster: kandidaten.length - planning.length,

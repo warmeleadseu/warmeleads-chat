@@ -81,6 +81,8 @@ interface Batch {
   leads_per_week: number | null; leads_per_day: number | null;
   leads_delivered: number; leads_delivered_external: number; status: string;
   is_paid: boolean; lookback_days: number | null; notes: string | null; lead_filters: LeadFilter[];
+  /** gefaseerd (standaard) of spoed: hoe de eerstvolgende lookback wordt geleverd. */
+  lookback_levering?: string | null;
   compensations: Compensation[];
   starts_at: string | null;
   account_manager_id: string | null;
@@ -234,14 +236,15 @@ function LookbackLeveringField({
   spoed,
   onChange,
   magKiezen,
-  meteenMogelijk,
+  moment,
 }: {
   spoed: boolean;
   onChange: (spoed: boolean) => void;
   magKiezen: boolean;
-  meteenMogelijk: boolean;
+  /** Wanneer de lookback loopt: nu, bij de betaling, of op de startdatum. */
+  moment: 'nu' | 'betaling' | 'start';
 }) {
-  const kiesbaar = magKiezen && meteenMogelijk;
+  const kiesbaar = magKiezen;
   const actief = spoed && kiesbaar;
   const opties = [
     { waarde: false, titel: 'Gefaseerd', uitleg: 'Standaard. Verspreid over 8 uur op willekeurige momenten, weinig tussen 23:00 en 06:00.' },
@@ -262,8 +265,10 @@ function LookbackLeveringField({
         ))}
       </div>
       {!magKiezen && <p className="mt-1.5 text-[11px] text-slate-500">Alleen een admin of superadmin kan met spoed leveren.</p>}
-      {magKiezen && !meteenMogelijk && (
-        <p className="mt-1.5 text-[11px] text-slate-500">Met spoed kan alleen bij een batch die nu al betaald is en meteen start. Anders wordt de lookback gefaseerd geleverd.</p>
+      {magKiezen && actief && moment !== 'nu' && (
+        <p className="mt-1.5 text-[11px] text-slate-500">
+          De lookback loopt {moment === 'betaling' ? 'zodra de batch betaald is' : 'op de startdatum'}; dan gaat alles meteen.
+        </p>
       )}
     </div>
   );
@@ -1735,7 +1740,12 @@ function BatchDetailPanel({ batchId, branches, onClose, onEdit, onListRefresh }:
                       {batch.lookback_days !== null && batch.lookback_days !== undefined && (
                         <div>
                           <p className="text-[11px] font-medium text-slate-400">Lookback</p>
-                          <p className="font-medium text-slate-700">{batch.lookback_days === 0 ? 'Geen' : `${batch.lookback_days} dagen`}</p>
+                          <p className="font-medium text-slate-700">
+                            {batch.lookback_days === 0 ? 'Geen' : `${batch.lookback_days} dagen`}
+                            {batch.lookback_levering === 'spoed' && (batch.lookback_days ?? 0) > 0 && (
+                              <span className="ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">met spoed</span>
+                            )}
+                          </p>
                         </div>
                       )}
                       <div>
@@ -2812,7 +2822,7 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
           leads_per_day: form.leads_per_day ? parseInt(form.leads_per_day) : null,
           leads_per_week: form.leads_per_week ? parseInt(form.leads_per_week) : null,
           lookback_days: parseInt(form.lookback_days) || 0,
-          ...(lookbackSpoed && aanmaker.role !== 'accountmanager' && form.is_paid && !scheduledStart && (parseInt(form.lookback_days) || 0) > 0
+          ...(lookbackSpoed && aanmaker.role !== 'accountmanager' && (parseInt(form.lookback_days) || 0) > 0
             ? { lookback_spoed: true }
             : {}),
           notes: form.notes || null,
@@ -3183,7 +3193,7 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
                   spoed={lookbackSpoed}
                   onChange={setLookbackSpoed}
                   magKiezen={aanmaker.role !== 'accountmanager'}
-                  meteenMogelijk={form.is_paid && !scheduledStart}
+                  moment={scheduledStart ? 'start' : form.is_paid ? 'nu' : 'betaling'}
                 />
               )}
             </div>

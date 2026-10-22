@@ -349,8 +349,14 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  /* Lookback met spoed: alleen superadmin en admin, alleen bij een lookback.
+     Bewaard op de batch, zodat het ook geldt als de lookback pas bij de
+     betaling of de startdatum loopt. */
+  const lookbackSpoed = body.lookback_spoed === true && admin.role !== 'accountmanager' && lookback > 0 && isPipelineBatchKind(batch_kind);
+
   if (isPipelineBatchKind(batch_kind)) {
     insertPayload.distribution_priority = body.distribution_priority === true;
+    if (lookbackSpoed) insertPayload.lookback_levering = 'spoed';
     /* Direct leveren per batch: aan / uit / leeg (volgt klantkaart). Alleen
        superadmin en admin; ongeldige invoer wordt geweigerd. */
     if (body.direct_leveren !== undefined && admin.role !== 'accountmanager') {
@@ -401,21 +407,29 @@ export async function POST(request: NextRequest) {
   // Targeted backfill: only if starts_at is NULL or in the past
   const startsInFuture = startsAtValue && new Date(startsAtValue) > new Date();
   if (lookback > 0 && !startsInFuture && batchIsPaid && isPipelineBatchKind(batch_kind)) {
-    /* Standaard gefaseerd. Met spoed (alles meteen) alleen als een admin of
-       superadmin daar bij het aanmaken bewust voor kiest. */
-    const spoed = body.lookback_spoed === true && admin.role !== 'accountmanager';
-    const uitkomst = await backfillBatch(data.id, lookback, { spoed })
+    /* Standaard gefaseerd; met spoed als dat op de batch staat (zie boven).
+       Hier mag spoed meteen afleveren: het beheerscherm wacht erop. */
+    const uitkomst = await backfillBatch(data.id, lookback, { meteenAfleveren: true })
       .catch(err => { console.error('[admin/batches POST] inhaalslag mislukt:', err); return null; });
-    if (spoed) {
+    if (lookbackSpoed) {
       await logAudit({
         adminId: admin.id,
         adminName: (admin as { name?: string | null }).name ?? null,
         action: 'lookback_spoed',
         entityType: 'customer_batch',
         entityId: data.id,
-        details: { lookback_dagen: lookback, ingepland: uitkomst?.gepland ?? 0, meteen_geleverd: uitkomst?.assigned ?? 0, branch: data.branch ?? null, customer_id: data.customer_id },
+        details: { lookback_dagen: lookback, moment: 'meteen', ingepland: uitkomst?.gepland ?? 0, meteen_geleverd: uitkomst?.assigned ?? 0, branch: data.branch ?? null, customer_id: data.customer_id },
       }).catch(() => {});
     }
+  } else if (lookbackSpoed) {
+    await logAudit({
+      adminId: admin.id,
+      adminName: (admin as { name?: string | null }).name ?? null,
+      action: 'lookback_spoed',
+      entityType: 'customer_batch',
+      entityId: data.id,
+      details: { lookback_dagen: lookback, moment: startsInFuture ? 'bij de startdatum' : 'bij de betaling', branch: data.branch ?? null, customer_id: data.customer_id },
+    }).catch(() => {});
   }
 
   // Admin notification email + invoice if paid with pricing
