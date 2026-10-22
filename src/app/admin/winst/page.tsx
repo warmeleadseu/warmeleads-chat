@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ArrowPathIcon, ChevronDownIcon, CurrencyEuroIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 import { adminFetch } from '@/lib/adminAuth';
 import ResultaatPerPeriode from '@/components/admin/ResultaatPerPeriode';
+import WinstFilter, { LEEG_FILTER, bewaarFilter, leesBewaardFilter, type WinstFilterStand } from '@/components/admin/WinstFilter';
 
 /**
  * Winst per batch: wat een batch opbracht (naar rato geleverd) min de
@@ -198,6 +199,12 @@ export default function WinstPage() {
   const [status, setStatus] = useState('');
   const [sort, setSort] = useState<{ op: Sleutel; af: boolean }>({ op: 'created_at', af: true });
   const [open, setOpen] = useState<string | null>(null);
+  /* Klanten uitsluiten en afspraken meetellen: geldt voor de hele pagina en
+     wordt per browser onthouden. */
+  const [filter, setFilterStand] = useState<WinstFilterStand>(LEEG_FILTER);
+  useEffect(() => { setFilterStand(leesBewaardFilter()); }, []);
+  const setFilter = (f: WinstFilterStand) => { setFilterStand(f); bewaarFilter(f); };
+  const uitgesloten = useMemo(() => new Set(filter.uitsluiten), [filter.uitsluiten]);
 
   const laad = useCallback(async () => {
     setLaden(true);
@@ -219,6 +226,7 @@ export default function WinstPage() {
   const zichtbaar = useMemo(() => {
     const z = zoek.trim().toLowerCase();
     const lijst = (data?.rijen ?? []).filter(r =>
+      !uitgesloten.has(r.customer_id) &&
       (!z || r.klant.toLowerCase().includes(z)) &&
       (!branche || r.branch === branche) &&
       (!status || r.status === status) &&
@@ -233,7 +241,7 @@ export default function WinstPage() {
       const c = typeof x === 'string' && typeof y === 'string' ? x.localeCompare(y) : Number(x) - Number(y);
       return sort.af ? -c : c;
     });
-  }, [data, zoek, branche, status, betaal, sort]);
+  }, [data, zoek, branche, status, betaal, sort, uitgesloten]);
 
   const totaal = useMemo(() => {
     const t = zichtbaar.reduce((s, r) => ({
@@ -279,7 +287,9 @@ export default function WinstPage() {
         </button>
       </div>
 
-      <ResultaatPerPeriode />
+      <WinstFilter waarde={filter} onChange={setFilter} />
+
+      <ResultaatPerPeriode filter={filter} />
 
       <h2 className="pt-2 text-base font-bold text-slate-900">Winst per batch</h2>
 

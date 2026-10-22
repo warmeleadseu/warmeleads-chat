@@ -5,6 +5,7 @@ import { ChevronDownIcon, PlusIcon, TrashIcon, UsersIcon } from '@heroicons/reac
 import { adminFetch } from '@/lib/adminAuth';
 import { useAdminConfirm } from '@/components/admin/ui/AdminConfirmProvider';
 import type { PeriodeResultaat, PeriodeSoort } from '@/lib/resultaatPerPeriode';
+import type { WinstFilterStand } from './WinstFilter';
 
 /**
  * Resultaat per periode op de winstpagina (alleen superadmin): verdiende
@@ -12,7 +13,11 @@ import type { PeriodeResultaat, PeriodeSoort } from '@/lib/resultaatPerPeriode';
  */
 
 type Personeel = { id: string; omschrijving: string; bedrag_per_maand: number | string; ingang: string; einde: string | null };
-type Antwoord = { soort: PeriodeSoort; start: string; vandaag: string; perioden: PeriodeResultaat[]; personeel: Personeel[]; error?: string };
+type Antwoord = {
+  soort: PeriodeSoort; start: string; vandaag: string; perioden: PeriodeResultaat[]; personeel: Personeel[];
+  filter?: { uitgesloten: string[]; afspraken: boolean; uitgeslotenKosten: number };
+  error?: string;
+};
 
 const EURO = new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
 const EURO2 = new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -162,7 +167,7 @@ const SOORTEN: { waarde: PeriodeSoort; label: string }[] = [
   { waarde: 'week', label: 'Week' }, { waarde: 'maand', label: 'Maand' }, { waarde: 'kwartaal', label: 'Kwartaal' }, { waarde: 'jaar', label: 'Jaar' },
 ];
 
-export default function ResultaatPerPeriode() {
+export default function ResultaatPerPeriode({ filter }: { filter: WinstFilterStand }) {
   const [soort, setSoort] = useState<PeriodeSoort>('maand');
   const [data, setData] = useState<Antwoord | null>(null);
   const [laden, setLaden] = useState(true);
@@ -174,7 +179,10 @@ export default function ResultaatPerPeriode() {
     setLaden(true);
     setFout(null);
     try {
-      const res = await adminFetch(`/api/admin/winst/resultaat?soort=${soort}`, { cache: 'no-store' });
+      const qs = new URLSearchParams({ soort });
+      if (filter.uitsluiten.length > 0) qs.set('uitsluiten', filter.uitsluiten.join(','));
+      if (filter.afspraken) qs.set('afspraken', '1');
+      const res = await adminFetch(`/api/admin/winst/resultaat?${qs}`, { cache: 'no-store' });
       const d = (await res.json().catch(() => ({}))) as Antwoord;
       if (mijn !== volgnummer.current) return;
       if (!res.ok) { setFout(d.error ?? 'Laden mislukt'); return; }
@@ -184,7 +192,7 @@ export default function ResultaatPerPeriode() {
     } finally {
       if (mijn === volgnummer.current) setLaden(false);
     }
-  }, [soort]);
+  }, [soort, filter.uitsluiten, filter.afspraken]);
   useEffect(() => { void laad(); }, [laad]);
 
   const perioden = data?.perioden ?? [];
@@ -304,6 +312,12 @@ export default function ResultaatPerPeriode() {
               </tbody>
             </table>
           </div>
+
+          {data.filter && data.filter.uitgeslotenKosten > 0 && (
+            <p className="text-[11px] text-slate-500">
+              Van de advertentiekosten is {eur(data.filter.uitgeslotenKosten)} weggelaten: het deel van de leads die naar de uitgesloten klanten gingen.
+            </p>
+          )}
 
           <PersoneelBeheer regels={data.personeel} onGewijzigd={() => void laad()} />
         </>
