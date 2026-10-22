@@ -51,6 +51,10 @@
     {
       "path": "/api/cron/direct-vangnet",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/geplande-leveringen",
+      "schedule": "* * * * *"
     }
   ]
 }

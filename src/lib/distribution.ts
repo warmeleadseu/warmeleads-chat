@@ -21,7 +21,9 @@ import {
 import { mirrorLeadToMasterPortal, MIRROR_ASSIGNMENT_SOURCE } from './masterPortalMirror';
 import { fetchActiveBatchTargetsByBatch, type GeoTargetRow } from './batchTargets';
 import { inhaalslagWeigering, kiesDerdeKlantLeads, leadPastInBatchVenster } from './verdeelGrenzen';
-import { INHAALSLAG_VENSTER_UREN, planInhaalslag, vroegsteMoment } from './inhaalslagPlanning';
+import { INHAALSLAG_VENSTER_UREN, planInhaalslag, planInhaalslagSpoed, vroegsteMoment } from './inhaalslagPlanning';
+import { isVers, kiesLevering, kiesMoment } from './leverSpreiding';
+import { zetInWachtrij } from './wachtrijPlannen';
 import { effectiefDirect, vergelijkKandidaten } from './directLeveren';
 
 const MAX_LEAD_AGE_DAYS = 3;
@@ -249,6 +251,69 @@ export function matchesAllFilters(lead: LeadForDistribution, filters: LeadFilter
 interface DistributionResult {
   lead_id: string;
   assignments: { customer_id: string; batch_id: string; distance_km: number | null }[];
+  /** In de wachtrij gezet in plaats van meteen geleverd (zie leverSpreiding.ts). */
+  gepland?: { customer_id: string; batch_id: string; gepland_voor: string };
+}
+
+/**
+ * Wat een verdeelronde onderweg bijhoudt, zodat leads niet in groepen
+ * tegelijk bij een klant aankomen (zie leverSpreiding.ts).
+ */
+export type VerdeelRonde = {
+  /** Leads die al in de wachtrij staan: die verdeelt de ronde niet opnieuw. */
+  geplandeLeadIds: Set<string>;
+  /** Per batch wat er in de wachtrij klaarstaat: telt mee voor ruimte en maxima. */
+  geplandPerBatch: Map<string, GeplandTelling>;
+  /** Batches die deze ronde al een lead meteen kregen. */
+  batchKreegLead: Set<string>;
+  /** Aantal leads dat deze ronde in de wachtrij is gezet. */
+  gepland: number;
+};
+
+type GeplandTelling = { totaal: number; vandaag: number; week: number; momenten: Date[] };
+
+/** Wat er per batch in de wachtrij klaarstaat, en welke leads daar al in staan. */
+export async function laadWachtrijStand(
+  supabase: SupabaseClient,
+  batchIds?: string[],
+): Promise<{ leadIds: Set<string>; perBatch: Map<string, GeplandTelling> }> {
+  const leadIds = new Set<string>();
+  const perBatch = new Map<string, GeplandTelling>();
+  if (batchIds && batchIds.length === 0) return { leadIds, perBatch };
+  const { dayStart, weekStart } = getLeadLimitPeriodAnchors(new Date());
+  const morgen = dayStart.getTime() + 86_400_000;
+  const volgendeWeek = weekStart.getTime() + 7 * 86_400_000;
+  for (let p = 0; p < 20; p++) {
+    let q = supabase
+      .from('geplande_leadleveringen')
+      .select('id, lead_id, batch_id, gepland_voor')
+      .eq('status', 'gepland');
+    if (batchIds) q = q.in('batch_id', batchIds);
+    const { data, error } = await q.order('id').range(p * 1000, p * 1000 + 999);
+    if (error) {
+      console.error('[distribution] wachtrij lezen mislukt:', error.message);
+      break;
+    }
+    for (const g of data || []) {
+      leadIds.add(g.lead_id as string);
+      if (!g.batch_id) continue;
+      const t = new Date(g.gepland_voor as string).getTime();
+      const tel = perBatch.get(g.batch_id as string) ?? { totaal: 0, vandaag: 0, week: 0, momenten: [] };
+      tel.totaal++;
+      if (t < morgen) tel.vandaag++;
+      if (t < volgendeWeek) tel.week++;
+      tel.momenten.push(new Date(t));
+      perBatch.set(g.batch_id as string, tel);
+    }
+    if (!data || data.length < 1000) break;
+  }
+  return { leadIds, perBatch };
+}
+
+/** Een lege rondestand, gevuld met wat er al in de wachtrij staat. */
+export async function nieuweVerdeelRonde(supabase: SupabaseClient): Promise<VerdeelRonde> {
+  const stand = await laadWachtrijStand(supabase);
+  return { geplandeLeadIds: stand.leadIds, geplandPerBatch: stand.perBatch, batchKreegLead: new Set(), gepland: 0 };
 }
 
 /** Uitkomst van één verdeelronde, inclusief de signalen om op te monitoren. */
@@ -257,6 +322,8 @@ export type DistributeRunResult = {
   distributed: number;
   /** Aantal aangemaakte toewijzingen in deze ronde. */
   assignments: number;
+  /** Leads die deze ronde in de wachtrij zijn gezet (verspreid geleverd). */
+  gepland?: number;
   /** Gemiddeld aantal toewijzingen per kandidaat-lead (streven is 2). */
   avgAssignments: number;
   /** Aantal leads dat in deze ronde is bekeken (venster van 3 dagen). */
@@ -359,6 +426,13 @@ export type DistributeLeadContext = {
   targetsByCustomer?: Record<string, GeoTargetRow[]>;
   batchTargetsByBatch?: Map<string, GeoTargetRow[]>;
   excludeByCustomer?: Record<string, string[]>;
+  /**
+   * Gezet door de verdeelronde (cron en de rondes na betalen of activeren).
+   * Dan gaat alleen een verse lead meteen (de eerste per batch per ronde); de
+   * rest krijgt een willekeurig moment in de wachtrij. Ontbreekt dit (bij
+   * binnenkomst), dan gaat een lead altijd meteen.
+   */
+  ronde?: VerdeelRonde;
 };
 
 /**
@@ -443,6 +517,21 @@ export async function distributeLead(
 
   const eersteKlant = pipelineCooldownAssignments.length === 0;
 
+  /* Staat de lead al in de wachtrij (een lookback of een verspreide
+     levering), dan is hij al onderweg naar een klant. Niet nog een keer
+     verdelen: anders krijgen twee klanten hem kort na elkaar. */
+  if (ctx?.ronde) {
+    if (ctx.ronde.geplandeLeadIds.has(lead.id)) return result;
+  } else {
+    const { data: inWachtrij } = await supabase
+      .from('geplande_leadleveringen')
+      .select('id')
+      .eq('lead_id', lead.id)
+      .eq('status', 'gepland')
+      .limit(1);
+    if ((inWachtrij?.length ?? 0) > 0) return result;
+  }
+
   let activeBatches = ctx?.activeBatchesByBranch?.get(lead.branch);
   if (activeBatches === undefined) {
     activeBatches = await fetchActiveBatchesForBranch(supabase, lead.branch);
@@ -483,6 +572,21 @@ export async function distributeLead(
           dailyCountByBatch[a.batch_id] = (dailyCountByBatch[a.batch_id] || 0) + 1;
         }
       }
+    }
+  }
+
+  /* Wat al in de wachtrij klaarstaat telt mee: voor het dag- en weekmaximum en
+     voor de ruimte in de batch. Anders plant één ronde een batch over zijn
+     maximum heen. */
+  const geplandPerBatch = ctx?.ronde
+    ? ctx.ronde.geplandPerBatch
+    : (await laadWachtrijStand(supabase, fifoActiveBatches.map(b => b.id))).perBatch;
+  for (const [batchId, tel] of geplandPerBatch) {
+    if (weeklyCountByBatch[batchId] !== undefined || batchesWithWeeklyLimit.some(b => b.id === batchId)) {
+      weeklyCountByBatch[batchId] = (weeklyCountByBatch[batchId] || 0) + tel.week;
+    }
+    if (dailyCountByBatch[batchId] !== undefined || batchesWithDailyLimit.some(b => b.id === batchId)) {
+      dailyCountByBatch[batchId] = (dailyCountByBatch[batchId] || 0) + tel.vandaag;
     }
   }
 
@@ -541,7 +645,11 @@ export async function distributeLead(
   const plafondBereikt = new Set<string>();
 
   for (const batch of fifoActiveBatches) {
-    if (batchIsAtCapacity(batch as { delivery_model?: string; batch_kind?: string; batch_size: number; leads_delivered: number | null })) {
+    const inWachtrijVoorBatch = geplandPerBatch.get(batch.id)?.totaal ?? 0;
+    if (batchIsAtCapacity({
+      ...(batch as { delivery_model?: string; batch_kind?: string; batch_size: number }),
+      leads_delivered: (Number(batch.leads_delivered) || 0) + inWachtrijVoorBatch,
+    })) {
       continue;
     }
     if (recentAssignedIds.has(batch.customer_id)) continue;
@@ -683,14 +791,16 @@ export async function distributeLead(
       (batchForCheck as { leads_delivered_external?: number | null } | undefined)
         ?.leads_delivered_external || 0;
     const currentDelivered = await countDeliveredForBatch(supabase, m.batch_id, externalOffset);
+    const wachtrijVoorBatch = geplandPerBatch.get(m.batch_id)?.totaal ?? 0;
     if (
       batchForCheck &&
       isCappedDeliveryModel(
         (batchForCheck as { delivery_model?: string }).delivery_model,
         (batchForCheck as { batch_kind?: string }).batch_kind,
       ) &&
-      currentDelivered >= batchForCheck.batch_size
+      currentDelivered + wachtrijVoorBatch >= batchForCheck.batch_size
     ) {
+      if (currentDelivered < batchForCheck.batch_size) continue; /* vol door de wachtrij: niet afsluiten */
       /* Batch is echt vol maar stond nog open: meteen bijwerken en afsluiten,
          anders wint hij bij de volgende lead opnieuw de sortering. */
       console.warn('[distribution] batch vol maar nog open, status wordt bijgewerkt', {
@@ -700,6 +810,51 @@ export async function distributeLead(
       });
       await syncBatchDelivered(supabase, m.batch_id);
       continue;
+    }
+
+    /* In een verdeelronde: alleen een verse lead meteen (de eerste per batch
+       per ronde) en direct leveren altijd meteen. De rest krijgt een
+       willekeurig, geloofwaardig moment in de wachtrij; die levert elke
+       minuut af wat aan de beurt is en toetst de regels dan opnieuw. */
+    if (ctx?.ronde) {
+      const keuze = kiesLevering({
+        vers: isVers((fullLead as { created_at?: string | null }).created_at, now),
+        direct: m.direct,
+        batchKreegAlLeadDezeRonde: ctx.ronde.batchKreegLead.has(m.batch_id),
+      });
+      if (keuze.soort === 'spreiden') {
+        const tel = geplandPerBatch.get(m.batch_id) ?? { totaal: 0, vandaag: 0, week: 0, momenten: [] };
+        const moment = kiesMoment({ nu: now, vensterMs: keuze.vensterMs, bezet: tel.momenten });
+        const { gepland, fout } = await zetInWachtrij(supabase, [{
+          lead_id: lead.id,
+          customer_id: m.customer_id,
+          batch_id: m.batch_id,
+          gepland_voor: moment.toISOString(),
+          soort: 'spreiding',
+          negeer_geo: true,
+          reden: isVers((fullLead as { created_at?: string | null }).created_at, now)
+            ? 'Extra lead voor deze batch in dezelfde ronde: kort verspreid.'
+            : 'Geen verse lead: verspreid geleverd.',
+          aangemaakt_door: 'verdeling',
+        }]);
+        if (fout) {
+          console.error('[distribution] in de wachtrij zetten mislukt', { leadId: lead.id, batchId: m.batch_id, fout });
+          continue;
+        }
+        /* gepland 0 zonder fout: de lead stond al klaar voor deze klant. */
+        if (gepland > 0) {
+          tel.totaal++;
+          const { dayStart, weekStart } = getLeadLimitPeriodAnchors(now);
+          if (moment.getTime() < dayStart.getTime() + 86_400_000) tel.vandaag++;
+          if (moment.getTime() < weekStart.getTime() + 7 * 86_400_000) tel.week++;
+          tel.momenten.push(moment);
+          geplandPerBatch.set(m.batch_id, tel);
+          ctx.ronde.gepland++;
+          result.gepland = { customer_id: m.customer_id, batch_id: m.batch_id, gepland_voor: moment.toISOString() };
+        }
+        ctx.ronde.geplandeLeadIds.add(lead.id);
+        break;
+      }
     }
 
     const { data: insertedAssignment, error } = await supabase
@@ -748,6 +903,7 @@ export async function distributeLead(
     });
 
     await syncBatchDelivered(supabase, m.batch_id);
+    ctx?.ronde?.batchKreegLead.add(m.batch_id);
 
     // Auto-assign to portal user based on assignment rules
     assignToPortalUser(supabase, m.customer_id, fullLead).catch(() => {});
@@ -783,11 +939,16 @@ export async function distributeLead(
  * Distribute multiple leads (max 1 assignment per lead per run).
  * Prefetches active batches per distinct branch to cut repeated customer_batches queries.
  */
-export async function distributeLeads(leads: LeadForDistribution[]): Promise<{ distributed: number; assignments: number }> {
+export async function distributeLeads(
+  leads: LeadForDistribution[],
+  ronde?: VerdeelRonde,
+): Promise<{ distributed: number; assignments: number; gepland: number }> {
   let distributed = 0;
   let assignments = 0;
+  let gepland = 0;
 
   const supabase = createServerClient();
+  const verdeelRonde = ronde ?? (await nieuweVerdeelRonde(supabase));
   const branches = [...new Set(leads.map(l => l.branch).filter((b): b is string => !!b))];
   const activeBatchesByBranch = new Map<string, ActiveCustomerBatch[]>();
   await Promise.all(
@@ -828,6 +989,7 @@ export async function distributeLeads(leads: LeadForDistribution[]): Promise<{ d
     targetsByCustomer: groupTargetsByCustomer(targetsRes.data as CustomerGeoTargetRow[] | null),
     batchTargetsByBatch,
     excludeByCustomer,
+    ronde: verdeelRonde,
   };
 
   for (const lead of leads) {
@@ -835,10 +997,14 @@ export async function distributeLeads(leads: LeadForDistribution[]): Promise<{ d
     if (result.assignments.length > 0) {
       distributed++;
       assignments += result.assignments.length;
+    } else if (result.gepland) {
+      /* Onderweg naar een klant: telt als verdeeld (niet als "blijft liggen"). */
+      distributed++;
+      gepland++;
     }
   }
 
-  return { distributed, assignments };
+  return { distributed, assignments, gepland };
 }
 
 /**
@@ -855,7 +1021,11 @@ export async function distributeLeads(leads: LeadForDistribution[]): Promise<{ d
  * - 12 uur pauze tussen twee klanten, en geen derde klant (zie
  *   `inhaalslagWeigering`).
  */
-export async function backfillBatch(batchId: string, lookbackDays: number): Promise<{ assigned: number; gepland: number }> {
+export async function backfillBatch(
+  batchId: string,
+  lookbackDays: number,
+  opties: { spoed?: boolean } = {},
+): Promise<{ assigned: number; gepland: number }> {
   if (lookbackDays <= 0) return { assigned: 0, gepland: 0 };
 
   const supabase = createServerClient();
@@ -1005,6 +1175,15 @@ export async function backfillBatch(batchId: string, lookbackDays: number): Prom
     .eq('batch_id', batch.id)
     .eq('status', 'gepland');
   const alGeplandIds = new Set((alGepland || []).map(g => g.lead_id as string));
+  /* Leads die al voor een andere klant in de wachtrij staan, laten we met rust:
+     die zijn al onderweg. */
+  const { data: elders } = await supabase
+    .from('geplande_leadleveringen')
+    .select('lead_id')
+    .in('lead_id', leads.map(l => l.id))
+    .neq('customer_id', batch.customer_id)
+    .eq('status', 'gepland');
+  const eldersGepland = new Set((elders || []).map(g => g.lead_id as string));
   const { dayStart: vandaagStart } = getLeadLimitPeriodAnchors(new Date());
   const morgenStart = new Date(vandaagStart.getTime() + 86_400_000);
   const geplandVandaag = (alGepland || []).filter(g => {
@@ -1025,13 +1204,13 @@ export async function backfillBatch(batchId: string, lookbackDays: number): Prom
   let skippedByWeeklyLimit = 0;
   let skippedByCap = 0;
 
-  const kandidaten: { lead_id: string; vroegst: Date | null }[] = [];
+  const kandidaten: { lead_id: string; vroegst: Date | null; created_at?: string | null }[] = [];
   for (const lead of leads) {
     if (ruimteBatch <= 0) break;
     if (ruimteDag <= 0) { skippedByDailyLimit++; break; }
     if (ruimteWeek <= 0) { skippedByWeeklyLimit++; break; }
 
-    if (alreadyAssigned.has(lead.id) || alGeplandIds.has(lead.id)) continue;
+    if (alreadyAssigned.has(lead.id) || alGeplandIds.has(lead.id) || eldersGepland.has(lead.id)) continue;
     if (excludedLeadIds.has(lead.id)) continue;
     if (!matchesAllFilters(lead as LeadForDistribution, filters)) continue;
 
@@ -1055,39 +1234,51 @@ export async function backfillBatch(batchId: string, lookbackDays: number): Prom
     }
     if (!inRange) continue;
 
-    kandidaten.push({ lead_id: lead.id, vroegst: vroegsteMoment(bestaand, batch.customer_id, nowCap) });
+    kandidaten.push({ lead_id: lead.id, vroegst: vroegsteMoment(bestaand, batch.customer_id, nowCap), created_at: (lead as { created_at?: string | null }).created_at ?? null });
     ruimteBatch--;
     ruimteDag--;
     ruimteWeek--;
   }
 
-  /* Gefaseerd over 8 uur in de wachtrij; de verdeelronde levert ze af en
-     controleert de regels opnieuw op het moment van leveren. Het gebied is
-     hier al getoetst met de batchgebieden erbij, vandaar negeer_geo. */
-  const planning = planInhaalslag(kandidaten, nowCap);
+  /* Standaard gefaseerd: willekeurige momenten over 8 uur met een dagritme,
+     oudste lead eerst. Met spoed (alleen handmatig bij het aanmaken van een
+     batch) alles meteen. De wachtrij levert af en controleert de regels
+     opnieuw op het moment van leveren. Het gebied is hier al getoetst met de
+     batchgebieden erbij, vandaar negeer_geo. */
+  const planning = opties.spoed ? planInhaalslagSpoed(kandidaten, nowCap) : planInhaalslag(kandidaten, nowCap);
+  let gepland = 0;
   if (planning.length > 0) {
-    const reden = `Terugkijkperiode ${lookbackDays} dag${lookbackDays === 1 ? '' : 'en'}, gefaseerd over ${INHAALSLAG_VENSTER_UREN} uur.`;
-    const { error: planFout } = await supabase.from('geplande_leadleveringen').upsert(
-      planning.map(p => ({
-        lead_id: p.lead_id,
-        customer_id: batch.customer_id,
-        batch_id: batch.id,
-        gepland_voor: p.gepland_voor.toISOString(),
-        status: 'gepland',
-        pogingen: 0,
-        negeer_geo: true,
-        soort: 'inhaalslag',
-        reden,
-        aangemaakt_door: 'inhaalslag',
-      })),
-      { onConflict: 'lead_id,customer_id', ignoreDuplicates: true },
-    );
-    if (planFout) console.error('[backfillBatch] inplannen mislukt:', planFout.message);
+    const reden = opties.spoed
+      ? `Terugkijkperiode ${lookbackDays} dag${lookbackDays === 1 ? '' : 'en'}, met spoed (in één keer).`
+      : `Terugkijkperiode ${lookbackDays} dag${lookbackDays === 1 ? '' : 'en'}, gefaseerd over ${INHAALSLAG_VENSTER_UREN} uur.`;
+    const uitkomst = await zetInWachtrij(supabase, planning.map(p => ({
+      lead_id: p.lead_id,
+      customer_id: batch.customer_id,
+      batch_id: batch.id,
+      gepland_voor: p.gepland_voor.toISOString(),
+      soort: 'inhaalslag' as const,
+      negeer_geo: true,
+      reden,
+      aangemaakt_door: opties.spoed ? 'inhaalslag-spoed' : 'inhaalslag',
+    })));
+    gepland = uitkomst.gepland;
+    if (uitkomst.fout) console.error('[backfillBatch] inplannen mislukt:', uitkomst.fout);
   }
 
-  console.info('[backfillBatch] gefaseerd ingepland', {
+  /* Met spoed: meteen afleveren wat nu mag. Wat de eerste keer niet past,
+     pakt de wachtrij binnen een minuut op. */
+  let assigned = 0;
+  if (opties.spoed && gepland > 0) {
+    const { verwerkGeplandeLeveringen } = await import('./geplandeLeveringen');
+    const r = await verwerkGeplandeLeveringen(supabase, { batchId: batch.id, max: 50, tijdBudgetMs: 40_000 });
+    assigned = r.geleverd;
+  }
+
+  console.info('[backfillBatch] ingepland', {
     batchId: batch.id,
-    gepland: planning.length,
+    spoed: opties.spoed === true,
+    gepland,
+    meteenGeleverd: assigned,
     afgevallenBuitenVenster: kandidaten.length - planning.length,
     skippedByDailyLimit,
     skippedByWeeklyLimit,
@@ -1098,7 +1289,7 @@ export async function backfillBatch(batchId: string, lookbackDays: number): Prom
     lookbackDays,
   });
 
-  return { assigned: 0, gepland: planning.length };
+  return { assigned, gepland };
 }
 
 /**
@@ -1173,9 +1364,12 @@ export async function distributeUnassignedLeads(): Promise<DistributeRunResult> 
   let totalDistributed = 0;
   let totalAssignments = 0;
   let pass1Distributed = 0;
+  /* Eén rondestand voor beide passen: wat in de wachtrij staat en welke
+     batches deze ronde al een lead meteen kregen. */
+  const ronde = await nieuweVerdeelRonde(supabase);
 
   if (newLeads.length > 0) {
-    const r = await distributeLeads(newLeads as LeadForDistribution[]);
+    const r = await distributeLeads(newLeads as LeadForDistribution[], ronde);
     totalDistributed += r.distributed;
     totalAssignments += r.assignments;
     // `distributed` = aantal leads dat daadwerkelijk ≥1 toewijzing kreeg.
@@ -1217,13 +1411,15 @@ export async function distributeUnassignedLeads(): Promise<DistributeRunResult> 
     const last = lastAssignedAt[l.id];
     return !(last && last > cooldownCutoff);
   };
+  /* Leads die al in de wachtrij staan, tellen niet mee als kandidaat. */
+  const nietGepland = (l: { id: string }) => !ronde.geplandeLeadIds.has(l.id);
   const naarTweede = leads.filter(l => {
     const count = recentAssignmentCounts[l.id] || 0;
-    return count === 1 && effectiveMaxAssignments(l as LeadForDistribution) > 1 && mag(l);
+    return count === 1 && effectiveMaxAssignments(l as LeadForDistribution) > 1 && mag(l) && nietGepland(l);
   });
   const naarDerde = leads.filter(l => {
     const count = recentAssignmentCounts[l.id] || 0;
-    return count >= 2 && count < effectiveMaxAssignments(l as LeadForDistribution) && mag(l);
+    return count >= 2 && count < effectiveMaxAssignments(l as LeadForDistribution) && mag(l) && nietGepland(l);
   });
 
   /* Een derde klant gelijkmatig en alleen op verse leads. Dit was één
@@ -1244,7 +1440,7 @@ export async function distributeUnassignedLeads(): Promise<DistributeRunResult> 
     reAssignCandidates.sort(
       (a, b) => (recentAssignmentCounts[a.id] || 0) - (recentAssignmentCounts[b.id] || 0),
     );
-    const r = await distributeLeads(reAssignCandidates as LeadForDistribution[]);
+    const r = await distributeLeads(reAssignCandidates as LeadForDistribution[], ronde);
     totalDistributed += r.distributed;
     totalAssignments += r.assignments;
   }
@@ -1263,6 +1459,7 @@ export async function distributeUnassignedLeads(): Promise<DistributeRunResult> 
   return {
     distributed: totalDistributed,
     assignments: totalAssignments,
+    gepland: ronde.gepland,
     avgAssignments,
     candidates: distinctCandidateLeads,
     undeliveredInWindow: Math.max(0, undeliveredInWindow),
@@ -1273,7 +1470,7 @@ export async function distributeUnassignedLeads(): Promise<DistributeRunResult> 
  * Auto-assign a lead to a portal user within a customer account based on assignment rules.
  * Uses weighted round-robin among eligible agents.
  */
-async function assignToPortalUser(
+export async function assignToPortalUser(
   supabase: ReturnType<typeof createServerClient>,
   customerId: string,
   lead: LeadForDistribution,

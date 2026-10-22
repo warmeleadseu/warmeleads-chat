@@ -52,7 +52,7 @@ function nepDb(opties: {
         }
         return [];
       };
-      for (const m of ['eq', 'neq', 'in', 'gte', 'lte', 'order', 'limit', 'or', 'not', 'contains', 'is']) b[m] = () => b;
+      for (const m of ['eq', 'neq', 'in', 'gte', 'lte', 'order', 'limit', 'or', 'not', 'contains', 'is', 'range']) b[m] = () => b;
       b.select = (s?: string) => { if (!isInsert) selectie = s ?? ''; return b; };
       b.insert = (row: Record<string, unknown>) => { isInsert = true; inserts.push({ tabel, ...row }); return b; };
       b.update = () => b;

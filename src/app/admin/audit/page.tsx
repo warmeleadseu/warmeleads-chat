@@ -62,6 +62,7 @@ const ACTION_LABELS: Record<string, string> = {
   quarantaine_afwijzen: 'Lead in quarantaine afgewezen',
   direct_leveren_klant: 'Direct leveren (klant) gewijzigd',
   direct_leveren_batch: 'Direct leveren (batch) gewijzigd',
+  lookback_spoed: 'Lookback met spoed geleverd',
 };
 
 const ENTITY_LABELS: Record<string, string> = {

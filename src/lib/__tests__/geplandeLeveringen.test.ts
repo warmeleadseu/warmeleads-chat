@@ -4,6 +4,8 @@ const assignMock = vi.fn();
 vi.mock('../assignLeadToBatch', () => ({ assignLeadToBatch: (...a: unknown[]) => assignMock(...a) }));
 vi.mock('../email', () => ({ sendLeadNotification: vi.fn() }));
 vi.mock('../pushNotification', () => ({ sendNewLeadPush: vi.fn(() => Promise.resolve()) }));
+const portaalMock = vi.fn(() => Promise.resolve());
+vi.mock('../distribution', () => ({ assignToPortalUser: (...a: unknown[]) => portaalMock(...(a as [])) }));
 
 import { verwerkGeplandeLeveringen } from '../geplandeLeveringen';
 
@@ -28,6 +30,7 @@ const RUIME_BATCH = {
 };
 
 const updates: Record<string, unknown>[] = [];
+const batchFilters: string[] = [];
 
 function maakClient(o: Opzet) {
   const nu = new Date().toISOString();
@@ -36,9 +39,10 @@ function maakClient(o: Opzet) {
       return {
         select: () => ({
           eq: () => ({
-            lte: () => ({
-              order: () => ({ limit: () => Promise.resolve({ data: o.rijen ?? [], error: null }) }),
-            }),
+            lte: () => {
+              const naOrder = { order: () => ({ limit: () => Promise.resolve({ data: o.rijen ?? [], error: null }) }) };
+              return { ...naOrder, eq: (_k: string, v: string) => { batchFilters.push(v); return naOrder; } };
+            },
           }),
         }),
         update: (payload: Record<string, unknown>) => {
@@ -85,7 +89,7 @@ const RIJ = { id: 'r1', lead_id: 'l1', customer_id: 'k1', batch_id: 'b1', poging
 const LEAD = { id: 'l1', branch: 'thuisbatterij', custom_fields: null };
 const KLANT = { id: 'k1', name: 'Partof', email: 'a@b.nl', branches: ['thuisbatterij'], is_active: true, email_notifications: false };
 
-beforeEach(() => { updates.length = 0; assignMock.mockReset(); });
+beforeEach(() => { updates.length = 0; batchFilters.length = 0; assignMock.mockReset(); portaalMock.mockClear(); });
 
 describe('verwerkGeplandeLeveringen', () => {
   it('doet niets als er niets aan de beurt is', async () => {
@@ -166,5 +170,42 @@ describe('verwerkGeplandeLeveringen', () => {
     );
     expect(r.overgeslagen).toBe(1);
     expect(assignMock).not.toHaveBeenCalled();
+  });
+
+  it('na een levering: volgens de toewijsregels bij een medewerker van de klant', async () => {
+    assignMock.mockResolvedValue({ ok: true, assignmentId: 'a1', distance_km: 5 });
+    await verwerkGeplandeLeveringen(maakClient({ rijen: [RIJ], lead: LEAD, klant: KLANT }));
+    expect(portaalMock).toHaveBeenCalledWith(expect.anything(), 'k1', expect.objectContaining({ id: 'l1' }));
+  });
+
+  it('verspreide levering mag een derde klant worden (de verdeelronde koos hem), een inhaalslag niet', async () => {
+    assignMock.mockResolvedValue({ ok: true, assignmentId: 'a1', distance_km: 5 });
+    const tweeAnderen = [
+      { customer_id: 'k2', assigned_at: new Date(Date.now() - 20 * 3_600_000).toISOString() },
+      { customer_id: 'k3', assigned_at: new Date(Date.now() - 14 * 3_600_000).toISOString() },
+    ];
+    const spreiding = await verwerkGeplandeLeveringen(maakClient({ rijen: [{ ...RIJ, soort: 'spreiding' }], lead: LEAD, klant: KLANT, bestaandeToewijzingen: tweeAnderen }));
+    expect(spreiding.geleverd).toBe(1);
+    updates.length = 0;
+    const inhaal = await verwerkGeplandeLeveringen(maakClient({ rijen: [{ ...RIJ, soort: 'inhaalslag' }], lead: LEAD, klant: KLANT, bestaandeToewijzingen: tweeAnderen }));
+    expect(inhaal.overgeslagen).toBe(1);
+    expect(String(updates[0].laatste_reden)).toContain('twee andere klanten');
+  });
+
+  it('verspreide levering binnen 12 uur na een andere klant: schuift door, wordt niet geleverd', async () => {
+    const r = await verwerkGeplandeLeveringen(maakClient({
+      rijen: [{ ...RIJ, soort: 'spreiding' }], lead: LEAD, klant: KLANT,
+      bestaandeToewijzingen: [{ customer_id: 'k2', assigned_at: new Date(Date.now() - 2 * 3_600_000).toISOString() }],
+    }));
+    expect(r.geleverd).toBe(0);
+    expect(assignMock).not.toHaveBeenCalled();
+    expect(String(updates[0].laatste_reden)).toContain('uitgesteld');
+    expect(new Date(updates[0].gepland_voor as string).getTime()).toBeGreaterThan(Date.now() + 9 * 3_600_000);
+  });
+
+  it('alleen de rijen van één batch (meteen na een lookback met spoed)', async () => {
+    assignMock.mockResolvedValue({ ok: true, assignmentId: 'a1', distance_km: 5 });
+    await verwerkGeplandeLeveringen(maakClient({ rijen: [RIJ], lead: LEAD, klant: KLANT }), { batchId: 'b1' });
+    expect(batchFilters).toEqual(['b1']);
   });
 });

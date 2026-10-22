@@ -254,6 +254,7 @@ async function verdeelronde(supabase: ReturnType<typeof createServerClient>) {
     zonderToewijzing: distResult.undeliveredInWindow,
     uitgedeeld: distResult.distributed,
     toewijzingen: distResult.assignments,
+    verspreidIngepland: distResult.gepland ?? 0,
     gemiddeldPerLead: distResult.avgAssignments,
     batchesGecorrigeerd,
   });

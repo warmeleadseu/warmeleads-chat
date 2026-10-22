@@ -226,6 +226,49 @@ function DirectLeverenField({
   );
 }
 
+/**
+ * Hoe de lookback wordt geleverd: gefaseerd (standaard, willekeurig verspreid
+ * over 8 uur met weinig leads 's nachts) of met spoed (alles meteen).
+ */
+function LookbackLeveringField({
+  spoed,
+  onChange,
+  magKiezen,
+  meteenMogelijk,
+}: {
+  spoed: boolean;
+  onChange: (spoed: boolean) => void;
+  magKiezen: boolean;
+  meteenMogelijk: boolean;
+}) {
+  const kiesbaar = magKiezen && meteenMogelijk;
+  const actief = spoed && kiesbaar;
+  const opties = [
+    { waarde: false, titel: 'Gefaseerd', uitleg: 'Standaard. Verspreid over 8 uur op willekeurige momenten, weinig tussen 23:00 en 06:00.' },
+    { waarde: true, titel: 'Met spoed', uitleg: 'Alles meteen in het portaal, voor een klant die haast heeft.' },
+  ];
+  return (
+    <div className="mt-3 border-t border-slate-200 pt-3">
+      <p className="text-xs font-medium text-slate-600">Levering van de lookback</p>
+      <div className="mt-1.5 grid gap-2 sm:grid-cols-2">
+        {opties.map(o => (
+          <label key={String(o.waarde)} className={`flex items-start gap-2 rounded-lg border p-2 ${actief === o.waarde ? 'border-brand-purple/60 bg-white' : 'border-slate-200 bg-white/60'} ${kiesbaar ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`}>
+            <input type="radio" checked={actief === o.waarde} disabled={!kiesbaar} onChange={() => onChange(o.waarde)} className="mt-0.5 accent-brand-purple" />
+            <span>
+              <span className="block text-xs font-semibold text-slate-700">{o.titel}</span>
+              <span className="block text-[11px] text-slate-500">{o.uitleg}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+      {!magKiezen && <p className="mt-1.5 text-[11px] text-slate-500">Alleen een admin of superadmin kan met spoed leveren.</p>}
+      {magKiezen && !meteenMogelijk && (
+        <p className="mt-1.5 text-[11px] text-slate-500">Met spoed kan alleen bij een batch die nu al betaald is en meteen start. Anders wordt de lookback gefaseerd geleverd.</p>
+      )}
+    </div>
+  );
+}
+
 function batchProgressProps(b: Pick<Batch, 'delivery_model' | 'batch_kind' | 'batch_size' | 'leads_delivered'>) {
   return {
     delivery_model: b.delivery_model,
@@ -2460,6 +2503,9 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
   const [metaSyncEnabled, setMetaSyncEnabled] = useState(true);
   const [distributionPriority, setDistributionPriority] = useState(false);
   const [directStand, setDirectStand] = useState<DirectStand>(null);
+  /* Lookback met spoed (alles meteen) in plaats van gefaseerd. Alleen
+     superadmin en admin, en alleen als de lookback nu meteen loopt. */
+  const [lookbackSpoed, setLookbackSpoed] = useState(false);
   const { user: aanmaker } = useAdmin();
   // Defaults uit `customer_branch_meta_defaults` worden automatisch geladen
   // wanneer (klant + branche) of (klant + niche-onderzoek + lead-branche)
@@ -2766,6 +2812,9 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
           leads_per_day: form.leads_per_day ? parseInt(form.leads_per_day) : null,
           leads_per_week: form.leads_per_week ? parseInt(form.leads_per_week) : null,
           lookback_days: parseInt(form.lookback_days) || 0,
+          ...(lookbackSpoed && aanmaker.role !== 'accountmanager' && form.is_paid && !scheduledStart && (parseInt(form.lookback_days) || 0) > 0
+            ? { lookback_spoed: true }
+            : {}),
           notes: form.notes || null,
           lead_filters: form.lead_filters.filter(f => f.field && (f.values?.length || 0) > 0),
           starts_at: startsAtISO,
@@ -3101,7 +3150,7 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
                   <p className="text-[11px] text-slate-400">
                     {form.lookback_days === '0'
                       ? 'Alleen nieuwe leads, geen bestaande leads laden'
-                      : `Direct bestaande leads van de afgelopen ${form.lookback_days || 3} dag(en) toewijzen`}
+                      : `Bestaande leads van de afgelopen ${form.lookback_days || 3} dag(en) toewijzen`}
                   </p>
                 </div>
                 <input
@@ -3129,6 +3178,14 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
                   </button>
                 ))}
               </div>
+              {(parseInt(form.lookback_days) || 0) > 0 && (
+                <LookbackLeveringField
+                  spoed={lookbackSpoed}
+                  onChange={setLookbackSpoed}
+                  magKiezen={aanmaker.role !== 'accountmanager'}
+                  meteenMogelijk={form.is_paid && !scheduledStart}
+                />
+              )}
             </div>
           ) : form.batch_delivery === 'bulk' ? (
             <div className="rounded-lg border border-violet-200 bg-violet-50/40 p-3 text-[11px] text-violet-900">

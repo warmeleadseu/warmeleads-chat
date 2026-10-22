@@ -401,7 +401,21 @@ export async function POST(request: NextRequest) {
   // Targeted backfill: only if starts_at is NULL or in the past
   const startsInFuture = startsAtValue && new Date(startsAtValue) > new Date();
   if (lookback > 0 && !startsInFuture && batchIsPaid && isPipelineBatchKind(batch_kind)) {
-    await backfillBatch(data.id, lookback).catch(err => console.error('[admin/batches POST] inhaalslag mislukt:', err));
+    /* Standaard gefaseerd. Met spoed (alles meteen) alleen als een admin of
+       superadmin daar bij het aanmaken bewust voor kiest. */
+    const spoed = body.lookback_spoed === true && admin.role !== 'accountmanager';
+    const uitkomst = await backfillBatch(data.id, lookback, { spoed })
+      .catch(err => { console.error('[admin/batches POST] inhaalslag mislukt:', err); return null; });
+    if (spoed) {
+      await logAudit({
+        adminId: admin.id,
+        adminName: (admin as { name?: string | null }).name ?? null,
+        action: 'lookback_spoed',
+        entityType: 'customer_batch',
+        entityId: data.id,
+        details: { lookback_dagen: lookback, ingepland: uitkomst?.gepland ?? 0, meteen_geleverd: uitkomst?.assigned ?? 0, branch: data.branch ?? null, customer_id: data.customer_id },
+      }).catch(() => {});
+    }
   }
 
   // Admin notification email + invoice if paid with pricing

@@ -7,7 +7,9 @@ import { sendLeadNotification } from './email';
 import { sendNewLeadPush } from './pushNotification';
 import { inhaalslagWeigering } from './verdeelGrenzen';
 import { vroegsteMoment } from './inhaalslagPlanning';
+import { buitenDeNacht } from './leverSpreiding';
 import { getLeadLimitPeriodAnchors } from './batchAssignmentCaps';
+import { assignToPortalUser } from './distribution';
 
 /**
  * Werkt de wachtrij `geplande_leadleveringen` af: leveringen die op een
@@ -15,8 +17,9 @@ import { getLeadLimitPeriodAnchors } from './batchAssignmentCaps';
  *
  * Waarom dit bestaat: een inhaalslag gedoseerd afleveren (bijvoorbeeld één lead
  * per dag gedurende een week) deed ik eerder met een script op een laptop. Dat
- * overleeft geen herstart. Nu staat het plan in de database en pikt de cron elke
- * kwartier op wat aan de beurt is.
+ * overleeft geen herstart. Nu staat het plan in de database en pikt een cron
+ * elke minuut op wat aan de beurt is (zie /api/cron/geplande-leveringen), zodat
+ * een lead aankomt op het willekeurige moment dat ervoor gekozen is.
  *
  * De gewone verdeelregels gelden op het moment van leveren, niet op het moment
  * van plannen. Een lead die intussen zijn derde klant heeft gekregen, gaat dus
@@ -30,8 +33,16 @@ export type GeplandeLeveringResultaat = {
   overgeslagen: number;
 };
 
-/** Hoeveel rijen we per cronronde maximaal afwerken; houdt de looptijd kort. */
+/** Hoeveel rijen we per ronde maximaal afwerken; houdt de looptijd kort. */
 const MAX_PER_RONDE = 25;
+
+export type VerwerkOpties = {
+  /** Alleen deze batch (bijvoorbeeld meteen na een lookback met spoed). */
+  batchId?: string;
+  max?: number;
+  /** Na deze tijd geen nieuwe rij meer beginnen. */
+  tijdBudgetMs?: number;
+};
 
 type Rij = {
   id: string;
@@ -42,22 +53,30 @@ type Rij = {
   /* Restleads liggen bewust net buiten het doelgebied; zonder deze vlag zou
      assignLeadToBatch ze twaalf uur later netjes weigeren. */
   negeer_geo?: boolean | null;
-  /** inhaalslag: uit de terugkijkperiode van een batch; extra regels bij leveren. */
+  /**
+   * inhaalslag: uit de terugkijkperiode van een batch; geen derde klant.
+   * spreiding: door de verdeelronde verspreid (geen verse lead, of een extra
+   * lead in dezelfde ronde); een tweede of derde klant mag, na de 12 uur.
+   */
   soort?: string | null;
 };
 
 export async function verwerkGeplandeLeveringen(
   supabase: SupabaseClient,
+  opties: VerwerkOpties = {},
 ): Promise<GeplandeLeveringResultaat> {
+  const start = Date.now();
   const nu = new Date().toISOString();
 
-  const { data: rijen, error } = await supabase
+  let query = supabase
     .from('geplande_leadleveringen')
     .select('id, lead_id, customer_id, batch_id, pogingen, negeer_geo, soort')
     .eq('status', 'gepland')
-    .lte('gepland_voor', nu)
+    .lte('gepland_voor', nu);
+  if (opties.batchId) query = query.eq('batch_id', opties.batchId);
+  const { data: rijen, error } = await query
     .order('gepland_voor', { ascending: true })
-    .limit(MAX_PER_RONDE);
+    .limit(opties.max ?? MAX_PER_RONDE);
 
   if (error) {
     /* Ontbreekt de tabel (migratie nog niet gedraaid), dan is dat geen reden om
@@ -70,13 +89,16 @@ export async function verwerkGeplandeLeveringen(
   let geleverd = 0;
   let overgeslagen = 0;
 
+  let bekeken = 0;
   for (const rij of rijen as Rij[]) {
+    if (opties.tijdBudgetMs && Date.now() - start > opties.tijdBudgetMs) break;
+    bekeken++;
     const uitkomst = await leverEenRij(supabase, rij);
     if (uitkomst === 'geleverd') geleverd++;
     else if (uitkomst === 'overgeslagen') overgeslagen++;
   }
 
-  return { bekeken: rijen.length, geleverd, overgeslagen };
+  return { bekeken, geleverd, overgeslagen };
 }
 
 async function leverEenRij(supabase: SupabaseClient, rij: Rij): Promise<'geleverd' | 'overgeslagen' | 'uitgesteld'> {
@@ -125,16 +147,21 @@ async function leverEenRij(supabase: SupabaseClient, rij: Rij): Promise<'gelever
      andere klant kan de lead intussen hebben gekregen. Geen derde klant; en
      binnen 12 uur na een andere klant schuift de levering door naar het
      eerste moment dat het mag. */
-  if (rij.soort === 'inhaalslag') {
+  if (rij.soort === 'inhaalslag' || rij.soort === 'spreiding') {
     const nu = new Date();
     const weigering = inhaalslagWeigering(bestaand || [], rij.customer_id, nu);
-    if (weigering === 'derde_klant') {
+    /* Alleen een inhaalslag maakt nooit een derde klant; een verspreide
+       levering uit de verdeelronde mag dat wel (die koos de ronde zelf). */
+    if (weigering === 'derde_klant' && rij.soort === 'inhaalslag') {
       await markeer('overgeslagen', 'lead heeft intussen al twee andere klanten');
       return 'overgeslagen';
     }
     if (weigering === 'pauze') {
-      const later = vroegsteMoment(bestaand || [], rij.customer_id, nu);
-      if (later) {
+      const vrij = vroegsteMoment(bestaand || [], rij.customer_id, nu);
+      if (vrij) {
+        /* Kort na het einde van de wachttijd, op een willekeurige minuut, en
+           niet midden in de nacht. */
+        const later = buitenDeNacht(new Date(vrij.getTime() + Math.floor(Math.random() * 15 * 60_000)));
         await supabase.from('geplande_leadleveringen')
           .update({ gepland_voor: later.toISOString(), laatste_reden: 'uitgesteld: 12 uur na de vorige klant' })
           .eq('id', rij.id);
@@ -151,7 +178,7 @@ async function leverEenRij(supabase: SupabaseClient, rij: Rij): Promise<'gelever
   if (rij.batch_id) {
     const { data: batch } = await supabase
       .from('customer_batches')
-      .select('delivery_model, batch_kind, batch_size, leads_delivered, status, leads_per_day')
+      .select('delivery_model, batch_kind, batch_size, leads_delivered, status, leads_per_day, leads_per_week')
       .eq('id', rij.batch_id)
       .maybeSingle();
 
@@ -167,16 +194,31 @@ async function leverEenRij(supabase: SupabaseClient, rij: Rij): Promise<'gelever
        vandaag al bereikt (de gewone verdeling kan het hebben opgemaakt), dan
        deze niet meer. */
     const max = Number((batch as { leads_per_day?: number | null } | null)?.leads_per_day) || 0;
-    if (rij.soort === 'inhaalslag' && max > 0) {
-      const { dayStart } = getLeadLimitPeriodAnchors(new Date());
-      const { count } = await supabase
-        .from('lead_assignments')
-        .select('id', { count: 'exact', head: true })
-        .eq('batch_id', rij.batch_id)
-        .gte('assigned_at', dayStart.toISOString());
-      if ((count ?? 0) >= max) {
-        await markeer('overgeslagen', `dagmaximum van ${max} bereikt`);
-        return 'overgeslagen';
+    const maxWeek = Number((batch as { leads_per_week?: number | null } | null)?.leads_per_week) || 0;
+    const metRegels = rij.soort === 'inhaalslag' || rij.soort === 'spreiding';
+    if (metRegels && (max > 0 || maxWeek > 0)) {
+      const { dayStart, weekStart } = getLeadLimitPeriodAnchors(new Date());
+      if (max > 0) {
+        const { count } = await supabase
+          .from('lead_assignments')
+          .select('id', { count: 'exact', head: true })
+          .eq('batch_id', rij.batch_id)
+          .gte('assigned_at', dayStart.toISOString());
+        if ((count ?? 0) >= max) {
+          await markeer('overgeslagen', `dagmaximum van ${max} bereikt`);
+          return 'overgeslagen';
+        }
+      }
+      if (maxWeek > 0) {
+        const { count } = await supabase
+          .from('lead_assignments')
+          .select('id', { count: 'exact', head: true })
+          .eq('batch_id', rij.batch_id)
+          .gte('assigned_at', weekStart.toISOString());
+        if ((count ?? 0) >= maxWeek) {
+          await markeer('overgeslagen', `weekmaximum van ${maxWeek} bereikt`);
+          return 'overgeslagen';
+        }
       }
     }
   }
@@ -199,6 +241,11 @@ async function leverEenRij(supabase: SupabaseClient, rij: Rij): Promise<'gelever
     geleverd_op: new Date().toISOString(),
     assignment_id: resultaat.assignmentId,
   });
+
+  /* Net als bij een gewone levering: volgens de toewijsregels van de klant
+     meteen bij een medewerker. Dat ontbrak hier, waardoor een lead uit de
+     wachtrij bij een team zonder eigenaar bleef staan. */
+  assignToPortalUser(supabase as never, klant.id, lead as never).catch(() => {});
 
   /* Zelfde melding als bij een gewone levering: de klant moet niet hoeven
      ontdekken dat er een lead in zijn portaal staat. */
