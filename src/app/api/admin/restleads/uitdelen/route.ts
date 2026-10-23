@@ -171,6 +171,7 @@ export async function POST(request: NextRequest) {
         return planMomenten({
           laatsteToewijzing: laatste,
           aantal: i + 1,
+          klantenAl: al.size,
           dagplafond: p?.plafond ?? 0,
           alGepland: p?.bezet ?? {},
         })[i];
@@ -246,7 +247,7 @@ export async function POST(request: NextRequest) {
       status: 'gepland',
       pogingen: 0,
       negeer_geo: true,
-      reden: `${RESTLEAD_REDEN} gespreid volgens de cooldown van 12 uur.`,
+      reden: `${RESTLEAD_REDEN} gespreid volgens de wachttijd tussen klanten (12 uur, 8 uur voor de derde).`,
       aangemaakt_door: admin.id,
     }).select('id').single();
 

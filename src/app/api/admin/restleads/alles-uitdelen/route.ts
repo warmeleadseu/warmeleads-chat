@@ -193,6 +193,8 @@ export async function POST(request: NextRequest) {
       const [moment] = planMomenten({
         laatsteToewijzing: i === 0 ? laatste : momenten[i - 1],
         aantal: 1,
+        /* Wachttijd hangt af van hoeveel klanten de lead dan al heeft. */
+        klantenAl: new Set(echte.map(a => a.customer_id)).size + i,
         dagplafond: p.plafond,
         alGepland: p.bezet,
       });
@@ -209,7 +211,7 @@ export async function POST(request: NextRequest) {
       status: 'gepland',
       pogingen: 0,
       negeer_geo: true,
-      reden: `${RESTLEAD_REDEN} massaal uitgedeeld, goedkoopste klant eerst, gespreid over 12 uur.`,
+      reden: `${RESTLEAD_REDEN} massaal uitgedeeld, goedkoopste klant eerst, gespreid volgens de wachttijd tussen klanten (12 uur, 8 uur voor de derde).`,
       aangemaakt_door: admin.id,
     }));
 

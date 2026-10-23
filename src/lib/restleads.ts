@@ -3,6 +3,7 @@ import { targetCountryAllowsLead } from './targetCountryMatch';
 import { leadMatchesAnyProvinceTarget } from './provinceTargetMatch';
 import { binnenProvincieMarge, effectieveStraal, margeVan } from './provincieDoelMarge';
 import { leadPastInBatchVenster } from './verdeelGrenzen';
+import { wachttijdUren } from './wachttijdKlanten';
 
 /**
  * Leads die tussen wal en schip vielen, en welke klanten ze alsnog kunnen krijgen.
@@ -131,6 +132,66 @@ export interface Kandidaat {
   reden: string;
   distribution_priority: boolean;
   automatisch: AutoStatus;
+  /** Kleinste straal van een gebied dat de lead dekt (999 = provincie); de verdeling geeft voorrang aan de kleinste. */
+  kleinste_straal: number | null;
+}
+
+/** Kleinste straal van de gebieden die de lead dekken (999 voor een provincie), zoals de verdeling sorteert. */
+export function kleinsteStraalDieDekt(lead: RestLead, doelen: Doelgebied[]): number | null {
+  let beste: number | null = null;
+  for (const d of doelen) {
+    if (!targetCountryAllowsLead(d as { country?: string | null }, lead)) continue;
+    if ((d.target_type || 'radius') === 'province') {
+      const provs = Array.isArray(d.provinces) ? d.provinces : [];
+      const marge = margeVan(d);
+      if (provs.length > 0 && (leadMatchesAnyProvinceTarget(lead, provs) || (marge > 0 && binnenProvincieMarge(lead, provs, marge)))) {
+        beste = beste === null ? 999 : Math.min(beste, 999);
+      }
+      continue;
+    }
+    if (lead.lat == null || lead.lng == null || d.lat == null || d.lng == null || d.radius_km == null) continue;
+    if (haversineKm(lead.lat, lead.lng, d.lat, d.lng) <= effectieveStraal(d)) {
+      beste = beste === null ? d.radius_km : Math.min(beste, d.radius_km);
+    }
+  }
+  return beste;
+}
+
+/**
+ * Welke kandidaat de verdeling vermoedelijk als volgende kiest: geen handwerk,
+ * dan voorrang, dan het kleinste gebied, dan de kleinste afstand. Vermoedelijk,
+ * want de verdeling weegt op het moment zelf ook de eerlijke verdeling over de
+ * afgelopen 24 uur en direct leveren mee.
+ */
+export function vermoedelijkVolgende(kandidaten: Kandidaat[]): string | null {
+  const kans = kandidaten.filter(k => k.automatisch.status !== 'handwerk');
+  if (kans.length === 0) return null;
+  const gesorteerd = [...kans].sort((a, b) => {
+    if (a.distribution_priority !== b.distribution_priority) return a.distribution_priority ? -1 : 1;
+    const sa = a.kleinste_straal ?? Infinity;
+    const sb = b.kleinste_straal ?? Infinity;
+    if (sa !== sb) return sa - sb;
+    return a.km_buiten - b.km_buiten;
+  });
+  return gesorteerd[0].customer_id;
+}
+
+/** Wanneer de volgende klant(en) op zijn vroegst kunnen, gegeven de wachttijd tussen klanten. */
+export function planVolgendeKlanten(opties: {
+  laatsteToewijzing: Date | null;
+  aantalKlanten: number;
+  maxKlanten: number;
+  nu?: Date;
+}): { vanaf: Date | null; wachtUren: number; daarnaUren: number | null } {
+  const nu = opties.nu ?? new Date();
+  const wachtUren = wachttijdUren(opties.aantalKlanten);
+  const vrij = opties.laatsteToewijzing ? opties.laatsteToewijzing.getTime() + wachtUren * 3600_000 : 0;
+  const plekken = Math.max(0, opties.maxKlanten - opties.aantalKlanten);
+  return {
+    vanaf: vrij > nu.getTime() ? new Date(vrij) : null,
+    wachtUren,
+    daarnaUren: plekken >= 2 ? wachttijdUren(opties.aantalKlanten + 1) : null,
+  };
 }
 
 /** Hoe ver ligt de lead buiten het dichtstbijzijnde doelgebied? 0 = erbinnen. */
@@ -203,7 +264,6 @@ export function beschrijfKandidaat(kmBuiten: number, ruimeReden: string | null):
 }
 
 
-const COOLDOWN_UREN = 12;
 
 /** Waarom de gewone verdeling deze kandidaat (nog) niet zelf heeft geplaatst. */
 export function automatischeStatus(
@@ -212,6 +272,8 @@ export function automatischeStatus(
   laatsteToewijzing: Date | null,
   nu: Date = new Date(),
   leadBinnen?: string | null,
+  /** Hoeveel klanten de lead al heeft (bepaalt de wachttijd: 12 of 8 uur). */
+  aantalKlanten = 1,
 ): AutoStatus {
   const tijd = (d: Date) =>
     d.toLocaleString('nl-NL', {
@@ -235,9 +297,10 @@ export function automatischeStatus(
     };
   }
   if (laatsteToewijzing) {
-    const vrij = new Date(laatsteToewijzing.getTime() + COOLDOWN_UREN * 3600_000);
+    const uren = wachttijdUren(aantalKlanten);
+    const vrij = new Date(laatsteToewijzing.getTime() + uren * 3600_000);
     if (vrij > nu) {
-      return { status: 'wacht', uitleg: `Wacht op de 12 uur tussen twee klanten; gaat vanzelf vanaf ${tijd(vrij)}.` };
+      return { status: 'wacht', uitleg: `Kan op zijn vroegst ${tijd(vrij)} (${uren} uur na de vorige klant).` };
     }
   }
   if (batch.starts_at && new Date(batch.starts_at) > nu) {
@@ -324,7 +387,8 @@ export function vindKandidaten(
       km_buiten: buiten,
       reden: beschrijfKandidaat(buiten, buiten > instellingen.marge_km ? marge.waarom : null),
       distribution_priority: batch.distribution_priority,
-      automatisch: automatischeStatus(buiten, batch, opties.laatsteToewijzing ?? null, opties.nu, lead.created_at),
+      kleinste_straal: kleinsteStraalDieDekt(lead, batch.doelen),
+      automatisch: automatischeStatus(buiten, batch, opties.laatsteToewijzing ?? null, opties.nu, lead.created_at, alToegewezenAan.size),
     });
   }
 

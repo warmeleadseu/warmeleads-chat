@@ -1,3 +1,4 @@
+import { WACHTTIJD_TWEEDE_KLANT_UUR, wachttijdUren } from './wachttijdKlanten';
 /**
  * Het spreiden van restlead-leveringen over de tijd.
  *
@@ -11,7 +12,8 @@
  * "08:00" in de code werd 10:00 bij de klant, en "20:00" werd 22:00.
  */
 
-export const COOLDOWN_UREN = 12;
+/** Wachttijd na de eerste klant (de tweede klant); na de tweede is het 8 uur (wachttijdKlanten.ts). */
+export const COOLDOWN_UREN = WACHTTIJD_TWEEDE_KLANT_UUR;
 
 /** Buiten deze uren (Nederlandse tijd) leveren we niet: dan gaat er toch niemand achteraan. */
 export const VROEGSTE_UUR = 9;
@@ -82,6 +84,11 @@ export interface PlanInvoer {
   dagplafond?: number | null;
   /** Wat er per dag al bij deze klant staat, geleverd en gepland, als {jjjj-mm-dd: aantal}. */
   alGepland?: Record<string, number>;
+  /**
+   * Hoeveel klanten de lead al heeft. Bepaalt de wachttijd: 12 uur voor de
+   * tweede klant, 8 uur voor de derde. Leeg = 1 als er een vorige toewijzing is.
+   */
+  klantenAl?: number;
 }
 
 /**
@@ -129,7 +136,8 @@ export function planMomenten(invoer: PlanInvoer): Date[] {
     if (!vorige) {
       moment = new Date(nu);
     } else {
-      const vroegst = new Date(vorige.getTime() + COOLDOWN_UREN * 3600_000);
+      const klantenVoorDeze = (invoer.klantenAl ?? (invoer.laatsteToewijzing ? 1 : 0)) + i;
+      const vroegst = new Date(vorige.getTime() + wachttijdUren(klantenVoorDeze) * 3600_000);
       moment = vroegst.getTime() > nu.getTime() ? vroegst : new Date(nu);
     }
 

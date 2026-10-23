@@ -11,6 +11,7 @@ import { resolvePlaatsRadiusOrigin, leadWithinRadiusKm, type PlaatsRadiusOrigin 
 import { resolveProvincieMarge } from '@/lib/provincieMarge';
 import { filterEnTel, type RestleadFilterItem, type RestleadFilterKeuze } from '@/lib/restleadFilters';
 import { campagneStaatToe, exclusiviteitVan, laadCampagneRegels } from '@/lib/campagneExclusiviteit';
+import { planVolgendeKlanten, vermoedelijkVolgende } from '@/lib/restleads';
 import {
   vindKandidaten,
   lijstVoor,
@@ -352,6 +353,13 @@ export async function GET(request: NextRequest) {
       );
       const kandidaten = alleKandidaten.filter(k => campagneStaatToe(k.batch_id, lead, campagneRegels, nu));
       const excl = exclusiviteitVan(lead, campagneRegels, nu);
+      const plan = planVolgendeKlanten({
+        laatsteToewijzing: laatstePerLead.has(lead.id) ? new Date(laatstePerLead.get(lead.id)!) : null,
+        aantalKlanten: al.size,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        maxKlanten: effectiveMaxAssignments(lead as any),
+        nu,
+      });
 
       const rij = {
         id: lead.id,
@@ -370,6 +378,14 @@ export async function GET(request: NextRequest) {
            gissen. */
         wachtrij: wachtrijPerLead.get(lead.id) ?? null,
         kandidaten,
+        /* Wat er echt gebeurt: wanneer de volgende klant op zijn vroegst kan,
+           wie dat vermoedelijk wordt, en of er daarna nog een plek is. */
+        plan: {
+          volgende_vanaf: plan.vanaf ? plan.vanaf.toISOString() : null,
+          wacht_uren: plan.wachtUren,
+          daarna_uren: plan.daarnaUren,
+          vermoedelijk: vermoedelijkVolgende(kandidaten),
+        },
         /* Uit een exclusieve campagne: voor wie, en tot wanneer (null = altijd). */
         exclusief: excl
           ? { klanten: [...excl.klantIds].map(id => klantNaam.get(id) ?? 'een andere klant'), tot: excl.tot ? excl.tot.toISOString() : null }

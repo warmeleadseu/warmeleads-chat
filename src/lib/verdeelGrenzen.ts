@@ -103,17 +103,21 @@ export const INHAALSLAG_PAUZE_UREN = 12;
  * derde klant. De gewone verdeling bewaakt die twee regels; de inhaalslag
  * deed dat niet.
  *
- * - `pauze`: een andere klant kreeg de lead minder dan 12 uur geleden.
+ * - `pauze`: de wachttijd na de vorige klant is nog niet om (12 uur na de
+ *   eerste klant, 8 uur na de tweede).
  * - `derde_klant`: de lead staat al bij twee andere klanten. Een derde klant
  *   loopt alleen via de gewone verdeelronde, gedoseerd en op verse leads.
  */
+import { wachttijdUren } from './wachttijdKlanten';
+
 export function inhaalslagWeigering(
   bestaande: { customer_id: string | null; assigned_at: string | null }[],
   klantId: string,
   nu: Date = new Date(),
 ): 'pauze' | 'derde_klant' | null {
   const anderen = bestaande.filter(a => a.customer_id && a.customer_id !== klantId);
-  const pauzeGrens = nu.getTime() - INHAALSLAG_PAUZE_UREN * 3_600_000;
+  /* 12 uur na de eerste klant, 8 uur na de tweede (wachttijdKlanten.ts). */
+  const pauzeGrens = nu.getTime() - wachttijdUren(new Set(anderen.map(a => a.customer_id)).size) * 3_600_000;
   for (const a of anderen) {
     const t = a.assigned_at ? new Date(a.assigned_at).getTime() : NaN;
     /* Zonder geldige datum voorzichtig: als recent behandelen. */

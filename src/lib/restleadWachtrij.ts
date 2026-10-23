@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { COOLDOWN_UREN, herverdeel, type WachtrijItem } from './restleadPlanning';
+import { herverdeel, type WachtrijItem } from './restleadPlanning';
+import { wachttijdUren } from './wachttijdKlanten';
 import { RESTLEAD_REDEN } from './restleads';
 
 /**
@@ -42,13 +43,17 @@ export async function herverdeelRestleadWachtrij(
   /* De cooldown per lead: twaalf uur na zijn laatste echte toewijzing. */
   const leadIds = [...new Set(rijen.map(r => r.lead_id))];
   const laatstePerLead = new Map<string, number>();
+  const klantenPerLead = new Map<string, Set<string>>();
   for (let i = 0; i < leadIds.length; i += 200) {
     const { data: toewijzingen } = await supabase
       .from('lead_assignments')
-      .select('lead_id, assigned_at, source')
+      .select('lead_id, customer_id, assigned_at, source')
       .in('lead_id', leadIds.slice(i, i + 200));
     for (const t of toewijzingen || []) {
       if (t.source === 'mirror') continue;
+      const set = klantenPerLead.get(t.lead_id) ?? new Set<string>();
+      if ((t as { customer_id?: string }).customer_id) set.add((t as { customer_id: string }).customer_id);
+      klantenPerLead.set(t.lead_id, set);
       const ms = new Date(t.assigned_at).getTime();
       if (ms > (laatstePerLead.get(t.lead_id) ?? 0)) laatstePerLead.set(t.lead_id, ms);
     }
@@ -67,8 +72,11 @@ export async function herverdeelRestleadWachtrij(
   for (const [leadId, lijst] of perLead) {
     lijst.sort((a, b) => new Date(a.gepland_voor).getTime() - new Date(b.gepland_voor).getTime());
     let vorige = laatstePerLead.get(leadId) ?? null;
+    let klanten = klantenPerLead.get(leadId)?.size ?? 0;
     for (const r of lijst) {
-      const vroegst = vorige === null ? nu.getTime() : vorige + COOLDOWN_UREN * 3600_000;
+      /* 12 uur na de eerste klant, 8 uur na de tweede (wachttijdKlanten.ts). */
+      const vroegst = vorige === null ? nu.getTime() : vorige + wachttijdUren(Math.max(1, klanten)) * 3600_000;
+      klanten++;
       items.push({
         id: r.id,
         customer_id: r.customer_id,

@@ -1,4 +1,5 @@
 import { LOOKBACK_VENSTER_UREN, buitenDeNacht, trekTijdstippen, type Rng } from './leverSpreiding';
+import { volgendeKlantVanaf } from './wachttijdKlanten';
 
 /**
  * Een inhaalslag (terugkijkperiode van een batch) gefaseerd over 8 uur.
@@ -78,16 +79,11 @@ function tijd(iso: string | null | undefined): number {
   return Number.isNaN(t) ? 0 : t;
 }
 
-/** Wanneer de 12 uur na de laatste andere klant om zijn, of null als dat al zo is. */
+/** Wanneer de wachttijd na de laatste andere klant om is (12 uur, of 8 uur voor een derde klant), of null als dat al zo is. */
 export function vroegsteMoment(
   bestaande: { customer_id: string | null; assigned_at: string | null }[],
   klantId: string,
   nu: Date = new Date(),
 ): Date | null {
-  const tijden = bestaande
-    .filter(a => a.customer_id && a.customer_id !== klantId && a.assigned_at)
-    .map(a => new Date(a.assigned_at as string).getTime());
-  if (tijden.length === 0) return null;
-  const vrij = Math.max(...tijden) + INHAALSLAG_PAUZE_UREN * 3_600_000;
-  return vrij > nu.getTime() ? new Date(vrij) : null;
+  return volgendeKlantVanaf(bestaande, klantId, nu);
 }

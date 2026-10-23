@@ -59,6 +59,8 @@ interface Restlead {
   uitgedeeld: number;
   phone_valid: boolean | null;
   wachtrij: { klant: string; wanneer: string | null; status: string } | null;
+  /** Wanneer de volgende klant op zijn vroegst kan en wie dat vermoedelijk wordt. */
+  plan?: { volgende_vanaf: string | null; wacht_uren: number; daarna_uren: number | null; vermoedelijk: string | null };
   /** Uit een exclusieve Meta-campagne: voor wie, en tot wanneer (null = altijd). */
   exclusief?: { klanten: string[]; tot: string | null } | null;
   kandidaten: Kandidaat[];
@@ -860,6 +862,15 @@ export default function RestleadsPage() {
                     <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
                       Kan alsnog naar ({ruimte} {ruimte === 1 ? 'plek' : 'plekken'} vrij)
                     </p>
+                    {l.plan && ruimte > 0 && (
+                      <p className="mb-2 rounded-lg bg-sky-50 px-3 py-2 text-xs leading-relaxed text-sky-900">
+                        De lead gaat naar één klant tegelijk.{' '}
+                        Volgende klant: {l.plan.volgende_vanaf ? <>op zijn vroegst <strong>{datum(l.plan.volgende_vanaf)}</strong></> : <strong>kan nu</strong>}{' '}
+                        ({l.plan.wacht_uren} uur na de vorige klant).
+                        {l.plan.daarna_uren && ruimte >= 2 ? ` Daarna nog één klant, op zijn vroegst ${l.plan.daarna_uren} uur later.` : ''}
+                        {' '}Kies je er hier zelf meer, dan houdt het uitdelen dezelfde wachttijd aan.
+                      </p>
+                    )}
                     <div className="space-y-1">
                       {l.kandidaten.map(k => {
                         const aan = gekozen.has(k.customer_id);
@@ -884,10 +895,17 @@ export default function RestleadsPage() {
                                 {k.distribution_priority && (
                                   <span className="ml-1.5 rounded bg-indigo-100 px-1.5 py-0.5 text-[9px] font-bold text-indigo-700">voorrang</span>
                                 )}
+                                {l.plan?.vermoedelijk === k.customer_id && (
+                                  <span className="ml-1.5 rounded bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700" title="Kleinste gebied en voorrang; de verdeling weegt op het moment zelf ook de eerlijke verdeling mee">
+                                    vermoedelijk de volgende
+                                  </span>
+                                )}
                               </span>
                               {k.automatisch && (
                                 <span className={`block text-[11px] leading-snug ${AUTO_KLEUR[k.automatisch.status] ?? 'text-slate-500'}`}>
-                                  {k.automatisch.uitleg}
+                                  {k.automatisch.status === 'wacht' && l.plan?.volgende_vanaf && l.plan.vermoedelijk && l.plan.vermoedelijk !== k.customer_id && k.automatisch.uitleg.startsWith('Kan op zijn vroegst')
+                                    ? 'Kandidaat als de vermoedelijke volgende afvalt, of voor de plek daarna.'
+                                    : k.automatisch.uitleg}
                                 </span>
                               )}
                             </span>

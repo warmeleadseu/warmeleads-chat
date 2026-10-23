@@ -24,6 +24,7 @@ import { inhaalslagWeigering, kiesDerdeKlantLeads, leadPastInBatchVenster } from
 import { INHAALSLAG_VENSTER_UREN, planInhaalslag, planInhaalslagSpoed, vroegsteMoment } from './inhaalslagPlanning';
 import { isVers, kiesLevering, kiesMoment } from './leverSpreiding';
 import { zetInWachtrij } from './wachtrijPlannen';
+import { wachttijdUren } from './wachttijdKlanten';
 import { GEEN_REGELS, campagneStaatToe, laadCampagneRegels, type CampagneRegels } from './campagneExclusiviteit';
 import { effectiefDirect, vergelijkKandidaten } from './directLeveren';
 
@@ -513,9 +514,12 @@ export async function distributeLead(
   const recentAssignedIds = recentDistinctCustomerIds(existingAssignments || []);
   if (recentAssignedIds.size >= effectiveMaxAssignments(fullLead as LeadForDistribution)) return result;
 
-  // 12-hour cooldown: alleen pipeline-toewijzingen (niche-onderzoek blokkeert andere klanten niet structureel)
+  /* Wachttijd tussen klanten: 12 uur voor de tweede klant, 8 uur voor de
+     derde (zie wachttijdKlanten.ts). Alleen pipeline-toewijzingen tellen;
+     niche-onderzoek blokkeert andere klanten niet structureel. */
   if (pipelineCooldownAssignments.length > 0) {
-    const cooldownCutoff = new Date(Date.now() - COOLDOWN_HOURS * 60 * 60 * 1000);
+    const aantalKlanten = new Set(pipelineCooldownAssignments.map(a => a.customer_id)).size;
+    const cooldownCutoff = new Date(Date.now() - wachttijdUren(aantalKlanten) * 60 * 60 * 1000);
     const cooldownHit = pipelineCooldownAssignments.find(a =>
       new Date(a.assigned_at) > cooldownCutoff
     );
@@ -1403,8 +1407,6 @@ export async function distributeUnassignedLeads(): Promise<DistributeRunResult> 
     recentAssignmentCounts[leadId] = klanten.size;
   }
 
-  const cooldownCutoff = new Date(Date.now() - COOLDOWN_HOURS * 60 * 60 * 1000);
-
   // Pass 1: leads with 0 recent assignments (new or eligible for re-assignment)
   const newLeads = leads.filter(l => (recentAssignmentCounts[l.id] || 0) === 0);
 
@@ -1454,9 +1456,12 @@ export async function distributeUnassignedLeads(): Promise<DistributeRunResult> 
    * naar een derde klant hangt nog van het streefgemiddelde af, zodat de
    * exclusiviteit niet alsnog wegvalt. Wie binnen het gebied past en ruimte
    * heeft, krijgt de lead; de rest blijft handwerk op de Restleads-pagina. */
+  /* Wachttijd na de laatste klant: 12 uur voor de tweede, 8 uur voor de derde. */
   const mag = (l: { id: string }) => {
     const last = lastAssignedAt[l.id];
-    return !(last && last > cooldownCutoff);
+    if (!last) return true;
+    const wacht = wachttijdUren(recentAssignmentCounts[l.id] || 0);
+    return last.getTime() <= Date.now() - wacht * 60 * 60 * 1000;
   };
   /* Leads die al in de wachtrij staan, tellen niet mee als kandidaat. */
   const nietGepland = (l: { id: string }) => !ronde.geplandeLeadIds.has(l.id);
