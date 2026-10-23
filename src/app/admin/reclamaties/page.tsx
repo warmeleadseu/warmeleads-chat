@@ -23,6 +23,19 @@ import { useAdmin } from '../adminContext';
 import { digitsOnlyPhone, phoneSearchDigitVariants } from '@/lib/phoneSearch';
 import { buildReclamatieCsv, reclamatieBestandsnaam } from '@/lib/reclamatieExport';
 
+/** Oordeel over het gebied bij "buiten afgesproken gebied" (zie reclamatieGebied.ts). */
+type GebiedLabel = { status: 'binnen' | 'buiten' | 'buiten_provincie' | 'onbekend'; tekst: string; binnenMarge?: boolean };
+
+function GebiedChip({ gebied }: { gebied?: GebiedLabel | null }) {
+  if (!gebied) return null;
+  const kleur =
+    gebied.status === 'binnen' ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+      : gebied.status === 'onbekend' ? 'bg-slate-50 text-slate-500 border-slate-200'
+        : gebied.binnenMarge ? 'bg-amber-50 text-amber-800 border-amber-200'
+          : 'bg-red-50 text-red-700 border-red-200';
+  return <span className={`mt-1 inline-block rounded-md border px-1.5 py-0.5 text-[10px] font-medium leading-snug ${kleur}`}>{gebied.tekst}</span>;
+}
+
 interface Reclamation {
   id: string;
   customer_id: string;
@@ -35,6 +48,8 @@ interface Reclamation {
   created_at: string;
   updated_at: string;
   customers: { name: string; email: string } | null;
+  /** Alleen bij "buiten afgesproken gebied": hoe ver erbuiten. */
+  gebied?: GebiedLabel | null;
   leads: {
     naam_klant: string;
     telefoonnummer: string;
@@ -334,6 +349,7 @@ export default function AdminReclamatiesPage() {
                         <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
                           {REASON_LABELS[r.reason] || r.reason}
                         </span>
+                        <div><GebiedChip gebied={r.gebied} /></div>
                       </td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${sc.cls}`}>
@@ -377,6 +393,7 @@ export default function AdminReclamatiesPage() {
                         <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">
                           {REASON_LABELS[r.reason] || r.reason}
                         </span>
+                        <GebiedChip gebied={r.gebied} />
                       </div>
                       <p className="truncate text-sm font-medium text-slate-900">{r.customers?.name || '—'}</p>
                       <p className="truncate text-xs text-slate-500">{r.leads?.naam_klant} &middot; {r.leads?.telefoonnummer}</p>

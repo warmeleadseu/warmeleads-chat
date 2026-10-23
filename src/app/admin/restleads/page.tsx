@@ -389,6 +389,69 @@ export default function RestleadsPage() {
     }
   };
 
+  /* Alle leads waarbij je klanten hebt aangevinkt, in één keer: elke lead
+     naar precies de klanten die jij koos. Zelfde route en regels als per lead
+     (dagmaximum, drie klanten, wachttijd, exclusieve campagnes); de leads gaan
+     na elkaar, zodat elke volgende de bezetting van de vorige meeneemt. */
+  const metSelectie = useMemo(
+    () => [...kansrijk, ...verlopen].filter((l, i, alle) => (selectie[l.id]?.size ?? 0) > 0 && alle.findIndex(x => x.id === l.id) === i),
+    [kansrijk, verlopen, selectie],
+  );
+  const deelSelectieUit = async () => {
+    const leads = metSelectie;
+    if (leads.length === 0) return;
+    const leveringen = leads.reduce((t, l) => t + (selectie[l.id]?.size ?? 0), 0);
+    if (!confirm(`${leads.length} lead${leads.length === 1 ? '' : 's'} uitdelen aan de klanten die je hebt aangevinkt (${leveringen} levering${leveringen === 1 ? '' : 'en'})?`)) return;
+
+    setMassaBezig(true);
+    setMelding(null);
+    let gelukt = 0;
+    const weg = new Set<string>();
+    const fouten: string[] = [];
+    try {
+      for (const lead of leads) {
+        const gekozen = selectie[lead.id];
+        const doelen = lead.kandidaten
+          .filter(k => gekozen?.has(k.customer_id))
+          .map(k => ({ customer_id: k.customer_id, batch_id: k.batch_id }));
+        if (doelen.length === 0) continue;
+        try {
+          const res = await adminFetch('/api/admin/restleads/uitdelen', {
+            method: 'POST',
+            body: JSON.stringify({ lead_id: lead.id, doelen }),
+          });
+          const d = await res.json().catch(() => ({}));
+          if (!res.ok) { fouten.push(`${lead.naam_klant ?? 'lead'}: ${d.error || 'mislukt'}`); continue; }
+          gelukt += Number(d.gelukt) || 0;
+          if ((Number(d.gelukt) || 0) > 0) weg.add(lead.id);
+          for (const u of (d.uitkomsten || []) as { ok: boolean; klant?: string; reden?: string }[]) {
+            if (!u.ok) fouten.push(`${lead.naam_klant ?? 'lead'} → ${u.klant ?? 'klant'}: ${u.reden ?? 'mislukt'}`);
+          }
+        } catch {
+          fouten.push(`${lead.naam_klant ?? 'lead'}: netwerkfout`);
+        }
+      }
+      setKansrijk(v => v.filter(x => !weg.has(x.id)));
+      setVerlopen(v => v.filter(x => !weg.has(x.id)));
+      setSelectie(v => {
+        const nieuw = { ...v };
+        for (const id of weg) delete nieuw[id];
+        return nieuw;
+      });
+      setLaatsteActie(null);
+      setMelding(
+        fouten.length === 0
+          ? `${gelukt} levering${gelukt === 1 ? '' : 'en'} uitgedeeld over ${weg.size} lead${weg.size === 1 ? '' : 's'}.`
+          : `${gelukt} gelukt over ${weg.size} lead${weg.size === 1 ? '' : 's'}; ${fouten.length} niet: ${fouten.slice(0, 6).join('; ')}${fouten.length > 6 ? ` en nog ${fouten.length - 6}` : ''}`,
+      );
+      laad();
+      laadWachtrij();
+    } finally {
+      setMassaBezig(false);
+      setTimeout(() => setMelding(null), 12000);
+    }
+  };
+
   /* Alles in één keer, met de regels die alleen hier gelden: niets uit de
      ruime marge (daar beslis jij over), geen gratis klanten, en bij meer
      kandidaten dan plekken de goedkoopste eerst. */
@@ -531,6 +594,16 @@ export default function RestleadsPage() {
               className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40"
             >
               <ArrowDownTrayIcon className={`h-4 w-4 ${exportBezig ? 'animate-pulse' : ''}`} /> {exportBezig ? 'Exporteren...' : 'Export'}
+            </button>
+          )}
+          {metSelectie.length > 0 && (
+            <button
+              onClick={deelSelectieUit}
+              disabled={massaBezig}
+              title="Elke lead naar de klanten die je bij die lead hebt aangevinkt"
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-slate-900 px-3.5 text-sm font-bold text-white hover:bg-slate-700 disabled:opacity-40"
+            >
+              {massaBezig ? 'Bezig...' : `Deel selectie uit (${metSelectie.length})`}
             </button>
           )}
           {lijst === 'kansrijk' && (

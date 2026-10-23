@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { fetchActiveBatchTargetsByBatch } from '@/lib/batchTargets';
+import { beoordeelGebied, gebiedTekst, type GebiedOordeel, type GebiedsDoel, type GebiedsLead } from '@/lib/reclamatieGebied';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
 import { digitsOnlyPhone, phoneSearchDigitVariants } from '@/lib/phoneSearch';
@@ -40,7 +42,7 @@ export async function GET(request: NextRequest) {
   let query = supabase
     .from('lead_reclamations')
     .select(
-      '*, customers(name, email), leads(naam_klant, telefoonnummer, email, postcode, plaatsnaam, provincie, branch)',
+      '*, customers(name, email), leads(naam_klant, telefoonnummer, email, postcode, plaatsnaam, provincie, branch, lat, lng, land)',
       { count: 'exact' },
     )
     .order('created_at', { ascending: false })
@@ -75,6 +77,14 @@ export async function GET(request: NextRequest) {
       limit,
       partial: true,
     });
+  }
+
+  /* Bij "buiten afgesproken gebied": hoe ver erbuiten, zodat dat niet met de
+     hand nagemeten hoeft te worden. Lukt het niet, dan blijft de lijst werken. */
+  try {
+    await voegGebiedToe(supabase, reclamations as ReclamatieRij[]);
+  } catch (err) {
+    console.error('[admin/reclamations] gebied bepalen mislukt:', err instanceof Error ? err.message : err);
   }
 
   if (search) {
@@ -325,4 +335,46 @@ export async function PUT(request: NextRequest) {
     compensation_reverted: compensationReverted,
     previous_status: previousStatus,
   });
+}
+
+type ReclamatieRij = {
+  reason?: string | null;
+  lead_id?: string | null;
+  customer_id?: string | null;
+  leads?: GebiedsLead | GebiedsLead[] | null;
+  gebied?: (GebiedOordeel & { tekst: string }) | null;
+};
+
+async function voegGebiedToe(supabase: ReturnType<typeof createServerClient>, rijen: ReclamatieRij[]) {
+  const doel = rijen.filter(x => x.reason === 'buiten_doelgebied' && x.lead_id && x.customer_id);
+  if (doel.length === 0) return;
+  const leadIds = [...new Set(doel.map(x => x.lead_id as string))];
+  const klantIds = [...new Set(doel.map(x => x.customer_id as string))];
+
+  /* Uit welke batch kwam de lead bij deze klant? Dat gebied gold. */
+  const batchVan = new Map<string, string>();
+  for (let i = 0; i < leadIds.length; i += 200) {
+    const { data, error } = await supabase
+      .from('lead_assignments')
+      .select('lead_id, customer_id, batch_id, assigned_at')
+      .in('lead_id', leadIds.slice(i, i + 200))
+      .neq('source', 'mirror')
+      .order('assigned_at', { ascending: true });
+    if (error) throw new Error(error.message);
+    for (const a of data ?? []) if (a.batch_id) batchVan.set(`${a.lead_id}:${a.customer_id}`, a.batch_id as string);
+  }
+  const batchDoelen = await fetchActiveBatchTargetsByBatch(supabase, [...new Set(batchVan.values())]);
+  const { data: klantDoelen, error: doelFout } = await supabase.from('customer_targets').select('*').in('customer_id', klantIds).eq('is_active', true);
+  if (doelFout) throw new Error(doelFout.message);
+  const perKlant = new Map<string, GebiedsDoel[]>();
+  for (const t of klantDoelen ?? []) perKlant.set(t.customer_id as string, [...(perKlant.get(t.customer_id as string) ?? []), t as GebiedsDoel]);
+
+  for (const rij of doel) {
+    const lead = (Array.isArray(rij.leads) ? rij.leads[0] : rij.leads) ?? {};
+    const batchId = batchVan.get(`${rij.lead_id}:${rij.customer_id}`);
+    const eigen = batchId ? (batchDoelen.get(batchId) as GebiedsDoel[] | undefined) : undefined;
+    const doelen = eigen && eigen.length > 0 ? eigen : perKlant.get(rij.customer_id as string) ?? [];
+    const oordeel = beoordeelGebied(lead, doelen);
+    rij.gebied = { ...oordeel, tekst: gebiedTekst(oordeel) };
+  }
 }
