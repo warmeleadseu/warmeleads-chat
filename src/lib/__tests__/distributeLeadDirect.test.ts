@@ -215,6 +215,56 @@ describe('distributeLead met direct leveren', () => {
     expect(inserts().map(i => i.customer_id)).toEqual(['B', 'A']);
   });
 
+  describe('exclusieve en uitgesloten campagnes', () => {
+    const uur = (u: number) => new Date(Date.now() - u * 3_600_000).toISOString();
+    const leadUit = (campagne: string | null, uurGeleden = 0.1) => ({ ...LEAD, meta_campaign_id: campagne, created_at: uur(uurGeleden) });
+    const metRegel = (klant: string, extra: Batch) => batch(klant, { status: 'active', meta_campagne_exclusief: {}, meta_campagne_uitgesloten: [], ...extra });
+
+    it('24 uur exclusief voor B: B krijgt hem, ook al wint A normaal', async () => {
+      const { db, inserts } = nepDb({ batches: [metRegel('A', {}), metRegel('B', { meta_campagne_exclusief: { '111': '24u' } })], targets: TARGETS });
+      await distributeLead(leadUit('111') as never, { supabase: db as never });
+      expect(inserts().map(i => i.customer_id)).toEqual(['B']);
+    });
+
+    it('na 24 uur: weer de gewone verdeling', async () => {
+      const { db, inserts } = nepDb({ batches: [metRegel('A', {}), metRegel('B', { meta_campagne_exclusief: { '111': '24u' } })], targets: TARGETS });
+      await distributeLead(leadUit('111', 25) as never, { supabase: db as never });
+      expect(inserts().map(i => i.customer_id)).toEqual(['A']);
+    });
+
+    it('altijd exclusief en de exclusieve batch is vol: niemand anders krijgt hem', async () => {
+      const { db, inserts } = nepDb({
+        batches: [metRegel('A', {}), metRegel('B', { meta_campagne_exclusief: { '111': 'altijd' }, batch_size: 5, leads_delivered: 5 })],
+        targets: TARGETS,
+      });
+      await distributeLead(leadUit('111', 80) as never, { supabase: db as never });
+      expect(inserts()).toHaveLength(0);
+    });
+
+    it('A sluit de campagne uit: B krijgt hem', async () => {
+      const { db, inserts } = nepDb({ batches: [metRegel('A', { meta_campagne_uitgesloten: ['111'] }), metRegel('B', {})], targets: TARGETS });
+      await distributeLead(leadUit('111') as never, { supabase: db as never });
+      expect(inserts().map(i => i.customer_id)).toEqual(['B']);
+    });
+
+    it('lead uit een andere campagne of zonder campagne: niets verandert', async () => {
+      const regels = [metRegel('A', {}), metRegel('B', { meta_campagne_exclusief: { '111': 'altijd' } })];
+      const een = nepDb({ batches: regels, targets: TARGETS });
+      await distributeLead(leadUit('222') as never, { supabase: een.db as never });
+      expect(een.inserts().map(i => i.customer_id)).toEqual(['A']);
+      const twee = nepDb({ batches: regels, targets: TARGETS });
+      await distributeLead(leadUit(null) as never, { supabase: twee.db as never });
+      expect(twee.inserts().map(i => i.customer_id)).toEqual(['A']);
+    });
+
+    it('exclusief voor een gepauzeerde batch: blijft exclusief (geen andere klant)', async () => {
+      const gepauzeerd = { id: 'batch-B', customer_id: 'B', status: 'paused', meta_campagne_exclusief: { '111': '24u' }, meta_campagne_uitgesloten: [] };
+      const { db, inserts } = nepDb({ batches: [metRegel('A', {}), gepauzeerd as Batch], targets: TARGETS });
+      await distributeLead(leadUit('111') as never, { supabase: db as never });
+      expect(inserts()).toHaveLength(0);
+    });
+  });
+
   it('demo-lead: nooit verdeeld', async () => {
     const { db, inserts } = nepDb({ batches: [klantDirect('B')], targets: TARGETS });
     await distributeLead({ ...LEAD, bron: 'demo' } as never, { supabase: db as never });

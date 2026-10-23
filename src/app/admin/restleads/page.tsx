@@ -59,6 +59,8 @@ interface Restlead {
   uitgedeeld: number;
   phone_valid: boolean | null;
   wachtrij: { klant: string; wanneer: string | null; status: string } | null;
+  /** Uit een exclusieve Meta-campagne: voor wie, en tot wanneer (null = altijd). */
+  exclusief?: { klanten: string[]; tot: string | null } | null;
   kandidaten: Kandidaat[];
 }
 
@@ -766,6 +768,13 @@ export default function RestleadsPage() {
                     Staat al klaar voor <strong>{l.wachtrij.klant}</strong>
                     {l.wachtrij.wanneer && ` op ${datum(l.wachtrij.wanneer)}`} ({l.wachtrij.status}).
                     Meld dit even; hij hoort hier niet meer te staan.
+                  </p>
+                )}
+
+                {l.exclusief && (
+                  <p className="mt-3 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-800">
+                    Uit een exclusieve campagne voor <strong>{l.exclusief.klanten.join(', ')}</strong>
+                    {l.exclusief.tot ? ` tot ${datum(l.exclusief.tot)}` : ' (altijd)'}. Andere klanten staan daarom niet als kandidaat.
                   </p>
                 )}
 

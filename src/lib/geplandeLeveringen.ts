@@ -8,6 +8,7 @@ import { sendNewLeadPush } from './pushNotification';
 import { inhaalslagWeigering } from './verdeelGrenzen';
 import { vroegsteMoment } from './inhaalslagPlanning';
 import { buitenDeNacht } from './leverSpreiding';
+import { campagneWeigering, exclusiviteitVan, laadCampagneRegels, type CampagneRegels } from './campagneExclusiviteit';
 import { getLeadLimitPeriodAnchors } from './batchAssignmentCaps';
 import { assignToPortalUser } from './distribution';
 
@@ -89,11 +90,22 @@ export async function verwerkGeplandeLeveringen(
   let geleverd = 0;
   let overgeslagen = 0;
 
+  /* Eén keer per ronde: de exclusieve en uitgesloten campagnes. Lukt dat
+     niet, dan deze ronde niets leveren (een exclusieve lead mag niet bij een
+     verkeerde klant belanden); de volgende minuut opnieuw. */
+  let campagneRegels: CampagneRegels;
+  try {
+    campagneRegels = await laadCampagneRegels(supabase);
+  } catch (err) {
+    console.error('[geplandeLeveringen] campagneregels niet beschikbaar:', err instanceof Error ? err.message : err);
+    return { bekeken: 0, geleverd: 0, overgeslagen: 0 };
+  }
+
   let bekeken = 0;
   for (const rij of rijen as Rij[]) {
     if (opties.tijdBudgetMs && Date.now() - start > opties.tijdBudgetMs) break;
     bekeken++;
-    const uitkomst = await leverEenRij(supabase, rij);
+    const uitkomst = await leverEenRij(supabase, rij, campagneRegels);
     if (uitkomst === 'geleverd') geleverd++;
     else if (uitkomst === 'overgeslagen') overgeslagen++;
   }
@@ -101,7 +113,7 @@ export async function verwerkGeplandeLeveringen(
   return { bekeken, geleverd, overgeslagen };
 }
 
-async function leverEenRij(supabase: SupabaseClient, rij: Rij): Promise<'geleverd' | 'overgeslagen' | 'uitgesteld'> {
+async function leverEenRij(supabase: SupabaseClient, rij: Rij, campagneRegels: CampagneRegels): Promise<'geleverd' | 'overgeslagen' | 'uitgesteld'> {
   const markeer = async (status: string, reden: string | null, extra?: Record<string, unknown>) => {
     await supabase
       .from('geplande_leadleveringen')
@@ -113,6 +125,26 @@ async function leverEenRij(supabase: SupabaseClient, rij: Rij): Promise<'gelever
   if (!lead) {
     await markeer('overgeslagen', 'lead bestaat niet meer');
     return 'overgeslagen';
+  }
+
+  /* Exclusieve of uitgesloten campagne, op het moment van leveren. Is de
+     lead nog maar tijdelijk exclusief voor een andere batch, dan schuift de
+     levering door tot daarna; anders overslaan. */
+  if (rij.batch_id) {
+    const weigering = campagneWeigering(rij.batch_id, lead, campagneRegels);
+    if (weigering) {
+      const excl = exclusiviteitVan(lead, campagneRegels);
+      const verbodenDoorUitsluiting = campagneRegels.uitgesloten.get(rij.batch_id)?.has(String(lead.meta_campaign_id));
+      if (excl?.tot && !verbodenDoorUitsluiting) {
+        const later = buitenDeNacht(new Date(excl.tot.getTime() + Math.floor(Math.random() * 20 * 60_000)));
+        await supabase.from('geplande_leadleveringen')
+          .update({ gepland_voor: later.toISOString(), laatste_reden: 'uitgesteld: lead is nog exclusief voor een andere batch' })
+          .eq('id', rij.id);
+        return 'uitgesteld';
+      }
+      await markeer('overgeslagen', weigering);
+      return 'overgeslagen';
+    }
   }
 
   const { data: klant } = await supabase

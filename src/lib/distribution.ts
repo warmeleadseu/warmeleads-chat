@@ -24,6 +24,7 @@ import { inhaalslagWeigering, kiesDerdeKlantLeads, leadPastInBatchVenster } from
 import { INHAALSLAG_VENSTER_UREN, planInhaalslag, planInhaalslagSpoed, vroegsteMoment } from './inhaalslagPlanning';
 import { isVers, kiesLevering, kiesMoment } from './leverSpreiding';
 import { zetInWachtrij } from './wachtrijPlannen';
+import { GEEN_REGELS, campagneStaatToe, laadCampagneRegels, type CampagneRegels } from './campagneExclusiviteit';
 import { effectiefDirect, vergelijkKandidaten } from './directLeveren';
 
 const MAX_LEAD_AGE_DAYS = 3;
@@ -433,6 +434,12 @@ export type DistributeLeadContext = {
    * binnenkomst), dan gaat een lead altijd meteen.
    */
   ronde?: VerdeelRonde;
+  /**
+   * Exclusieve en uitgesloten Meta-campagnes (zie campagneExclusiviteit.ts).
+   * Gevuld door de verdeelronde; ontbreekt het, dan haalt distributeLead ze
+   * zelf op als de lead een campagne heeft.
+   */
+  campagneRegels?: CampagneRegels;
 };
 
 /**
@@ -516,6 +523,20 @@ export async function distributeLead(
   }
 
   const eersteKlant = pipelineCooldownAssignments.length === 0;
+
+  /* Campagneregels: alleen nodig als de lead uit een Meta-campagne komt.
+     Lukt het ophalen niet, dan nu niet verdelen: een exclusieve lead mag niet
+     bij een verkeerde klant belanden. Het vangnet en de kwartierronde proberen
+     het opnieuw. */
+  let campagneRegels: CampagneRegels = GEEN_REGELS;
+  if ((fullLead as { meta_campaign_id?: string | null }).meta_campaign_id) {
+    try {
+      campagneRegels = ctx?.campagneRegels ?? (await laadCampagneRegels(supabase));
+    } catch (err) {
+      console.error('[distribution] campagneregels niet beschikbaar, lead later opnieuw', { leadId: lead.id, err: err instanceof Error ? err.message : err });
+      return result;
+    }
+  }
 
   /* Staat de lead al in de wachtrij (een lookback of een verspreide
      levering), dan is hij al onderweg naar een klant. Niet nog een keer
@@ -656,6 +677,8 @@ export async function distributeLead(
     if (plafondBereikt.has(batch.customer_id)) continue;
     if (matches.some(m => m.customer_id === batch.customer_id)) continue;
     if (batch.starts_at && new Date(batch.starts_at) > now) continue;
+    /* Exclusieve of uitgesloten campagne (blok Meta-campagnes van de batch). */
+    if (!campagneStaatToe(batch.id, fullLead as { meta_campaign_id?: string | null; created_at?: string | null }, campagneRegels, now)) continue;
     /* De lookback van de batch geldt ook hier, niet alleen bij het aanmaken.
        Anders krijgt een batch zonder lookback via de gewone verdeling alsnog
        leads van vóór zijn start. */
@@ -990,6 +1013,7 @@ export async function distributeLeads(
     batchTargetsByBatch,
     excludeByCustomer,
     ronde: verdeelRonde,
+    campagneRegels: await laadCampagneRegels(supabase),
   };
 
   for (const lead of leads) {
@@ -1217,6 +1241,8 @@ export async function backfillBatch(
   let ruimteWeek = weeklyLimit !== null ? Math.max(0, weeklyLimit - dezeWeekGeleverd - alGeplandIds.size) : Infinity;
 
   let skippedByDerdeKlant = 0;
+  let skippedByCampagne = 0;
+  const campagneRegels = await laadCampagneRegels(supabase);
   let skippedByVenster = 0;
   let skippedByDailyLimit = 0;
   let skippedByWeeklyLimit = 0;
@@ -1235,6 +1261,8 @@ export async function backfillBatch(
     const bestaand = assignmentsByLead.get(lead.id) || [];
     if (!canAssignWithinCap(lead as LeadForDistribution, bestaand, batch.customer_id, nowCap)) { skippedByCap++; continue; }
     if (!leadPastInBatchVenster(lead as { created_at?: string | null }, batch)) { skippedByVenster++; continue; }
+    /* Exclusief voor een andere batch, of door deze batch uitgesloten. */
+    if (!campagneStaatToe(batch.id, lead as { meta_campaign_id?: string | null; created_at?: string | null }, campagneRegels, nowCap)) { skippedByCampagne++; continue; }
     /* Geen derde klant via een inhaalslag. De 12 uur tussen twee klanten
        wacht de planning af in plaats van de lead over te slaan. */
     if (inhaalslagWeigering(bestaand, batch.customer_id, nowCap) === 'derde_klant') { skippedByDerdeKlant++; continue; }
@@ -1303,6 +1331,7 @@ export async function backfillBatch(
     skippedByCap,
     skippedByDerdeKlant,
     skippedByVenster,
+    skippedByCampagne,
     leads_per_day: dailyLimit,
     lookbackDays,
   });

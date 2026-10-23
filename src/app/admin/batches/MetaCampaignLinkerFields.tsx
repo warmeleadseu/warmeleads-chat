@@ -16,7 +16,23 @@ type Props = {
   setSyncEnabled: (v: boolean) => void;
   syncStatusSlot?: ReactNode;
   searchPlaceholder?: string;
+  /**
+   * Per gekoppelde campagne kiezen of de leads exclusief zijn voor deze batch,
+   * en campagnes uitsluiten. Alleen voor leadbatches; wijzigen alleen door
+   * superadmin en admin (anders alleen zichtbaar).
+   */
+  campagneRegels?: {
+    magWijzigen: boolean;
+    uitgesloten: MetaCampaignPick[];
+    setUitgesloten: React.Dispatch<React.SetStateAction<MetaCampaignPick[]>>;
+  };
 };
+
+const EXCLUSIEF_OPTIES: { waarde: '' | '24u' | 'altijd'; label: string }[] = [
+  { waarde: '', label: 'Leads: gewone verdeling' },
+  { waarde: '24u', label: 'Leads: 24 uur exclusief voor deze batch' },
+  { waarde: 'altijd', label: 'Leads: altijd exclusief voor deze batch' },
+];
 
 /**
  * Zoeken + meerdere campagne-ID's koppelen (max 10), handmatige toevoeging, sync-toggle.
@@ -31,7 +47,11 @@ export function MetaCampaignLinkerFields({
   setSyncEnabled,
   syncStatusSlot,
   searchPlaceholder = 'Typ een deel van de campagnenaam…',
+  campagneRegels,
 }: Props) {
+  const uitgesloten = campagneRegels?.uitgesloten ?? [];
+  const setUitgesloten = campagneRegels?.setUitgesloten;
+  const uitIdsKey = uitgesloten.map(p => p.id).join(',');
   const [metaSearchQuery, setMetaSearchQuery] = useState('');
   const [metaSearchResults, setMetaSearchResults] = useState<{ id: string; name: string; effective_status?: string }[]>(
     [],
@@ -59,6 +79,24 @@ export function MetaCampaignLinkerFields({
       cancelled = true;
     };
   }, [idsKey, setPicks]);
+
+  /* Namen voor de uitgesloten campagnes. */
+  useEffect(() => {
+    if (!setUitgesloten) return;
+    const ids = uitgesloten.map(p => p.id).filter(id => /^\d+$/.test(id) && uitgesloten.find(x => x.id === id)?.name === id);
+    if (ids.length === 0) return;
+    let cancelled = false;
+    adminFetch(`/api/admin/meta-campaigns/lookup?ids=${encodeURIComponent(ids.join(','))}`)
+      .then(r => (r.ok ? r.json() : Promise.reject(new Error('lookup failed'))))
+      .then((d: { campaigns?: { id: string; name: string }[] }) => {
+        if (cancelled) return;
+        const namen = new Map((d.campaigns || []).map(c => [String(c.id), c.name]));
+        setUitgesloten(prev => prev.map(p => (namen.has(p.id) ? { ...p, name: namen.get(p.id) || p.id } : p)));
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uitIdsKey, setUitgesloten]);
 
   useEffect(() => {
     const q = metaSearchQuery.trim();
@@ -141,26 +179,38 @@ export function MetaCampaignLinkerFields({
             {!metaSearchLoading &&
               metaSearchResults.map(c => {
                 const already = picks.some(p => p.id === c.id);
+                const alUitgesloten = uitgesloten.some(p => p.id === c.id);
+                const sluiten = () => { setMetaSearchQuery(''); setMetaSearchResults([]); setMetaSearchOpen(false); };
                 return (
-                  <button
-                    key={c.id}
-                    type="button"
-                    disabled={already || picks.length >= MAX_PICKS}
-                    onClick={() => {
-                      if (already || picks.length >= MAX_PICKS) return;
-                      setPicks(prev => [...prev, { id: c.id, name: c.name }]);
-                      setMetaSearchQuery('');
-                      setMetaSearchResults([]);
-                      setMetaSearchOpen(false);
-                    }}
-                    className="flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left text-sm hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    <span className="font-medium text-slate-900">{c.name}</span>
-                    <span className="font-mono text-[10px] text-slate-500">
-                      {c.id}
-                      {c.effective_status ? ` · ${c.effective_status}` : ''}
-                    </span>
-                  </button>
+                  <div key={c.id} className="flex items-center gap-2 px-3 py-2 hover:bg-indigo-50">
+                    <button
+                      type="button"
+                      disabled={already || alUitgesloten || picks.length >= MAX_PICKS}
+                      onClick={() => {
+                        if (already || alUitgesloten || picks.length >= MAX_PICKS) return;
+                        setPicks(prev => [...prev, { id: c.id, name: c.name }]);
+                        sluiten();
+                      }}
+                      className="flex min-w-0 flex-1 flex-col items-start gap-0.5 text-left text-sm disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <span className="font-medium text-slate-900">{c.name}</span>
+                      <span className="font-mono text-[10px] text-slate-500">
+                        {c.id}
+                        {c.effective_status ? ` · ${c.effective_status}` : ''}
+                      </span>
+                    </button>
+                    {setUitgesloten && campagneRegels?.magWijzigen && (
+                      <button
+                        type="button"
+                        disabled={already || alUitgesloten}
+                        onClick={() => { setUitgesloten(prev => [...prev, { id: c.id, name: c.name }].slice(0, 50)); sluiten(); }}
+                        className="shrink-0 rounded border border-rose-200 px-2 py-1 text-[10px] font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-40"
+                        title="Deze batch krijgt nooit leads uit deze campagne"
+                      >
+                        Uitsluiten
+                      </button>
+                    )}
+                  </div>
                 );
               })}
           </div>
@@ -188,6 +238,26 @@ export function MetaCampaignLinkerFields({
                   <span className="shrink-0 rounded bg-slate-200 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-slate-600">
                     Uit
                   </span>
+                )}
+                {campagneRegels && (
+                  <select
+                    value={p.exclusief ?? ''}
+                    disabled={!campagneRegels.magWijzigen}
+                    onChange={e => {
+                      const v = e.target.value as '' | '24u' | 'altijd';
+                      setPicks(prev => prev.map(x => {
+                        if (x.id !== p.id) return x;
+                        const { exclusief: _weg, ...rest } = x;
+                        void _weg;
+                        return v ? { ...rest, exclusief: v } : rest;
+                      }));
+                    }}
+                    title={campagneRegels.magWijzigen ? 'Wie krijgt de leads uit deze campagne?' : 'Alleen een admin of superadmin kan dit wijzigen'}
+                    aria-label="Exclusiviteit van de leads uit deze campagne"
+                    className={`shrink-0 rounded border px-1.5 py-1 text-[10px] font-medium ${p.exclusief ? 'border-violet-300 bg-violet-50 text-violet-800' : 'border-slate-200 bg-white text-slate-600'} disabled:opacity-60`}
+                  >
+                    {EXCLUSIEF_OPTIES.map(o => <option key={o.waarde} value={o.waarde}>{o.label}</option>)}
+                  </select>
                 )}
                 <button
                   type="button"
@@ -222,6 +292,39 @@ export function MetaCampaignLinkerFields({
               </div>
             );
           })}
+        </div>
+      )}
+
+      {campagneRegels && picks.some(p => p.exclusief) && (
+        <p className="mb-3 rounded-md border border-violet-200 bg-violet-50 px-2.5 py-1.5 text-[11px] text-violet-900">
+          Exclusief: leads uit die campagne gaan alleen naar deze batch (bij &quot;24 uur&quot; de eerste 24 uur na binnenkomst, daarna ook naar
+          anderen). Kan deze batch de lead niet nemen, dan wacht hij of komt hij in Restleads; een andere klant krijgt hem in die tijd niet.
+          Een campagne kan maar bij één klant exclusief zijn.
+        </p>
+      )}
+
+      {campagneRegels && (
+        <div className="mb-3 rounded-md border border-rose-100 bg-white/70 px-2.5 py-2">
+          <p className="text-[11px] font-semibold text-rose-900">Campagnes uitsluiten</p>
+          <p className="text-[10px] text-rose-900/70">Deze batch krijgt nooit leads uit deze campagnes. Zoek hierboven een campagne en kies &quot;Uitsluiten&quot;.</p>
+          {uitgesloten.length === 0 ? (
+            <p className="mt-1 text-[10px] text-slate-400">Geen uitgesloten campagnes.</p>
+          ) : (
+            <div className="mt-1.5 flex flex-col gap-1">
+              {uitgesloten.map(p => (
+                <div key={p.id} className="flex items-center gap-1.5 rounded border border-rose-200 bg-rose-50/60 px-2 py-1 text-[11px] text-rose-900">
+                  <span className="min-w-0 flex-1 truncate" title={p.name}>{p.name}</span>
+                  <span className="hidden shrink-0 font-mono text-[10px] text-rose-700/70 sm:inline">({p.id})</span>
+                  {campagneRegels.magWijzigen && setUitgesloten && (
+                    <button type="button" onClick={() => setUitgesloten(prev => prev.filter(x => x.id !== p.id))}
+                      className="rounded p-1 text-rose-400 hover:bg-rose-100 hover:text-rose-700" aria-label="Weer toestaan">
+                      <XMarkIcon className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

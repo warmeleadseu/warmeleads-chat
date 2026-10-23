@@ -117,3 +117,28 @@ describe('metaInheritanceNoteSuffix', () => {
     expect(metaInheritanceNoteSuffix('latest_batch')).toContain('laatste');
   });
 });
+
+describe('exclusieve en uitgesloten campagnes erven mee', () => {
+  it('vervolgbatch neemt de exclusiviteit over, alleen voor gekoppelde campagnes', () => {
+    const r = applyMetaInheritanceWaterfall({
+      orderBranch: 'thuisbatterij',
+      customerId: 'k',
+      sourceBatch: null,
+      branchDefault: {
+        meta_campaign_ids: ['111', '222'],
+        meta_campaign_sync_enabled: true,
+        meta_campagne_exclusief: { '111': 'altijd', '333': '24u', '222': 'raar' },
+        meta_campagne_uitgesloten: ['55555555', '111'],
+      },
+      historical: [],
+    });
+    expect(r.meta_campagne_exclusief).toEqual({ '111': 'altijd' });
+    expect(r.meta_campagne_uitgesloten).toEqual(['55555555']);
+  });
+
+  it('zonder bron: leeg', () => {
+    const r = applyMetaInheritanceWaterfall({ orderBranch: 'x', customerId: 'k', sourceBatch: null, branchDefault: null, historical: [] });
+    expect(r.meta_campagne_exclusief).toEqual({});
+    expect(r.meta_campagne_uitgesloten).toEqual([]);
+  });
+});

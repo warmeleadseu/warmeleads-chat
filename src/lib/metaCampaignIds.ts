@@ -48,7 +48,14 @@ function dedupeKeepOrder(ids: string[]): string[] {
   return out;
 }
 
-export type MetaCampaignPick = { id: string; name: string; /** Handmatig uit in CRM → PAUSED in Meta */ paused?: boolean };
+export type MetaCampaignPick = {
+  id: string;
+  name: string;
+  /** Handmatig uit in CRM → PAUSED in Meta */
+  paused?: boolean;
+  /** Leads uit deze campagne exclusief voor deze batch: 24 uur na binnenkomst, of altijd. */
+  exclusief?: '24u' | 'altijd';
+};
 
 /** Zelfde volgorde als `orderedIds`; namen uit Meta lookup waar beschikbaar. */
 export function mergeMetaCampaignLookupNames(
@@ -59,6 +66,7 @@ export function mergeMetaCampaignLookupNames(
   const pausedById = new Map(
     (previous ?? []).filter(p => p.paused === true).map(p => [p.id, true] as const),
   );
+  const exclusiefById = new Map((previous ?? []).filter(p => p.exclusief).map(p => [p.id, p.exclusief!] as const));
   const nameById = new Map<string, string>();
   for (const c of campaigns) {
     const id = String(c.id).trim();
@@ -68,5 +76,6 @@ export function mergeMetaCampaignLookupNames(
     id,
     name: nameById.get(id) || id,
     ...(pausedById.has(id) ? { paused: true as const } : {}),
+    ...(exclusiefById.has(id) ? { exclusief: exclusiefById.get(id) } : {}),
   }));
 }

@@ -21,6 +21,8 @@ type Opzet = {
   klant?: Record<string, unknown> | null;
   bestaandeToewijzingen?: { customer_id: string; assigned_at: string }[];
   batch?: Record<string, unknown> | null;
+  /** Batches met campagneregels (exclusief / uitgesloten). */
+  regelBatches?: Record<string, unknown>[];
 };
 
 /** Een gewone, actieve batch met ruimte: de toestand waarin leveren mag. */
@@ -70,7 +72,9 @@ function maakClient(o: Opzet) {
     }
     if (tabel === 'customer_batches') {
       return {
-        select: () => ({
+        select: (kolommen?: string) => kolommen?.includes('meta_campagne_exclusief') ? ({
+          in: () => ({ limit: () => Promise.resolve({ data: o.regelBatches ?? [], error: null }) }),
+        }) : ({
           eq: () => ({
             maybeSingle: () => Promise.resolve({
               data: o.batch === undefined ? RUIME_BATCH : o.batch,
@@ -207,5 +211,45 @@ describe('verwerkGeplandeLeveringen', () => {
     assignMock.mockResolvedValue({ ok: true, assignmentId: 'a1', distance_km: 5 });
     await verwerkGeplandeLeveringen(maakClient({ rijen: [RIJ], lead: LEAD, klant: KLANT }), { batchId: 'b1' });
     expect(batchFilters).toEqual(['b1']);
+  });
+
+  describe('exclusieve campagnes', () => {
+    const NU = Date.now();
+    const leadUit = (campagne: string, uurGeleden: number) => ({ ...LEAD, meta_campaign_id: campagne, created_at: new Date(NU - uurGeleden * 3_600_000).toISOString() });
+    const anderBatch = (modus: '24u' | 'altijd') => ({ id: 'b-ander', customer_id: 'k-ander', status: 'active', meta_campagne_exclusief: { '111': modus }, meta_campagne_uitgesloten: [] });
+
+    it('lead die nog 24 uur exclusief is voor een andere batch: schuift door tot daarna', async () => {
+      const r = await verwerkGeplandeLeveringen(maakClient({ rijen: [RIJ], lead: leadUit('111', 2), klant: KLANT, regelBatches: [anderBatch('24u')] }));
+      expect(r.geleverd).toBe(0);
+      expect(assignMock).not.toHaveBeenCalled();
+      expect(String(updates[0].laatste_reden)).toContain('nog exclusief');
+      expect(new Date(updates[0].gepland_voor as string).getTime()).toBeGreaterThan(NU + 21 * 3_600_000);
+    });
+
+    it('altijd exclusief voor een andere batch: overgeslagen', async () => {
+      const r = await verwerkGeplandeLeveringen(maakClient({ rijen: [RIJ], lead: leadUit('111', 50), klant: KLANT, regelBatches: [anderBatch('altijd')] }));
+      expect(r.overgeslagen).toBe(1);
+      expect(String(updates[0].laatste_reden)).toContain('altijd exclusief');
+    });
+
+    it('na de 24 uur: gewoon leveren', async () => {
+      assignMock.mockResolvedValue({ ok: true, assignmentId: 'a1', distance_km: 5 });
+      const r = await verwerkGeplandeLeveringen(maakClient({ rijen: [RIJ], lead: leadUit('111', 25), klant: KLANT, regelBatches: [anderBatch('24u')] }));
+      expect(r.geleverd).toBe(1);
+    });
+
+    it('exclusief voor deze batch zelf: gewoon leveren', async () => {
+      assignMock.mockResolvedValue({ ok: true, assignmentId: 'a1', distance_km: 5 });
+      const eigen = { id: 'b1', customer_id: 'k1', status: 'active', meta_campagne_exclusief: { '111': 'altijd' }, meta_campagne_uitgesloten: [] };
+      const r = await verwerkGeplandeLeveringen(maakClient({ rijen: [RIJ], lead: leadUit('111', 1), klant: KLANT, regelBatches: [eigen] }));
+      expect(r.geleverd).toBe(1);
+    });
+
+    it('deze batch sluit de campagne uit: overgeslagen, ook na 24 uur', async () => {
+      const uitsluiter = { id: 'b1', customer_id: 'k1', status: 'active', meta_campagne_exclusief: {}, meta_campagne_uitgesloten: ['111'] };
+      const r = await verwerkGeplandeLeveringen(maakClient({ rijen: [RIJ], lead: leadUit('111', 80), klant: KLANT, regelBatches: [uitsluiter] }));
+      expect(r.overgeslagen).toBe(1);
+      expect(String(updates[0].laatste_reden)).toContain('sluit de campagne');
+    });
   });
 });

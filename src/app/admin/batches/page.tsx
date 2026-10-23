@@ -49,22 +49,55 @@ import { coerceCustomerBatchMetaCampaignIds, type MetaCampaignPick } from '@/lib
 import { batchMatchesBranchDefault } from '@/lib/metaCampaignDefaults';
 import { MetaCampaignLinkerFields } from './MetaCampaignLinkerFields';
 
-function metaFieldsFromPicks(picks: MetaCampaignPick[]) {
+function metaFieldsFromPicks(picks: MetaCampaignPick[], uitgesloten?: MetaCampaignPick[]) {
   const meta_campaign_ids = picks.map(p => p.id).slice(0, 10);
   const linked = new Set(meta_campaign_ids);
   const meta_campaign_paused_ids = picks
     .filter(p => p.paused && linked.has(p.id))
     .map(p => p.id);
-  return { meta_campaign_ids, meta_campaign_paused_ids };
+  /* Alleen meesturen als het blok de campagneregels toont (leadbatches); de
+     API negeert ze voor andere batchsoorten en voor accountmanagers. */
+  if (!uitgesloten) return { meta_campaign_ids, meta_campaign_paused_ids };
+  const meta_campagne_exclusief = Object.fromEntries(
+    picks.filter(p => p.exclusief && linked.has(p.id)).map(p => [p.id, p.exclusief as string]),
+  );
+  return {
+    meta_campaign_ids,
+    meta_campaign_paused_ids,
+    meta_campagne_exclusief,
+    meta_campagne_uitgesloten: uitgesloten.map(p => p.id).filter(id => !linked.has(id)),
+  };
+}
+
+/** Uitgesloten campagnes van een batch, als picks (namen vult het koppelblok aan). */
+function uitgeslotenVanBatch(batch: { meta_campagne_uitgesloten?: unknown }): MetaCampaignPick[] {
+  return coerceCustomerBatchMetaCampaignIds(batch.meta_campagne_uitgesloten).map(id => ({ id, name: id }));
+}
+
+/** Heeft deze batch een exclusieve campagne? Voor het label in lijst en detail. */
+function exclusieveCampagneLabel(b: { meta_campagne_exclusief?: unknown; status?: string }): string | null {
+  if (b.status === 'completed') return null;
+  const raw = b.meta_campagne_exclusief;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const standen = Object.values(raw as Record<string, unknown>);
+  if (standen.length === 0) return null;
+  return standen.includes('altijd') ? 'Exclusieve campagne (altijd)' : 'Exclusieve campagne (24 uur)';
 }
 
 function picksFromBatchMeta(batch: {
   meta_campaign_ids?: unknown;
   meta_campaign_paused_ids?: unknown;
+  meta_campagne_exclusief?: unknown;
 }): MetaCampaignPick[] {
   const ids = coerceCustomerBatchMetaCampaignIds(batch.meta_campaign_ids);
   const paused = new Set(coerceCustomerBatchMetaCampaignIds(batch.meta_campaign_paused_ids));
-  return ids.map(id => ({ id, name: id, ...(paused.has(id) ? { paused: true as const } : {}) }));
+  const excl = (batch.meta_campagne_exclusief && typeof batch.meta_campagne_exclusief === 'object' ? batch.meta_campagne_exclusief : {}) as Record<string, unknown>;
+  return ids.map(id => ({
+    id,
+    name: id,
+    ...(paused.has(id) ? { paused: true as const } : {}),
+    ...(excl[id] === '24u' || excl[id] === 'altijd' ? { exclusief: excl[id] as '24u' | 'altijd' } : {}),
+  }));
 }
 
 import { BatchTargetAreaBadges } from '@/components/admin/BatchTargetAreaBadges';
@@ -103,6 +136,10 @@ interface Batch {
   extern_bedrag_excl?: number | string | null;
   /** aan / uit / null (volgt klantkaart). */
   direct_leveren?: string | null;
+  /** Per gekoppelde campagne: 24u of altijd exclusief voor deze batch. */
+  meta_campagne_exclusief?: Record<string, string> | null;
+  /** Campagnes waarvan deze batch nooit leads krijgt. */
+  meta_campagne_uitgesloten?: string[] | null;
   batch_targets?: CustomerTargetRow[] | null;
   customers?: {
     id?: string;
@@ -669,6 +706,11 @@ export default function BatchesPage() {
                               Meta · {metaLinkCount}
                             </span>
                           )}
+                          {exclusieveCampagneLabel(b) && (
+                            <span title={exclusieveCampagneLabel(b) ?? undefined} className="inline-flex w-fit items-center rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold text-violet-800">
+                              Exclusief
+                            </span>
+                          )}
                           {directLabel(b) && (
                             <span title={directLabel(b) ?? undefined} className="inline-flex w-fit items-center gap-0.5 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
                               <BoltIcon className="h-3 w-3 shrink-0" aria-hidden />
@@ -875,6 +917,9 @@ function BatchDetailMetaBlock({
   const serverIdsKey = serverIds.join(',');
 
   const [metaCampaignPicks, setMetaCampaignPicks] = useState<MetaCampaignPick[]>(() => picksFromBatchMeta(batch));
+  const [campagneUitgesloten, setCampagneUitgesloten] = useState<MetaCampaignPick[]>(() => uitgeslotenVanBatch(batch));
+  const { user: metaBewerker } = useAdmin();
+  const toonCampagneRegels = isPipelineBatchKind(batch.batch_kind);
   const [metaSyncEnabled, setMetaSyncEnabled] = useState(() => batch.meta_campaign_sync_enabled !== false);
   const [savingMeta, setSavingMeta] = useState(false);
   // Match-aware staat:
@@ -891,7 +936,8 @@ function BatchDetailMetaBlock({
   useEffect(() => {
     if (!supportsBatchMetaCampaigns(batch.batch_kind)) return;
     setMetaCampaignPicks(picksFromBatchMeta(batch));
-  }, [batch.batch_kind, batch.id, serverIdsKey, batch.meta_campaign_paused_ids]);
+    setCampagneUitgesloten(uitgeslotenVanBatch(batch));
+  }, [batch.batch_kind, batch.id, serverIdsKey, batch.meta_campaign_paused_ids, JSON.stringify(batch.meta_campagne_exclusief ?? {}), (batch.meta_campagne_uitgesloten ?? []).join(',')]);
 
   useEffect(() => {
     setMetaSyncEnabled(batch.meta_campaign_sync_enabled !== false);
@@ -961,7 +1007,7 @@ function BatchDetailMetaBlock({
         method: 'PUT',
         body: JSON.stringify({
           id: batch.id,
-          ...metaFieldsFromPicks(metaCampaignPicks),
+          ...metaFieldsFromPicks(metaCampaignPicks, toonCampagneRegels ? campagneUitgesloten : undefined),
           meta_campaign_sync_enabled: metaSyncEnabled,
           ...savePayload,
         }),
@@ -1007,6 +1053,7 @@ function BatchDetailMetaBlock({
         setPicks={setMetaCampaignPicks}
         syncEnabled={metaSyncEnabled}
         setSyncEnabled={setMetaSyncEnabled}
+        campagneRegels={toonCampagneRegels ? { magWijzigen: metaBewerker.role !== 'accountmanager', uitgesloten: campagneUitgesloten, setUitgesloten: setCampagneUitgesloten } : undefined}
         syncStatusSlot={
           (batch.meta_sync_last_error || batch.meta_sync_last_success_at) ? (
             <div className="mt-2 space-y-0.5 border-t border-indigo-200/60 pt-2 text-[10px] text-indigo-900/70">
@@ -1330,6 +1377,11 @@ function BatchDetailPanel({ batchId, branches, onClose, onEdit, onListRefresh }:
                   ) : (
                     <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-1 text-xs font-medium text-red-600">
                       <ExclamationCircleIcon className="h-3.5 w-3.5" /> Onbetaald
+                    </span>
+                  )}
+                  {exclusieveCampagneLabel(batch) && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-violet-100 px-2.5 py-1 text-xs font-semibold text-violet-800">
+                      {exclusieveCampagneLabel(batch)}
                     </span>
                   )}
                   {directLabel(batch) && (
@@ -1858,6 +1910,9 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
   const editServerMetaKey = editServerMetaIds.join(',');
 
   const [metaCampaignPicks, setMetaCampaignPicks] = useState<MetaCampaignPick[]>(() => picksFromBatchMeta(batch));
+  const [campagneUitgesloten, setCampagneUitgesloten] = useState<MetaCampaignPick[]>(() => uitgeslotenVanBatch(batch));
+  const { user: metaBewerker } = useAdmin();
+  const toonCampagneRegels = isPipelineBatchKind(batch.batch_kind);
   const [metaSyncEnabled, setMetaSyncEnabled] = useState(() => batch.meta_campaign_sync_enabled !== false);
   // Match-aware staat (zie BatchDetailMetaBlock voor uitleg).
   const [saveBranchMetaDefault, setSaveBranchMetaDefault] = useState(false);
@@ -1881,7 +1936,8 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
   useEffect(() => {
     if (!supportsBatchMetaCampaigns(batch.batch_kind)) return;
     setMetaCampaignPicks(picksFromBatchMeta(batch));
-  }, [batch.batch_kind, batch.id, editServerMetaKey, batch.meta_campaign_paused_ids]);
+    setCampagneUitgesloten(uitgeslotenVanBatch(batch));
+  }, [batch.batch_kind, batch.id, editServerMetaKey, batch.meta_campaign_paused_ids, JSON.stringify(batch.meta_campagne_exclusief ?? {}), (batch.meta_campagne_uitgesloten ?? []).join(',')]);
 
   // Stabiele fingerprint (zie BatchDetailMetaBlock).
   const editBatchMetaFingerprint = `${batch.id}|${batch.batch_kind || ''}|${batch.customer_id}|${batch.branch}|${batch.lead_branch_slug || ''}|${editServerMetaKey}|${coerceCustomerBatchMetaCampaignIds(batch.meta_campaign_paused_ids).join(',')}|${batch.meta_campaign_sync_enabled !== false ? 1 : 0}`;
@@ -1959,7 +2015,7 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
         payload.lookback_days = clamped;
       }
       if (supportsBatchMetaCampaigns(batch.batch_kind)) {
-        Object.assign(payload, metaFieldsFromPicks(metaCampaignPicks));
+        Object.assign(payload, metaFieldsFromPicks(metaCampaignPicks, toonCampagneRegels ? campagneUitgesloten : undefined));
         payload.meta_campaign_sync_enabled = metaSyncEnabled;
         // Match-aware (zie BatchDetailMetaBlock):
         //  - vinkje aan → upsert met huidige meta-staat;
@@ -2238,6 +2294,7 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
               setPicks={setMetaCampaignPicks}
               syncEnabled={metaSyncEnabled}
               setSyncEnabled={setMetaSyncEnabled}
+              campagneRegels={toonCampagneRegels && !isNicheResearch ? { magWijzigen: metaBewerker.role !== 'accountmanager', uitgesloten: campagneUitgesloten, setUitgesloten: setCampagneUitgesloten } : undefined}
               syncStatusSlot={
                 (batch.meta_sync_last_error || batch.meta_sync_last_success_at) ? (
                   <div className="mt-2 space-y-1 border-t border-indigo-200/60 pt-2 text-[10px] text-indigo-900/70">
@@ -2510,6 +2567,7 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
   const [startsAtDate, setStartsAtDate] = useState('');
   const [startsAtTime, setStartsAtTime] = useState('09:00');
   const [metaCampaignPicks, setMetaCampaignPicks] = useState<MetaCampaignPick[]>([]);
+  const [campagneUitgesloten, setCampagneUitgesloten] = useState<MetaCampaignPick[]>([]);
   const [metaSyncEnabled, setMetaSyncEnabled] = useState(true);
   const [distributionPriority, setDistributionPriority] = useState(false);
   const [directStand, setDirectStand] = useState<DirectStand>(null);
@@ -2552,6 +2610,7 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
     // Reset de picks zodat oude defaults van een andere combo niet blijven
     // hangen, en zet de banner-vlag uit tot de nieuwe fetch resolved.
     setMetaCampaignPicks([]);
+    setCampagneUitgesloten([]);
     setMetaSyncEnabled(true);
     setMetaDefaultLoadedFromDb(false);
 
@@ -2582,13 +2641,16 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
           setMetaCampaignPicks(prev => {
             if (prev.length > 0) return prev;
             didPrefill = true;
+            const excl = (d.meta_campagne_exclusief && typeof d.meta_campagne_exclusief === 'object' ? d.meta_campagne_exclusief : {}) as Record<string, unknown>;
             return ids.map(id => ({
               id,
               name: id,
               ...(paused.has(id) ? { paused: true as const } : {}),
+              ...(excl[id] === '24u' || excl[id] === 'altijd' ? { exclusief: excl[id] as '24u' | 'altijd' } : {}),
             }));
           });
           if (didPrefill) {
+            setCampagneUitgesloten(uitgeslotenVanBatch(d));
             setMetaSyncEnabled(d.meta_campaign_sync_enabled !== false);
             setMetaDefaultLoadedFromDb(true);
           }
@@ -2789,7 +2851,10 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
       const metaFetchPending = metaDefaultsKey !== '' && metaDefaultLoadedKey !== metaDefaultsKey;
       const metaPayload = metaFetchPending
         ? { meta_campaign_sync_enabled: metaSyncEnabled }
-        : { ...metaFieldsFromPicks(metaCampaignPicks), meta_campaign_sync_enabled: metaSyncEnabled };
+        : {
+            ...metaFieldsFromPicks(metaCampaignPicks, form.batch_delivery === 'pipeline' && form.batch_product === 'leads' ? campagneUitgesloten : undefined),
+            meta_campaign_sync_enabled: metaSyncEnabled,
+          };
 
       if (form.batch_delivery === 'niche_research') {
         const res = await adminFetch('/api/admin/batches', {
@@ -3242,6 +3307,9 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
                 setPicks={setMetaCampaignPicks}
                 syncEnabled={metaSyncEnabled}
                 setSyncEnabled={setMetaSyncEnabled}
+                campagneRegels={form.batch_delivery === 'pipeline' && form.batch_product === 'leads'
+                  ? { magWijzigen: aanmaker.role !== 'accountmanager', uitgesloten: campagneUitgesloten, setUitgesloten: setCampagneUitgesloten }
+                  : undefined}
               />
             </div>
           )}

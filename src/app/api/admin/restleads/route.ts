@@ -10,6 +10,7 @@ import { applyLeadFilters, readLeadFilterParams, type LeadFilterParams } from '@
 import { resolvePlaatsRadiusOrigin, leadWithinRadiusKm, type PlaatsRadiusOrigin } from '@/lib/leadPlaatsRadius';
 import { resolveProvincieMarge } from '@/lib/provincieMarge';
 import { filterEnTel, type RestleadFilterItem, type RestleadFilterKeuze } from '@/lib/restleadFilters';
+import { campagneStaatToe, exclusiviteitVan, laadCampagneRegels } from '@/lib/campagneExclusiviteit';
 import {
   vindKandidaten,
   lijstVoor,
@@ -318,6 +319,15 @@ export async function GET(request: NextRequest) {
     });
 
     const nu = new Date();
+    /* Exclusieve en uitgesloten campagnes: een kandidaat die de lead niet mag
+       krijgen, staat hier ook niet als kandidaat. */
+    const campagneRegels = await laadCampagneRegels(supabase);
+    const exclusieveKlanten = [...new Set([...campagneRegels.exclusief.values()].flatMap(r => [...r.klantIds]))];
+    const klantNaam = new Map<string, string>();
+    if (exclusieveKlanten.length > 0) {
+      const { data: namen } = await supabase.from('customers').select('id, name').in('id', exclusieveKlanten);
+      for (const n of namen ?? []) klantNaam.set(n.id as string, (n.name as string) ?? 'een andere klant');
+    }
     const regels: { lijst: 'kansrijk' | 'verlopen'; rij: unknown; item: RestleadFilterItem }[] = [];
 
     for (const lead of onderbedeeld) {
@@ -325,7 +335,7 @@ export async function GET(request: NextRequest) {
       if (!lijst) continue;
 
       const al = perLead.get(lead.id) ?? new Set<string>();
-      const kandidaten = vindKandidaten(
+      const alleKandidaten = vindKandidaten(
         lead,
         batches,
         al,
@@ -340,6 +350,8 @@ export async function GET(request: NextRequest) {
           nu,
         },
       );
+      const kandidaten = alleKandidaten.filter(k => campagneStaatToe(k.batch_id, lead, campagneRegels, nu));
+      const excl = exclusiviteitVan(lead, campagneRegels, nu);
 
       const rij = {
         id: lead.id,
@@ -358,6 +370,10 @@ export async function GET(request: NextRequest) {
            gissen. */
         wachtrij: wachtrijPerLead.get(lead.id) ?? null,
         kandidaten,
+        /* Uit een exclusieve campagne: voor wie, en tot wanneer (null = altijd). */
+        exclusief: excl
+          ? { klanten: [...excl.klantIds].map(id => klantNaam.get(id) ?? 'een andere klant'), tot: excl.tot ? excl.tot.toISOString() : null }
+          : null,
       };
 
       regels.push({

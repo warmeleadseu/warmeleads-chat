@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin, unauthorized } from '@/lib/adminAuth';
 import { createServerClient } from '@/lib/supabase';
 import { assignLeadToBatch } from '@/lib/assignLeadToBatch';
+import { campagneWeigering, laadCampagneRegels } from '@/lib/campagneExclusiviteit';
 import { MAX_UITDELINGEN, RESTLEAD_REDEN } from '@/lib/restleads';
 import { planMomenten, dagSleutel } from '@/lib/restleadPlanning';
 import { herverdeelRestleadWachtrij } from '@/lib/restleadWachtrij';
@@ -117,12 +118,20 @@ export async function POST(request: NextRequest) {
     ? new Date(Math.max(...echte.map(a => new Date(a.assigned_at).getTime())))
     : null;
 
+  /* Exclusieve en uitgesloten campagnes gelden ook bij handwerk: een lead die
+     (nog) exclusief is voor een andere batch, kan hier niet naar een ander. */
+  const campagneRegels = await laadCampagneRegels(supabase);
   const teDoen: Doel[] = [];
   const uitkomsten: { customer_id: string; klant?: string; ok: boolean; reden?: string; wanneer?: string; rij_id?: string }[] = [];
 
   for (const doel of doelen) {
     if (al.has(doel.customer_id)) {
       uitkomsten.push({ customer_id: doel.customer_id, ok: false, reden: 'Klant had deze lead al of staat al gepland' });
+      continue;
+    }
+    const campagneNee = campagneWeigering(doel.batch_id, lead, campagneRegels);
+    if (campagneNee) {
+      uitkomsten.push({ customer_id: doel.customer_id, ok: false, reden: `Niet toegestaan: ${campagneNee}` });
       continue;
     }
     if (al.size + teDoen.length >= 3) {

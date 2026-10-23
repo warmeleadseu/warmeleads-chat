@@ -11,6 +11,7 @@ import { finalizePaidLeadBatch, finalizePaidBulkLeadBatch } from '@/lib/finalize
 import { isBulkLeadsBatchKind, isMetaCampaignSyncBatchKind, isPipelineBatchKind } from '@/lib/batchKind';
 import { reconcileBatchMetaCampaigns } from '@/lib/metaBatchCampaignSync';
 import { metaInheritanceNoteSuffix, resolveMetaCampaignFieldsForNewLeadBatch } from '@/lib/metaCampaignInheritance';
+import { zonderBotsingen } from '@/lib/campagneExclusiviteit';
 import { ensureCustomerHasBranch } from '@/lib/nicheResearch';
 import { deliveryModelForNewBatch, normalizeDeliveryModel } from '@/lib/batchDeliveryModel';
 
@@ -479,6 +480,12 @@ export async function POST(request: NextRequest) {
         batchInsertPayload.meta_campaign_ids = leadMetaResolved.meta_campaign_ids;
         batchInsertPayload.meta_campaign_paused_ids = leadMetaResolved.meta_campaign_paused_ids;
         batchInsertPayload.meta_campaign_sync_enabled = leadMetaResolved.meta_campaign_sync_enabled;
+        /* Exclusieve en uitgesloten campagnes gaan mee met de koppeling (alleen leadbatches). */
+        if (orderBatchKind === 'leads') {
+          batchInsertPayload.meta_campagne_exclusief = await zonderBotsingen(supabase, leadMetaResolved.meta_campagne_exclusief, order.customer_id)
+            .catch(() => ({}));
+          batchInsertPayload.meta_campagne_uitgesloten = leadMetaResolved.meta_campagne_uitgesloten;
+        }
       }
 
       const { data: newBatch, error: batchError } = await supabase

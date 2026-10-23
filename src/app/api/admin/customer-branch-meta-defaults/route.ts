@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
 
   const { data, error } = await supabase
     .from('customer_branch_meta_defaults')
-    .select('meta_campaign_ids, meta_campaign_paused_ids, meta_campaign_sync_enabled, updated_at')
+    .select('meta_campaign_ids, meta_campaign_paused_ids, meta_campaign_sync_enabled, meta_campagne_exclusief, meta_campagne_uitgesloten, updated_at')
     .eq('customer_id', customerId)
     .eq('branch', branch)
     .maybeSingle();
@@ -65,6 +65,8 @@ export async function GET(request: NextRequest) {
       meta_campaign_ids: [],
       meta_campaign_paused_ids: [],
       meta_campaign_sync_enabled: true,
+      meta_campagne_exclusief: {},
+      meta_campagne_uitgesloten: [],
       updated_at: null,
     });
   }
@@ -75,6 +77,8 @@ export async function GET(request: NextRequest) {
     meta_campaign_ids: coerceCustomerBatchMetaCampaignIds(data.meta_campaign_ids),
     meta_campaign_paused_ids: coerceCustomerBatchMetaCampaignIds(data.meta_campaign_paused_ids),
     meta_campaign_sync_enabled: data.meta_campaign_sync_enabled !== false,
+    meta_campagne_exclusief: (data as { meta_campagne_exclusief?: unknown }).meta_campagne_exclusief ?? {},
+    meta_campagne_uitgesloten: (data as { meta_campagne_uitgesloten?: unknown }).meta_campagne_uitgesloten ?? [],
     updated_at: data.updated_at ?? null,
   });
 }

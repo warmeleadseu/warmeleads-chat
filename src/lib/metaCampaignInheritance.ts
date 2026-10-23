@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { isNicheResearchBatchKind, isPipelineBatchKind } from '@/lib/batchKind';
 import { normalizeCampaignIds, sanitizePausedMetaCampaignIds } from '@/lib/metaBatchCampaignSync';
+import { normaliseerExclusief, normaliseerUitgesloten, type ExclusiefModus } from '@/lib/campagneExclusiviteit';
 
 export type MetaInheritanceSource = 'source_batch' | 'branch_default' | 'latest_batch' | 'none';
 
@@ -8,6 +9,9 @@ export type ResolvedCustomerBatchMeta = {
   meta_campaign_ids: string[];
   meta_campaign_paused_ids: string[];
   meta_campaign_sync_enabled: boolean;
+  /** Exclusieve en uitgesloten campagnes gaan mee met de koppeling (zie campagneExclusiviteit.ts). */
+  meta_campagne_exclusief: Record<string, ExclusiefModus>;
+  meta_campagne_uitgesloten: string[];
   inheritance_source: MetaInheritanceSource;
 };
 
@@ -18,6 +22,8 @@ type SourceBatchRow = {
   meta_campaign_ids: unknown;
   meta_campaign_paused_ids?: unknown;
   meta_campaign_sync_enabled: boolean | null;
+  meta_campagne_exclusief?: unknown;
+  meta_campagne_uitgesloten?: unknown;
 };
 
 type MetaInheritRow = {
@@ -25,10 +31,15 @@ type MetaInheritRow = {
   meta_campaign_ids: unknown;
   meta_campaign_paused_ids?: unknown;
   meta_campaign_sync_enabled: boolean | null;
+  meta_campagne_exclusief?: unknown;
+  meta_campagne_uitgesloten?: unknown;
 };
 
 function resolvedFromRow(
-  row: { meta_campaign_ids: unknown; meta_campaign_paused_ids?: unknown; meta_campaign_sync_enabled: boolean | null },
+  row: {
+    meta_campaign_ids: unknown; meta_campaign_paused_ids?: unknown; meta_campaign_sync_enabled: boolean | null;
+    meta_campagne_exclusief?: unknown; meta_campagne_uitgesloten?: unknown;
+  },
   source: MetaInheritanceSource,
 ): ResolvedCustomerBatchMeta {
   const meta_campaign_ids = normalizeCampaignIds(row.meta_campaign_ids);
@@ -36,6 +47,8 @@ function resolvedFromRow(
     meta_campaign_ids,
     meta_campaign_paused_ids: sanitizePausedMetaCampaignIds(meta_campaign_ids, row.meta_campaign_paused_ids),
     meta_campaign_sync_enabled: row.meta_campaign_sync_enabled !== false,
+    meta_campagne_exclusief: normaliseerExclusief(row.meta_campagne_exclusief, meta_campaign_ids),
+    meta_campagne_uitgesloten: normaliseerUitgesloten(row.meta_campagne_uitgesloten, meta_campaign_ids),
     inheritance_source: source,
   };
 }
@@ -49,6 +62,8 @@ export function applyMetaInheritanceWaterfall(input: {
     meta_campaign_ids: unknown;
     meta_campaign_paused_ids?: unknown;
     meta_campaign_sync_enabled: boolean | null;
+    meta_campagne_exclusief?: unknown;
+    meta_campagne_uitgesloten?: unknown;
   } | null;
   historical: MetaInheritRow[];
 }): ResolvedCustomerBatchMeta {
@@ -86,6 +101,8 @@ export function applyMetaInheritanceWaterfall(input: {
     meta_campaign_ids: [],
     meta_campaign_paused_ids: [],
     meta_campaign_sync_enabled: true,
+    meta_campagne_exclusief: {},
+    meta_campagne_uitgesloten: [],
     inheritance_source: 'none',
   };
 }
@@ -114,7 +131,7 @@ export async function resolveMetaCampaignFieldsForNewLeadBatch(
   if (sourceBatchId) {
     const { data } = await supabase
       .from('customer_batches')
-      .select('customer_id, branch, batch_kind, meta_campaign_ids, meta_campaign_paused_ids, meta_campaign_sync_enabled')
+      .select('customer_id, branch, batch_kind, meta_campaign_ids, meta_campaign_paused_ids, meta_campaign_sync_enabled, meta_campagne_exclusief, meta_campagne_uitgesloten')
       .eq('id', sourceBatchId)
       .maybeSingle();
     if (data) sourceBatch = data as SourceBatchRow;
@@ -124,10 +141,12 @@ export async function resolveMetaCampaignFieldsForNewLeadBatch(
     meta_campaign_ids: unknown;
     meta_campaign_paused_ids?: unknown;
     meta_campaign_sync_enabled: boolean | null;
+    meta_campagne_exclusief?: unknown;
+    meta_campagne_uitgesloten?: unknown;
   } | null = null;
   const { data: defRow } = await supabase
     .from('customer_branch_meta_defaults')
-    .select('meta_campaign_ids, meta_campaign_paused_ids, meta_campaign_sync_enabled')
+    .select('meta_campaign_ids, meta_campaign_paused_ids, meta_campaign_sync_enabled, meta_campagne_exclusief, meta_campagne_uitgesloten')
     .eq('customer_id', customerId)
     .eq('branch', branch)
     .maybeSingle();
@@ -135,7 +154,7 @@ export async function resolveMetaCampaignFieldsForNewLeadBatch(
 
   const { data: histRows } = await supabase
     .from('customer_batches')
-    .select('batch_kind, meta_campaign_ids, meta_campaign_paused_ids, meta_campaign_sync_enabled')
+    .select('batch_kind, meta_campaign_ids, meta_campaign_paused_ids, meta_campaign_sync_enabled, meta_campagne_exclusief, meta_campagne_uitgesloten')
     .eq('customer_id', customerId)
     .eq('branch', branch)
     .order('created_at', { ascending: false })
@@ -143,7 +162,7 @@ export async function resolveMetaCampaignFieldsForNewLeadBatch(
 
   const { data: nicheHistRows } = await supabase
     .from('customer_batches')
-    .select('batch_kind, meta_campaign_ids, meta_campaign_paused_ids, meta_campaign_sync_enabled')
+    .select('batch_kind, meta_campaign_ids, meta_campaign_paused_ids, meta_campaign_sync_enabled, meta_campagne_exclusief, meta_campagne_uitgesloten')
     .eq('customer_id', customerId)
     .eq('batch_kind', 'niche_research')
     .eq('lead_branch_slug', branch)
@@ -172,6 +191,8 @@ export async function upsertCustomerBranchMetaDefaults(
     meta_campaign_ids: string[];
     meta_campaign_paused_ids?: string[];
     meta_campaign_sync_enabled: boolean;
+    meta_campagne_exclusief?: unknown;
+    meta_campagne_uitgesloten?: unknown;
     updatedBy: string | null;
   },
 ): Promise<void> {
@@ -193,6 +214,8 @@ export async function upsertCustomerBranchMetaDefaults(
       meta_campaign_ids: ids,
       meta_campaign_paused_ids: paused,
       meta_campaign_sync_enabled,
+      meta_campagne_exclusief: normaliseerExclusief(input.meta_campagne_exclusief, ids),
+      meta_campagne_uitgesloten: normaliseerUitgesloten(input.meta_campagne_uitgesloten, ids),
       updated_at: now,
       updated_by: updatedBy,
     },
