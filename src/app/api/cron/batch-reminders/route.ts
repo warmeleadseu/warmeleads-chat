@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
-import { sendBatchMilestoneEmail } from '@/lib/email';
+import { sendBatchMilestoneEmail, sendHerbestelSignaalEmail } from '@/lib/email';
+import { heeftVervolg } from '@/lib/batchNotifications';
+import { accountmanagerOntvanger } from '@/lib/accountmanagerOntvanger';
 import { sendBatchMilestonePush } from '@/lib/pushNotification';
 import { verifyCronAuth } from '@/lib/cronAuth';
 
@@ -15,7 +17,7 @@ export async function GET(request: NextRequest) {
 
   const { data: batches } = await supabase
     .from('customer_batches')
-    .select('id, customer_id, branch, batch_size, leads_delivered, completed_at')
+    .select('id, customer_id, branch, batch_size, leads_delivered, completed_at, created_at, account_manager_id')
     .eq('status', 'completed')
     .eq('batch_kind', 'leads')
     .eq('notified_completed', true)
@@ -29,7 +31,7 @@ export async function GET(request: NextRequest) {
   const customerIds = [...new Set(batches.map(b => b.customer_id))];
   const { data: customers } = await supabase
     .from('customers')
-    .select('id, name, email, contact_person')
+    .select('id, name, email, contact_person, phone, account_manager_id, intern, demo_mode')
     .in('id', customerIds);
 
   const customerMap = new Map((customers || []).map(c => [c.id, c]));
@@ -64,6 +66,16 @@ export async function GET(request: NextRequest) {
 
     sendBatchMilestoneEmail(customer, { ...batch, branch_name: branchName }, 'reminder').catch(() => {});
     sendBatchMilestonePush(customer.id, batch.id, branchName, 'reminder').catch(() => {});
+
+    /* De accountmanager belt: de klant krijgt nu geen leads meer. */
+    if (!customer.intern && !customer.demo_mode && !(await heeftVervolg(supabase, batch).catch(() => true))) {
+      const naar = await accountmanagerOntvanger(supabase, { batchAm: batch.account_manager_id, klantAm: customer.account_manager_id });
+      sendHerbestelSignaalEmail(naar, {
+        soort: 'klaar', klant: customer.name, contactpersoon: customer.contact_person, telefoon: customer.phone,
+        klantEmail: customer.email, branche: branchName, geleverd: batch.leads_delivered, grootte: batch.batch_size,
+        batchId: batch.id, customerId: customer.id,
+      }).catch(() => {});
+    }
 
     await supabase.from('customer_batches').update({ notified_reminder: true }).eq('id', batch.id);
     sent++;

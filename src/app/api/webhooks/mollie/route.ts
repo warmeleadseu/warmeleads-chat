@@ -14,6 +14,7 @@ import { metaInheritanceNoteSuffix, resolveMetaCampaignFieldsForNewLeadBatch } f
 import { zonderBotsingen } from '@/lib/campagneExclusiviteit';
 import { ensureCustomerHasBranch } from '@/lib/nicheResearch';
 import { deliveryModelForNewBatch, normalizeDeliveryModel } from '@/lib/batchDeliveryModel';
+import { kopieerBatchGebied } from '@/lib/batchTargetInsert';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.warmeleads.eu';
 
@@ -544,6 +545,20 @@ export async function POST(request: NextRequest) {
         .from('batch_orders')
         .update({ batch_id: newBatch.id })
         .eq('id', orderId);
+
+      /* Nabesteld: het eigen doelgebied van de vorige batch gaat mee. */
+      if (orderSourceBatchId && orderBatchKind === 'leads') {
+        try {
+          await kopieerBatchGebied(supabase, orderSourceBatchId, newBatch.id);
+        } catch (e) {
+          console.error('[mollie-webhook] doelgebied overnemen mislukt:', e);
+          sendEmail('info@warmeleads.eu', `[ACTIE] Doelgebied niet overgenomen bij nabestelling`,
+            errorEmailHtml('Doelgebied controleren', `
+              <p style="margin:0 0 16px">Batch <strong>${newBatch.id}</strong> is nabesteld van ${orderSourceBatchId}, maar het eigen doelgebied van de vorige batch kon niet worden overgenomen. Hij gebruikt nu het gebied van de klantkaart. Controleer en zet het gebied zo nodig met de hand.</p>`),
+            { type: 'mollie_error', metadata: { batch_id: newBatch.id, error_type: 'batch_targets_copy_failed' } },
+          ).catch(() => {});
+        }
+      }
 
       if (orderBatchKind === 'niche_research' && orderLeadBranchSlug) {
         await ensureCustomerHasBranch(supabase, order.customer_id, orderLeadBranchSlug);

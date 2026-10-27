@@ -148,3 +148,27 @@ export async function insertBatchTargets(
   }
   return { ok: true };
 }
+
+/**
+ * Neemt het eigen doelgebied van een batch over op zijn opvolger (nabestellen).
+ * Zonder dit viel een nabestelde batch terug op het gebied van de klantkaart,
+ * ook als de vorige batch een afwijkend gebied had. Heeft de bron geen eigen
+ * gebied, dan gebeurt er niets (de klantkaart geldt dan voor allebei).
+ */
+export async function kopieerBatchGebied(
+  supabase: SupabaseClient,
+  vanBatchId: string,
+  naarBatchId: string,
+): Promise<number> {
+  const [{ data: bron }, { data: bestaand }] = await Promise.all([
+    supabase.from('batch_targets').select('label, target_type, lat, lng, radius_km, provinces, country').eq('batch_id', vanBatchId).eq('is_active', true),
+    supabase.from('batch_targets').select('id').eq('batch_id', naarBatchId).limit(1),
+  ]);
+  /* Idempotent: een webhook die opnieuw komt, kopieert niet nog eens. */
+  if (!bron?.length || (bestaand ?? []).length > 0) return 0;
+  const { error } = await supabase
+    .from('batch_targets')
+    .insert(bron.map(t => ({ ...t, batch_id: naarBatchId, is_active: true })));
+  if (error) throw new Error(`Doelgebied overnemen mislukt: ${error.message}`);
+  return bron.length;
+}

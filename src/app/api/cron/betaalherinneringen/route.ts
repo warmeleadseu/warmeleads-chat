@@ -5,6 +5,7 @@ import { EMAIL_BASE_URL, sendBetaalBelactieEmail, sendOfferteVerlopenEmail, send
 import { ensureInvoiceMollieCheckout } from '@/lib/invoiceCheckout';
 import { VERLOOP_DAGEN, dagenOud, volgendeHerinnerStap, type HerinnerStap } from '@/lib/betaalHerinnering';
 import { laatBatchVerlopen } from '@/lib/offerteVerloop';
+import { herbestelUrl } from '@/lib/herbestelToken';
 
 /**
  * Dagelijks (09:00): automatische opvolging van onbetaalde batches.
@@ -153,7 +154,7 @@ export async function GET(request: NextRequest) {
         const v = await laatBatchVerlopen(supabase, r.id, { door: null, reden: `automatisch na ${VERLOOP_DAGEN} dagen` });
         if (!v.ok) { await terug(); uitkomst.push({ batch_id: r.id, stap: p.stap.stap, soort: 'verlopen', ok: false, fout: 'verlopen mislukt' }); continue; }
         /* De mail is een service; mislukt hij, dan blijft de batch toch verlopen. */
-        await sendOfferteVerlopenEmail(klant, batchInfo, `${EMAIL_BASE_URL}/portal/bestellen?batch=${r.id}`).catch(() => false);
+        await sendOfferteVerlopenEmail(klant, batchInfo, herbestelUrl(r.id, 'verlopen', { siteUrl: EMAIL_BASE_URL })).catch(() => false);
         uitkomst.push({ batch_id: r.id, stap: p.stap.stap, soort: 'verlopen', ok: true });
       }
     } catch (e) {

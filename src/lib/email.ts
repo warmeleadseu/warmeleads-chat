@@ -1,4 +1,5 @@
 import { Resend } from 'resend';
+import { herbestelUrl } from './herbestelToken';
 import { createServerClient } from '@/lib/supabase';
 import { computeInvoiceVat } from '@/lib/invoiceVat';
 
@@ -519,7 +520,12 @@ export async function sendBatchMilestoneEmail(
   const branchLabel = batch.branch_name || batch.branch;
   const greeting = customer.contact_person || customer.name;
   const pct = batch.batch_size > 0 ? Math.round((batch.leads_delivered / batch.batch_size) * 100) : 0;
-  const orderUrl = `${BASE_URL}/portal/bestellen?batch=${batch.id}`;
+  const portalUrl = `${BASE_URL}/portal/bestellen?batch=${batch.id}`;
+  /* Eén klik, zonder inloggen: de meeste klanten zitten niet dagelijks in het portaal. */
+  let orderUrl = portalUrl;
+  try {
+    orderUrl = herbestelUrl(batch.id, milestone === '80pct' ? '80' : milestone === 'completed' ? '100' : 'herinnering', { siteUrl: BASE_URL });
+  } catch { /* geen servergeheim: dan via het portaal */ }
 
   const titles: Record<string, string> = {
     '80pct': `Je batch ${branchLabel} is voor ${pct}% voltooid`,
@@ -551,7 +557,8 @@ export async function sendBatchMilestoneEmail(
   const content = `
     <p style="margin:0 0 20px">${milestoneBadges[milestone]}</p>
     ${bodies[milestone]}
-    ${cta('Nieuwe batch bestellen &rarr;', orderUrl)}`;
+    ${cta('Opnieuw bestellen &rarr;', orderUrl)}
+    <p style="margin:12px 0 0;font-size:13px;color:#94a3b8">Zelfde voorwaarden, je kiest alleen het aantal. Liever iets aanpassen? <a href="${portalUrl}" style="color:#3B2F75">Bestel via je portaal</a>.</p>`;
 
   const milestoneTypes: Record<string, string> = { '80pct': 'batch_80pct', completed: 'batch_completed', reminder: 'batch_reminder' };
   return sendEmail(
@@ -693,6 +700,42 @@ export async function sendOfferteVerlopenEmail(
     type: 'batch_offerte_verlopen',
     toName: greeting,
     metadata: { customer_id: customer.id, batch_id: batch.id, branch: batch.branch },
+  });
+}
+
+/**
+ * Herbestelsignaal voor de accountmanager: de batch van een klant is bijna op
+ * (80%) of al een paar dagen klaar, en er is nog geen vervolg besteld.
+ */
+export async function sendHerbestelSignaalEmail(
+  to: { email: string; name?: string | null },
+  info: {
+    soort: 'bijna_op' | 'klaar'; klant: string; contactpersoon?: string | null; telefoon?: string | null;
+    klantEmail?: string | null; branche: string; geleverd: number; grootte: number; batchId: string; customerId: string;
+  },
+): Promise<boolean> {
+  const titel = info.soort === 'bijna_op'
+    ? `${info.klant}: batch ${info.branche} bijna op, nog geen vervolg`
+    : `Bel ${info.klant}: batch ${info.branche} is klaar en er is niets nabesteld`;
+  const uitleg = info.soort === 'bijna_op'
+    ? 'De klant kreeg net de mail met de knop om opnieuw te bestellen. Een belletje nu voorkomt dat de levering stilvalt.'
+    : 'De batch is een paar dagen klaar en de klant heeft niet opnieuw besteld. Hij ontvangt nu geen leads meer. Bel om te horen hoe het ging en of er een vervolg komt.';
+  const content = `
+    <p style="margin:0 0 20px">${statusBadge(info.soort === 'bijna_op' ? 'BIJNA OP' : 'GEEN VERVOLG', info.soort === 'bijna_op' ? 'orange' : 'red')}</p>
+    <p style="margin:0 0 16px">${uitleg}</p>
+    ${dataTable(
+      row('Klant', `<strong style="color:#0f172a">${info.klant}</strong>`) +
+      row('Contactpersoon', info.contactpersoon || '-') +
+      row('Telefoon', info.telefoon || '-') +
+      row('E-mail', info.klantEmail || '-') +
+      row('Batch', `${info.branche}: ${info.geleverd} van ${info.grootte} geleverd`),
+      'Herbestellen',
+    )}
+    ${cta('Batch openen in het CRM &rarr;', `${BASE_URL}/admin/batches?batch=${info.batchId}`)}`;
+  return sendEmail(to.email, titel, layout(titel, content), {
+    type: info.soort === 'bijna_op' ? 'am_herbestel_bijna_op' : 'am_herbestel_klaar',
+    toName: to.name ?? undefined,
+    metadata: { customer_id: info.customerId, batch_id: info.batchId },
   });
 }
 
