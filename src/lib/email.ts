@@ -577,10 +577,18 @@ export type UnpaidBatchReminderEmailContent = {
   };
 };
 
+/** Opties voor de herinnering: betaallink, en bij de automatische reeks de stap en tot wanneer het aanbod geldt. */
+export type UnpaidBatchReminderOptions = {
+  directCheckoutUrl?: string | null;
+  geldigTot?: Date | null;
+  laatste?: boolean;
+  stap?: number;
+};
+
 export function buildUnpaidBatchReminderEmailContent(
   customer: Customer,
   batch: UnpaidBatchReminderInfo,
-  options?: { directCheckoutUrl?: string | null },
+  options?: UnpaidBatchReminderOptions,
 ): UnpaidBatchReminderEmailContent {
   const branchLabel = batch.branch_name || batch.branch;
   const greeting = customer.contact_person || customer.name;
@@ -614,6 +622,9 @@ export function buildUnpaidBatchReminderEmailContent(
     <p style="margin:0 0 16px;font-size:16px;font-weight:600;color:#0f172a">Hallo ${greeting},</p>
     <p style="margin:0 0 8px">Je batch <strong style="color:#0f172a">${branchLabel}</strong> staat voor je klaar, maar is nog niet betaald.</p>
     <p style="margin:0 0 8px">Zodra je betaalt, start de levering direct en ontvang je nieuwe leads in je portaal.</p>
+    ${options?.geldigTot
+      ? `<p style="margin:0 0 8px">Dit aanbod is geldig tot en met <strong style="color:#0f172a">${options.geldigTot.toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', timeZone: 'Europe/Amsterdam' })}</strong>.</p>`
+      : ''}
     ${dataTable(
       row('Branche', `<strong style="color:#0f172a">${branchLabel}</strong>`) +
       row('Batch grootte', `<strong style="color:#0f172a">${batch.batch_size}</strong> leads`) +
@@ -627,7 +638,9 @@ export function buildUnpaidBatchReminderEmailContent(
     <p style="margin:12px 0 0;font-size:13px;color:#94a3b8">Na betaling gaat je batch direct live.</p>`;
 
   return {
-    subject: `Herinnering: je batch ${branchLabel} wacht op betaling`,
+    subject: options?.laatste
+      ? `Laatste herinnering: je batch ${branchLabel} wacht op betaling`
+      : `Herinnering: je batch ${branchLabel} wacht op betaling`,
     html: layout('Batch betaling herinnering', content),
     to: { email: customer.email, name: greeting },
     type: 'batch_payment_reminder',
@@ -635,6 +648,7 @@ export function buildUnpaidBatchReminderEmailContent(
       customer_id: customer.id,
       batch_id: batch.id,
       branch: batch.branch,
+      ...(options?.stap ? { stap: options.stap, automatisch: true } : {}),
     },
     summary: {
       branch_label: branchLabel,
@@ -649,13 +663,66 @@ export function buildUnpaidBatchReminderEmailContent(
 export async function sendUnpaidBatchReminderEmail(
   customer: Customer,
   batch: UnpaidBatchReminderInfo,
-  options?: { directCheckoutUrl?: string | null },
+  options?: UnpaidBatchReminderOptions,
 ): Promise<boolean> {
   const c = buildUnpaidBatchReminderEmailContent(customer, batch, options);
   return sendEmail(c.to.email, c.subject, c.html, {
     type: c.type,
     toName: c.to.name,
     metadata: c.metadata,
+  });
+}
+
+/** Na 21 dagen zonder betaling: het aanbod is verlopen, met een weg terug. */
+export async function sendOfferteVerlopenEmail(
+  customer: Customer,
+  batch: UnpaidBatchReminderInfo,
+  alsnogUrl: string,
+): Promise<boolean> {
+  const branchLabel = batch.branch_name || batch.branch;
+  const greeting = customer.contact_person || customer.name;
+  const titel = `Je aanbod voor ${branchLabel} is verlopen`;
+  const content = `
+    <p style="margin:0 0 20px">${statusBadge('AANBOD VERLOPEN', 'orange')}</p>
+    <p style="margin:0 0 16px;font-size:16px;font-weight:600;color:#0f172a">Hallo ${greeting},</p>
+    <p style="margin:0 0 8px">Je batch van <strong style="color:#0f172a">${batch.batch_size} ${branchLabel}-leads</strong> is niet betaald en daarom verlopen. De factuur vervalt, je hoeft niets te doen.</p>
+    <p style="margin:0">Wil je toch leads ontvangen? Met de knop hieronder bestel je hem alsnog, en de levering start direct na betaling.</p>
+    ${cta('Alsnog bestellen &rarr;', alsnogUrl)}
+    <p style="margin:12px 0 0;font-size:13px;color:#94a3b8">Vragen? Beantwoord deze mail, dan nemen we contact met je op.</p>`;
+  return sendEmail(customer.email, titel, layout(titel, content), {
+    type: 'batch_offerte_verlopen',
+    toName: greeting,
+    metadata: { customer_id: customer.id, batch_id: batch.id, branch: batch.branch },
+  });
+}
+
+/** Dag 14 zonder betaling: de accountmanager belt de klant. */
+export async function sendBetaalBelactieEmail(
+  to: { email: string; name?: string | null },
+  info: {
+    klant: string; contactpersoon?: string | null; telefoon?: string | null; klantEmail?: string | null;
+    branche: string; aantal: number; bedragExcl: number; dagen: number; verlooptOp: Date; batchId: string; customerId: string;
+  },
+): Promise<boolean> {
+  const titel = `Bel ${info.klant}: batch wacht ${info.dagen} dagen op betaling`;
+  const content = `
+    <p style="margin:0 0 20px">${statusBadge('BELACTIE', 'red')}</p>
+    <p style="margin:0 0 16px">${info.klant} heeft na drie herinneringen nog niet betaald. Een belletje helpt vaak: zit er iets in de weg, of wil de klant iets aanpassen?</p>
+    ${dataTable(
+      row('Klant', `<strong style="color:#0f172a">${info.klant}</strong>`) +
+      row('Contactpersoon', info.contactpersoon || '-') +
+      row('Telefoon', info.telefoon || '-') +
+      row('E-mail', info.klantEmail || '-') +
+      row('Batch', `${info.aantal} ${info.branche}-leads`) +
+      row('Bedrag excl. btw', `&euro;${info.bedragExcl.toFixed(2)}`) +
+      row('Verloopt op', info.verlooptOp.toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', timeZone: 'Europe/Amsterdam' })),
+      'Onbetaalde batch',
+    )}
+    ${cta('Batch openen in het CRM &rarr;', `${BASE_URL}/admin/batches?batch=${info.batchId}`)}`;
+  return sendEmail(to.email, titel, layout(titel, content), {
+    type: 'batch_betaal_belactie',
+    toName: to.name ?? undefined,
+    metadata: { customer_id: info.customerId, batch_id: info.batchId },
   });
 }
 

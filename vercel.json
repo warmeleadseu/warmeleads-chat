@@ -55,6 +55,10 @@
     {
       "path": "/api/cron/geplande-leveringen",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/betaalherinneringen",
+      "schedule": "0 8 * * *"
     }
   ]
 }

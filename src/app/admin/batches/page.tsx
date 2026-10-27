@@ -430,6 +430,11 @@ export default function BatchesPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [editBatch, setEditBatch] = useState<Batch | null>(null);
   const [detailBatchId, setDetailBatchId] = useState<string | null>(null);
+  /* Directe link vanuit een mail: /admin/batches?batch=<id> opent het detail. */
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('batch');
+    if (id) setDetailBatchId(id);
+  }, []);
   const [toast, setToast] = useState('');
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
