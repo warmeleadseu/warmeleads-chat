@@ -22,6 +22,8 @@ import {
   ChevronUpIcon,
   ChevronDownIcon,
   ExclamationTriangleIcon,
+  ArchiveBoxXMarkIcon,
+  ArrowUturnLeftIcon,
 } from '@heroicons/react/24/outline';
 import { adminFetch, adminHeaders } from '@/lib/adminAuth';
 import { computeInvoiceVat } from '@/lib/invoiceVat';
@@ -50,6 +52,8 @@ interface Invoice {
   credit_note_of: string | null;
   batch_order_id: string | null;
   batch_id: string | null;
+  appointment_batch_id?: string | null;
+  expired_at?: string | null;
   uploaded_pdf_path: string | null;
   /** Hoe hij op betaald kwam: de klant via Mollie, of wij met de hand. */
   betaald_via?: 'mollie' | 'handmatig' | null;
@@ -58,7 +62,7 @@ interface Invoice {
 
 interface Customer { id: string; name: string; email: string; country?: string | null; vat_id?: string | null }
 
-type StatusFilter = 'all' | 'open' | 'paid' | 'credit_note' | 'overdue';
+type StatusFilter = 'all' | 'open' | 'paid' | 'credit_note' | 'overdue' | 'expired';
 /** Alleen betaalde facturen: via Mollie, met de hand (staat ook in Rompslomp), of nog niet vastgesteld. */
 type BetaaldViaFilter = 'all' | 'mollie' | 'handmatig' | 'onbekend';
 
@@ -75,7 +79,19 @@ function isOverdue(inv: Invoice): boolean {
 }
 
 function statusLabel(status: string): string {
-  return status === 'open' ? 'Open' : status === 'credit_note' ? 'Creditnota' : 'Betaald';
+  return status === 'open' ? 'Open' : status === 'credit_note' ? 'Creditnota' : status === 'expired' ? 'Vervallen' : 'Betaald';
+}
+
+function statusKleur(status: string): string {
+  return status === 'open' ? 'bg-red-50 text-red-700'
+    : status === 'credit_note' ? 'bg-amber-50 text-amber-700'
+    : status === 'expired' ? 'bg-slate-100 text-slate-500'
+    : 'bg-emerald-50 text-emerald-700';
+}
+
+/** Een open factuur die bij geen batch (meer) hoort: betalen start niets. */
+function zonderBatch(inv: Invoice): boolean {
+  return inv.status === 'open' && !inv.batch_id && !inv.appointment_batch_id;
 }
 
 function fmtDateNl(iso: string | null): string {
@@ -197,8 +213,11 @@ export default function AdminInvoicesPage() {
       }
       if (statusFilter === 'overdue') {
         if (!isOverdue(i)) return false;
-      } else if (statusFilter !== 'all') {
-        if (i.status !== statusFilter) return false;
+      } else if (statusFilter === 'all') {
+        /* Vervallen facturen (verlopen offertes) alleen via hun eigen filter. */
+        if (i.status === 'expired') return false;
+      } else if (i.status !== statusFilter) {
+        return false;
       }
       if (customerFilter && i.customer_id !== customerFilter) return false;
       if (betaaldViaFilter !== 'all') {
@@ -333,6 +352,24 @@ export default function AdminInvoicesPage() {
       if (res.ok) { showToast('Factuur gemarkeerd als betaald'); fetchInvoices(); }
       else { const d = await res.json().catch(() => ({})); showToast(d.error || 'Markeren mislukt'); }
     } catch { showToast('Markeren mislukt'); }
+    setActionBusy(null);
+  }, [showToast, fetchInvoices]);
+
+  const wisselVervallen = useCallback(async (inv: Invoice, actie: 'vervallen' | 'terugzetten') => {
+    const vraag = actie === 'vervallen'
+      ? `Factuur ${inv.invoice_number} laten vervallen? Hij telt niet meer als openstaand en is niet meer te betalen. Terugzetten kan altijd.${inv.batch_id ? ' De batch verloopt mee.' : ''}`
+      : `Factuur ${inv.invoice_number} weer openzetten?${inv.batch_id ? ' De batch wacht dan weer op betaling.' : ''}`;
+    if (!confirm(vraag)) return;
+    setActionBusy(inv.id);
+    try {
+      const res = await adminFetch(`/api/admin/invoices/${inv.id}/vervallen`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actie }),
+      });
+      if (res.ok) { showToast(actie === 'vervallen' ? 'Factuur vervallen' : 'Factuur weer open'); fetchInvoices(); }
+      else { const d = await res.json().catch(() => ({})); showToast(d.error || 'Wijzigen mislukt'); }
+    } catch { showToast('Wijzigen mislukt'); }
     setActionBusy(null);
   }, [showToast, fetchInvoices]);
 
@@ -572,6 +609,7 @@ export default function AdminInvoicesPage() {
               <option value="overdue">Te laat</option>
               <option value="paid">Betaald</option>
               <option value="credit_note">Creditnota</option>
+              <option value="expired">Vervallen</option>
             </select>
           </div>
           <div>
@@ -686,7 +724,7 @@ export default function AdminInvoicesPage() {
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap items-center gap-1">
                         <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
-                          inv.status === 'open' ? 'bg-red-50 text-red-700' : inv.status === 'credit_note' ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'
+                          statusKleur(inv.status)
                         }`}>
                           {statusLabel(inv.status)}
                         </span>
@@ -695,6 +733,9 @@ export default function AdminInvoicesPage() {
                             className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${inv.betaald_via === 'mollie' ? 'bg-sky-50 text-sky-700' : inv.betaald_via === 'handmatig' ? 'bg-violet-50 text-violet-700' : 'bg-slate-100 text-slate-500'}`}>
                             {inv.betaald_via === 'mollie' ? 'via Mollie' : inv.betaald_via === 'handmatig' ? 'handmatig' : 'onbekend'}
                           </span>
+                        )}
+                        {zonderBatch(inv) && (
+                          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800" title="Hoort bij geen batch: betalen start niets">geen batch</span>
                         )}
                         {overdue && (
                           <span className="inline-flex items-center gap-0.5 rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-bold text-white" title={`Vervallen op ${fmtDateNl(inv.due_date)}`}>
@@ -721,7 +762,17 @@ export default function AdminInvoicesPage() {
                               className="rounded-lg p-1.5 text-slate-400 transition hover:bg-emerald-50 hover:text-emerald-600 disabled:opacity-50">
                               <BanknotesIcon className="h-4 w-4" />
                             </button>
+                            <button onClick={() => wisselVervallen(inv, 'vervallen')} disabled={busy} title="Laten vervallen"
+                              className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50">
+                              <ArchiveBoxXMarkIcon className="h-4 w-4" />
+                            </button>
                           </>
+                        )}
+                        {inv.status === 'expired' && (
+                          <button onClick={() => wisselVervallen(inv, 'terugzetten')} disabled={busy} title="Weer openzetten"
+                            className="rounded-lg p-1.5 text-slate-400 transition hover:bg-brand-purple/10 hover:text-brand-purple disabled:opacity-50">
+                            <ArrowUturnLeftIcon className="h-4 w-4" />
+                          </button>
                         )}
                         {canCredit && (
                           <button onClick={() => createCreditNote(inv)} disabled={busy} title="Creditnota maken"
@@ -763,7 +814,7 @@ export default function AdminInvoicesPage() {
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <span className="min-w-0 truncate rounded bg-brand-purple/10 px-2 py-0.5 text-xs font-bold text-brand-purple">{inv.invoice_number}</span>
                     <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                      inv.status === 'open' ? 'bg-red-50 text-red-700' : inv.status === 'credit_note' ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'
+                      statusKleur(inv.status)
                     }`}>
                       {statusLabel(inv.status)}
                     </span>
@@ -772,6 +823,9 @@ export default function AdminInvoicesPage() {
                         className={`rounded-full shrink-0 px-2 py-0.5 text-[10px] font-medium ${inv.betaald_via === 'mollie' ? 'bg-sky-50 text-sky-700' : inv.betaald_via === 'handmatig' ? 'bg-violet-50 text-violet-700' : 'bg-slate-100 text-slate-500'}`}>
                         {inv.betaald_via === 'mollie' ? 'via Mollie' : inv.betaald_via === 'handmatig' ? 'handmatig' : 'onbekend'}
                       </span>
+                    )}
+                    {zonderBatch(inv) && (
+                      <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">geen batch</span>
                     )}
                     {overdue && (
                       <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-bold text-white">
@@ -788,7 +842,15 @@ export default function AdminInvoicesPage() {
                         <button onClick={() => markPaid(inv)} disabled={busy} className="rounded-lg p-2.5 text-slate-400 hover:text-emerald-600 disabled:opacity-50">
                           <BanknotesIcon className="h-4 w-4" />
                         </button>
+                        <button onClick={() => wisselVervallen(inv, 'vervallen')} disabled={busy} aria-label="Laten vervallen" className="rounded-lg p-2.5 text-slate-400 hover:text-slate-700 disabled:opacity-50">
+                          <ArchiveBoxXMarkIcon className="h-4 w-4" />
+                        </button>
                       </>
+                    )}
+                    {inv.status === 'expired' && (
+                      <button onClick={() => wisselVervallen(inv, 'terugzetten')} disabled={busy} aria-label="Weer openzetten" className="rounded-lg p-2.5 text-slate-400 hover:text-brand-purple disabled:opacity-50">
+                        <ArrowUturnLeftIcon className="h-4 w-4" />
+                      </button>
                     )}
                     {canCredit && (
                       <button onClick={() => createCreditNote(inv)} disabled={busy} className="rounded-lg p-2.5 text-slate-400 hover:text-amber-600 disabled:opacity-50">

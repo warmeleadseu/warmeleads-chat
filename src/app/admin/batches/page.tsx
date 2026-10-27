@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import ExterneFactuurKeuze, { beginStand, naarVelden, type ExterneFactuurStand } from '@/components/admin/ExterneFactuurKeuze';
 import BatchWinstBlok from '@/components/admin/BatchWinstBlok';
+import BetaalOpvolging from '@/components/admin/BetaalOpvolging';
 import { directHerkomst, type DirectStand } from '@/lib/directLeveren';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -138,6 +139,12 @@ interface Batch {
   extern_bedrag_excl?: number | string | null;
   /** aan / uit / null (volgt klantkaart). */
   direct_leveren?: string | null;
+  /** Automatische betaalherinneringen (onbetaalde batch). */
+  betaalherinneringen?: boolean | null;
+  betaalherinnering_stap?: number | null;
+  betaalherinnering_op?: string | null;
+  herinnering_vanaf?: string | null;
+  expired_at?: string | null;
   /** Per gekoppelde campagne: 24u of altijd exclusief voor deze batch. */
   meta_campagne_exclusief?: Record<string, string> | null;
   /** Campagnes waarvan deze batch nooit leads krijgt. */
@@ -368,6 +375,7 @@ const STATUS_OPTS = [
   { value: 'pending_payment', label: 'Betaling' },
   { value: 'paused', label: 'Gepauzeerd' },
   { value: 'completed', label: 'Afgerond' },
+  { value: 'expired', label: 'Verlopen' },
 ];
 
 const SORT_OPTS = [
@@ -396,6 +404,7 @@ const STATUS_COLORS: Record<string, string> = {
   paused: 'bg-amber-100 text-amber-700',
   completed: 'bg-blue-100 text-blue-700',
   cancelled: 'bg-red-100 text-red-700',
+  expired: 'bg-slate-100 text-slate-500',
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -404,6 +413,7 @@ const STATUS_LABELS: Record<string, string> = {
   paused: 'Gepauzeerd',
   completed: 'Afgerond',
   cancelled: 'Geannuleerd',
+  expired: 'Verlopen',
 };
 
 export default function BatchesPage() {
@@ -466,7 +476,9 @@ export default function BatchesPage() {
 
   const filtered = useMemo(() => {
     let list = [...batches];
+    /* Verlopen offertes alleen via hun eigen filter, anders vervuilen ze de lijst. */
     if (statusFilter !== 'all') list = list.filter(b => b.status === statusFilter);
+    else list = list.filter(b => b.status !== 'expired');
     if (branchFilter !== 'all') list = list.filter(b => b.branch === branchFilter);
     if (customerFilter !== 'all') list = list.filter(b => b.customer_id === customerFilter);
     if (search) {
@@ -763,7 +775,7 @@ export default function BatchesPage() {
                             className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-brand-purple">
                             <PencilSquareIcon className="h-4 w-4" />
                           </button>
-                          {b.status !== 'completed' && b.status !== 'pending_payment' && (
+                          {b.status !== 'completed' && b.status !== 'pending_payment' && b.status !== 'expired' && (
                             <button onClick={e => { e.stopPropagation(); toggleStatus(b); }} title={b.status === 'active' ? 'Pauzeren' : 'Heractiveren'}
                               className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-amber-600">
                               {b.status === 'active' ? <PauseIcon className="h-4 w-4" /> : <PlayIcon className="h-4 w-4" />}
@@ -834,7 +846,7 @@ export default function BatchesPage() {
                       <button onClick={e => { e.stopPropagation(); setEditBatch(b); }} className="rounded-lg p-2.5 text-slate-400 hover:bg-slate-100 hover:text-brand-purple">
                         <PencilSquareIcon className="h-4 w-4" />
                       </button>
-                      {b.status !== 'completed' && b.status !== 'pending_payment' && (
+                      {b.status !== 'completed' && b.status !== 'pending_payment' && b.status !== 'expired' && (
                         <button onClick={e => { e.stopPropagation(); toggleStatus(b); }} className="rounded-lg p-2.5 text-slate-400 hover:bg-slate-100 hover:text-amber-600">
                           {b.status === 'active' ? <PauseIcon className="h-4 w-4" /> : <PlayIcon className="h-4 w-4" />}
                         </button>
@@ -1639,6 +1651,7 @@ function BatchDetailPanel({ batchId, branches, onClose, onEdit, onListRefresh }:
                         </div>
                         {!batch.is_paid && (
                           <div className="mt-3 space-y-2 border-t border-slate-100 pt-3">
+                            {batch.status !== 'expired' && (
                             <div className="flex flex-wrap gap-2">
                               <button
                                 type="button"
@@ -1657,6 +1670,8 @@ function BatchDetailPanel({ batchId, branches, onClose, onEdit, onListRefresh }:
                                 Stuur betaalherinnering
                               </button>
                             </div>
+                            )}
+                            <BetaalOpvolging batch={batch} onGewijzigd={() => { void reloadDetailBatch(); onListRefresh?.(); }} />
                             {invoiceSendFeedback && (
                               <p className={`text-[11px] ${invoiceSendFeedback.kind === 'success' ? 'text-emerald-600' : 'text-red-600'}`}>
                                 {invoiceSendFeedback.message}

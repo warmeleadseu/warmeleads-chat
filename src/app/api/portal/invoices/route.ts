@@ -16,6 +16,8 @@ export async function GET(request: NextRequest) {
     .from('invoices')
     .select('id, invoice_number, description, subtotal, btw_percentage, btw_amount, total_incl_btw, status, paid_at, created_at, batch_id')
     .eq('customer_id', customer.id)
+    /* Vervallen facturen zijn verlopen offertes: niet meer tonen. */
+    .neq('status', 'expired')
     .order('created_at', { ascending: false });
 
   if (error) return NextResponse.json({ error: 'Kon facturen niet ophalen' }, { status: 500 });

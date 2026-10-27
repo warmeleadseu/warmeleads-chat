@@ -45,6 +45,8 @@ export async function GET(request: NextRequest) {
       .from('customer_batches')
       .select('id, customer_id, branch, batch_kind, status, batch_size, total_price, price_per_lead, is_paid, mollie_payment_id, leads_delivered_external, extern_bedrag_excl, extern_factuurnummer, created_at, completed_at, customers(name, intern)')
       .in('batch_kind', SOORTEN)
+      /* Verlopen offertes zijn nooit omzet geweest. */
+      .neq('status', 'expired')
       .gte('created_at', `${van}T00:00:00Z`)
       .lt('created_at', totExclusief.toISOString())
       .order('created_at', { ascending: false })

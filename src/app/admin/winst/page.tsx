@@ -45,7 +45,7 @@ const BETAAL: Record<Betaalwijze, [string, string]> = {
   extern: ['Extern', 'bg-violet-50 text-violet-700'],
   open: ['Nog niet betaald', 'bg-amber-50 text-amber-700'],
 };
-const STATUS: Record<string, string> = { active: 'Actief', completed: 'Afgerond', paused: 'Gepauzeerd', pending_payment: 'Wacht op betaling' };
+const STATUS: Record<string, string> = { active: 'Actief', completed: 'Afgerond', paused: 'Gepauzeerd', pending_payment: 'Wacht op betaling', expired: 'Verlopen' };
 const SOORT: Record<string, string> = { leads: '', bulk_leads: 'Bulk', niche_research: 'Niche-onderzoek' };
 
 function isoDag(d: Date) { return d.toISOString().slice(0, 10); }

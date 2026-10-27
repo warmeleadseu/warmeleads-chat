@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
 
     const { data: leadBatch } = await supabase
       .from('customer_batches')
-      .select('id, customer_id, branch, batch_size, price_per_lead, total_price, is_paid, mollie_payment_id')
+      .select('id, customer_id, branch, batch_size, price_per_lead, total_price, is_paid, mollie_payment_id, status')
       .eq('id', batch_id)
       .eq('customer_id', customer.id)
       .maybeSingle();
@@ -41,6 +41,9 @@ export async function POST(request: NextRequest) {
 
     if (batch) {
       if (batch.is_paid) return NextResponse.json({ error: 'Batch is al betaald' }, { status: 400 });
+      if (batch.status === 'expired') {
+        return NextResponse.json({ error: 'Dit aanbod is verlopen. Neem contact met ons op als je het alsnog wilt.' }, { status: 410 });
+      }
 
       const { data: openInvoice } = await supabase
         .from('invoices')

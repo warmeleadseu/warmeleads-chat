@@ -249,11 +249,13 @@ export async function createInvoice(params: CreateInvoiceParams) {
 export async function markInvoicePaid(batchId: string, molliePaymentId: string) {
   const supabase = createServerClient();
 
+  /* Ook een vervallen factuur: wordt de batch toch betaald, dan hoort de
+     factuur daarbij gewoon op betaald. */
   const { data: existing } = await supabase
     .from('invoices')
     .select('id, invoice_number, total_incl_btw, description, customer_id, status')
     .eq('batch_id', batchId)
-    .in('status', ['open'])
+    .in('status', ['open', 'expired'])
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -273,7 +275,7 @@ export async function markInvoicePaid(batchId: string, molliePaymentId: string) 
   const now = new Date().toISOString();
   const { data: updated, error } = await supabase
     .from('invoices')
-    .update({ status: 'paid', paid_at: now, mollie_payment_id: molliePaymentId, betaald_via: betaaldViaUitBetaalId(molliePaymentId) })
+    .update({ status: 'paid', paid_at: now, expired_at: null, mollie_payment_id: molliePaymentId, betaald_via: betaaldViaUitBetaalId(molliePaymentId) })
     .eq('id', existing.id)
     .select()
     .single();

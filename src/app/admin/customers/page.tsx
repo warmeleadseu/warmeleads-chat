@@ -3455,6 +3455,7 @@ function BatchesPanel({ customer, branchOptions, onClose, embedded }: { customer
   const statusColors: Record<string, string> = {
     active: 'bg-emerald-100 text-emerald-700',
     pending_payment: 'bg-orange-100 text-orange-800',
+    expired: 'bg-slate-100 text-slate-500',
     paused: 'bg-amber-100 text-amber-700',
     completed: 'bg-blue-100 text-blue-700',
     cancelled: 'bg-slate-100 text-slate-600',
@@ -3463,6 +3464,7 @@ function BatchesPanel({ customer, branchOptions, onClose, embedded }: { customer
   const statusLabels: Record<string, string> = {
     active: 'Actief',
     pending_payment: 'Wacht op betaling',
+    expired: 'Verlopen',
     paused: 'Gepauzeerd',
     completed: 'Voltooid',
     cancelled: 'Geannuleerd',
@@ -3757,7 +3759,7 @@ function BatchesPanel({ customer, branchOptions, onClose, embedded }: { customer
                         </span>
                       </div>
                       <div className="flex items-center gap-1">
-                        {b.status !== 'completed' && b.status !== 'pending_payment' && (
+                        {b.status !== 'completed' && b.status !== 'pending_payment' && b.status !== 'expired' && (
                           <button type="button" onClick={() => toggleBatchStatus(b)}
                             className="rounded-lg px-2 py-1 text-[11px] font-medium text-slate-500 transition hover:bg-slate-100">
                             {b.status === 'active' ? 'Pauzeer' : 'Heractiveer'}
@@ -3846,7 +3848,7 @@ function BatchesPanel({ customer, branchOptions, onClose, embedded }: { customer
                         </span>
                       </div>
                       <div className="flex items-center gap-1">
-                        {b.status !== 'completed' && b.status !== 'pending_payment' && b.status !== 'cancelled' && (
+                        {b.status !== 'completed' && b.status !== 'pending_payment' && b.status !== 'expired' && b.status !== 'cancelled' && (
                           <button type="button" onClick={() => toggleApptBatchStatus(b)}
                             className="rounded-lg px-2 py-1 text-[11px] font-medium text-slate-500 transition hover:bg-slate-100">
                             {b.status === 'active' ? 'Pauzeer' : 'Heractiveer'}

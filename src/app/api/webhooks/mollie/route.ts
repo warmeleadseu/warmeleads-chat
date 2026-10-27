@@ -268,14 +268,36 @@ export async function POST(request: NextRequest) {
         const nowIso = new Date().toISOString();
         const { data: inv, error: invErr } = await supabase
           .from('invoices')
-          .update({ status: 'paid', paid_at: nowIso, mollie_payment_id: paymentId, betaald_via: 'mollie', betaald_door: null })
+          .update({ status: 'paid', paid_at: nowIso, mollie_payment_id: paymentId, betaald_via: 'mollie', betaald_door: null, expired_at: null })
           .eq('id', invoiceId)
-          .eq('status', 'open')
+          /* Ook een vervallen factuur: de klant heeft betaald, dus gewoon
+             verwerken (de batch gaat hieronder alsnog lopen). */
+          .in('status', ['open', 'expired'])
           .select('*')
           .single();
-
+        if (invErr || !inv) {
+          /* Betaald, maar de factuur stond niet (meer) open. Meestal een
+             dubbele webhook; anders moet iemand kijken. */
+          const { data: huidig } = await supabase.from('invoices').select('status, mollie_payment_id').eq('id', invoiceId).maybeSingle();
+          if (!huidig || huidig.mollie_payment_id !== paymentId) {
+            sendEmail('info@warmeleads.eu', '[WAARSCHUWING] Betaling op een factuur die niet openstond',
+              errorEmailHtml('Betaling niet verwerkt', `
+                <p style="margin:0 0 16px">Mollie meldt een betaling op factuur <strong>${invoiceId}</strong>, maar die factuur stond niet open (status: ${huidig?.status ?? 'niet gevonden'}). Controleer of er iets geleverd of terugbetaald moet worden.</p>
+                <p style="margin:0;font-family:monospace;font-size:13px">Mollie: ${paymentId}</p>`),
+              { type: 'mollie_error', metadata: { invoice_id: invoiceId, payment_id: paymentId, error_type: 'invoice_not_open' } },
+            ).catch(() => {});
+          }
+        }
         if (!invErr && inv) {
           await notifyCustomerInvoicePaid(inv.id);
+          if (!inv.batch_id && !(inv as { appointment_batch_id?: string | null }).appointment_batch_id) {
+            /* Een factuur zonder batch: er start niets vanzelf. */
+            sendEmail('info@warmeleads.eu', `[ACTIE] Factuur ${inv.invoice_number} betaald, maar hoort bij geen batch`,
+              errorEmailHtml('Betaald zonder batch', `
+                <p style="margin:0 0 16px"><strong>${inv.customer_name ?? 'Een klant'}</strong> betaalde factuur <strong>${inv.invoice_number}</strong> (${inv.description ?? ''}). Er hangt geen batch aan, dus er wordt niets geleverd. Maak de batch aan of betaal terug.</p>`),
+              { type: 'mollie_error', metadata: { invoice_id: inv.id, payment_id: paymentId, error_type: 'paid_without_batch' } },
+            ).catch(() => {});
+          }
 
           if (inv.batch_id) {
             const { data: batchClaim } = await supabase

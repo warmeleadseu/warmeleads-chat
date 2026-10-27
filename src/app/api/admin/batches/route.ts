@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { leesExterneFactuur } from '@/lib/factuurBetaling';
+import { beheerderNaam, leesExterneFactuur } from '@/lib/factuurBetaling';
+import { laatFactuurVervallen } from '@/lib/offerteVerloop';
 import { leesDirectStand } from '@/lib/directLeveren';
 import { exclusiefBijAndereKlant, normaliseerExclusief, normaliseerUitgesloten, zonderBotsingen } from '@/lib/campagneExclusiviteit';
 
@@ -681,8 +682,9 @@ export async function PUT(request: NextRequest) {
     'meta_campaign_ids', 'meta_campaign_paused_ids', 'meta_campaign_sync_enabled',
     'lead_branch_slug', 'distribution_priority', 'direct_leveren',
     'meta_campagne_exclusief', 'meta_campagne_uitgesloten', 'dagdosering',
-    'extern_factuurnummer', 'extern_bedrag_excl',
+    'extern_factuurnummer', 'extern_bedrag_excl', 'betaalherinneringen',
   ];
+  if (updates.betaalherinneringen !== undefined) updates.betaalherinneringen = updates.betaalherinneringen !== false;
   if (updates.dagdosering !== undefined) updates.dagdosering = updates.dagdosering !== false;
   if ('extern_factuurnummer' in updates || 'extern_bedrag_excl' in updates) {
     const ext = leesExterneFactuur(updates);
@@ -721,7 +723,11 @@ export async function PUT(request: NextRequest) {
   let nextStatus = safeUpdates.status !== undefined ? String(safeUpdates.status) : ex.status;
 
   if (safeUpdates.is_paid === true && ex.is_paid !== true) {
-    if (nextStatus === 'pending_payment') nextStatus = 'active';
+    /* Ook een verlopen batch die toch wordt betaald gaat gewoon lopen. */
+    if (nextStatus === 'pending_payment' || nextStatus === 'expired') nextStatus = 'active';
+  }
+  if (nextStatus === 'expired' && nextPaid) {
+    return NextResponse.json({ error: 'Een betaalde batch kan niet verlopen.' }, { status: 400 });
   }
   if (safeUpdates.is_paid === false && ex.is_paid === true) {
     if (nextStatus === 'active' || nextStatus === 'paused') nextStatus = 'pending_payment';
@@ -939,16 +945,38 @@ export async function DELETE(request: NextRequest) {
   const id = request.nextUrl.searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'ID ontbreekt' }, { status: 400 });
 
+  const { data: batch } = await supabase
+    .from('customer_batches')
+    .select('customer_id, branch, batch_size, status, is_paid, total_price')
+    .eq('id', id)
+    .maybeSingle();
+  if (!batch) return NextResponse.json({ error: 'Batch niet gevonden' }, { status: 404 });
+
   if (admin.role === 'accountmanager') {
-    const { data: batch } = await supabase.from('customer_batches').select('customer_id').eq('id', id).single();
-    if (batch) {
-      const { data: myCust } = await supabase.from('customers').select('id').eq('account_manager_id', admin.id).eq('id', batch.customer_id).single();
-      if (!myCust) return NextResponse.json({ error: 'Geen toegang tot deze batch' }, { status: 403 });
-    }
+    const { data: myCust } = await supabase.from('customers').select('id').eq('account_manager_id', admin.id).eq('id', batch.customer_id).single();
+    if (!myCust) return NextResponse.json({ error: 'Geen toegang tot deze batch' }, { status: 403 });
+  }
+
+  /* Open facturen van deze batch eerst laten vervallen. Voorheen bleven ze
+     open en betaalbaar staan zonder batch: de klant kon betalen zonder dat er
+     iets werd geleverd (92 facturen, EUR 97k op 27 okt 2026). */
+  const door = { id: admin.id, naam: beheerderNaam(admin) };
+  const { data: openFacturen } = await supabase.from('invoices').select('id').eq('batch_id', id).eq('status', 'open');
+  for (const f of openFacturen ?? []) {
+    await laatFactuurVervallen(supabase, f.id, { door, reden: 'batch verwijderd' });
   }
 
   const { error } = await supabase.from('customer_batches').delete().eq('id', id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  void logAudit({
+    adminId: admin.id,
+    adminName: beheerderNaam(admin),
+    action: 'delete_batch',
+    entityType: 'customer_batch',
+    entityId: id,
+    details: { ...batch, facturen_vervallen: (openFacturen ?? []).map(f => f.id) },
+  });
 
   return NextResponse.json({ ok: true });
 }
