@@ -112,6 +112,8 @@ interface Batch {
   id: string; customer_id: string; branch: string; batch_size: number;
   price_per_lead: number | null; total_price: number | null;
   leads_per_week: number | null; leads_per_day: number | null;
+  /** Dagmaximum gelijkmatig over 08:00-16:00 (standaard aan). */
+  dagdosering?: boolean | null;
   leads_delivered: number; leads_delivered_external: number; status: string;
   is_paid: boolean; lookback_days: number | null; notes: string | null; lead_filters: LeadFilter[];
   /** gefaseerd (standaard) of spoed: hoe de eerstvolgende lookback wordt geleverd. */
@@ -308,6 +310,19 @@ function LookbackLeveringField({
         </p>
       )}
     </div>
+  );
+}
+
+/**
+ * Bij het dagmaximum: gelijkmatig over de dag (standaard) of zodra ze
+ * binnenkomen. Zie src/lib/dagDosering.ts.
+ */
+function DagdoseringKeuze({ aan, onChange }: { aan: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <label className="mt-1.5 flex cursor-pointer items-start gap-1.5 text-[11px] leading-snug text-slate-600" title="Aan: het dagmaximum wordt gelijkmatig verdeeld tussen 08:00 en 16:00, en leads die langer dan 18 uur op een klant wachten gaan naar Restleads. Uit: leads komen zodra ze binnenkomen, tot het dagmaximum op is.">
+      <input type="checkbox" checked={aan} onChange={e => onChange(e.target.checked)} className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-[#7c3aed]" />
+      <span>Gelijkmatig over de dag (08:00-16:00)</span>
+    </label>
   );
 }
 
@@ -1887,6 +1902,7 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
     is_paid: batch.is_paid !== false,
     price_per_lead: batch.price_per_lead ? String(batch.price_per_lead) : '',
     leads_per_day: batch.leads_per_day ? String(batch.leads_per_day) : '',
+    dagdosering: batch.dagdosering !== false,
     leads_per_week: batch.leads_per_week ? String(batch.leads_per_week) : '',
     notes: batch.notes || '',
     lead_filters: batch.lead_filters || [],
@@ -2001,6 +2017,7 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
         is_paid: form.is_paid,
         price_per_lead: form.price_per_lead ? parseFloat(form.price_per_lead) : null,
         leads_per_day: form.leads_per_day ? parseInt(form.leads_per_day) : null,
+        dagdosering: form.dagdosering,
         leads_per_week: form.leads_per_week ? parseInt(form.leads_per_week) : null,
         notes: form.notes || null,
         lead_filters: form.lead_filters.filter(f => f.field && (f.values?.length || 0) > 0),
@@ -2249,6 +2266,9 @@ function EditBatchPanel({ batch, branches, customers, onClose, onSaved }: {
               <input type="number" value={form.leads_per_day} onChange={e => setForm(f => ({ ...f, leads_per_day: e.target.value }))}
                 placeholder="∞" min={1}
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
+              {form.leads_per_day && (
+                <DagdoseringKeuze aan={form.dagdosering} onChange={v => setForm(f => ({ ...f, dagdosering: v }))} />
+              )}
             </div>
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-500">Per week</label>
@@ -2549,7 +2569,7 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
     customer_id: '', branch: '', batch_size: 100, is_paid: false,
     batch_product: 'leads' as 'leads' | 'appointments',
     price_per_lead: '', price_per_appointment: '', appointments_per_day: '', appointments_per_week: '',
-    leads_per_day: '', leads_per_week: '', lookback_days: '3', notes: '', lead_filters: [] as LeadFilter[],
+    leads_per_day: '', dagdosering: true, leads_per_week: '', lookback_days: '3', notes: '', lead_filters: [] as LeadFilter[],
     batch_delivery: 'pipeline' as 'pipeline' | 'bulk' | 'niche_research',
     niche_title: '',
     lead_branch_slug: '',
@@ -2885,6 +2905,7 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
           is_paid: form.is_paid,
           price_per_lead: form.price_per_lead ? parseFloat(form.price_per_lead) : null,
           leads_per_day: form.leads_per_day ? parseInt(form.leads_per_day) : null,
+          dagdosering: form.dagdosering,
           leads_per_week: form.leads_per_week ? parseInt(form.leads_per_week) : null,
           lookback_days: parseInt(form.lookback_days) || 0,
           ...(lookbackSpoed && aanmaker.role !== 'accountmanager' && (parseInt(form.lookback_days) || 0) > 0
@@ -3175,9 +3196,14 @@ function CreateBatchPanel({ branches, customers, onClose, onCreated }: {
                   placeholder="∞" min={1}
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-teal-600/50" />
               ) : (
-                <input type="number" value={form.leads_per_day} onChange={e => setForm(f => ({ ...f, leads_per_day: e.target.value }))}
-                  placeholder="∞" min={1}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
+                <>
+                  <input type="number" value={form.leads_per_day} onChange={e => setForm(f => ({ ...f, leads_per_day: e.target.value }))}
+                    placeholder="∞" min={1}
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-purple/50" />
+                  {form.leads_per_day && form.batch_delivery === 'pipeline' && (
+                    <DagdoseringKeuze aan={form.dagdosering} onChange={v => setForm(f => ({ ...f, dagdosering: v }))} />
+                  )}
+                </>
               )}
             </div>
             <div>

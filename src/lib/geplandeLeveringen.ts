@@ -8,6 +8,7 @@ import { sendNewLeadPush } from './pushNotification';
 import { inhaalslagWeigering } from './verdeelGrenzen';
 import { vroegsteMoment } from './inhaalslagPlanning';
 import { buitenDeNacht } from './leverSpreiding';
+import { teLangGewacht, toegestaanTotNu, volgendeRuimte } from './dagDosering';
 import { campagneWeigering, exclusiviteitVan, laadCampagneRegels, type CampagneRegels } from './campagneExclusiviteit';
 import { getLeadLimitPeriodAnchors } from './batchAssignmentCaps';
 import { assignToPortalUser } from './distribution';
@@ -210,7 +211,7 @@ async function leverEenRij(supabase: SupabaseClient, rij: Rij, campagneRegels: C
   if (rij.batch_id) {
     const { data: batch } = await supabase
       .from('customer_batches')
-      .select('delivery_model, batch_kind, batch_size, leads_delivered, status, leads_per_day, leads_per_week')
+      .select('delivery_model, batch_kind, batch_size, leads_delivered, status, leads_per_day, leads_per_week, dagdosering')
       .eq('id', rij.batch_id)
       .maybeSingle();
 
@@ -239,6 +240,26 @@ async function leverEenRij(supabase: SupabaseClient, rij: Rij, campagneRegels: C
         if ((count ?? 0) >= max) {
           await markeer('overgeslagen', `dagmaximum van ${max} bereikt`);
           return 'overgeslagen';
+        }
+        /* Dagdosering: alleen een verspreide levering uit de verdeelronde
+           (een lookback heeft zijn eigen planning). Te lang gewacht: niet meer
+           leveren; nog geen plek in het doseerschema: doorschuiven. */
+        if (rij.soort === 'spreiding' && (batch as { dagdosering?: boolean | null } | null)?.dagdosering !== false) {
+          const heeftKlant = (bestaand || []).some(a => a.customer_id && a.customer_id !== rij.customer_id);
+          if (!heeftKlant && teLangGewacht(lead.created_at as string | null)) {
+            await markeer('overgeslagen', 'lead wacht langer dan 18 uur op een klant (dagdosering); naar Restleads');
+            return 'overgeslagen';
+          }
+          if ((count ?? 0) >= toegestaanTotNu(max)) {
+            const plek = volgendeRuimte(max, count ?? 0);
+            if (plek) {
+              const later = new Date(plek.getTime() + Math.floor(Math.random() * 25 * 60_000));
+              await supabase.from('geplande_leadleveringen')
+                .update({ gepland_voor: later.toISOString(), laatste_reden: 'uitgesteld: dagmaximum gelijkmatig over de dag' })
+                .eq('id', rij.id);
+              return 'uitgesteld';
+            }
+          }
         }
       }
       if (maxWeek > 0) {

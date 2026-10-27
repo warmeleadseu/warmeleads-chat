@@ -4,6 +4,7 @@ import { leadMatchesAnyProvinceTarget } from './provinceTargetMatch';
 import { binnenProvincieMarge, effectieveStraal, margeVan } from './provincieDoelMarge';
 import { leadPastInBatchVenster } from './verdeelGrenzen';
 import { wachttijdUren } from './wachttijdKlanten';
+import { teLangGewacht, toegestaanTotNu, volgendeRuimte } from './dagDosering';
 
 /**
  * Leads die tussen wal en schip vielen, en welke klanten ze alsnog kunnen krijgen.
@@ -74,6 +75,8 @@ export interface RestLead {
 }
 
 export interface KandidaatBatch {
+  /** Dagmaximum gelijkmatig over de dag (dagDosering.ts); leeg = aan. */
+  dagdosering?: boolean | null;
   batch_id: string;
   customer_id: string;
   klant: string;
@@ -268,7 +271,7 @@ export function beschrijfKandidaat(kmBuiten: number, ruimeReden: string | null):
 /** Waarom de gewone verdeling deze kandidaat (nog) niet zelf heeft geplaatst. */
 export function automatischeStatus(
   kmBuiten: number,
-  batch: Pick<KandidaatBatch, 'starts_at' | 'leads_per_day' | 'leads_per_week' | 'vandaag' | 'deze_week' | 'created_at' | 'lookback_days'>,
+  batch: Pick<KandidaatBatch, 'starts_at' | 'leads_per_day' | 'leads_per_week' | 'vandaag' | 'deze_week' | 'created_at' | 'lookback_days'> & { dagdosering?: boolean | null },
   laatsteToewijzing: Date | null,
   nu: Date = new Date(),
   leadBinnen?: string | null,
@@ -308,6 +311,15 @@ export function automatischeStatus(
   }
   if (batch.leads_per_day && batch.leads_per_day > 0 && (batch.vandaag ?? 0) >= batch.leads_per_day) {
     return { status: 'wacht', uitleg: `Dagplafond van ${batch.leads_per_day} bereikt; morgen weer ruimte.` };
+  }
+  if (batch.leads_per_day && batch.leads_per_day > 0 && batch.dagdosering !== false) {
+    if (aantalKlanten === 0 && teLangGewacht(leadBinnen ?? null, nu)) {
+      return { status: 'handwerk', uitleg: 'Wacht al langer dan 18 uur; de verdeling geeft hem deze klant niet meer (dagdosering).' };
+    }
+    if ((batch.vandaag ?? 0) >= toegestaanTotNu(batch.leads_per_day, nu)) {
+      const plek = volgendeRuimte(batch.leads_per_day, batch.vandaag ?? 0, nu);
+      return { status: 'wacht', uitleg: plek ? `Dagmaximum over de dag verdeeld; volgende plek ${tijd(plek)}.` : 'Dagmaximum over de dag verdeeld; vandaag geen plek meer.' };
+    }
   }
   if (batch.leads_per_week && batch.leads_per_week > 0 && (batch.deze_week ?? 0) >= batch.leads_per_week) {
     return { status: 'wacht', uitleg: `Weekplafond van ${batch.leads_per_week} bereikt; maandag weer ruimte.` };

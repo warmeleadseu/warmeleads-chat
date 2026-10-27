@@ -265,6 +265,77 @@ describe('distributeLead met direct leveren', () => {
     });
   });
 
+  describe('dagdosering (dagmaximum gelijkmatig over 08:00-16:00)', () => {
+    /* 27 okt 2026, wintertijd: Nederland = UTC+1. */
+    const nl = (uur: number, min = 0) => new Date(Date.UTC(2026, 9, 27, uur - 1, min));
+    const metKlok = async (t: Date, fn: () => Promise<void>) => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(t);
+      try { await fn(); } finally { vi.useRealTimers(); }
+    };
+    const leadOp = (t: Date, uurOud = 0.1) => ({ ...LEAD, created_at: new Date(t.getTime() - uurOud * 3_600_000).toISOString() });
+
+    it('om 09:00 al één lead vandaag bij 5 per dag: wacht, de volgende kandidaat krijgt hem', async () => {
+      await metKlok(nl(9), async () => {
+        const { db, inserts } = nepDb({
+          batches: [batch('A', { leads_per_day: 5 }), batch('B')],
+          targets: TARGETS,
+          periode: [{ batch_id: 'batch-A', assigned_at: nl(8, 30).toISOString() }],
+        });
+        await distributeLead(leadOp(nl(9)) as never, { supabase: db as never });
+        expect(inserts().map(i => i.customer_id)).toEqual(['B']);
+      });
+    });
+
+    it('zelfde situatie met dagdosering uit: A krijgt hem gewoon', async () => {
+      await metKlok(nl(9), async () => {
+        const { db, inserts } = nepDb({
+          batches: [batch('A', { leads_per_day: 5, dagdosering: false }), batch('B')],
+          targets: TARGETS,
+          periode: [{ batch_id: 'batch-A', assigned_at: nl(8, 30).toISOString() }],
+        });
+        await distributeLead(leadOp(nl(9)) as never, { supabase: db as never });
+        expect(inserts().map(i => i.customer_id)).toEqual(['A']);
+      });
+    });
+
+    it('om 12:00 met één lead vandaag: wel ruimte (3 toegestaan)', async () => {
+      await metKlok(nl(12), async () => {
+        const { db, inserts } = nepDb({
+          batches: [batch('A', { leads_per_day: 5 }), batch('B')],
+          targets: TARGETS,
+          periode: [{ batch_id: 'batch-A', assigned_at: nl(8, 30).toISOString() }],
+        });
+        await distributeLead(leadOp(nl(12)) as never, { supabase: db as never });
+        expect(inserts().map(i => i.customer_id)).toEqual(['A']);
+      });
+    });
+
+    it('vóór 08:00: een gedoseerde batch krijgt nog niets', async () => {
+      await metKlok(nl(7), async () => {
+        const { db, inserts } = nepDb({ batches: [batch('A', { leads_per_day: 5 }), batch('B')], targets: TARGETS });
+        await distributeLead(leadOp(nl(7)) as never, { supabase: db as never });
+        expect(inserts().map(i => i.customer_id)).toEqual(['B']);
+      });
+    });
+
+    it('lead zonder klant die al 20 uur wacht: niet meer naar een gedoseerde batch', async () => {
+      await metKlok(nl(12), async () => {
+        const { db, inserts } = nepDb({ batches: [batch('A', { leads_per_day: 5 })], targets: TARGETS });
+        await distributeLead(leadOp(nl(12), 20) as never, { supabase: db as never });
+        expect(inserts()).toHaveLength(0);
+      });
+    });
+
+    it('batch zonder dagmaximum: dosering speelt geen rol', async () => {
+      await metKlok(nl(7), async () => {
+        const { db, inserts } = nepDb({ batches: [batch('A')], targets: TARGETS });
+        await distributeLead(leadOp(nl(7), 20) as never, { supabase: db as never });
+        expect(inserts().map(i => i.customer_id)).toEqual(['A']);
+      });
+    });
+  });
+
   it('demo-lead: nooit verdeeld', async () => {
     const { db, inserts } = nepDb({ batches: [klantDirect('B')], targets: TARGETS });
     await distributeLead({ ...LEAD, bron: 'demo' } as never, { supabase: db as never });

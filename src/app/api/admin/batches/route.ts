@@ -375,6 +375,7 @@ export async function POST(request: NextRequest) {
 
   if (isPipelineBatchKind(batch_kind)) {
     insertPayload.distribution_priority = body.distribution_priority === true;
+    if (body.dagdosering !== undefined) insertPayload.dagdosering = body.dagdosering !== false;
     if (lookbackSpoed) insertPayload.lookback_levering = 'spoed';
     /* Direct leveren per batch: aan / uit / leeg (volgt klantkaart). Alleen
        superadmin en admin; ongeldige invoer wordt geweigerd. */
@@ -679,9 +680,10 @@ export async function PUT(request: NextRequest) {
     'compensations', 'starts_at', 'account_manager_id', 'batch_kind', 'niche_title',
     'meta_campaign_ids', 'meta_campaign_paused_ids', 'meta_campaign_sync_enabled',
     'lead_branch_slug', 'distribution_priority', 'direct_leveren',
-    'meta_campagne_exclusief', 'meta_campagne_uitgesloten',
+    'meta_campagne_exclusief', 'meta_campagne_uitgesloten', 'dagdosering',
     'extern_factuurnummer', 'extern_bedrag_excl',
   ];
+  if (updates.dagdosering !== undefined) updates.dagdosering = updates.dagdosering !== false;
   if ('extern_factuurnummer' in updates || 'extern_bedrag_excl' in updates) {
     const ext = leesExterneFactuur(updates);
     if (!ext.ok) return NextResponse.json({ error: ext.fout }, { status: 400 });

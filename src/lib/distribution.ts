@@ -25,6 +25,7 @@ import { INHAALSLAG_VENSTER_UREN, planInhaalslag, planInhaalslagSpoed, vroegsteM
 import { isVers, kiesLevering, kiesMoment } from './leverSpreiding';
 import { zetInWachtrij } from './wachtrijPlannen';
 import { wachttijdUren } from './wachttijdKlanten';
+import { teLangGewacht, toegestaanTotNu } from './dagDosering';
 import { GEEN_REGELS, campagneStaatToe, laadCampagneRegels, type CampagneRegels } from './campagneExclusiviteit';
 import { effectiefDirect, vergelijkKandidaten } from './directLeveren';
 
@@ -360,6 +361,8 @@ type ActiveCustomerBatch = {
   direct_leveren?: string | null;
   /** Effectieve stand, berekend bij het ophalen. */
   direct?: boolean;
+  /** Dagmaximum gelijkmatig over 08:00-16:00 en maximaal 18 uur wachten (dagDosering.ts). */
+  dagdosering?: boolean | null;
   customers: { id: string; is_active: boolean; portal_active: boolean; direct_leveren?: boolean | null };
 };
 
@@ -385,7 +388,7 @@ async function fetchActiveBatchesForBranch(
 ): Promise<ActiveCustomerBatch[]> {
   const { data, error } = await supabase
     .from('customer_batches')
-    .select('id, customer_id, branch, batch_size, leads_delivered, leads_delivered_external, leads_per_week, leads_per_day, lead_filters, created_at, is_paid, starts_at, distribution_priority, direct_leveren, delivery_model, batch_kind, lookback_days, customers!inner(id, is_active, portal_active, direct_leveren)')
+    .select('id, customer_id, branch, batch_size, leads_delivered, leads_delivered_external, leads_per_week, leads_per_day, lead_filters, created_at, is_paid, starts_at, distribution_priority, direct_leveren, delivery_model, batch_kind, lookback_days, dagdosering, customers!inner(id, is_active, portal_active, direct_leveren)')
     .eq('branch', branch)
     .eq('status', 'active')
     .eq('batch_kind', 'leads')
@@ -714,6 +717,14 @@ export async function distributeLead(
     if (!ctx?.ignoreBatchDailyCap && batch.leads_per_day && batch.leads_per_day > 0) {
       const todayCount = dailyCountByBatch[batch.id] || 0;
       if (todayCount >= batch.leads_per_day) { plafondBereikt.add(batch.customer_id); continue; }
+      /* Dagdosering: het maximum gelijkmatig over 08:00-16:00. En een lead die
+         nog geen klant heeft maar al langer dan 18 uur wacht, gaat niet meer
+         naar deze batch (die komt in Restleads), zodat er geen achterstand
+         ontstaat die de klant elke ochtend als oude leads krijgt. */
+      if (batch.dagdosering !== false) {
+        if (eersteKlant && teLangGewacht((fullLead as { created_at?: string | null }).created_at, now)) continue;
+        if (todayCount >= toegestaanTotNu(batch.leads_per_day, now)) { plafondBereikt.add(batch.customer_id); continue; }
+      }
     }
 
     // Batch-target-override: heeft de batch eigen actieve targetgebieden, dan tellen
