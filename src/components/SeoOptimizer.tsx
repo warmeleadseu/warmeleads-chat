@@ -103,9 +103,9 @@ export function generateOrganizationStructuredData() {
     ],
     address: {
       '@type': 'PostalAddress',
-      streetAddress: 'Stavangerweg 21-1',
+      streetAddress: 'Kattegat 50a',
       addressLocality: 'Groningen',
-      postalCode: '9723 JC',
+      postalCode: '9723 JP',
       addressCountry: 'NL',
     },
     contactPoint: {
