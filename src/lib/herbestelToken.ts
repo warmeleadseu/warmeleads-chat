@@ -55,6 +55,16 @@ export function maakHerbestelToken(batchId: string, tot: number): string {
   return hmac(sleutel(), batchId, tot);
 }
 
+/** Handtekening met hetzelfde servergeheim, voor andere links zonder inlog. */
+export function serverHandtekening(tekst: string): string {
+  return createHmac('sha256', sleutel()).update(tekst).digest('hex').slice(0, 32);
+}
+
+/** Vergelijkt twee handtekeningen in constante tijd. */
+export function handtekeningKlopt(gegeven: unknown, verwacht: string): boolean {
+  return typeof gegeven === 'string' && gelijk(gegeven, verwacht);
+}
+
 export type TokenUitslag = 'ok' | 'ongeldig' | 'verlopen';
 
 export function controleerHerbestelToken(batchId: string, tot: unknown, token: unknown, nu: Date = new Date()): TokenUitslag {

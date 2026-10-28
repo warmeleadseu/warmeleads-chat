@@ -7,6 +7,8 @@ export type PortalBatchLike = {
   leads_delivered?: number;
   status?: string | null;
   is_paid?: boolean | null;
+  /** Doorlopend op factuur: levert al, de open factuur staat onder Facturen. */
+  op_factuur?: boolean | null;
   total_price?: number | null;
   price_per_lead?: number | null;
   price_per_appointment?: number | null;
@@ -19,7 +21,7 @@ export type PortalBatchLike = {
 
 export function isPortalBatchAwaitingPayment(batch: PortalBatchLike): boolean {
   if (batch.status === 'pending_payment') return true;
-  if (batch.is_paid === false) return true;
+  if (batch.is_paid === false && batch.op_factuur !== true) return true;
   return false;
 }
 

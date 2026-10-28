@@ -94,7 +94,7 @@ export async function directBranches(supabase: SupabaseClient): Promise<Set<stri
     .select('branch, direct_leveren, customers!inner(direct_leveren, is_active)')
     .eq('status', 'active')
     .eq('batch_kind', 'leads')
-    .neq('is_paid', false)
+    .eq('mag_leveren', true)
     .eq('customers.is_active', true);
   if (error) throw new Error(`direct-branches ophalen mislukt: ${error.message}`);
   const uit = new Set<string>();

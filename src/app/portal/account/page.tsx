@@ -36,6 +36,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { usePushNotifications } from '../usePushNotifications';
 import { PageHeader } from '../_ui';
+import { DoorlopendKaart } from '../_ui/Doorlopend';
 import { IntegrationsTab } from './IntegrationsTab';
 import { WebhookIntegration } from './WebhookIntegration';
 import { PartnerKoppelingen } from './PartnerKoppelingen';
@@ -1442,6 +1443,8 @@ export default function AccountPage() {
           {activeTab === 'areas' && (
             <AreasTab data={areasData} loading={areasLoading} />
           )}
+          {activeTab === 'orders' && <DoorlopendKaart />}
+
           {activeTab === 'orders' && (
             <OrdersTab
               data={ordersData}

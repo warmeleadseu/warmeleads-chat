@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { rateLimitShared, getClientIp } from '@/lib/rateLimit';
 import { controleerHerbestelToken, leesBron } from '@/lib/herbestelToken';
+import { doorloopStatus, zetDoorlopend } from '@/lib/doorlopen';
 import { berekenHerbestelling, geldigeGrootte, grootteKeuzes, laadHerbestelling, startHerbestelling } from '@/lib/herbestelling';
 
 /**
@@ -46,7 +47,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const g = r.data;
 
   const keuzes = grootteKeuzes(g.vorigeGrootte);
-  const prijzen = await Promise.all(keuzes.map(async n => ({ grootte: n, ...(await berekenHerbestelling(supabase, g, n)) })));
+  const [prijzen, doorloop] = await Promise.all([
+    Promise.all(keuzes.map(async n => ({ grootte: n, ...(await berekenHerbestelling(supabase, g, n)) }))),
+    doorloopStatus(supabase, g.klant.id).catch(() => null),
+  ]);
 
   return NextResponse.json({
     bedrijf: g.klant.name,
@@ -58,6 +62,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     leads_per_week: g.batch.leads_per_week,
     met_filters: g.batch.lead_filters.length > 0,
     al_nabesteld: g.alNabesteld,
+    doorlopend: { aan: doorloop?.aan === true, mag_aanzetten: doorloop?.zelf === 'ok' },
     keuzes: prijzen.map(p => ({ grootte: p.grootte, totaal_excl: p.totaalExcl, totaal_incl: p.totaalIncl, korting: p.korting, btw: p.btwLabel })),
   }, { headers: { 'Cache-Control': 'no-store' } });
 }
@@ -86,6 +91,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       terugUrl: orderId => `${basis}/herbestellen/${id}?v=${encodeURIComponent(String(body.v))}&t=${encodeURIComponent(String(body.t))}&order=${orderId}`,
     });
     if (!checkoutUrl) throw new Error('Geen betaallink');
+    /* Zelf aangevinkt: doorlopend aan (alleen als de klant dat mag). */
+    if (body?.doorlopend === true) {
+      await zetDoorlopend(supabase, r.data.klant.id, true, { soort: 'klant', naam: `Klant (${r.data.klant.name}, herbestellink)` })
+        .catch(e => console.error('[herbestellen] doorlopend aanzetten mislukt', e));
+    }
     return NextResponse.json({ checkoutUrl });
   } catch (e) {
     console.error('[herbestellen] start mislukt:', e);

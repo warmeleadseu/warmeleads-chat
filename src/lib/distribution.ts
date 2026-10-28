@@ -393,7 +393,7 @@ async function fetchActiveBatchesForBranch(
     .eq('status', 'active')
     .eq('batch_kind', 'leads')
     .eq('customers.is_active', true)
-    .neq('is_paid', false)
+    .eq('mag_leveren', true)
     .order('created_at', { ascending: true });
   /* Zonder deze melding zou een mislukte query de verdeling van een hele
      branche stil laten stoppen (geen batches = geen kandidaten). */
@@ -1080,7 +1080,7 @@ export async function backfillBatch(
 
   const { data: batch } = await supabase
     .from('customer_batches')
-    .select('id, customer_id, branch, batch_size, leads_delivered, leads_delivered_external, leads_per_week, leads_per_day, lead_filters, is_paid, starts_at, created_at, distribution_priority, direct_leveren, batch_kind, delivery_model, lookback_days, lookback_levering, customers!inner(id, is_active, direct_leveren)')
+    .select('id, customer_id, branch, batch_size, leads_delivered, leads_delivered_external, leads_per_week, leads_per_day, lead_filters, is_paid, op_factuur, starts_at, created_at, distribution_priority, direct_leveren, batch_kind, delivery_model, lookback_days, lookback_levering, customers!inner(id, is_active, direct_leveren)')
     .eq('id', batchId)
     .eq('status', 'active')
     .single();
@@ -1089,7 +1089,7 @@ export async function backfillBatch(
     return { assigned: 0, gepland: 0 };
   }
   if (batchIsAtCapacity(batch)) return { assigned: 0, gepland: 0 };
-  if (batch.is_paid === false) return { assigned: 0, gepland: 0 };
+  if (batch.is_paid === false && (batch as { op_factuur?: boolean | null }).op_factuur !== true) return { assigned: 0, gepland: 0 };
   if (batch.starts_at && new Date(batch.starts_at) > new Date()) return { assigned: 0, gepland: 0 };
 
   const nowBf = new Date();
@@ -1100,7 +1100,7 @@ export async function backfillBatch(
     .eq('branch', batch.branch)
     .eq('status', 'active')
     .eq('batch_kind', 'leads')
-    .neq('is_paid', false);
+    .eq('mag_leveren', true);
 
   /* Dezelfde volgorde als de verdeling: batch op direct, voorrang, oudste. */
   if (!isPipelineFifoHeadBatch(batch, fifoSiblings || [], nowBf)) {

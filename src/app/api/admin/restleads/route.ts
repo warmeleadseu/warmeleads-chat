@@ -193,7 +193,7 @@ export async function GET(request: NextRequest) {
       .select('id, customer_id, branch, batch_size, leads_delivered, price_per_lead, lead_filters, distribution_priority, direct_leveren, created_at, starts_at, leads_per_day, leads_per_week, delivery_model, batch_kind, lookback_days, dagdosering, customers!inner(name, exclude_customers, is_active)')
       .eq('status', 'active')
       .eq('batch_kind', 'leads')
-      .neq('is_paid', false)
+      .eq('mag_leveren', true)
       .eq('customers.is_active', true);
 
     /* FIFO-volgorde, zoals de verdeling: per klant een batch op "altijd

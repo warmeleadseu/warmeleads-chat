@@ -111,6 +111,9 @@ interface LeadFilter { field: string; operator: string; value: string; values?: 
 interface Compensation { amount: number; reason: string; date: string }
 interface Batch {
   id: string; customer_id: string; branch: string; batch_size: number;
+  /** Doorlopend op factuur: levert al voor de betaling. */
+  op_factuur?: boolean | null;
+  gepauzeerd_reden?: string | null;
   price_per_lead: number | null; total_price: number | null;
   leads_per_week: number | null; leads_per_day: number | null;
   /** Dagmaximum gelijkmatig over 08:00-16:00 (standaard aan). */
@@ -416,6 +419,21 @@ const STATUS_LABELS: Record<string, string> = {
   expired: 'Verlopen',
 };
 
+/** Doorlopend op factuur: herkenbaar naast de status. */
+function DoorloopChip({ b, klein }: { b: Pick<Batch, 'op_factuur' | 'gepauzeerd_reden' | 'is_paid'>; klein?: boolean }) {
+  if (!b.op_factuur) return null;
+  const maat = klein ? 'text-[10px]' : 'text-[11px]';
+  if (b.gepauzeerd_reden === 'onbetaald') {
+    return <span className={`rounded-full bg-red-100 px-2 py-0.5 ${maat} font-medium text-red-700`} title="Gepauzeerd: doorloopfactuur na 7 dagen niet betaald">Onbetaald</span>;
+  }
+  return (
+    <span className={`rounded-full px-2 py-0.5 ${maat} font-medium ${b.is_paid ? 'bg-violet-50 text-violet-600' : 'bg-violet-100 text-violet-700'}`}
+      title={b.is_paid ? 'Doorgelopen op factuur, factuur betaald' : 'Doorgelopen op factuur, factuur staat open (7 dagen)'}>
+      {b.is_paid ? 'Doorgelopen' : 'Op factuur'}
+    </span>
+  );
+}
+
 export default function BatchesPage() {
   const [batches, setBatches] = useState<Batch[]>([]);
   const [branches, setBranches] = useState<BranchOption[]>([]);
@@ -717,6 +735,7 @@ export default function BatchesPage() {
                       <td className="px-4 py-3">
                         <div className="flex flex-col gap-1">
                           <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_COLORS[b.status] || 'bg-slate-100 text-slate-600'}`}>{STATUS_LABELS[b.status] || b.status}</span>
+                          <DoorloopChip b={b} />
                           {isBulkLeadsBatch(b) && (
                             <span className="w-fit rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold text-violet-800">Bulk</span>
                           )}
@@ -814,6 +833,7 @@ export default function BatchesPage() {
                       <div className="mt-1 flex flex-wrap items-center gap-1.5">
                         <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${c.light} ${c.text}`}>{br.name}</span>
                         <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${STATUS_COLORS[b.status] || 'bg-slate-100 text-slate-600'}`}>{STATUS_LABELS[b.status] || b.status}</span>
+                        <DoorloopChip b={b} klein />
                         {isBulkLeadsBatch(b) && (
                           <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold text-violet-800">Bulk</span>
                         )}
@@ -1396,6 +1416,7 @@ function BatchDetailPanel({ batchId, branches, onClose, onEdit, onListRefresh }:
                 <div className="flex flex-wrap items-center gap-2">
                   <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${c.light} ${c.text}`}>{br.name}</span>
                   <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_COLORS[batch.status] || 'bg-slate-100 text-slate-600'}`}>{STATUS_LABELS[batch.status] || batch.status}</span>
+                  <DoorloopChip b={batch} />
                   {isBulkLeadsBatch(batch) && (
                     <span className="rounded-full bg-violet-100 px-2.5 py-1 text-xs font-semibold text-violet-800">Bulk CRM</span>
                   )}

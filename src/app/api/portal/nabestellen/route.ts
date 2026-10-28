@@ -14,6 +14,10 @@ export async function GET(request: NextRequest) {
   if (!hasPermission(session, PERMISSIONS.ORDERS_CREATE)) return NextResponse.json({ suggestie: null });
 
   const supabase = createServerClient();
+  /* Doorlopend op factuur: de batch loopt vanzelf door, dus geen oproep om na te bestellen. */
+  const { data: klant } = await supabase.from('customers').select('doorlopend').eq('id', session.customer.id).maybeSingle();
+  if (klant?.doorlopend) return NextResponse.json({ suggestie: null }, { headers: { 'Cache-Control': 'no-store' } });
+
   const { data, error } = await supabase
     .from('customer_batches')
     .select('id, branch, batch_kind, delivery_model, status, is_paid, batch_size, leads_delivered, created_at, completed_at')

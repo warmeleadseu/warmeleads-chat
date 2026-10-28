@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { usePortal } from '../portalContext';
 import { portalFetch } from '@/lib/portalAuth';
+import { DoorlopendVinkje, useDoorloopStand } from '../_ui/Doorlopend';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   CheckCircleIcon,
@@ -85,6 +86,8 @@ export default function BestellenPage() {
   const [useCustomSpeed, setUseCustomSpeed] = useState(false);
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const { stand: doorloopStand } = useDoorloopStand();
+  const [doorlopenGekozen, setDoorlopenGekozen] = useState(false);
   const [showOrders, setShowOrders] = useState(false);
   const [pendingCancelOrderId, setPendingCancelOrderId] = useState<string | null>(null);
   const [cancellingOrder, setCancellingOrder] = useState(false);
@@ -347,6 +350,7 @@ export default function BestellenPage() {
           price_per_lead: pricePerLead,
           leads_per_day: effectiveSpeed || null,
           notes: notes || undefined,
+          ...(doorlopenGekozen ? { doorlopend: true } : {}),
         }),
       });
       const data = await res.json();
@@ -732,6 +736,8 @@ export default function BestellenPage() {
           </div>
         </div>
       )}
+
+      <DoorlopendVinkje stand={doorloopStand} gekozen={doorlopenGekozen} onChange={setDoorlopenGekozen} />
 
       <OrderSummaryCard
         lines={[

@@ -16,6 +16,7 @@ import { ensureCustomerHasBranch } from '@/lib/nicheResearch';
 import { deliveryModelForNewBatch, normalizeDeliveryModel } from '@/lib/batchDeliveryModel';
 import { kopieerBatchGebied } from '@/lib/batchTargetInsert';
 import { markeerAankoopMislukt, verwerkBetaaldeAankoop } from '@/lib/losseLeads';
+import { verwerkDoorloopBetaling } from '@/lib/doorlopen';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.warmeleads.eu';
 
@@ -324,7 +325,9 @@ export async function POST(request: NextRequest) {
             ).catch(() => {});
           }
 
-          if (inv.batch_id) {
+          /* Doorlopend op factuur: de batch levert al, alleen op betaald zetten. */
+          const doorloop = inv.batch_id ? await verwerkDoorloopBetaling(supabase, inv.batch_id, paymentId) : false;
+          if (inv.batch_id && !doorloop) {
             const { data: batchClaim } = await supabase
               .from('customer_batches')
               .update({ is_paid: true, mollie_payment_id: paymentId, status: 'active' })

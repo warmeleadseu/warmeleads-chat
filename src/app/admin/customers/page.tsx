@@ -57,6 +57,7 @@ import { ComposeMailDrawer } from '../_components/ComposeMailDrawer';
 import { MailHistory } from '../_components/MailHistory';
 import PartnerOpvolgingBlok from './PartnerOpvolgingBlok';
 import DirectLeverenBlok from './DirectLeverenBlok';
+import DoorlopendBlok from './DoorlopendBlok';
 import { LEAD_STATUS_LABELS, LEAD_STATUS_VALUES } from '@/lib/leadStatuses';
 
 interface Customer {
@@ -1396,6 +1397,9 @@ function CustomerDetailPanel({
                 sinds={c.direct_leveren_sinds ?? null}
                 onGewijzigd={onRefresh}
               />
+
+              {/* Doorlopend op factuur: keuze van klant of accountmanager, standaard uit. */}
+              <DoorlopendBlok customerId={c.id} klantNaam={c.name} />
 
               {/* Welcome offer */}
               <WelcomeOfferBlock customer={c} onUpdated={onRefresh} />

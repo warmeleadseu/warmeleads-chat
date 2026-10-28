@@ -717,31 +717,38 @@ export async function PUT(request: NextRequest) {
     if (key in updates) safeUpdates[key] = updates[key];
   }
 
-  const ex = existing as { status: string; is_paid: boolean | null };
+  const ex = existing as { status: string; is_paid: boolean | null; op_factuur?: boolean | null; gepauzeerd_reden?: string | null };
   const nextPaid =
     safeUpdates.is_paid !== undefined ? safeUpdates.is_paid === true : ex.is_paid === true;
+  /* Doorlopend op factuur levert al voor de betaling; voor alle andere
+     batches is dit precies "betaald". */
+  const magLeveren = nextPaid || ex.op_factuur === true;
   let nextStatus = safeUpdates.status !== undefined ? String(safeUpdates.status) : ex.status;
 
   if (safeUpdates.is_paid === true && ex.is_paid !== true) {
     /* Ook een verlopen batch die toch wordt betaald gaat gewoon lopen. */
     if (nextStatus === 'pending_payment' || nextStatus === 'expired') nextStatus = 'active';
+    /* Gepauzeerd omdat de doorloopfactuur openstond: betaald, dus weer leveren. */
+    if (nextStatus === 'paused' && ex.gepauzeerd_reden === 'onbetaald' && safeUpdates.status === undefined) nextStatus = 'active';
   }
   if (nextStatus === 'expired' && nextPaid) {
     return NextResponse.json({ error: 'Een betaalde batch kan niet verlopen.' }, { status: 400 });
   }
-  if (safeUpdates.is_paid === false && ex.is_paid === true) {
+  if (safeUpdates.is_paid === false && ex.is_paid === true && ex.op_factuur !== true) {
     if (nextStatus === 'active' || nextStatus === 'paused') nextStatus = 'pending_payment';
   }
-  if (nextStatus === 'paused' && !nextPaid) {
+  if (nextStatus === 'paused' && !magLeveren) {
     return NextResponse.json(
       { error: 'Pauzeren is alleen mogelijk voor betaalde batches.' },
       { status: 400 },
     );
   }
-  if (nextStatus === 'active' && !nextPaid) {
+  if (nextStatus === 'active' && !magLeveren) {
     nextStatus = 'pending_payment';
   }
   safeUpdates.status = nextStatus;
+  /* Weer actief (met de hand of na betaling): de pauzereden vervalt. */
+  if (nextStatus !== 'paused' && ex.gepauzeerd_reden) safeUpdates.gepauzeerd_reden = null;
 
   const { data, error } = await supabase
     .from('customer_batches')

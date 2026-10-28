@@ -372,7 +372,7 @@ export async function POST(request: NextRequest) {
         .eq('customer_id', custId)
         .eq('status', 'active')
         .eq('batch_kind', 'leads')
-        .neq('is_paid', false)
+        .eq('mag_leveren', true)
         .limit(1)
         .maybeSingle();
 

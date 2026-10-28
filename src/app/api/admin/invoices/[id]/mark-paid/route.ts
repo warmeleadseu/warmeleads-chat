@@ -6,6 +6,7 @@ import { logAudit } from '@/lib/audit';
 import { notifyCustomerInvoicePaid } from '@/lib/invoice';
 import { finalizePaidLeadBatch, finalizePaidBulkLeadBatch } from '@/lib/finalizePaidLeadBatch';
 import { isBulkLeadsBatchKind } from '@/lib/batchKind';
+import { verwerkDoorloopBetaling } from '@/lib/doorlopen';
 
 /**
  * Markeert een open factuur handmatig als betaald (bijv. bankoverschrijving).
@@ -64,8 +65,13 @@ export async function POST(
   // Betaalbevestiging mailen (zelfde als Mollie-webhook).
   await notifyCustomerInvoicePaid(updated.id).catch(() => {});
 
+  /* Doorlopend op factuur: de batch levert al, alleen op betaald zetten. */
+  const doorloop = invoice.batch_id
+    ? await verwerkDoorloopBetaling(supabase, invoice.batch_id, paymentRef, { id: admin.id, naam: beheerderNaam(admin) })
+    : false;
+
   // Gekoppelde lead-batch activeren + afronden (spiegelt de invoice:-webhook).
-  if (invoice.batch_id) {
+  if (invoice.batch_id && !doorloop) {
     const { data: batchClaim } = await supabase
       .from('customer_batches')
       .update({ is_paid: true, mollie_payment_id: paymentRef, status: 'active' })

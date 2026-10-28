@@ -8,6 +8,7 @@ import { computeInvoiceVat, mollieBtwLabel } from '@/lib/invoiceVat';
 import { loadWelcomeOfferStatus, welcomeDiscountAmount } from '@/lib/welcomeOffer';
 import { validateLeadBranchSlug } from '@/lib/nicheResearch';
 import { deliveryModelForNewBatch } from '@/lib/batchDeliveryModel';
+import { zetDoorlopend } from '@/lib/doorlopen';
 
 export async function GET(request: NextRequest) {
   const session = await verifyCustomer(request);
@@ -324,6 +325,13 @@ export async function POST(request: NextRequest) {
       .from('batch_orders')
       .update({ mollie_payment_id: payment.id })
       .eq('id', order.id);
+
+    /* Zelf aangevinkt: doorlopend op factuur aan (alleen als de klant dat mag;
+       anders blijft het gewoon uit en gaat de bestelling door). */
+    if (body.doorlopend === true && batchKind === 'leads') {
+      await zetDoorlopend(supabase, customer.id, true, { soort: 'klant', naam: `Klant (${customer.name})` })
+        .catch(e => console.error('[orders] doorlopend aanzetten mislukt', e));
+    }
 
     return NextResponse.json({
       orderId: order.id,

@@ -246,6 +246,12 @@ export async function PUT(request: NextRequest) {
       else updates.intern = updates.intern === true;
     }
 
+    /* Doorlopend op factuur gaat alleen via de eigen route (met bevestigingsmail
+       aan de klant), nooit mee met het opslaan van de klantkaart. */
+    delete updates.doorlopend;
+    delete updates.doorlopend_sinds;
+    delete updates.doorlopend_door;
+
     /* Direct leveren: alleen superadmin en admin. De datum van aanzetten is
        het begin van de "na"-periode in de vergelijking. */
     delete updates.direct_leveren_sinds;

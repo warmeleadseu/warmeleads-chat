@@ -769,6 +769,194 @@ export async function sendBetaalBelactieEmail(
   });
 }
 
+/* ─── Doorlopend op factuur ──────────────────────────────────── */
+
+export type DoorloopMailInfo = {
+  batchId: string;
+  branche: string;
+  grootte: number;
+  prijsPerLead: number;
+  totaalExcl: number;
+  totaalIncl: number;
+  /** Kleiner dan de vorige batch omdat die boven het maximum zat. */
+  verkleind?: boolean;
+  stopUrl: string;
+};
+
+const euro = (n: number) => `&euro;${n.toFixed(2).replace('.', ',')}`;
+const nlDatum = (d: Date) => d.toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', timeZone: 'Europe/Amsterdam' });
+const stopRegel = (url: string) =>
+  `<p style="margin:16px 0 0;font-size:13px;color:#64748b">Liever niet meer automatisch doorlopen? <a href="${url}" style="color:#3B2F75;font-weight:600">Zet het hier uit</a>. Dat kan altijd, ook in je portaal onder Account &rsaquo; Bestellingen.</p>`;
+
+/** Bevestiging dat doorlopend op factuur aan staat, met wie het aanzette. */
+export async function sendDoorlopendAanEmail(
+  customer: Customer,
+  info: { door: 'beheer' | 'klant'; stopUrl: string },
+): Promise<boolean> {
+  const greeting = customer.contact_person || customer.name;
+  const titel = 'Je leads lopen voortaan automatisch door';
+  const wie = info.door === 'beheer'
+    ? 'Zoals afgesproken met je accountmanager staat doorlopende levering nu aan.'
+    : 'Je hebt doorlopende levering aangezet.';
+  const content = `
+    <p style="margin:0 0 20px">${statusBadge('DOORLOPEND', 'purple')}</p>
+    <p style="margin:0 0 16px;font-size:16px;font-weight:600;color:#0f172a">Hallo ${greeting},</p>
+    <p style="margin:0 0 12px">${wie} Is een batch volledig geleverd, dan start direct een nieuwe met dezelfde voorwaarden. Zo zit je nooit zonder leads.</p>
+    <p style="margin:0 0 12px">Zo werkt het:</p>
+    <ul style="margin:0 0 12px;padding-left:20px;color:#334155">
+      <li style="margin-bottom:6px">Bij 90% van je batch krijg je bericht, met het aantal leads en het bedrag.</li>
+      <li style="margin-bottom:6px">De nieuwe batch gaat op factuur, met 7 dagen betaaltermijn. Maximaal ${euro(2500)} excl. btw per keer.</li>
+      <li>Stoppen kan altijd. Een batch die al loopt, wordt afgemaakt.</li>
+    </ul>
+    ${stopRegel(info.stopUrl)}`;
+  return sendEmail(customer.email, titel, layout(titel, content), {
+    type: 'doorlopend_aan',
+    toName: greeting,
+    metadata: { customer_id: customer.id, door: info.door },
+  });
+}
+
+/** Bij 90%: de batch loopt straks door, met een knop om dat te voorkomen. */
+export async function sendDoorloopAankondigingEmail(customer: Customer, info: DoorloopMailInfo & { laat?: boolean }): Promise<boolean> {
+  const greeting = customer.contact_person || customer.name;
+  const titel = `Je ${info.branche}-leads lopen ${info.laat ? 'morgen' : 'binnenkort'} door`;
+  const content = `
+    <p style="margin:0 0 20px">${statusBadge('LOOPT DOOR', 'purple')}</p>
+    <p style="margin:0 0 16px;font-size:16px;font-weight:600;color:#0f172a">Hallo ${greeting},</p>
+    <p style="margin:0 0 12px">${info.laat
+      ? 'Je batch is volledig geleverd. Omdat doorlopende levering aan staat, start morgen een nieuwe batch met dezelfde voorwaarden.'
+      : 'Je batch is bijna vol. Omdat doorlopende levering aan staat, start bij de laatste lead direct een nieuwe batch met dezelfde voorwaarden, zodat je leads blijven doorkomen.'}</p>
+    ${dataTable(
+      row('Branche', `<strong style="color:#0f172a">${info.branche}</strong>`) +
+      row('Aantal leads', `<strong style="color:#0f172a">${info.grootte}</strong>`) +
+      row('Prijs per lead (excl. btw)', euro(info.prijsPerLead)) +
+      row('Totaal excl. btw', euro(info.totaalExcl)) +
+      row('Totaal', `<strong style="color:#0f172a">${euro(info.totaalIncl)}</strong>`) +
+      row('Betaling', 'Op factuur, 7 dagen betaaltermijn'),
+      'Volgende batch',
+    )}
+    ${info.verkleind ? `<p style="margin:0 0 12px;font-size:13px;color:#64748b">Doorlopen gaat tot ${euro(2500)} excl. btw per keer, daarom is deze batch kleiner dan je vorige. Wil je een grotere? Bestel hem dan in je portaal.</p>` : ''}
+    <p style="margin:0">Wil je dit niet? Dan hoef je alleen op de knop te drukken, er start dan niets.</p>
+    ${cta('Niet doorlopen', info.stopUrl)}`;
+  return sendEmail(customer.email, titel, layout(titel, content), {
+    type: 'doorloop_aankondiging',
+    toName: greeting,
+    metadata: { customer_id: customer.id, batch_id: info.batchId },
+  });
+}
+
+/** De nieuwe batch loopt, met de factuur en de betaallink. */
+export async function sendDoorloopGestartEmail(
+  customer: Customer,
+  info: DoorloopMailInfo & { factuurnummer: string; betaalUrl: string; uiterlijk: Date },
+): Promise<boolean> {
+  const greeting = customer.contact_person || customer.name;
+  const titel = `Je nieuwe batch ${info.branche} loopt: factuur ${info.factuurnummer}`;
+  const content = `
+    <p style="margin:0 0 20px">${statusBadge('&#10003; DOORGELOPEN', 'green')}</p>
+    <p style="margin:0 0 16px;font-size:16px;font-weight:600;color:#0f172a">Hallo ${greeting},</p>
+    <p style="margin:0 0 12px">Je vorige batch is volledig geleverd en je nieuwe batch van <strong style="color:#0f172a">${info.grootte} ${info.branche}-leads</strong> loopt al. Je ontvangt de leads zoals je gewend bent.</p>
+    ${dataTable(
+      row('Factuur', info.factuurnummer) +
+      row('Totaal', `<strong style="color:#0f172a">${euro(info.totaalIncl)}</strong>`) +
+      row('Graag betaald voor', nlDatum(info.uiterlijk)),
+      'Factuur',
+    )}
+    ${cta('Factuur betalen &rarr;', info.betaalUrl)}
+    <p style="margin:12px 0 0;font-size:13px;color:#64748b">Is de factuur na 7 dagen niet betaald, dan pauzeren we de levering tot de betaling binnen is.</p>
+    ${stopRegel(info.stopUrl)}`;
+  return sendEmail(customer.email, titel, layout(titel, content), {
+    type: 'doorloop_gestart',
+    toName: greeting,
+    metadata: { customer_id: customer.id, batch_id: info.batchId },
+  });
+}
+
+/** Dag 5 zonder betaling: over twee dagen pauzeert de levering. */
+export async function sendDoorloopHerinneringEmail(
+  customer: Customer,
+  info: { batchId: string; branche: string; factuurnummer: string; totaalIncl: number; betaalUrl: string; pauzeOp: Date },
+): Promise<boolean> {
+  const greeting = customer.contact_person || customer.name;
+  const titel = `Herinnering: factuur ${info.factuurnummer} staat nog open`;
+  const content = `
+    <p style="margin:0 0 20px">${statusBadge('HERINNERING', 'orange')}</p>
+    <p style="margin:0 0 16px;font-size:16px;font-weight:600;color:#0f172a">Hallo ${greeting},</p>
+    <p style="margin:0 0 12px">Je doorlopende batch ${info.branche} levert gewoon door, maar factuur <strong style="color:#0f172a">${info.factuurnummer}</strong> (${euro(info.totaalIncl)}) is nog niet betaald. Is hij op ${nlDatum(info.pauzeOp)} niet betaald, dan pauzeren we de levering.</p>
+    ${cta('Factuur betalen &rarr;', info.betaalUrl)}
+    <p style="margin:12px 0 0;font-size:13px;color:#94a3b8">Al betaald? Dan kruisen onze berichten elkaar en kun je deze mail negeren.</p>`;
+  return sendEmail(customer.email, titel, layout(titel, content), {
+    type: 'doorloop_herinnering',
+    toName: greeting,
+    metadata: { customer_id: customer.id, batch_id: info.batchId },
+  });
+}
+
+/** Dag 7 zonder betaling: levering gepauzeerd, doorlopen staat uit. */
+export async function sendDoorloopGepauzeerdEmail(
+  customer: Customer,
+  info: { batchId: string; branche: string; factuurnummer: string; totaalIncl: number; betaalUrl: string; alGeleverd: boolean },
+): Promise<boolean> {
+  const greeting = customer.contact_person || customer.name;
+  const titel = info.alGeleverd
+    ? `Factuur ${info.factuurnummer} is niet op tijd betaald`
+    : `Je levering ${info.branche} is gepauzeerd`;
+  const content = `
+    <p style="margin:0 0 20px">${statusBadge(info.alGeleverd ? 'BETAALTERMIJN VERSTREKEN' : 'GEPAUZEERD', 'red')}</p>
+    <p style="margin:0 0 16px;font-size:16px;font-weight:600;color:#0f172a">Hallo ${greeting},</p>
+    <p style="margin:0 0 12px">Factuur <strong style="color:#0f172a">${info.factuurnummer}</strong> (${euro(info.totaalIncl)}) is na 7 dagen nog niet betaald. ${info.alGeleverd
+      ? 'De batch was al volledig geleverd.'
+      : 'We hebben de levering daarom gepauzeerd. Na betaling gaat hij vanzelf verder, je mist geen leads uit je batch.'} Doorlopende levering staat tot die tijd uit.</p>
+    ${cta('Factuur betalen &rarr;', info.betaalUrl)}
+    <p style="margin:12px 0 0;font-size:13px;color:#94a3b8">Klopt er iets niet? Beantwoord deze mail, dan kijken we met je mee.</p>`;
+  return sendEmail(customer.email, titel, layout(titel, content), {
+    type: 'doorloop_gepauzeerd',
+    toName: greeting,
+    metadata: { customer_id: customer.id, batch_id: info.batchId },
+  });
+}
+
+/** Signaal voor de accountmanager over een doorlopende klant. */
+export async function sendDoorloopSignaalEmail(
+  to: { email: string; name?: string | null },
+  info: {
+    soort: 'aangezet_door_klant' | 'gestart' | 'gepauzeerd' | 'bellen' | 'wacht_op_betaling' | 'niet_gestart';
+    klant: string; contactpersoon?: string | null; telefoon?: string | null; klantEmail?: string | null;
+    branche: string; grootte?: number; bedragIncl?: number; factuurnummer?: string | null; reden?: string;
+    batchId: string | null; customerId: string;
+  },
+): Promise<boolean> {
+  const teksten: Record<typeof info.soort, { titel: string; badge: string; kleur: 'green' | 'orange' | 'red' | 'purple' | 'blue'; uitleg: string }> = {
+    aangezet_door_klant: { titel: `${info.klant} zette doorlopend op factuur aan`, badge: 'NIEUW', kleur: 'purple', uitleg: 'De klant zette zelf doorlopende levering aan. Bij een volle batch start voortaan direct een nieuwe, op factuur. Uitzetten kan op de klantkaart.' },
+    gestart: { titel: `${info.klant}: batch ${info.branche} is doorgelopen`, badge: 'DOORGELOPEN', kleur: 'green', uitleg: 'De vorige batch was vol en er loopt nu een nieuwe, op factuur met 7 dagen betaaltermijn.' },
+    gepauzeerd: { titel: `${info.klant}: doorloopfactuur niet betaald, levering gepauzeerd`, badge: 'GEPAUZEERD', kleur: 'red', uitleg: 'De factuur is na 7 dagen niet betaald. De levering is gepauzeerd en doorlopen staat uit. Na betaling gaat de batch vanzelf verder.' },
+    bellen: { titel: `Bel ${info.klant}: doorloopfactuur 14 dagen open`, badge: 'BELACTIE', kleur: 'red', uitleg: 'De factuur van de doorgelopen batch staat 14 dagen open. De leads zijn (deels) geleverd, dus dit moet betaald worden. Een belletje helpt vaak.' },
+    wacht_op_betaling: { titel: `${info.klant}: batch ${info.branche} loopt nog niet door`, badge: 'WACHT', kleur: 'orange', uitleg: 'De batch is vol, maar er staat nog een onbetaalde doorloopfactuur open. De nieuwe batch start pas na betaling daarvan.' },
+    niet_gestart: { titel: `${info.klant}: batch ${info.branche} kon niet doorlopen`, badge: 'ACTIE', kleur: 'orange', uitleg: `De batch is vol, maar de doorloop kon niet starten${info.reden ? `: ${info.reden}` : ''}. Neem contact op of maak de batch met de hand aan.` },
+  };
+  const t = teksten[info.soort];
+  const content = `
+    <p style="margin:0 0 20px">${statusBadge(t.badge, t.kleur)}</p>
+    <p style="margin:0 0 16px">${t.uitleg}</p>
+    ${dataTable(
+      row('Klant', `<strong style="color:#0f172a">${info.klant}</strong>`) +
+      row('Contactpersoon', info.contactpersoon || '-') +
+      row('Telefoon', info.telefoon || '-') +
+      row('E-mail', info.klantEmail || '-') +
+      row('Branche', info.branche) +
+      (info.grootte ? row('Batch', `${info.grootte} leads`) : '') +
+      (info.factuurnummer ? row('Factuur', info.factuurnummer) : '') +
+      (info.bedragIncl ? row('Bedrag', euro(info.bedragIncl)) : ''),
+      'Doorlopend op factuur',
+    )}
+    ${cta(info.batchId ? 'Batch openen in het CRM &rarr;' : 'Klant openen in het CRM &rarr;', info.batchId ? `${BASE_URL}/admin/batches?batch=${info.batchId}` : `${BASE_URL}/admin/customers`)}`;
+  return sendEmail(to.email, t.titel, layout(t.titel, content), {
+    type: `am_doorloop_${info.soort}`,
+    toName: to.name ?? undefined,
+    metadata: { customer_id: info.customerId, batch_id: info.batchId },
+  });
+}
+
 export async function sendOrderConfirmationEmail(
   customer: Customer,
   order: { branch: string; branch_name?: string; batch_size: number; total_price: number; price_per_lead?: number },

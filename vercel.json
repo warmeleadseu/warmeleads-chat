@@ -59,6 +59,10 @@
     {
       "path": "/api/cron/betaalherinneringen",
       "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cron/doorlopen",
+      "schedule": "20 * * * *"
     }
   ]
 }

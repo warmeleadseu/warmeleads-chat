@@ -202,7 +202,7 @@ export async function POST(request: NextRequest) {
     .in('customer_id', toCustomerIds)
     .eq('status', 'active')
     .eq('batch_kind', 'leads')
-    .neq('is_paid', false);
+    .eq('mag_leveren', true);
   for (const b of pipelineBatches || []) {
     if (normalizeBatchKind(b.batch_kind) !== 'leads') continue;
     const branch = typeof b.branch === 'string' ? b.branch : '';

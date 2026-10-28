@@ -20,6 +20,8 @@ type Gegevens = {
   leads_per_week: number | null;
   met_filters: boolean;
   al_nabesteld: boolean;
+  /** Doorlopend op factuur: al aan, of mag de klant het hier aanvinken? */
+  doorlopend: { aan: boolean; mag_aanzetten: boolean };
   keuzes: Keuze[];
 };
 type OrderStand = { status: string; batch_size: number; actief: boolean };
@@ -39,6 +41,7 @@ export default function HerbestelClient({ id }: { id: string }) {
   const [laden, setLaden] = useState(true);
   const [fout, setFout] = useState<string | null>(null);
   const [bezig, setBezig] = useState(false);
+  const [doorlopen, setDoorlopen] = useState(false);
 
   const laad = useCallback(async () => {
     try {
@@ -74,7 +77,7 @@ export default function HerbestelClient({ id }: { id: string }) {
       const r = await fetch(`/api/herbestellen/${id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ v, t, b, grootte: gekozen }),
+        body: JSON.stringify({ v, t, b, grootte: gekozen, ...(doorlopen ? { doorlopend: true } : {}) }),
       });
       const d = await r.json().catch(() => ({}));
       if (!r.ok || !d.checkoutUrl) { setFout(d.error || 'Betaling starten mislukt.'); setBezig(false); return; }
@@ -165,6 +168,20 @@ export default function HerbestelClient({ id }: { id: string }) {
           <div className="flex justify-between text-base font-bold text-slate-900"><span>Te betalen</span><span>{euro(keuze.totaal_incl)}</span></div>
           <p className="text-[11px] text-slate-400">{keuze.btw}</p>
         </div>
+      )}
+
+      {data.doorlopend?.mag_aanzetten && !data.doorlopend.aan && (
+        <label className="mt-4 flex cursor-pointer items-start gap-2.5 rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+          <input type="checkbox" checked={doorlopen} onChange={e => setDoorlopen(e.target.checked)}
+            className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-brand-purple focus:ring-brand-purple" />
+          <span className="text-xs leading-relaxed text-slate-600">
+            <span className="font-semibold text-slate-800">Laat mijn leads voortaan automatisch doorlopen op factuur</span>
+            <span className="mt-0.5 block text-slate-500">Is een batch vol, dan start direct een nieuwe met dezelfde voorwaarden, op factuur met 7 dagen betaaltermijn (tot €2.500 excl. btw per keer). Je krijgt bij 90% bericht en kunt altijd stoppen.</span>
+          </span>
+        </label>
+      )}
+      {data.doorlopend?.aan && (
+        <p className="mt-4 text-[11px] text-slate-500">Automatisch doorlopen op factuur staat aan; deze bestelling betaal je gewoon vooraf.</p>
       )}
 
       {fout && <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{fout}</p>}

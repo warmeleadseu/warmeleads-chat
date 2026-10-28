@@ -158,7 +158,7 @@ async function findTargetBatch(
     .select('*')
     .eq('customer_id', customerId)
     .in('status', ['active', 'completed'])
-    .neq('is_paid', false)
+    .eq('mag_leveren', true)
     .order('created_at', { ascending: false })
     .limit(1)
     .single();

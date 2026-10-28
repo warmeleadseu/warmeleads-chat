@@ -66,6 +66,11 @@ const ACTION_LABELS: Record<string, string> = {
   campagne_regels: 'Exclusieve/uitgesloten campagnes gewijzigd',
   personeelskosten: 'Personeelskosten gewijzigd',
   personeelskosten_verwijderd: 'Personeelskosten verwijderd',
+  doorlopend_aan: 'Doorlopend op factuur aangezet',
+  doorlopend_uit: 'Doorlopend op factuur uitgezet',
+  batch_doorgelopen: 'Batch doorgelopen op factuur',
+  doorloop_betaald: 'Doorloopfactuur betaald',
+  doorloop_gepauzeerd: 'Doorloop gepauzeerd (niet betaald)',
 };
 
 const ENTITY_LABELS: Record<string, string> = {

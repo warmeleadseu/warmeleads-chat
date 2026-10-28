@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
       .eq('branch', batch.branch)
       .eq('batch_kind', 'leads')
       .eq('status', 'active')
-      .neq('is_paid', false);
+      .eq('mag_leveren', true);
 
     if (activeErr) continue;
 

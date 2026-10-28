@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
     )
     .eq('status', 'active')
     .eq('customers.is_active', true)
-    .neq('is_paid', false);
+    .eq('mag_leveren', true);
 
   if (admin.role === 'accountmanager') {
     const { data: myCustomers } = await supabase.from('customers').select('id').eq('account_manager_id', admin.id);

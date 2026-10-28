@@ -38,6 +38,8 @@ interface CreateInvoiceParams {
    * betaallink verstuurd.
    */
   send_payment_email?: boolean;
+  /** Betaaltermijn van een open factuur in dagen. Standaard 14; doorlopend op factuur 7. */
+  termijn_dagen?: number;
 }
 
 export async function getNextInvoiceNumber(supabase: ReturnType<typeof createServerClient>): Promise<string> {
@@ -162,8 +164,9 @@ export async function createInvoice(params: CreateInvoiceParams) {
   const invoiceStatus = params.status || 'paid';
   const isPaid = invoiceStatus === 'paid';
 
-  // Open facturen krijgen een vervaldatum (factuurdatum + 14 dagen) t.b.v. 'te laat'-signalering.
-  const dueDate = isPaid ? null : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
+  // Open facturen krijgen een vervaldatum (standaard factuurdatum + 14 dagen) t.b.v. 'te laat'-signalering.
+  const termijn = params.termijn_dagen && params.termijn_dagen > 0 ? params.termijn_dagen : 14;
+  const dueDate = isPaid ? null : new Date(Date.now() + termijn * 24 * 60 * 60 * 1000).toISOString();
 
   const invoicePayload = await sanitizeInvoiceWritePayload(supabase, {
     invoice_number: invoiceNumber,

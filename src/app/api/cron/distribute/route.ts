@@ -266,7 +266,7 @@ async function verdeelronde(supabase: ReturnType<typeof createServerClient>) {
     .select('id, lookback_days, starts_at')
     .eq('status', 'active')
     .eq('batch_kind', 'leads')
-    .eq('is_paid', true)
+    .eq('mag_leveren', true)
     .not('starts_at', 'is', null)
     .lte('starts_at', new Date().toISOString())
     .eq('leads_delivered', 0);

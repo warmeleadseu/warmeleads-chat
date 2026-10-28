@@ -2,6 +2,8 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import { sendBatchMilestoneEmail, sendHerbestelSignaalEmail } from './email';
 import { sendBatchMilestonePush } from './pushNotification';
 import { accountmanagerOntvanger } from './accountmanagerOntvanger';
+import { kondigDoorloopAan, startDoorloop } from './doorlopen';
+import { AANKONDIG_PCT } from './doorlopenRegels';
 
 /**
  * Check a batch after sync and send milestone notifications if needed.
@@ -17,7 +19,7 @@ export async function checkBatchMilestones(
 
   const { data: batch } = await supabase
     .from('customer_batches')
-    .select('id, customer_id, branch, batch_size, leads_delivered, notified_80pct, notified_completed, account_manager_id, created_at')
+    .select('id, customer_id, branch, batch_size, leads_delivered, notified_80pct, notified_completed, account_manager_id, created_at, doorloop_aangekondigd_op')
     .eq('id', batchId)
     .single();
 
@@ -25,7 +27,7 @@ export async function checkBatchMilestones(
 
   const { data: customer } = await supabase
     .from('customers')
-    .select('id, name, email, contact_person, phone, account_manager_id, intern, demo_mode')
+    .select('id, name, email, contact_person, phone, account_manager_id, intern, demo_mode, doorlopend')
     .eq('id', batch.customer_id)
     .single();
 
@@ -49,16 +51,38 @@ export async function checkBatchMilestones(
 
   if (pct >= 80 && pct < 100 && !batch.notified_80pct) {
     await supabase.from('customer_batches').update({ notified_80pct: true }).eq('id', batchId);
-    sendBatchMilestoneEmail(customer, batchInfo, '80pct').catch(() => {});
     sendBatchMilestonePush(customer.id, batchId, branchName, '80pct').catch(() => {});
-    /* Seintje voor de accountmanager, als er nog geen vervolg klaarstaat. */
-    void seinAccountmanager(supabase, { batch, customer, branchName, delivered }).catch(() => {});
+    /* Doorlopend: geen "opnieuw bestellen" en geen herbestelsignaal; bij 90%
+       volgt de aankondiging dat de batch vanzelf doorloopt. */
+    if (!customer.doorlopend) {
+      sendBatchMilestoneEmail(customer, batchInfo, '80pct').catch(() => {});
+      /* Seintje voor de accountmanager, als er nog geen vervolg klaarstaat. */
+      void seinAccountmanager(supabase, { batch, customer, branchName, delivered }).catch(() => {});
+    }
+  }
+
+  /* Doorlopend op factuur (alleen als klant of accountmanager het koos):
+     bij 90% de aankondiging met stopknop. */
+  if (customer.doorlopend && pct >= AANKONDIG_PCT && pct < 100 && !batch.doorloop_aangekondigd_op) {
+    void kondigDoorloopAan(supabase, batchId).catch(e => console.error('[doorlopen] aankondigen', e));
   }
 
   if (pct >= 100 && !batch.notified_completed) {
     await supabase.from('customer_batches').update({ notified_completed: true }).eq('id', batchId);
-    sendBatchMilestoneEmail(customer, batchInfo, 'completed').catch(() => {});
     sendBatchMilestonePush(customer.id, batchId, branchName, 'completed').catch(() => {});
+    if (customer.doorlopend) {
+      /* Doorlopend: direct de volgende batch, zodat de leads blijven komen.
+         Lukt dat niet, dan krijgt de klant gewoon de mail met herbestelknop. */
+      void startDoorloop(supabase, batchId, { signaleer: true })
+        .then(u => {
+          if (!u.gestart && u.reden !== 'aangekondigd' && u.reden !== 'wacht' && u.reden !== 'al_vervolg') {
+            return sendBatchMilestoneEmail(customer, batchInfo, 'completed');
+          }
+        })
+        .catch(e => console.error('[doorlopen] starten', e));
+    } else {
+      sendBatchMilestoneEmail(customer, batchInfo, 'completed').catch(() => {});
+    }
   }
 }
 

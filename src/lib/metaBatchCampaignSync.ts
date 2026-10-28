@@ -4,6 +4,7 @@ import { coerceCustomerBatchMetaCampaignIds } from '@/lib/metaCampaignIds';
 import { getMetaCredentials, META_GRAPH_URL } from '@/lib/meta';
 import { isMetaCampaignSyncBatchKind, isNicheResearchBatchKind } from '@/lib/batchKind';
 import { batchIsAtCapacity } from '@/lib/batchDeliveryModel';
+import { batchMagLeveren } from '@/lib/doorlopenRegels';
 
 export type MetaBatchCampaignSyncTrigger = 'finalize' | 'batch_sync' | 'admin' | 'cron';
 
@@ -14,6 +15,8 @@ export type BatchMetaSyncRow = {
   batch_kind?: string | null;
   delivery_model?: string | null;
   is_paid: boolean | null;
+  /** Doorlopend op factuur: levert (en adverteert) al voor de betaling. */
+  op_factuur?: boolean | null;
   status: string | null;
   batch_size: number | null;
   leads_delivered: number | null;
@@ -71,7 +74,7 @@ export function getDesiredMetaCampaignStatus(
   if (ids.length === 0) return 'PAUSED';
   if (row.meta_campaign_sync_enabled === false) return 'PAUSED';
   if (!isMetaCampaignSyncBatchKind(row.batch_kind)) return 'PAUSED';
-  if (row.is_paid !== true) return 'PAUSED';
+  if (!batchMagLeveren(row)) return 'PAUSED';
   if (row.status !== 'active') return 'PAUSED';
 
   if (
@@ -103,7 +106,7 @@ export function isBatchEligibleForMetaSync(row: BatchMetaSyncRow): boolean {
   return (
     row.meta_campaign_sync_enabled !== false &&
     isMetaCampaignSyncBatchKind(row.batch_kind) &&
-    row.is_paid === true &&
+    batchMagLeveren(row) &&
     row.status === 'active'
   );
 }
@@ -148,10 +151,10 @@ async function fetchActiveMetaLinkedBatches(supabase: SupabaseClient): Promise<B
   const { data, error } = await supabase
     .from('customer_batches')
     .select(
-      'id, batch_kind, delivery_model, is_paid, status, batch_size, leads_delivered, starts_at, leads_per_day, leads_per_week, meta_campaign_ids, meta_campaign_paused_ids, meta_campaign_sync_enabled',
+      'id, batch_kind, delivery_model, is_paid, op_factuur, status, batch_size, leads_delivered, starts_at, leads_per_day, leads_per_week, meta_campaign_ids, meta_campaign_paused_ids, meta_campaign_sync_enabled',
     )
     .eq('status', 'active')
-    .eq('is_paid', true)
+    .eq('mag_leveren', true)
     .not('meta_campaign_ids', 'eq', '{}')
     .limit(400);
 
@@ -267,7 +270,7 @@ export async function reconcileBatchMetaCampaigns(
   const { data: row, error: fetchErr } = await supabase
     .from('customer_batches')
     .select(
-      'id, batch_kind, delivery_model, is_paid, status, batch_size, leads_delivered, starts_at, leads_per_day, leads_per_week, meta_campaign_ids, meta_campaign_paused_ids, meta_campaign_sync_enabled',
+      'id, batch_kind, delivery_model, is_paid, op_factuur, status, batch_size, leads_delivered, starts_at, leads_per_day, leads_per_week, meta_campaign_ids, meta_campaign_paused_ids, meta_campaign_sync_enabled',
     )
     .eq('id', batchId)
     .single();
@@ -422,9 +425,9 @@ export async function reconcileMetaCampaignsForCron(supabase: SupabaseClient, li
 
   const { data: activeRows, error: activeErr } = await supabase
     .from('customer_batches')
-    .select('id, meta_campaign_ids, batch_kind, status, is_paid, meta_campaign_sync_enabled')
+    .select('id, meta_campaign_ids, batch_kind, status, is_paid, op_factuur, meta_campaign_sync_enabled')
     .eq('status', 'active')
-    .eq('is_paid', true)
+    .eq('mag_leveren', true)
     .not('meta_campaign_ids', 'eq', '{}')
     .order('created_at', { ascending: false })
     .limit(300);
@@ -454,10 +457,10 @@ export async function reconcileMetaCampaignsForCron(supabase: SupabaseClient, li
     const { data: completedRows, error: completedErr } = await supabase
       .from('customer_batches')
       .select(
-        'id, meta_campaign_ids, batch_kind, status, is_paid, meta_campaign_sync_enabled, completed_at, meta_sync_last_success_at',
+        'id, meta_campaign_ids, batch_kind, status, is_paid, op_factuur, meta_campaign_sync_enabled, completed_at, meta_sync_last_success_at',
       )
       .eq('status', 'completed')
-      .eq('is_paid', true)
+      .eq('mag_leveren', true)
       .not('meta_campaign_ids', 'eq', '{}')
       .gte('completed_at', since)
       .order('completed_at', { ascending: false })

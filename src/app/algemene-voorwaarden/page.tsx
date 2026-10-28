@@ -18,7 +18,7 @@ export default function AlgemeneVoorwaardenPage() {
       <section className="bg-brand-navy py-16 sm:py-20">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h1 className="text-3xl sm:text-4xl font-bold text-white">Algemene voorwaarden</h1>
-          <p className="mt-3 text-base text-white/70">Laatst gewijzigd op 13 oktober 2025</p>
+          <p className="mt-3 text-base text-white/70">Laatst gewijzigd op 28 oktober 2026</p>
         </div>
       </section>
 
@@ -83,6 +83,17 @@ export default function AlgemeneVoorwaardenPage() {
             <p><span className="font-semibold text-slate-900">4.6.3 Procedure voor Reclamatie:</span> De Klant kan een reclamatie indienen door de betreffende lead in de gedeelde Google Spreadsheet rood te markeren en in de opmerkingen de reden voor de reclamatie te vermelden (bijvoorbeeld &ldquo;onjuist telefoonnummer&rdquo; of &ldquo;dubbele lead&rdquo;). Warmeleads.eu zal de reclamatie beoordelen binnen 5 werkdagen. Indien de reclamatie wordt goedgekeurd, zal Warmeleads.eu de gereclameerde lead vervangen door een nieuwe lead die voldoet aan de kwaliteitscriteria.</p>
             <p><span className="font-semibold text-slate-900">4.6.4</span> Het reclameren van een lead houdt in dat de oorspronkelijke lead door een nieuwe, kwalitatieve lead wordt vervangen. Een credit of terugbetaling wordt niet aangeboden, tenzij uitdrukkelijk anders overeengekomen.</p>
             <p><span className="font-semibold text-slate-900">4.6.5</span> Warmeleads.eu behoudt zich het recht voor om reclamatieclaims te verwerpen indien de lead voldoet aan de door Warmeleads.eu vastgestelde kwaliteitscriteria.</p>
+          </div>
+        </section>
+
+        {/* Artikel 4.7 */}
+        <section className="mb-10">
+          <h2 className="text-lg font-bold text-slate-900 mb-3">Artikel 4.7: Doorlopende levering</h2>
+          <div className="space-y-3 text-sm leading-relaxed text-slate-600">
+            <p><span className="font-semibold text-slate-900">4.7.1</span> Heeft de Klant gekozen voor doorlopende levering, dan start na volledige levering van een batch automatisch een nieuwe batch onder dezelfde voorwaarden, tot een maximum van &euro; 2.500 exclusief btw per batch. Doorlopende levering geldt alleen als de Klant hiervoor kiest; zonder die keuze start er nooit automatisch een nieuwe batch.</p>
+            <p><span className="font-semibold text-slate-900">4.7.2</span> Warmeleads.eu kondigt dit per e-mail aan zodra 90% van de batch is geleverd.</p>
+            <p><span className="font-semibold text-slate-900">4.7.3</span> De Klant kan doorlopende levering op elk moment stopzetten via het portaal of via de link in de e-mail. Een batch die al is gestart, wordt volledig geleverd en gefactureerd.</p>
+            <p><span className="font-semibold text-slate-900">4.7.4</span> De factuur van een doorlopende batch heeft een betaaltermijn van 7 dagen. Is de factuur na die termijn niet betaald, dan pauzeert Warmeleads.eu de levering totdat de betaling is ontvangen.</p>
           </div>
         </section>
 
