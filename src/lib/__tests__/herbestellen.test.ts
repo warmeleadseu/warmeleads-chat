@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { controleerHerbestelToken, herbestelUrl, leesBron, maakHerbestelToken, vervaldag } from '../herbestelToken';
+import { OUDE_SLEUTEL_TOT_DAG, controleerHerbestelToken, herbestelUrl, leesBron, maakHerbestelToken, vervaldag } from '../herbestelToken';
 import { geldigeGrootte, grootteKeuzes, oorspronkelijkeGrootte } from '../herbestelling';
 
 const oud = process.env.HERBESTEL_TOKEN_SECRET;
@@ -56,5 +56,30 @@ describe('herbestelling', () => {
     expect(geldigeGrootte(1001)).toBeNull();
     expect(geldigeGrootte(12.5)).toBeNull();
     expect(geldigeGrootte(undefined)).toBeNull();
+  });
+});
+
+describe('overgang naar een eigen geheim', () => {
+  it('links met het oude cron-geheim blijven tot hun vervaldag geldig, nieuwe niet', () => {
+    const eigen = process.env.HERBESTEL_TOKEN_SECRET;
+    const cron = process.env.CRON_SECRET;
+    try {
+      process.env.CRON_SECRET = 'oud-cron-geheim';
+      delete process.env.HERBESTEL_TOKEN_SECRET;
+      const tot = vervaldag(nu);
+      const oudeLink = maakHerbestelToken('b1', tot);
+      process.env.HERBESTEL_TOKEN_SECRET = 'nieuw-eigen-geheim';
+      expect(controleerHerbestelToken('b1', String(tot), oudeLink, nu)).toBe('ok');
+      expect(maakHerbestelToken('b1', tot)).not.toBe(oudeLink);
+      /* Een vervaldag na de overgang kan nooit met de oude sleutel gemaakt zijn. */
+      delete process.env.HERBESTEL_TOKEN_SECRET;
+      const laat = OUDE_SLEUTEL_TOT_DAG + 1;
+      const vervalst = maakHerbestelToken('b1', laat);
+      process.env.HERBESTEL_TOKEN_SECRET = 'nieuw-eigen-geheim';
+      expect(controleerHerbestelToken('b1', String(laat), vervalst, new Date(laat * 86_400_000 - 1000))).toBe('ongeldig');
+    } finally {
+      process.env.HERBESTEL_TOKEN_SECRET = eigen;
+      process.env.CRON_SECRET = cron;
+    }
   });
 });

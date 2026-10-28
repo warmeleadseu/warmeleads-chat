@@ -41,7 +41,7 @@ export interface CreateBatchPaymentParams {
   customerEmail: string;
   customerName: string;
   /** Kind discriminator for Mollie metadata; defaults to 'batch' (leads). */
-  kind?: 'batch' | 'appointment_order' | 'invoice';
+  kind?: 'batch' | 'appointment_order' | 'invoice' | 'losse_leads';
   /**
    * Facturatie-land van de klant. Bepaalt de Mollie-locale, en daarmee welke
    * betaalmethode prominent wordt getoond (Bancontact voor BE, iDEAL voor NL).

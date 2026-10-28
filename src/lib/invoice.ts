@@ -22,7 +22,7 @@ interface CreateInvoiceParams {
   paid_at?: string;
   status?: 'paid' | 'open';
   /** Onderzoeksbatch: factuurregels spreken over onderzoek i.p.v. "X leads" */
-  invoice_product?: 'leads' | 'niche_research' | 'bulk_leads' | 'appointments';
+  invoice_product?: 'leads' | 'niche_research' | 'bulk_leads' | 'appointments' | 'losse_leads';
   /** Titel van de te onderzoeken niche (alleen bij niche_research) */
   niche_title?: string | null;
   /**
@@ -127,6 +127,7 @@ export async function createInvoice(params: CreateInvoiceParams) {
   const isNiche = params.invoice_product === 'niche_research';
   const isBulk = params.invoice_product === 'bulk_leads';
   const isAppointments = params.invoice_product === 'appointments';
+  const isLos = params.invoice_product === 'losse_leads';
   const nicheLabel = (params.niche_title || '').trim();
   const lineDescription = isNiche
     ? `Onderzoeksbatch niche-onderzoek${nicheLabel ? `: ${nicheLabel}` : ''} (€${subtotal.toFixed(2).replace('.', ',')} excl. btw${vatMode === 'reverse_charge_be' ? ', BTW verlegd' : ''})`
@@ -134,7 +135,9 @@ export async function createInvoice(params: CreateInvoiceParams) {
       ? `Bulk-leads pakket ${params.branch_name}: ${params.batch_size} leads (€${subtotal.toFixed(2).replace('.', ',')} excl. btw${vatMode === 'reverse_charge_be' ? ', BTW verlegd' : ''})`
       : isAppointments
         ? `Afspraken-batch ${params.branch_name}: ${params.batch_size} afspraken (€${subtotal.toFixed(2).replace('.', ',')} excl. btw${vatMode === 'reverse_charge_be' ? ', BTW verlegd' : ''})`
-        : `${params.branch_name} leads`;
+        : isLos
+          ? `Losse ${params.branch_name}-leads (buiten regio, nooit eerder geleverd)`
+          : `${params.branch_name} leads`;
 
   const invoiceSummaryDescription = isNiche
     ? `Onderzoeksbatch niche-onderzoek${nicheLabel ? ` (${nicheLabel})` : ''}`
@@ -142,7 +145,9 @@ export async function createInvoice(params: CreateInvoiceParams) {
       ? `Bulk-leads: ${params.batch_size} × ${params.branch_name}`
       : isAppointments
         ? `Afspraken: ${params.batch_size} × ${params.branch_name}`
-        : `${params.batch_size} ${params.branch_name} leads`;
+        : isLos
+          ? `Losse leads: ${params.batch_size} × ${params.branch_name}`
+          : `${params.batch_size} ${params.branch_name} leads`;
 
   const lineItems: InvoiceLineItem[] = [{
     description: lineDescription,

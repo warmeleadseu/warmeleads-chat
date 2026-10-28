@@ -15,6 +15,7 @@ import { zonderBotsingen } from '@/lib/campagneExclusiviteit';
 import { ensureCustomerHasBranch } from '@/lib/nicheResearch';
 import { deliveryModelForNewBatch, normalizeDeliveryModel } from '@/lib/batchDeliveryModel';
 import { kopieerBatchGebied } from '@/lib/batchTargetInsert';
+import { markeerAankoopMislukt, verwerkBetaaldeAankoop } from '@/lib/losseLeads';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.warmeleads.eu';
 
@@ -256,6 +257,29 @@ export async function POST(request: NextRequest) {
         await supabase.from('appointment_orders').update({ status: 'cancelled' }).eq('id', apptOrderId);
       }
 
+      return NextResponse.json({ ok: true });
+    }
+
+    // Losse leads uit het portaal; orderId losse:<aankoop-id>
+    if (kind === 'losse_leads' || rawOrderId.startsWith('losse:')) {
+      const aankoopId = rawOrderId.replace(/^losse:/, '');
+      if (status === 'paid') {
+        try {
+          await verwerkBetaaldeAankoop(supabase, aankoopId, paymentId);
+        } catch (e) {
+          console.error('[mollie-webhook] losse leads verwerken mislukt:', e);
+          sendEmail('info@warmeleads.eu', '[URGENT] Losse leads betaald maar niet geleverd',
+            errorEmailHtml('Losse leads verwerken mislukt', `
+              <p style="margin:0 0 16px">Mollie meldt betaald voor aankoop <strong>${aankoopId}</strong>, maar de levering faalde. Mollie probeert de webhook opnieuw.</p>
+              <p style="margin:0;font-family:monospace;font-size:13px">${String(e)}</p>`),
+            { type: 'mollie_error', metadata: { aankoop_id: aankoopId, payment_id: paymentId, error_type: 'losse_leads_failed' } },
+          ).catch(() => {});
+          /* 500: Mollie probeert het opnieuw; de aankoop staat weer open. */
+          return NextResponse.json({ error: 'losse leads failed, will retry' }, { status: 500 });
+        }
+      } else if (status === 'failed' || status === 'expired' || status === 'canceled') {
+        await markeerAankoopMislukt(supabase, aankoopId);
+      }
       return NextResponse.json({ ok: true });
     }
 

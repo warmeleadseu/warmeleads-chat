@@ -334,6 +334,8 @@ const ALL_PORTAL_NAV: (NavItem & { shortLabel?: string })[] = [
   { label: 'Leads', href: '/portal', icon: InboxStackIcon, permission: PERMISSIONS.LEADS_VIEW },
   { label: 'Agenda', href: '/portal/agenda', icon: CalendarDaysIcon, permission: PERMISSIONS.APPOINTMENTS_VIEW },
   { label: 'Bestellen', href: '/portal/bestellen', icon: ShoppingCartIcon, permission: PERMISSIONS.ORDERS_CREATE },
+  /* Iedereen met een account ziet het aanbod; kopen kan wie mag bestellen. */
+  { label: 'Extra leads', href: '/portal/extra-leads', icon: SparklesIcon },
   { label: 'Reclamaties', href: '/portal/reclamaties', icon: FlagIcon, permission: PERMISSIONS.RECLAMATIONS_CREATE },
   { label: 'Team', href: '/portal/team', icon: UsersIcon, permission: PERMISSIONS.TEAM_MANAGE },
   { label: 'Account & Insights', shortLabel: 'Account', href: '/portal/account', icon: UserCircleIcon },

@@ -21,9 +21,29 @@ export type HerbestelBron = '80' | '100' | 'herinnering' | 'verlopen' | 'resulta
 const BRONNEN: HerbestelBron[] = ['80', '100', 'herinnering', 'verlopen', 'resultaat'];
 
 function sleutel(): string {
-  const s = process.env.HERBESTEL_TOKEN_SECRET || process.env.CRON_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const s = process.env.HERBESTEL_TOKEN_SECRET || oudeSleutel();
   if (!s) throw new Error('Geen servergeheim beschikbaar voor herbestellinks');
   return s;
+}
+
+function oudeSleutel(): string | undefined {
+  return process.env.CRON_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY;
+}
+
+/**
+ * Overgang (28 okt 2026): tot HERBESTEL_TOKEN_SECRET bestond, werden links met
+ * het cron-geheim ondertekend. Die blijven geldig tot hun eigen vervaldag; een
+ * link die later vervalt kan nooit met de oude sleutel zijn gemaakt. Na 11 nov
+ * 2026 is dit overbodig en mag het weg.
+ */
+export const OUDE_SLEUTEL_TOT_DAG = 20768;
+
+function hmac(sleutelWaarde: string, batchId: string, tot: number): string {
+  return createHmac('sha256', sleutelWaarde).update(`herbestel:${batchId}:${tot}`).digest('hex').slice(0, 32);
+}
+
+function gelijk(a: string, b: string): boolean {
+  return a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
 }
 
 /** Vervaldag als hele dagen sinds 1970, zodat de link kort blijft. */
@@ -32,7 +52,7 @@ export function vervaldag(nu: Date = new Date()): number {
 }
 
 export function maakHerbestelToken(batchId: string, tot: number): string {
-  return createHmac('sha256', sleutel()).update(`herbestel:${batchId}:${tot}`).digest('hex').slice(0, 32);
+  return hmac(sleutel(), batchId, tot);
 }
 
 export type TokenUitslag = 'ok' | 'ongeldig' | 'verlopen';
@@ -40,8 +60,12 @@ export type TokenUitslag = 'ok' | 'ongeldig' | 'verlopen';
 export function controleerHerbestelToken(batchId: string, tot: unknown, token: unknown, nu: Date = new Date()): TokenUitslag {
   const dag = typeof tot === 'string' ? Number(tot) : typeof tot === 'number' ? tot : NaN;
   if (!Number.isInteger(dag) || typeof token !== 'string' || !token) return 'ongeldig';
-  const verwacht = maakHerbestelToken(batchId, dag);
-  if (token.length !== verwacht.length || !timingSafeEqual(Buffer.from(token), Buffer.from(verwacht))) return 'ongeldig';
+  let geldig = gelijk(token, maakHerbestelToken(batchId, dag));
+  const oud = oudeSleutel();
+  if (!geldig && process.env.HERBESTEL_TOKEN_SECRET && oud && dag <= OUDE_SLEUTEL_TOT_DAG) {
+    geldig = gelijk(token, hmac(oud, batchId, dag));
+  }
+  if (!geldig) return 'ongeldig';
   if (Math.floor(nu.getTime() / 86_400_000) > dag) return 'verlopen';
   return 'ok';
 }
