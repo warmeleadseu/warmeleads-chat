@@ -29,7 +29,7 @@ export type Actor = {
 };
 
 export type PartnerStatus = {
-  partner: { id: string; naam: string; tagline: string; urlUitleg: string; logo: string | null };
+  partner: { id: string; naam: string; tagline: string; urlUitleg: string; invoerLabel: string; invoerPlaceholder: string; logo: string | null };
   gekoppeld: boolean;
   aan: boolean;
   url_hint: string | null;
@@ -75,7 +75,7 @@ export async function partnerStatus(
   const openRijen = open.data || [];
 
   return {
-    partner: { id: partner.id, naam: partner.naam, tagline: partner.tagline, urlUitleg: partner.urlUitleg, logo: partner.logo },
+    partner: { id: partner.id, naam: partner.naam, tagline: partner.tagline, urlUitleg: partner.urlUitleg, invoerLabel: partner.invoerLabel, invoerPlaceholder: partner.invoerPlaceholder, logo: partner.logo },
     gekoppeld: Boolean(config?.token),
     aan: config?.settings.enabled === true && Boolean(config?.token),
     url_hint: config?.token ? partner.urlHint(config.token) : null,
@@ -123,11 +123,11 @@ export async function partnerOpslaan(
 
   if (invoer.url !== undefined) {
     const token = partner.leesToken(invoer.url);
-    if (!token) return { ok: false, fout: `Dit is geen geldig ${partner.naam}-adres. ${partner.urlUitleg}` };
+    if (!token) return { ok: false, fout: `Dit is geen geldige ${partner.invoerLabel.toLowerCase()} van ${partner.naam}. ${partner.urlUitleg}` };
     opslag.token = token;
   }
   if (!bestaand?.token && opslag.token === undefined) {
-    return { ok: false, fout: `Vul eerst het afleveradres van ${partner.naam} in.` };
+    return { ok: false, fout: `Vul eerst de ${partner.invoerLabel.toLowerCase()} van ${partner.naam} in.` };
   }
   if (invoer.branches !== undefined) {
     const toegestaan = new Set(beschikbareBranches);
@@ -235,16 +235,17 @@ export async function partnerTest(
   let token: string | null = null;
   if (url) {
     token = partner.leesToken(url);
-    if (!token) return { ok: false, melding: `Dit is geen geldig ${partner.naam}-adres. ${partner.urlUitleg}`, ms: 0 };
+    if (!token) return { ok: false, melding: `Dit is geen geldige ${partner.invoerLabel.toLowerCase()} van ${partner.naam}. ${partner.urlUitleg}`, ms: 0 };
   } else {
     token = (await haalPartnerConfig(supabase, customerId, partner))?.token ?? null;
-    if (!token) return { ok: false, melding: `Vul eerst het afleveradres van ${partner.naam} in.`, ms: 0 };
+    if (!token) return { ok: false, melding: `Vul eerst de ${partner.invoerLabel.toLowerCase()} van ${partner.naam} in.`, ms: 0 };
   }
 
   const start = Date.now();
   const antwoord = await verstuurNaarPartner(partner.bouwUrl(token), partner.bouwTestPayload({ telefoon: testTelefoon }), {
     timeoutMs: partner.timeoutMs,
     idempotencyKey: `test-${customerId}-${start}`,
+    authorization: partner.authHeader?.(token) ?? null,
   });
   const ms = Date.now() - start;
   const uitslag = partner.beoordeel(antwoord);

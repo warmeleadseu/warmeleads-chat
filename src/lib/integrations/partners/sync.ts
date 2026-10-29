@@ -127,6 +127,7 @@ export async function leverAanPartner(args: Args): Promise<PartnerSyncUitkomst> 
     const antwoord = await verstuurNaarPartner(partner.bouwUrl(config.token), payload, {
       timeoutMs: partner.timeoutMs,
       idempotencyKey: assignmentId,
+      authorization: partner.authHeader?.(config.token) ?? null,
     });
     uitslag = partner.beoordeel(antwoord);
   } catch (err) {

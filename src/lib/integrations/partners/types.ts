@@ -63,8 +63,16 @@ export type PartnerDefinitie = {
    * (zie public/partners/). Zonder logo tonen we de eerste letter.
    */
   logo: string | null;
-  /** Uitleg bij het invoerveld: waar komt de URL vandaan. */
+  /** Uitleg bij het invoerveld: waar komt de URL (of sleutel) vandaan. */
   urlUitleg: string;
+  /** Wat de gebruiker invult, bijvoorbeeld "Afleveradres" of "API-sleutel". */
+  invoerLabel: string;
+  invoerPlaceholder: string;
+  /**
+   * Geheim in een Authorization-header in plaats van in de URL (bijvoorbeeld
+   * Sollit: "Bearer <sleutel>"). Zonder deze functie gaat er geen header mee.
+   */
+  authHeader?: (token: string) => string;
   /**
    * Haalt het geheime deel uit een geplakte URL, of null als de URL niet van
    * deze partner is. Alleen dat deel wordt (versleuteld) opgeslagen; de URL

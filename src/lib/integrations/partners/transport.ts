@@ -8,14 +8,15 @@ const MAX_ANTWOORD_BYTES = 64_000;
  * Eén POST naar een partner. Gooit nooit: de partnerdefinitie beslist wat een
  * antwoord betekent (beoordeel), deze functie meldt alleen wat er gebeurde.
  *
- * Geen Authorization-header: bij partners als Snelraak zit het geheim in de URL.
+ * Bij partners als Snelraak zit het geheim in de URL; bij partners als Sollit
+ * gaat het als Authorization-header mee (opties.authorization).
  * Redirects volgen we niet, zodat een publiek adres ons nooit naar een intern
  * adres kan omleiden.
  */
 export async function verstuurNaarPartner(
   url: string,
   payload: unknown,
-  opties: { timeoutMs: number; idempotencyKey?: string | null },
+  opties: { timeoutMs: number; idempotencyKey?: string | null; authorization?: string | null },
 ): Promise<PartnerAntwoord> {
   const leeg: PartnerAntwoord = { status: 0, body: '', timeout: false, netwerkfout: true, retryAfter: null };
 
@@ -26,6 +27,10 @@ export async function verstuurNaarPartner(
   const klok = setTimeout(() => controller.abort(), opties.timeoutMs);
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (opties.idempotencyKey) headers['Idempotency-Key'] = opties.idempotencyKey;
+  if (opties.authorization) {
+    headers.Authorization = opties.authorization;
+    headers.Accept = 'application/json';
+  }
 
   try {
     const res = await fetch(url, {

@@ -166,6 +166,8 @@ export const SNELRAAK: PartnerDefinitie = {
   tagline: 'Automatische leadopvolging via WhatsApp',
   logo: '/partners/snelraak.png',
   urlUitleg: 'Plak het afleveradres dat je van Snelraak kreeg (begint met https://snelraak.nl/api/v1/ingest/).',
+  invoerLabel: 'Afleveradres',
+  invoerPlaceholder: 'https://snelraak.nl/api/v1/ingest/…',
   leesToken: leesSnelraakToken,
   bouwUrl: token => `${BASIS}${token}`,
   urlHint: token => `${BASIS}••••${token.slice(-4)}`,

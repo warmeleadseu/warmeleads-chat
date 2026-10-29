@@ -19,7 +19,7 @@ import PartnerLogo from './PartnerLogo';
  */
 
 export type PartnerStatusData = {
-  partner: { id: string; naam: string; tagline: string; urlUitleg: string; logo?: string | null };
+  partner: { id: string; naam: string; tagline: string; urlUitleg: string; invoerLabel?: string; invoerPlaceholder?: string; logo?: string | null };
   gekoppeld: boolean;
   aan: boolean;
   url_hint: string | null;
@@ -189,7 +189,7 @@ export default function PartnerKoppelingKaart({
 
       {!s.gekoppeld && (
         <p className="mt-3 text-sm text-slate-600">
-          Gebruik je {naam}? Plak het afleveradres dat je van {naam} kreeg. Elke nieuwe lead staat dan binnen
+          Gebruik je {naam}? Plak de {(s.partner.invoerLabel ?? 'Afleveradres').toLowerCase()} die je van {naam} kreeg. Elke nieuwe lead staat dan binnen
           seconden bij {naam}, zodat de opvolging direct start.
         </p>
       )}
@@ -225,20 +225,20 @@ export default function PartnerKoppelingKaart({
         {s.gekoppeld && !bewerken ? (
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-100 px-3 py-2">
             <code className="truncate text-xs text-slate-500">{s.url_hint}</code>
-            <button onClick={() => setBewerken(true)} className="text-xs font-semibold text-brand-purple hover:underline">Adres wijzigen</button>
+            <button onClick={() => setBewerken(true)} className="text-xs font-semibold text-brand-purple hover:underline">{s.partner.invoerLabel === 'API-sleutel' ? 'Sleutel wijzigen' : 'Adres wijzigen'}</button>
           </div>
         ) : (
           <div>
-            <label className="mb-1 block text-xs font-semibold text-slate-600">Afleveradres van {naam}</label>
+            <label className="mb-1 block text-xs font-semibold text-slate-600">{s.partner.invoerLabel ?? 'Afleveradres'} van {naam}</label>
             <input
               value={url}
               onChange={e => setUrl(e.target.value)}
-              placeholder="https://snelraak.nl/api/v1/ingest/…"
+              placeholder={s.partner.invoerPlaceholder ?? 'https://…'}
               autoComplete="off"
               spellCheck={false}
               className="h-10 w-full rounded-lg border border-slate-200 px-3 font-mono text-xs outline-none focus:border-brand-purple/50 focus:ring-1 focus:ring-brand-purple/30"
             />
-            <p className="mt-1 text-[11px] text-slate-400">{s.partner.urlUitleg} Het adres is geheim; na opslaan tonen we alleen de laatste tekens.</p>
+            <p className="mt-1 text-[11px] text-slate-400">{s.partner.urlUitleg} Dit is geheim; na opslaan tonen we alleen de laatste tekens.</p>
           </div>
         )}
 
