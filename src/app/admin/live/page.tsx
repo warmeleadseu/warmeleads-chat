@@ -604,6 +604,7 @@ interface AMTargetLive {
   admin_user_id: string;
   am_name: string;
   am_avatar_url?: string | null;
+  am_active?: boolean;
   label: string;
   target_type: string;
   target_value: number;
@@ -686,14 +687,14 @@ function SlideVandaag({ data }: { data: LiveData }) {
       trend: dag ? <TrendArrow current={dag.leads} previous={dag.prevLeads} /> : null,
     },
     {
-      label: 'Winst',
+      label: 'Winst deze maand',
       waarde: <AnimatedNumber value={Math.round(cm?.totalProfit || 0)} prefix="€" />,
-      sub: `omzet totaal ${euro(Math.round(data.totalRevenue))}`,
+      sub: `omzet deze maand ${euro(Math.round(data.totalRevenue))}`,
     },
     {
       label: 'Effectieve CPL',
       waarde: euro(cm?.effectieveCpl || 0, 2),
-      sub: `${cm?.avgAssignments || 0}x uitgedeeld`,
+      sub: `deze maand · ${cm?.avgAssignments || 0}x uitgedeeld`,
     },
     {
       label: 'Leads totaal',
@@ -814,36 +815,44 @@ function SlideGeld({ data, costMetrics: cm }: { data: LiveData; costMetrics: Cos
   const ai = data.aiSpend;
   const tegels: { label: string; waarde: string; kleur: string; sub?: string; uitleg?: string }[] = [
     { label: 'Ad spend deze maand', waarde: euro(cm.monthAdSpend), kleur: 'text-white' },
-    { label: 'Bruto CPL', waarde: euro(cm.brutoCpl, 2), kleur: 'text-white' },
+    { label: 'Bruto CPL deze maand', waarde: euro(cm.brutoCpl, 2), kleur: 'text-white' },
     {
-      label: 'Effectieve CPL',
+      label: 'Effectieve CPL deze maand',
       waarde: euro(cm.effectieveCpl, 2),
       kleur: 'text-emerald-400',
       sub: `${cm.avgAssignments}x uitgedeeld${cm.approvedReclamationsInWindow ? ` · −${cm.approvedReclamationsInWindow} reclamaties` : ''}`,
       uitleg: 'Spend gedeeld door netto-toewijzingen (goedgekeurde reclamaties tellen niet als levering, kosten blijven volledig staan).',
     },
     {
-      label: 'Omzet',
+      label: 'Omzet deze maand',
       waarde: euro(data.totalRevenue),
       kleur: 'text-white',
       sub: cm.bulkRevenue > 0 ? `${euro(cm.batchRevenue)} batch + ${euro(cm.bulkRevenue)} bulk` : undefined,
     },
     {
-      label: 'Winst',
+      label: 'Winst deze maand',
       waarde: `${cm.totalProfit >= 0 ? '+' : ''}${euro(cm.totalProfit)}`,
+      sub: 'omzet min ad spend',
       kleur: cm.totalProfit >= 0 ? 'text-emerald-400' : 'text-red-400',
     },
     {
-      label: 'AI spend vandaag',
-      waarde: euro((ai?.todayCents || 0) / 100, 2),
+      label: 'AI spend deze maand',
+      waarde: euro((ai?.monthCents || 0) / 100, 2),
       kleur: ai?.enabled ? 'text-purple-300' : 'text-white/30',
-      sub: ai?.enabled ? `${ai.activeExperiments} live · maand ${euro((ai.monthCents || 0) / 100)}` : 'AI uit',
+      sub: ai?.enabled ? `${ai.activeExperiments} live · vandaag ${euro((ai.todayCents || 0) / 100, 2)}` : 'AI uit',
     },
   ];
 
   return (
     <div className="flex h-full flex-col">
-      <SlideKop titel="Geld" />
+      <SlideKop
+        titel="Geld"
+        rechts={
+          <p className={`${TYPE.secondary} font-semibold capitalize text-white/50`}>
+            {new Date().toLocaleDateString('nl-NL', { month: 'long', year: 'numeric', timeZone: 'Europe/Amsterdam' })}
+          </p>
+        }
+      />
       <div className="grid min-h-0 flex-1 grid-cols-3 grid-rows-2 gap-5">
         {tegels.map(t => (
           <div
@@ -1126,7 +1135,11 @@ export default function LiveDashboard() {
       const res = await adminFetch('/api/admin/am-targets');
       if (res.ok) {
         const all: AMTargetLive[] = await res.json();
-        setAmTargets(all.filter(t => t.status === 'active'));
+        /* Alleen wat nu loopt: een actieve target van een actieve medewerker
+           waarvan de periode vandaag omvat. Anders bleef een verlopen target
+           (of iemand die uit dienst is) gewoon op het scherm staan. */
+        const vandaag = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Amsterdam' });
+        setAmTargets(all.filter(t => t.status === 'active' && t.am_active !== false && t.period_start <= vandaag && t.period_end >= vandaag));
       }
     } catch { /* silent */ }
   }, []);

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
-  META_SPEND_START_ISO,
   fetchSpendRowsSince,
   splitSpend,
   leadExclusionOrFilter,
@@ -17,6 +16,7 @@ import {
 import { adminCustomerLiveUnpaidEmbed, adminCustomerTargetsOnly } from '@/lib/adminBatchQueries';
 import { activeTargetSummariesFromUnknown } from '@/lib/batchTargetAreas';
 import { laadActieSamenvatting } from '@/lib/lotenActieLaden';
+import { amsterdamWallTimeToUtc, amsterdamYmd } from '@/lib/appointmentSlots';
 import {
   countApprovedReclamationsForAssignments,
   getApprovedReclamationStats,
@@ -29,7 +29,7 @@ const BATCHES_LIST_LIMIT = 1_500;
 const BULK_ASSIGNMENTS_MAX_PAGES = 80;
 
 const LIVE_STATS_CACHE_TTL_MS = 45_000;
-const LIVE_STATS_CACHE_KEY = 'live-stats-v8';
+const LIVE_STATS_CACHE_KEY = 'live-stats-v9';
 const UNPAID_BATCH_FEED_LIMIT = 18;
 
 interface AiSpendSummary {
@@ -276,10 +276,16 @@ export async function GET(request: NextRequest) {
     accountManagerName: accountManagerId ? amNameById[accountManagerId] ?? null : null,
   }));
 
-  /* Omzet over hetzelfde venster als de kosten (sinds 1 mei 2026), zodat de
-     winst teller en noemer over dezelfde periode heeft. */
+  /* Alle geldcijfers op het dashboard gaan over de lopende kalendermaand
+     (Nederlandse tijd): advertentiekosten, CPL, omzet en winst. Tot 30 okt
+     2026 telden ze sinds 1 mei 2026 terwijl er "deze maand" bij stond. */
+  const maandDag = `${amsterdamYmd(new Date()).slice(0, 7)}-01`;
+  const MAAND_START_ISO = amsterdamWallTimeToUtc(maandDag, '00:00').toISOString();
+
+  /* Omzet over hetzelfde venster als de kosten, zodat de winst teller en
+     noemer over dezelfde periode heeft. */
   const revenueStatsRes = await supabase.rpc('live_revenue_stats_since', {
-    p_since: META_SPEND_START_ISO,
+    p_since: MAAND_START_ISO,
   });
   const revenueStats =
     (revenueStatsRes.data as {
@@ -297,18 +303,18 @@ export async function GET(request: NextRequest) {
     };
 
   /* ── Advertentiekosten: één definitie, zie src/lib/metaCpl.ts ──
-     Alle spend vanaf 1 mei 2026 telt mee, behalve campagnes met het woord
+     Alle spend van deze maand telt mee, behalve campagnes met het woord
      pakketadvies of energie in de titel. Gepagineerd opgehaald: één losse
      query wordt door Supabase stil op 1000 rijen afgekapt, en precies dat
      maakte de bruto CPL hier maandenlang ~60% te laag (6,64 om 16,70). */
-  const spendFetch = await fetchSpendRowsSince(supabase);
+  const spendFetch = await fetchSpendRowsSince(supabase, maandDag);
   const spendTotals = splitSpend(spendFetch.rows);
   const monthAdSpend = spendTotals.includedTotal;
   const cplWindowSpend = spendTotals.includedTotal;
   const metaCampaignPagesFetched = Math.ceil((spendFetch.rows.length || 1) / 1000);
   const metaCampaignTruncated = spendFetch.truncated;
 
-  /* Noemer: alle echte leads sinds de boekhoudstart. Leads zonder
+  /* Noemer: alle echte leads van deze maand. Leads zonder
      campagne-attributie tellen mee (73% van de instroom komt via Zapier
      zonder campagne-id binnen); leads uit uitgesloten campagnes niet. */
   let leadsCountQuery = supabase
@@ -316,7 +322,7 @@ export async function GET(request: NextRequest) {
     .select('id', { count: 'exact', head: true })
     .neq('bron', 'excel_import')
     .neq('bron', 'demo')
-    .gte('created_at', META_SPEND_START_ISO);
+    .gte('created_at', MAAND_START_ISO);
   const leadExclusion = leadExclusionOrFilter(spendTotals.excludedCampaignIds);
   if (leadExclusion) leadsCountQuery = leadsCountQuery.or(leadExclusion);
   const { count: ourLeadsCount } = await leadsCountQuery;
@@ -327,7 +333,7 @@ export async function GET(request: NextRequest) {
   // ── Eff. CPL: spend voor verse Meta-leads ÷ uitdelingen van díé leads ──
   //
   // Definitie: "wat heeft een geleverde lead ons gemiddeld gekost". Alles in
-  // hetzelfde venster als de lead-pool (laatste 180 dagen):
+  // hetzelfde venster als de lead-pool (deze maand):
   //   • teller   = Meta-spend in het venster (cplWindowSpend)
   //   • noemer   = alle toewijzingen van leads die in het venster zijn
   //                gegenereerd met Meta-attributie — ongeacht wanneer de
@@ -347,7 +353,7 @@ export async function GET(request: NextRequest) {
     };
     let c = q as unknown as Chainable;
     c = c
-      .gte('leads.created_at', META_SPEND_START_ISO)
+      .gte('leads.created_at', MAAND_START_ISO)
       .neq('leads.bron', 'excel_import')
       .neq('leads.bron', 'demo')
       .or('source.is.null,source.not.in.("bulk_export","demo")')
@@ -374,7 +380,7 @@ export async function GET(request: NextRequest) {
   // mag de distributie-noemer niet verlagen.
   const approvedRecs = await getApprovedReclamationStats(
     {
-      leadCreatedSinceIso: META_SPEND_START_ISO,
+      leadCreatedSinceIso: MAAND_START_ISO,
       excludeBulkAndDemo: true,
     },
     supabase,
@@ -701,7 +707,7 @@ export async function GET(request: NextRequest) {
       provinceSampleRows: provinceSampleSize,
       branchSampleRows: branchSampleSize,
       provinceBranchCapped,
-      spendStartDate: '2026-05-01',
+      spendStartDate: maandDag,
       metaCampaignPagesFetched,
       metaCampaignTruncated,
       batchesListLimit: BATCHES_LIST_LIMIT,
