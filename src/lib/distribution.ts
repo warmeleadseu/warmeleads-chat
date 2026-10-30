@@ -8,7 +8,7 @@ import { batchIsAtCapacity, isCappedDeliveryModel } from './batchDeliveryModel';
 import { getLeadLimitPeriodAnchors } from './batchAssignmentCaps';
 import { leadMatchesAnyProvinceTarget } from './provinceTargetMatch';
 import { targetCountryAllowsLead } from './targetCountryMatch';
-import { agentDektLocatie } from './agentGebied';
+import { kiesMedewerker, type Keuze, type Medewerker, type Tellingen, type ToewijsRegels } from './agentKeuze';
 import { binnenProvincieMarge, effectieveStraal, margeVan } from './provincieDoelMarge';
 import { isPipelineFifoHeadBatch, orderPipelineBatchesFifo } from './pipelineBatchFifo';
 import {
@@ -943,8 +943,15 @@ export async function distributeLead(
     await syncBatchDelivered(supabase, m.batch_id);
     ctx?.ronde?.batchKreegLead.add(m.batch_id);
 
-    // Auto-assign to portal user based on assignment rules
-    assignToPortalUser(supabase, m.customer_id, fullLead).catch(() => {});
+    /* Bij een medewerker van de klant zetten. Afwachten en fouten loggen:
+       een stil ingeslikte fout liet de lead op "Niet toegewezen" staan. */
+    await assignToPortalUser(supabase, m.customer_id, fullLead).catch(err => {
+      console.error('[distribution] lead niet bij een medewerker gezet', {
+        leadId: lead.id,
+        customerId: m.customer_id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    });
 
     result.assignments.push({
       customer_id: m.customer_id,
@@ -1530,112 +1537,62 @@ export async function distributeUnassignedLeads(): Promise<DistributeRunResult> 
 }
 
 /**
- * Auto-assign a lead to a portal user within a customer account based on assignment rules.
- * Uses weighted round-robin among eligible agents.
+ * Zet een geleverde lead bij een medewerker van de klant, volgens de
+ * toewijsregels van het team (zie src/lib/agentKeuze.ts). Heeft de klant
+ * medewerkers op automatisch, dan wordt de lead altijd verdeeld: binnen een
+ * werkgebied eerlijk, daarbuiten naar wie het dichtst bij werkt.
+ *
+ * Gooit bij een databasefout, zodat de aanroeper die kan loggen in plaats
+ * van dat een lead stil op "Niet toegewezen" blijft staan.
  */
 export async function assignToPortalUser(
   supabase: ReturnType<typeof createServerClient>,
   customerId: string,
   lead: LeadForDistribution,
-): Promise<void> {
-  const { data: agents } = await supabase
+): Promise<Keuze | null> {
+  const { data: agents, error: agentFout } = await supabase
     .from('portal_users')
-    .select('id, assignment_rules, role')
+    .select('id, assignment_rules')
     .eq('customer_id', customerId)
     .eq('is_active', true);
+  if (agentFout) throw new Error(`medewerkers laden: ${agentFout.message}`);
 
-  if (!agents || agents.length === 0) return;
+  const medewerkers: Medewerker[] = (agents ?? []).map(a => ({ id: a.id as string, regels: (a.assignment_rules as ToewijsRegels | null) ?? null }));
+  if (!medewerkers.some(m => m.regels?.mode && m.regels.mode !== 'manual')) return null;
 
-  interface AgentRules {
-    mode?: string;
-    branches?: string[];
-    regions?: { type: string; values: string[] };
-    max_leads_per_day?: number;
-    max_leads_per_week?: number;
-    round_robin_weight?: number;
-  }
-
-  const candidates = agents.filter(a => {
-    const rules: AgentRules = a.assignment_rules || {};
-    if (!rules.mode || rules.mode === 'manual') return false;
-    if (rules.mode === 'all') return true;
-
-    // Branch filter
-    if (rules.branches && rules.branches.length > 0) {
-      if (!rules.branches.includes(lead.branch)) return false;
-    }
-
-    /* Werkgebied: provincies én stralen rond een plaats, via dezelfde functie
-       als de afsprakentoewijzer. Hier stond eerder alleen een provincie-
-       controle, waardoor een instelling op postcodes werd genegeerd. */
-    return agentDektLocatie(rules, {
-      provincie: lead.provincie,
-      land: (lead as { land?: string | null }).land,
-      postcode: lead.postcode,
-      lat: lead.lat,
-      lng: lead.lng,
-    });
-  });
-
-  if (candidates.length === 0) return;
-
-  // Check daily/weekly limits and count existing leads for round-robin
-  const candidateIds = candidates.map(c => c.id);
-  const now = new Date();
-  const dayStart = new Date(now);
-  dayStart.setHours(0, 0, 0, 0);
-  const weekStart = new Date(now);
-  weekStart.setDate(weekStart.getDate() - weekStart.getDay() + (weekStart.getDay() === 0 ? -6 : 1));
-  weekStart.setHours(0, 0, 0, 0);
-
-  const { data: recentAssignments } = await supabase
+  /* Tellingen voor limieten en eerlijk verdelen, in Nederlandse dagen en weken. */
+  const { dayStart, weekStart } = getLeadLimitPeriodAnchors(new Date());
+  const { data: recent, error: telFout } = await supabase
     .from('lead_assignments')
     .select('portal_user_id, assigned_at')
     .eq('customer_id', customerId)
-    .in('portal_user_id', candidateIds)
+    .in('portal_user_id', medewerkers.map(m => m.id))
     .gte('assigned_at', weekStart.toISOString());
+  if (telFout) throw new Error(`tellingen laden: ${telFout.message}`);
+  const tellingen: Tellingen = { dag: {}, week: {} };
+  for (const a of recent ?? []) {
+    if (!a.portal_user_id) continue;
+    tellingen.week[a.portal_user_id] = (tellingen.week[a.portal_user_id] || 0) + 1;
+    if (new Date(a.assigned_at) >= dayStart) tellingen.dag[a.portal_user_id] = (tellingen.dag[a.portal_user_id] || 0) + 1;
+  }
 
-  const dailyCounts: Record<string, number> = {};
-  const weeklyCounts: Record<string, number> = {};
-  const totalCounts: Record<string, number> = {};
+  const keuze = kiesMedewerker(medewerkers, {
+    provincie: lead.provincie,
+    land: (lead as { land?: string | null }).land,
+    postcode: lead.postcode,
+    lat: lead.lat,
+    lng: lead.lng,
+    branch: lead.branch,
+  }, tellingen);
+  if (!keuze) return null;
 
-  (recentAssignments || []).forEach(a => {
-    if (!a.portal_user_id) return;
-    weeklyCounts[a.portal_user_id] = (weeklyCounts[a.portal_user_id] || 0) + 1;
-    totalCounts[a.portal_user_id] = (totalCounts[a.portal_user_id] || 0) + 1;
-    if (new Date(a.assigned_at) >= dayStart) {
-      dailyCounts[a.portal_user_id] = (dailyCounts[a.portal_user_id] || 0) + 1;
-    }
-  });
-
-  const eligible = candidates.filter(c => {
-    const rules: AgentRules = c.assignment_rules || {};
-    if (rules.max_leads_per_day && (dailyCounts[c.id] || 0) >= rules.max_leads_per_day) return false;
-    if (rules.max_leads_per_week && (weeklyCounts[c.id] || 0) >= rules.max_leads_per_week) return false;
-    return true;
-  });
-
-  if (eligible.length === 0) return;
-
-  // Weighted round-robin: sort by (total_count / weight), lowest wins
-  eligible.sort((a, b) => {
-    const rulesA: AgentRules = a.assignment_rules || {};
-    const rulesB: AgentRules = b.assignment_rules || {};
-    const wA = rulesA.round_robin_weight || 1;
-    const wB = rulesB.round_robin_weight || 1;
-    const scoreA = (totalCounts[a.id] || 0) / wA;
-    const scoreB = (totalCounts[b.id] || 0) / wB;
-    return scoreA - scoreB;
-  });
-
-  const winner = eligible[0];
-
-  // Update the most recent assignment for this lead+customer to set the portal_user_id
-  await supabase
+  /* Alleen de levering die nog bij niemand staat; een handmatige keuze van de klant blijft staan. */
+  const { error } = await supabase
     .from('lead_assignments')
-    .update({ portal_user_id: winner.id })
+    .update({ portal_user_id: keuze.id })
     .eq('lead_id', lead.id)
     .eq('customer_id', customerId)
-    .order('assigned_at', { ascending: false })
-    .limit(1);
+    .is('portal_user_id', null);
+  if (error) throw new Error(`toewijzen: ${error.message}`);
+  return keuze;
 }

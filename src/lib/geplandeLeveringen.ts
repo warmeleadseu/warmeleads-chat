@@ -298,7 +298,13 @@ async function leverEenRij(supabase: SupabaseClient, rij: Rij, campagneRegels: C
   /* Net als bij een gewone levering: volgens de toewijsregels van de klant
      meteen bij een medewerker. Dat ontbrak hier, waardoor een lead uit de
      wachtrij bij een team zonder eigenaar bleef staan. */
-  assignToPortalUser(supabase as never, klant.id, lead as never).catch(() => {});
+  await assignToPortalUser(supabase as never, klant.id, lead as never).catch(err => {
+    console.error('[geplande-leveringen] lead niet bij een medewerker gezet', {
+      leadId: lead.id,
+      customerId: klant.id,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  });
 
   /* Zelfde melding als bij een gewone levering: de klant moet niet hoeven
      ontdekken dat er een lead in zijn portaal staat. */
