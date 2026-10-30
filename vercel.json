@@ -67,6 +67,10 @@
     {
       "path": "/api/cron/loten-actie",
       "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/cron/am-staffels",
+      "schedule": "5 0 * * *"
     }
   ]
 }

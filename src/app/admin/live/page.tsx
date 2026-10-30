@@ -8,6 +8,7 @@ import { adminFetch } from '@/lib/adminAuth';
 import { audioManager } from '@/lib/celebrationSounds';
 import type { ActieSamenvatting } from '@/lib/lotenActieLaden';
 import { DuurzaamDecor } from './DuurzaamDecor';
+import { groepeerStaffels, type StaffelWeergave } from '@/lib/amStaffel';
 import { bouwSlides, huidigeIndex, leesDuur, leesVasteSlide, onderwerpen, paginaVan, stapIndex, STANDAARD_DUUR_SEC, type SlideId } from '@/lib/liveSlides';
 import { ExclamationTriangleIcon, SignalSlashIcon } from '@heroicons/react/24/outline';
 
@@ -614,6 +615,7 @@ interface AMTargetLive {
   period_start: string;
   period_end: string;
   status: string;
+  notes?: string | null;
 }
 
 const TARGET_TYPE_LABELS: Record<string, string> = {
@@ -947,8 +949,60 @@ function SlideActie({ actie, nu }: { actie: ActieSamenvatting; nu: Date }) {
 const MAX_TARGETS = 6;
 const MAX_LEADERBOARD = 8;
 
+/** Een bonusstaffel als één regel: balk tot de hoogste trede, met een streepje per trede. */
+function StaffelRegel({ s }: { s: StaffelWeergave }) {
+  const top = s.treden[s.treden.length - 1]?.waarde || 1;
+  const bedrag = (n: number) => (s.target_type === 'revenue' ? euro(n) : n.toLocaleString('nl-NL'));
+  const kort = (n: number) => (s.target_type === 'revenue' ? `€${(n / 1000).toLocaleString('nl-NL', { maximumFractionDigits: 1 })}k` : n.toLocaleString('nl-NL'));
+  const dagen = Math.max(0, Math.ceil((new Date(s.period_end + 'T23:59:59').getTime() - Date.now()) / 86400000));
+  const alles = !s.volgende;
+  return (
+    <div className={`rounded-2xl border px-5 py-3 ${s.bonus > 0 ? 'border-emerald-500/25 bg-emerald-500/[0.07]' : 'border-white/[0.05] bg-white/[0.02]'}`}>
+      <div className="flex items-baseline justify-between gap-4">
+        <p className={`${TYPE.secondary} min-w-0 flex-1 truncate font-bold text-white/85`}>
+          {s.am_name}
+          <span className={`${TYPE.meta} ml-3 font-medium text-white/35`}>{bedrag(s.huidig)} deze maand</span>
+        </p>
+        <span className={`${TYPE.secondary} shrink-0 font-black tabular-nums ${s.bonus > 0 ? 'text-emerald-400' : 'text-white/60'}`}>
+          {alles ? '🎉 ' : ''}{euro(s.bonus)} bonus
+        </span>
+      </div>
+      <div className="relative mt-2 h-3 rounded-full bg-white/[0.07]">
+        <div
+          className={`h-full rounded-full ${alles ? 'bg-emerald-400' : 'bg-gradient-to-r from-amber-400 to-emerald-400'}`}
+          style={{ width: `${Math.min(100, (s.huidig / top) * 100)}%` }}
+        />
+        {s.treden.map(t => (
+          <span
+            key={t.waarde}
+            className={`absolute top-1/2 h-5 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full ${t.gehaald ? 'bg-white' : 'bg-white/30'}`}
+            style={{ left: `${(t.waarde / top) * 100}%` }}
+          />
+        ))}
+      </div>
+      <div className="relative mt-1 h-[24px]">
+        {s.treden.map(t => (
+          <span
+            key={t.waarde}
+            className={`${TYPE.meta} absolute -translate-x-1/2 whitespace-nowrap tabular-nums ${t.gehaald ? 'font-bold text-emerald-400/80' : 'text-white/35'}`}
+            style={{ left: `${Math.min(96, (t.waarde / top) * 100)}%` }}
+          >
+            {kort(t.waarde)}
+          </span>
+        ))}
+      </div>
+      <p className={`${TYPE.meta} mt-1 tabular-nums text-white/40`}>
+        {s.volgende
+          ? `nog ${bedrag(s.volgende.nog)} tot ${bedrag(s.volgende.waarde)} (${euro(s.volgende.bonus)} bonus) · ${dagen}d over`
+          : 'hoogste trede gehaald'}
+      </p>
+    </div>
+  );
+}
+
 function SlideTeam({ targets, leaderboard }: { targets: AMTargetLive[]; leaderboard: AMLeaderboardEntry[] }) {
-  const gesorteerd = [...targets].sort((a, b) => b.progress_pct - a.progress_pct);
+  /* Staffels (zie src/lib/amStaffel.ts) als één regel; andere targets los, beste voortgang eerst. */
+  const regels = groepeerStaffels([...targets].sort((a, b) => b.progress_pct - a.progress_pct));
   const beide = targets.length > 0 && leaderboard.length > 0;
   const bedrag = (t: AMTargetLive, n: number) => (t.target_type === 'revenue' ? euro(n) : n.toLocaleString('nl-NL'));
 
@@ -960,7 +1014,9 @@ function SlideTeam({ targets, leaderboard }: { targets: AMTargetLive[]; leaderbo
           <div className="flex min-h-0 flex-col overflow-hidden rounded-3xl border border-amber-500/10 bg-amber-500/[0.04] p-6">
             <h3 className={`${TYPE.secondary} mb-4 font-bold text-white/75`}>Targets</h3>
             <div className="flex min-h-0 flex-1 flex-col gap-3">
-              {gesorteerd.slice(0, MAX_TARGETS).map(t => {
+              {regels.slice(0, MAX_TARGETS).map(r => {
+                if (r.soort === 'staffel') return <StaffelRegel key={r.sleutel} s={r} />;
+                const t = r.target;
                 const klaar = t.progress_pct >= 100;
                 const kleur = klaar ? 'bg-emerald-400' : t.progress_pct >= 75 ? 'bg-amber-400' : t.progress_pct >= 50 ? 'bg-orange-400' : 'bg-red-400';
                 const rest = Math.max(0, t.target_value - t.current_value);
@@ -996,8 +1052,8 @@ function SlideTeam({ targets, leaderboard }: { targets: AMTargetLive[]; leaderbo
                   </div>
                 );
               })}
-              {targets.length > MAX_TARGETS && (
-                <p className={`${TYPE.meta} text-center tabular-nums text-white/35`}>+{targets.length - MAX_TARGETS} niet getoond</p>
+              {regels.length > MAX_TARGETS && (
+                <p className={`${TYPE.meta} text-center tabular-nums text-white/35`}>+{regels.length - MAX_TARGETS} niet getoond</p>
               )}
             </div>
           </div>
