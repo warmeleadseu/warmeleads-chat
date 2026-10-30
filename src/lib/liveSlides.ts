@@ -6,16 +6,17 @@
  * pagina's verdeeld in plaats van een lijst die scrolt.
  */
 
-export type SlideId = 'vandaag' | 'batches' | 'geld' | 'team';
+export type SlideId = 'vandaag' | 'batches' | 'geld' | 'team' | 'actie';
 
 export const SLIDE_TITELS: Record<SlideId, string> = {
   vandaag: 'Vandaag',
   batches: 'Actieve batches',
   geld: 'Geld',
   team: 'Team',
+  actie: 'Actie',
 };
 
-const VOLGORDE: SlideId[] = ['vandaag', 'batches', 'geld', 'team'];
+const VOLGORDE: SlideId[] = ['vandaag', 'batches', 'geld', 'team', 'actie'];
 
 export const BATCHES_PER_PAGINA = 8;
 export const STANDAARD_DUUR_SEC = 15;
@@ -39,6 +40,8 @@ export interface SlideInhoud {
   batches: number;
   heeftGeld: boolean;
   heeftTeam: boolean;
+  /** Een lopende actie (zoals de najaarsactie); optioneel zodat oude aanroepen blijven werken. */
+  heeftActie?: boolean;
 }
 
 export function bouwSlides(inhoud: SlideInhoud, opties: { duurSec?: number; vast?: SlideId | null } = {}): Slide[] {
@@ -57,6 +60,7 @@ export function bouwSlides(inhoud: SlideInhoud, opties: { duurSec?: number; vast
     }
     if (id === 'geld' && !inhoud.heeftGeld) continue;
     if (id === 'team' && !inhoud.heeftTeam) continue;
+    if (id === 'actie' && !inhoud.heeftActie) continue;
     slides.push({ key: id, id, titel: SLIDE_TITELS[id], pagina: 1, paginas: 1, duurMs });
   }
   if (opties.vast) {

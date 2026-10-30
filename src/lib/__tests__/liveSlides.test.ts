@@ -13,6 +13,11 @@ describe('live-dashboard slides', () => {
   it('één batchpagina krijgt de gewone duur', () => {
     expect(bouwSlides({ ...vol, batches: 8 }).find(x => x.id === 'batches')?.duurMs).toBe(15_000);
   });
+  it('toont de actie als laatste slide, alleen als er een actie loopt', () => {
+    expect(bouwSlides({ ...vol, heeftActie: true }).map(x => x.key).slice(-2)).toEqual(['team', 'actie']);
+    expect(bouwSlides({ ...vol, heeftActie: false }).some(x => x.id === 'actie')).toBe(false);
+    expect(leesVasteSlide('actie')).toBe('actie');
+  });
   it('slaat lege slides over; Vandaag staat er altijd', () => {
     expect(bouwSlides({ batches: 0, heeftGeld: false, heeftTeam: false }).map(x => x.key)).toEqual(['vandaag']);
     expect(bouwSlides({ batches: 3, heeftGeld: false, heeftTeam: true }).map(x => x.key)).toEqual(['vandaag', 'batches-1', 'team']);

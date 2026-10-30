@@ -37,6 +37,7 @@ import {
 import { usePushNotifications } from '../usePushNotifications';
 import { PageHeader } from '../_ui';
 import { DoorlopendKaart } from '../_ui/Doorlopend';
+import { ActieKaart } from '../_ui/Actie';
 import { IntegrationsTab } from './IntegrationsTab';
 import { WebhookIntegration } from './WebhookIntegration';
 import { PartnerKoppelingen } from './PartnerKoppelingen';
@@ -1443,6 +1444,7 @@ export default function AccountPage() {
           {activeTab === 'areas' && (
             <AreasTab data={areasData} loading={areasLoading} />
           )}
+          {activeTab === 'orders' && <ActieKaart />}
           {activeTab === 'orders' && <DoorlopendKaart />}
 
           {activeTab === 'orders' && (

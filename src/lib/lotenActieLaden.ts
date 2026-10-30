@@ -216,3 +216,54 @@ export async function laadDeelnemers(
     .filter(d => d.totaal > 0 || d.bulkLeads > 0)
     .sort((a, b) => b.totaal - a.totaal || a.klant.localeCompare(b.klant, 'nl'));
 }
+
+/** Hoe lang na de trekking de actie nog op het live-dashboard en in het portaal staat. */
+const ZICHTBAAR_NA_TREKKING_MS = 3 * 86_400_000;
+/** Zonder trekking: zo lang na afloop nog tonen ("trekking volgt"). */
+const ZICHTBAAR_NA_EIND_MS = 14 * 86_400_000;
+
+export type ActieTrekkingKort = { winnaar_customer_id: string; getrokken_op: string };
+
+export async function laadTrekking(supabase: SupabaseClient): Promise<ActieTrekkingKort | null> {
+  const { data, error } = await supabase
+    .from('actie_trekkingen')
+    .select('winnaar_customer_id, getrokken_op')
+    .eq('actie', ACTIE.code)
+    .maybeSingle();
+  if (error) throw new ActieLaadFout(`trekking: ${error.message}`);
+  return (data as ActieTrekkingKort | null) ?? null;
+}
+
+/** Hoort de actie nu in beeld (dashboard, portaal)? */
+export function actieZichtbaar(trekking: ActieTrekkingKort | null, nu: Date = new Date()): boolean {
+  const t = nu.getTime();
+  if (t < Date.parse(ACTIE.start)) return false;
+  if (trekking) return t - Date.parse(trekking.getrokken_op) < ZICHTBAAR_NA_TREKKING_MS;
+  return t < Date.parse(ACTIE.eind) + ZICHTBAAR_NA_EIND_MS;
+}
+
+export type ActieSamenvatting = {
+  eind: string; eindLabel: string; prijsLeads: number; leadsPerLot: number;
+  totaalLoten: number; deelnemers: number;
+  top: { klant: string; loten: number }[];
+  winnaar: string | null;
+};
+
+/** Voor het live-dashboard: de stand van de pot, of null als de actie niet in beeld hoort. */
+export async function laadActieSamenvatting(supabase: SupabaseClient, nu: Date = new Date()): Promise<ActieSamenvatting | null> {
+  const trekking = await laadTrekking(supabase);
+  if (!actieZichtbaar(trekking, nu)) return null;
+  const deelnemers = (await laadDeelnemers(supabase, { nu })).filter(d => d.totaal > 0);
+  let winnaar: string | null = null;
+  if (trekking) {
+    const { data } = await supabase.from('customers').select('name').eq('id', trekking.winnaar_customer_id).maybeSingle();
+    winnaar = (data?.name as string | undefined) ?? 'Onbekende klant';
+  }
+  return {
+    eind: ACTIE.eind, eindLabel: ACTIE.eindLabel, prijsLeads: ACTIE.prijsLeads, leadsPerLot: ACTIE.leadsPerLot,
+    totaalLoten: deelnemers.reduce((s, d) => s + d.totaal, 0),
+    deelnemers: deelnemers.length,
+    top: deelnemers.slice(0, 6).map(d => ({ klant: d.klant, loten: d.totaal })),
+    winnaar,
+  };
+}

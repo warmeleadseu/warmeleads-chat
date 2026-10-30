@@ -16,6 +16,7 @@ import {
 } from '@/lib/amLeaderboardServer';
 import { adminCustomerLiveUnpaidEmbed, adminCustomerTargetsOnly } from '@/lib/adminBatchQueries';
 import { activeTargetSummariesFromUnknown } from '@/lib/batchTargetAreas';
+import { laadActieSamenvatting } from '@/lib/lotenActieLaden';
 import {
   countApprovedReclamationsForAssignments,
   getApprovedReclamationStats,
@@ -688,6 +689,11 @@ export async function GET(request: NextRequest) {
     aiSpend: await loadAiSpendSummary(supabase),
     recentPaidBatches,
     amLeaderboard,
+    /* Najaarsactie: de stand van de pot; een fout mag het dashboard niet breken. */
+    actie: await laadActieSamenvatting(supabase).catch(err => {
+      console.error('[live-stats] actie', err instanceof Error ? err.message : err);
+      return null;
+    }),
     timestamp: new Date().toISOString(),
     _liveStatsScope: {
       breakdownLookbackDays: BREAKDOWN_LOOKBACK_DAYS,

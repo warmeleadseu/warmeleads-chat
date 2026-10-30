@@ -18,7 +18,7 @@ export default function AlgemeneVoorwaardenPage() {
       <section className="bg-brand-navy py-16 sm:py-20">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h1 className="text-3xl sm:text-4xl font-bold text-white">Algemene voorwaarden</h1>
-          <p className="mt-3 text-base text-white/70">Laatst gewijzigd op 28 oktober 2026</p>
+          <p className="mt-3 text-base text-white/70">Laatst gewijzigd op 30 oktober 2026</p>
         </div>
       </section>
 
@@ -94,6 +94,18 @@ export default function AlgemeneVoorwaardenPage() {
             <p><span className="font-semibold text-slate-900">4.7.2</span> Warmeleads.eu kondigt dit per e-mail aan zodra 90% van de batch is geleverd.</p>
             <p><span className="font-semibold text-slate-900">4.7.3</span> De Klant kan doorlopende levering op elk moment stopzetten via het portaal of via de link in de e-mail. Een batch die al is gestart, wordt volledig geleverd en gefactureerd.</p>
             <p><span className="font-semibold text-slate-900">4.7.4</span> De factuur van een doorlopende batch heeft een betaaltermijn van 7 dagen. Is de factuur na die termijn niet betaald, dan pauzeert Warmeleads.eu de levering totdat de betaling is ontvangen.</p>
+          </div>
+        </section>
+
+        {/* Artikel 4.8 */}
+        <section className="mb-10">
+          <h2 className="text-lg font-bold text-slate-900 mb-3">Artikel 4.8: Acties</h2>
+          <div className="space-y-3 text-sm leading-relaxed text-slate-600">
+            <p><span className="font-semibold text-slate-900">4.8.1</span> Warmeleads.eu kan tijdelijke acties houden, zoals een verloting onder klanten. De voorwaarden van een actie staan in dit artikel en in de communicatie over die actie. Bij verschil gaat dit artikel voor.</p>
+            <p><span className="font-semibold text-slate-900">4.8.2</span> Najaarsactie 2026. De actie loopt van 30 oktober 2026 tot en met 13 november 2026 (Nederlandse tijd). Voor elke batch leads die de Klant in deze periode betaalt, ontvangt de Klant 1 lot per volle 10 leads. Voor bulkleads die in deze periode aan de Klant zijn geleverd, ontvangt de Klant 1 lot per volle 100 leads. Batches die vóór 30 oktober 2026 zijn betaald, afsprakenbatches en kosteloze batches tellen niet mee.</p>
+            <p><span className="font-semibold text-slate-900">4.8.3</span> Na afloop van de actie trekt Warmeleads.eu één winnaar uit alle loten; elk lot heeft een gelijke kans. De trekking gebeurt met een willekeurig, geautomatiseerd proces en wordt met de volledige lijst van deelnemers en loten vastgelegd. De winnaar ontvangt 20 kosteloze leads in de eigen branche en het eigen gebied en wordt persoonlijk benaderd.</p>
+            <p><span className="font-semibold text-slate-900">4.8.4</span> De prijs is niet inwisselbaar voor geld en niet overdraagbaar. Wordt een batch gecrediteerd of terugbetaald, dan vervallen de loten van die batch. Interne accounts en demo-accounts van Warmeleads.eu doen niet mee.</p>
+            <p><span className="font-semibold text-slate-900">4.8.5</span> Warmeleads.eu mag een actie wijzigen of beëindigen als daar een gegronde reden voor is, bijvoorbeeld bij misbruik of fraude. Al verkregen loten blijven in dat geval geldig, tenzij ze door misbruik of fraude zijn verkregen.</p>
           </div>
         </section>
 

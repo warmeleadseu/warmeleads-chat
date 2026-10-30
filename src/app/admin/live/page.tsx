@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { adminFetch } from '@/lib/adminAuth';
 import { audioManager } from '@/lib/celebrationSounds';
+import type { ActieSamenvatting } from '@/lib/lotenActieLaden';
 import { bouwSlides, huidigeIndex, leesDuur, leesVasteSlide, onderwerpen, paginaVan, stapIndex, STANDAARD_DUUR_SEC, type SlideId } from '@/lib/liveSlides';
 import { ExclamationTriangleIcon, SignalSlashIcon } from '@heroicons/react/24/outline';
 
@@ -104,6 +105,7 @@ interface LiveData {
   costMetrics?: CostMetrics;
   recentPaidBatches?: PaidBatch[];
   amLeaderboard?: AMLeaderboardEntry[];
+  actie?: ActieSamenvatting | null;
   timestamp: string;
 }
 
@@ -858,6 +860,80 @@ function SlideGeld({ data, costMetrics: cm }: { data: LiveData; costMetrics: Cos
   );
 }
 
+function SlideActie({ actie, nu }: { actie: ActieSamenvatting; nu: Date }) {
+  const resterendMs = Date.parse(actie.eind) - nu.getTime();
+  const dagen = Math.floor(resterendMs / 86_400_000);
+  const uren = Math.floor((resterendMs % 86_400_000) / 3_600_000);
+  const aftellen = resterendMs <= 0 ? null : dagen >= 1 ? `nog ${dagen} ${dagen === 1 ? 'dag' : 'dagen'}` : `nog ${Math.max(1, uren)} uur`;
+  const meeste = Math.max(1, ...actie.top.map(t => t.loten));
+
+  return (
+    <div className="flex h-full flex-col">
+      <SlideKop
+        titel={`Actie: ${actie.prijsLeads} gratis leads`}
+        rechts={<p className={`${TYPE.label} text-white/45`}>1 lot per {actie.leadsPerLot} leads in een betaalde batch</p>}
+      />
+      <div className="grid min-h-0 flex-1 grid-cols-5 gap-5">
+        <div className="col-span-2 flex flex-col gap-5">
+          <div className="flex flex-1 flex-col justify-center rounded-3xl border border-orange-400/20 bg-gradient-to-br from-orange-500/20 to-brand-pink/10 px-10">
+            {actie.winnaar ? (
+              <>
+                <p className={`${TYPE.secondary} font-semibold uppercase tracking-wider text-orange-200/70`}>Winnaar</p>
+                <p className="mt-4 text-[72px] font-black leading-[1.05] tracking-tight text-white">{actie.winnaar} 🎉</p>
+                <p className={`${TYPE.secondary} mt-5 text-white/55`}>wint {actie.prijsLeads} gratis leads</p>
+              </>
+            ) : (
+              <>
+                <p className={`${TYPE.secondary} font-semibold uppercase tracking-wider text-orange-200/70`}>Trekking</p>
+                <p className="mt-4 text-[110px] font-black leading-none tracking-tight text-white">{aftellen ?? 'binnenkort'}</p>
+                <p className={`${TYPE.secondary} mt-5 text-white/55`}>
+                  {aftellen ? `loopt tot en met ${actie.eindLabel}` : 'de actie is afgelopen'}
+                </p>
+              </>
+            )}
+          </div>
+          <div className="grid h-[220px] shrink-0 grid-cols-2 gap-5">
+            {[
+              { label: 'Loten in de pot', waarde: actie.totaalLoten },
+              { label: 'Deelnemers', waarde: actie.deelnemers },
+            ].map(k => (
+              <div key={k.label} className="flex flex-col justify-center rounded-3xl border border-white/[0.06] bg-white/[0.03] px-8">
+                <p className={`${TYPE.label} font-semibold uppercase tracking-wide text-white/45`}>{k.label}</p>
+                <AnimatedNumber value={k.waarde} className="mt-3 text-[72px] font-black leading-none tabular-nums text-white" />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="col-span-3 flex min-h-0 flex-col rounded-3xl border border-white/[0.06] bg-white/[0.03] p-8">
+          <h3 className={`${TYPE.secondary} mb-5 font-bold text-white/75`}>Meeste loten</h3>
+          {actie.top.length === 0 ? (
+            <div className="flex flex-1 items-center justify-center">
+              <p className={`${TYPE.secondary} text-white/30`}>Nog geen loten. De eerste betaalde batch opent de pot.</p>
+            </div>
+          ) : (
+            <div className="flex min-h-0 flex-1 flex-col justify-start gap-4">
+              {actie.top.map((t, i) => (
+                <div key={t.klant + i}>
+                  <div className="flex items-baseline justify-between gap-4">
+                    <p className={`${TYPE.secondary} min-w-0 truncate font-bold ${i === 0 ? 'text-orange-300' : 'text-white/85'}`}>{t.klant}</p>
+                    <span className={`${TYPE.secondary} shrink-0 font-black tabular-nums text-white`}>
+                      {t.loten} {t.loten === 1 ? 'lot' : 'loten'}
+                    </span>
+                  </div>
+                  <div className="mt-2 h-3 overflow-hidden rounded-full bg-white/[0.07]">
+                    <div className="h-full rounded-full bg-gradient-to-r from-orange-400 to-brand-pink" style={{ width: `${(t.loten / meeste) * 100}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const MAX_TARGETS = 6;
 const MAX_LEADERBOARD = 8;
 
@@ -1278,10 +1354,11 @@ export default function LiveDashboard() {
           batches: data?.activeBatches.length ?? 0,
           heeftGeld: !!cm && (cm.monthAdSpend > 0 || cm.effectieveCpl > 0),
           heeftTeam: amTargets.length > 0 || (data?.amLeaderboard?.length ?? 0) > 0,
+          heeftActie: !!data?.actie,
         },
         slideInstelling,
       ),
-    [data?.activeBatches.length, cm, amTargets.length, data?.amLeaderboard?.length, slideInstelling],
+    [data?.activeBatches.length, cm, amTargets.length, data?.amLeaderboard?.length, data?.actie, slideInstelling],
   );
   const slideIndex = huidigeIndex(slides, slideKey);
   const slide = slides[slideIndex];
@@ -1983,6 +2060,7 @@ export default function LiveDashboard() {
               )}
               {slide.id === 'geld' && data.costMetrics && <SlideGeld data={data} costMetrics={data.costMetrics} />}
               {slide.id === 'team' && <SlideTeam targets={amTargets} leaderboard={data.amLeaderboard ?? []} />}
+              {slide.id === 'actie' && data.actie && <SlideActie actie={data.actie} nu={clock} />}
             </motion.div>
           </AnimatePresence>
         </div>
