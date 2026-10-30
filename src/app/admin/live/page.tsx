@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { adminFetch } from '@/lib/adminAuth';
 import { audioManager } from '@/lib/celebrationSounds';
 import type { ActieSamenvatting } from '@/lib/lotenActieLaden';
+import { DuurzaamDecor } from './DuurzaamDecor';
 import { bouwSlides, huidigeIndex, leesDuur, leesVasteSlide, onderwerpen, paginaVan, stapIndex, STANDAARD_DUUR_SEC, type SlideId } from '@/lib/liveSlides';
 import { ExclamationTriangleIcon, SignalSlashIcon } from '@heroicons/react/24/outline';
 
@@ -1932,6 +1933,9 @@ export default function LiveDashboard() {
           })}
         </AnimatePresence>
       </div>
+
+      {/* Zacht duurzaamheidstafereel achter de slide in beeld. */}
+      <DuurzaamDecor id={slide.id} reducedMotion={reducedMotion} />
 
       <div className="relative z-10 flex h-full flex-col overflow-hidden p-5">
         {/* Bovenbalk: blijft staan terwijl de slides wisselen */}
